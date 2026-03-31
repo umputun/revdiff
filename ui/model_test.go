@@ -1041,6 +1041,84 @@ func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
 	assert.Contains(t, rendered, "fix this in a.go")
 }
 
+func TestModel_AnnotateInputEchoesCharacters(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 0
+
+	// enter annotation mode
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model = result.(Model)
+	require.True(t, model.annotating)
+
+	// type characters one at a time and verify each appears in viewport
+	for _, ch := range []rune{'h', 'e', 'l', 'l', 'o'} {
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		model = result.(Model)
+
+		// verify the typed text so far is visible in the viewport content
+		vpContent := model.viewport.View()
+		typed := model.annotateInput.Value()
+		assert.Contains(t, vpContent, typed, "viewport should contain typed text %q after keystroke %q", typed, string(ch))
+	}
+
+	// final check: all characters are visible
+	assert.Equal(t, "hello", model.annotateInput.Value())
+	assert.Contains(t, model.viewport.View(), "hello")
+}
+
+func TestModel_AnnotateInputVisibleBeforeEnter(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 0
+
+	// enter annotation mode
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model = result.(Model)
+	require.True(t, model.annotating)
+
+	// type some text
+	for _, ch := range []rune{'t', 'e', 's', 't'} {
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		model = result.(Model)
+	}
+
+	// verify text is in viewport content before pressing Enter
+	assert.True(t, model.annotating, "should still be in annotation mode")
+	vpContent := model.viewport.View()
+	assert.Contains(t, vpContent, "test", "typed text should be visible in viewport before Enter")
+
+	// also verify via renderDiff (which is what SetContent uses)
+	rendered := model.renderDiff()
+	assert.Contains(t, rendered, "test", "typed text should be in rendered diff before Enter")
+
+	// also verify the annotation input emoji marker is visible
+	assert.Contains(t, rendered, "\U0001f4ac", "annotation marker should be visible before Enter")
+}
+
 func TestModel_AnnotateRenderWithDividers(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},

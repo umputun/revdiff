@@ -44,10 +44,10 @@
 - Modify: `ui/annotate.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in `handleAnnotateKey` default branch (annotate.go ~line 103), add `m.viewport.SetContent(m.renderDiff())` after `m.annotateInput.Update(msg)` so viewport re-renders with live text input on each keystroke
-- [ ] write test: send multiple `tea.KeyMsg` characters while in annotation mode, assert `View()` output contains typed characters after each key
-- [ ] write test: verify text input is visible in viewport before pressing Enter
-- [ ] run `go test ./ui/` — must pass before task 2
+- [x] in `handleAnnotateKey` default branch (annotate.go ~line 103), add `m.viewport.SetContent(m.renderDiff())` after `m.annotateInput.Update(msg)` so viewport re-renders with live text input on each keystroke
+- [x] write test: send multiple `tea.KeyMsg` characters while in annotation mode, assert `View()` output contains typed characters after each key
+- [x] write test: verify text input is visible in viewport before pressing Enter
+- [x] run `go test ./ui/` — must pass before task 2
 
 ### Task 2: Fix delete annotation UX — conditional status bar hint
 

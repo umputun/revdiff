@@ -102,6 +102,7 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.annotateInput, cmd = m.annotateInput.Update(msg)
+		m.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately
 		return m, cmd
 	}
 }
