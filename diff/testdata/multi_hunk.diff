@@ -1,0 +1,14 @@
+diff --git a/main.go b/main.go
+index abc1234..def5678 100644
+--- a/main.go
++++ b/main.go
+@@ -2,3 +2,4 @@
+
+ import "fmt"
++import "os"
+
+@@ -10,3 +11,4 @@
+ func main() {
+     fmt.Println("hello")
++    os.Exit(0)
+ }
