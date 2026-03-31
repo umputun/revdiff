@@ -183,3 +183,78 @@ func TestFileTree_FileIndices(t *testing.T) {
 	// dir at 0, files at 1 and 2
 	assert.Equal(t, []int{1, 2}, indices)
 }
+
+func TestFileTree_RefreshFilter(t *testing.T) {
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+
+	// enable filter with a.go annotated
+	ft.toggleFilter(map[string]bool{"a.go": true})
+	assert.True(t, ft.filter)
+
+	fileCount := 0
+	for _, e := range ft.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 1, fileCount)
+
+	// refresh with a.go and c.go annotated - c.go should now appear
+	ft.refreshFilter(map[string]bool{"a.go": true, "c.go": true})
+	fileCount = 0
+	for _, e := range ft.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 2, fileCount)
+}
+
+func TestFileTree_RefreshFilterNoAnnotations(t *testing.T) {
+	ft := newFileTree([]string{"a.go", "b.go"})
+	ft.toggleFilter(map[string]bool{"a.go": true})
+	assert.True(t, ft.filter)
+
+	// refresh with no annotations - should disable filter
+	ft.refreshFilter(map[string]bool{})
+	assert.False(t, ft.filter)
+
+	fileCount := 0
+	for _, e := range ft.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 2, fileCount)
+}
+
+func TestFileTree_RefreshFilterPreservesCursor(t *testing.T) {
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft.toggleFilter(map[string]bool{"a.go": true, "b.go": true})
+	assert.True(t, ft.filter)
+
+	// move to b.go
+	ft.moveDown()
+	assert.Equal(t, "b.go", ft.selectedFile())
+
+	// refresh filter - cursor should remain on b.go
+	ft.refreshFilter(map[string]bool{"a.go": true, "b.go": true})
+	assert.Equal(t, "b.go", ft.selectedFile())
+}
+
+func TestFileTree_RefreshFilterNotActive(t *testing.T) {
+	ft := newFileTree([]string{"a.go", "b.go"})
+	assert.False(t, ft.filter)
+
+	// refresh when filter is not active should be a no-op
+	ft.refreshFilter(map[string]bool{"a.go": true})
+	assert.False(t, ft.filter)
+
+	fileCount := 0
+	for _, e := range ft.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 2, fileCount, "all files should remain visible")
+}

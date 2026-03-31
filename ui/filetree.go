@@ -239,3 +239,44 @@ func (ft *fileTree) toggleFilter(annotatedFiles map[string]bool) {
 		}
 	}
 }
+
+// refreshFilter rebuilds the filtered tree if the filter is active, preserving cursor position.
+func (ft *fileTree) refreshFilter(annotatedFiles map[string]bool) {
+	if !ft.filter {
+		return
+	}
+
+	// capture selected file before rebuilding entries
+	prevFile := ft.selectedFile()
+
+	var filtered []string
+	for _, f := range ft.allFiles {
+		if annotatedFiles[f] {
+			filtered = append(filtered, f)
+		}
+	}
+	if len(filtered) == 0 {
+		// no annotated files left, switch back to all files
+		ft.filter = false
+		ft.entries = buildEntries(ft.allFiles)
+	} else {
+		ft.entries = buildEntries(filtered)
+	}
+
+	// try to keep cursor on same file, otherwise position on first file
+	ft.cursor = 0
+	if prevFile != "" {
+		for i, e := range ft.entries {
+			if e.path == prevFile {
+				ft.cursor = i
+				return
+			}
+		}
+	}
+	for i, e := range ft.entries {
+		if !e.isDir {
+			ft.cursor = i
+			return
+		}
+	}
+}

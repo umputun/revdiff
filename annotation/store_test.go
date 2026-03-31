@@ -1,6 +1,7 @@
 package annotation
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,7 @@ func TestStore_Delete(t *testing.T) {
 	s := NewStore()
 	s.Add("handler.go", 43, "+", "comment")
 
-	ok := s.Delete("handler.go", 43)
+	ok := s.Delete("handler.go", 43, "+")
 	assert.True(t, ok)
 	assert.Empty(t, s.Get("handler.go"))
 }
@@ -59,7 +60,7 @@ func TestStore_Delete(t *testing.T) {
 func TestStore_DeleteCleansUpEmptyFile(t *testing.T) {
 	s := NewStore()
 	s.Add("handler.go", 43, "+", "comment")
-	s.Delete("handler.go", 43)
+	s.Delete("handler.go", 43, "+")
 
 	all := s.All()
 	_, exists := all["handler.go"]
@@ -68,7 +69,7 @@ func TestStore_DeleteCleansUpEmptyFile(t *testing.T) {
 
 func TestStore_DeleteNonExistent(t *testing.T) {
 	s := NewStore()
-	ok := s.Delete("handler.go", 43)
+	ok := s.Delete("handler.go", 43, "+")
 	assert.False(t, ok)
 }
 
@@ -77,10 +78,33 @@ func TestStore_DeletePreservesOthers(t *testing.T) {
 	s.Add("handler.go", 10, "+", "keep")
 	s.Add("handler.go", 43, "-", "remove")
 
-	s.Delete("handler.go", 43)
+	s.Delete("handler.go", 43, "-")
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
 	assert.Equal(t, 10, anns[0].Line)
+}
+
+func TestStore_DeleteMatchesByType(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 5, "+", "added line")
+	s.Add("handler.go", 5, "-", "removed line")
+
+	// deleting the add should leave the remove
+	ok := s.Delete("handler.go", 5, "+")
+	assert.True(t, ok)
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "-", anns[0].Type)
+	assert.Equal(t, "removed line", anns[0].Comment)
+}
+
+func TestStore_AddSameLineDifferentTypes(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 5, "+", "added line")
+	s.Add("handler.go", 5, "-", "removed line")
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 2, "same line number with different types should be separate annotations")
 }
 
 func TestStore_GetEmpty(t *testing.T) {
@@ -128,6 +152,18 @@ func TestStore_AllReturnsCopy(t *testing.T) {
 	assert.Equal(t, "comment", original["handler.go"][0].Comment, "All should return a copy")
 }
 
+func TestStore_Files(t *testing.T) {
+	s := NewStore()
+	assert.Empty(t, s.Files())
+
+	s.Add("z_file.go", 1, "+", "comment")
+	s.Add("a_file.go", 2, "-", "comment")
+	files := s.Files()
+	require.Len(t, files, 2)
+	assert.Equal(t, "a_file.go", files[0])
+	assert.Equal(t, "z_file.go", files[1])
+}
+
 func TestStore_FormatOutputEmpty(t *testing.T) {
 	s := NewStore()
 	assert.Empty(t, s.FormatOutput())
@@ -173,8 +209,10 @@ func TestStore_FormatOutputSortedByFilename(t *testing.T) {
 	s.Add("a_file.go", 1, "-", "first")
 
 	out := s.FormatOutput()
-	aIdx := len("## a_file.go")
-	zIdx := len(out) - len("last\n")
+	aIdx := strings.Index(out, "## a_file.go")
+	zIdx := strings.Index(out, "## z_file.go")
+	require.GreaterOrEqual(t, aIdx, 0, "a_file should be in output")
+	require.GreaterOrEqual(t, zIdx, 0, "z_file should be in output")
 	assert.Less(t, aIdx, zIdx, "a_file should come before z_file")
 	assert.Contains(t, out, "## a_file.go:1 (-)\nfirst\n")
 	assert.Contains(t, out, "## z_file.go:1 (+)\nlast\n")

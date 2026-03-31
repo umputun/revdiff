@@ -18,12 +18,12 @@ func (m Model) renderDiff() string {
 	annotations := m.store.Get(m.currFile)
 	annotationMap := make(map[string]string, len(annotations))
 	for _, a := range annotations {
-		annotationMap[annotationKey(a.Line, a.Type)] = a.Comment
+		annotationMap[m.annotationKey(a.Line, a.Type)] = a.Comment
 	}
 
 	var b strings.Builder
 	for i, dl := range m.diffLines {
-		lineNum := m.styles.LineNumber.Render(formatLineNum(dl))
+		lineNum := m.styles.LineNumber.Render(m.formatLineNum(dl))
 		var content string
 		switch dl.ChangeType {
 		case diff.ChangeAdd:
@@ -47,7 +47,7 @@ func (m Model) renderDiff() string {
 			b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
 		} else if dl.ChangeType != diff.ChangeDivider {
 			// inject existing annotation line
-			key := annotationKey(diffLineNum(dl), dl.ChangeType)
+			key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
 			if comment, ok := annotationMap[key]; ok {
 				b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac "+comment) + "\n")
 			}
@@ -57,7 +57,7 @@ func (m Model) renderDiff() string {
 }
 
 // formatLineNum formats old/new line numbers for display.
-func formatLineNum(dl diff.DiffLine) string {
+func (m Model) formatLineNum(dl diff.DiffLine) string {
 	switch dl.ChangeType {
 	case diff.ChangeAdd:
 		return fmt.Sprintf("%4d ", dl.NewNum)

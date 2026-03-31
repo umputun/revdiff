@@ -20,7 +20,6 @@ var opts struct {
 	} `positional-args:"yes"`
 
 	Staged  bool `long:"staged" description:"show staged changes"`
-	Debug   bool `long:"dbg" env:"DEBUG" description:"debug mode"`
 	Version bool `short:"V" long:"version" description:"show version info"`
 }
 

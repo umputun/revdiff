@@ -84,7 +84,7 @@ func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 
 // diffArgs builds the base git diff arguments for the given ref and staged flag.
 func (g *Git) diffArgs(ref string, staged bool) []string {
-	args := []string{"diff"}
+	args := []string{"diff", "--no-color", "--no-ext-diff"}
 	if staged {
 		args = append(args, "--cached")
 	}
@@ -117,6 +117,7 @@ var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
 	var lines []DiffLine
 	scanner := bufio.NewScanner(strings.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024) // 1MB max line
 
 	// skip diff header lines (---, +++, diff --git, index, etc.)
 	inHeader := true
@@ -185,6 +186,10 @@ func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
 			oldNum++
 			newNum++
 		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan diff: %w", err)
 	}
 
 	return lines, nil

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -744,9 +745,222 @@ func TestModel_CursorViewportY(t *testing.T) {
 }
 
 func TestModel_DiffLineNum(t *testing.T) {
-	assert.Equal(t, 5, diffLineNum(diff.DiffLine{NewNum: 5, ChangeType: diff.ChangeContext}))
-	assert.Equal(t, 3, diffLineNum(diff.DiffLine{NewNum: 3, ChangeType: diff.ChangeAdd}))
-	assert.Equal(t, 7, diffLineNum(diff.DiffLine{OldNum: 7, ChangeType: diff.ChangeRemove}))
+	m := testModel(nil, nil)
+	assert.Equal(t, 5, m.diffLineNum(diff.DiffLine{NewNum: 5, ChangeType: diff.ChangeContext}))
+	assert.Equal(t, 3, m.diffLineNum(diff.DiffLine{NewNum: 3, ChangeType: diff.ChangeAdd}))
+	assert.Equal(t, 7, m.diffLineNum(diff.DiffLine{OldNum: 7, ChangeType: diff.ChangeRemove}))
+}
+
+func TestModel_FileLoadedDiscardsStaleResponse(t *testing.T) {
+	// simulate rapid n/n where second load completes first, then stale first response arrives
+	files := []string{"a.go", "b.go", "c.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+
+	// user presses n twice: first for b.go (seq=1), then for c.go (seq=2)
+	m.loadSeq = 2
+	m.pendingFile = "c.go"
+	m.tree.nextFile() // -> b.go
+	m.tree.nextFile() // -> c.go
+
+	// c.go response arrives first with latest seq - accepted
+	cLines := []diff.DiffLine{{NewNum: 1, Content: "package c", ChangeType: diff.ChangeContext}}
+	result, _ := m.Update(fileLoadedMsg{file: "c.go", seq: 2, lines: cLines})
+	model := result.(Model)
+	assert.Equal(t, "c.go", model.currFile)
+
+	// stale b.go response arrives later with old seq - should be discarded
+	bLines := []diff.DiffLine{{NewNum: 1, Content: "package b", ChangeType: diff.ChangeContext}}
+	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: 1, lines: bLines})
+	model = result.(Model)
+	assert.Equal(t, "c.go", model.currFile, "stale response should not overwrite current file")
+	assert.Equal(t, cLines, model.diffLines, "stale response should not overwrite diff lines")
+}
+
+func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
+	// simulate: user presses n to load b.go (seq=1), then j/k moves cursor to c.go before response arrives.
+	// the response for b.go should still be accepted because it carries the latest sequence number.
+	files := []string{"a.go", "b.go", "c.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+
+	// user presses n to load b.go
+	m.loadSeq = 1
+	m.pendingFile = "b.go"
+	m.tree.nextFile() // cursor -> b.go
+
+	// then j/k moves cursor to c.go (without triggering a load)
+	m.tree.moveDown() // cursor -> c.go
+	assert.Equal(t, "c.go", m.tree.selectedFile(), "cursor moved to c.go")
+
+	// b.go response arrives with matching seq - should be accepted
+	bLines := []diff.DiffLine{{NewNum: 1, Content: "package b", ChangeType: diff.ChangeContext}}
+	result, _ := m.Update(fileLoadedMsg{file: "b.go", seq: 1, lines: bLines})
+	model := result.(Model)
+	assert.Equal(t, "b.go", model.currFile, "response should be accepted despite cursor being on c.go")
+	assert.Equal(t, bLines, model.diffLines)
+}
+
+func TestModel_FileLoadedStaleErrorDiscarded(t *testing.T) {
+	// stale error responses should also be discarded, not overwrite the current diff
+	files := []string{"a.go", "b.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+
+	// load a.go successfully (seq=1)
+	m.loadSeq = 1
+	m.pendingFile = "a.go"
+	aLines := []diff.DiffLine{{NewNum: 1, Content: "package a", ChangeType: diff.ChangeContext}}
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: 1, lines: aLines})
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.currFile)
+
+	// user navigates to b.go (seq=2)
+	model.loadSeq = 2
+	model.pendingFile = "b.go"
+	model.tree.nextFile()
+
+	// stale error for a.go arrives with old seq - should be discarded
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: 1, err: errors.New("stale error")})
+	model = result.(Model)
+	assert.Equal(t, "a.go", model.currFile, "stale error should not change current file")
+	assert.Equal(t, aLines, model.diffLines, "stale error should not clear diff lines")
+}
+
+func TestModel_SameFileDuplicateLoadDiscarded(t *testing.T) {
+	// pressing enter twice on the same file issues two loads for a.go.
+	// the older response (seq=1) must be discarded even though it's for the same file.
+	files := []string{"a.go", "b.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+
+	// first enter on a.go (seq=1), then another enter on a.go (seq=2)
+	m.loadSeq = 2
+	m.pendingFile = "a.go"
+
+	// newer response arrives first (seq=2)
+	aLines := []diff.DiffLine{{NewNum: 1, Content: "package a", ChangeType: diff.ChangeContext}}
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: 2, lines: aLines})
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.currFile)
+	assert.Equal(t, aLines, model.diffLines)
+
+	// stale response for the same file arrives later with old seq - must be discarded
+	staleLines := []diff.DiffLine{{NewNum: 1, Content: "stale data", ChangeType: diff.ChangeContext}}
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: 1, lines: staleLines})
+	model = result.(Model)
+	assert.Equal(t, aLines, model.diffLines, "stale same-file response should not overwrite newer data")
+
+	// stale error for the same file should also be discarded
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: 1, err: errors.New("stale error")})
+	model = result.(Model)
+	assert.Equal(t, aLines, model.diffLines, "stale same-file error should not overwrite newer data")
+}
+
+func TestModel_FilterRefreshedAfterAnnotationSave(t *testing.T) {
+	files := []string{"a.go", "b.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.store.Add("a.go", 1, "+", "initial annotation")
+
+	// enable filter - should show only a.go
+	annotated := m.annotatedFiles()
+	m.tree.toggleFilter(annotated)
+	assert.True(t, m.tree.filter)
+
+	fileCount := 0
+	for _, e := range m.tree.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 1, fileCount, "only a.go should be visible")
+
+	// add annotation to b.go via saveAnnotation
+	m.currFile = "b.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext}}
+	m.diffCursor = 0
+	m.startAnnotation()
+	m.annotateInput.SetValue("new annotation")
+	m.saveAnnotation()
+
+	// after save, filter should be refreshed and b.go should be visible
+	fileCount = 0
+	for _, e := range m.tree.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 2, fileCount, "both a.go and b.go should be visible after adding annotation")
+}
+
+func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
+	files := []string{"a.go", "b.go"}
+	diffs := map[string][]diff.DiffLine{
+		"b.go": {{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext}},
+	}
+	m := testModel(files, diffs)
+	m.tree = newFileTree(files)
+	m.store.Add("a.go", 1, " ", "annotation on a")
+	m.store.Add("b.go", 5, " ", "annotation on b")
+
+	// enable filter - should show both annotated files
+	annotated := m.annotatedFiles()
+	m.tree.toggleFilter(annotated)
+	assert.True(t, m.tree.filter)
+
+	// delete the annotation on a.go via deleteAnnotation
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, OldNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m.diffCursor = 0
+	cmd := m.deleteAnnotation()
+
+	// after delete, filter should be refreshed and only b.go should be visible
+	fileCount := 0
+	for _, e := range m.tree.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 1, fileCount, "only b.go should be visible after deleting a.go annotation")
+
+	// should return a command to load the new selection (b.go)
+	require.NotNil(t, cmd, "should trigger file load for new tree selection")
+	assert.Equal(t, "b.go", m.pendingFile, "pendingFile should be set to new tree selection")
+	assert.Equal(t, uint64(1), m.loadSeq, "loadSeq should be incremented to invalidate in-flight loads")
+}
+
+func TestModel_FilterDisabledWhenLastAnnotationDeleted(t *testing.T) {
+	files := []string{"a.go", "b.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.store.Add("a.go", 1, " ", "only annotation")
+
+	// enable filter
+	annotated := m.annotatedFiles()
+	m.tree.toggleFilter(annotated)
+	assert.True(t, m.tree.filter)
+
+	// delete the last annotation
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, OldNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m.diffCursor = 0
+	cmd := m.deleteAnnotation()
+
+	// filter should be disabled since no annotated files remain
+	assert.False(t, m.tree.filter, "filter should be disabled when no annotated files remain")
+
+	fileCount := 0
+	for _, e := range m.tree.entries {
+		if !e.isDir {
+			fileCount++
+		}
+	}
+	assert.Equal(t, 2, fileCount, "all files should be visible")
+
+	// when filter switches back to all-files, cursor lands on a.go (first file) which matches currFile,
+	// so no file load command is needed
+	assert.Nil(t, cmd, "no file load needed when filter switches back to all-files and cursor stays on same file")
 }
 
 func TestModel_NextPrevFileWrapAround(t *testing.T) {
@@ -793,7 +1007,9 @@ func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
 	model.annotateInput.SetValue("fix this in a.go")
 	model.saveAnnotation()
 
-	// switch to b.go
+	// navigate tree to b.go and load it
+	model.tree.nextFile()
+	assert.Equal(t, "b.go", model.tree.selectedFile())
 	result, _ = model.Update(fileLoadedMsg{file: "b.go", lines: linesB})
 	model = result.(Model)
 	assert.Equal(t, "b.go", model.currFile)
@@ -805,7 +1021,9 @@ func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
 	model.annotateInput.SetValue("check b.go")
 	model.saveAnnotation()
 
-	// switch back to a.go
+	// navigate tree back to a.go and load it
+	model.tree.prevFile()
+	assert.Equal(t, "a.go", model.tree.selectedFile())
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: linesA})
 	model = result.(Model)
 

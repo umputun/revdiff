@@ -26,7 +26,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 	ti.Width = m.width - m.treeWidth - 10
 
 	// pre-fill with existing annotation if one exists
-	lineNum := diffLineNum(dl)
+	lineNum := m.diffLineNum(dl)
 	for _, a := range m.store.Get(m.currFile) {
 		if a.Line == lineNum && a.Type == dl.ChangeType {
 			ti.SetValue(a.Comment)
@@ -53,9 +53,10 @@ func (m *Model) saveAnnotation() {
 		return
 	}
 
-	lineNum := diffLineNum(dl)
+	lineNum := m.diffLineNum(dl)
 	m.store.Add(m.currFile, lineNum, dl.ChangeType, text)
 	m.annotating = false
+	m.tree.refreshFilter(m.annotatedFiles())
 	m.viewport.SetContent(m.renderDiff())
 }
 
@@ -66,16 +67,27 @@ func (m *Model) cancelAnnotation() {
 }
 
 // deleteAnnotation removes the annotation on the current cursor line if one exists.
-func (m *Model) deleteAnnotation() {
+// returns a command to load the new file if the tree selection changed after filter refresh.
+func (m *Model) deleteAnnotation() tea.Cmd {
 	dl, ok := m.cursorDiffLine()
 	if !ok || dl.ChangeType == diff.ChangeDivider {
-		return
+		return nil
 	}
 
-	lineNum := diffLineNum(dl)
-	if m.store.Delete(m.currFile, lineNum) {
+	lineNum := m.diffLineNum(dl)
+	if m.store.Delete(m.currFile, lineNum, dl.ChangeType) {
+		m.tree.refreshFilter(m.annotatedFiles())
+
+		// if filter moved cursor to a different file, load the new selection
+		if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
+			m.loadSeq++
+			m.pendingFile = newFile
+			return m.loadFileDiff(newFile)
+		}
+
 		m.viewport.SetContent(m.renderDiff())
 	}
+	return nil
 }
 
 // handleAnnotateKey handles key messages during annotation input mode.
@@ -95,7 +107,7 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // diffLineNum returns the display line number for a diff line.
-func diffLineNum(dl diff.DiffLine) int {
+func (m Model) diffLineNum(dl diff.DiffLine) int {
 	if dl.ChangeType == diff.ChangeRemove {
 		return dl.OldNum
 	}
@@ -115,7 +127,7 @@ func (m Model) cursorViewportY() int {
 		y++ // the diff line itself
 		dl := m.diffLines[i]
 		if dl.ChangeType != diff.ChangeDivider {
-			key := annotationKey(diffLineNum(dl), dl.ChangeType)
+			key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
 			if annotationSet[key] {
 				y++ // the annotation line below it
 			}
@@ -129,13 +141,13 @@ func (m Model) buildAnnotationSet() map[string]bool {
 	annotations := m.store.Get(m.currFile)
 	set := make(map[string]bool, len(annotations))
 	for _, a := range annotations {
-		set[annotationKey(a.Line, a.Type)] = true
+		set[m.annotationKey(a.Line, a.Type)] = true
 	}
 	return set
 }
 
 // annotationKey creates a lookup key from line number and change type.
-func annotationKey(line int, changeType string) string {
+func (m Model) annotationKey(line int, changeType string) string {
 	return fmt.Sprintf("%d:%s", line, changeType)
 }
 
@@ -161,7 +173,7 @@ func (m Model) renderAnnotationSummary(width int) string {
 			b.WriteString(m.styles.FileEntry.Render(loc) + "\n")
 			comment := a.Comment
 			maxLen := width - 4
-			if maxLen > 0 && len(comment) > maxLen {
+			if maxLen > 3 && len(comment) > maxLen {
 				comment = comment[:maxLen-3] + "..."
 			}
 			b.WriteString(m.styles.AnnotationLine.Render(" \""+comment+"\"") + "\n")

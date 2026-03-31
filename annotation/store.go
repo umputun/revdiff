@@ -29,9 +29,8 @@ func NewStore() *Store {
 func (s *Store) Add(file string, line int, changeType, comment string) {
 	existing := s.annotations[file]
 	for i, a := range existing {
-		if a.Line == line {
+		if a.Line == line && a.Type == changeType {
 			existing[i].Comment = comment
-			existing[i].Type = changeType
 			return
 		}
 	}
@@ -43,12 +42,12 @@ func (s *Store) Add(file string, line int, changeType, comment string) {
 	})
 }
 
-// Delete removes the annotation at the given file and line.
+// Delete removes the annotation at the given file, line and change type.
 // Returns true if an annotation was found and removed.
-func (s *Store) Delete(file string, line int) bool {
+func (s *Store) Delete(file string, line int, changeType string) bool {
 	existing := s.annotations[file]
 	for i, a := range existing {
-		if a.Line == line {
+		if a.Line == line && a.Type == changeType {
 			s.annotations[file] = append(existing[:i], existing[i+1:]...)
 			if len(s.annotations[file]) == 0 {
 				delete(s.annotations, file)
@@ -79,6 +78,16 @@ func (s *Store) All() map[string][]Annotation {
 	return result
 }
 
+// Files returns the list of files that have annotations, sorted alphabetically.
+func (s *Store) Files() []string {
+	files := make([]string, 0, len(s.annotations))
+	for file := range s.annotations {
+		files = append(files, file)
+	}
+	sort.Strings(files)
+	return files
+}
+
 // FormatOutput produces the structured output format for stdout.
 // Files are sorted alphabetically, annotations within each file by line number.
 // Returns empty string if no annotations exist.
@@ -87,12 +96,7 @@ func (s *Store) FormatOutput() string {
 		return ""
 	}
 
-	// collect and sort file names
-	files := make([]string, 0, len(s.annotations))
-	for file := range s.annotations {
-		files = append(files, file)
-	}
-	sort.Strings(files)
+	files := s.Files()
 
 	var buf strings.Builder
 	first := true

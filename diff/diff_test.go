@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -263,6 +264,23 @@ func TestGit_FileDiff_Error(t *testing.T) {
 	_, err := g.FileDiff("", "main.go", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get file diff")
+}
+
+func TestParseUnifiedDiff_LongLine(t *testing.T) {
+	// build a diff with a line exceeding default scanner buffer (64KB)
+	longContent := strings.Repeat("x", 100_000)
+	raw := "diff --git a/big.js b/big.js\n--- a/big.js\n+++ b/big.js\n@@ -1,1 +1,2 @@\n context\n+" + longContent + "\n"
+
+	lines, err := ParseUnifiedDiff(raw)
+	require.NoError(t, err, "should handle lines up to 1MB without error")
+
+	var hasAdd bool
+	for _, l := range lines {
+		if l.ChangeType == ChangeAdd && len(l.Content) == 100_000 {
+			hasAdd = true
+		}
+	}
+	assert.True(t, hasAdd, "should parse the long added line")
 }
 
 func TestGit_FileDiff_NoChanges(t *testing.T) {

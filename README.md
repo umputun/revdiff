@@ -28,7 +28,6 @@ revdiff [OPTIONS] [ref]
 |--------|-------------|---------|
 | `ref` | Git ref to diff against | uncommitted changes |
 | `--staged` | Show staged changes | `false` |
-| `--dbg` | Debug mode | `false` |
 | `-V`, `--version` | Show version info | |
 
 ### Examples
@@ -51,7 +50,8 @@ revdiff HEAD~1
 
 | Key | Action |
 |-----|--------|
-| `j/k` or arrows | Scroll diff viewport |
+| `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
+| `h/l` or left/right | Switch between file tree and diff pane |
 | `Enter` | Select file from list |
 | `Tab` | Toggle all files / annotated only |
 | `n/p` | Next/previous changed file |
