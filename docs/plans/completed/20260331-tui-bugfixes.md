@@ -93,19 +93,19 @@
 - Modify: `ui/model.go`
 - Modify: `ui/filetree_test.go`
 
-- [ ] in `handleTreeNav` (model.go ~line 180), add cases for `tea.KeyPgDown`/`tea.KeyPgUp` — move tree cursor by visible page height
-- [ ] add `Home`/`End` keys — move to first/last file in tree
-- [ ] write test: PgDown in tree moves cursor by page
-- [ ] write test: PgUp in tree moves cursor by page
-- [ ] write test: Home/End in tree move to boundaries
-- [ ] run `go test ./...` — must pass before task 6
+- [x] in `handleTreeNav` (model.go ~line 180), add cases for `tea.KeyPgDown`/`tea.KeyPgUp` — move tree cursor by visible page height
+- [x] add `Home`/`End` keys — move to first/last file in tree
+- [x] write test: PgDown in tree moves cursor by page
+- [x] write test: PgUp in tree moves cursor by page
+- [x] write test: Home/End in tree move to boundaries
+- [x] run `go test ./...` — must pass before task 6
 
 ### Task 6: Verify all fixes
 
-- [ ] manual test: type in annotation input, verify characters appear immediately
-- [ ] manual test: verify `[d]` only shows on annotated lines
-- [ ] manual test: file tree shows indented files under directories
-- [ ] manual test: PgUp/PgDown works in diff and file tree
-- [ ] manual test: ctrl+u/ctrl+d work for half-page scrolling
-- [ ] run full test suite: `go test ./...`
-- [ ] run linter: `golangci-lint run`
+- [x] manual test: type in annotation input, verify characters appear immediately
+- [x] manual test: verify `[d]` only shows on annotated lines
+- [x] manual test: file tree shows indented files under directories
+- [x] manual test: PgUp/PgDown works in diff and file tree
+- [x] manual test: ctrl+u/ctrl+d work for page scrolling
+- [x] run full test suite: `go test ./...`
+- [x] run linter: `golangci-lint run`
