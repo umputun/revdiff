@@ -1183,3 +1183,180 @@ func TestModel_StatusBarHidesDeleteOnNonAnnotatedLine(t *testing.T) {
 	view = m.View()
 	assert.NotContains(t, view, "[d] delete", "status bar should not show delete hint when cursor is on a different line")
 }
+
+func TestModel_PgDownMovesCursorByPageHeight(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize so Height is set
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	assert.Equal(t, 0, model.diffCursor)
+
+	pageHeight := model.viewport.Height
+	require.Positive(t, pageHeight, "viewport height must be positive")
+
+	// pgdown should move cursor by page height
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Equal(t, pageHeight, model.diffCursor, "PgDown should move cursor by viewport height")
+
+	// ctrl+d should also move by page height
+	prevCursor := model.diffCursor
+	model.diffCursor = prevCursor // reset to known position
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	model = result.(Model)
+	assert.Equal(t, prevCursor+pageHeight, model.diffCursor, "ctrl+d should move cursor by viewport height")
+}
+
+func TestModel_PgUpMovesCursorByPageHeight(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize so Height is set
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	pageHeight := model.viewport.Height
+	require.Positive(t, pageHeight, "viewport height must be positive")
+
+	// move cursor to line 80 first
+	model.diffCursor = 80
+
+	// pgup should move cursor up by page height
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+	assert.Equal(t, 80-pageHeight, model.diffCursor, "PgUp should move cursor up by viewport height")
+
+	// ctrl+u should also move up by page height
+	model.diffCursor = 80
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model = result.(Model)
+	assert.Equal(t, 80-pageHeight, model.diffCursor, "ctrl+u should move cursor up by viewport height")
+}
+
+func TestModel_HomeEndMoveCursorToBoundaries(t *testing.T) {
+	lines := make([]diff.DiffLine, 50)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// move to middle
+	model.diffCursor = 25
+
+	// end should move to last line
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	model = result.(Model)
+	assert.Equal(t, 49, model.diffCursor, "End should move cursor to last line")
+
+	// home should move to first line
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyHome})
+	model = result.(Model)
+	assert.Equal(t, 0, model.diffCursor, "Home should move cursor to first line")
+}
+
+func TestModel_HomeEndSkipDividers(t *testing.T) {
+	lines := []diff.DiffLine{
+		{Content: "...", ChangeType: diff.ChangeDivider},
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{Content: "...", ChangeType: diff.ChangeDivider},
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// home should skip leading divider
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyHome})
+	model = result.(Model)
+	assert.Equal(t, 1, model.diffCursor, "Home should skip leading divider")
+
+	// end should skip trailing divider
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	model = result.(Model)
+	assert.Equal(t, 2, model.diffCursor, "End should skip trailing divider")
+}
+
+func TestModel_PgDownClampsAtEnd(t *testing.T) {
+	lines := make([]diff.DiffLine, 10)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file - viewport height is much larger than 10 lines
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// pgdown when there are fewer lines than page height should clamp at last line
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Equal(t, 9, model.diffCursor, "PgDown should clamp at last line")
+}
+
+func TestModel_PgUpClampsAtStart(t *testing.T) {
+	lines := make([]diff.DiffLine, 10)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// initialize viewport via resize
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// load file
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 3
+
+	// pgup from line 3 with large page height should clamp at first line
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+	assert.Equal(t, 0, model.diffCursor, "PgUp should clamp at first line")
+}

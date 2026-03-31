@@ -202,6 +202,14 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "k" || msg.String() == "up":
 		m.moveDiffCursorUp()
 		m.syncViewportToCursor()
+	case msg.Type == tea.KeyPgDown || msg.String() == "ctrl+d":
+		m.moveDiffCursorPageDown()
+	case msg.Type == tea.KeyPgUp || msg.String() == "ctrl+u":
+		m.moveDiffCursorPageUp()
+	case msg.Type == tea.KeyHome:
+		m.moveDiffCursorToStart()
+	case msg.Type == tea.KeyEnd:
+		m.moveDiffCursorToEnd()
 	case msg.String() == "a":
 		cmd := m.startAnnotation()
 		m.viewport.SetContent(m.renderDiff())

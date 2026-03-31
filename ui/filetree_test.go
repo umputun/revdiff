@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -257,4 +258,33 @@ func TestFileTree_RefreshFilterNotActive(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 2, fileCount, "all files should remain visible")
+}
+
+func TestFileTree_RenderIndentation(t *testing.T) {
+	ft := newFileTree([]string{"cmd/main.go", "internal/handler.go", "internal/store.go"})
+	s := defaultStyles()
+
+	// verify entry depth: directories at depth 0, files at depth 1
+	for _, e := range ft.entries {
+		if e.isDir {
+			assert.Equal(t, 0, e.depth, "directory %q should have depth 0", e.name)
+		} else {
+			assert.Equal(t, 1, e.depth, "file %q should have depth 1", e.name)
+		}
+	}
+
+	result := ft.render(40, nil, s)
+	lines := strings.Split(result, "\n")
+	assert.GreaterOrEqual(t, len(lines), 5, "expected at least 5 lines (2 dirs + 3 files)")
+
+	// directory lines should not have leading spaces, file lines should be indented
+	for _, e := range ft.entries {
+		if e.isDir {
+			// directory entry starts with the dir icon, no leading spaces
+			assert.Contains(t, result, "▾ "+e.name, "directory %q should appear without indent", e.name)
+		} else {
+			// file entries should have leading spaces (indentation from depth=1)
+			assert.Contains(t, result, "  "+e.name, "file %q should be indented under its directory", e.name)
+		}
+	}
 }

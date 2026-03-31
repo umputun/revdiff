@@ -98,6 +98,45 @@ func (m *Model) moveDiffCursorUp() {
 	}
 }
 
+// moveDiffCursorPageDown moves the diff cursor down by one page (viewport height).
+func (m *Model) moveDiffCursorPageDown() {
+	for range m.viewport.Height {
+		m.moveDiffCursorDown()
+	}
+	m.syncViewportToCursor()
+}
+
+// moveDiffCursorPageUp moves the diff cursor up by one page (viewport height).
+func (m *Model) moveDiffCursorPageUp() {
+	for range m.viewport.Height {
+		m.moveDiffCursorUp()
+	}
+	m.syncViewportToCursor()
+}
+
+// moveDiffCursorToStart moves the diff cursor to the first non-divider line.
+func (m *Model) moveDiffCursorToStart() {
+	m.diffCursor = 0
+	for i, dl := range m.diffLines {
+		if dl.ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			break
+		}
+	}
+	m.syncViewportToCursor()
+}
+
+// moveDiffCursorToEnd moves the diff cursor to the last non-divider line.
+func (m *Model) moveDiffCursorToEnd() {
+	for i := len(m.diffLines) - 1; i >= 0; i-- {
+		if m.diffLines[i].ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			break
+		}
+	}
+	m.syncViewportToCursor()
+}
+
 // syncViewportToCursor adjusts viewport scroll to keep cursor visible and re-renders content.
 // accounts for annotation lines injected between diff lines.
 func (m *Model) syncViewportToCursor() {

@@ -68,13 +68,13 @@
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in `handleDiffNav` (model.go ~line 194), add cases for `tea.KeyPgDown` and `ctrl+d` — move `diffCursor` down by `viewport.Height` lines, call `syncViewportToCursor()`
-- [ ] add cases for `tea.KeyPgUp` and `ctrl+u` — move `diffCursor` up by `viewport.Height` lines, call `syncViewportToCursor()`
-- [ ] add `Home`/`End` keys — move cursor to first/last diff line
-- [ ] write test: PgDown moves cursor by page height
-- [ ] write test: PgUp moves cursor by page height
-- [ ] write test: Home/End move cursor to boundaries
-- [ ] run `go test ./ui/` — must pass before task 4
+- [x] in `handleDiffNav` (model.go ~line 194), add cases for `tea.KeyPgDown` and `ctrl+d` — move `diffCursor` down by `viewport.Height` lines, call `syncViewportToCursor()`
+- [x] add cases for `tea.KeyPgUp` and `ctrl+u` — move `diffCursor` up by `viewport.Height` lines, call `syncViewportToCursor()`
+- [x] add `Home`/`End` keys — move cursor to first/last diff line
+- [x] write test: PgDown moves cursor by page height
+- [x] write test: PgUp moves cursor by page height
+- [x] write test: Home/End move cursor to boundaries
+- [x] run `go test ./ui/` — must pass before task 4
 
 ### Task 4: Fix file tree indentation — files under directories need indent
 
@@ -82,9 +82,9 @@
 - Modify: `ui/filetree.go`
 - Modify: `ui/filetree_test.go`
 
-- [ ] in filetree rendering, add at least one space indent for files nested under a directory entry
-- [ ] write test: `View()` output shows indented file names under their directory
-- [ ] run `go test ./ui/` — must pass before task 5
+- [x] in filetree rendering, add at least one space indent for files nested under a directory entry
+- [x] write test: `View()` output shows indented file names under their directory
+- [x] run `go test ./ui/` — must pass before task 5
 
 ### Task 5: Add page up/down navigation in file tree
 
