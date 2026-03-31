@@ -1,0 +1,15 @@
+diff --git a/config.go b/config.go
+index abc1234..def5678 100644
+--- a/config.go
++++ b/config.go
+@@ -1,8 +1,8 @@
+ package config
+
+ type Config struct {
+-    Host string
+-    Port int
++    Addr string
++    Port uint16
+     Debug bool
+ }
+
