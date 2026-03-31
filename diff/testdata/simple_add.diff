@@ -1,0 +1,13 @@
+diff --git a/handler.go b/handler.go
+index abc1234..def5678 100644
+--- a/handler.go
++++ b/handler.go
+@@ -1,5 +1,7 @@
+ package main
+
+ func handle() {
++    if err != nil {
++        return
++    }
+     fmt.Println("done")
+ }
