@@ -218,17 +218,66 @@ func TestModel_DiffScrolling(t *testing.T) {
 	// load file
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
-	assert.Equal(t, 0, model.viewport.YOffset)
+	assert.Equal(t, 0, model.diffCursor)
 
-	// j scrolls down
+	// j moves cursor down
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model = result.(Model)
-	assert.Equal(t, 1, model.viewport.YOffset)
+	assert.Equal(t, 1, model.diffCursor)
 
-	// k scrolls back up
+	// k moves cursor back up
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	model = result.(Model)
-	assert.Equal(t, 0, model.viewport.YOffset)
+	assert.Equal(t, 0, model.diffCursor)
+}
+
+func TestModel_DiffCursorSkipsDividers(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{Content: "...", ChangeType: diff.ChangeDivider},
+		{NewNum: 10, Content: "line10", ChangeType: diff.ChangeContext},
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+	assert.Equal(t, 0, model.diffCursor)
+
+	// j should skip divider and land on line10
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = result.(Model)
+	assert.Equal(t, 2, model.diffCursor)
+
+	// k should skip divider and go back to line1
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.diffCursor)
+}
+
+func TestModel_DiffCursorAutoScrolls(t *testing.T) {
+	// create more lines than viewport height
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+
+	// move cursor past viewport height - viewport should auto-scroll
+	for range 50 {
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model = result.(Model)
+	}
+	assert.Equal(t, 50, model.diffCursor)
+	assert.Positive(t, model.viewport.YOffset, "viewport should have scrolled")
 }
 
 func TestModel_WindowResize(t *testing.T) {
@@ -248,10 +297,19 @@ func TestModel_ViewOutput(t *testing.T) {
 	m.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
 	m.ready = true
 
+	// tree pane focused - should show tree navigation hints
+	m.focus = paneTree
 	view := m.View()
 	assert.Contains(t, view, "a.go")
 	assert.Contains(t, view, "b.go")
 	assert.Contains(t, view, "quit")
+	assert.Contains(t, view, "navigate")
+
+	// diff pane focused - should show diff hints
+	m.focus = paneDiff
+	view = m.View()
+	assert.Contains(t, view, "annotate")
+	assert.Contains(t, view, "scroll")
 }
 
 func TestModel_ViewNotReady(t *testing.T) {
@@ -290,6 +348,51 @@ func TestModel_RenderDiffLines(t *testing.T) {
 	assert.Contains(t, rendered, "package main")
 	assert.Contains(t, rendered, "func foo()")
 	assert.Contains(t, rendered, "func bar()")
+}
+
+func TestModel_CursorDiffLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	dl, ok := m.cursorDiffLine()
+	assert.True(t, ok)
+	assert.Equal(t, "line1", dl.Content)
+	assert.Equal(t, diff.ChangeContext, dl.ChangeType)
+
+	m.diffCursor = 1
+	dl, ok = m.cursorDiffLine()
+	assert.True(t, ok)
+	assert.Equal(t, "added", dl.Content)
+	assert.Equal(t, diff.ChangeAdd, dl.ChangeType)
+
+	// out of bounds
+	m.diffCursor = -1
+	_, ok = m.cursorDiffLine()
+	assert.False(t, ok)
+
+	m.diffCursor = 10
+	_, ok = m.cursorDiffLine()
+	assert.False(t, ok)
+}
+
+func TestModel_FileLoadedResetsCursor(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.diffCursor = 5 // simulate cursor was elsewhere
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+	assert.Equal(t, 0, model.diffCursor) // cursor reset to first line
 }
 
 func TestModel_NextPrevFileWrapAround(t *testing.T) {
