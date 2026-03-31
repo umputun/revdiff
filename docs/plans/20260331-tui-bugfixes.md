@@ -56,11 +56,11 @@
 - Modify: `ui/annotate.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `cursorLineHasAnnotation() bool` method on Model — checks if current `diffCursor` line has an annotation in the store for current file
-- [ ] in `View()` (model.go ~line 329), conditionally include `[d] delete` in diff pane status bar only when `cursorLineHasAnnotation()` returns true
-- [ ] write test: status bar shows `[d] delete` when cursor is on annotated line
-- [ ] write test: status bar hides `[d] delete` when cursor is on non-annotated line
-- [ ] run `go test ./ui/` — must pass before task 3
+- [x] add `cursorLineHasAnnotation() bool` method on Model — checks if current `diffCursor` line has an annotation in the store for current file
+- [x] in `View()` (model.go ~line 329), conditionally include `[d] delete` in diff pane status bar only when `cursorLineHasAnnotation()` returns true
+- [x] write test: status bar shows `[d] delete` when cursor is on annotated line
+- [x] write test: status bar hides `[d] delete` when cursor is on non-annotated line
+- [x] run `go test ./ui/` — must pass before task 3
 
 ### Task 3: Add page up/down navigation in diff viewport
 
