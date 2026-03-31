@@ -1,5 +1,7 @@
 package diff
 
+//go:generate moq -out mocks/diff_renderer.go -pkg mocks -skip-ensure -fmt goimports . DiffRenderer
+
 import (
 	"bufio"
 	"context"

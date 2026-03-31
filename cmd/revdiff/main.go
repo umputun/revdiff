@@ -6,7 +6,12 @@ import (
 	"os"
 	"runtime"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jessevdk/go-flags"
+
+	"github.com/umputun/revdiff/annotation"
+	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/ui"
 )
 
 var opts struct {
@@ -46,6 +51,22 @@ func main() {
 }
 
 func run() error {
-	// placeholder for bubbletea app initialization
+	renderer := diff.NewGit(".")
+	store := annotation.NewStore()
+	model := ui.NewModel(renderer, store, opts.Ref.Ref, opts.Staged)
+
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	finalModel, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("TUI error: %w", err)
+	}
+
+	// output annotations to stdout
+	if m, ok := finalModel.(ui.Model); ok {
+		output := m.Store().FormatOutput()
+		if output != "" {
+			fmt.Print(output)
+		}
+	}
 	return nil
 }
