@@ -23,6 +23,9 @@ type styles struct {
 	// status bar
 	StatusBar lipgloss.Style
 
+	// diff cursor
+	DiffCursorLine lipgloss.Style
+
 	// annotation
 	AnnotationLine lipgloss.Style
 }
@@ -70,6 +73,9 @@ func defaultStyles() styles {
 		StatusBar: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("242")).
 			Padding(0, 1),
+
+		DiffCursorLine: lipgloss.NewStyle().
+			Background(lipgloss.Color("237")),
 
 		AnnotationLine: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("220")).

@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,12 +31,13 @@ type Model struct {
 	store    *annotation.Store
 	renderer diff.DiffRenderer
 
-	ref       string
-	staged    bool
-	focus     pane
-	width     int
-	height    int
-	treeWidth int
+	ref        string
+	staged     bool
+	focus      pane
+	width      int
+	height     int
+	treeWidth  int
+	diffCursor int // index into diffLines for current cursor line
 
 	diffLines []diff.DiffLine // current file's parsed diff lines
 	currFile  string          // currently displayed file
@@ -173,9 +173,11 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = paneTree
 		return m, nil
 	case msg.String() == "j" || msg.String() == "down":
-		m.viewport.ScrollDown(1)
+		m.moveDiffCursorDown()
+		m.syncViewportToCursor()
 	case msg.String() == "k" || msg.String() == "up":
-		m.viewport.ScrollUp(1)
+		m.moveDiffCursorUp()
+		m.syncViewportToCursor()
 	}
 	return m, nil
 }
@@ -226,6 +228,14 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	m.diffCursor = 0
+	// skip divider lines at the start
+	for i, dl := range m.diffLines {
+		if dl.ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			break
+		}
+	}
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, nil
@@ -268,9 +278,15 @@ func (m Model) View() string {
 
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
-	// status bar
-	status := m.styles.StatusBar.Render(
-		"[j/k] scroll  [enter] select  [tab] filter  [n/p] next/prev  [a] annotate  [d] delete  [q] quit")
+	// status bar with context-sensitive hints
+	var statusText string
+	switch m.focus {
+	case paneTree:
+		statusText = "[j/k] navigate  [enter] select  [l] diff  [tab] filter  [n/p] next/prev  [q] quit"
+	case paneDiff:
+		statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+	}
+	status := m.styles.StatusBar.Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
@@ -282,43 +298,4 @@ func (m Model) annotatedFiles() map[string]bool {
 		result[f] = true
 	}
 	return result
-}
-
-// renderDiff renders the current file's diff lines with styling.
-func (m Model) renderDiff() string {
-	if len(m.diffLines) == 0 {
-		return "  no changes"
-	}
-
-	var b strings.Builder
-	for _, dl := range m.diffLines {
-		lineNum := m.styles.LineNumber.Render(formatLineNum(dl))
-		var content string
-		switch dl.ChangeType {
-		case diff.ChangeAdd:
-			content = m.styles.LineAdd.Render(" +" + dl.Content)
-		case diff.ChangeRemove:
-			content = m.styles.LineRemove.Render(" -" + dl.Content)
-		case diff.ChangeDivider:
-			content = m.styles.LineNumber.Render(" " + dl.Content)
-		default:
-			content = m.styles.LineContext.Render("  " + dl.Content)
-		}
-		b.WriteString(lineNum + content + "\n")
-	}
-	return b.String()
-}
-
-// formatLineNum formats old/new line numbers for display.
-func formatLineNum(dl diff.DiffLine) string {
-	switch dl.ChangeType {
-	case diff.ChangeAdd:
-		return fmt.Sprintf("%4d ", dl.NewNum)
-	case diff.ChangeRemove:
-		return fmt.Sprintf("%4d ", dl.OldNum)
-	case diff.ChangeDivider:
-		return "     "
-	default:
-		return fmt.Sprintf("%4d ", dl.NewNum)
-	}
 }
