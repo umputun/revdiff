@@ -1,0 +1,43 @@
+# binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+.bin/
+/revdiff
+
+# test files
+*.test
+coverage.out
+coverage_no_mocks.out
+profile.cov
+
+# dependency directories
+vendor/
+
+# ide and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# os files
+.DS_Store
+Thumbs.db
+
+# build artifacts
+dist/
+
+# local configuration
+.env
+.env.local
+*.local.yml
+*.local.yaml
+
+# debug
+__debug_bin*
+
+# ralphex progress logs
+.ralphex/progress/
