@@ -27,8 +27,6 @@ var opts struct {
 var revision = "unknown"
 
 func main() {
-	fmt.Printf("revdiff %s\n", revision)
-
 	p := flags.NewParser(&opts, flags.Default)
 	p.Usage = "[OPTIONS] [ref]"
 	if _, err := p.Parse(); err != nil {

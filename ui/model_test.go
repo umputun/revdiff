@@ -94,6 +94,33 @@ func TestModel_QuitKey(t *testing.T) {
 	assert.True(t, ok)
 }
 
+func TestModel_QuitPreservesAnnotations(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.store.Add("a.go", 5, "+", "needs review")
+	m.store.Add("b.go", 10, " ", "check this")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+
+	// verify annotations survive the quit
+	model := result.(Model)
+	output := model.Store().FormatOutput()
+	assert.Contains(t, output, "a.go:5")
+	assert.Contains(t, output, "needs review")
+	assert.Contains(t, output, "b.go:10")
+	assert.Contains(t, output, "check this")
+}
+
+func TestModel_QuitNoAnnotationsEmptyOutput(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.Empty(t, model.Store().FormatOutput())
+}
+
 func TestModel_EnterSelectsFile(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": {{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}},
