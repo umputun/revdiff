@@ -774,3 +774,73 @@ func TestModel_NextPrevFileWrapAround(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, "b.go", model.tree.selectedFile())
 }
+
+func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
+	linesA := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}, {NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd}}
+	linesB := []diff.DiffLine{{NewNum: 1, Content: "b-line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": linesA, "b.go": linesB})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+
+	// load file a.go
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: linesA})
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.currFile)
+
+	// add annotation on a.go
+	model.focus = paneDiff
+	model.diffCursor = 1
+	model.startAnnotation()
+	model.annotateInput.SetValue("fix this in a.go")
+	model.saveAnnotation()
+
+	// switch to b.go
+	result, _ = model.Update(fileLoadedMsg{file: "b.go", lines: linesB})
+	model = result.(Model)
+	assert.Equal(t, "b.go", model.currFile)
+
+	// add annotation on b.go
+	model.focus = paneDiff
+	model.diffCursor = 0
+	model.startAnnotation()
+	model.annotateInput.SetValue("check b.go")
+	model.saveAnnotation()
+
+	// switch back to a.go
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: linesA})
+	model = result.(Model)
+
+	// both annotations should still exist
+	annsA := model.store.Get("a.go")
+	require.Len(t, annsA, 1)
+	assert.Equal(t, "fix this in a.go", annsA[0].Comment)
+
+	annsB := model.store.Get("b.go")
+	require.Len(t, annsB, 1)
+	assert.Equal(t, "check b.go", annsB[0].Comment)
+
+	// rendered diff for a.go should show annotation
+	rendered := model.renderDiff()
+	assert.Contains(t, rendered, "fix this in a.go")
+}
+
+func TestModel_AnnotateRenderWithDividers(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+		{Content: "...", ChangeType: diff.ChangeDivider},
+		{NewNum: 10, Content: "line10", ChangeType: diff.ChangeContext},
+		{OldNum: 11, Content: "removed", ChangeType: diff.ChangeRemove},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// add annotations on different change types
+	m.store.Add("a.go", 2, "+", "addition comment")
+	m.store.Add("a.go", 11, "-", "removal comment")
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "addition comment")
+	assert.Contains(t, rendered, "removal comment")
+	assert.Contains(t, rendered, "...")
+}
