@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -742,6 +743,11 @@ func TestModel_CursorViewportY(t *testing.T) {
 	m.store.Add("a.go", 1, " ", "comment")
 	m.diffCursor = 2
 	assert.Equal(t, 3, m.cursorViewportY())
+
+	// empty file with non-zero cursor returns cursor value directly
+	empty := testModel(nil, nil)
+	empty.diffCursor = 5
+	assert.Equal(t, 5, empty.cursorViewportY(), "empty state returns diffCursor as-is")
 }
 
 func TestModel_DiffLineNum(t *testing.T) {
@@ -1119,6 +1125,31 @@ func TestModel_AnnotateInputVisibleBeforeEnter(t *testing.T) {
 	assert.Contains(t, rendered, "\U0001f4ac", "annotation marker should be visible before Enter")
 }
 
+func TestModel_UpdateForwardsNonKeyMsgWhileAnnotating(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// enter annotation mode
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model = result.(Model)
+	require.True(t, model.annotating)
+
+	// send a non-key message (e.g. a custom struct); should not panic and model stays annotating
+	type customMsg struct{}
+	result, _ = model.Update(customMsg{})
+	model = result.(Model)
+	assert.True(t, model.annotating, "annotating should remain true after non-key message")
+}
+
 func TestModel_AnnotateRenderWithDividers(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
@@ -1210,9 +1241,8 @@ func TestModel_PgDownMovesCursorByPageHeight(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, pageHeight, model.diffCursor, "PgDown should move cursor by viewport height")
 
-	// ctrl+d should also move by page height
+	// ctrl+d should also move by page height from current position
 	prevCursor := model.diffCursor
-	model.diffCursor = prevCursor // reset to known position
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model = result.(Model)
 	assert.Equal(t, prevCursor+pageHeight, model.diffCursor, "ctrl+d should move cursor by viewport height")
@@ -1359,4 +1389,278 @@ func TestModel_PgUpClampsAtStart(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model = result.(Model)
 	assert.Equal(t, 0, model.diffCursor, "PgUp should clamp at first line")
+}
+
+func TestModel_PgDownAccountsForDividers(t *testing.T) {
+	// create diff lines with dividers every 5 lines (simulating hunk boundaries)
+	var lines []diff.DiffLine
+	for i := range 60 {
+		if i > 0 && i%5 == 0 {
+			lines = append(lines, diff.DiffLine{Content: "@@ hunk @@", ChangeType: diff.ChangeDivider})
+		}
+		lines = append(lines, diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	assert.Equal(t, 0, model.diffCursor)
+
+	pageHeight := model.viewport.Height
+	require.Positive(t, pageHeight)
+
+	// pgdown with dividers: cursor traverses fewer non-divider lines than viewport height
+	// because divider rows consume visual space without being cursor-selectable
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Positive(t, model.diffCursor, "cursor should have moved forward")
+
+	nonDividerCount := 0
+	for i := range model.diffCursor {
+		if lines[i].ChangeType != diff.ChangeDivider {
+			nonDividerCount++
+		}
+	}
+	assert.Less(t, nonDividerCount, pageHeight,
+		"non-divider positions traversed should be fewer than viewport height")
+}
+
+func TestModel_PgDownAccountsForAnnotations(t *testing.T) {
+	lines := make([]diff.DiffLine, 50)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeAdd}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// add annotations on several lines - each takes an extra visual row
+	for i := range 10 {
+		model.store.Add("a.go", i+1, diff.ChangeAdd, "annotation")
+	}
+
+	pageHeight := model.viewport.Height
+	require.Positive(t, pageHeight)
+
+	// pgdown with annotations should move fewer cursor positions than viewport height
+	// because annotation rows take visual space
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	m2 := result.(Model)
+	assert.Less(t, m2.diffCursor, pageHeight,
+		"with annotations, cursor should move fewer positions than viewport height")
+	assert.Positive(t, m2.diffCursor, "cursor should have moved forward")
+}
+
+func TestModel_PgDownScrollsViewportByPage(t *testing.T) {
+	lines := make([]diff.DiffLine, 200)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	assert.Equal(t, 0, model.viewport.YOffset)
+
+	pageHeight := model.viewport.Height
+	require.Positive(t, pageHeight)
+
+	// pgdown should scroll viewport by approximately a full page (not just 1 line)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Equal(t, pageHeight, model.viewport.YOffset,
+		"viewport should scroll to cursor position (full page), not just 1 line")
+
+	// second pgdown should scroll another full page
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Equal(t, 2*pageHeight, model.viewport.YOffset,
+		"viewport should advance by another full page")
+}
+
+func TestModel_PgUpScrollsViewportByPage(t *testing.T) {
+	lines := make([]diff.DiffLine, 200)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	pageHeight := model.viewport.Height
+	require.Positive(t, pageHeight)
+
+	// move cursor to line 100
+	model.diffCursor = 100
+	model.syncViewportToCursor()
+
+	// pgup should scroll viewport back by approximately a full page
+	prevOffset := model.viewport.YOffset
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+
+	// viewport should scroll back significantly, not just 1 line
+	scrolled := prevOffset - model.viewport.YOffset
+	assert.GreaterOrEqual(t, scrolled, pageHeight-1,
+		"viewport should scroll back by approximately a full page")
+}
+
+func TestModel_TreePgDownMovesCursorByPage(t *testing.T) {
+	files := make([]string, 50)
+	for i := range files {
+		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
+	}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+	m.height = 20
+
+	// cursor starts on first file
+	assert.Equal(t, "pkg/file00.go", m.tree.selectedFile())
+
+	pageSize := m.treePageSize()
+	require.Positive(t, pageSize)
+
+	// PgDown should advance cursor by page size files
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model := result.(Model)
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model.tree.selectedFile(),
+		"PgDown in tree should move cursor by page size")
+}
+
+func TestModel_TreePgUpMovesCursorByPage(t *testing.T) {
+	files := make([]string, 50)
+	for i := range files {
+		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
+	}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+	m.height = 20
+
+	pageSize := m.treePageSize()
+	require.Positive(t, pageSize)
+
+	// move cursor to the last file, then back 10 — lands on file39
+	m.tree.moveToLast()
+	for range 10 {
+		m.tree.moveUp()
+	}
+	assert.Equal(t, "pkg/file39.go", m.tree.selectedFile())
+
+	// PgUp should move back by page size files
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model := result.(Model)
+	expected := fmt.Sprintf("pkg/file%02d.go", 39-pageSize)
+	assert.Equal(t, expected, model.tree.selectedFile(), "PgUp in tree should move cursor by page size")
+}
+
+func TestModel_TreeCtrlDMovesCursorByPage(t *testing.T) {
+	files := make([]string, 50)
+	for i := range files {
+		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
+	}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+	m.height = 20
+
+	assert.Equal(t, "pkg/file00.go", m.tree.selectedFile())
+
+	pageSize := m.treePageSize()
+	require.Positive(t, pageSize)
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	model := result.(Model)
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model.tree.selectedFile(),
+		"ctrl+d in tree should move cursor by page size")
+}
+
+func TestModel_TreeCtrlUMovesCursorByPage(t *testing.T) {
+	files := make([]string, 50)
+	for i := range files {
+		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
+	}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+	m.height = 20
+
+	pageSize := m.treePageSize()
+	require.Positive(t, pageSize)
+
+	m.tree.moveToLast()
+	for range 10 {
+		m.tree.moveUp()
+	}
+	assert.Equal(t, "pkg/file39.go", m.tree.selectedFile())
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model := result.(Model)
+	expected := fmt.Sprintf("pkg/file%02d.go", 39-pageSize)
+	assert.Equal(t, expected, model.tree.selectedFile(), "ctrl+u in tree should move cursor by page size")
+}
+
+func TestModel_TreeHomeEndMoveToBoundaries(t *testing.T) {
+	files := []string{"cmd/main.go", "internal/a.go", "internal/b.go", "internal/c.go", "pkg/util.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+
+	// move to middle
+	m.tree.moveDown()
+	m.tree.moveDown()
+	assert.NotEqual(t, "cmd/main.go", m.tree.selectedFile())
+
+	// end should move to last file
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	model := result.(Model)
+	assert.Equal(t, "pkg/util.go", model.tree.selectedFile(), "End in tree should move to last file")
+
+	// home should move to first file
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyHome})
+	model = result.(Model)
+	assert.Equal(t, "cmd/main.go", model.tree.selectedFile(), "Home in tree should move to first file")
+}
+
+func TestModel_TreeScrollOffsetPersistsAcrossUpdates(t *testing.T) {
+	// many files so tree needs scrolling at the given height
+	files := make([]string, 30)
+	for i := range files {
+		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
+	}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+	m.height = 10 // visible tree height = 10-3 = 7 rows
+
+	// scroll down past the visible window via repeated Update calls
+	var result tea.Model
+	for range 15 {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = result.(Model)
+	}
+	// cursor should be well past the initial visible window
+	offsetAfterDown := m.tree.offset
+	assert.Positive(t, offsetAfterDown, "offset should be non-zero after scrolling past visible area")
+
+	// move up one step, offset should stay stable (not jump to 0)
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	m = result.(Model)
+	assert.Equal(t, offsetAfterDown, m.tree.offset,
+		"offset should remain stable when moving cursor up within the visible window")
 }

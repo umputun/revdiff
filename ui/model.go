@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -117,6 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.annotating {
 		var cmd tea.Cmd
 		m.annotateInput, cmd = m.annotateInput.Update(msg)
+		m.viewport.SetContent(m.renderDiff()) // re-render so cursor blink updates are visible
 		return m, cmd
 	}
 
@@ -136,10 +138,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "tab":
 		annotated := m.annotatedFiles()
 		m.tree.toggleFilter(annotated)
+		m.tree.ensureVisible(m.treePageSize())
 		return m, nil
 
 	case msg.String() == "n":
 		m.tree.nextFile()
+		m.tree.ensureVisible(m.treePageSize())
 		if f := m.tree.selectedFile(); f != "" && f != m.currFile {
 			m.loadSeq++
 			m.pendingFile = f
@@ -149,6 +153,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case msg.String() == "p":
 		m.tree.prevFile()
+		m.tree.ensureVisible(m.treePageSize())
 		if f := m.tree.selectedFile(); f != "" && f != m.currFile {
 			m.loadSeq++
 			m.pendingFile = f
@@ -183,12 +188,31 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tree.moveDown()
 	case msg.String() == "k" || msg.String() == "up":
 		m.tree.moveUp()
+	case msg.Type == tea.KeyPgDown || msg.String() == "ctrl+d":
+		m.tree.pageDown(m.treePageSize())
+	case msg.Type == tea.KeyPgUp || msg.String() == "ctrl+u":
+		m.tree.pageUp(m.treePageSize())
+	case msg.Type == tea.KeyHome:
+		m.tree.moveToFirst()
+	case msg.Type == tea.KeyEnd:
+		m.tree.moveToLast()
 	case msg.String() == "l" || msg.String() == "right":
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
 	}
+	m.tree.ensureVisible(m.treePageSize())
 	return m, nil
+}
+
+// treePageSize returns the number of visible lines in the tree pane,
+// accounting for annotation summary lines when present.
+func (m Model) treePageSize() int {
+	size := m.height - 3 // content height matching Height(m.height-3) in View()
+	if summary := m.renderAnnotationSummary(m.treeWidth); summary != "" {
+		size -= strings.Count(summary, "\n") + 1
+	}
+	return max(1, size)
 }
 
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -238,6 +262,8 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = diffWidth
 		m.viewport.Height = diffHeight
 	}
+
+	m.tree.ensureVisible(m.treePageSize())
 
 	if m.currFile != "" {
 		m.viewport.SetContent(m.renderDiff())
@@ -292,8 +318,14 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	treeContent := m.tree.render(m.treeWidth, m.annotatedFiles(), m.styles)
-	if summary := m.renderAnnotationSummary(m.treeWidth); summary != "" {
+	treeHeight := m.height - 3 // content height matching treeStyle.Height(m.height-3)
+	summary := m.renderAnnotationSummary(m.treeWidth)
+	if summary != "" {
+		treeHeight -= strings.Count(summary, "\n") + 1
+	}
+	treeHeight = max(1, treeHeight) // ensure at least one row for file list
+	treeContent := m.tree.render(m.treeWidth, treeHeight, m.annotatedFiles(), m.styles)
+	if summary != "" {
 		treeContent += "\n" + summary
 	}
 
@@ -335,9 +367,10 @@ func (m Model) View() string {
 		case paneTree:
 			statusText = "[j/k] navigate  [enter] select  [l] diff  [tab] filter  [n/p] next/prev  [q] quit"
 		case paneDiff:
-			statusText = "[j/k] scroll  [h] files  [a] annotate  [n/p] next/prev  [q] quit"
 			if m.cursorLineHasAnnotation() {
 				statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+			} else {
+				statusText = "[j/k] scroll  [h] files  [a] annotate  [n/p] next/prev  [q] quit"
 			}
 		}
 	}

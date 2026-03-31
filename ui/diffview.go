@@ -98,20 +98,44 @@ func (m *Model) moveDiffCursorUp() {
 	}
 }
 
-// moveDiffCursorPageDown moves the diff cursor down by one page (viewport height).
+// moveDiffCursorPageDown moves the diff cursor down by one visual page.
+// accounts for divider lines and annotation rows that occupy rendered space.
+// scrolls the viewport so cursor appears near the top of the new page.
 func (m *Model) moveDiffCursorPageDown() {
-	for range m.viewport.Height {
+	startY := m.cursorViewportY()
+	for {
+		prev := m.diffCursor
 		m.moveDiffCursorDown()
+		if m.diffCursor == prev {
+			break
+		}
+		if m.cursorViewportY()-startY >= m.viewport.Height {
+			break
+		}
 	}
-	m.syncViewportToCursor()
+	// place cursor at the top of the viewport for a true page-scroll feel
+	m.viewport.SetYOffset(m.cursorViewportY())
+	m.viewport.SetContent(m.renderDiff())
 }
 
-// moveDiffCursorPageUp moves the diff cursor up by one page (viewport height).
+// moveDiffCursorPageUp moves the diff cursor up by one visual page.
+// accounts for divider lines and annotation rows that occupy rendered space.
+// scrolls the viewport so cursor appears near the bottom of the new page.
 func (m *Model) moveDiffCursorPageUp() {
-	for range m.viewport.Height {
+	startY := m.cursorViewportY()
+	for {
+		prev := m.diffCursor
 		m.moveDiffCursorUp()
+		if m.diffCursor == prev {
+			break
+		}
+		if startY-m.cursorViewportY() >= m.viewport.Height {
+			break
+		}
 	}
-	m.syncViewportToCursor()
+	// place cursor at the bottom of the viewport for a true page-scroll feel
+	m.viewport.SetYOffset(max(0, m.cursorViewportY()-m.viewport.Height+1))
+	m.viewport.SetContent(m.renderDiff())
 }
 
 // moveDiffCursorToStart moves the diff cursor to the first non-divider line.

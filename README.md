@@ -52,11 +52,14 @@ revdiff HEAD~1
 |-----|--------|
 | `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
 | `h/l` or left/right | Switch between file tree and diff pane |
+| `PgDown/PgUp` | Page scroll in file tree and diff pane |
+| `Ctrl+d/Ctrl+u` | Page scroll in file tree and diff pane |
+| `Home/End` | Jump to first/last item |
 | `Enter` | Select file from list |
 | `Tab` | Toggle all files / annotated only |
 | `n/p` | Next/previous changed file |
 | `a` | Annotate current diff line |
-| `d` | Delete annotation under cursor |
+| `d` | Delete annotation under cursor (shown only on annotated lines) |
 | `Esc` | Cancel annotation input |
 | `q` | Quit, output annotations to stdout |
 

@@ -10,6 +10,7 @@ import (
 type fileTree struct {
 	entries  []treeEntry // flat list of directories and files for display
 	cursor   int         // currently highlighted entry index
+	offset   int         // first visible entry index for viewport scrolling
 	allFiles []string    // original full file paths
 	filter   bool        // when true, show only annotated files
 }
@@ -88,6 +89,24 @@ func (ft *fileTree) selectedFile() string {
 	return ft.entries[ft.cursor].path
 }
 
+// ensureVisible adjusts offset so the cursor is within the visible range of given height.
+func (ft *fileTree) ensureVisible(height int) {
+	if height <= 0 {
+		return
+	}
+	if ft.cursor < ft.offset {
+		ft.offset = ft.cursor
+	} else if ft.cursor >= ft.offset+height {
+		ft.offset = ft.cursor - height + 1
+	}
+	if ft.offset < 0 {
+		ft.offset = 0
+	}
+	if maxOff := max(len(ft.entries)-height, 0); ft.offset > maxOff {
+		ft.offset = maxOff
+	}
+}
+
 // moveDown moves cursor to the next file entry (skips directories).
 func (ft *fileTree) moveDown() {
 	for i := ft.cursor + 1; i < len(ft.entries); i++ {
@@ -101,6 +120,54 @@ func (ft *fileTree) moveDown() {
 // moveUp moves cursor to the previous file entry (skips directories).
 func (ft *fileTree) moveUp() {
 	for i := ft.cursor - 1; i >= 0; i-- {
+		if !ft.entries[i].isDir {
+			ft.cursor = i
+			return
+		}
+	}
+}
+
+// pageDown moves cursor down by approximately n visual rows,
+// accounting for directory header rows that occupy rendered space.
+func (ft *fileTree) pageDown(n int) {
+	rowsMoved := 0
+	for rowsMoved < n {
+		prev := ft.cursor
+		ft.moveDown()
+		if ft.cursor == prev {
+			break
+		}
+		rowsMoved += ft.cursor - prev // counts skipped directory entries too
+	}
+}
+
+// pageUp moves cursor up by approximately n visual rows,
+// accounting for directory header rows that occupy rendered space.
+func (ft *fileTree) pageUp(n int) {
+	rowsMoved := 0
+	for rowsMoved < n {
+		prev := ft.cursor
+		ft.moveUp()
+		if ft.cursor == prev {
+			break
+		}
+		rowsMoved += prev - ft.cursor // counts skipped directory entries too
+	}
+}
+
+// moveToFirst moves cursor to the first file entry.
+func (ft *fileTree) moveToFirst() {
+	for i, e := range ft.entries {
+		if !e.isDir {
+			ft.cursor = i
+			return
+		}
+	}
+}
+
+// moveToLast moves cursor to the last file entry.
+func (ft *fileTree) moveToLast() {
+	for i := len(ft.entries) - 1; i >= 0; i-- {
 		if !ft.entries[i].isDir {
 			ft.cursor = i
 			return
@@ -175,14 +242,19 @@ func (ft *fileTree) setFiles(files []string) {
 	}
 }
 
-// render produces the file tree display string.
-func (ft *fileTree) render(width int, annotatedFiles map[string]bool, s styles) string {
+// render produces the file tree display string, showing only entries visible within the given height.
+// it adjusts the internal offset so the cursor stays within the visible window.
+func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s styles) string {
 	if len(ft.entries) == 0 {
 		return "  no changed files"
 	}
 
+	ft.ensureVisible(height)
+	end := min(ft.offset+height, len(ft.entries))
+
 	var b strings.Builder
-	for i, e := range ft.entries {
+	for idx := ft.offset; idx < end; idx++ {
+		e := ft.entries[idx]
 		indent := strings.Repeat("  ", e.depth)
 		var line string
 
@@ -195,7 +267,7 @@ func (ft *fileTree) render(width int, annotatedFiles map[string]bool, s styles) 
 			}
 			name := indent + e.name + marker
 
-			if i == ft.cursor {
+			if idx == ft.cursor {
 				line = s.FileSelected.Width(width - 2).Render(name)
 			} else {
 				line = s.FileEntry.Render(name)
@@ -203,7 +275,7 @@ func (ft *fileTree) render(width int, annotatedFiles map[string]bool, s styles) 
 		}
 
 		b.WriteString(line)
-		if i < len(ft.entries)-1 {
+		if idx < end-1 {
 			b.WriteString("\n")
 		}
 	}
