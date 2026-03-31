@@ -20,8 +20,7 @@ const (
 	paneTree pane = iota
 	paneDiff
 
-	defaultTreeWidth = 30
-	minTreeWidth     = 20
+	minTreeWidth = 20
 )
 
 // Model is the top-level bubbletea model for revdiff.
@@ -32,13 +31,14 @@ type Model struct {
 	store    *annotation.Store
 	renderer diff.DiffRenderer
 
-	ref        string
-	staged     bool
-	focus      pane
-	width      int
-	height     int
-	treeWidth  int
-	diffCursor int // index into diffLines for current cursor line
+	ref            string
+	staged         bool
+	focus          pane
+	width          int
+	height         int
+	treeWidth      int
+	treeWidthRatio int // 1-10 units for file tree panel
+	diffCursor     int // index into diffLines for current cursor line
 
 	diffLines     []diff.DiffLine // current file's parsed diff lines
 	currFile      string          // currently displayed file
@@ -63,16 +63,19 @@ type filesLoadedMsg struct {
 	err   error
 }
 
-// NewModel creates a new Model with the given renderer, store, ref, and staged flag.
-func NewModel(renderer diff.DiffRenderer, store *annotation.Store, ref string, staged bool) Model {
+// NewModel creates a new Model with the given renderer, store, ref, staged flag, and tree width ratio (1-10).
+func NewModel(renderer diff.DiffRenderer, store *annotation.Store, ref string, staged bool, treeWidthRatio int) Model {
+	if treeWidthRatio < 1 || treeWidthRatio > 10 {
+		treeWidthRatio = 3
+	}
 	return Model{
-		styles:    defaultStyles(),
-		store:     store,
-		renderer:  renderer,
-		ref:       ref,
-		staged:    staged,
-		focus:     paneTree,
-		treeWidth: defaultTreeWidth,
+		styles:         defaultStyles(),
+		store:          store,
+		renderer:       renderer,
+		ref:            ref,
+		staged:         staged,
+		focus:          paneTree,
+		treeWidthRatio: treeWidthRatio,
 	}
 }
 
@@ -249,8 +252,8 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	// adjust tree width
-	m.treeWidth = max(minTreeWidth, min(defaultTreeWidth, m.width/3))
+	// adjust tree width based on ratio (N out of 10 units)
+	m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 
 	diffWidth := m.width - m.treeWidth - 4 // borders
 	diffHeight := m.height - 4             // borders + status

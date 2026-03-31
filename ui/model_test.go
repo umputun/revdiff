@@ -24,11 +24,11 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		},
 	}
 	store := annotation.NewStore()
-	m := NewModel(renderer, store, "", false)
+	m := NewModel(renderer, store, "", false, 3)
 	// simulate window size
 	m.width = 120
 	m.height = 40
-	m.treeWidth = defaultTreeWidth
+	m.treeWidth = m.width * m.treeWidthRatio / 10
 	m.ready = true
 	return m
 }
@@ -319,6 +319,35 @@ func TestModel_WindowResize(t *testing.T) {
 	assert.True(t, model.ready)
 	assert.Equal(t, 100, model.width)
 	assert.Equal(t, 50, model.height)
+	assert.Equal(t, 30, model.treeWidth) // 100 * 3 / 10 = 30
+}
+
+func TestModel_TreeWidthRatio(t *testing.T) {
+	tests := []struct {
+		name          string
+		ratio         int
+		termWidth     int
+		wantTreeWidth int
+	}{
+		{name: "default ratio 3 of 10", ratio: 3, termWidth: 120, wantTreeWidth: 36},
+		{name: "ratio 2 of 10", ratio: 2, termWidth: 120, wantTreeWidth: 24},
+		{name: "ratio 5 of 10", ratio: 5, termWidth: 120, wantTreeWidth: 60},
+		{name: "min width enforced", ratio: 1, termWidth: 100, wantTreeWidth: 20},
+		{name: "invalid ratio defaults to 3", ratio: 0, termWidth: 120, wantTreeWidth: 36},
+		{name: "over max ratio defaults to 3", ratio: 15, termWidth: 120, wantTreeWidth: 36},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			renderer := &mocks.DiffRendererMock{
+				ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
+				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+			}
+			m := NewModel(renderer, annotation.NewStore(), "", false, tc.ratio)
+			result, _ := m.Update(tea.WindowSizeMsg{Width: tc.termWidth, Height: 40})
+			model := result.(Model)
+			assert.Equal(t, tc.wantTreeWidth, model.treeWidth)
+		})
+	}
 }
 
 func TestModel_ViewOutput(t *testing.T) {

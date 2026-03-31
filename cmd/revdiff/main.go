@@ -19,8 +19,9 @@ var opts struct {
 		Ref string `positional-arg-name:"ref" description:"git ref to diff against (default: uncommitted changes)"`
 	} `positional-args:"yes"`
 
-	Staged  bool `long:"staged" description:"show staged changes"`
-	Version bool `short:"V" long:"version" description:"show version info"`
+	Staged    bool `long:"staged" description:"show staged changes"`
+	TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3" description:"file tree panel width in units (1-10, default 3 of 10)"`
+	Version   bool `short:"V" long:"version" description:"show version info"`
 }
 
 var revision = "unknown"
@@ -50,7 +51,7 @@ func main() {
 func run() error {
 	renderer := diff.NewGit(".")
 	store := annotation.NewStore()
-	model := ui.NewModel(renderer, store, opts.Ref.Ref, opts.Staged)
+	model := ui.NewModel(renderer, store, opts.Ref.Ref, opts.Staged, opts.TreeWidth)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	finalModel, err := p.Run()

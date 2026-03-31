@@ -28,6 +28,7 @@ revdiff [OPTIONS] [ref]
 |--------|-------------|---------|
 | `ref` | Git ref to diff against | uncommitted changes |
 | `--staged` | Show staged changes | `false` |
+| `--tree-width` | File tree panel width in units (1-10), env: `TREE_WIDTH` | `3` |
 | `-V`, `--version` | Show version info | |
 
 ### Examples
