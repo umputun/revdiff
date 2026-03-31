@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -39,9 +40,11 @@ type Model struct {
 	treeWidth  int
 	diffCursor int // index into diffLines for current cursor line
 
-	diffLines []diff.DiffLine // current file's parsed diff lines
-	currFile  string          // currently displayed file
-	ready     bool            // true after first WindowSizeMsg
+	diffLines     []diff.DiffLine // current file's parsed diff lines
+	currFile      string          // currently displayed file
+	ready         bool            // true after first WindowSizeMsg
+	annotating    bool            // true when annotation text input is active
+	annotateInput textinput.Model // text input for annotations
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -107,10 +110,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fileLoadedMsg:
 		return m.handleFileLoaded(msg)
 	}
+
+	// forward other messages to textinput when annotating (e.g. cursor blink)
+	if m.annotating {
+		var cmd tea.Cmd
+		m.annotateInput, cmd = m.annotateInput.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// annotation input mode takes priority
+	if m.annotating {
+		return m.handleAnnotateKey(msg)
+	}
+
 	switch {
 	case msg.String() == "q":
 		return m, tea.Quit
@@ -178,6 +194,12 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "k" || msg.String() == "up":
 		m.moveDiffCursorUp()
 		m.syncViewportToCursor()
+	case msg.String() == "a":
+		cmd := m.startAnnotation()
+		m.viewport.SetContent(m.renderDiff())
+		return m, cmd
+	case msg.String() == "d":
+		m.deleteAnnotation()
 	}
 	return m, nil
 }
@@ -248,6 +270,9 @@ func (m Model) View() string {
 	}
 
 	treeContent := m.tree.render(m.treeWidth, m.annotatedFiles(), m.styles)
+	if summary := m.renderAnnotationSummary(m.treeWidth); summary != "" {
+		treeContent += "\n" + summary
+	}
 
 	// apply pane borders based on focus
 	treeStyle := m.styles.TreePane
@@ -280,11 +305,15 @@ func (m Model) View() string {
 
 	// status bar with context-sensitive hints
 	var statusText string
-	switch m.focus {
-	case paneTree:
-		statusText = "[j/k] navigate  [enter] select  [l] diff  [tab] filter  [n/p] next/prev  [q] quit"
-	case paneDiff:
-		statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+	if m.annotating {
+		statusText = "[enter] save  [esc] cancel"
+	} else {
+		switch m.focus {
+		case paneTree:
+			statusText = "[j/k] navigate  [enter] select  [l] diff  [tab] filter  [n/p] next/prev  [q] quit"
+		case paneDiff:
+			statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+		}
 	}
 	status := m.styles.StatusBar.Render(statusText)
 

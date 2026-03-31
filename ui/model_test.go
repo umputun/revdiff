@@ -395,6 +395,333 @@ func TestModel_FileLoadedResetsCursor(t *testing.T) {
 	assert.Equal(t, 0, model.diffCursor) // cursor reset to first line
 }
 
+func TestModel_AnnotateKey(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	// press 'a' - should enter annotation mode
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model := result.(Model)
+	assert.True(t, model.annotating)
+	assert.NotNil(t, cmd) // textinput blink command
+}
+
+func TestModel_AnnotateEnterSaves(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	// enter annotation mode and set text
+	m.startAnnotation()
+	m.annotateInput.SetValue("test comment")
+
+	// press Enter - should save
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.False(t, model.annotating)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "test comment", anns[0].Comment)
+	assert.Equal(t, 5, anns[0].Line)
+	assert.Equal(t, diff.ChangeContext, anns[0].Type)
+}
+
+func TestModel_AnnotateEnterEmptyTextCancels(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	m.startAnnotation()
+	// don't set any text, press Enter
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.False(t, model.annotating)
+	assert.Empty(t, model.store.Get("a.go"))
+}
+
+func TestModel_AnnotateEscCancels(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	m.startAnnotation()
+	m.annotateInput.SetValue("should not be saved")
+
+	// press Esc - should cancel without saving
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := result.(Model)
+	assert.False(t, model.annotating)
+	assert.Empty(t, model.store.Get("a.go"))
+}
+
+func TestModel_AnnotateOnDividerIgnored(t *testing.T) {
+	lines := []diff.DiffLine{
+		{Content: "...", ChangeType: diff.ChangeDivider},
+		{NewNum: 10, Content: "line10", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	// press 'a' on divider - should not enter annotation mode
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model := result.(Model)
+	assert.False(t, model.annotating)
+}
+
+func TestModel_AnnotateOnAddLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 3, Content: "new line", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	m.startAnnotation()
+	m.annotateInput.SetValue("needs review")
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 3, anns[0].Line)
+	assert.Equal(t, diff.ChangeAdd, anns[0].Type)
+}
+
+func TestModel_AnnotateOnRemoveLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 7, Content: "removed line", ChangeType: diff.ChangeRemove},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	m.startAnnotation()
+	m.annotateInput.SetValue("why removed?")
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 7, anns[0].Line)
+	assert.Equal(t, diff.ChangeRemove, anns[0].Type)
+}
+
+func TestModel_AnnotatePreFillsExisting(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.store.Add("a.go", 1, " ", "old comment")
+
+	m.startAnnotation()
+	assert.Equal(t, "old comment", m.annotateInput.Value())
+}
+
+func TestModel_DeleteAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.store.Add("a.go", 1, " ", "test comment")
+
+	// press 'd' - should delete annotation
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+	assert.Empty(t, model.store.Get("a.go"))
+}
+
+func TestModel_DeleteAnnotationOnDividerIgnored(t *testing.T) {
+	lines := []diff.DiffLine{
+		{Content: "...", ChangeType: diff.ChangeDivider},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	// press 'd' on divider - should not panic
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	_ = result.(Model)
+}
+
+func TestModel_DeleteAnnotationNoAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+
+	// no annotation exists, 'd' should be harmless
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+	assert.Empty(t, model.store.Get("a.go"))
+}
+
+func TestModel_RenderDiffWithAnnotations(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
+	}
+	m.store.Add("a.go", 2, "+", "needs error handling")
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "needs error handling")
+	assert.Contains(t, rendered, "\U0001f4ac")
+}
+
+func TestModel_RenderDiffAnnotationInput(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.diffCursor = 0
+	m.focus = paneDiff
+	m.startAnnotation()
+	m.annotateInput.SetValue("typing...")
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "typing...")
+	assert.Contains(t, rendered, "\U0001f4ac")
+}
+
+func TestModel_AnnotationSummary(t *testing.T) {
+	m := testModel(nil, nil)
+	m.store.Add("internal/a.go", 1, "+", "first comment")
+	m.store.Add("b.go", 5, " ", "second comment")
+
+	summary := m.renderAnnotationSummary(40)
+	assert.Contains(t, summary, "annotations")
+	assert.Contains(t, summary, "a.go:1")
+	assert.Contains(t, summary, "b.go:5")
+	assert.Contains(t, summary, "first comment")
+	assert.Contains(t, summary, "second comment")
+}
+
+func TestModel_AnnotationSummaryEmpty(t *testing.T) {
+	m := testModel(nil, nil)
+	summary := m.renderAnnotationSummary(30)
+	assert.Empty(t, summary)
+}
+
+func TestModel_AnnotationSummaryTruncatesLongComments(t *testing.T) {
+	m := testModel(nil, nil)
+	m.store.Add("a.go", 1, "+", "this is a very long comment that should be truncated because it exceeds the width limit")
+
+	summary := m.renderAnnotationSummary(20)
+	assert.Contains(t, summary, "...")
+}
+
+func TestModel_AnnotateStatusBar(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.focus = paneDiff
+	m.annotating = true
+
+	view := m.View()
+	assert.Contains(t, view, "save")
+	assert.Contains(t, view, "cancel")
+	assert.NotContains(t, view, "annotate")
+}
+
+func TestModel_AnnotateKeysBlockedInTreePane(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneTree
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+
+	// 'a' in tree pane should not enter annotation mode
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model := result.(Model)
+	assert.False(t, model.annotating)
+}
+
+func TestModel_CursorViewportY(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+	}
+
+	// no annotations, cursor at 0 -> viewport Y = 0
+	m.diffCursor = 0
+	assert.Equal(t, 0, m.cursorViewportY())
+
+	// no annotations, cursor at 2 -> viewport Y = 2
+	m.diffCursor = 2
+	assert.Equal(t, 2, m.cursorViewportY())
+
+	// add annotation on line 1 (index 0), cursor at 2 -> viewport Y = 3 (line0 + annotation + line1)
+	m.store.Add("a.go", 1, " ", "comment")
+	m.diffCursor = 2
+	assert.Equal(t, 3, m.cursorViewportY())
+}
+
+func TestModel_DiffLineNum(t *testing.T) {
+	assert.Equal(t, 5, diffLineNum(diff.DiffLine{NewNum: 5, ChangeType: diff.ChangeContext}))
+	assert.Equal(t, 3, diffLineNum(diff.DiffLine{NewNum: 3, ChangeType: diff.ChangeAdd}))
+	assert.Equal(t, 7, diffLineNum(diff.DiffLine{OldNum: 7, ChangeType: diff.ChangeRemove}))
+}
+
 func TestModel_NextPrevFileWrapAround(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, map[string][]diff.DiffLine{

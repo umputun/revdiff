@@ -7,10 +7,18 @@ import (
 	"github.com/umputun/revdiff/diff"
 )
 
-// renderDiff renders the current file's diff lines with styling and cursor highlight.
+// renderDiff renders the current file's diff lines with styling, cursor highlight,
+// and injected annotation lines.
 func (m Model) renderDiff() string {
 	if len(m.diffLines) == 0 {
 		return "  no changes"
+	}
+
+	// build annotation lookup for current file
+	annotations := m.store.Get(m.currFile)
+	annotationMap := make(map[string]string, len(annotations))
+	for _, a := range annotations {
+		annotationMap[annotationKey(a.Line, a.Type)] = a.Comment
 	}
 
 	var b strings.Builder
@@ -33,6 +41,17 @@ func (m Model) renderDiff() string {
 			line = m.styles.DiffCursorLine.Render(line)
 		}
 		b.WriteString(line + "\n")
+
+		// inject text input if annotating on this line
+		if m.annotating && i == m.diffCursor {
+			b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
+		} else if dl.ChangeType != diff.ChangeDivider {
+			// inject existing annotation line
+			key := annotationKey(diffLineNum(dl), dl.ChangeType)
+			if comment, ok := annotationMap[key]; ok {
+				b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac "+comment) + "\n")
+			}
+		}
 	}
 	return b.String()
 }
@@ -80,11 +99,13 @@ func (m *Model) moveDiffCursorUp() {
 }
 
 // syncViewportToCursor adjusts viewport scroll to keep cursor visible and re-renders content.
+// accounts for annotation lines injected between diff lines.
 func (m *Model) syncViewportToCursor() {
-	if m.diffCursor < m.viewport.YOffset {
-		m.viewport.SetYOffset(m.diffCursor)
-	} else if m.diffCursor >= m.viewport.YOffset+m.viewport.Height {
-		m.viewport.SetYOffset(m.diffCursor - m.viewport.Height + 1)
+	cursorY := m.cursorViewportY()
+	if cursorY < m.viewport.YOffset {
+		m.viewport.SetYOffset(cursorY)
+	} else if cursorY >= m.viewport.YOffset+m.viewport.Height {
+		m.viewport.SetYOffset(cursorY - m.viewport.Height + 1)
 	}
 	m.viewport.SetContent(m.renderDiff())
 }
