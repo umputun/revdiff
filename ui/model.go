@@ -327,7 +327,10 @@ func (m Model) View() string {
 		case paneTree:
 			statusText = "[j/k] navigate  [enter] select  [l] diff  [tab] filter  [n/p] next/prev  [q] quit"
 		case paneDiff:
-			statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+			statusText = "[j/k] scroll  [h] files  [a] annotate  [n/p] next/prev  [q] quit"
+			if m.cursorLineHasAnnotation() {
+				statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+			}
 		}
 	}
 	status := m.styles.StatusBar.Render(statusText)

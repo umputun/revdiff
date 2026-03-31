@@ -107,6 +107,21 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
+// cursorLineHasAnnotation checks if the current diffCursor line has an annotation in the store.
+func (m Model) cursorLineHasAnnotation() bool {
+	dl, ok := m.cursorDiffLine()
+	if !ok || dl.ChangeType == diff.ChangeDivider {
+		return false
+	}
+	lineNum := m.diffLineNum(dl)
+	for _, a := range m.store.Get(m.currFile) {
+		if a.Line == lineNum && a.Type == dl.ChangeType {
+			return true
+		}
+	}
+	return false
+}
+
 // diffLineNum returns the display line number for a diff line.
 func (m Model) diffLineNum(dl diff.DiffLine) int {
 	if dl.ChangeType == diff.ChangeRemove {

@@ -1140,3 +1140,46 @@ func TestModel_AnnotateRenderWithDividers(t *testing.T) {
 	assert.Contains(t, rendered, "removal comment")
 	assert.Contains(t, rendered, "...")
 }
+
+func TestModel_StatusBarShowsDeleteOnAnnotatedLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.focus = paneDiff
+	m.store.Add("a.go", 1, " ", "review this")
+
+	view := m.View()
+	assert.Contains(t, view, "[d] delete", "status bar should show delete hint on annotated line")
+	assert.Contains(t, view, "annotate")
+}
+
+func TestModel_StatusBarHidesDeleteOnNonAnnotatedLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.focus = paneDiff
+
+	// no annotations exist - delete hint should not appear
+	view := m.View()
+	assert.NotContains(t, view, "[d] delete", "status bar should not show delete hint on non-annotated line")
+	assert.Contains(t, view, "annotate")
+
+	// add annotation on line 2 (index 1), but cursor is on line 1 (index 0) - still no delete
+	m.store.Add("a.go", 2, "+", "some comment")
+	view = m.View()
+	assert.NotContains(t, view, "[d] delete", "status bar should not show delete hint when cursor is on a different line")
+}
