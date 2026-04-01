@@ -2437,7 +2437,7 @@ func TestModel_StatusBarShowsHunkIndicator(t *testing.T) {
 	m.focus = paneDiff
 
 	status := m.statusBarText(m.annotatedFiles())
-	assert.Contains(t, status, "[/] hunk 1/2")
+	assert.Contains(t, status, "[ ] hunk 1/2")
 
 	m.diffCursor = 3
 	status = m.statusBarText(m.annotatedFiles())
@@ -2457,7 +2457,7 @@ func TestModel_StatusBarNoHunkIndicatorWithoutChanges(t *testing.T) {
 	m.focus = paneDiff
 
 	status := m.statusBarText(m.annotatedFiles())
-	assert.NotContains(t, status, "[/] hunk", "should not show hunk hint when no hunks")
+	assert.NotContains(t, status, "[ ] hunk", "should not show hunk hint when no hunks")
 }
 
 func TestModel_StatusBarHunksHintInDiffPane(t *testing.T) {
@@ -2468,12 +2468,12 @@ func TestModel_StatusBarHunksHintInDiffPane(t *testing.T) {
 	m.focus = paneDiff
 
 	status := m.statusBarText(m.annotatedFiles())
-	assert.Contains(t, status, "[/] hunk 1/1")
+	assert.Contains(t, status, "[ ] hunk 1/1")
 
 	// tree pane should not show hunk hint
 	m.focus = paneTree
 	status = m.statusBarText(m.annotatedFiles())
-	assert.NotContains(t, status, "[/] hunk")
+	assert.NotContains(t, status, "[ ] hunk")
 }
 
 func TestModel_EditExistingFileAnnotationShowsInput(t *testing.T) {

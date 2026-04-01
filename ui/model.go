@@ -481,7 +481,7 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		}
 		hunkHint := ""
 		if cur, total := m.currentHunk(); total > 0 {
-			hunkHint = fmt.Sprintf("  [/] hunk %d/%d", cur, total)
+			hunkHint = fmt.Sprintf("  [ ] hunk %d/%d", cur, total)
 		}
 		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
 	}
