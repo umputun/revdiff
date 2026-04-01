@@ -1,6 +1,6 @@
 ---
 name: revdiff
-description: Review git diffs with inline annotations in a TUI overlay. Opens revdiff in tmux/kitty/wezterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff".
+description: Review git diffs with inline annotations in a TUI overlay. Opens revdiff in tmux/kitty/wezterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff", "git review with revdiff", "interactive diff review".
 argument-hint: 'optional git ref (e.g., HEAD~1, main)'
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob, EnterPlanMode]
 ---
