@@ -9,12 +9,12 @@ import (
 	"github.com/umputun/revdiff/diff"
 )
 
-// DiffRendererMock is a mock implementation of diff.DiffRenderer.
+// RendererMock is a mock implementation of ui.Renderer.
 //
-//	func TestSomethingThatUsesDiffRenderer(t *testing.T) {
+//	func TestSomethingThatUsesRenderer(t *testing.T) {
 //
-//		// make and configure a mocked diff.DiffRenderer
-//		mockedDiffRenderer := &DiffRendererMock{
+//		// make and configure a mocked ui.Renderer
+//		mockedRenderer := &RendererMock{
 //			ChangedFilesFunc: func(ref string, staged bool) ([]string, error) {
 //				panic("mock out the ChangedFiles method")
 //			},
@@ -23,11 +23,11 @@ import (
 //			},
 //		}
 //
-//		// use mockedDiffRenderer in code that requires diff.DiffRenderer
+//		// use mockedRenderer in code that requires ui.Renderer
 //		// and then make assertions.
 //
 //	}
-type DiffRendererMock struct {
+type RendererMock struct {
 	// ChangedFilesFunc mocks the ChangedFiles method.
 	ChangedFilesFunc func(ref string, staged bool) ([]string, error)
 
@@ -58,9 +58,9 @@ type DiffRendererMock struct {
 }
 
 // ChangedFiles calls ChangedFilesFunc.
-func (mock *DiffRendererMock) ChangedFiles(ref string, staged bool) ([]string, error) {
+func (mock *RendererMock) ChangedFiles(ref string, staged bool) ([]string, error) {
 	if mock.ChangedFilesFunc == nil {
-		panic("DiffRendererMock.ChangedFilesFunc: method is nil but DiffRenderer.ChangedFiles was just called")
+		panic("RendererMock.ChangedFilesFunc: method is nil but Renderer.ChangedFiles was just called")
 	}
 	callInfo := struct {
 		Ref    string
@@ -78,8 +78,8 @@ func (mock *DiffRendererMock) ChangedFiles(ref string, staged bool) ([]string, e
 // ChangedFilesCalls gets all the calls that were made to ChangedFiles.
 // Check the length with:
 //
-//	len(mockedDiffRenderer.ChangedFilesCalls())
-func (mock *DiffRendererMock) ChangedFilesCalls() []struct {
+//	len(mockedRenderer.ChangedFilesCalls())
+func (mock *RendererMock) ChangedFilesCalls() []struct {
 	Ref    string
 	Staged bool
 } {
@@ -94,9 +94,9 @@ func (mock *DiffRendererMock) ChangedFilesCalls() []struct {
 }
 
 // FileDiff calls FileDiffFunc.
-func (mock *DiffRendererMock) FileDiff(ref string, file string, staged bool) ([]diff.DiffLine, error) {
+func (mock *RendererMock) FileDiff(ref string, file string, staged bool) ([]diff.DiffLine, error) {
 	if mock.FileDiffFunc == nil {
-		panic("DiffRendererMock.FileDiffFunc: method is nil but DiffRenderer.FileDiff was just called")
+		panic("RendererMock.FileDiffFunc: method is nil but Renderer.FileDiff was just called")
 	}
 	callInfo := struct {
 		Ref    string
@@ -116,8 +116,8 @@ func (mock *DiffRendererMock) FileDiff(ref string, file string, staged bool) ([]
 // FileDiffCalls gets all the calls that were made to FileDiff.
 // Check the length with:
 //
-//	len(mockedDiffRenderer.FileDiffCalls())
-func (mock *DiffRendererMock) FileDiffCalls() []struct {
+//	len(mockedRenderer.FileDiffCalls())
+func (mock *RendererMock) FileDiffCalls() []struct {
 	Ref    string
 	File   string
 	Staged bool

@@ -126,7 +126,6 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 
 	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
 		m.loadSeq++
-		m.pendingFile = newFile
 		return m.loadFileDiff(newFile)
 	}
 
@@ -161,7 +160,6 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 		// if filter moved cursor to a different file, load the new selection
 		if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
 			m.loadSeq++
-			m.pendingFile = newFile
 			return m.loadFileDiff(newFile)
 		}
 
@@ -206,15 +204,6 @@ func (m Model) hasFileAnnotation() bool {
 	return false
 }
 
-// fileAnnotationComment returns the file-level annotation comment, if one exists.
-func (m Model) fileAnnotationComment() string {
-	for _, a := range m.store.Get(m.currFile) {
-		if a.Line == 0 {
-			return a.Comment
-		}
-	}
-	return ""
-}
 
 // cursorOnFileAnnotationLine returns true if the diff cursor is on the file-level annotation line.
 func (m Model) cursorOnFileAnnotationLine() bool {

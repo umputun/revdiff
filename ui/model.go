@@ -1,5 +1,7 @@
 package ui
 
+//go:generate moq -out mocks/renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
+
 import (
 	"fmt"
 	"strings"
@@ -12,6 +14,12 @@ import (
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
 )
+
+// Renderer provides methods to extract changed files and build full-file diff views.
+type Renderer interface {
+	ChangedFiles(ref string, staged bool) ([]string, error)
+	FileDiff(ref, file string, staged bool) ([]diff.DiffLine, error)
+}
 
 // pane identifies which pane has focus.
 type pane int
@@ -29,7 +37,7 @@ type Model struct {
 	tree     fileTree
 	viewport viewport.Model
 	store    *annotation.Store
-	renderer diff.DiffRenderer
+	renderer Renderer
 
 	ref            string
 	staged         bool
@@ -42,7 +50,6 @@ type Model struct {
 
 	diffLines          []diff.DiffLine // current file's parsed diff lines
 	currFile           string          // currently displayed file
-	pendingFile        string          // file currently being loaded (async request identity)
 	loadSeq            uint64          // monotonic counter to identify the latest load request
 	ready              bool            // true after first WindowSizeMsg
 	annotating         bool            // true when annotation text input is active
@@ -66,7 +73,7 @@ type filesLoadedMsg struct {
 }
 
 // NewModel creates a new Model with the given renderer, store, ref, staged flag, and tree width ratio (1-10).
-func NewModel(renderer diff.DiffRenderer, store *annotation.Store, ref string, staged bool, treeWidthRatio int) Model {
+func NewModel(renderer Renderer, store *annotation.Store, ref string, staged bool, treeWidthRatio int) Model {
 	if treeWidthRatio < 1 || treeWidthRatio > 10 {
 		treeWidthRatio = 3
 	}
@@ -173,7 +180,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case paneTree:
 			if f := m.tree.selectedFile(); f != "" {
 				m.loadSeq++
-				m.pendingFile = f
 				return m, m.loadFileDiff(f)
 			}
 		case paneDiff:
@@ -209,7 +215,6 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	m.tree.ensureVisible(m.treePageSize())
 	if f := m.tree.selectedFile(); f != "" && f != m.currFile {
 		m.loadSeq++
-		m.pendingFile = f
 		return m, m.loadFileDiff(f)
 	}
 	return m, nil
@@ -319,7 +324,6 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	// auto-select first file
 	if f := m.tree.selectedFile(); f != "" {
 		m.loadSeq++
-		m.pendingFile = f
 		return m, m.loadFileDiff(f)
 	}
 	return m, nil

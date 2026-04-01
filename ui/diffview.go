@@ -14,9 +14,9 @@ func (m Model) renderDiff() string {
 		return "  no changes"
 	}
 
-	annotationMap := m.buildAnnotationMap()
+	annotationMap, fileComment := m.buildAnnotationMap()
 	var b strings.Builder
-	m.renderFileAnnotationHeader(&b)
+	m.renderFileAnnotationHeader(&b, fileComment)
 
 	for i, dl := range m.diffLines {
 		m.renderDiffLine(&b, i, dl)
@@ -26,21 +26,22 @@ func (m Model) renderDiff() string {
 }
 
 // buildAnnotationMap creates a lookup map of line annotations for the current file.
-// excludes file-level annotations (Line=0).
-func (m Model) buildAnnotationMap() map[string]string {
-	annotations := m.store.Get(m.currFile)
-	annotationMap := make(map[string]string, len(annotations))
-	for _, a := range annotations {
+// returns the annotation map and the file-level comment (empty if none).
+func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment string) {
+	all := m.store.Get(m.currFile)
+	annotations = make(map[string]string, len(all))
+	for _, a := range all {
 		if a.Line == 0 {
+			fileComment = a.Comment
 			continue
 		}
-		annotationMap[m.annotationKey(a.Line, a.Type)] = a.Comment
+		annotations[m.annotationKey(a.Line, a.Type)] = a.Comment
 	}
-	return annotationMap
+	return annotations, fileComment
 }
 
 // renderFileAnnotationHeader writes the file-level annotation or input to the builder.
-func (m Model) renderFileAnnotationHeader(b *strings.Builder) {
+func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annotating && m.fileAnnotating {
 		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
@@ -48,7 +49,7 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder) {
 		return
 	}
 
-	if fileComment := m.fileAnnotationComment(); fileComment != "" {
+	if fileComment != "" {
 		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
 		if m.diffCursor == -1 && m.focus == paneDiff {
 			line = m.styles.DiffCursorLine.Render(line)

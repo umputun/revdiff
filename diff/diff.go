@@ -1,7 +1,5 @@
 package diff
 
-//go:generate moq -out mocks/diff_renderer.go -pkg mocks -skip-ensure -fmt goimports . DiffRenderer
-
 import (
 	"bufio"
 	"context"
@@ -29,13 +27,7 @@ type DiffLine struct {
 	ChangeType string // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
 }
 
-// DiffRenderer provides methods to extract changed files and build full-file diff views.
-type DiffRenderer interface {
-	ChangedFiles(ref string, staged bool) ([]string, error)
-	FileDiff(ref, file string, staged bool) ([]DiffLine, error)
-}
-
-// Git implements DiffRenderer by shelling out to git commands.
+// Git provides methods to extract changed files and build full-file diff views.
 type Git struct {
 	workDir string // working directory for git commands
 }

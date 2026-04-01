@@ -12,11 +12,11 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
-	"github.com/umputun/revdiff/diff/mocks"
+	"github.com/umputun/revdiff/ui/mocks"
 )
 
 func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
-	renderer := &mocks.DiffRendererMock{
+	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(ref string, staged bool) ([]string, error) {
 			return files, nil
 		},
@@ -425,7 +425,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			renderer := &mocks.DiffRendererMock{
+			renderer := &mocks.RendererMock{
 				ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
 				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 			}
@@ -946,7 +946,6 @@ func TestModel_FileLoadedDiscardsStaleResponse(t *testing.T) {
 
 	// user presses n twice: first for b.go (seq=1), then for c.go (seq=2)
 	m.loadSeq = 2
-	m.pendingFile = "c.go"
 	m.tree.nextFile() // -> b.go
 	m.tree.nextFile() // -> c.go
 
@@ -973,7 +972,6 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 
 	// user presses n to load b.go
 	m.loadSeq = 1
-	m.pendingFile = "b.go"
 	m.tree.nextFile() // cursor -> b.go
 
 	// then j/k moves cursor to c.go (without triggering a load)
@@ -996,7 +994,6 @@ func TestModel_FileLoadedStaleErrorDiscarded(t *testing.T) {
 
 	// load a.go successfully (seq=1)
 	m.loadSeq = 1
-	m.pendingFile = "a.go"
 	aLines := []diff.DiffLine{{NewNum: 1, Content: "package a", ChangeType: diff.ChangeContext}}
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: 1, lines: aLines})
 	model := result.(Model)
@@ -1004,7 +1001,6 @@ func TestModel_FileLoadedStaleErrorDiscarded(t *testing.T) {
 
 	// user navigates to b.go (seq=2)
 	model.loadSeq = 2
-	model.pendingFile = "b.go"
 	model.tree.nextFile()
 
 	// stale error for a.go arrives with old seq - should be discarded
@@ -1023,7 +1019,6 @@ func TestModel_SameFileDuplicateLoadDiscarded(t *testing.T) {
 
 	// first enter on a.go (seq=1), then another enter on a.go (seq=2)
 	m.loadSeq = 2
-	m.pendingFile = "a.go"
 
 	// newer response arrives first (seq=2)
 	aLines := []diff.DiffLine{{NewNum: 1, Content: "package a", ChangeType: diff.ChangeContext}}
@@ -1114,7 +1109,6 @@ func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
 
 	// should return a command to load the new selection (b.go)
 	require.NotNil(t, cmd, "should trigger file load for new tree selection")
-	assert.Equal(t, "b.go", m.pendingFile, "pendingFile should be set to new tree selection")
 	assert.Equal(t, uint64(1), m.loadSeq, "loadSeq should be incremented to invalidate in-flight loads")
 }
 
@@ -2094,7 +2088,6 @@ func TestModel_DeleteFileAnnotationFilterShiftsSelection(t *testing.T) {
 	// a.go no longer has annotations, filter should shift selection to b.go
 	assert.Empty(t, model.store.Get("a.go"), "file-level annotation should be deleted")
 	assert.NotNil(t, cmd, "should return a command to load the new file")
-	assert.Equal(t, "b.go", model.pendingFile, "should load b.go after filter shift")
 }
 
 func TestModel_CursorLineHasAnnotationExcludesFileLevel(t *testing.T) {

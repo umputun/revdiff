@@ -216,32 +216,6 @@ func (ft *fileTree) fileIndices() []int {
 	return indices
 }
 
-// setFiles rebuilds the tree with a new file list, preserving cursor position if possible.
-func (ft *fileTree) setFiles(files []string) {
-	prevFile := ft.selectedFile()
-	ft.allFiles = files
-	ft.entries = ft.buildEntries(files)
-	ft.cursor = 0
-
-	// try to restore cursor to previously selected file
-	if prevFile != "" {
-		for i, e := range ft.entries {
-			if e.path == prevFile {
-				ft.cursor = i
-				return
-			}
-		}
-	}
-
-	// position on first file entry
-	for i, e := range ft.entries {
-		if !e.isDir {
-			ft.cursor = i
-			return
-		}
-	}
-}
-
 // render produces the file tree display string, showing only entries visible within the given height.
 // it adjusts the internal offset so the cursor stays within the visible window.
 func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s styles) string {

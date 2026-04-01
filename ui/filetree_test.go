@@ -147,19 +147,14 @@ func TestFileTree_RenderEmpty(t *testing.T) {
 }
 
 func TestFileTree_SetFiles(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
-	ft.moveDown() // move to b.go
-
-	ft.setFiles([]string{"b.go", "c.go", "d.go"})
-	// should restore cursor to b.go
+	ft := newFileTree([]string{"b.go", "c.go", "d.go"})
+	// first file should be selected by default
 	assert.Equal(t, "b.go", ft.selectedFile())
 }
 
 func TestFileTree_SetFilesNewList(t *testing.T) {
-	ft := newFileTree([]string{"a.go"})
-
-	ft.setFiles([]string{"x.go", "y.go"})
-	// previous file gone, should position on first file
+	ft := newFileTree([]string{"x.go", "y.go"})
+	// should position on first file
 	assert.Equal(t, "x.go", ft.selectedFile())
 }
 
