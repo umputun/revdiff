@@ -41,6 +41,7 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-selected-fg` | Selected file text | `#ffffaf` |
 | `--color-selected-bg` | Selected file background | `#303030` |
 | `--color-annotation` | Annotation text and markers | `#ffd700` |
+| `--color-cursor-fg` | Cursor indicator color | terminal default |
 | `--color-cursor-bg` | Cursor line background | `#3a3a3a` |
 | `--color-add-fg` | Added line text | `#87d787` |
 | `--color-add-bg` | Added line background | `#022800` |

@@ -11,6 +11,7 @@ type Colors struct {
 	SelectedFg string // selected file text
 	SelectedBg string // selected file background
 	Annotation string // annotation text and markers
+	CursorFg   string // diff cursor indicator foreground
 	CursorBg   string // diff cursor line background
 	AddFg      string // added line foreground
 	AddBg      string // added line background
@@ -71,6 +72,7 @@ func normalizeColors(c Colors) Colors {
 	c.SelectedFg = normalizeColor(c.SelectedFg)
 	c.SelectedBg = normalizeColor(c.SelectedBg)
 	c.Annotation = normalizeColor(c.Annotation)
+	c.CursorFg = normalizeColor(c.CursorFg)
 	c.CursorBg = normalizeColor(c.CursorBg)
 	c.AddFg = normalizeColor(c.AddFg)
 	c.AddBg = normalizeColor(c.AddBg)
@@ -154,12 +156,20 @@ func newStyles(c Colors) styles {
 		LineRemoveHighlight: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.RemoveBg)),
 
-		DiffCursorLine: lipgloss.NewStyle().
-			Background(lipgloss.Color(c.CursorBg)),
+		DiffCursorLine: cursorLineStyle(c),
 		AnnotationLine: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)).
 			Italic(true),
 	}
+}
+
+// cursorLineStyle builds the diff cursor style with optional foreground.
+func cursorLineStyle(c Colors) lipgloss.Style {
+	s := lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg))
+	if c.CursorFg != "" {
+		s = s.Foreground(lipgloss.Color(c.CursorFg))
+	}
+	return s
 }
 
 // plainStyles returns styles with no colors for --no-colors mode.

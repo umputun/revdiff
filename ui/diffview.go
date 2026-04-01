@@ -53,7 +53,7 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 	if fileComment != "" {
 		cursor := " "
 		if m.diffCursor == -1 && m.focus == paneDiff {
-			cursor = m.styles.DiffCursorLine.Render("▎")
+			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
 		line := cursor + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
 		b.WriteString(line + "\n")
@@ -102,7 +102,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▎")
+		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
 	b.WriteString(cursor + content + "\n")
 }
@@ -119,7 +119,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
-				cursor = m.styles.DiffCursorLine.Render("▎")
+				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
 			line := cursor + m.styles.AnnotationLine.Render("\U0001f4ac "+comment)
 			b.WriteString(line + "\n")

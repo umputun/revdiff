@@ -2554,7 +2554,7 @@ func TestModel_RenderDiffLineCursorHighlight(t *testing.T) {
 	m.focus = paneDiff
 	m.diffCursor = 0
 	output := m.renderDiff()
-	assert.Contains(t, output, "▎", "cursor indicator should appear on active line")
+	assert.Contains(t, output, "▶", "cursor indicator should appear on active line")
 	assert.Contains(t, output, "line one", "cursor line content should appear")
 }
 
