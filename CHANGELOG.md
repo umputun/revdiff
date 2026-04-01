@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.3 - 2026-04-01
+
+### Fixed
+
+- resolve git repo root so revdiff works from subdirectories (#2)
+
+### Improvements
+
+- document supported terminal overlays for Claude Code plugin
+
 ## v0.2.2 - 2026-04-01
 
 ### Fixed
