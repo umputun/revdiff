@@ -64,7 +64,7 @@ revdiff HEAD~1
 | `Home/End` | Jump to first/last item |
 | `Enter` | Select file (tree pane) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file |
-| `[` / `]` | Jump to previous/next change chunk in diff |
+| `[` / `]` | Jump to previous/next change hunk in diff |
 
 **Annotations:**
 

@@ -8,12 +8,8 @@ import (
 )
 
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
-// and injected annotation lines. dispatches to renderSimplifiedDiff when simplified view is active.
+// and injected annotation lines.
 func (m Model) renderDiff() string {
-	if m.simplifiedView {
-		return m.renderSimplifiedDiff()
-	}
-
 	if len(m.diffLines) == 0 {
 		return "  no changes"
 	}
@@ -77,7 +73,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	}
 
 	line := lineNum + content
-	if idx == m.diffCursor && m.focus == paneDiff {
+	if idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation {
 		line = m.styles.DiffCursorLine.Render(line)
 	}
 	b.WriteString(line + "\n")
@@ -92,7 +88,11 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, dl diff.Diff
 	if dl.ChangeType != diff.ChangeDivider {
 		key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
 		if comment, ok := annotationMap[key]; ok {
-			b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac "+comment) + "\n")
+			line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac "+comment)
+			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
+				line = m.styles.DiffCursorLine.Render(line)
+			}
+			b.WriteString(line + "\n")
 		}
 	}
 }
@@ -120,47 +120,65 @@ func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
 }
 
 // moveDiffCursorDown moves the diff cursor to the next non-divider line.
-// in simplified view, also skips lines that are not visible.
+// if the current line has an annotation and cursor is on the diff line, stops on the annotation first.
 func (m *Model) moveDiffCursorDown() {
-	// if on file annotation line, move to first non-divider diff line
+	// if currently on annotation sub-line, move to the next diff line
+	if m.cursorOnAnnotation {
+		m.cursorOnAnnotation = false
+		for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
+			if m.diffLines[i].ChangeType != diff.ChangeDivider {
+				m.diffCursor = i
+				return
+			}
+		}
+		return
+	}
+
+	// if current line has an annotation, stop on it first
+	if m.diffCursor >= 0 && m.diffCursor < len(m.diffLines) {
+		dl := m.diffLines[m.diffCursor]
+		if dl.ChangeType != diff.ChangeDivider {
+			lineNum := m.diffLineNum(dl)
+			if m.store.Has(m.currFile, lineNum, dl.ChangeType) {
+				m.cursorOnAnnotation = true
+				return
+			}
+		}
+	}
+
+	// move to next non-divider diff line
 	start := m.diffCursor + 1
 	if m.diffCursor == -1 {
 		start = 0
 	}
-
-	var visible []bool
-	if m.simplifiedView {
-		visible = m.visibleInSimplified()
-	}
-
 	for i := start; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider {
-			continue
+		if m.diffLines[i].ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			return
 		}
-		if len(visible) > 0 && !visible[i] {
-			continue
-		}
-		m.diffCursor = i
-		return
 	}
 }
 
 // moveDiffCursorUp moves the diff cursor to the previous non-divider line.
-// in simplified view, also skips lines that are not visible.
+// when moving up from a diff line, if the previous line has an annotation, lands on the annotation first.
 func (m *Model) moveDiffCursorUp() {
-	var visible []bool
-	if m.simplifiedView {
-		visible = m.visibleInSimplified()
+	// if currently on annotation sub-line, move up to the diff line itself
+	if m.cursorOnAnnotation {
+		m.cursorOnAnnotation = false
+		return
 	}
 
 	for i := m.diffCursor - 1; i >= 0; i-- {
 		if m.diffLines[i].ChangeType == diff.ChangeDivider {
 			continue
 		}
-		if len(visible) > 0 && !visible[i] {
-			continue
-		}
 		m.diffCursor = i
+		// if this line has an annotation, land on it
+		dl := m.diffLines[i]
+		lineNum := m.diffLineNum(dl)
+		if m.store.Has(m.currFile, lineNum, dl.ChangeType) {
+			m.cursorOnAnnotation = true
+		}
 		return
 	}
 	// if we're at the first line and there's a file-level annotation, go to it
@@ -211,50 +229,32 @@ func (m *Model) moveDiffCursorPageUp() {
 
 // moveDiffCursorToStart moves the diff cursor to the first selectable position.
 // if a file-level annotation exists, the cursor goes to -1 (file annotation line).
-// in simplified view, finds the first visible non-divider line.
 func (m *Model) moveDiffCursorToStart() {
+	m.cursorOnAnnotation = false
 	if m.hasFileAnnotation() {
 		m.diffCursor = -1
 		m.syncViewportToCursor()
 		return
 	}
 
-	var visible []bool
-	if m.simplifiedView {
-		visible = m.visibleInSimplified()
-	}
-
 	m.diffCursor = 0
 	for i, dl := range m.diffLines {
-		if dl.ChangeType == diff.ChangeDivider {
-			continue
+		if dl.ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			break
 		}
-		if len(visible) > 0 && !visible[i] {
-			continue
-		}
-		m.diffCursor = i
-		break
 	}
 	m.syncViewportToCursor()
 }
 
 // moveDiffCursorToEnd moves the diff cursor to the last non-divider line.
-// in simplified view, finds the last visible non-divider line.
 func (m *Model) moveDiffCursorToEnd() {
-	var visible []bool
-	if m.simplifiedView {
-		visible = m.visibleInSimplified()
-	}
-
+	m.cursorOnAnnotation = false
 	for i := len(m.diffLines) - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider {
-			continue
+		if m.diffLines[i].ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			break
 		}
-		if len(visible) > 0 && !visible[i] {
-			continue
-		}
-		m.diffCursor = i
-		break
 	}
 	m.syncViewportToCursor()
 }
@@ -271,172 +271,79 @@ func (m *Model) syncViewportToCursor() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
-// visibleInSimplified returns a boolean slice marking which diffLines indices
-// are visible in simplified view. visible lines are: changed lines (add/remove),
-// up to 3 context lines around each change group, lines with annotations,
-// and divider lines between groups.
-func (m Model) visibleInSimplified() []bool {
-	n := len(m.diffLines)
-	if n == 0 {
-		return nil
-	}
-
-	visible := make([]bool, n)
-	const contextLines = 3
-
-	// mark changed lines and their context
-	for i, dl := range m.diffLines {
-		if dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove {
-			// mark context before
-			for j := max(0, i-contextLines); j < i; j++ {
-				visible[j] = true
-			}
-			visible[i] = true
-			// mark context after
-			for j := i + 1; j < n && j <= i+contextLines; j++ {
-				visible[j] = true
-			}
-		}
-	}
-
-	// mark annotated lines as visible so annotations are never hidden
-	annotationMap := m.buildAnnotationMap()
-	for i, dl := range m.diffLines {
-		if dl.ChangeType == diff.ChangeDivider {
-			continue
-		}
-		key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
-		if annotationMap[key] != "" {
-			visible[i] = true
-		}
-	}
-
-	return visible
-}
-
-// renderSimplifiedDiff renders only visible lines (changes + context) with
-// dividers inserted between non-adjacent visible groups.
-func (m Model) renderSimplifiedDiff() string {
-	if len(m.diffLines) == 0 {
-		return "  no changes"
-	}
-
-	visible := m.visibleInSimplified()
-	annotationMap := m.buildAnnotationMap()
-
-	var b strings.Builder
-	m.renderFileAnnotationHeader(&b)
-
-	lastVisibleIdx := -1
-	for i, dl := range m.diffLines {
-		if !visible[i] {
-			continue
-		}
-
-		// insert divider between non-adjacent visible groups
-		if lastVisibleIdx >= 0 && i-lastVisibleIdx > 1 {
-			b.WriteString(m.styles.LineNumber.Render("     ") + m.styles.LineNumber.Render(" ···") + "\n")
-		}
-		lastVisibleIdx = i
-
-		m.renderDiffLine(&b, i, dl)
-		m.renderAnnotationOrInput(&b, i, dl, annotationMap)
-	}
-	return b.String()
-}
-
-// ensureCursorVisible adjusts the diff cursor to the nearest visible line
-// when switching to simplified view.
-func (m *Model) ensureCursorVisible() {
-	if !m.simplifiedView || len(m.diffLines) == 0 {
-		return
-	}
-	visible := m.visibleInSimplified()
-
-	// cursor is on file annotation line or already visible
-	if m.diffCursor == -1 {
-		return
-	}
-	if m.diffCursor >= 0 && m.diffCursor < len(visible) && visible[m.diffCursor] {
-		return
-	}
-
-	// search forward for nearest visible non-divider line
-	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
-		if visible[i] && m.diffLines[i].ChangeType != diff.ChangeDivider {
-			m.diffCursor = i
-			return
-		}
-	}
-	// search backward
-	for i := m.diffCursor - 1; i >= 0; i-- {
-		if visible[i] && m.diffLines[i].ChangeType != diff.ChangeDivider {
-			m.diffCursor = i
-			return
-		}
-	}
-}
-
-// findChunks scans diffLines and returns a slice of chunk start indices.
+// findHunks scans diffLines and returns a slice of chunk start indices.
 // a chunk is a contiguous group of added/removed lines. the returned index
 // is the first line of each such group.
-func (m Model) findChunks() []int {
-	var chunks []int
-	inChunk := false
+func (m Model) findHunks() []int {
+	var hunks []int
+	inHunk := false
 	for i, dl := range m.diffLines {
 		isChange := dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove
-		if isChange && !inChunk {
-			chunks = append(chunks, i)
-			inChunk = true
+		if isChange && !inHunk {
+			hunks = append(hunks, i)
+			inHunk = true
 		} else if !isChange {
-			inChunk = false
+			inHunk = false
 		}
 	}
-	return chunks
+	return hunks
 }
 
-// currentChunk returns the 1-based chunk index and total chunk count
-// based on the current diffCursor position. returns (0, 0) when there are no chunks.
-func (m Model) currentChunk() (int, int) {
-	chunks := m.findChunks()
-	if len(chunks) == 0 {
+// currentHunk returns the 1-based chunk index and total chunk count.
+// returns non-zero chunk index only when the cursor is on a changed line (add/remove).
+// returns (0, total) when cursor is not inside any chunk.
+func (m Model) currentHunk() (int, int) {
+	hunks := m.findHunks()
+	if len(hunks) == 0 {
 		return 0, 0
 	}
-	if m.diffCursor < 0 {
-		return 0, 0
+	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+		return 0, len(hunks)
 	}
+	dl := m.diffLines[m.diffCursor]
+	if dl.ChangeType != diff.ChangeAdd && dl.ChangeType != diff.ChangeRemove {
+		return 0, len(hunks)
+	}
+	// cursor is on a changed line, find which chunk
 	cur := 0
-	for i, start := range chunks {
+	for i, start := range hunks {
 		if m.diffCursor >= start {
 			cur = i + 1
 		}
 	}
-	if cur == 0 {
-		cur = 1
-	}
-	return cur, len(chunks)
+	return cur, len(hunks)
 }
 
-// moveToNextChunk moves the diff cursor to the start of the next change chunk.
-func (m *Model) moveToNextChunk() {
-	chunks := m.findChunks()
-	for _, start := range chunks {
+// moveToNextHunk moves the diff cursor to the start of the next change chunk.
+func (m *Model) moveToNextHunk() {
+	m.cursorOnAnnotation = false
+	hunks := m.findHunks()
+	for _, start := range hunks {
 		if start > m.diffCursor {
 			m.diffCursor = start
-			m.syncViewportToCursor()
+			m.centerViewportOnCursor()
 			return
 		}
 	}
 }
 
-// moveToPrevChunk moves the diff cursor to the start of the previous change chunk.
-func (m *Model) moveToPrevChunk() {
-	chunks := m.findChunks()
-	for i := len(chunks) - 1; i >= 0; i-- {
-		if chunks[i] < m.diffCursor {
-			m.diffCursor = chunks[i]
-			m.syncViewportToCursor()
+// moveToPrevHunk moves the diff cursor to the start of the previous change chunk.
+func (m *Model) moveToPrevHunk() {
+	m.cursorOnAnnotation = false
+	hunks := m.findHunks()
+	for i := len(hunks) - 1; i >= 0; i-- {
+		if hunks[i] < m.diffCursor {
+			m.diffCursor = hunks[i]
+			m.centerViewportOnCursor()
 			return
 		}
 	}
+}
+
+// centerViewportOnCursor scrolls the viewport to place the cursor in the middle of the page.
+func (m *Model) centerViewportOnCursor() {
+	cursorY := m.cursorViewportY()
+	offset := max(0, cursorY-m.viewport.Height/2)
+	m.viewport.SetYOffset(offset)
+	m.viewport.SetContent(m.renderDiff())
 }

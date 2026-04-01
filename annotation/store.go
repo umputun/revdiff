@@ -58,6 +58,16 @@ func (s *Store) Delete(file string, line int, changeType string) bool {
 	return false
 }
 
+// Has checks if an annotation exists at the given file, line and change type.
+func (s *Store) Has(file string, line int, changeType string) bool {
+	for _, a := range s.annotations[file] {
+		if a.Line == line && a.Type == changeType {
+			return true
+		}
+	}
+	return false
+}
+
 // Get returns all annotations for the given file, sorted by line number.
 func (s *Store) Get(file string) []Annotation {
 	result := make([]Annotation, len(s.annotations[file]))

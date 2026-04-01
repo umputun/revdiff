@@ -63,6 +63,9 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 	m.annotateInput = ti
 	m.annotating = true
 	m.fileAnnotating = true
+	m.diffCursor = -1 // position cursor on the file annotation line
+	m.viewport.GotoTop()
+	m.viewport.SetContent(m.renderDiff())
 	return cmd
 }
 
@@ -78,8 +81,10 @@ func (m *Model) saveAnnotation() {
 		m.store.Add(m.currFile, 0, "", text)
 		m.annotating = false
 		m.fileAnnotating = false
+		m.diffCursor = -1 // position cursor on the file annotation line
 		m.tree.refreshFilter(m.annotatedFiles())
 		m.viewport.SetContent(m.renderDiff())
+		m.viewport.GotoTop()
 		return
 	}
 
@@ -117,12 +122,6 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 		}
 	}
 
-	// in simplified view, the first non-divider line may be hidden;
-	// move cursor to the nearest visible line.
-	if m.simplifiedView {
-		m.ensureCursorVisible()
-	}
-
 	m.tree.refreshFilter(m.annotatedFiles())
 
 	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
@@ -137,11 +136,16 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 
 // deleteAnnotation removes the annotation on the current cursor line if one exists.
 // handles both file-level annotations (cursor at -1) and regular line annotations.
+// if the current line has no annotation, checks the previous line (since annotations
+// only works when cursor is on the annotation sub-line (cursorOnAnnotation=true) or file annotation line.
 // returns a command to load the new file if the tree selection changed after filter refresh.
 func (m *Model) deleteAnnotation() tea.Cmd {
-	// handle file-level annotation deletion when cursor is on the file annotation line
 	if m.cursorOnFileAnnotationLine() {
 		return m.deleteFileAnnotation()
+	}
+
+	if !m.cursorOnAnnotation {
+		return nil
 	}
 
 	dl, ok := m.cursorDiffLine()
@@ -151,13 +155,8 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 
 	lineNum := m.diffLineNum(dl)
 	if m.store.Delete(m.currFile, lineNum, dl.ChangeType) {
+		m.cursorOnAnnotation = false
 		m.tree.refreshFilter(m.annotatedFiles())
-
-		// in simplified view, the deleted annotation's line may become hidden;
-		// move cursor to the nearest visible line to keep it consistent.
-		if m.simplifiedView {
-			m.ensureCursorVisible()
-		}
 
 		// if filter moved cursor to a different file, load the new selection
 		if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
@@ -188,29 +187,13 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// cursorLineHasAnnotation checks if the current diffCursor line has an annotation in the store.
-// returns true for file-level annotation when cursor is on the file annotation line (index -1 logically,
-// but rendered at top). for regular lines, excludes file-level annotations (Line=0).
+// cursorLineHasAnnotation checks if the cursor is on a deletable annotation line.
+// returns true only when cursor is on the file annotation line or on an annotation sub-line.
 func (m Model) cursorLineHasAnnotation() bool {
-	// check if cursor is on the file-level annotation line at the top
 	if m.cursorOnFileAnnotationLine() {
 		return true
 	}
-
-	dl, ok := m.cursorDiffLine()
-	if !ok || dl.ChangeType == diff.ChangeDivider {
-		return false
-	}
-	lineNum := m.diffLineNum(dl)
-	for _, a := range m.store.Get(m.currFile) {
-		if a.Line == 0 {
-			continue // skip file-level annotations in regular per-line checks
-		}
-		if a.Line == lineNum && a.Type == dl.ChangeType {
-			return true
-		}
-	}
-	return false
+	return m.cursorOnAnnotation
 }
 
 // hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
@@ -267,10 +250,6 @@ func (m Model) cursorViewportY() int {
 
 	annotationSet := m.buildAnnotationSet()
 
-	if m.simplifiedView {
-		return m.cursorViewportYSimplified(fileAnnotationOffset, annotationSet)
-	}
-
 	y := fileAnnotationOffset
 	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
 		y++ // the diff line itself
@@ -282,43 +261,10 @@ func (m Model) cursorViewportY() int {
 			}
 		}
 	}
-	return y
-}
-
-// cursorViewportYSimplified computes viewport Y for simplified view,
-// counting only visible lines and inserted dividers between non-adjacent groups.
-func (m Model) cursorViewportYSimplified(fileAnnotationOffset int, annotationSet map[string]bool) int {
-	visible := m.visibleInSimplified()
-	y := fileAnnotationOffset
-	lastVisibleIdx := -1
-
-	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
-		if !visible[i] {
-			continue
-		}
-		// divider between non-adjacent visible groups
-		if lastVisibleIdx >= 0 && i-lastVisibleIdx > 1 {
-			y++ // the "···" divider line
-		}
-		lastVisibleIdx = i
-		y++ // the visible line itself
-
-		dl := m.diffLines[i]
-		if dl.ChangeType != diff.ChangeDivider {
-			key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
-			if annotationSet[key] {
-				y++ // the annotation line below it
-			}
-		}
+	// if cursor is on the annotation sub-line, add one more row
+	if m.cursorOnAnnotation {
+		y++
 	}
-
-	// account for divider before cursor line if there's a gap
-	if m.diffCursor < len(m.diffLines) && visible[m.diffCursor] {
-		if lastVisibleIdx >= 0 && m.diffCursor-lastVisibleIdx > 1 {
-			y++ // divider before the cursor's group
-		}
-	}
-
 	return y
 }
 
