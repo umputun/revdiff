@@ -67,9 +67,9 @@ A set of UX improvements to the revdiff TUI covering key bindings, navigation, v
 - Modify: `ui/filetree.go`
 - Modify: `ui/filetree_test.go`
 
-- [ ] change `"▾ "` to `"· "` in filetree.go render()
-- [ ] update tests in filetree_test.go that assert on `▾` to use `·`
-- [ ] run `go test ./ui/` - must pass before next task
+- [x] change `"▾ "` to `"· "` in filetree.go render()
+- [x] update tests in filetree_test.go that assert on `▾` to use `·`
+- [x] run `go test ./ui/` - must pass before next task
 
 ### Task 2: Remap Tab to pane switching, f for filter
 

@@ -370,7 +370,7 @@ func TestFileTree_RenderIndentation(t *testing.T) {
 	for _, e := range ft.entries {
 		if e.isDir {
 			// directory entry starts with the dir icon, no leading spaces
-			assert.Contains(t, result, "▾ "+e.name, "directory %q should appear without indent", e.name)
+			assert.Contains(t, result, "· "+e.name, "directory %q should appear without indent", e.name)
 		} else {
 			// file entries should have leading spaces (indentation from depth=1)
 			assert.Contains(t, result, "  "+e.name, "file %q should be indented under its directory", e.name)
