@@ -26,7 +26,7 @@ type treeEntry struct {
 // newFileTree builds a file tree from a list of changed file paths.
 func newFileTree(files []string) fileTree {
 	ft := fileTree{allFiles: files}
-	ft.entries = buildEntries(files)
+	ft.entries = ft.buildEntries(files)
 	// position cursor on first file entry
 	for i, e := range ft.entries {
 		if !e.isDir {
@@ -38,7 +38,7 @@ func newFileTree(files []string) fileTree {
 }
 
 // buildEntries groups files by directory and creates a flat entry list.
-func buildEntries(files []string) []treeEntry {
+func (ft *fileTree) buildEntries(files []string) []treeEntry {
 	if len(files) == 0 {
 		return nil
 	}
@@ -220,7 +220,7 @@ func (ft *fileTree) fileIndices() []int {
 func (ft *fileTree) setFiles(files []string) {
 	prevFile := ft.selectedFile()
 	ft.allFiles = files
-	ft.entries = buildEntries(files)
+	ft.entries = ft.buildEntries(files)
 	ft.cursor = 0
 
 	// try to restore cursor to previously selected file
@@ -297,9 +297,9 @@ func (ft *fileTree) toggleFilter(annotatedFiles map[string]bool) {
 			ft.filter = false // nothing to filter, stay on all
 			return
 		}
-		ft.entries = buildEntries(filtered)
+		ft.entries = ft.buildEntries(filtered)
 	} else {
-		ft.entries = buildEntries(ft.allFiles)
+		ft.entries = ft.buildEntries(ft.allFiles)
 	}
 
 	// position cursor on first file
@@ -330,9 +330,9 @@ func (ft *fileTree) refreshFilter(annotatedFiles map[string]bool) {
 	if len(filtered) == 0 {
 		// no annotated files left, switch back to all files
 		ft.filter = false
-		ft.entries = buildEntries(ft.allFiles)
+		ft.entries = ft.buildEntries(ft.allFiles)
 	} else {
-		ft.entries = buildEntries(filtered)
+		ft.entries = ft.buildEntries(filtered)
 	}
 
 	// try to keep cursor on same file, otherwise position on first file

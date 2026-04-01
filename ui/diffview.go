@@ -20,7 +20,7 @@ func (m Model) renderDiff() string {
 
 	for i, dl := range m.diffLines {
 		m.renderDiffLine(&b, i, dl)
-		m.renderAnnotationOrInput(&b, i, dl, annotationMap)
+		m.renderAnnotationOrInput(&b, i, annotationMap)
 	}
 	return b.String()
 }
@@ -80,11 +80,12 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 }
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
-func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, dl diff.DiffLine, annotationMap map[string]string) {
+func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
 		b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
 		return
 	}
+	dl := m.diffLines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
 		key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
 		if comment, ok := annotationMap[key]; ok {

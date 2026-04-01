@@ -142,12 +142,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case msg.String() == "tab":
 		// switch panes: tree <-> diff (only switch to diff if a file is loaded)
-		if m.focus == paneTree {
-			if m.currFile != "" {
-				m.focus = paneDiff
-			}
-		} else {
+		if m.focus != paneTree {
 			m.focus = paneTree
+			return m, nil
+		}
+		if m.currFile != "" {
+			m.focus = paneDiff
 		}
 		return m, nil
 

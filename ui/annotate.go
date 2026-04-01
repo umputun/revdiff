@@ -230,8 +230,7 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 }
 
 // cursorViewportY computes the actual viewport Y position of the cursor,
-// accounting for injected annotation lines, the file-level annotation line,
-// and simplified view filtering.
+// accounting for injected annotation lines and the file-level annotation line.
 func (m Model) cursorViewportY() int {
 	if m.currFile == "" || len(m.diffLines) == 0 {
 		return max(0, m.diffCursor)

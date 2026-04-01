@@ -2057,7 +2057,7 @@ func TestModel_DeleteFileAnnotationCursorNotOnFileLine(t *testing.T) {
 	m.diffLines = lines
 	m.store.Add("a.go", 0, "", "file note")
 	m.store.Add("a.go", 1, " ", "line note")
-	m.diffCursor = 0 // on regular line
+	m.diffCursor = 0            // on regular line
 	m.cursorOnAnnotation = true // on the annotation sub-line for line 1
 
 	// press 'd' should delete the line annotation, not the file annotation
@@ -2328,7 +2328,7 @@ func TestModel_CurrentHunk(t *testing.T) {
 	tests := []struct {
 		name      string
 		cursor    int
-		wantHunk int
+		wantHunk  int
 		wantTotal int
 	}{
 		{name: "file annotation line", cursor: -1, wantHunk: 0, wantTotal: 3},

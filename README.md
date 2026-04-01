@@ -6,7 +6,6 @@ Terminal UI for reviewing git diffs with inline annotations. Two-pane layout wit
 
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Full-file view with changes highlighted inline (green adds, red removes)
-- Simplified diff view showing only changes with surrounding context
 - Inline annotations on any diff line, plus file-level annotations
 - Chunk navigation to jump between change groups
 - Filter file tree to show only annotated files
@@ -80,7 +79,6 @@ revdiff HEAD~1
 | Key | Action |
 |-----|--------|
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
-| `v` | Toggle simplified/full diff view (shows only changes with context) |
 | `q` | Quit, output annotations to stdout |
 
 ### Output Format
