@@ -40,13 +40,14 @@ type Model struct {
 	treeWidthRatio int // 1-10 units for file tree panel
 	diffCursor     int // index into diffLines for current cursor line
 
-	diffLines     []diff.DiffLine // current file's parsed diff lines
-	currFile      string          // currently displayed file
-	pendingFile   string          // file currently being loaded (async request identity)
-	loadSeq       uint64          // monotonic counter to identify the latest load request
-	ready         bool            // true after first WindowSizeMsg
-	annotating    bool            // true when annotation text input is active
-	annotateInput textinput.Model // text input for annotations
+	diffLines      []diff.DiffLine // current file's parsed diff lines
+	currFile       string          // currently displayed file
+	pendingFile    string          // file currently being loaded (async request identity)
+	loadSeq        uint64          // monotonic counter to identify the latest load request
+	ready          bool            // true after first WindowSizeMsg
+	annotating     bool            // true when annotation text input is active
+	fileAnnotating bool            // true when annotating at file level (Line=0)
+	annotateInput  textinput.Model // text input for annotations
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -159,23 +160,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case msg.String() == "n":
 		m.tree.nextFile()
-		m.tree.ensureVisible(m.treePageSize())
-		if f := m.tree.selectedFile(); f != "" && f != m.currFile {
-			m.loadSeq++
-			m.pendingFile = f
-			return m, m.loadFileDiff(f)
-		}
-		return m, nil
+		return m.loadSelectedIfChanged()
 
 	case msg.String() == "p":
 		m.tree.prevFile()
-		m.tree.ensureVisible(m.treePageSize())
-		if f := m.tree.selectedFile(); f != "" && f != m.currFile {
-			m.loadSeq++
-			m.pendingFile = f
-			return m, m.loadFileDiff(f)
-		}
-		return m, nil
+		return m.loadSelectedIfChanged()
 
 	case msg.String() == "enter":
 		switch m.focus {
@@ -191,6 +180,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+
+	case msg.String() == "A":
+		if m.currFile != "" {
+			cmd := m.startFileAnnotation()
+			m.viewport.SetContent(m.renderDiff())
+			return m, cmd
+		}
+		return m, nil
 	}
 
 	// pane-specific navigation
@@ -199,6 +196,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleTreeNav(msg)
 	case paneDiff:
 		return m.handleDiffNav(msg)
+	}
+	return m, nil
+}
+
+// loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
+func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
+	m.tree.ensureVisible(m.treePageSize())
+	if f := m.tree.selectedFile(); f != "" && f != m.currFile {
+		m.loadSeq++
+		m.pendingFile = f
+		return m, m.loadFileDiff(f)
 	}
 	return m, nil
 }
@@ -380,28 +388,38 @@ func (m Model) View() string {
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
 	// status bar with context-sensitive hints
-	var statusText string
-	if m.annotating {
-		statusText = "[enter] save  [esc] cancel"
-	} else {
-		filterHint := ""
-		if len(m.annotatedFiles()) > 0 {
-			filterHint = "  [f] filter"
-		}
-		switch m.focus {
-		case paneTree:
-			statusText = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
-		case paneDiff:
-			if m.cursorLineHasAnnotation() {
-				statusText = "[j/k] scroll  [h/tab] files  [enter/a] annotate  [d] delete" + filterHint + "  [n/p] next/prev  [q] quit"
-			} else {
-				statusText = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + filterHint + "  [n/p] next/prev  [q] quit"
-			}
-		}
-	}
-	status := m.styles.StatusBar.Render(statusText)
+	status := m.styles.StatusBar.Render(m.statusBarText())
 
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
+}
+
+// statusBarText returns context-sensitive status bar hints.
+func (m Model) statusBarText() string {
+	if m.annotating {
+		return "[enter] save  [esc] cancel"
+	}
+
+	filterHint := ""
+	if len(m.annotatedFiles()) > 0 {
+		filterHint = "  [f] filter"
+	}
+	fileNoteHint := ""
+	if m.currFile != "" {
+		fileNoteHint = "  [A] file note"
+	}
+
+	switch m.focus {
+	case paneTree:
+		return "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
+	case paneDiff:
+		deleteHint := ""
+		if m.cursorLineHasAnnotation() {
+			deleteHint = "  [d] delete"
+		}
+		return "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
+	default:
+		return ""
+	}
 }
 
 // annotatedFiles returns a set of files that have annotations.

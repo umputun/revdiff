@@ -14,14 +14,31 @@ func (m Model) renderDiff() string {
 		return "  no changes"
 	}
 
-	// build annotation lookup for current file
+	// build annotation lookup for current file (excludes file-level)
 	annotations := m.store.Get(m.currFile)
 	annotationMap := make(map[string]string, len(annotations))
 	for _, a := range annotations {
+		if a.Line == 0 {
+			continue
+		}
 		annotationMap[m.annotationKey(a.Line, a.Type)] = a.Comment
 	}
 
 	var b strings.Builder
+
+	// render file-level annotation at the top if it exists
+	if fileComment := m.fileAnnotationComment(); fileComment != "" {
+		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
+		if m.diffCursor == -1 && m.focus == paneDiff {
+			line = m.styles.DiffCursorLine.Render(line)
+		}
+		b.WriteString(line + "\n")
+	} else if m.annotating && m.fileAnnotating {
+		// show text input for new file-level annotation
+		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
+		b.WriteString(line + "\n")
+	}
+
 	for i, dl := range m.diffLines {
 		lineNum := m.styles.LineNumber.Render(m.formatLineNum(dl))
 		var content string
@@ -42,8 +59,8 @@ func (m Model) renderDiff() string {
 		}
 		b.WriteString(line + "\n")
 
-		// inject text input if annotating on this line
-		if m.annotating && i == m.diffCursor {
+		// inject text input if annotating on this line (non-file-level)
+		if m.annotating && !m.fileAnnotating && i == m.diffCursor {
 			b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
 		} else if dl.ChangeType != diff.ChangeDivider {
 			// inject existing annotation line
@@ -80,7 +97,12 @@ func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
 
 // moveDiffCursorDown moves the diff cursor to the next non-divider line.
 func (m *Model) moveDiffCursorDown() {
-	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
+	// if on file annotation line, move to first non-divider diff line
+	start := m.diffCursor + 1
+	if m.diffCursor == -1 {
+		start = 0
+	}
+	for i := start; i < len(m.diffLines); i++ {
 		if m.diffLines[i].ChangeType != diff.ChangeDivider {
 			m.diffCursor = i
 			return
@@ -95,6 +117,10 @@ func (m *Model) moveDiffCursorUp() {
 			m.diffCursor = i
 			return
 		}
+	}
+	// if we're at the first line and there's a file-level annotation, go to it
+	if m.diffCursor >= 0 && m.hasFileAnnotation() {
+		m.diffCursor = -1
 	}
 }
 
@@ -138,8 +164,14 @@ func (m *Model) moveDiffCursorPageUp() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
-// moveDiffCursorToStart moves the diff cursor to the first non-divider line.
+// moveDiffCursorToStart moves the diff cursor to the first selectable position.
+// if a file-level annotation exists, the cursor goes to -1 (file annotation line).
 func (m *Model) moveDiffCursorToStart() {
+	if m.hasFileAnnotation() {
+		m.diffCursor = -1
+		m.syncViewportToCursor()
+		return
+	}
 	m.diffCursor = 0
 	for i, dl := range m.diffLines {
 		if dl.ChangeType != diff.ChangeDivider {
