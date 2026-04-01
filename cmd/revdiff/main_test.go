@@ -232,3 +232,19 @@ func TestDefaultConfigPath(t *testing.T) {
 	assert.Contains(t, path, "revdiff")
 	assert.Contains(t, path, "config")
 }
+
+func TestGitTopLevel(t *testing.T) {
+	t.Run("inside repo", func(t *testing.T) {
+		root, err := gitTopLevel()
+		require.NoError(t, err)
+		assert.DirExists(t, root)
+		assert.NotEmpty(t, root)
+	})
+
+	t.Run("outside repo", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		_, err := gitTopLevel()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "git rev-parse --show-toplevel")
+	})
+}
