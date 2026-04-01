@@ -233,7 +233,7 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 		var line string
 
 		if e.isDir {
-			line = s.DirEntry.Render(indent + "· " + e.name)
+			line = s.DirEntry.Render(" " + e.name)
 		} else {
 			marker := "  "
 			if annotatedFiles[e.path] {
