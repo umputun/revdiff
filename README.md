@@ -109,12 +109,13 @@ revdiff HEAD~1
 | Key | Action |
 |-----|--------|
 | `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
-| `h/l` or left/right | Switch between file tree and diff pane |
+| `h/l` | Switch between file tree and diff pane |
+| left/right | Horizontal scroll in diff pane |
 | `Tab` | Switch between file tree and diff pane |
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Page scroll in file tree and diff pane |
 | `Home/End` | Jump to first/last item |
-| `Enter` | Select file (tree pane) / start annotation (diff pane) |
+| `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file |
 | `[` / `]` | Jump to previous/next change hunk in diff |
 

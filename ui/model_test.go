@@ -2596,3 +2596,42 @@ func TestModel_TabWidthDefault(t *testing.T) {
 	m2 := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 2})
 	assert.Equal(t, "  ", m2.tabSpaces, "tab width 2 should produce 2 spaces")
 }
+
+func TestModel_HorizontalScroll(t *testing.T) {
+	longLine := "package " + strings.Repeat("x", 200)
+	lines := []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: longLine, ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+
+	assert.Equal(t, 0, m.scrollX)
+
+	// scroll right
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = result.(Model)
+	assert.Equal(t, scrollStep, m.scrollX)
+
+	// scroll left back to 0
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = result.(Model)
+	assert.Equal(t, 0, m.scrollX)
+
+	// scroll left at 0 stays at 0
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = result.(Model)
+	assert.Equal(t, 0, m.scrollX)
+}
+
+func TestModel_HorizontalScrollResetsOnFileLoad(t *testing.T) {
+	lines := []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.scrollX = 20
+
+	// loading new file should reset scrollX
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	assert.Equal(t, 0, m.scrollX)
+}

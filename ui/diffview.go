@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/umputun/revdiff/diff"
 )
 
@@ -92,6 +94,11 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		} else {
 			content = m.styles.LineContext.Render("  " + lineContent)
 		}
+	}
+
+	// apply horizontal scroll to content (line number and bar stay fixed)
+	if m.scrollX > 0 {
+		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
 	}
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
@@ -368,4 +375,24 @@ func (m *Model) centerViewportOnCursor() {
 	offset := max(0, cursorY-m.viewport.Height/2)
 	m.viewport.SetYOffset(offset)
 	m.viewport.SetContent(m.renderDiff())
+}
+
+const scrollStep = 4 // horizontal scroll step in characters
+
+// scrollRight moves the horizontal scroll offset to the right.
+func (m *Model) scrollRight() {
+	m.scrollX += scrollStep
+	m.viewport.SetContent(m.renderDiff())
+}
+
+// scrollLeft moves the horizontal scroll offset to the left.
+func (m *Model) scrollLeft() {
+	m.scrollX = max(0, m.scrollX-scrollStep)
+	m.viewport.SetContent(m.renderDiff())
+}
+
+// diffContentWidth returns the available width for diff line content (excluding line number and bar).
+func (m Model) diffContentWidth() int {
+	// diff pane width minus borders (4) minus tree width, minus line number (6) minus bar (1)
+	return max(10, m.width-m.treeWidth-4-7)
 }

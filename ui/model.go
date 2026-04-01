@@ -54,6 +54,7 @@ type Model struct {
 	treeWidthRatio int    // 1-10 units for file tree panel
 	tabSpaces      string // spaces to replace tabs with
 	diffCursor     int    // index into diffLines for current cursor line
+	scrollX        int    // horizontal scroll offset for diff pane
 
 	highlighter        SyntaxHighlighter // syntax highlighter
 	highlightedLines   []string          // pre-computed highlighted content, parallel to diffLines
@@ -278,8 +279,14 @@ func (m Model) treePageSize() int {
 
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case msg.String() == "h" || msg.String() == "left":
+	case msg.String() == "h":
 		m.focus = paneTree
+		return m, nil
+	case msg.String() == "left":
+		m.scrollLeft()
+		return m, nil
+	case msg.String() == "right":
+		m.scrollRight()
 		return m, nil
 	case msg.String() == "j" || msg.String() == "down":
 		m.moveDiffCursorDown()
@@ -365,6 +372,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.diffLines = msg.lines
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
 	m.cursorOnAnnotation = false
+	m.scrollX = 0
 	m.skipInitialDividers()
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
