@@ -156,6 +156,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(annotated) > 0 {
 			m.tree.toggleFilter(annotated)
 			m.tree.ensureVisible(m.treePageSize())
+			return m.loadSelectedIfChanged()
 		}
 		return m, nil
 
@@ -183,7 +184,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case msg.String() == "A":
-		if m.currFile != "" {
+		// file-level annotation only from diff pane to avoid annotating the wrong file
+		// when tree selection differs from the currently displayed file.
+		if m.focus == paneDiff && m.currFile != "" {
 			cmd := m.startFileAnnotation()
 			m.viewport.SetContent(m.renderDiff())
 			return m, cmd
@@ -349,6 +352,9 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 			break
 		}
 	}
+	if m.simplifiedView {
+		m.ensureCursorVisible()
+	}
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, nil
@@ -366,7 +372,8 @@ func (m Model) View() string {
 		treeHeight -= strings.Count(summary, "\n") + 1
 	}
 	treeHeight = max(1, treeHeight) // ensure at least one row for file list
-	treeContent := m.tree.render(m.treeWidth, treeHeight, m.annotatedFiles(), m.styles)
+	annotated := m.annotatedFiles()
+	treeContent := m.tree.render(m.treeWidth, treeHeight, annotated, m.styles)
 	if summary != "" {
 		treeContent += "\n" + summary
 	}
@@ -401,19 +408,19 @@ func (m Model) View() string {
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
 	// status bar with context-sensitive hints
-	status := m.styles.StatusBar.Render(m.statusBarText())
+	status := m.styles.StatusBar.Render(m.statusBarText(annotated))
 
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
 
 // statusBarText returns context-sensitive status bar hints.
-func (m Model) statusBarText() string {
+func (m Model) statusBarText(annotated map[string]bool) string {
 	if m.annotating {
 		return "[enter] save  [esc] cancel"
 	}
 
 	filterHint := ""
-	if len(m.annotatedFiles()) > 0 {
+	if len(annotated) > 0 {
 		filterHint = "  [f] filter"
 	}
 	fileNoteHint := ""
@@ -423,7 +430,7 @@ func (m Model) statusBarText() string {
 
 	switch m.focus {
 	case paneTree:
-		return "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
+		return "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
 	case paneDiff:
 		deleteHint := ""
 		if m.cursorLineHasAnnotation() {

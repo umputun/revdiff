@@ -23,7 +23,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 	ti.Placeholder = "annotation..."
 	cmd := ti.Focus()
 	ti.CharLimit = 500
-	ti.Width = m.width - m.treeWidth - 10
+	ti.Width = max(10, m.width-m.treeWidth-10)
 
 	// pre-fill with existing annotation if one exists
 	lineNum := m.diffLineNum(dl)
@@ -50,7 +50,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 	ti.Placeholder = "file-level annotation..."
 	cmd := ti.Focus()
 	ti.CharLimit = 500
-	ti.Width = m.width - m.treeWidth - 10
+	ti.Width = max(10, m.width-m.treeWidth-10)
 
 	// pre-fill with existing file-level annotation if one exists
 	for _, a := range m.store.Get(m.currFile) {
@@ -116,6 +116,13 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 			break
 		}
 	}
+
+	// in simplified view, the first non-divider line may be hidden;
+	// move cursor to the nearest visible line.
+	if m.simplifiedView {
+		m.ensureCursorVisible()
+	}
+
 	m.tree.refreshFilter(m.annotatedFiles())
 
 	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
@@ -124,7 +131,7 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 		return m.loadFileDiff(newFile)
 	}
 
-	m.viewport.SetContent(m.renderDiff())
+	m.syncViewportToCursor()
 	return nil
 }
 
@@ -146,6 +153,12 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 	if m.store.Delete(m.currFile, lineNum, dl.ChangeType) {
 		m.tree.refreshFilter(m.annotatedFiles())
 
+		// in simplified view, the deleted annotation's line may become hidden;
+		// move cursor to the nearest visible line to keep it consistent.
+		if m.simplifiedView {
+			m.ensureCursorVisible()
+		}
+
 		// if filter moved cursor to a different file, load the new selection
 		if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
 			m.loadSeq++
@@ -153,7 +166,7 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 			return m.loadFileDiff(newFile)
 		}
 
-		m.viewport.SetContent(m.renderDiff())
+		m.syncViewportToCursor()
 	}
 	return nil
 }
@@ -346,7 +359,12 @@ func (m Model) renderAnnotationSummary(width int) string {
 
 	for _, file := range files {
 		for _, a := range all[file] {
-			loc := fmt.Sprintf(" %s:%d", filepath.Base(file), a.Line)
+			var loc string
+			if a.Line == 0 {
+				loc = fmt.Sprintf(" %s (file)", filepath.Base(file))
+			} else {
+				loc = fmt.Sprintf(" %s:%d", filepath.Base(file), a.Line)
+			}
 			b.WriteString(m.styles.FileEntry.Render(loc) + "\n")
 			comment := a.Comment
 			maxLen := width - 4

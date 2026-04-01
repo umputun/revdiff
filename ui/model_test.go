@@ -85,6 +85,32 @@ func TestModel_FileLoaded(t *testing.T) {
 	assert.Len(t, model.diffLines, 2)
 }
 
+func TestModel_FileLoadedInSimplifiedView(t *testing.T) {
+	// when simplified view is active and a file is loaded, cursor should land on a visible line
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // 0 - hidden
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext}, // 1 - hidden
+		{NewNum: 3, Content: "ctx3", ChangeType: diff.ChangeContext}, // 2 - hidden
+		{NewNum: 4, Content: "ctx4", ChangeType: diff.ChangeContext}, // 3 - hidden
+		{NewNum: 5, Content: "ctx5", ChangeType: diff.ChangeContext}, // 4 - hidden
+		{NewNum: 6, Content: "ctx6", ChangeType: diff.ChangeContext}, // 5 - visible (context before)
+		{NewNum: 7, Content: "ctx7", ChangeType: diff.ChangeContext}, // 6 - visible (context before)
+		{NewNum: 8, Content: "ctx8", ChangeType: diff.ChangeContext}, // 7 - visible (context before)
+		{NewNum: 9, Content: "add", ChangeType: diff.ChangeAdd},      // 8 - visible (change)
+	}
+
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.simplifiedView = true
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+
+	assert.Equal(t, "a.go", model.currFile)
+	visible := model.visibleInSimplified()
+	assert.True(t, visible[model.diffCursor], "cursor should be on a visible line in simplified view")
+}
+
 func TestModel_QuitKey(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 
@@ -802,6 +828,49 @@ func TestModel_DeleteAnnotationNoAnnotation(t *testing.T) {
 	assert.Empty(t, model.store.Get("a.go"))
 }
 
+func TestModel_DeleteAnnotationInSimplifiedViewMovesCursor(t *testing.T) {
+	// a context line far from any change is visible only because it has an annotation.
+	// deleting it should move cursor to the nearest visible line.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "line6", ChangeType: diff.ChangeContext},
+		{NewNum: 7, Content: "line7", ChangeType: diff.ChangeContext},
+		{NewNum: 8, Content: "line8", ChangeType: diff.ChangeContext}, // beyond context range of line1
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.simplifiedView = true
+	m.ready = true
+	m.viewport.Width = 80
+	m.viewport.Height = 20
+
+	// annotate line8 — the only reason it's visible in simplified view
+	m.store.Add("a.go", 8, " ", "annotation on far context line")
+	m.diffCursor = 7 // on line8
+
+	visible := m.visibleInSimplified()
+	require.True(t, visible[7], "line8 should be visible due to annotation")
+
+	// delete the annotation via 'd'
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+	assert.Empty(t, model.store.Get("a.go"), "annotation should be deleted")
+
+	// cursor should have moved to a visible line (not stuck on hidden line8)
+	visibleAfter := model.visibleInSimplified()
+	assert.True(t, model.diffCursor >= 0 && model.diffCursor < len(visibleAfter),
+		"cursor should be in valid range")
+	assert.True(t, visibleAfter[model.diffCursor],
+		"cursor should be on a visible line after deleting annotation in simplified view")
+}
+
 func TestModel_RenderDiffWithAnnotations(t *testing.T) {
 	m := testModel(nil, nil)
 	m.currFile = "a.go"
@@ -843,6 +912,17 @@ func TestModel_AnnotationSummary(t *testing.T) {
 	assert.Contains(t, summary, "b.go:5")
 	assert.Contains(t, summary, "first comment")
 	assert.Contains(t, summary, "second comment")
+}
+
+func TestModel_AnnotationSummaryFileLevelAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.store.Add("handler.go", 0, "", "file-level note")
+	m.store.Add("handler.go", 5, "+", "line note")
+
+	summary := m.renderAnnotationSummary(40)
+	assert.Contains(t, summary, "handler.go (file)", "file-level annotation should show (file) instead of :0")
+	assert.Contains(t, summary, "handler.go:5", "line annotation should show normal line number")
+	assert.NotContains(t, summary, "handler.go:0", "should not show :0 for file-level annotations")
 }
 
 func TestModel_AnnotationSummaryEmpty(t *testing.T) {
@@ -1863,24 +1943,24 @@ func TestModel_ShiftAIgnoredWithoutFile(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-func TestModel_ShiftAWorksFromBothPanes(t *testing.T) {
+func TestModel_ShiftAOnlyWorksFromDiffPane(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
+
+	// from tree pane — should be ignored to avoid annotating wrong file
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = newFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
-
-	// from tree pane
 	m.focus = paneTree
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
 	model := result.(Model)
-	assert.True(t, model.annotating, "A should work from tree pane")
-	assert.True(t, model.fileAnnotating)
-	assert.NotNil(t, cmd)
+	assert.False(t, model.annotating, "A from tree pane should not start annotation")
+	assert.False(t, model.fileAnnotating)
+	assert.Nil(t, cmd)
 
-	// from diff pane
+	// from diff pane — should work
 	m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m2.tree = newFileTree([]string{"a.go"})
 	m2.currFile = "a.go"
@@ -1891,6 +1971,34 @@ func TestModel_ShiftAWorksFromBothPanes(t *testing.T) {
 	assert.True(t, model.annotating, "A should work from diff pane")
 	assert.True(t, model.fileAnnotating)
 	assert.NotNil(t, cmd)
+}
+
+func TestModel_AnnotationInputWidthNarrowTerminal(t *testing.T) {
+	// very narrow terminal should not produce negative textinput width
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.focus = paneDiff
+	m.width = 20
+	m.treeWidth = 20 // width - treeWidth - 10 = -10 without the guard
+
+	// line-level annotation
+	cmd := m.startAnnotation()
+	assert.NotNil(t, cmd)
+	assert.True(t, m.annotating)
+	assert.GreaterOrEqual(t, m.annotateInput.Width, 10, "text input width should be at least 10")
+
+	// file-level annotation
+	m.annotating = false
+	cmd = m.startFileAnnotation()
+	assert.NotNil(t, cmd)
+	assert.True(t, m.fileAnnotating)
+	assert.GreaterOrEqual(t, m.annotateInput.Width, 10, "file text input width should be at least 10")
 }
 
 func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {
@@ -2022,6 +2130,35 @@ func TestModel_DeleteFileAnnotationCursorNotOnFileLine(t *testing.T) {
 	assert.Equal(t, 0, anns[0].Line, "file-level annotation should remain")
 }
 
+func TestModel_DeleteFileAnnotationFilterShiftsSelection(t *testing.T) {
+	// when filter is active and deleting a file-level annotation removes the only annotation
+	// for that file, the filter rebuilds entries and tree selects a different file
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.store.Add("a.go", 0, "", "file note on a")
+	m.store.Add("b.go", 1, " ", "line note on b")
+	m.diffCursor = -1 // on file annotation line
+
+	// enable filter to show only annotated files
+	m.tree.toggleFilter(m.annotatedFiles())
+	require.True(t, m.tree.filter)
+
+	// press 'd' to delete file-level annotation on a.go
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+
+	// a.go no longer has annotations, filter should shift selection to b.go
+	assert.Empty(t, model.store.Get("a.go"), "file-level annotation should be deleted")
+	assert.NotNil(t, cmd, "should return a command to load the new file")
+	assert.Equal(t, "b.go", model.pendingFile, "should load b.go after filter shift")
+}
+
 func TestModel_CursorLineHasAnnotationExcludesFileLevel(t *testing.T) {
 	m := testModel(nil, nil)
 	m.currFile = "a.go"
@@ -2058,12 +2195,12 @@ func TestModel_StatusBarShowsFileNoteHint(t *testing.T) {
 	m.currFile = "a.go"
 	m.diffLines = lines
 
-	// check from tree pane
+	// tree pane should not show file note hint (A only works from diff pane)
 	m.focus = paneTree
 	view := m.View()
-	assert.Contains(t, view, "[A] file note", "tree pane should show file note hint when file is loaded")
+	assert.NotContains(t, view, "[A] file note", "tree pane should not show file note hint")
 
-	// check from diff pane
+	// diff pane should show file note hint
 	m.focus = paneDiff
 	view = m.View()
 	assert.Contains(t, view, "[A] file note", "diff pane should show file note hint when file is loaded")
@@ -2256,6 +2393,7 @@ func TestModel_CurrentChunk(t *testing.T) {
 		wantChunk int
 		wantTotal int
 	}{
+		{name: "file annotation line", cursor: -1, wantChunk: 0, wantTotal: 0},
 		{name: "before first chunk", cursor: 0, wantChunk: 1, wantTotal: 3},
 		{name: "at first chunk start", cursor: 1, wantChunk: 1, wantTotal: 3},
 		{name: "inside first chunk", cursor: 2, wantChunk: 1, wantTotal: 3},
@@ -2382,12 +2520,12 @@ func TestModel_StatusBarShowsChunkIndicator(t *testing.T) {
 	m.currFile = "a.go"
 	m.focus = paneDiff
 
-	status := m.statusBarText()
+	status := m.statusBarText(m.annotatedFiles())
 	assert.Contains(t, status, "chunk 1/2")
 	assert.Contains(t, status, "[/] chunks")
 
 	m.diffCursor = 3
-	status = m.statusBarText()
+	status = m.statusBarText(m.annotatedFiles())
 	assert.Contains(t, status, "chunk 2/2")
 }
 
@@ -2403,7 +2541,7 @@ func TestModel_StatusBarNoChunkIndicatorWithoutChanges(t *testing.T) {
 	m.currFile = "a.go"
 	m.focus = paneDiff
 
-	status := m.statusBarText()
+	status := m.statusBarText(m.annotatedFiles())
 	assert.NotContains(t, status, "chunk 0/0", "should not show 0/0 when no chunks")
 	assert.NotRegexp(t, `chunk \d+/\d+`, status, "should not show numeric chunk indicator")
 	assert.Contains(t, status, "[/] chunks")
@@ -2414,12 +2552,12 @@ func TestModel_StatusBarChunksHintInDiffPane(t *testing.T) {
 	m.currFile = "a.go"
 	m.focus = paneDiff
 
-	status := m.statusBarText()
+	status := m.statusBarText(m.annotatedFiles())
 	assert.Contains(t, status, "[/] chunks")
 
 	// tree pane should not show chunk hint
 	m.focus = paneTree
-	status = m.statusBarText()
+	status = m.statusBarText(m.annotatedFiles())
 	assert.NotContains(t, status, "[/] chunks")
 }
 
@@ -2748,19 +2886,19 @@ func TestModel_StatusBarShowsViewToggle(t *testing.T) {
 	m.focus = paneDiff
 
 	// default: should show [v] simple
-	status := m.statusBarText()
+	status := m.statusBarText(m.annotatedFiles())
 	assert.Contains(t, status, "[v] simple")
 	assert.NotContains(t, status, "[v] full")
 
 	// when simplified view is active: should show [v] full
 	m.simplifiedView = true
-	status = m.statusBarText()
+	status = m.statusBarText(m.annotatedFiles())
 	assert.Contains(t, status, "[v] full")
 	assert.NotContains(t, status, "[v] simple")
 
 	// tree pane should not show view toggle
 	m.focus = paneTree
-	status = m.statusBarText()
+	status = m.statusBarText(m.annotatedFiles())
 	assert.NotContains(t, status, "[v] simple")
 	assert.NotContains(t, status, "[v] full")
 }
@@ -2794,6 +2932,38 @@ func TestModel_EnsureCursorVisibleOnToggle(t *testing.T) {
 	// cursor should have moved to a visible line
 	visible := model.visibleInSimplified()
 	assert.True(t, visible[model.diffCursor], "cursor should be on a visible line after toggle")
+}
+
+func TestModel_EnsureCursorVisibleBackwardSearch(t *testing.T) {
+	// cursor past the last visible line should search backward to find the nearest visible line
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd},      // 0 - visible (change)
+		{NewNum: 2, Content: "ctx1", ChangeType: diff.ChangeContext}, // 1 - visible (context after)
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // 2 - visible (context after)
+		{NewNum: 4, Content: "ctx3", ChangeType: diff.ChangeContext}, // 3 - visible (context after)
+		{NewNum: 5, Content: "ctx4", ChangeType: diff.ChangeContext}, // 4 - hidden
+		{NewNum: 6, Content: "ctx5", ChangeType: diff.ChangeContext}, // 5 - hidden
+		{NewNum: 7, Content: "ctx6", ChangeType: diff.ChangeContext}, // 6 - hidden
+		{NewNum: 8, Content: "ctx7", ChangeType: diff.ChangeContext}, // 7 - hidden
+		{NewNum: 9, Content: "ctx8", ChangeType: diff.ChangeContext}, // 8 - hidden
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+	m.diffCursor = 8 // on the last hidden line, no visible lines ahead
+
+	// toggle to simplified view
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	model := result.(Model)
+	assert.True(t, model.simplifiedView)
+
+	// cursor should have moved backward to a visible line
+	visible := model.visibleInSimplified()
+	assert.True(t, visible[model.diffCursor], "cursor should be on a visible line after backward search")
+	assert.LessOrEqual(t, model.diffCursor, 3, "cursor should be on one of the visible context lines")
 }
 
 func TestModel_SimplifiedViewRendersDividers(t *testing.T) {
@@ -2878,4 +3048,175 @@ func TestModel_CursorViewportYInSimplifiedView(t *testing.T) {
 	// visible lines before: 0,1,2,3 (4) + divider (1) + 7,8,9 (3) = Y=8
 	m.diffCursor = 10
 	assert.Equal(t, 8, m.cursorViewportY())
+}
+
+func TestModel_EditExistingFileAnnotationShowsInput(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m.focus = paneDiff
+	m.store.Add("a.go", 0, "", "existing note")
+
+	// start editing the existing file-level annotation
+	m.startFileAnnotation()
+	assert.True(t, m.annotating)
+	assert.True(t, m.fileAnnotating)
+	assert.Equal(t, "existing note", m.annotateInput.Value(), "input should be pre-filled")
+
+	// render should show the text input, not the static annotation
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "existing note", "input with pre-filled text should be visible")
+	assert.Contains(t, rendered, "file:", "should show file: prefix during input")
+}
+
+func TestModel_SimplifiedViewShowsAnnotatedContextLines(t *testing.T) {
+	// create a diff with a change at index 1, and a context line far away at index 10
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx0", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "ctx4", ChangeType: diff.ChangeContext},
+		{NewNum: 7, Content: "ctx5", ChangeType: diff.ChangeContext},
+		{NewNum: 8, Content: "ctx6", ChangeType: diff.ChangeContext},
+		{NewNum: 9, Content: "ctx7", ChangeType: diff.ChangeContext},
+		{NewNum: 10, Content: "ctx8", ChangeType: diff.ChangeContext},
+		{NewNum: 11, Content: "annotated-far", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// annotate the far-away context line
+	m.store.Add("a.go", 11, " ", "important note")
+
+	m.simplifiedView = true
+	visible := m.visibleInSimplified()
+
+	// line at index 10 (NewNum=11) has an annotation and should be visible
+	assert.True(t, visible[10], "annotated context line should be visible in simplified view")
+
+	// verify the annotation appears in rendered output
+	rendered := m.renderSimplifiedDiff()
+	assert.Contains(t, rendered, "annotated-far", "annotated context line content should be rendered")
+	assert.Contains(t, rendered, "important note", "annotation text should be rendered")
+}
+
+func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
+	lines := map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a-line", ChangeType: diff.ChangeAdd}},
+		"b.go": {{NewNum: 1, Content: "b-line", ChangeType: diff.ChangeAdd}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, lines)
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "b.go"
+	m.diffLines = lines["b.go"]
+	m.focus = paneTree
+
+	// annotate only a.go
+	m.store.Add("a.go", 1, "+", "note on a")
+
+	// toggle filter on — should select a.go (the only annotated file)
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model := result.(Model)
+	assert.True(t, model.tree.filter)
+
+	// since b.go was current and a.go is now selected, a load command should be returned
+	if cmd != nil {
+		msg := cmd()
+		flm, ok := msg.(fileLoadedMsg)
+		assert.True(t, ok, "filter toggle should trigger file load for new selection")
+		assert.Equal(t, "a.go", flm.file)
+	} else {
+		t.Fatal("expected a load command after filter toggle changed selection")
+	}
+}
+
+func TestModel_DeleteFileAnnotationInSimplifiedViewMovesCursor(t *testing.T) {
+	// in simplified view, the first non-divider line may be hidden if it's a context
+	// line far from any change. deleting a file-level annotation should move the cursor
+	// to a visible line via ensureCursorVisible.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "ctx3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "ctx4", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "ctx5", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "ctx6", ChangeType: diff.ChangeContext},
+		{NewNum: 7, Content: "ctx7", ChangeType: diff.ChangeContext},
+		{NewNum: 8, Content: "added", ChangeType: diff.ChangeAdd}, // only change at the end
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.simplifiedView = true
+	m.ready = true
+	m.viewport.Width = 80
+	m.viewport.Height = 20
+
+	// add file-level annotation and position cursor on it
+	m.store.Add("a.go", 0, "", "file-level note")
+	m.diffCursor = -1
+
+	// verify line 0 (ctx1) is NOT visible — it's 7 lines from the change, beyond 3 context
+	visible := m.visibleInSimplified()
+	require.False(t, visible[0], "ctx1 should not be visible in simplified view")
+
+	// press 'd' to delete file-level annotation
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+	assert.Empty(t, model.store.Get("a.go"), "file-level annotation should be deleted")
+	assert.GreaterOrEqual(t, model.diffCursor, 0, "cursor should move off file annotation line")
+
+	// cursor should land on a visible line, not on hidden ctx1 (index 0)
+	visibleAfter := model.visibleInSimplified()
+	require.True(t, model.diffCursor >= 0 && model.diffCursor < len(visibleAfter), "cursor in valid range")
+	assert.True(t, visibleAfter[model.diffCursor], "cursor should be on a visible line")
+}
+
+func TestModel_DeleteAnnotationSyncsViewport(t *testing.T) {
+	// after deleting an annotation that was keeping a far-away context line visible,
+	// the viewport should scroll to keep the cursor on screen.
+	lines := make([]diff.DiffLine, 50)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: fmt.Sprintf("ctx%d", i+1), ChangeType: diff.ChangeContext}
+	}
+	// put changes near the start and end to create two distant visible groups
+	lines[0].ChangeType = diff.ChangeAdd
+	lines[49].ChangeType = diff.ChangeAdd
+
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.simplifiedView = true
+	m.ready = true
+	m.viewport.Width = 80
+	m.viewport.Height = 10
+
+	// annotate a far-away line (line 25 = index 24) — this makes it visible in simplified view
+	m.store.Add("a.go", 25, " ", "annotation on far line")
+	m.diffCursor = 24 // position cursor on the annotated line
+	m.syncViewportToCursor()
+
+	oldOffset := m.viewport.YOffset
+
+	// delete the annotation via 'd'
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+
+	// cursor should have moved to a visible line
+	visibleAfter := model.visibleInSimplified()
+	require.True(t, model.diffCursor >= 0 && model.diffCursor < len(visibleAfter), "cursor in valid range")
+	assert.True(t, visibleAfter[model.diffCursor], "cursor should be on a visible line")
+
+	// viewport should have adjusted (not stuck at old position)
+	cursorY := model.cursorViewportY()
+	assert.True(t, cursorY >= model.viewport.YOffset && cursorY < model.viewport.YOffset+model.viewport.Height,
+		"cursor Y (%d) should be within viewport [%d, %d), old offset was %d",
+		cursorY, model.viewport.YOffset, model.viewport.YOffset+model.viewport.Height, oldOffset)
 }

@@ -45,14 +45,18 @@ func (m Model) buildAnnotationMap() map[string]string {
 
 // renderFileAnnotationHeader writes the file-level annotation or input to the builder.
 func (m Model) renderFileAnnotationHeader(b *strings.Builder) {
+	// when actively editing a file-level annotation, always show the input widget
+	if m.annotating && m.fileAnnotating {
+		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
+		b.WriteString(line + "\n")
+		return
+	}
+
 	if fileComment := m.fileAnnotationComment(); fileComment != "" {
 		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
 		if m.diffCursor == -1 && m.focus == paneDiff {
 			line = m.styles.DiffCursorLine.Render(line)
 		}
-		b.WriteString(line + "\n")
-	} else if m.annotating && m.fileAnnotating {
-		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
 		b.WriteString(line + "\n")
 	}
 }
@@ -269,7 +273,8 @@ func (m *Model) syncViewportToCursor() {
 
 // visibleInSimplified returns a boolean slice marking which diffLines indices
 // are visible in simplified view. visible lines are: changed lines (add/remove),
-// up to 3 context lines around each change group, and divider lines between groups.
+// up to 3 context lines around each change group, lines with annotations,
+// and divider lines between groups.
 func (m Model) visibleInSimplified() []bool {
 	n := len(m.diffLines)
 	if n == 0 {
@@ -291,6 +296,18 @@ func (m Model) visibleInSimplified() []bool {
 			for j := i + 1; j < n && j <= i+contextLines; j++ {
 				visible[j] = true
 			}
+		}
+	}
+
+	// mark annotated lines as visible so annotations are never hidden
+	annotationMap := m.buildAnnotationMap()
+	for i, dl := range m.diffLines {
+		if dl.ChangeType == diff.ChangeDivider {
+			continue
+		}
+		key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
+		if annotationMap[key] != "" {
+			visible[i] = true
 		}
 	}
 
@@ -383,6 +400,9 @@ func (m Model) findChunks() []int {
 func (m Model) currentChunk() (int, int) {
 	chunks := m.findChunks()
 	if len(chunks) == 0 {
+		return 0, 0
+	}
+	if m.diffCursor < 0 {
 		return 0, 0
 	}
 	cur := 0
