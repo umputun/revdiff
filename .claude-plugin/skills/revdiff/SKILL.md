@@ -2,7 +2,7 @@
 name: revdiff
 description: Review git diffs with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/kitty/wezterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff", "git review with revdiff", "interactive diff review", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 argument-hint: 'optional git ref (e.g., HEAD~1, main)'
-allowed-tools: [Bash, Read, Edit, Write, Grep, Glob, EnterPlanMode]
+allowed-tools: [Bash, Read, Edit, Write, Grep, Glob, EnterPlanMode, AskUserQuestion]
 ---
 
 # revdiff - TUI Diff Review
@@ -44,9 +44,27 @@ If not found, guide installation:
 
 ### Step 1: Determine Ref
 
-Check `$ARGUMENTS` for optional git ref:
-- If provided: use as the ref argument (e.g., `HEAD~1`, `main`)
-- If empty: revdiff will diff uncommitted changes by default
+If `$ARGUMENTS` contains an explicit ref (e.g., `HEAD~1`, `main`), use it as-is.
+
+If no ref provided, run the smart detection script:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/detect-ref.sh
+```
+
+The script outputs structured fields:
+- `branch`, `main_branch`, `is_main`, `has_uncommitted`
+- `suggested_ref` — the ref to pass to revdiff (empty = uncommitted changes)
+- `needs_ask` — if `true`, ask the user before proceeding
+
+**When `needs_ask: true`** (on a feature branch with uncommitted changes), use AskUserQuestion:
+- **"Uncommitted only"** — pass no ref (review just working changes)
+- **"Branch vs {main_branch}"** — pass main_branch as ref (full branch diff including uncommitted)
+
+**When `needs_ask: false`**, use `suggested_ref` directly:
+- On main + uncommitted → no ref (uncommitted changes)
+- On main + clean → `HEAD~1` (last commit)
+- On feature branch + clean → main branch name (full branch diff)
 
 ### Step 2: Launch Review
 
