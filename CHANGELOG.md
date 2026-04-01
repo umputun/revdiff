@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.4 - 2026-04-01
+
+### New Features
+
+- smart ref detection in Claude Code plugin — auto-detects branch and uncommitted state
+
+### Fixed
+
+- change hunk navigation hint from `[/]` to `[ ]` in status bar to avoid confusion with key grouping
+
 ## v0.2.3 - 2026-04-01
 
 ### Fixed
