@@ -30,12 +30,27 @@ revdiff [OPTIONS] [ref]
 | Option | Description | Default |
 |--------|-------------|---------|
 | `ref` | Git ref to diff against | uncommitted changes |
-| `--staged` | Show staged changes | `false` |
+| `--staged` | Show staged changes, env: `REVDIFF_STAGED` | `false` |
 | `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `3` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `monokai` |
+| `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
+| `--dump-config` | Print default config to stdout and exit | |
 | `-V`, `--version` | Show version info | |
+
+### Config File
+
+All options can be set in a config file at `~/.config/revdiff/config` (INI format). CLI flags and environment variables override config file values.
+
+Generate a default config file:
+
+```bash
+mkdir -p ~/.config/revdiff
+revdiff --dump-config > ~/.config/revdiff/config
+```
+
+Then uncomment and edit the values you want to change.
 
 <details>
 <summary>Color customization flags (click to expand)</summary>
