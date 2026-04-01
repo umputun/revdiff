@@ -9,7 +9,7 @@
       "name": "revdiff",
       "source": "./",
       "description": "Review git diffs with inline annotations in a TUI overlay",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "author": {
         "name": "umputun"
       }
