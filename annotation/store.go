@@ -26,46 +26,44 @@ func NewStore() *Store {
 
 // Add adds an annotation for the given file and line.
 // If an annotation already exists at the same file:line, it is replaced.
-func (s *Store) Add(file string, line int, changeType, comment string) {
-	existing := s.annotations[file]
-	for i, a := range existing {
-		if a.Line == line && a.Type == changeType {
-			existing[i].Comment = comment
-			return
-		}
+func (s *Store) Add(a Annotation) {
+	existing := s.annotations[a.File]
+	if i, ok := s.find(a.File, a.Line, a.Type); ok {
+		existing[i].Comment = a.Comment
+		return
 	}
-	s.annotations[file] = append(existing, Annotation{
-		File:    file,
-		Line:    line,
-		Type:    changeType,
-		Comment: comment,
-	})
+	s.annotations[a.File] = append(existing, a)
 }
 
 // Delete removes the annotation at the given file, line and change type.
 // Returns true if an annotation was found and removed.
 func (s *Store) Delete(file string, line int, changeType string) bool {
-	existing := s.annotations[file]
-	for i, a := range existing {
-		if a.Line == line && a.Type == changeType {
-			s.annotations[file] = append(existing[:i], existing[i+1:]...)
-			if len(s.annotations[file]) == 0 {
-				delete(s.annotations, file)
-			}
-			return true
-		}
+	i, ok := s.find(file, line, changeType)
+	if !ok {
+		return false
 	}
-	return false
+	existing := s.annotations[file]
+	s.annotations[file] = append(existing[:i], existing[i+1:]...)
+	if len(s.annotations[file]) == 0 {
+		delete(s.annotations, file)
+	}
+	return true
 }
 
 // Has checks if an annotation exists at the given file, line and change type.
 func (s *Store) Has(file string, line int, changeType string) bool {
-	for _, a := range s.annotations[file] {
+	_, ok := s.find(file, line, changeType)
+	return ok
+}
+
+// find returns the index of an annotation matching file, line, and changeType.
+func (s *Store) find(file string, line int, changeType string) (int, bool) {
+	for i, a := range s.annotations[file] {
 		if a.Line == line && a.Type == changeType {
-			return true
+			return i, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 // Get returns all annotations for the given file, sorted by line number.
@@ -111,28 +109,17 @@ func (s *Store) FormatOutput() string {
 	var buf strings.Builder
 	first := true
 	for _, file := range files {
-		anns := s.Get(file)
-		// render file-level annotations (Line=0) first
+		anns := s.Get(file) // sorted by line: file-level (0) first, then ascending
 		for _, a := range anns {
-			if a.Line != 0 {
-				continue
-			}
 			if !first {
 				buf.WriteString("\n")
 			}
 			first = false
-			fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, a.Comment)
-		}
-		// render line-specific annotations
-		for _, a := range anns {
 			if a.Line == 0 {
-				continue
+				fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, a.Comment)
+			} else {
+				fmt.Fprintf(&buf, "## %s:%d (%s)\n%s\n", a.File, a.Line, a.Type, a.Comment)
 			}
-			if !first {
-				buf.WriteString("\n")
-			}
-			first = false
-			fmt.Fprintf(&buf, "## %s:%d (%s)\n%s\n", a.File, a.Line, a.Type, a.Comment)
 		}
 	}
 	return buf.String()

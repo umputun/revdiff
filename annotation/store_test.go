@@ -10,7 +10,7 @@ import (
 
 func TestStore_Add(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "use errors.Is()")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "use errors.Is()"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
@@ -19,8 +19,8 @@ func TestStore_Add(t *testing.T) {
 
 func TestStore_AddReplacesExisting(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "old comment")
-	s.Add("handler.go", 43, "+", "new comment")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "old comment"})
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "new comment"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
@@ -29,8 +29,8 @@ func TestStore_AddReplacesExisting(t *testing.T) {
 
 func TestStore_AddMultipleLines(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "first")
-	s.Add("handler.go", 10, "-", "second")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "first"})
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: "-", Comment: "second"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 2)
@@ -41,8 +41,8 @@ func TestStore_AddMultipleLines(t *testing.T) {
 
 func TestStore_AddMultipleFiles(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "first")
-	s.Add("store.go", 18, "-", "second")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "first"})
+	s.Add(Annotation{File: "store.go", Line: 18, Type: "-", Comment: "second"})
 
 	assert.Len(t, s.Get("handler.go"), 1)
 	assert.Len(t, s.Get("store.go"), 1)
@@ -50,7 +50,7 @@ func TestStore_AddMultipleFiles(t *testing.T) {
 
 func TestStore_Delete(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "comment")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "comment"})
 
 	ok := s.Delete("handler.go", 43, "+")
 	assert.True(t, ok)
@@ -59,7 +59,7 @@ func TestStore_Delete(t *testing.T) {
 
 func TestStore_DeleteCleansUpEmptyFile(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "comment")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "comment"})
 	s.Delete("handler.go", 43, "+")
 
 	all := s.All()
@@ -75,8 +75,8 @@ func TestStore_DeleteNonExistent(t *testing.T) {
 
 func TestStore_DeletePreservesOthers(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 10, "+", "keep")
-	s.Add("handler.go", 43, "-", "remove")
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: "+", Comment: "keep"})
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "-", Comment: "remove"})
 
 	s.Delete("handler.go", 43, "-")
 	anns := s.Get("handler.go")
@@ -86,8 +86,8 @@ func TestStore_DeletePreservesOthers(t *testing.T) {
 
 func TestStore_DeleteMatchesByType(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 5, "+", "added line")
-	s.Add("handler.go", 5, "-", "removed line")
+	s.Add(Annotation{File: "handler.go", Line: 5, Type: "+", Comment: "added line"})
+	s.Add(Annotation{File: "handler.go", Line: 5, Type: "-", Comment: "removed line"})
 
 	// deleting the add should leave the remove
 	ok := s.Delete("handler.go", 5, "+")
@@ -100,8 +100,8 @@ func TestStore_DeleteMatchesByType(t *testing.T) {
 
 func TestStore_AddSameLineDifferentTypes(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 5, "+", "added line")
-	s.Add("handler.go", 5, "-", "removed line")
+	s.Add(Annotation{File: "handler.go", Line: 5, Type: "+", Comment: "added line"})
+	s.Add(Annotation{File: "handler.go", Line: 5, Type: "-", Comment: "removed line"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 2, "same line number with different types should be separate annotations")
@@ -115,7 +115,7 @@ func TestStore_GetEmpty(t *testing.T) {
 
 func TestStore_GetReturnsCopy(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "comment")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "comment"})
 
 	anns := s.Get("handler.go")
 	anns[0].Comment = "modified"
@@ -126,8 +126,8 @@ func TestStore_GetReturnsCopy(t *testing.T) {
 
 func TestStore_All(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "first")
-	s.Add("store.go", 18, "-", "second")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "first"})
+	s.Add(Annotation{File: "store.go", Line: 18, Type: "-", Comment: "second"})
 
 	all := s.All()
 	assert.Len(t, all, 2)
@@ -143,7 +143,7 @@ func TestStore_AllEmpty(t *testing.T) {
 
 func TestStore_AllReturnsCopy(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "comment")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "comment"})
 
 	all := s.All()
 	all["handler.go"][0].Comment = "modified"
@@ -156,8 +156,8 @@ func TestStore_Files(t *testing.T) {
 	s := NewStore()
 	assert.Empty(t, s.Files())
 
-	s.Add("z_file.go", 1, "+", "comment")
-	s.Add("a_file.go", 2, "-", "comment")
+	s.Add(Annotation{File: "z_file.go", Line: 1, Type: "+", Comment: "comment"})
+	s.Add(Annotation{File: "a_file.go", Line: 2, Type: "-", Comment: "comment"})
 	files := s.Files()
 	require.Len(t, files, 2)
 	assert.Equal(t, "a_file.go", files[0])
@@ -171,7 +171,7 @@ func TestStore_FormatOutputEmpty(t *testing.T) {
 
 func TestStore_FormatOutputSingle(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "use errors.Is() instead of direct comparison")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "use errors.Is() instead of direct comparison"})
 
 	expected := "## handler.go:43 (+)\nuse errors.Is() instead of direct comparison\n"
 	assert.Equal(t, expected, s.FormatOutput())
@@ -179,8 +179,8 @@ func TestStore_FormatOutputSingle(t *testing.T) {
 
 func TestStore_FormatOutputMultiFile(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "use errors.Is() instead of direct comparison")
-	s.Add("store.go", 18, "-", "don't remove this validation")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "use errors.Is() instead of direct comparison"})
+	s.Add(Annotation{File: "store.go", Line: 18, Type: "-", Comment: "don't remove this validation"})
 
 	expected := "## handler.go:43 (+)\n" +
 		"use errors.Is() instead of direct comparison\n" +
@@ -192,8 +192,8 @@ func TestStore_FormatOutputMultiFile(t *testing.T) {
 
 func TestStore_FormatOutputMultiLinesSameFile(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "fix this")
-	s.Add("handler.go", 10, " ", "add docs")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "fix this"})
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: " ", Comment: "add docs"})
 
 	expected := "## handler.go:10 ( )\n" +
 		"add docs\n" +
@@ -205,7 +205,7 @@ func TestStore_FormatOutputMultiLinesSameFile(t *testing.T) {
 
 func TestStore_AddFileLevelAnnotation(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 0, "", "this file needs refactoring")
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "this file needs refactoring"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
@@ -214,8 +214,8 @@ func TestStore_AddFileLevelAnnotation(t *testing.T) {
 
 func TestStore_AddFileLevelReplacesExisting(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 0, "", "old comment")
-	s.Add("handler.go", 0, "", "new comment")
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "old comment"})
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "new comment"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
@@ -224,7 +224,7 @@ func TestStore_AddFileLevelReplacesExisting(t *testing.T) {
 
 func TestStore_DeleteFileLevelAnnotation(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 0, "", "file comment")
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file comment"})
 
 	ok := s.Delete("handler.go", 0, "")
 	assert.True(t, ok)
@@ -233,8 +233,8 @@ func TestStore_DeleteFileLevelAnnotation(t *testing.T) {
 
 func TestStore_DeleteFileLevelPreservesLineAnnotations(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 0, "", "file comment")
-	s.Add("handler.go", 43, "+", "line comment")
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file comment"})
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "line comment"})
 
 	s.Delete("handler.go", 0, "")
 	anns := s.Get("handler.go")
@@ -244,9 +244,9 @@ func TestStore_DeleteFileLevelPreservesLineAnnotations(t *testing.T) {
 
 func TestStore_GetFileLevelWithLineAnnotations(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "line comment")
-	s.Add("handler.go", 0, "", "file comment")
-	s.Add("handler.go", 10, "-", "another line")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "line comment"})
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file comment"})
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: "-", Comment: "another line"})
 
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 3)
@@ -258,7 +258,7 @@ func TestStore_GetFileLevelWithLineAnnotations(t *testing.T) {
 
 func TestStore_FormatOutputFileLevelOnly(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 0, "", "this file needs refactoring")
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "this file needs refactoring"})
 
 	expected := "## handler.go (file-level)\nthis file needs refactoring\n"
 	assert.Equal(t, expected, s.FormatOutput())
@@ -266,8 +266,8 @@ func TestStore_FormatOutputFileLevelOnly(t *testing.T) {
 
 func TestStore_FormatOutputFileLevelBeforeLineAnnotations(t *testing.T) {
 	s := NewStore()
-	s.Add("handler.go", 43, "+", "fix this")
-	s.Add("handler.go", 0, "", "file needs refactoring")
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "fix this"})
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file needs refactoring"})
 
 	expected := "## handler.go (file-level)\nfile needs refactoring\n" +
 		"\n" +
@@ -277,10 +277,10 @@ func TestStore_FormatOutputFileLevelBeforeLineAnnotations(t *testing.T) {
 
 func TestStore_FormatOutputMixedFileLevelAndLineMultiFile(t *testing.T) {
 	s := NewStore()
-	s.Add("a_file.go", 0, "", "file-level note for a")
-	s.Add("a_file.go", 10, "+", "line note for a")
-	s.Add("b_file.go", 5, "-", "line note for b")
-	s.Add("b_file.go", 0, "", "file-level note for b")
+	s.Add(Annotation{File: "a_file.go", Line: 0, Type: "", Comment: "file-level note for a"})
+	s.Add(Annotation{File: "a_file.go", Line: 10, Type: "+", Comment: "line note for a"})
+	s.Add(Annotation{File: "b_file.go", Line: 5, Type: "-", Comment: "line note for b"})
+	s.Add(Annotation{File: "b_file.go", Line: 0, Type: "", Comment: "file-level note for b"})
 
 	expected := "## a_file.go (file-level)\nfile-level note for a\n" +
 		"\n" +
@@ -294,8 +294,8 @@ func TestStore_FormatOutputMixedFileLevelAndLineMultiFile(t *testing.T) {
 
 func TestStore_FormatOutputSortedByFilename(t *testing.T) {
 	s := NewStore()
-	s.Add("z_file.go", 1, "+", "last")
-	s.Add("a_file.go", 1, "-", "first")
+	s.Add(Annotation{File: "z_file.go", Line: 1, Type: "+", Comment: "last"})
+	s.Add(Annotation{File: "a_file.go", Line: 1, Type: "-", Comment: "first"})
 
 	out := s.FormatOutput()
 	aIdx := strings.Index(out, "## a_file.go")

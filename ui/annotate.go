@@ -9,8 +9,19 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
 )
+
+// newAnnotationInput creates and focuses a text input for annotation editing.
+func (m *Model) newAnnotationInput(placeholder string) (textinput.Model, tea.Cmd) {
+	ti := textinput.New()
+	ti.Placeholder = placeholder
+	cmd := ti.Focus()
+	ti.CharLimit = 500
+	ti.Width = max(10, m.width-m.treeWidth-10)
+	return ti, cmd
+}
 
 // startAnnotation enters annotation input mode for the current cursor line.
 func (m *Model) startAnnotation() tea.Cmd {
@@ -19,16 +30,12 @@ func (m *Model) startAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti := textinput.New()
-	ti.Placeholder = "annotation..."
-	cmd := ti.Focus()
-	ti.CharLimit = 500
-	ti.Width = max(10, m.width-m.treeWidth-10)
+	ti, cmd := m.newAnnotationInput("annotation...")
 
 	// pre-fill with existing annotation if one exists
 	lineNum := m.diffLineNum(dl)
 	for _, a := range m.store.Get(m.currFile) {
-		if a.Line == lineNum && a.Type == dl.ChangeType {
+		if a.Line == lineNum && a.Type == string(dl.ChangeType) {
 			ti.SetValue(a.Comment)
 			break
 		}
@@ -46,11 +53,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti := textinput.New()
-	ti.Placeholder = "file-level annotation..."
-	cmd := ti.Focus()
-	ti.CharLimit = 500
-	ti.Width = max(10, m.width-m.treeWidth-10)
+	ti, cmd := m.newAnnotationInput("file-level annotation...")
 
 	// pre-fill with existing file-level annotation if one exists
 	for _, a := range m.store.Get(m.currFile) {
@@ -78,7 +81,7 @@ func (m *Model) saveAnnotation() {
 	}
 
 	if m.fileAnnotating {
-		m.store.Add(m.currFile, 0, "", text)
+		m.store.Add(annotation.Annotation{File: m.currFile, Line: 0, Type: "", Comment: text})
 		m.annotating = false
 		m.fileAnnotating = false
 		m.diffCursor = -1 // position cursor on the file annotation line
@@ -95,7 +98,7 @@ func (m *Model) saveAnnotation() {
 	}
 
 	lineNum := m.diffLineNum(dl)
-	m.store.Add(m.currFile, lineNum, dl.ChangeType, text)
+	m.store.Add(annotation.Annotation{File: m.currFile, Line: lineNum, Type: string(dl.ChangeType), Comment: text})
 	m.annotating = false
 	m.tree.refreshFilter(m.annotatedFiles())
 	m.viewport.SetContent(m.renderDiff())
@@ -113,14 +116,7 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 	if !m.store.Delete(m.currFile, 0, "") {
 		return nil
 	}
-	m.diffCursor = 0
-	// skip dividers at the start
-	for i, dl := range m.diffLines {
-		if dl.ChangeType != diff.ChangeDivider {
-			m.diffCursor = i
-			break
-		}
-	}
+	m.skipInitialDividers()
 
 	m.tree.refreshFilter(m.annotatedFiles())
 
@@ -153,7 +149,7 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 	}
 
 	lineNum := m.diffLineNum(dl)
-	if m.store.Delete(m.currFile, lineNum, dl.ChangeType) {
+	if m.store.Delete(m.currFile, lineNum, string(dl.ChangeType)) {
 		m.cursorOnAnnotation = false
 		m.tree.refreshFilter(m.annotatedFiles())
 
@@ -204,7 +200,6 @@ func (m Model) hasFileAnnotation() bool {
 	return false
 }
 
-
 // cursorOnFileAnnotationLine returns true if the diff cursor is on the file-level annotation line.
 func (m Model) cursorOnFileAnnotationLine() bool {
 	return m.diffCursor == -1 && m.hasFileAnnotation()
@@ -243,7 +238,7 @@ func (m Model) cursorViewportY() int {
 		y++ // the diff line itself
 		dl := m.diffLines[i]
 		if dl.ChangeType != diff.ChangeDivider {
-			key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
+			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 			if annotationSet[key] {
 				y++ // the annotation line below it
 			}

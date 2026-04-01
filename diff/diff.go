@@ -12,19 +12,23 @@ import (
 )
 
 // ChangeType represents the type of change for a diff line.
+type ChangeType string
+
 const (
-	ChangeAdd     = "+"
-	ChangeRemove  = "-"
-	ChangeContext = " "
-	ChangeDivider = "~" // separates non-adjacent hunks
+	ChangeAdd     ChangeType = "+"
+	ChangeRemove  ChangeType = "-"
+	ChangeContext ChangeType = " "
+	ChangeDivider ChangeType = "~" // separates non-adjacent hunks
+
+	fullFileContext = "-U1000000" // request full file as diff context
 )
 
 // DiffLine holds parsed line info from a diff.
 type DiffLine struct {
-	OldNum     int    // line number in old version (0 for additions)
-	NewNum     int    // line number in new version (0 for removals)
-	Content    string // line content without the +/- prefix
-	ChangeType string // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
+	OldNum     int        // line number in old version (0 for additions)
+	NewNum     int        // line number in new version (0 for removals)
+	Content    string     // line content without the +/- prefix
+	ChangeType ChangeType // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
 }
 
 // Git provides methods to extract changed files and build full-file diff views.
@@ -64,7 +68,7 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]string, error) {
 // interleaved at their correct positions.
 func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, "-U1000000", "--", file) // large context to get full file
+	args = append(args, fullFileContext, "--", file) // large context to get full file
 
 	out, err := g.runGit(args...)
 	if err != nil {

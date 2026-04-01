@@ -256,17 +256,22 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 	return b.String()
 }
 
+// filterFiles returns the subset of allFiles that have annotations.
+func (ft *fileTree) filterFiles(annotatedFiles map[string]bool) []string {
+	var filtered []string
+	for _, f := range ft.allFiles {
+		if annotatedFiles[f] {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
 // toggleFilter switches between showing all files and only annotated files.
 func (ft *fileTree) toggleFilter(annotatedFiles map[string]bool) {
 	ft.filter = !ft.filter
 	if ft.filter {
-		// show only annotated files
-		var filtered []string
-		for _, f := range ft.allFiles {
-			if annotatedFiles[f] {
-				filtered = append(filtered, f)
-			}
-		}
+		filtered := ft.filterFiles(annotatedFiles)
 		if len(filtered) == 0 {
 			ft.filter = false // nothing to filter, stay on all
 			return
@@ -295,12 +300,7 @@ func (ft *fileTree) refreshFilter(annotatedFiles map[string]bool) {
 	// capture selected file before rebuilding entries
 	prevFile := ft.selectedFile()
 
-	var filtered []string
-	for _, f := range ft.allFiles {
-		if annotatedFiles[f] {
-			filtered = append(filtered, f)
-		}
-	}
+	filtered := ft.filterFiles(annotatedFiles)
 	if len(filtered) == 0 {
 		// no annotated files left, switch back to all files
 		ft.filter = false

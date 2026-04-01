@@ -340,18 +340,22 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
-	m.diffCursor = 0
 	m.cursorOnAnnotation = false
-	// skip divider lines at the start
+	m.skipInitialDividers()
+	m.viewport.SetContent(m.renderDiff())
+	m.viewport.GotoTop()
+	return m, nil
+}
+
+// skipInitialDividers positions diffCursor on the first non-divider line.
+func (m *Model) skipInitialDividers() {
+	m.diffCursor = 0
 	for i, dl := range m.diffLines {
 		if dl.ChangeType != diff.ChangeDivider {
 			m.diffCursor = i
 			break
 		}
 	}
-	m.viewport.SetContent(m.renderDiff())
-	m.viewport.GotoTop()
-	return m, nil
 }
 
 // View renders the full TUI.

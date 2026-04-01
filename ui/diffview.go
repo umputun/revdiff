@@ -88,7 +88,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 	}
 	dl := m.diffLines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
-		key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
+		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 		if comment, ok := annotationMap[key]; ok {
 			line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac "+comment)
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
@@ -141,7 +141,7 @@ func (m *Model) moveDiffCursorDown() {
 		dl := m.diffLines[m.diffCursor]
 		if dl.ChangeType != diff.ChangeDivider {
 			lineNum := m.diffLineNum(dl)
-			if m.store.Has(m.currFile, lineNum, dl.ChangeType) {
+			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
 				m.cursorOnAnnotation = true
 				return
 			}
@@ -178,7 +178,7 @@ func (m *Model) moveDiffCursorUp() {
 		// if this line has an annotation, land on it
 		dl := m.diffLines[i]
 		lineNum := m.diffLineNum(dl)
-		if m.store.Has(m.currFile, lineNum, dl.ChangeType) {
+		if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
 			m.cursorOnAnnotation = true
 		}
 		return
@@ -239,13 +239,7 @@ func (m *Model) moveDiffCursorToStart() {
 		return
 	}
 
-	m.diffCursor = 0
-	for i, dl := range m.diffLines {
-		if dl.ChangeType != diff.ChangeDivider {
-			m.diffCursor = i
-			break
-		}
-	}
+	m.skipInitialDividers()
 	m.syncViewportToCursor()
 }
 

@@ -99,8 +99,8 @@ func TestModel_QuitKey(t *testing.T) {
 
 func TestModel_QuitPreservesAnnotations(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
-	m.store.Add("a.go", 5, "+", "needs review")
-	m.store.Add("b.go", 10, " ", "check this")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 5, Type: "+", Comment: "needs review"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 10, Type: " ", Comment: "check this"})
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	require.NotNil(t, cmd)
@@ -174,7 +174,7 @@ func TestModel_TabPaneSwitching(t *testing.T) {
 func TestModel_FKeyFilterToggle(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
 	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.store.Add("a.go", 1, "+", "test annotation")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test annotation"})
 
 	t.Run("toggle filter on and off from tree pane", func(t *testing.T) {
 		m.focus = paneTree
@@ -224,7 +224,7 @@ func TestModel_StatusBarFilterHint(t *testing.T) {
 		m.ready = true
 		m.currFile = "a.go"
 		m.diffLines = lines
-		m.store.Add("a.go", 1, " ", "note")
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"})
 
 		m.focus = paneTree
 		view := m.View()
@@ -467,7 +467,7 @@ func TestModel_ViewNotReady(t *testing.T) {
 func TestModel_AnnotatedFilesMarker(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
 	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.store.Add("a.go", 1, "+", "test")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
 
 	annotated := m.annotatedFiles()
 	assert.True(t, annotated["a.go"])
@@ -636,7 +636,7 @@ func TestModel_AnnotateEnterSaves(t *testing.T) {
 	require.Len(t, anns, 1)
 	assert.Equal(t, "test comment", anns[0].Comment)
 	assert.Equal(t, 5, anns[0].Line)
-	assert.Equal(t, diff.ChangeContext, anns[0].Type)
+	assert.Equal(t, string(diff.ChangeContext), anns[0].Type)
 }
 
 func TestModel_AnnotateEnterEmptyTextCancels(t *testing.T) {
@@ -713,7 +713,7 @@ func TestModel_AnnotateOnAddLine(t *testing.T) {
 	anns := model.store.Get("a.go")
 	require.Len(t, anns, 1)
 	assert.Equal(t, 3, anns[0].Line)
-	assert.Equal(t, diff.ChangeAdd, anns[0].Type)
+	assert.Equal(t, string(diff.ChangeAdd), anns[0].Type)
 }
 
 func TestModel_AnnotateOnRemoveLine(t *testing.T) {
@@ -735,7 +735,7 @@ func TestModel_AnnotateOnRemoveLine(t *testing.T) {
 	anns := model.store.Get("a.go")
 	require.Len(t, anns, 1)
 	assert.Equal(t, 7, anns[0].Line)
-	assert.Equal(t, diff.ChangeRemove, anns[0].Type)
+	assert.Equal(t, string(diff.ChangeRemove), anns[0].Type)
 }
 
 func TestModel_AnnotatePreFillsExisting(t *testing.T) {
@@ -747,7 +747,7 @@ func TestModel_AnnotatePreFillsExisting(t *testing.T) {
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.diffCursor = 0
-	m.store.Add("a.go", 1, " ", "old comment")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "old comment"})
 
 	m.startAnnotation()
 	assert.Equal(t, "old comment", m.annotateInput.Value())
@@ -764,7 +764,7 @@ func TestModel_DeleteAnnotation(t *testing.T) {
 	m.diffLines = lines
 	m.diffCursor = 0
 	m.cursorOnAnnotation = true // cursor on the annotation sub-line
-	m.store.Add("a.go", 1, " ", "test comment")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "test comment"})
 
 	// press 'd' - should delete annotation
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -810,7 +810,7 @@ func TestModel_RenderDiffWithAnnotations(t *testing.T) {
 		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
 	}
-	m.store.Add("a.go", 2, "+", "needs error handling")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "needs error handling"})
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "needs error handling")
@@ -835,8 +835,8 @@ func TestModel_RenderDiffAnnotationInput(t *testing.T) {
 
 func TestModel_AnnotationSummary(t *testing.T) {
 	m := testModel(nil, nil)
-	m.store.Add("internal/a.go", 1, "+", "first comment")
-	m.store.Add("b.go", 5, " ", "second comment")
+	m.store.Add(annotation.Annotation{File: "internal/a.go", Line: 1, Type: "+", Comment: "first comment"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "second comment"})
 
 	summary := m.renderAnnotationSummary(40)
 	assert.Contains(t, summary, "annotations")
@@ -848,8 +848,8 @@ func TestModel_AnnotationSummary(t *testing.T) {
 
 func TestModel_AnnotationSummaryFileLevelAnnotation(t *testing.T) {
 	m := testModel(nil, nil)
-	m.store.Add("handler.go", 0, "", "file-level note")
-	m.store.Add("handler.go", 5, "+", "line note")
+	m.store.Add(annotation.Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file-level note"})
+	m.store.Add(annotation.Annotation{File: "handler.go", Line: 5, Type: "+", Comment: "line note"})
 
 	summary := m.renderAnnotationSummary(40)
 	assert.Contains(t, summary, "handler.go (file)", "file-level annotation should show (file) instead of :0")
@@ -865,7 +865,7 @@ func TestModel_AnnotationSummaryEmpty(t *testing.T) {
 
 func TestModel_AnnotationSummaryTruncatesLongComments(t *testing.T) {
 	m := testModel(nil, nil)
-	m.store.Add("a.go", 1, "+", "this is a very long comment that should be truncated because it exceeds the width limit")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "this is a very long comment that should be truncated because it exceeds the width limit"})
 
 	summary := m.renderAnnotationSummary(20)
 	assert.Contains(t, summary, "...")
@@ -921,7 +921,7 @@ func TestModel_CursorViewportY(t *testing.T) {
 	assert.Equal(t, 2, m.cursorViewportY())
 
 	// add annotation on line 1 (index 0), cursor at 2 -> viewport Y = 3 (line0 + annotation + line1)
-	m.store.Add("a.go", 1, " ", "comment")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "comment"})
 	m.diffCursor = 2
 	assert.Equal(t, 3, m.cursorViewportY())
 
@@ -1043,7 +1043,7 @@ func TestModel_FilterRefreshedAfterAnnotationSave(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
 	m.tree = newFileTree(files)
-	m.store.Add("a.go", 1, "+", "initial annotation")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "initial annotation"})
 
 	// enable filter - should show only a.go
 	annotated := m.annotatedFiles()
@@ -1083,8 +1083,8 @@ func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
 	}
 	m := testModel(files, diffs)
 	m.tree = newFileTree(files)
-	m.store.Add("a.go", 1, " ", "annotation on a")
-	m.store.Add("b.go", 5, " ", "annotation on b")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "annotation on a"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "annotation on b"})
 
 	// enable filter - should show both annotated files
 	annotated := m.annotatedFiles()
@@ -1116,7 +1116,7 @@ func TestModel_FilterDisabledWhenLastAnnotationDeleted(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
 	m.tree = newFileTree(files)
-	m.store.Add("a.go", 1, " ", "only annotation")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "only annotation"})
 
 	// enable filter
 	annotated := m.annotatedFiles()
@@ -1340,8 +1340,8 @@ func TestModel_AnnotateRenderWithDividers(t *testing.T) {
 	m.diffLines = lines
 
 	// add annotations on different change types
-	m.store.Add("a.go", 2, "+", "addition comment")
-	m.store.Add("a.go", 11, "-", "removal comment")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "addition comment"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 11, Type: "-", Comment: "removal comment"})
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "addition comment")
@@ -1362,7 +1362,7 @@ func TestModel_StatusBarShowsDeleteOnAnnotatedLine(t *testing.T) {
 	m.diffCursor = 0
 	m.cursorOnAnnotation = true // cursor on the annotation sub-line
 	m.focus = paneDiff
-	m.store.Add("a.go", 1, " ", "review this")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "review this"})
 
 	view := m.View()
 	assert.Contains(t, view, "[d] delete", "status bar should show delete hint on annotation sub-line")
@@ -1388,7 +1388,7 @@ func TestModel_StatusBarHidesDeleteOnNonAnnotatedLine(t *testing.T) {
 	assert.Contains(t, view, "annotate")
 
 	// add annotation on line 2 (index 1), but cursor is on line 1 (index 0) - still no delete
-	m.store.Add("a.go", 2, "+", "some comment")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "some comment"})
 	view = m.View()
 	assert.NotContains(t, view, "[d] delete", "status bar should not show delete hint when cursor is on a different line")
 }
@@ -1621,7 +1621,7 @@ func TestModel_PgDownAccountsForAnnotations(t *testing.T) {
 
 	// add annotations on several lines - each takes an extra visual row
 	for i := range 10 {
-		model.store.Add("a.go", i+1, diff.ChangeAdd, "annotation")
+		model.store.Add(annotation.Annotation{File: "a.go", Line: i + 1, Type: string(diff.ChangeAdd), Comment: "annotation"})
 	}
 
 	pageHeight := model.viewport.Height
@@ -1964,7 +1964,7 @@ func TestModel_FileAnnotationPreFillsExisting(t *testing.T) {
 	m.tree = newFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}}
-	m.store.Add("a.go", 0, "", "existing file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "existing file note"})
 
 	m.startFileAnnotation()
 	assert.Equal(t, "existing file note", m.annotateInput.Value(), "should pre-fill with existing file-level annotation")
@@ -1995,7 +1995,7 @@ func TestModel_FileAnnotationRenderedAtTopOfDiff(t *testing.T) {
 		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
 	}
-	m.store.Add("a.go", 0, "", "this is a file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "this is a file note"})
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "file: this is a file note", "file-level annotation should appear in rendered diff")
@@ -2013,7 +2013,7 @@ func TestModel_FileAnnotationCursorHighlighted(t *testing.T) {
 	m.diffLines = []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
-	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
 	m.focus = paneDiff
 	m.diffCursor = -1 // on file annotation line
 
@@ -2030,7 +2030,7 @@ func TestModel_DeleteFileAnnotationViaD(t *testing.T) {
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
-	m.store.Add("a.go", 0, "", "file note to delete")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note to delete"})
 	m.diffCursor = -1 // on file annotation line
 
 	// press 'd' to delete file-level annotation
@@ -2049,8 +2049,8 @@ func TestModel_DeleteFileAnnotationCursorNotOnFileLine(t *testing.T) {
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
-	m.store.Add("a.go", 0, "", "file note")
-	m.store.Add("a.go", 1, " ", "line note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "line note"})
 	m.diffCursor = 0            // on regular line
 	m.cursorOnAnnotation = true // on the annotation sub-line for line 1
 
@@ -2073,8 +2073,8 @@ func TestModel_DeleteFileAnnotationFilterShiftsSelection(t *testing.T) {
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
-	m.store.Add("a.go", 0, "", "file note on a")
-	m.store.Add("b.go", 1, " ", "line note on b")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note on a"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 1, Type: " ", Comment: "line note on b"})
 	m.diffCursor = -1 // on file annotation line
 
 	// enable filter to show only annotated files
@@ -2096,7 +2096,7 @@ func TestModel_CursorLineHasAnnotationExcludesFileLevel(t *testing.T) {
 	m.diffLines = []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
-	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
 	m.diffCursor = 0 // on line 1, not on file annotation
 	m.focus = paneDiff
 
@@ -2110,7 +2110,7 @@ func TestModel_CursorOnFileAnnotationLineReportsAnnotation(t *testing.T) {
 	m.diffLines = []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
-	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
 	m.diffCursor = -1
 
 	assert.True(t, m.cursorLineHasAnnotation(), "cursor on file annotation line should report annotation")
@@ -2159,7 +2159,7 @@ func TestModel_CursorNavigatesToFileAnnotation(t *testing.T) {
 	m.diffLines = lines
 	m.focus = paneDiff
 	m.diffCursor = 0
-	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
 
 	// move up from first line should go to file annotation
 	m.moveDiffCursorUp()
@@ -2181,7 +2181,7 @@ func TestModel_HomeGoesToFileAnnotation(t *testing.T) {
 	m.diffLines = lines
 	m.focus = paneDiff
 	m.diffCursor = 1
-	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
 	m.ready = true
 
 	m.moveDiffCursorToStart()
@@ -2195,7 +2195,7 @@ func TestModel_CursorViewportYWithFileAnnotation(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
-	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
 
 	// cursor on file annotation line
 	m.diffCursor = -1
@@ -2233,8 +2233,8 @@ func TestModel_FileAnnotationExcludedFromRegularAnnotationMap(t *testing.T) {
 	m.diffLines = []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
-	m.store.Add("a.go", 0, "", "file note")
-	m.store.Add("a.go", 1, " ", "line note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "line note"})
 
 	set := m.buildAnnotationSet()
 	assert.Len(t, set, 1, "buildAnnotationSet should exclude file-level annotations")
@@ -2496,7 +2496,7 @@ func TestModel_EditExistingFileAnnotationShowsInput(t *testing.T) {
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m.focus = paneDiff
-	m.store.Add("a.go", 0, "", "existing note")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "existing note"})
 
 	// start editing the existing file-level annotation
 	m.startFileAnnotation()
@@ -2522,7 +2522,7 @@ func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
 	m.focus = paneTree
 
 	// annotate only a.go
-	m.store.Add("a.go", 1, "+", "note on a")
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note on a"})
 
 	// toggle filter on — should select a.go (the only annotated file)
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})

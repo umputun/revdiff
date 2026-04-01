@@ -66,6 +66,7 @@ func TestParseUnifiedDiff_SimpleRemove(t *testing.T) {
 			removals++
 		case ChangeAdd:
 			additions++
+		case ChangeContext, ChangeDivider:
 		}
 	}
 	assert.Equal(t, 3, removals, "expected 3 removed lines")
@@ -101,13 +102,13 @@ func TestParseUnifiedDiff_MixedChanges(t *testing.T) {
 	lines, err := ParseUnifiedDiff(raw)
 	require.NoError(t, err)
 
-	types := make([]string, 0, len(lines))
+	types := make([]ChangeType, 0, len(lines))
 	for _, l := range lines {
 		types = append(types, l.ChangeType)
 	}
 
 	// expected sequence: ctx, blank, ctx, remove, remove, add, add, ctx, ctx, blank
-	assert.Equal(t, []string{
+	assert.Equal(t, []ChangeType{
 		ChangeContext,
 		ChangeContext, // blank
 		ChangeContext,
@@ -253,6 +254,7 @@ func TestGit_FileDiff(t *testing.T) {
 			hasAdd = true
 		case ChangeContext:
 			hasCtx = true
+		case ChangeRemove, ChangeDivider:
 		}
 	}
 	assert.True(t, hasAdd, "expected addition lines")

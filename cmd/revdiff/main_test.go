@@ -8,15 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type cliOpts struct {
+	Ref struct {
+		Ref string `positional-arg-name:"ref"`
+	} `positional-args:"yes"`
+	Staged    bool `long:"staged"`
+	TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3"`
+	Version   bool `short:"V" long:"version"`
+}
+
 func TestCLI_Defaults(t *testing.T) {
-	var o struct {
-		Ref struct {
-			Ref string `positional-arg-name:"ref"`
-		} `positional-args:"yes"`
-		Staged    bool `long:"staged"`
-		TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3"`
-		Version   bool `short:"V" long:"version"`
-	}
+	var o cliOpts
 	p := flags.NewParser(&o, flags.Default)
 	_, err := p.ParseArgs([]string{})
 	require.NoError(t, err)
@@ -39,14 +41,7 @@ func TestCLI_TreeWidth(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var o struct {
-				Ref struct {
-					Ref string `positional-arg-name:"ref"`
-				} `positional-args:"yes"`
-				Staged    bool `long:"staged"`
-				TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3"`
-				Version   bool `short:"V" long:"version"`
-			}
+			var o cliOpts
 			p := flags.NewParser(&o, flags.Default)
 			_, err := p.ParseArgs(tc.args)
 			require.NoError(t, err)
@@ -57,14 +52,7 @@ func TestCLI_TreeWidth(t *testing.T) {
 
 func TestCLI_TreeWidthEnv(t *testing.T) {
 	t.Setenv("TREE_WIDTH", "7")
-	var o struct {
-		Ref struct {
-			Ref string `positional-arg-name:"ref"`
-		} `positional-args:"yes"`
-		Staged    bool `long:"staged"`
-		TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3"`
-		Version   bool `short:"V" long:"version"`
-	}
+	var o cliOpts
 	p := flags.NewParser(&o, flags.Default)
 	_, err := p.ParseArgs([]string{})
 	require.NoError(t, err)
@@ -72,14 +60,7 @@ func TestCLI_TreeWidthEnv(t *testing.T) {
 }
 
 func TestCLI_StagedFlag(t *testing.T) {
-	var o struct {
-		Ref struct {
-			Ref string `positional-arg-name:"ref"`
-		} `positional-args:"yes"`
-		Staged    bool `long:"staged"`
-		TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3"`
-		Version   bool `short:"V" long:"version"`
-	}
+	var o cliOpts
 	p := flags.NewParser(&o, flags.Default)
 	_, err := p.ParseArgs([]string{"--staged"})
 	require.NoError(t, err)
@@ -87,14 +68,7 @@ func TestCLI_StagedFlag(t *testing.T) {
 }
 
 func TestCLI_PositionalRef(t *testing.T) {
-	var o struct {
-		Ref struct {
-			Ref string `positional-arg-name:"ref"`
-		} `positional-args:"yes"`
-		Staged    bool `long:"staged"`
-		TreeWidth int  `long:"tree-width" env:"TREE_WIDTH" default:"3"`
-		Version   bool `short:"V" long:"version"`
-	}
+	var o cliOpts
 	p := flags.NewParser(&o, flags.Default)
 	_, err := p.ParseArgs([]string{"HEAD~3"})
 	require.NoError(t, err)
