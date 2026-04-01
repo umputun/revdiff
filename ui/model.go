@@ -48,6 +48,7 @@ type Model struct {
 	annotating     bool            // true when annotation text input is active
 	fileAnnotating bool            // true when annotating at file level (Line=0)
 	annotateInput  textinput.Model // text input for annotations
+	simplifiedView bool            // true when showing simplified diff (changed lines + context only)
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -267,6 +268,14 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveToNextChunk()
 	case msg.String() == "[":
 		m.moveToPrevChunk()
+	case msg.String() == "v":
+		m.simplifiedView = !m.simplifiedView
+		// ensure cursor is on a visible line in the new view mode
+		if m.simplifiedView {
+			m.ensureCursorVisible()
+		}
+		m.viewport.SetContent(m.renderDiff())
+		m.syncViewportToCursor()
 	case msg.String() == "a":
 		cmd := m.startAnnotation()
 		m.viewport.SetContent(m.renderDiff())
@@ -424,7 +433,11 @@ func (m Model) statusBarText() string {
 		if cur, total := m.currentChunk(); total > 0 {
 			chunkHint = fmt.Sprintf("  chunk %d/%d", cur, total)
 		}
-		return "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + "  [/] chunks" + chunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
+		viewHint := "  [v] simple"
+		if m.simplifiedView {
+			viewHint = "  [v] full"
+		}
+		return "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + "  [/] chunks" + chunkHint + viewHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
 	default:
 		return ""
 	}

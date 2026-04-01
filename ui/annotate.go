@@ -234,7 +234,8 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 }
 
 // cursorViewportY computes the actual viewport Y position of the cursor,
-// accounting for injected annotation lines and the file-level annotation line.
+// accounting for injected annotation lines, the file-level annotation line,
+// and simplified view filtering.
 func (m Model) cursorViewportY() int {
 	if m.currFile == "" || len(m.diffLines) == 0 {
 		return max(0, m.diffCursor)
@@ -252,6 +253,11 @@ func (m Model) cursorViewportY() int {
 	}
 
 	annotationSet := m.buildAnnotationSet()
+
+	if m.simplifiedView {
+		return m.cursorViewportYSimplified(fileAnnotationOffset, annotationSet)
+	}
+
 	y := fileAnnotationOffset
 	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
 		y++ // the diff line itself
@@ -263,6 +269,43 @@ func (m Model) cursorViewportY() int {
 			}
 		}
 	}
+	return y
+}
+
+// cursorViewportYSimplified computes viewport Y for simplified view,
+// counting only visible lines and inserted dividers between non-adjacent groups.
+func (m Model) cursorViewportYSimplified(fileAnnotationOffset int, annotationSet map[string]bool) int {
+	visible := m.visibleInSimplified()
+	y := fileAnnotationOffset
+	lastVisibleIdx := -1
+
+	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
+		if !visible[i] {
+			continue
+		}
+		// divider between non-adjacent visible groups
+		if lastVisibleIdx >= 0 && i-lastVisibleIdx > 1 {
+			y++ // the "···" divider line
+		}
+		lastVisibleIdx = i
+		y++ // the visible line itself
+
+		dl := m.diffLines[i]
+		if dl.ChangeType != diff.ChangeDivider {
+			key := m.annotationKey(m.diffLineNum(dl), dl.ChangeType)
+			if annotationSet[key] {
+				y++ // the annotation line below it
+			}
+		}
+	}
+
+	// account for divider before cursor line if there's a gap
+	if m.diffCursor < len(m.diffLines) && visible[m.diffCursor] {
+		if lastVisibleIdx >= 0 && m.diffCursor-lastVisibleIdx > 1 {
+			y++ // divider before the cursor's group
+		}
+	}
+
 	return y
 }
 

@@ -166,39 +166,39 @@ NOTE: `findChunks()` always operates on original `diffLines` regardless of view 
 
 **Approach**: keep `diffCursor` as index into original `diffLines`. The simplified view only changes what is rendered and how cursor movement skips non-visible lines. No index mapping needed.
 
-- [ ] add `simplifiedView bool` field to Model struct
-- [ ] add `visibleInSimplified()` method: returns a `[]bool` (or set) marking which diffLines indices are visible — changed lines plus ~3 context lines around each change group, plus divider lines between groups
-- [ ] add `renderSimplifiedDiff()` method: iterates diffLines, skips non-visible lines, renders visible ones with same styling as renderDiff, inserts dividers between non-adjacent visible groups
-- [ ] adapt `moveDiffCursorDown/Up` to skip non-visible lines when simplifiedView is true
-- [ ] adapt `moveDiffCursorPageDown/Up` to account for simplified view (page size based on visible lines)
-- [ ] adapt `moveDiffCursorToStart/End` to find first/last visible non-divider line
-- [ ] adapt `cursorViewportY` to count only visible lines when computing cursor position
-- [ ] in handleDiffNav: add `v` key to toggle simplifiedView, reset viewport position, re-render
-- [ ] in renderDiff callers (handleFileLoaded, syncViewportToCursor, etc.): dispatch to renderSimplifiedDiff() when simplifiedView is true
-- [ ] annotations continue to work unchanged — annotationMap lookup uses original line numbers, store operations use original indices
-- [ ] chunk navigation (Task 5) continues to work — findChunks uses original diffLines, cursor jumps to original indices which are visible in simplified view
-- [ ] update status bar: show `[v] simple` / `[v] full` toggle hint depending on current mode
-- [ ] write tests for visibleInSimplified with various change patterns
-- [ ] write tests for renderSimplifiedDiff output (correct context, dividers)
-- [ ] write tests for v key toggling between views
-- [ ] write tests for cursor navigation in simplified view (skip hidden lines)
-- [ ] write tests for annotation creation/display in simplified view
-- [ ] write test for toggling view with existing annotations (annotations preserved)
-- [ ] run `go test ./ui/` - must pass before next task
+- [x] add `simplifiedView bool` field to Model struct
+- [x] add `visibleInSimplified()` method: returns a `[]bool` (or set) marking which diffLines indices are visible — changed lines plus ~3 context lines around each change group, plus divider lines between groups
+- [x] add `renderSimplifiedDiff()` method: iterates diffLines, skips non-visible lines, renders visible ones with same styling as renderDiff, inserts dividers between non-adjacent visible groups
+- [x] adapt `moveDiffCursorDown/Up` to skip non-visible lines when simplifiedView is true
+- [x] adapt `moveDiffCursorPageDown/Up` to account for simplified view (page size based on visible lines)
+- [x] adapt `moveDiffCursorToStart/End` to find first/last visible non-divider line
+- [x] adapt `cursorViewportY` to count only visible lines when computing cursor position
+- [x] in handleDiffNav: add `v` key to toggle simplifiedView, reset viewport position, re-render
+- [x] in renderDiff callers (handleFileLoaded, syncViewportToCursor, etc.): dispatch to renderSimplifiedDiff() when simplifiedView is true
+- [x] annotations continue to work unchanged — annotationMap lookup uses original line numbers, store operations use original indices
+- [x] chunk navigation (Task 5) continues to work — findChunks uses original diffLines, cursor jumps to original indices which are visible in simplified view
+- [x] update status bar: show `[v] simple` / `[v] full` toggle hint depending on current mode
+- [x] write tests for visibleInSimplified with various change patterns
+- [x] write tests for renderSimplifiedDiff output (correct context, dividers)
+- [x] write tests for v key toggling between views
+- [x] write tests for cursor navigation in simplified view (skip hidden lines)
+- [x] write tests for annotation creation/display in simplified view
+- [x] write test for toggling view with existing annotations (annotations preserved)
+- [x] run `go test ./ui/` - must pass before next task
 
 ### Task 7: Verify acceptance criteria
 
-- [ ] verify all 7 improvements are implemented and working together
-- [ ] verify tab switches panes, l/h still work as alternatives
-- [ ] verify f toggles filter, hint hidden when no annotations
-- [ ] verify [ / ] navigate chunks with correct status indicator
-- [ ] verify v toggles simplified view with working annotations
-- [ ] verify · dot prefix on directories
-- [ ] verify A creates file-level annotations displayed at diff top
-- [ ] verify Enter in diff pane starts annotation
-- [ ] run full test suite: `go test ./...`
-- [ ] run linter: `golangci-lint run`
-- [ ] verify test coverage meets 80%+
+- [x] verify all 7 improvements are implemented and working together
+- [x] verify tab switches panes, l/h still work as alternatives
+- [x] verify f toggles filter, hint hidden when no annotations
+- [x] verify [ / ] navigate chunks with correct status indicator
+- [x] verify v toggles simplified view with working annotations
+- [x] verify · dot prefix on directories
+- [x] verify A creates file-level annotations displayed at diff top
+- [x] verify Enter in diff pane starts annotation
+- [x] run full test suite: `go test ./...`
+- [x] run linter: `golangci-lint run`
+- [x] verify test coverage meets 80%+
 
 ### Task 8: Update documentation
 
