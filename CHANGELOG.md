@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.2.0 - 2026-04-01
+
+### New Features
+
+- add reference docs for revdiff plugin skill (install, config, usage)
+
+### Fixed
+
+- remove spurious `colors=` line from `--dump-config` output
+- add trigger words to plugin skill description
+- isolate tests from user's real config file
+
 ## v0.1.1 - 2026-04-01
 
 ### New Features
