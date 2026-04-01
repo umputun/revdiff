@@ -1,6 +1,7 @@
 package ui
 
 //go:generate moq -out mocks/renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
+//go:generate moq -out mocks/syntax_highlighter.go -pkg mocks -skip-ensure -fmt goimports . SyntaxHighlighter
 
 import (
 	"fmt"
@@ -19,6 +20,11 @@ import (
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]string, error)
 	FileDiff(ref, file string, staged bool) ([]diff.DiffLine, error)
+}
+
+// SyntaxHighlighter provides syntax highlighting for diff lines.
+type SyntaxHighlighter interface {
+	HighlightLines(filename string, lines []diff.DiffLine) []string
 }
 
 // pane identifies which pane has focus.
@@ -45,17 +51,20 @@ type Model struct {
 	width          int
 	height         int
 	treeWidth      int
-	treeWidthRatio int // 1-10 units for file tree panel
-	diffCursor     int // index into diffLines for current cursor line
+	treeWidthRatio int    // 1-10 units for file tree panel
+	tabSpaces      string // spaces to replace tabs with
+	diffCursor     int    // index into diffLines for current cursor line
 
-	diffLines          []diff.DiffLine // current file's parsed diff lines
-	currFile           string          // currently displayed file
-	loadSeq            uint64          // monotonic counter to identify the latest load request
-	ready              bool            // true after first WindowSizeMsg
-	annotating         bool            // true when annotation text input is active
-	fileAnnotating     bool            // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
-	annotateInput      textinput.Model // text input for annotations
+	highlighter        SyntaxHighlighter // syntax highlighter
+	highlightedLines   []string          // pre-computed highlighted content, parallel to diffLines
+	diffLines          []diff.DiffLine   // current file's parsed diff lines
+	currFile           string            // currently displayed file
+	loadSeq            uint64            // monotonic counter to identify the latest load request
+	ready              bool              // true after first WindowSizeMsg
+	annotating         bool              // true when annotation text input is active
+	fileAnnotating     bool              // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
+	annotateInput      textinput.Model   // text input for annotations
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -77,22 +86,33 @@ type ModelConfig struct {
 	Ref            string
 	Staged         bool
 	TreeWidthRatio int
+	TabWidth       int  // number of spaces per tab character
+	NoColors       bool // disable all colors including syntax highlighting
 	Colors         Colors
 }
 
-// NewModel creates a new Model with the given renderer, store, and configuration.
-func NewModel(renderer Renderer, store *annotation.Store, cfg ModelConfig) Model {
+// NewModel creates a new Model with the given renderer, store, highlighter and configuration.
+func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
 		cfg.TreeWidthRatio = 3
 	}
+	if cfg.TabWidth < 1 {
+		cfg.TabWidth = 4
+	}
+	s := newStyles(cfg.Colors)
+	if cfg.NoColors {
+		s = plainStyles()
+	}
 	return Model{
-		styles:         newStyles(cfg.Colors),
+		styles:         s,
 		store:          store,
 		renderer:       renderer,
+		highlighter:    highlighter,
 		ref:            cfg.Ref,
 		staged:         cfg.Staged,
 		focus:          paneTree,
 		treeWidthRatio: cfg.TreeWidthRatio,
+		tabSpaces:      strings.Repeat(" ", cfg.TabWidth),
 	}
 }
 
@@ -186,10 +206,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "enter":
 		switch m.focus {
 		case paneTree:
-			if f := m.tree.selectedFile(); f != "" {
-				m.loadSeq++
-				return m, m.loadFileDiff(f)
+			if m.currFile != "" {
+				m.focus = paneDiff
 			}
+			return m, nil
 		case paneDiff:
 			cmd := m.startAnnotation()
 			m.viewport.SetContent(m.renderDiff())
@@ -248,17 +268,12 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.tree.ensureVisible(m.treePageSize())
-	return m, nil
+	return m.loadSelectedIfChanged()
 }
 
-// treePageSize returns the number of visible lines in the tree pane,
-// accounting for annotation summary lines when present.
+// treePageSize returns the number of visible lines in the tree pane.
 func (m Model) treePageSize() int {
-	size := m.height - 3 // content height matching Height(m.height-3) in View()
-	if summary := m.renderAnnotationSummary(m.treeWidth); summary != "" {
-		size -= strings.Count(summary, "\n") + 1
-	}
-	return max(1, size)
+	return max(1, m.height-3)
 }
 
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -348,6 +363,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
 	m.cursorOnAnnotation = false
 	m.skipInitialDividers()
 	m.viewport.SetContent(m.renderDiff())
@@ -372,17 +388,9 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	treeHeight := m.height - 3 // content height matching treeStyle.Height(m.height-3)
-	summary := m.renderAnnotationSummary(m.treeWidth)
-	if summary != "" {
-		treeHeight -= strings.Count(summary, "\n") + 1
-	}
-	treeHeight = max(1, treeHeight) // ensure at least one row for file list
+	treeHeight := max(1, m.height-3)
 	annotated := m.annotatedFiles()
 	treeContent := m.tree.render(m.treeWidth, treeHeight, annotated, m.styles)
-	if summary != "" {
-		treeContent += "\n" + summary
-	}
 
 	// apply pane borders based on focus
 	treeStyle := m.styles.TreePane
@@ -434,9 +442,16 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		fileNoteHint = "  [A] file note"
 	}
 
+	annotationCount := m.store.Count()
+	countHint := ""
+	if annotationCount > 0 {
+		countHint = fmt.Sprintf("  %d annotations", annotationCount)
+	}
+
+	var hints string
 	switch m.focus {
 	case paneTree:
-		return "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
+		hints = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
 	case paneDiff:
 		deleteHint := ""
 		if m.cursorLineHasAnnotation() {
@@ -446,10 +461,19 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		if cur, total := m.currentHunk(); total > 0 {
 			hunkHint = fmt.Sprintf("  [/] hunk %d/%d", cur, total)
 		}
-		return "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
-	default:
-		return ""
+		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
 	}
+
+	if countHint != "" {
+		// pad hints to push annotation count to the right
+		padding := m.width - len(hints) - len(countHint) - 2 // 2 for status bar padding
+		if padding > 0 {
+			hints += strings.Repeat(" ", padding) + countHint
+		} else {
+			hints += countHint
+		}
+	}
+	return hints
 }
 
 // annotatedFiles returns a set of files that have annotations.

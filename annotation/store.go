@@ -74,6 +74,15 @@ func (s *Store) Get(file string) []Annotation {
 	return result
 }
 
+// Count returns the total number of annotations across all files.
+func (s *Store) Count() int {
+	count := 0
+	for _, anns := range s.annotations {
+		count += len(anns)
+	}
+	return count
+}
+
 // All returns all annotations grouped by file. The returned map is a copy.
 func (s *Store) All() map[string][]Annotation {
 	result := make(map[string][]Annotation, len(s.annotations))

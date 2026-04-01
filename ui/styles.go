@@ -12,6 +12,7 @@ type Colors struct {
 	SelectedBg string // selected file background
 	Annotation string // annotation text and markers
 	CursorBg   string // diff cursor line background
+	CursorBar  string // cursor line vertical bar indicator
 	AddFg      string // added line foreground
 	AddBg      string // added line background
 	RemoveFg   string // removed line foreground
@@ -39,8 +40,13 @@ type styles struct {
 	// status bar
 	StatusBar lipgloss.Style
 
+	// syntax-highlighted add/remove lines (background only, chroma owns foreground)
+	LineAddHighlight    lipgloss.Style
+	LineRemoveHighlight lipgloss.Style
+
 	// diff cursor
 	DiffCursorLine lipgloss.Style
+	CursorBar      lipgloss.Style
 
 	// annotation
 	AnnotationLine lipgloss.Style
@@ -90,11 +96,50 @@ func newStyles(c Colors) styles {
 			Foreground(lipgloss.Color(c.Muted)).
 			Padding(0, 1),
 
+		LineAddHighlight: lipgloss.NewStyle().
+			Background(lipgloss.Color(c.AddBg)),
+		LineRemoveHighlight: lipgloss.NewStyle().
+			Background(lipgloss.Color(c.RemoveBg)),
+
 		DiffCursorLine: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.CursorBg)),
+		CursorBar: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.CursorBar)),
 
 		AnnotationLine: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)).
 			Italic(true),
+	}
+}
+
+// plainStyles returns styles with no colors for --no-colors mode.
+// borders are preserved for layout but all color styling is removed.
+func plainStyles() styles {
+	border := lipgloss.NormalBorder()
+
+	return styles{
+		TreePane:       lipgloss.NewStyle().Border(border),
+		TreePaneActive: lipgloss.NewStyle().Border(border),
+		DirEntry:       lipgloss.NewStyle().Bold(true),
+		FileEntry:      lipgloss.NewStyle(),
+		FileSelected:   lipgloss.NewStyle().Reverse(true),
+		AnnotationMark: lipgloss.NewStyle(),
+
+		DiffPane:       lipgloss.NewStyle().Border(border),
+		DiffPaneActive: lipgloss.NewStyle().Border(border),
+		LineAdd:        lipgloss.NewStyle(),
+		LineRemove:     lipgloss.NewStyle(),
+		LineContext:    lipgloss.NewStyle(),
+		LineNumber:     lipgloss.NewStyle().Width(6).Align(lipgloss.Right),
+
+		StatusBar: lipgloss.NewStyle().Padding(0, 1),
+
+		LineAddHighlight:    lipgloss.NewStyle(),
+		LineRemoveHighlight: lipgloss.NewStyle(),
+
+		DiffCursorLine: lipgloss.NewStyle().Reverse(true),
+		CursorBar:      lipgloss.NewStyle(),
+
+		AnnotationLine: lipgloss.NewStyle().Italic(true),
 	}
 }

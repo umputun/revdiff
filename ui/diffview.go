@@ -61,20 +61,46 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 // renderDiffLine writes a single styled diff line (with cursor highlight) to the builder.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineNum := m.styles.LineNumber.Render(m.formatLineNum(dl))
+
+	// check for pre-computed syntax-highlighted content
+	hasHighlight := idx < len(m.highlightedLines)
+	hlContent := ""
+	if hasHighlight {
+		hlContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
+	}
+	lineContent := strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+
 	var content string
 	switch dl.ChangeType {
 	case diff.ChangeAdd:
-		content = m.styles.LineAdd.Render(" +" + dl.Content)
+		if hasHighlight {
+			content = m.styles.LineAddHighlight.Render(" +" + hlContent)
+		} else {
+			content = m.styles.LineAdd.Render(" +" + lineContent)
+		}
 	case diff.ChangeRemove:
-		content = m.styles.LineRemove.Render(" -" + dl.Content)
+		if hasHighlight {
+			content = m.styles.LineRemoveHighlight.Render(" -" + hlContent)
+		} else {
+			content = m.styles.LineRemove.Render(" -" + lineContent)
+		}
 	case diff.ChangeDivider:
-		content = m.styles.LineNumber.Render(" " + dl.Content)
+		content = m.styles.LineNumber.Render(" " + lineContent)
 	default:
-		content = m.styles.LineContext.Render("  " + dl.Content)
+		if hasHighlight {
+			content = "  " + hlContent
+		} else {
+			content = m.styles.LineContext.Render("  " + lineContent)
+		}
 	}
 
-	line := lineNum + content
-	if idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation {
+	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	bar := " "
+	if isCursor {
+		bar = m.styles.CursorBar.Render("│")
+	}
+	line := lineNum + bar + content
+	if isCursor {
 		line = m.styles.DiffCursorLine.Render(line)
 	}
 	b.WriteString(line + "\n")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/highlight"
 	"github.com/umputun/revdiff/ui"
 )
 
@@ -19,9 +20,12 @@ var opts struct {
 		Ref string `positional-arg-name:"ref" description:"git ref to diff against (default: uncommitted changes)"`
 	} `positional-args:"yes"`
 
-	Staged    bool `long:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	TreeWidth int  `long:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"3" description:"file tree panel width in units (1-10, default 3 of 10)"`
-	Version   bool `short:"V" long:"version" description:"show version info"`
+	Staged      bool   `long:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
+	TreeWidth   int    `long:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"3" description:"file tree panel width in units (1-10, default 3 of 10)"`
+	TabWidth    int    `long:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
+	NoColors    bool   `long:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	ChromaStyle string `long:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
+	Version     bool   `short:"V" long:"version" description:"show version info"`
 
 	Colors struct {
 		Accent     string `long:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#5f87ff" description:"active pane borders and directory names"`
@@ -32,6 +36,7 @@ var opts struct {
 		SelectedBg string `long:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#303030" description:"selected file background color"`
 		Annotation string `long:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
 		CursorBg   string `long:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   default:"#3a3a3a" description:"diff cursor line background"`
+		CursorBar  string `long:"color-cursor-bar"  env:"REVDIFF_COLOR_CURSOR_BAR"  default:"#d7af00" description:"cursor line vertical bar color"`
 		AddFg      string `long:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
 		AddBg      string `long:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800" description:"added line background color"`
 		RemoveFg   string `long:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
@@ -66,7 +71,10 @@ func main() {
 func run() error {
 	renderer := diff.NewGit(".")
 	store := annotation.NewStore()
-	model := ui.NewModel(renderer, store, ui.ModelConfig{
+	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
+	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
+		NoColors:       opts.NoColors,
+		TabWidth:       opts.TabWidth,
 		Ref:            opts.Ref.Ref,
 		Staged:         opts.Staged,
 		TreeWidthRatio: opts.TreeWidth,
@@ -79,6 +87,7 @@ func run() error {
 			SelectedBg: opts.Colors.SelectedBg,
 			Annotation: opts.Colors.Annotation,
 			CursorBg:   opts.Colors.CursorBg,
+			CursorBar:  opts.Colors.CursorBar,
 			AddFg:      opts.Colors.AddFg,
 			AddBg:      opts.Colors.AddBg,
 			RemoveFg:   opts.Colors.RemoveFg,

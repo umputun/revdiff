@@ -2,9 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -268,41 +265,4 @@ func (m Model) buildAnnotationSet() map[string]bool {
 // annotationKey creates a lookup key from line number and change type.
 func (m Model) annotationKey(line int, changeType string) string {
 	return fmt.Sprintf("%d:%s", line, changeType)
-}
-
-// renderAnnotationSummary renders a summary of all annotations for the left pane.
-func (m Model) renderAnnotationSummary(width int) string {
-	all := m.store.All()
-	if len(all) == 0 {
-		return ""
-	}
-
-	files := make([]string, 0, len(all))
-	for f := range all {
-		files = append(files, f)
-	}
-	sort.Strings(files)
-
-	var b strings.Builder
-	b.WriteString(m.styles.DirEntry.Render("─ annotations ─") + "\n")
-
-	for _, file := range files {
-		for _, a := range all[file] {
-			var loc string
-			if a.Line == 0 {
-				loc = fmt.Sprintf(" %s (file)", filepath.Base(file))
-			} else {
-				loc = fmt.Sprintf(" %s:%d", filepath.Base(file), a.Line)
-			}
-			b.WriteString(m.styles.FileEntry.Render(loc) + "\n")
-			comment := a.Comment
-			maxLen := width - 4
-			if maxLen > 3 && len(comment) > maxLen {
-				comment = comment[:maxLen-3] + "..."
-			}
-			b.WriteString(m.styles.AnnotationLine.Render(" \""+comment+"\"") + "\n")
-		}
-	}
-
-	return b.String()
 }

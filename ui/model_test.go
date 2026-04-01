@@ -15,6 +15,12 @@ import (
 	"github.com/umputun/revdiff/ui/mocks"
 )
 
+func noopHighlighter() *mocks.SyntaxHighlighterMock {
+	return &mocks.SyntaxHighlighterMock{
+		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
+	}
+}
+
 func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(ref string, staged bool) ([]string, error) {
@@ -25,7 +31,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		},
 	}
 	store := annotation.NewStore()
-	m := NewModel(renderer, store, ModelConfig{TreeWidthRatio: 3})
+	m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
 	// simulate window size
 	m.width = 120
 	m.height = 40
@@ -124,21 +130,20 @@ func TestModel_QuitNoAnnotationsEmptyOutput(t *testing.T) {
 	assert.Empty(t, model.Store().FormatOutput())
 }
 
-func TestModel_EnterSelectsFile(t *testing.T) {
-	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
-		"a.go": {{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}},
-	})
+func TestModel_EnterSwitchesToDiffPane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = newFileTree([]string{"a.go", "b.go"})
 	m.focus = paneTree
+	// simulate file already loaded (tree nav auto-loads)
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneTree // reset focus after file load
 
-	// enter on selected file should trigger file load
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	require.NotNil(t, cmd)
-
-	msg := cmd()
-	flm, ok := msg.(fileLoadedMsg)
-	require.True(t, ok)
-	assert.Equal(t, "a.go", flm.file)
+	// enter should switch to diff pane
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.focus)
 }
 
 func TestModel_TabPaneSwitching(t *testing.T) {
@@ -429,7 +434,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 				ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
 				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 			}
-			m := NewModel(renderer, annotation.NewStore(), ModelConfig{TreeWidthRatio: tc.ratio})
+			m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: tc.ratio})
 			result, _ := m.Update(tea.WindowSizeMsg{Width: tc.termWidth, Height: 40})
 			model := result.(Model)
 			assert.Equal(t, tc.wantTreeWidth, model.treeWidth)
@@ -833,42 +838,22 @@ func TestModel_RenderDiffAnnotationInput(t *testing.T) {
 	assert.Contains(t, rendered, "\U0001f4ac")
 }
 
-func TestModel_AnnotationSummary(t *testing.T) {
-	m := testModel(nil, nil)
-	m.store.Add(annotation.Annotation{File: "internal/a.go", Line: 1, Type: "+", Comment: "first comment"})
-	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "second comment"})
-
-	summary := m.renderAnnotationSummary(40)
-	assert.Contains(t, summary, "annotations")
-	assert.Contains(t, summary, "a.go:1")
-	assert.Contains(t, summary, "b.go:5")
-	assert.Contains(t, summary, "first comment")
-	assert.Contains(t, summary, "second comment")
+func TestModel_AnnotationCountInStatusBar(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.width = 120
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "other"})
+	annotated := m.annotatedFiles()
+	status := m.statusBarText(annotated)
+	assert.Contains(t, status, "2 annotations")
 }
 
-func TestModel_AnnotationSummaryFileLevelAnnotation(t *testing.T) {
-	m := testModel(nil, nil)
-	m.store.Add(annotation.Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file-level note"})
-	m.store.Add(annotation.Annotation{File: "handler.go", Line: 5, Type: "+", Comment: "line note"})
-
-	summary := m.renderAnnotationSummary(40)
-	assert.Contains(t, summary, "handler.go (file)", "file-level annotation should show (file) instead of :0")
-	assert.Contains(t, summary, "handler.go:5", "line annotation should show normal line number")
-	assert.NotContains(t, summary, "handler.go:0", "should not show :0 for file-level annotations")
-}
-
-func TestModel_AnnotationSummaryEmpty(t *testing.T) {
-	m := testModel(nil, nil)
-	summary := m.renderAnnotationSummary(30)
-	assert.Empty(t, summary)
-}
-
-func TestModel_AnnotationSummaryTruncatesLongComments(t *testing.T) {
-	m := testModel(nil, nil)
-	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "this is a very long comment that should be truncated because it exceeds the width limit"})
-
-	summary := m.renderAnnotationSummary(20)
-	assert.Contains(t, summary, "...")
+func TestModel_NoAnnotationCountWhenEmpty(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.width = 120
+	annotated := m.annotatedFiles()
+	status := m.statusBarText(annotated)
+	assert.NotContains(t, status, "annotations")
 }
 
 func TestModel_AnnotateStatusBar(t *testing.T) {
@@ -2538,4 +2523,76 @@ func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
 	} else {
 		t.Fatal("expected a load command after filter toggle changed selection")
 	}
+}
+
+func TestModel_RenderDiffLineHighlighted(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
+		{OldNum: 2, Content: "func bar() {}", ChangeType: diff.ChangeRemove},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.highlightedLines = []string{"hl-context", "hl-add", "hl-remove"}
+	m.focus = paneDiff
+	output := m.renderDiff()
+
+	assert.Contains(t, output, "hl-context", "highlighted context line should appear")
+	assert.Contains(t, output, "hl-add", "highlighted add line should appear")
+	assert.Contains(t, output, "hl-remove", "highlighted remove line should appear")
+}
+
+func TestModel_RenderDiffLineCursorBar(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "line one", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 2, Content: "line two", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	m.diffCursor = 0
+	output := m.renderDiff()
+	assert.Contains(t, output, "│", "cursor bar should appear on active line")
+}
+
+func TestModel_RenderDiffLineTabReplacement(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "\tfoo", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.tabSpaces = "    " // 4 spaces
+	output := m.renderDiff()
+	assert.Contains(t, output, "    foo", "tabs should be replaced with spaces")
+	assert.NotContains(t, output, "\t", "no raw tabs should remain")
+}
+
+func TestModel_PlainStyles(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{NoColors: true, TreeWidthRatio: 3})
+	m.width = 120
+	m.height = 40
+	m.treeWidth = 36
+	m.ready = true
+	// plain styles should not panic and should render
+	output := m.View()
+	assert.NotEmpty(t, output)
+}
+
+func TestModel_TabWidthDefault(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 0})
+	assert.Equal(t, "    ", m.tabSpaces, "tab width 0 should default to 4 spaces")
+
+	m2 := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 2})
+	assert.Equal(t, "  ", m2.tabSpaces, "tab width 2 should produce 2 spaces")
 }
