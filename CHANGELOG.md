@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.1 - 2026-04-01
+
+### Improvements
+
+- replace diff cursor bar (▎) with solid triangle (▶)
+- add `--color-cursor-fg` flag to customize cursor indicator color
+
 ## v0.2.0 - 2026-04-01
 
 ### New Features
