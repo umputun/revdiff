@@ -178,12 +178,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case msg.String() == "enter":
-		if m.focus == paneTree {
+		switch m.focus {
+		case paneTree:
 			if f := m.tree.selectedFile(); f != "" {
 				m.loadSeq++
 				m.pendingFile = f
 				return m, m.loadFileDiff(f)
 			}
+		case paneDiff:
+			cmd := m.startAnnotation()
+			m.viewport.SetContent(m.renderDiff())
+			return m, cmd
 		}
 		return m, nil
 	}
@@ -388,9 +393,9 @@ func (m Model) View() string {
 			statusText = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
 		case paneDiff:
 			if m.cursorLineHasAnnotation() {
-				statusText = "[j/k] scroll  [h/tab] files  [a] annotate  [d] delete" + filterHint + "  [n/p] next/prev  [q] quit"
+				statusText = "[j/k] scroll  [h/tab] files  [enter/a] annotate  [d] delete" + filterHint + "  [n/p] next/prev  [q] quit"
 			} else {
-				statusText = "[j/k] scroll  [h/tab] files  [a] annotate" + filterHint + "  [n/p] next/prev  [q] quit"
+				statusText = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + filterHint + "  [n/p] next/prev  [q] quit"
 			}
 		}
 	}

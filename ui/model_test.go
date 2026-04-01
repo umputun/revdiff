@@ -558,6 +558,59 @@ func TestModel_AnnotateKey(t *testing.T) {
 	assert.NotNil(t, cmd) // textinput blink command
 }
 
+func TestModel_EnterInDiffPaneStartsAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+
+	// press enter in diff pane - should enter annotation mode
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.True(t, model.annotating, "enter in diff pane should start annotation mode")
+	assert.NotNil(t, cmd, "should return textinput blink command")
+	assert.Equal(t, paneDiff, model.focus, "focus should remain on diff pane")
+}
+
+func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
+	lines := []diff.DiffLine{
+		{Content: "--- a/file.go", ChangeType: diff.ChangeDivider},
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0 // on divider line
+
+	// press enter on divider - should not enter annotation mode
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.False(t, model.annotating, "enter on divider should not start annotation")
+}
+
+func TestModel_StatusBarShowsEnterAnnotateHint(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+
+	view := m.View()
+	assert.Contains(t, view, "[enter/a] annotate", "diff pane status bar should show enter/a annotate hint")
+}
+
 func TestModel_AnnotateEnterSaves(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},

@@ -96,10 +96,10 @@ A set of UX improvements to the revdiff TUI covering key bindings, navigation, v
 
 NOTE: the global `enter` handler in handleKey returns before reaching handleDiffNav. The fix must be in the global section: when focus == paneDiff, call startAnnotation() instead of returning nil.
 
-- [ ] in handleKey global `enter` case: add branch for `m.focus == paneDiff` that calls startAnnotation() and re-renders viewport
-- [ ] update diff pane status bar hints to show `[enter/a] annotate`
-- [ ] write tests for Enter key in diff pane triggering annotation mode
-- [ ] run `go test ./ui/` - must pass before next task
+- [x] in handleKey global `enter` case: add branch for `m.focus == paneDiff` that calls startAnnotation() and re-renders viewport
+- [x] update diff pane status bar hints to show `[enter/a] annotate`
+- [x] write tests for Enter key in diff pane triggering annotation mode
+- [x] run `go test ./ui/` - must pass before next task
 
 ### Task 4a: Store support for file-level annotations
 
