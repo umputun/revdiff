@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -161,7 +163,11 @@ func defaultConfigPath() string {
 }
 
 func run(opts options) error {
-	renderer := diff.NewGit(".")
+	repoRoot, err := gitTopLevel()
+	if err != nil {
+		return fmt.Errorf("find git root: %w", err)
+	}
+	renderer := diff.NewGit(repoRoot)
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
@@ -215,4 +221,14 @@ func run(opts options) error {
 	}
 	fmt.Print(output)
 	return nil
+}
+
+// gitTopLevel returns the root directory of the current git repository.
+func gitTopLevel() (string, error) {
+	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
