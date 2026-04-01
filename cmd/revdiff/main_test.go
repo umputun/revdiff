@@ -18,7 +18,18 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.Staged)
 	assert.False(t, opts.NoColors)
 	assert.False(t, opts.NoStatusBar)
+	assert.Empty(t, opts.Output)
 	assert.Empty(t, opts.Ref.Ref)
+}
+
+func TestParseArgs_OutputFlag(t *testing.T) {
+	opts, err := parseArgs([]string{"-o", "/tmp/out.txt"})
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/out.txt", opts.Output)
+
+	opts, err = parseArgs([]string{"--output=/tmp/out2.txt"})
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/out2.txt", opts.Output)
 }
 
 func TestParseArgs_Flags(t *testing.T) {

@@ -5,18 +5,24 @@
 
 set -euo pipefail
 
-# build revdiff command
-REVDIFF_CMD="revdiff"
-REVDIFF_ARGS=("$@")
+# resolve revdiff to absolute path so overlay shells (sh -c) can find it
+# even when /opt/homebrew/bin or similar dirs are not in sh's default PATH
+REVDIFF_BIN=$(command -v revdiff 2>/dev/null || true)
+if [ -z "$REVDIFF_BIN" ]; then
+    echo "error: revdiff not found in PATH" >&2
+    echo "install: go install github.com/umputun/revdiff/cmd/revdiff@latest" >&2
+    exit 1
+fi
 
-# temp file for capturing annotations
 OUTPUT_FILE=$(mktemp /tmp/revdiff-output-XXXXXX)
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
+REVDIFF_CMD="$REVDIFF_BIN --output=$OUTPUT_FILE $*"
+CWD="$(pwd)"
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w 90% -h 90% -T " revdiff " -- \
-        sh -c "$REVDIFF_CMD ${REVDIFF_ARGS[*]+"${REVDIFF_ARGS[*]}"} > '$OUTPUT_FILE' 2>/dev/null"
+    tmux display-popup -E -w 90% -h 90% -T " revdiff " -d "$CWD" -- sh -c "$REVDIFF_CMD"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -27,13 +33,11 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
     rm -f "$SENTINEL"
 
-    LAUNCH_CMD="$REVDIFF_CMD ${REVDIFF_ARGS[*]+"${REVDIFF_ARGS[*]}"} > '$OUTPUT_FILE' 2>/dev/null; touch '$SENTINEL'"
-
-    KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="revdiff")
+    KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="revdiff" --cwd="$CWD")
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
         KITTY_ARGS+=(--match "id:${KITTY_WINDOW_ID}")
     fi
-    KITTY_ARGS+=(sh -c "$LAUNCH_CMD")
+    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch '$SENTINEL'")
 
     "${KITTY_ARGS[@]}" >/dev/null 2>&1
 
@@ -41,7 +45,6 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
         sleep 0.3
     done
     rm -f "$SENTINEL"
-
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -51,16 +54,13 @@ if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
     SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
     rm -f "$SENTINEL"
 
-    LAUNCH_CMD="$REVDIFF_CMD ${REVDIFF_ARGS[*]+"${REVDIFF_ARGS[*]}"} > '$OUTPUT_FILE' 2>/dev/null; touch '$SENTINEL'"
-
     wezterm cli split-pane --bottom --percent 90 \
-        --pane-id "$WEZTERM_PANE" -- sh -c "$LAUNCH_CMD" >/dev/null 2>&1
+        --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
     rm -f "$SENTINEL"
-
     cat "$OUTPUT_FILE"
     exit 0
 fi

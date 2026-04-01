@@ -28,6 +28,7 @@ type options struct {
 	NoColors    bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
 	NoStatusBar bool   `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
 	ChromaStyle string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
+	Output      string `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Config      string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig  bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version     bool   `short:"V" long:"version" no-ini:"true" description:"show version info"`
@@ -195,12 +196,21 @@ func run(opts options) error {
 		return fmt.Errorf("TUI error: %w", err)
 	}
 
-	// output annotations to stdout
-	if m, ok := finalModel.(ui.Model); ok {
-		output := m.Store().FormatOutput()
-		if output != "" {
-			fmt.Print(output)
-		}
+	// output annotations to stdout or file
+	m, ok := finalModel.(ui.Model)
+	if !ok {
+		return nil
 	}
+	output := m.Store().FormatOutput()
+	if output == "" {
+		return nil
+	}
+	if opts.Output != "" {
+		if err := os.WriteFile(opts.Output, []byte(output), 0o600); err != nil {
+			return fmt.Errorf("write output: %w", err)
+		}
+		return nil
+	}
+	fmt.Print(output)
 	return nil
 }

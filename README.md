@@ -53,6 +53,7 @@ revdiff [OPTIONS] [ref]
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `monokai` |
+| `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
 | `--dump-config` | Print default config to stdout and exit | |
 | `-V`, `--version` | Show version info | |

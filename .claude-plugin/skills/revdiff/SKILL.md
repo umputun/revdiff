@@ -45,7 +45,7 @@ Check `$ARGUMENTS` for optional git ref:
 Run the launcher script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/revdiff/scripts/launch-revdiff.sh [ref] [--staged]
+${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [ref] [--staged]
 ```
 
 The script:
