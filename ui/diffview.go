@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -46,24 +45,23 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annotating && m.fileAnnotating {
-		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
+		line := " " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
 		b.WriteString(line + "\n")
 		return
 	}
 
 	if fileComment != "" {
-		line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
+		cursor := " "
 		if m.diffCursor == -1 && m.focus == paneDiff {
-			line = m.styles.DiffCursorLine.Render(line)
+			cursor = m.styles.DiffCursorLine.Render("▎")
 		}
+		line := cursor + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
 		b.WriteString(line + "\n")
 	}
 }
 
 // renderDiffLine writes a single styled diff line (with cursor highlight) to the builder.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
-	lineNum := m.styles.LineNumber.Render(m.formatLineNum(dl))
-
 	// check for pre-computed syntax-highlighted content
 	hasHighlight := idx < len(m.highlightedLines)
 	hlContent := ""
@@ -76,73 +74,56 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	switch dl.ChangeType {
 	case diff.ChangeAdd:
 		if hasHighlight {
-			content = m.styles.LineAddHighlight.Render(" +" + hlContent)
+			content = m.styles.LineAddHighlight.Render(" + " + hlContent)
 		} else {
-			content = m.styles.LineAdd.Render(" +" + lineContent)
+			content = m.styles.LineAdd.Render(" + " + lineContent)
 		}
 	case diff.ChangeRemove:
 		if hasHighlight {
-			content = m.styles.LineRemoveHighlight.Render(" -" + hlContent)
+			content = m.styles.LineRemoveHighlight.Render(" - " + hlContent)
 		} else {
-			content = m.styles.LineRemove.Render(" -" + lineContent)
+			content = m.styles.LineRemove.Render(" - " + lineContent)
 		}
 	case diff.ChangeDivider:
 		content = m.styles.LineNumber.Render(" " + lineContent)
 	default:
 		if hasHighlight {
-			content = "  " + hlContent
+			content = "   " + hlContent
 		} else {
-			content = m.styles.LineContext.Render("  " + lineContent)
+			content = m.styles.LineContext.Render("   " + lineContent)
 		}
 	}
 
-	// apply horizontal scroll to content (line number and bar stay fixed)
+	// apply horizontal scroll to content (bar stays fixed)
 	if m.scrollX > 0 {
 		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
 	}
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
-	bar := " "
+	cursor := " "
 	if isCursor {
-		bar = m.styles.CursorBar.Render("│")
+		cursor = m.styles.DiffCursorLine.Render("▎")
 	}
-	line := lineNum + bar + content
-	if isCursor {
-		line = m.styles.DiffCursorLine.Render(line)
-	}
-	b.WriteString(line + "\n")
+	b.WriteString(cursor + content + "\n")
 }
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
-		b.WriteString("      " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
+		b.WriteString(" " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
 		return
 	}
 	dl := m.diffLines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
 		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 		if comment, ok := annotationMap[key]; ok {
-			line := "      " + m.styles.AnnotationLine.Render("\U0001f4ac "+comment)
+			cursor := " "
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
-				line = m.styles.DiffCursorLine.Render(line)
+				cursor = m.styles.DiffCursorLine.Render("▎")
 			}
+			line := cursor + m.styles.AnnotationLine.Render("\U0001f4ac "+comment)
 			b.WriteString(line + "\n")
 		}
-	}
-}
-
-// formatLineNum formats old/new line numbers for display.
-func (m Model) formatLineNum(dl diff.DiffLine) string {
-	switch dl.ChangeType {
-	case diff.ChangeAdd:
-		return fmt.Sprintf("%4d ", dl.NewNum)
-	case diff.ChangeRemove:
-		return fmt.Sprintf("%4d ", dl.OldNum)
-	case diff.ChangeDivider:
-		return "     "
-	default:
-		return fmt.Sprintf("%4d ", dl.NewNum)
 	}
 }
 
@@ -391,8 +372,8 @@ func (m *Model) scrollLeft() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
-// diffContentWidth returns the available width for diff line content (excluding line number and bar).
+// diffContentWidth returns the available width for diff line content (excluding cursor bar).
 func (m Model) diffContentWidth() int {
-	// diff pane width minus borders (4) minus tree width, minus line number (6) minus bar (1)
-	return max(10, m.width-m.treeWidth-4-7)
+	// diff pane width minus borders (4) minus tree width, minus bar (1)
+	return max(10, m.width-m.treeWidth-4-1)
 }

@@ -17,6 +17,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.Equal(t, "monokai", opts.ChromaStyle)
 	assert.False(t, opts.Staged)
 	assert.False(t, opts.NoColors)
+	assert.False(t, opts.NoStatusBar)
 	assert.Empty(t, opts.Ref.Ref)
 }
 
@@ -38,7 +39,6 @@ func TestParseArgs_ColorDefaults(t *testing.T) {
 	assert.Equal(t, "#585858", opts.Colors.Border)
 	assert.Equal(t, "#d0d0d0", opts.Colors.Normal)
 	assert.Equal(t, "#6c6c6c", opts.Colors.Muted)
-	assert.Equal(t, "#d7af00", opts.Colors.CursorBar)
 	assert.Equal(t, "#87d787", opts.Colors.AddFg)
 	assert.Equal(t, "#022800", opts.Colors.AddBg)
 	assert.Equal(t, "#ff8787", opts.Colors.RemoveFg)
@@ -136,7 +136,6 @@ func TestParseArgs_ConfigColorsOnly(t *testing.T) {
 	err := os.WriteFile(cfgPath, []byte(`[color options]
 color-add-fg = #00ff00
 color-remove-fg = #ff0000
-color-cursor-bar = #ffff00
 `), 0o600)
 	require.NoError(t, err)
 
@@ -144,7 +143,6 @@ color-cursor-bar = #ffff00
 	require.NoError(t, err)
 	assert.Equal(t, "#00ff00", opts.Colors.AddFg)
 	assert.Equal(t, "#ff0000", opts.Colors.RemoveFg)
-	assert.Equal(t, "#ffff00", opts.Colors.CursorBar)
 	// other colors keep defaults
 	assert.Equal(t, "#5f87ff", opts.Colors.Accent)
 }

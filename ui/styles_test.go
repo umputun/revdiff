@@ -41,8 +41,8 @@ func TestNewStyles_OptionalBackgrounds(t *testing.T) {
 		s := newStyles(Colors{
 			Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c",
 			SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700",
-			CursorBg: "#3a3a3a", CursorBar: "#d7af00",
-			AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100",
+			CursorBg: "#3a3a3a",
+			AddFg:    "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100",
 		})
 		// styles should be created without panic
 		assert.NotNil(t, s.TreePane)
@@ -54,8 +54,8 @@ func TestNewStyles_OptionalBackgrounds(t *testing.T) {
 		s := newStyles(Colors{
 			Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c",
 			SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700",
-			CursorBg: "#3a3a3a", CursorBar: "#d7af00",
-			AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100",
+			CursorBg: "#3a3a3a",
+			AddFg:    "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100",
 			TreeBg: "#111111", DiffBg: "#222222", StatusFg: "#cccccc", StatusBg: "#333333",
 		})
 		assert.NotNil(t, s.TreePane)

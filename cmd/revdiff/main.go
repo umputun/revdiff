@@ -26,6 +26,7 @@ type options struct {
 	TreeWidth   int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
 	TabWidth    int    `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
 	NoColors    bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	NoStatusBar bool   `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
 	ChromaStyle string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
 	Config      string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig  bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
@@ -40,7 +41,6 @@ type options struct {
 		SelectedBg string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#303030" description:"selected file background color"`
 		Annotation string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
 		CursorBg   string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   default:"#3a3a3a" description:"diff cursor line background"`
-		CursorBar  string `long:"color-cursor-bar"  ini-name:"color-cursor-bar"  env:"REVDIFF_COLOR_CURSOR_BAR"  default:"#d7af00" description:"cursor line vertical bar color"`
 		AddFg      string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
 		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800" description:"added line background color"`
 		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
@@ -164,6 +164,7 @@ func run(opts options) error {
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
 		NoColors:       opts.NoColors,
+		NoStatusBar:    opts.NoStatusBar,
 		TabWidth:       opts.TabWidth,
 		Ref:            opts.Ref.Ref,
 		Staged:         opts.Staged,
@@ -177,7 +178,6 @@ func run(opts options) error {
 			SelectedBg: opts.Colors.SelectedBg,
 			Annotation: opts.Colors.Annotation,
 			CursorBg:   opts.Colors.CursorBg,
-			CursorBar:  opts.Colors.CursorBar,
 			AddFg:      opts.Colors.AddFg,
 			AddBg:      opts.Colors.AddBg,
 			RemoveFg:   opts.Colors.RemoveFg,

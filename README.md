@@ -9,7 +9,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
 - Full-file diff view with syntax highlighting (powered by [Chroma](https://github.com/alecthomas/chroma))
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
-- Two-pane TUI: file tree (left) + colorized diff viewport (right) with cursor bar indicator
+- Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Chunk navigation to jump between change groups
 - Filter file tree to show only annotated files
 
@@ -34,6 +34,7 @@ revdiff [OPTIONS] [ref]
 | `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `2` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
+| `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `monokai` |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
 | `--dump-config` | Print default config to stdout and exit | |
@@ -62,12 +63,11 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-accent` | Active pane borders and directory names | `#5f87ff` |
 | `--color-border` | Inactive pane borders | `#585858` |
 | `--color-normal` | File entries and context lines | `#d0d0d0` |
-| `--color-muted` | Line numbers and status bar | `#6c6c6c` |
+| `--color-muted` | Divider lines and status bar | `#6c6c6c` |
 | `--color-selected-fg` | Selected file text | `#ffffaf` |
 | `--color-selected-bg` | Selected file background | `#303030` |
 | `--color-annotation` | Annotation text and markers | `#ffd700` |
 | `--color-cursor-bg` | Cursor line background | `#3a3a3a` |
-| `--color-cursor-bar` | Cursor line vertical bar | `#d7af00` |
 | `--color-add-fg` | Added line text | `#87d787` |
 | `--color-add-bg` | Added line background | `#022800` |
 | `--color-remove-fg` | Removed line text | `#ff8787` |
