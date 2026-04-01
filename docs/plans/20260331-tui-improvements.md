@@ -144,18 +144,18 @@ NOTE: the global `enter` handler in handleKey returns before reaching handleDiff
 
 NOTE: `findChunks()` always operates on original `diffLines` regardless of view mode (chunks are properties of the diff, not the view).
 
-- [ ] add `findChunks()` method that scans diffLines and returns a slice of chunk start indices (first line of each contiguous +/- group)
-- [ ] add `currentChunk()` method that returns (chunkIndex, totalChunks) based on diffCursor position relative to chunk ranges
-- [ ] add `moveToNextChunk()` method: finds next chunk start after current cursor, moves cursor there, syncs viewport
-- [ ] add `moveToPrevChunk()` method: finds previous chunk start before current cursor, moves cursor there, syncs viewport
-- [ ] in handleDiffNav: add `]` to call moveToNextChunk(), `[` to call moveToPrevChunk()
-- [ ] in View() status bar for diff pane: append chunk indicator "chunk 2/5" when chunks > 0
-- [ ] update diff pane status hints to include `[/] chunks`
-- [ ] write tests for findChunks with various diff patterns (single chunk, multiple chunks, no changes, all changes)
-- [ ] write tests for currentChunk returning correct index
-- [ ] write tests for moveToNextChunk/moveToPrevChunk navigation
-- [ ] write tests for chunk indicator in status bar
-- [ ] run `go test ./ui/` - must pass before next task
+- [x] add `findChunks()` method that scans diffLines and returns a slice of chunk start indices (first line of each contiguous +/- group)
+- [x] add `currentChunk()` method that returns (chunkIndex, totalChunks) based on diffCursor position relative to chunk ranges
+- [x] add `moveToNextChunk()` method: finds next chunk start after current cursor, moves cursor there, syncs viewport
+- [x] add `moveToPrevChunk()` method: finds previous chunk start before current cursor, moves cursor there, syncs viewport
+- [x] in handleDiffNav: add `]` to call moveToNextChunk(), `[` to call moveToPrevChunk()
+- [x] in View() status bar for diff pane: append chunk indicator "chunk 2/5" when chunks > 0
+- [x] update diff pane status hints to include `[/] chunks`
+- [x] write tests for findChunks with various diff patterns (single chunk, multiple chunks, no changes, all changes)
+- [x] write tests for currentChunk returning correct index
+- [x] write tests for moveToNextChunk/moveToPrevChunk navigation
+- [x] write tests for chunk indicator in status bar
+- [x] run `go test ./ui/` - must pass before next task
 
 ### Task 6: Simplified/unified diff view with v toggle
 

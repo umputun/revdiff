@@ -204,3 +204,64 @@ func (m *Model) syncViewportToCursor() {
 	}
 	m.viewport.SetContent(m.renderDiff())
 }
+
+// findChunks scans diffLines and returns a slice of chunk start indices.
+// a chunk is a contiguous group of added/removed lines. the returned index
+// is the first line of each such group.
+func (m Model) findChunks() []int {
+	var chunks []int
+	inChunk := false
+	for i, dl := range m.diffLines {
+		isChange := dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove
+		if isChange && !inChunk {
+			chunks = append(chunks, i)
+			inChunk = true
+		} else if !isChange {
+			inChunk = false
+		}
+	}
+	return chunks
+}
+
+// currentChunk returns the 1-based chunk index and total chunk count
+// based on the current diffCursor position. returns (0, 0) when there are no chunks.
+func (m Model) currentChunk() (int, int) {
+	chunks := m.findChunks()
+	if len(chunks) == 0 {
+		return 0, 0
+	}
+	cur := 0
+	for i, start := range chunks {
+		if m.diffCursor >= start {
+			cur = i + 1
+		}
+	}
+	if cur == 0 {
+		cur = 1
+	}
+	return cur, len(chunks)
+}
+
+// moveToNextChunk moves the diff cursor to the start of the next change chunk.
+func (m *Model) moveToNextChunk() {
+	chunks := m.findChunks()
+	for _, start := range chunks {
+		if start > m.diffCursor {
+			m.diffCursor = start
+			m.syncViewportToCursor()
+			return
+		}
+	}
+}
+
+// moveToPrevChunk moves the diff cursor to the start of the previous change chunk.
+func (m *Model) moveToPrevChunk() {
+	chunks := m.findChunks()
+	for i := len(chunks) - 1; i >= 0; i-- {
+		if chunks[i] < m.diffCursor {
+			m.diffCursor = chunks[i]
+			m.syncViewportToCursor()
+			return
+		}
+	}
+}

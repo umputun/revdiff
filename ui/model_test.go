@@ -2187,3 +2187,238 @@ func TestModel_StartAnnotationResetsFileAnnotating(t *testing.T) {
 	assert.True(t, m.annotating)
 	assert.False(t, m.fileAnnotating, "startAnnotation should set fileAnnotating=false")
 }
+
+func TestModel_FindChunks(t *testing.T) {
+	tests := []struct {
+		name   string
+		lines  []diff.DiffLine
+		expect []int
+	}{
+		{name: "no lines", lines: nil, expect: nil},
+		{name: "all context", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "b", ChangeType: diff.ChangeContext},
+		}, expect: nil},
+		{name: "single chunk", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "b", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "c", ChangeType: diff.ChangeAdd},
+			{NewNum: 4, Content: "d", ChangeType: diff.ChangeContext},
+		}, expect: []int{1}},
+		{name: "multiple chunks", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "b", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "c", ChangeType: diff.ChangeContext},
+			{OldNum: 4, Content: "d", ChangeType: diff.ChangeRemove},
+			{OldNum: 5, Content: "e", ChangeType: diff.ChangeRemove},
+			{NewNum: 4, Content: "f", ChangeType: diff.ChangeContext},
+		}, expect: []int{1, 3}},
+		{name: "all changes", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a", ChangeType: diff.ChangeAdd},
+			{NewNum: 2, Content: "b", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "c", ChangeType: diff.ChangeAdd},
+		}, expect: []int{0}},
+		{name: "mixed add and remove in one chunk", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "ctx", ChangeType: diff.ChangeContext},
+		}, expect: []int{1}},
+		{name: "chunks separated by divider", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a", ChangeType: diff.ChangeAdd},
+			{Content: "...", ChangeType: diff.ChangeDivider},
+			{NewNum: 10, Content: "b", ChangeType: diff.ChangeAdd},
+		}, expect: []int{0, 2}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tc.lines
+			assert.Equal(t, tc.expect, m.findChunks())
+		})
+	}
+}
+
+func TestModel_CurrentChunk(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
+		{NewNum: 2, Content: "add1", ChangeType: diff.ChangeAdd},     // 1 - chunk 1 start
+		{NewNum: 3, Content: "add2", ChangeType: diff.ChangeAdd},     // 2
+		{NewNum: 4, Content: "ctx2", ChangeType: diff.ChangeContext}, // 3
+		{OldNum: 5, Content: "rem1", ChangeType: diff.ChangeRemove},  // 4 - chunk 2 start
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext}, // 5
+		{NewNum: 6, Content: "add3", ChangeType: diff.ChangeAdd},     // 6 - chunk 3 start
+	}
+
+	tests := []struct {
+		name      string
+		cursor    int
+		wantChunk int
+		wantTotal int
+	}{
+		{name: "before first chunk", cursor: 0, wantChunk: 1, wantTotal: 3},
+		{name: "at first chunk start", cursor: 1, wantChunk: 1, wantTotal: 3},
+		{name: "inside first chunk", cursor: 2, wantChunk: 1, wantTotal: 3},
+		{name: "between chunks", cursor: 3, wantChunk: 1, wantTotal: 3},
+		{name: "at second chunk", cursor: 4, wantChunk: 2, wantTotal: 3},
+		{name: "between chunk 2 and 3", cursor: 5, wantChunk: 2, wantTotal: 3},
+		{name: "at third chunk", cursor: 6, wantChunk: 3, wantTotal: 3},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = lines
+			m.diffCursor = tc.cursor
+			chunk, total := m.currentChunk()
+			assert.Equal(t, tc.wantChunk, chunk)
+			assert.Equal(t, tc.wantTotal, total)
+		})
+	}
+}
+
+func TestModel_CurrentChunkNoChanges(t *testing.T) {
+	m := testModel(nil, nil)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+	}
+	chunk, total := m.currentChunk()
+	assert.Equal(t, 0, chunk)
+	assert.Equal(t, 0, total)
+}
+
+func TestModel_MoveToNextChunk(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},      // 1 - chunk 1
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // 2
+		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},     // 3 - chunk 2
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext}, // 4
+	}
+
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.currFile = "a.go"
+	m.viewport.Height = 20
+
+	m.moveToNextChunk()
+	assert.Equal(t, 1, m.diffCursor, "should jump to chunk 1")
+
+	m.moveToNextChunk()
+	assert.Equal(t, 3, m.diffCursor, "should jump to chunk 2")
+
+	// at last chunk, should not move
+	m.moveToNextChunk()
+	assert.Equal(t, 3, m.diffCursor, "should stay at last chunk")
+}
+
+func TestModel_MoveToPrevChunk(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},      // 1 - chunk 1
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // 2
+		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},     // 3 - chunk 2
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext}, // 4
+	}
+
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.diffCursor = 4
+	m.currFile = "a.go"
+	m.viewport.Height = 20
+
+	m.moveToPrevChunk()
+	assert.Equal(t, 3, m.diffCursor, "should jump to chunk 2")
+
+	m.moveToPrevChunk()
+	assert.Equal(t, 1, m.diffCursor, "should jump to chunk 1")
+
+	// at first chunk, should not move
+	m.moveToPrevChunk()
+	assert.Equal(t, 1, m.diffCursor, "should stay at first chunk")
+}
+
+func TestModel_ChunkNavigationViaKeys(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},      // 1 - chunk 1
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // 2
+		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},     // 3 - chunk 2
+	}
+
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.viewport.Height = 20
+
+	// press ] to go to next chunk
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.diffCursor, "] should jump to first chunk")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model = result.(Model)
+	assert.Equal(t, 3, model.diffCursor, "] should jump to second chunk")
+
+	// press [ to go to previous chunk
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	model = result.(Model)
+	assert.Equal(t, 1, model.diffCursor, "[ should jump back to first chunk")
+}
+
+func TestModel_StatusBarShowsChunkIndicator(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},
+	}
+
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.currFile = "a.go"
+	m.focus = paneDiff
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "chunk 1/2")
+	assert.Contains(t, status, "[/] chunks")
+
+	m.diffCursor = 3
+	status = m.statusBarText()
+	assert.Contains(t, status, "chunk 2/2")
+}
+
+func TestModel_StatusBarNoChunkIndicatorWithoutChanges(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.currFile = "a.go"
+	m.focus = paneDiff
+
+	status := m.statusBarText()
+	assert.NotContains(t, status, "chunk 0/0", "should not show 0/0 when no chunks")
+	assert.NotRegexp(t, `chunk \d+/\d+`, status, "should not show numeric chunk indicator")
+	assert.Contains(t, status, "[/] chunks")
+}
+
+func TestModel_StatusBarChunksHintInDiffPane(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "[/] chunks")
+
+	// tree pane should not show chunk hint
+	m.focus = paneTree
+	status = m.statusBarText()
+	assert.NotContains(t, status, "[/] chunks")
+}

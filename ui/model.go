@@ -263,6 +263,10 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorToStart()
 	case msg.Type == tea.KeyEnd:
 		m.moveDiffCursorToEnd()
+	case msg.String() == "]":
+		m.moveToNextChunk()
+	case msg.String() == "[":
+		m.moveToPrevChunk()
 	case msg.String() == "a":
 		cmd := m.startAnnotation()
 		m.viewport.SetContent(m.renderDiff())
@@ -416,7 +420,11 @@ func (m Model) statusBarText() string {
 		if m.cursorLineHasAnnotation() {
 			deleteHint = "  [d] delete"
 		}
-		return "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
+		chunkHint := ""
+		if cur, total := m.currentChunk(); total > 0 {
+			chunkHint = fmt.Sprintf("  chunk %d/%d", cur, total)
+		}
+		return "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + "  [/] chunks" + chunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
 	default:
 		return ""
 	}
