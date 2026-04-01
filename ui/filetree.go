@@ -233,7 +233,7 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 		var line string
 
 		if e.isDir {
-			line = s.DirEntry.Render(" " + e.name)
+			line = s.DirEntry.Render(" " + ft.truncateDirName(e.name, width-3))
 		} else {
 			marker := "  "
 			if annotatedFiles[e.path] {
@@ -289,6 +289,15 @@ func (ft *fileTree) toggleFilter(annotatedFiles map[string]bool) {
 			return
 		}
 	}
+}
+
+// truncateDirName trims a directory name from the left to fit maxWidth,
+// prepending an ellipsis when truncated.
+func (ft *fileTree) truncateDirName(name string, maxWidth int) string {
+	if maxWidth <= 0 || len(name) <= maxWidth {
+		return name
+	}
+	return "…" + name[len(name)-maxWidth+1:]
 }
 
 // refreshFilter rebuilds the filtered tree if the filter is active, preserving cursor position.

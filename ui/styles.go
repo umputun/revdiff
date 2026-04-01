@@ -163,11 +163,14 @@ func newStyles(c Colors) styles {
 	}
 }
 
-// cursorLineStyle builds the diff cursor style with optional foreground.
+// cursorLineStyle builds the diff cursor style with optional foreground and background.
 func cursorLineStyle(c Colors) lipgloss.Style {
-	s := lipgloss.NewStyle().Background(lipgloss.Color(c.CursorBg))
+	s := lipgloss.NewStyle()
 	if c.CursorFg != "" {
 		s = s.Foreground(lipgloss.Color(c.CursorFg))
+	}
+	if c.CursorBg != "" {
+		s = s.Background(lipgloss.Color(c.CursorBg))
 	}
 	return s
 }
