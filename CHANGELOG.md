@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.2 - 2026-04-01
+
+### Fixed
+
+- remove default cursor background so triangle uses terminal default
+- truncate long directory names from the left with ellipsis in file tree
+
 ## v0.2.1 - 2026-04-01
 
 ### Improvements
