@@ -25,7 +25,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		},
 	}
 	store := annotation.NewStore()
-	m := NewModel(renderer, store, "", false, 3)
+	m := NewModel(renderer, store, ModelConfig{TreeWidthRatio: 3})
 	// simulate window size
 	m.width = 120
 	m.height = 40
@@ -429,7 +429,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 				ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
 				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 			}
-			m := NewModel(renderer, annotation.NewStore(), "", false, tc.ratio)
+			m := NewModel(renderer, annotation.NewStore(), ModelConfig{TreeWidthRatio: tc.ratio})
 			result, _ := m.Update(tea.WindowSizeMsg{Width: tc.termWidth, Height: 40})
 			model := result.(Model)
 			assert.Equal(t, tc.wantTreeWidth, model.treeWidth)

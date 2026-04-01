@@ -72,19 +72,27 @@ type filesLoadedMsg struct {
 	err   error
 }
 
-// NewModel creates a new Model with the given renderer, store, ref, staged flag, and tree width ratio (1-10).
-func NewModel(renderer Renderer, store *annotation.Store, ref string, staged bool, treeWidthRatio int) Model {
-	if treeWidthRatio < 1 || treeWidthRatio > 10 {
-		treeWidthRatio = 3
+// ModelConfig holds configuration options for NewModel.
+type ModelConfig struct {
+	Ref            string
+	Staged         bool
+	TreeWidthRatio int
+	Colors         Colors
+}
+
+// NewModel creates a new Model with the given renderer, store, and configuration.
+func NewModel(renderer Renderer, store *annotation.Store, cfg ModelConfig) Model {
+	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
+		cfg.TreeWidthRatio = 3
 	}
 	return Model{
-		styles:         defaultStyles(),
+		styles:         newStyles(cfg.Colors),
 		store:          store,
 		renderer:       renderer,
-		ref:            ref,
-		staged:         staged,
+		ref:            cfg.Ref,
+		staged:         cfg.Staged,
 		focus:          paneTree,
-		treeWidthRatio: treeWidthRatio,
+		treeWidthRatio: cfg.TreeWidthRatio,
 	}
 }
 

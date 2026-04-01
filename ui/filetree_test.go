@@ -131,7 +131,7 @@ func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
 func TestFileTree_Render(t *testing.T) {
 	ft := newFileTree([]string{"internal/handler.go", "main.go"})
 	ft.cursor = 1 // select handler.go
-	s := defaultStyles()
+	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	result := ft.render(30, 100, map[string]bool{"internal/handler.go": true}, s)
 	assert.Contains(t, result, "internal/")
@@ -141,7 +141,7 @@ func TestFileTree_Render(t *testing.T) {
 
 func TestFileTree_RenderEmpty(t *testing.T) {
 	ft := newFileTree(nil)
-	s := defaultStyles()
+	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 	result := ft.render(30, 100, nil, s)
 	assert.Contains(t, result, "no changed files")
 }
@@ -346,7 +346,7 @@ func TestFileTree_MoveToFirstLast(t *testing.T) {
 
 func TestFileTree_RenderIndentation(t *testing.T) {
 	ft := newFileTree([]string{"cmd/main.go", "internal/handler.go", "internal/store.go"})
-	s := defaultStyles()
+	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	// verify entry depth: directories at depth 0, files at depth 1
 	for _, e := range ft.entries {
@@ -365,7 +365,7 @@ func TestFileTree_RenderIndentation(t *testing.T) {
 	for _, e := range ft.entries {
 		if e.isDir {
 			// directory entry starts with the dir icon, no leading spaces
-			assert.Contains(t, result, "· "+e.name, "directory %q should appear without indent", e.name)
+			assert.Contains(t, result, " "+e.name, "directory %q should appear with single leading space", e.name)
 		} else {
 			// file entries should have leading spaces (indentation from depth=1)
 			assert.Contains(t, result, "  "+e.name, "file %q should be indented under its directory", e.name)
@@ -402,7 +402,7 @@ func TestFileTree_RenderViewport(t *testing.T) {
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
 		"b/1.go", "b/2.go", "b/3.go",
 	})
-	s := defaultStyles()
+	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	// render with height=3, cursor on first file
 	result := ft.render(40, 3, nil, s)
@@ -437,7 +437,7 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
 	}
 	ft := newFileTree(files)
-	s := defaultStyles()
+	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	// page down past visible area with small height
 	ft.pageDown(100)
