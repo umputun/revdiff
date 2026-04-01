@@ -203,6 +203,95 @@ func TestStore_FormatOutputMultiLinesSameFile(t *testing.T) {
 	assert.Equal(t, expected, s.FormatOutput())
 }
 
+func TestStore_AddFileLevelAnnotation(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 0, "", "this file needs refactoring")
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, Annotation{File: "handler.go", Line: 0, Type: "", Comment: "this file needs refactoring"}, anns[0])
+}
+
+func TestStore_AddFileLevelReplacesExisting(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 0, "", "old comment")
+	s.Add("handler.go", 0, "", "new comment")
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "new comment", anns[0].Comment)
+}
+
+func TestStore_DeleteFileLevelAnnotation(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 0, "", "file comment")
+
+	ok := s.Delete("handler.go", 0, "")
+	assert.True(t, ok)
+	assert.Empty(t, s.Get("handler.go"))
+}
+
+func TestStore_DeleteFileLevelPreservesLineAnnotations(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 0, "", "file comment")
+	s.Add("handler.go", 43, "+", "line comment")
+
+	s.Delete("handler.go", 0, "")
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 43, anns[0].Line)
+}
+
+func TestStore_GetFileLevelWithLineAnnotations(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 43, "+", "line comment")
+	s.Add("handler.go", 0, "", "file comment")
+	s.Add("handler.go", 10, "-", "another line")
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 3)
+	// sorted by line: file-level (0) first, then 10, then 43
+	assert.Equal(t, 0, anns[0].Line)
+	assert.Equal(t, 10, anns[1].Line)
+	assert.Equal(t, 43, anns[2].Line)
+}
+
+func TestStore_FormatOutputFileLevelOnly(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 0, "", "this file needs refactoring")
+
+	expected := "## handler.go (file-level)\nthis file needs refactoring\n"
+	assert.Equal(t, expected, s.FormatOutput())
+}
+
+func TestStore_FormatOutputFileLevelBeforeLineAnnotations(t *testing.T) {
+	s := NewStore()
+	s.Add("handler.go", 43, "+", "fix this")
+	s.Add("handler.go", 0, "", "file needs refactoring")
+
+	expected := "## handler.go (file-level)\nfile needs refactoring\n" +
+		"\n" +
+		"## handler.go:43 (+)\nfix this\n"
+	assert.Equal(t, expected, s.FormatOutput())
+}
+
+func TestStore_FormatOutputMixedFileLevelAndLineMultiFile(t *testing.T) {
+	s := NewStore()
+	s.Add("a_file.go", 0, "", "file-level note for a")
+	s.Add("a_file.go", 10, "+", "line note for a")
+	s.Add("b_file.go", 5, "-", "line note for b")
+	s.Add("b_file.go", 0, "", "file-level note for b")
+
+	expected := "## a_file.go (file-level)\nfile-level note for a\n" +
+		"\n" +
+		"## a_file.go:10 (+)\nline note for a\n" +
+		"\n" +
+		"## b_file.go (file-level)\nfile-level note for b\n" +
+		"\n" +
+		"## b_file.go:5 (-)\nline note for b\n"
+	assert.Equal(t, expected, s.FormatOutput())
+}
+
 func TestStore_FormatOutputSortedByFilename(t *testing.T) {
 	s := NewStore()
 	s.Add("z_file.go", 1, "+", "last")

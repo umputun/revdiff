@@ -102,7 +102,22 @@ func (s *Store) FormatOutput() string {
 	first := true
 	for _, file := range files {
 		anns := s.Get(file)
+		// render file-level annotations (Line=0) first
 		for _, a := range anns {
+			if a.Line != 0 {
+				continue
+			}
+			if !first {
+				buf.WriteString("\n")
+			}
+			first = false
+			fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, a.Comment)
+		}
+		// render line-specific annotations
+		for _, a := range anns {
+			if a.Line == 0 {
+				continue
+			}
 			if !first {
 				buf.WriteString("\n")
 			}

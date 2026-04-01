@@ -107,11 +107,11 @@ NOTE: the global `enter` handler in handleKey returns before reaching handleDiff
 - Modify: `annotation/store.go`
 - Modify: `annotation/store_test.go`
 
-- [ ] verify Add/Delete/Get work with Line=0 and Type="" for file-level annotations (no special-casing blocks this)
-- [ ] in FormatOutput: render file-level annotations (Line=0) as `## file (file-level)` before line-specific annotations for each file
-- [ ] write tests for store Add/Delete/Get with Line=0 file-level annotations
-- [ ] write tests for FormatOutput with mixed file-level and line-level annotations
-- [ ] run `go test ./annotation/` - must pass before next task
+- [x] verify Add/Delete/Get work with Line=0 and Type="" for file-level annotations (no special-casing blocks this)
+- [x] in FormatOutput: render file-level annotations (Line=0) as `## file (file-level)` before line-specific annotations for each file
+- [x] write tests for store Add/Delete/Get with Line=0 file-level annotations
+- [x] write tests for FormatOutput with mixed file-level and line-level annotations
+- [x] run `go test ./annotation/` - must pass before next task
 
 ### Task 4b: File-level annotation UI
 
