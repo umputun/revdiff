@@ -421,12 +421,12 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 		termWidth     int
 		wantTreeWidth int
 	}{
-		{name: "default ratio 3 of 10", ratio: 3, termWidth: 120, wantTreeWidth: 36},
-		{name: "ratio 2 of 10", ratio: 2, termWidth: 120, wantTreeWidth: 24},
+		{name: "default ratio 2 of 10", ratio: 2, termWidth: 120, wantTreeWidth: 24},
+		{name: "ratio 3 of 10", ratio: 3, termWidth: 120, wantTreeWidth: 36},
 		{name: "ratio 5 of 10", ratio: 5, termWidth: 120, wantTreeWidth: 60},
 		{name: "min width enforced", ratio: 1, termWidth: 100, wantTreeWidth: 20},
-		{name: "invalid ratio defaults to 3", ratio: 0, termWidth: 120, wantTreeWidth: 36},
-		{name: "over max ratio defaults to 3", ratio: 15, termWidth: 120, wantTreeWidth: 36},
+		{name: "invalid ratio defaults to 2", ratio: 0, termWidth: 120, wantTreeWidth: 24},
+		{name: "over max ratio defaults to 2", ratio: 15, termWidth: 120, wantTreeWidth: 24},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

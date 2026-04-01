@@ -95,7 +95,7 @@ type ModelConfig struct {
 // NewModel creates a new Model with the given renderer, store, highlighter and configuration.
 func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
-		cfg.TreeWidthRatio = 3
+		cfg.TreeWidthRatio = 2
 	}
 	if cfg.TabWidth < 1 {
 		cfg.TabWidth = 4
@@ -429,8 +429,8 @@ func (m Model) View() string {
 
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
-	// status bar with context-sensitive hints
-	status := m.styles.StatusBar.Render(m.statusBarText(annotated))
+	// status bar with context-sensitive hints, spans full terminal width
+	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText(annotated))
 
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }

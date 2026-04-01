@@ -12,7 +12,7 @@ import (
 func TestParseArgs_Defaults(t *testing.T) {
 	opts, err := parseArgs([]string{})
 	require.NoError(t, err)
-	assert.Equal(t, 3, opts.TreeWidth)
+	assert.Equal(t, 2, opts.TreeWidth)
 	assert.Equal(t, 4, opts.TabWidth)
 	assert.Equal(t, "monokai", opts.ChromaStyle)
 	assert.False(t, opts.Staged)
@@ -43,6 +43,10 @@ func TestParseArgs_ColorDefaults(t *testing.T) {
 	assert.Equal(t, "#022800", opts.Colors.AddBg)
 	assert.Equal(t, "#ff8787", opts.Colors.RemoveFg)
 	assert.Equal(t, "#3D0100", opts.Colors.RemoveBg)
+	assert.Empty(t, opts.Colors.TreeBg, "tree bg should be empty by default")
+	assert.Empty(t, opts.Colors.DiffBg, "diff bg should be empty by default")
+	assert.Empty(t, opts.Colors.StatusFg, "status fg should be empty by default")
+	assert.Empty(t, opts.Colors.StatusBg, "status bg should be empty by default")
 }
 
 func TestParseArgs_ColorFlags(t *testing.T) {
@@ -86,7 +90,7 @@ color-accent = #112233
 	assert.Equal(t, "nord", opts.ChromaStyle)
 	assert.Equal(t, "#112233", opts.Colors.Accent)
 	// unset values keep defaults
-	assert.Equal(t, 3, opts.TreeWidth)
+	assert.Equal(t, 2, opts.TreeWidth)
 	assert.Equal(t, "#585858", opts.Colors.Border)
 }
 

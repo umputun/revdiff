@@ -31,7 +31,7 @@ revdiff [OPTIONS] [ref]
 |--------|-------------|---------|
 | `ref` | Git ref to diff against | uncommitted changes |
 | `--staged` | Show staged changes, env: `REVDIFF_STAGED` | `false` |
-| `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `3` |
+| `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `2` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `monokai` |
@@ -72,6 +72,10 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-add-bg` | Added line background | `#022800` |
 | `--color-remove-fg` | Removed line text | `#ff8787` |
 | `--color-remove-bg` | Removed line background | `#3D0100` |
+| `--color-tree-bg` | File tree pane background | terminal default |
+| `--color-diff-bg` | Diff pane background | terminal default |
+| `--color-status-fg` | Status bar foreground | same as muted |
+| `--color-status-bg` | Status bar background | terminal default |
 
 </details>
 

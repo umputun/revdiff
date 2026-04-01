@@ -23,7 +23,7 @@ type options struct {
 	} `positional-args:"yes"`
 
 	Staged      bool   `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	TreeWidth   int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"3" description:"file tree panel width in units (1-10, default 3 of 10)"`
+	TreeWidth   int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
 	TabWidth    int    `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
 	NoColors    bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
 	ChromaStyle string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
@@ -45,6 +45,10 @@ type options struct {
 		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800" description:"added line background color"`
 		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
 		RemoveBg   string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#3D0100" description:"removed line background color"`
+		TreeBg     string `long:"color-tree-bg"     ini-name:"color-tree-bg"     env:"REVDIFF_COLOR_TREE_BG"     description:"file tree pane background"`
+		DiffBg     string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
+		StatusFg   string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   description:"status bar foreground"`
+		StatusBg   string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   description:"status bar background"`
 	} `group:"color options" ini-name:"colors"`
 }
 
@@ -178,6 +182,10 @@ func run(opts options) error {
 			AddBg:      opts.Colors.AddBg,
 			RemoveFg:   opts.Colors.RemoveFg,
 			RemoveBg:   opts.Colors.RemoveBg,
+			TreeBg:     opts.Colors.TreeBg,
+			DiffBg:     opts.Colors.DiffBg,
+			StatusFg:   opts.Colors.StatusFg,
+			StatusBg:   opts.Colors.StatusBg,
 		},
 	})
 
