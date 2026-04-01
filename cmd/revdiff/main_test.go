@@ -9,8 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// noConfigArgs returns args that point to a nonexistent config file,
+// isolating the test from user's real config.
+func noConfigArgs(t *testing.T, extra ...string) []string {
+	t.Helper()
+	args := make([]string, 0, 2+len(extra))
+	args = append(args, "--config", filepath.Join(t.TempDir(), "none"))
+	return append(args, extra...)
+}
+
 func TestParseArgs_Defaults(t *testing.T) {
-	opts, err := parseArgs([]string{})
+	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)
 	assert.Equal(t, 2, opts.TreeWidth)
 	assert.Equal(t, 4, opts.TabWidth)
@@ -44,7 +53,7 @@ func TestParseArgs_Flags(t *testing.T) {
 }
 
 func TestParseArgs_ColorDefaults(t *testing.T) {
-	opts, err := parseArgs([]string{})
+	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)
 	assert.Equal(t, "#5f87ff", opts.Colors.Accent)
 	assert.Equal(t, "#585858", opts.Colors.Border)
@@ -70,7 +79,7 @@ func TestParseArgs_ColorFlags(t *testing.T) {
 func TestParseArgs_EnvVars(t *testing.T) {
 	t.Setenv("REVDIFF_TREE_WIDTH", "7")
 	t.Setenv("REVDIFF_COLOR_ACCENT", "#ff0000")
-	opts, err := parseArgs([]string{})
+	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)
 	assert.Equal(t, 7, opts.TreeWidth)
 	assert.Equal(t, "#ff0000", opts.Colors.Accent)
@@ -197,6 +206,24 @@ func TestResolveConfigPath_Default(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(home, ".config", "revdiff", "config"), path)
+}
+
+func TestDumpConfig(t *testing.T) {
+	tmpFile, err := os.CreateTemp(t.TempDir(), "config-dump")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	dumpConfig([]string{"--config", filepath.Join(t.TempDir(), "nonexistent")}, tmpFile)
+
+	data, err := os.ReadFile(tmpFile.Name())
+	require.NoError(t, err)
+	output := string(data)
+
+	assert.Contains(t, output, "[Application Options]")
+	assert.Contains(t, output, "chroma-style = monokai")
+	assert.Contains(t, output, "[color options]")
+	assert.Contains(t, output, "color-accent = #5f87ff")
+	assert.NotContains(t, output, "\ncolors =", "should not have spurious colors= line")
 }
 
 func TestDefaultConfigPath(t *testing.T) {

@@ -50,7 +50,7 @@ type options struct {
 		DiffBg     string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
 		StatusFg   string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   description:"status bar foreground"`
 		StatusBg   string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   description:"status bar background"`
-	} `group:"color options" ini-name:"colors"`
+	} `group:"color options"`
 }
 
 var revision = "unknown"
