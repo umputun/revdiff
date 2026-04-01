@@ -1,6 +1,6 @@
 {
   "name": "revdiff",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Review git diffs with inline annotations in a TUI overlay",
   "author": {
     "name": "umputun",
@@ -14,5 +14,5 @@
     "annotations",
     "tui"
   ],
-  "skills": "./skills/"
+  "skills": "./.claude-plugin/skills/"
 }

@@ -20,7 +20,7 @@ Terminal UI diff viewer with inline annotations, built with bubbletea.
 
 ## Key Interfaces (consumer-side, in `ui/`)
 - `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`
-- `SyntaxHighlighter` - `HighlightLines()`, `SetEnabled()`, `Enabled()` - implemented by `highlight.Highlighter`
+- `SyntaxHighlighter` - `HighlightLines()` - implemented by `highlight.Highlighter`
 
 ## Data Flow
 ```
@@ -42,6 +42,11 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - `--dump-config` outputs current defaults, `--config` overrides path
 - `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --version)
 - `ini-name` tags ensure config keys match CLI long flag names
+
+## Claude Code Plugin
+- Plugin lives at `.claude-plugin/` with `plugin.json`, `marketplace.json`, and `skills/`
+- Skills path in `plugin.json` is relative to repo root, not to `.claude-plugin/`
+- When changing plugin files, bump version in both `plugin.json` and `marketplace.json`
 
 ## Gotchas
 - Project uses vendoring - run `go mod vendor` after adding/updating dependencies
