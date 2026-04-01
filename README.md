@@ -7,11 +7,14 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 ## Features
 
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
-- Full-file diff view with syntax highlighting (powered by [Chroma](https://github.com/alecthomas/chroma))
+- Full-file diff view with syntax highlighting
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
-- Chunk navigation to jump between change groups
+- Hunk navigation to jump between change groups
 - Filter file tree to show only annotated files
+- Fully customizable colors via environment variables, CLI flags, or config file
+
+![revdiff screenshot](screenshot.png)
 
 ## Requirements
 
