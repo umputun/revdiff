@@ -13,11 +13,25 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Chunk navigation to jump between change groups
 - Filter file tree to show only annotated files
 
+## Requirements
+
+- `git` (used to generate diffs)
+
 ## Installation
+
+**Homebrew (macOS/Linux):**
+
+```bash
+brew install umputun/apps/revdiff
+```
+
+**Go install:**
 
 ```bash
 go install github.com/umputun/revdiff/cmd/revdiff@latest
 ```
+
+**Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
 
 ## Usage
 
@@ -152,19 +166,33 @@ use errors.Is() instead of direct comparison
 don't remove this validation
 ```
 
-### Integration with AI Agents
+## Claude Code Plugin
 
-The structured stdout output makes revdiff a natural fit for AI-assisted code review workflows. Launch revdiff as a terminal overlay (tmux popup, kitty overlay, wezterm split-pane), annotate the diff, quit, and feed the annotations back to the calling process.
+revdiff ships with a [Claude Code](https://claude.ai/code) plugin for interactive code review directly from a Claude session. The plugin launches revdiff as a terminal overlay (tmux, kitty, or wezterm), captures annotations, and feeds them back to Claude for processing.
+
+**Install:**
 
 ```bash
-# review changes and feed annotations to an AI agent
-annotations=$(revdiff main)
-if [ -n "$annotations" ]; then
-  echo "$annotations" | your-ai-agent fix
-fi
+# add marketplace and install
+/plugin marketplace add umputun/revdiff
+/plugin install revdiff@umputun-revdiff
 ```
 
-See [cc-thingz](https://github.com/umputun/cc-thingz) for Claude Code plugins with terminal overlay support (tmux, kitty, wezterm).
+**Use:** `/revdiff [ref]` — opens a review session. Annotate the diff, quit, and Claude will address each annotation.
+
+The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
+
+### Integration with Other Tools
+
+The structured stdout output works with any tool that can read text:
+
+```bash
+# capture annotations for processing
+annotations=$(revdiff main)
+if [ -n "$annotations" ]; then
+  echo "$annotations" | your-tool
+fi
+```
 
 ## Contributing
 
