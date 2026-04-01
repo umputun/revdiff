@@ -7,12 +7,11 @@ type Colors struct {
 	Accent     string // active pane borders, dir names
 	Border     string // inactive pane borders
 	Normal     string // file entries, context lines
-	Muted      string // line numbers, status bar
+	Muted      string // divider lines, status bar
 	SelectedFg string // selected file text
 	SelectedBg string // selected file background
 	Annotation string // annotation text and markers
 	CursorBg   string // diff cursor line background
-	CursorBar  string // cursor line vertical bar indicator
 	AddFg      string // added line foreground
 	AddBg      string // added line background
 	RemoveFg   string // removed line foreground
@@ -50,8 +49,6 @@ type styles struct {
 
 	// diff cursor
 	DiffCursorLine lipgloss.Style
-	CursorBar      lipgloss.Style
-
 	// annotation
 	AnnotationLine lipgloss.Style
 }
@@ -75,7 +72,6 @@ func normalizeColors(c Colors) Colors {
 	c.SelectedBg = normalizeColor(c.SelectedBg)
 	c.Annotation = normalizeColor(c.Annotation)
 	c.CursorBg = normalizeColor(c.CursorBg)
-	c.CursorBar = normalizeColor(c.CursorBar)
 	c.AddFg = normalizeColor(c.AddFg)
 	c.AddBg = normalizeColor(c.AddBg)
 	c.RemoveFg = normalizeColor(c.RemoveFg)
@@ -149,9 +145,7 @@ func newStyles(c Colors) styles {
 		LineContext: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Normal)),
 		LineNumber: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Muted)).
-			Width(6).
-			Align(lipgloss.Right),
+			Foreground(lipgloss.Color(c.Muted)),
 
 		StatusBar: statusBar,
 
@@ -162,9 +156,6 @@ func newStyles(c Colors) styles {
 
 		DiffCursorLine: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.CursorBg)),
-		CursorBar: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.CursorBar)),
-
 		AnnotationLine: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)).
 			Italic(true),
@@ -189,7 +180,7 @@ func plainStyles() styles {
 		LineAdd:        lipgloss.NewStyle(),
 		LineRemove:     lipgloss.NewStyle(),
 		LineContext:    lipgloss.NewStyle(),
-		LineNumber:     lipgloss.NewStyle().Width(6).Align(lipgloss.Right),
+		LineNumber:     lipgloss.NewStyle(),
 
 		StatusBar: lipgloss.NewStyle().Padding(0, 1),
 
@@ -197,8 +188,6 @@ func plainStyles() styles {
 		LineRemoveHighlight: lipgloss.NewStyle(),
 
 		DiffCursorLine: lipgloss.NewStyle().Reverse(true),
-		CursorBar:      lipgloss.NewStyle(),
-
 		AnnotationLine: lipgloss.NewStyle().Italic(true),
 	}
 }

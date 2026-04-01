@@ -47,6 +47,7 @@ type Model struct {
 
 	ref            string
 	staged         bool
+	noStatusBar    bool
 	focus          pane
 	width          int
 	height         int
@@ -89,6 +90,7 @@ type ModelConfig struct {
 	TreeWidthRatio int
 	TabWidth       int  // number of spaces per tab character
 	NoColors       bool // disable all colors including syntax highlighting
+	NoStatusBar    bool // hide the status bar
 	Colors         Colors
 }
 
@@ -111,6 +113,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		highlighter:    highlighter,
 		ref:            cfg.Ref,
 		staged:         cfg.Staged,
+		noStatusBar:    cfg.NoStatusBar,
 		focus:          paneTree,
 		treeWidthRatio: cfg.TreeWidthRatio,
 		tabSpaces:      strings.Repeat(" ", cfg.TabWidth),
@@ -274,7 +277,16 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // treePageSize returns the number of visible lines in the tree pane.
 func (m Model) treePageSize() int {
-	return max(1, m.height-3)
+	return max(1, m.paneHeight())
+}
+
+// paneHeight returns the content height for panes (total minus borders and status bar).
+func (m Model) paneHeight() int {
+	h := m.height - 2 // borders
+	if !m.noStatusBar {
+		h-- // status bar
+	}
+	return max(1, h)
 }
 
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -325,7 +337,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 
 	diffWidth := m.width - m.treeWidth - 4 // borders
-	diffHeight := m.height - 4             // borders + status
+	diffHeight := m.paneHeight() - 1       // pane height minus diff header
 
 	if !m.ready {
 		m.viewport = viewport.New(diffWidth, diffHeight)
@@ -396,9 +408,9 @@ func (m Model) View() string {
 		return "loading..."
 	}
 
-	treeHeight := max(1, m.height-3)
+	ph := m.paneHeight()
 	annotated := m.annotatedFiles()
-	treeContent := m.tree.render(m.treeWidth, treeHeight, annotated, m.styles)
+	treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
 
 	// apply pane borders based on focus
 	treeStyle := m.styles.TreePane
@@ -411,7 +423,7 @@ func (m Model) View() string {
 
 	treePane := treeStyle.
 		Width(m.treeWidth).
-		Height(m.height - 3).
+		Height(ph).
 		Render(treeContent)
 
 	// diff pane title
@@ -424,14 +436,16 @@ func (m Model) View() string {
 
 	diffPane := diffStyle.
 		Width(m.width - m.treeWidth - 4).
-		Height(m.height - 3).
+		Height(ph).
 		Render(diffContent)
 
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
-	// status bar with context-sensitive hints, spans full terminal width
-	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText(annotated))
+	if m.noStatusBar {
+		return mainView
+	}
 
+	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText(annotated))
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
 

@@ -2543,7 +2543,7 @@ func TestModel_RenderDiffLineHighlighted(t *testing.T) {
 	assert.Contains(t, output, "hl-remove", "highlighted remove line should appear")
 }
 
-func TestModel_RenderDiffLineCursorBar(t *testing.T) {
+func TestModel_RenderDiffLineCursorHighlight(t *testing.T) {
 	lines := []diff.DiffLine{
 		{OldNum: 1, NewNum: 1, Content: "line one", ChangeType: diff.ChangeContext},
 		{OldNum: 2, NewNum: 2, Content: "line two", ChangeType: diff.ChangeContext},
@@ -2554,7 +2554,8 @@ func TestModel_RenderDiffLineCursorBar(t *testing.T) {
 	m.focus = paneDiff
 	m.diffCursor = 0
 	output := m.renderDiff()
-	assert.Contains(t, output, "│", "cursor bar should appear on active line")
+	assert.Contains(t, output, "▎", "cursor indicator should appear on active line")
+	assert.Contains(t, output, "line one", "cursor line content should appear")
 }
 
 func TestModel_RenderDiffLineTabReplacement(t *testing.T) {
@@ -2634,4 +2635,38 @@ func TestModel_HorizontalScrollResetsOnFileLoad(t *testing.T) {
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
 	assert.Equal(t, 0, m.scrollX)
+}
+
+func TestModel_PaneHeight(t *testing.T) {
+	tests := []struct {
+		name         string
+		noStatusBar  bool
+		height, want int
+	}{
+		{name: "with status bar", noStatusBar: false, height: 40, want: 37},
+		{name: "without status bar", noStatusBar: true, height: 40, want: 38},
+		{name: "min clamp with status", noStatusBar: false, height: 3, want: 1},
+		{name: "min clamp without status", noStatusBar: true, height: 2, want: 1},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.height = tc.height
+			m.noStatusBar = tc.noStatusBar
+			assert.Equal(t, tc.want, m.paneHeight())
+		})
+	}
+}
+
+func TestModel_ViewNoStatusBar(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.noStatusBar = true
+	m.ready = true
+	m.width = 120
+	m.height = 40
+	m.treeWidth = 24
+	view := m.View()
+	assert.NotContains(t, view, "quit", "status bar should be hidden")
+	assert.Contains(t, view, "a.go", "tree content should still appear")
 }
