@@ -6,7 +6,10 @@ Terminal UI for reviewing git diffs with inline annotations. Two-pane layout wit
 
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Full-file view with changes highlighted inline (green adds, red removes)
-- Inline annotations on any diff line
+- Simplified diff view showing only changes with surrounding context
+- Inline annotations on any diff line, plus file-level annotations
+- Chunk navigation to jump between change groups
+- Filter file tree to show only annotated files
 - Structured annotation output to stdout on quit
 - Navigate between changed files with keyboard shortcuts
 
@@ -49,24 +52,43 @@ revdiff HEAD~1
 
 ### Key Bindings
 
+**Navigation:**
+
 | Key | Action |
 |-----|--------|
 | `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
 | `h/l` or left/right | Switch between file tree and diff pane |
+| `Tab` | Switch between file tree and diff pane |
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Page scroll in file tree and diff pane |
 | `Home/End` | Jump to first/last item |
-| `Enter` | Select file from list |
-| `Tab` | Toggle all files / annotated only |
+| `Enter` | Select file (tree pane) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file |
-| `a` | Annotate current diff line |
-| `d` | Delete annotation under cursor (shown only on annotated lines) |
+| `[` / `]` | Jump to previous/next change chunk in diff |
+
+**Annotations:**
+
+| Key | Action |
+|-----|--------|
+| `a` or `Enter` (diff pane) | Annotate current diff line |
+| `A` | Add file-level annotation (stored at top of diff) |
+| `d` | Delete annotation under cursor |
 | `Esc` | Cancel annotation input |
+
+**View:**
+
+| Key | Action |
+|-----|--------|
+| `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
+| `v` | Toggle simplified/full diff view (shows only changes with context) |
 | `q` | Quit, output annotations to stdout |
 
 ### Output Format
 
 ```
+## handler.go (file-level)
+consider splitting this file into smaller modules
+
 ## handler.go:43 (+)
 use errors.Is() instead of direct comparison
 

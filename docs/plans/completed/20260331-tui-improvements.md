@@ -202,9 +202,9 @@ NOTE: `findChunks()` always operates on original `diffLines` regardless of view 
 
 ### Task 8: Update documentation
 
-- [ ] update README.md key bindings section with new keys (tab, f, [, ], v, A, Enter)
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md key bindings section with new keys (tab, f, [, ], v, A, Enter)
+- [x] update CLAUDE.md if new patterns discovered
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
