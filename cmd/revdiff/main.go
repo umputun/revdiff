@@ -42,7 +42,7 @@ type options struct {
 		SelectedBg string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#303030" description:"selected file background color"`
 		Annotation string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
 		CursorFg   string `long:"color-cursor-fg"   ini-name:"color-cursor-fg"   env:"REVDIFF_COLOR_CURSOR_FG"   description:"diff cursor indicator color"`
-		CursorBg   string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   default:"#3a3a3a" description:"diff cursor line background"`
+		CursorBg   string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   description:"diff cursor indicator background"`
 		AddFg      string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
 		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800" description:"added line background color"`
 		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`

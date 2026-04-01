@@ -430,6 +430,17 @@ func TestFileTree_EnsureVisibleResetsOffsetWhenTreeFitsViewport(t *testing.T) {
 	assert.Equal(t, 0, ft.offset, "offset should reset to 0 when all entries fit in viewport")
 }
 
+func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
+	files := []string{".claude-plugin/skills/revdiff/references/config.md"}
+	ft := newFileTree(files)
+	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+
+	result := ft.render(30, 10, nil, s)
+	assert.Contains(t, result, "…", "long dir name should be truncated with ellipsis")
+	assert.Contains(t, result, "references/", "truncated dir should show trailing path")
+	assert.NotContains(t, result, ".claude-plugin/skills/revdiff/references/", "full dir name should not appear")
+}
+
 func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 	files := []string{
 		"cmd/main.go", "cmd/flags.go",
