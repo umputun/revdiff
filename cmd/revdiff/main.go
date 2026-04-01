@@ -228,6 +228,10 @@ func gitTopLevel() (string, error) {
 	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return "", fmt.Errorf("git rev-parse --show-toplevel: %s", strings.TrimSpace(string(exitErr.Stderr)))
+		}
 		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil

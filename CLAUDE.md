@@ -60,3 +60,4 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Highlighted lines are pre-computed once per file load, stored parallel to `diffLines`
 - `DiffLine.Content` has no `+`/`-` prefix - prefix is re-added at render time
 - Tab replacement happens at render time in `renderDiffLine`, not in diff parsing
+- `run()` resolves git repo root via `git rev-parse --show-toplevel` so revdiff works from any subdirectory
