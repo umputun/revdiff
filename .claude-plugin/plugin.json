@@ -1,6 +1,6 @@
 {
   "name": "revdiff",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Review git diffs with inline annotations in a TUI overlay",
   "author": {
     "name": "umputun",

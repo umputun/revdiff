@@ -46,7 +46,12 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 ## Claude Code Plugin
 - Plugin lives at `.claude-plugin/` with `plugin.json`, `marketplace.json`, and `skills/`
 - Skills path in `plugin.json` is relative to repo root, not to `.claude-plugin/`
-- When changing plugin files, bump version in both `plugin.json` and `marketplace.json`
+- **CRITICAL: After any plugin file change, ask user if they want to bump the plugin version**
+- When bumping, update version in both `plugin.json` and `marketplace.json`
+- Reference docs at `.claude-plugin/skills/revdiff/references/` — keep in sync with README.md:
+  - `install.md` — installation methods and plugin setup
+  - `config.md` — options, colors, chroma styles
+  - `usage.md` — examples, key bindings, output format
 
 ## Gotchas
 - Project uses vendoring - run `go mod vendor` after adding/updating dependencies
