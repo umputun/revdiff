@@ -173,7 +173,17 @@ don't remove this validation
 
 ## Claude Code Plugin
 
-revdiff ships with a [Claude Code](https://claude.ai/code) plugin for interactive code review directly from a Claude session. The plugin launches revdiff as a terminal overlay (tmux, kitty, or wezterm), captures annotations, and feeds them back to Claude for processing.
+revdiff ships with a [Claude Code](https://claude.ai/code) plugin for interactive code review directly from a Claude session. The plugin launches revdiff as a terminal overlay, captures annotations, and feeds them back to Claude for processing.
+
+The plugin requires one of the following terminals since Claude Code itself cannot display interactive TUI applications — the overlay runs revdiff in a separate terminal layer on top of the current session:
+
+| Terminal | Overlay method | Detection |
+|----------|---------------|-----------|
+| **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
+| **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
+| **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
+
+Priority: tmux → kitty → wezterm (first detected wins). If none are available, the plugin exits with an error.
 
 **Install:**
 
