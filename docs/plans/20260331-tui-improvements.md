@@ -77,16 +77,16 @@ A set of UX improvements to the revdiff TUI covering key bindings, navigation, v
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in handleKey global keys: change `tab` from toggleFilter to pane switching (toggle focus between paneTree/paneDiff, only switch to paneDiff if currFile != "")
-- [ ] add `f` key in global keys section to call tree.toggleFilter(annotatedFiles()) + ensureVisible
-- [ ] update status bar in View(): replace `[tab] filter` with `[tab] switch` in tree pane hints
-- [ ] add `[tab] files` hint to diff pane status bar
-- [ ] add `[f] filter` to status bar hints (both panes), but only when len(annotatedFiles()) > 0
-- [ ] update existing tests that check tab behavior to expect pane switching
-- [ ] write tests for tab pane switching (tree->diff, diff->tree, tree->tree when no file loaded)
-- [ ] write tests for f filter toggle (global, works from both panes)
-- [ ] write tests for conditional filter hint in status bar (with/without annotations)
-- [ ] run `go test ./ui/` - must pass before next task
+- [x] in handleKey global keys: change `tab` from toggleFilter to pane switching (toggle focus between paneTree/paneDiff, only switch to paneDiff if currFile != "")
+- [x] add `f` key in global keys section to call tree.toggleFilter(annotatedFiles()) + ensureVisible
+- [x] update status bar in View(): replace `[tab] filter` with `[tab] switch` in tree pane hints
+- [x] add `[tab] files` hint to diff pane status bar
+- [x] add `[f] filter` to status bar hints (both panes), but only when len(annotatedFiles()) > 0
+- [x] update existing tests that check tab behavior to expect pane switching
+- [x] write tests for tab pane switching (tree->diff, diff->tree, tree->tree when no file loaded)
+- [x] write tests for f filter toggle (global, works from both panes)
+- [x] write tests for conditional filter hint in status bar (with/without annotations)
+- [x] run `go test ./ui/` - must pass before next task
 
 ### Task 3: Enter in diff pane starts annotation
 

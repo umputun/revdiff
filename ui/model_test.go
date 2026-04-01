@@ -140,29 +140,115 @@ func TestModel_EnterSelectsFile(t *testing.T) {
 	assert.Equal(t, "a.go", flm.file)
 }
 
-func TestModel_TabToggleFilter(t *testing.T) {
+func TestModel_TabPaneSwitching(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+
+	t.Run("tree to diff when file loaded", func(t *testing.T) {
+		m.focus = paneTree
+		m.currFile = "a.go"
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus)
+	})
+
+	t.Run("diff to tree", func(t *testing.T) {
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneTree, model.focus)
+	})
+
+	t.Run("stays on tree when no file loaded", func(t *testing.T) {
+		m.focus = paneTree
+		m.currFile = ""
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneTree, model.focus)
+	})
+}
+
+func TestModel_FKeyFilterToggle(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
 	m.tree = newFileTree([]string{"a.go", "b.go"})
 	m.store.Add("a.go", 1, "+", "test annotation")
 
-	// toggle filter - should show only annotated files
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	model := result.(Model)
-	assert.True(t, model.tree.filter)
+	t.Run("toggle filter on and off from tree pane", func(t *testing.T) {
+		m.focus = paneTree
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.True(t, model.tree.filter)
 
-	// only a.go should be visible (1 dir + 1 file)
-	fileCount := 0
-	for _, e := range model.tree.entries {
-		if !e.isDir {
-			fileCount++
+		// only a.go should be visible (1 dir + 1 file)
+		fileCount := 0
+		for _, e := range model.tree.entries {
+			if !e.isDir {
+				fileCount++
+			}
 		}
-	}
-	assert.Equal(t, 1, fileCount)
+		assert.Equal(t, 1, fileCount)
 
-	// toggle back
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
-	model = result.(Model)
-	assert.False(t, model.tree.filter)
+		// toggle filter off
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model = result.(Model)
+		assert.False(t, model.tree.filter)
+	})
+
+	t.Run("works from diff pane", func(t *testing.T) {
+		m.focus = paneDiff
+		m.tree.filter = false
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.True(t, model.tree.filter)
+	})
+
+	t.Run("no-op when no annotations", func(t *testing.T) {
+		m2 := testModel([]string{"a.go", "b.go"}, nil)
+		m2.tree = newFileTree([]string{"a.go", "b.go"})
+		// no annotations added
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.False(t, model.tree.filter, "filter should not toggle when no annotated files")
+	})
+}
+
+func TestModel_StatusBarFilterHint(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+
+	t.Run("filter hint shown when annotations exist", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.tree = newFileTree([]string{"a.go"})
+		m.ready = true
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.store.Add("a.go", 1, " ", "note")
+
+		m.focus = paneTree
+		view := m.View()
+		assert.Contains(t, view, "[f] filter", "tree pane should show filter hint when annotations exist")
+
+		m.focus = paneDiff
+		view = m.View()
+		assert.Contains(t, view, "[f] filter", "diff pane should show filter hint when annotations exist")
+	})
+
+	t.Run("filter hint hidden when no annotations", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.tree = newFileTree([]string{"a.go"})
+		m.ready = true
+		m.currFile = "a.go"
+		m.diffLines = lines
+
+		m.focus = paneTree
+		view := m.View()
+		assert.NotContains(t, view, "[f] filter", "tree pane should not show filter hint without annotations")
+
+		m.focus = paneDiff
+		view = m.View()
+		assert.NotContains(t, view, "[f] filter", "diff pane should not show filter hint without annotations")
+	})
 }
 
 func TestModel_NextPrevFile(t *testing.T) {

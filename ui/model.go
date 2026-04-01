@@ -139,9 +139,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case msg.String() == "tab":
+		// switch panes: tree <-> diff (only switch to diff if a file is loaded)
+		if m.focus == paneTree {
+			if m.currFile != "" {
+				m.focus = paneDiff
+			}
+		} else {
+			m.focus = paneTree
+		}
+		return m, nil
+
+	case msg.String() == "f":
 		annotated := m.annotatedFiles()
-		m.tree.toggleFilter(annotated)
-		m.tree.ensureVisible(m.treePageSize())
+		if len(annotated) > 0 {
+			m.tree.toggleFilter(annotated)
+			m.tree.ensureVisible(m.treePageSize())
+		}
 		return m, nil
 
 	case msg.String() == "n":
@@ -366,14 +379,18 @@ func (m Model) View() string {
 	if m.annotating {
 		statusText = "[enter] save  [esc] cancel"
 	} else {
+		filterHint := ""
+		if len(m.annotatedFiles()) > 0 {
+			filterHint = "  [f] filter"
+		}
 		switch m.focus {
 		case paneTree:
-			statusText = "[j/k] navigate  [enter] select  [l] diff  [tab] filter  [n/p] next/prev  [q] quit"
+			statusText = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
 		case paneDiff:
 			if m.cursorLineHasAnnotation() {
-				statusText = "[j/k] scroll  [h] files  [a] annotate  [d] delete  [n/p] next/prev  [q] quit"
+				statusText = "[j/k] scroll  [h/tab] files  [a] annotate  [d] delete" + filterHint + "  [n/p] next/prev  [q] quit"
 			} else {
-				statusText = "[j/k] scroll  [h] files  [a] annotate  [n/p] next/prev  [q] quit"
+				statusText = "[j/k] scroll  [h/tab] files  [a] annotate" + filterHint + "  [n/p] next/prev  [q] quit"
 			}
 		}
 	}
