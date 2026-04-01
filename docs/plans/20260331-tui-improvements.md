@@ -121,19 +121,19 @@ NOTE: the global `enter` handler in handleKey returns before reaching handleDiff
 - Modify: `ui/diffview.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `fileAnnotating bool` field to Model to distinguish file-level vs line-level annotation mode
-- [ ] add `startFileAnnotation()` method in annotate.go: creates textinput, sets fileAnnotating=true and annotating=true, pre-fills if existing file-level annotation exists
-- [ ] in saveAnnotation: when fileAnnotating, store with Line=0, Type=""
-- [ ] in cancelAnnotation: reset fileAnnotating
-- [ ] in handleKey global keys: add `A` (shift+a) to call startFileAnnotation() when currFile != ""
-- [ ] in renderDiff: render file-level annotations at the top of the diff view as a special selectable line, using `"💬 file: "` prefix with AnnotationLine style
-- [ ] enable `d` to delete file-level annotation when cursor is on the file-level annotation line at the top
-- [ ] in cursorLineHasAnnotation: exclude file-level annotations from regular per-line checks
-- [ ] update status bar: show `[A] file note` hint when currFile != "" (both panes)
-- [ ] write tests for A key triggering file-level annotation mode
-- [ ] write tests for file-level annotation rendering at top of diff
-- [ ] write tests for deleting file-level annotation via d on the special line
-- [ ] run `go test ./ui/` - must pass before next task
+- [x] add `fileAnnotating bool` field to Model to distinguish file-level vs line-level annotation mode
+- [x] add `startFileAnnotation()` method in annotate.go: creates textinput, sets fileAnnotating=true and annotating=true, pre-fills if existing file-level annotation exists
+- [x] in saveAnnotation: when fileAnnotating, store with Line=0, Type=""
+- [x] in cancelAnnotation: reset fileAnnotating
+- [x] in handleKey global keys: add `A` (shift+a) to call startFileAnnotation() when currFile != ""
+- [x] in renderDiff: render file-level annotations at the top of the diff view as a special selectable line, using `"💬 file: "` prefix with AnnotationLine style
+- [x] enable `d` to delete file-level annotation when cursor is on the file-level annotation line at the top
+- [x] in cursorLineHasAnnotation: exclude file-level annotations from regular per-line checks
+- [x] update status bar: show `[A] file note` hint when currFile != "" (both panes)
+- [x] write tests for A key triggering file-level annotation mode
+- [x] write tests for file-level annotation rendering at top of diff
+- [x] write tests for deleting file-level annotation via d on the special line
+- [x] run `go test ./ui/` - must pass before next task
 
 ### Task 5: Chunk navigation with [ / ]
 

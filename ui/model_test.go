@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -1831,4 +1832,358 @@ func TestModel_TreeScrollOffsetPersistsAcrossUpdates(t *testing.T) {
 	m = result.(Model)
 	assert.Equal(t, offsetAfterDown, m.tree.offset,
 		"offset should remain stable when moving cursor up within the visible window")
+}
+
+func TestModel_ShiftAStartsFileAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model := result.(Model)
+	assert.True(t, model.annotating, "A should start annotation mode")
+	assert.True(t, model.fileAnnotating, "A should set fileAnnotating=true")
+	assert.NotNil(t, cmd, "should return textinput blink command")
+}
+
+func TestModel_ShiftAIgnoredWithoutFile(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = ""
+	m.focus = paneTree
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model := result.(Model)
+	assert.False(t, model.annotating, "A without currFile should not start annotation")
+	assert.Nil(t, cmd)
+}
+
+func TestModel_ShiftAWorksFromBothPanes(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// from tree pane
+	m.focus = paneTree
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model := result.(Model)
+	assert.True(t, model.annotating, "A should work from tree pane")
+	assert.True(t, model.fileAnnotating)
+	assert.NotNil(t, cmd)
+
+	// from diff pane
+	m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m2.tree = newFileTree([]string{"a.go"})
+	m2.currFile = "a.go"
+	m2.diffLines = lines
+	m2.focus = paneDiff
+	result, cmd = m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model = result.(Model)
+	assert.True(t, model.annotating, "A should work from diff pane")
+	assert.True(t, model.fileAnnotating)
+	assert.NotNil(t, cmd)
+}
+
+func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+
+	// start file-level annotation and set text
+	m.startFileAnnotation()
+	m.annotateInput.SetValue("file-level comment")
+
+	// save via Enter
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.False(t, model.annotating)
+	assert.False(t, model.fileAnnotating)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 0, anns[0].Line, "file-level annotation should have Line=0")
+	assert.Empty(t, anns[0].Type, "file-level annotation should have empty Type")
+	assert.Equal(t, "file-level comment", anns[0].Comment)
+}
+
+func TestModel_FileAnnotationPreFillsExisting(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}}
+	m.store.Add("a.go", 0, "", "existing file note")
+
+	m.startFileAnnotation()
+	assert.Equal(t, "existing file note", m.annotateInput.Value(), "should pre-fill with existing file-level annotation")
+}
+
+func TestModel_FileAnnotationCancelResetsFlags(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}}
+	m.focus = paneDiff
+
+	m.startFileAnnotation()
+	assert.True(t, m.annotating)
+	assert.True(t, m.fileAnnotating)
+
+	// press Esc to cancel
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := result.(Model)
+	assert.False(t, model.annotating, "cancel should reset annotating")
+	assert.False(t, model.fileAnnotating, "cancel should reset fileAnnotating")
+}
+
+func TestModel_FileAnnotationRenderedAtTopOfDiff(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
+	}
+	m.store.Add("a.go", 0, "", "this is a file note")
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "file: this is a file note", "file-level annotation should appear in rendered diff")
+	assert.Contains(t, rendered, "\U0001f4ac", "file-level annotation should have speech bubble emoji")
+
+	// file annotation should appear before any line content
+	fileIdx := strings.Index(rendered, "file: this is a file note")
+	lineIdx := strings.Index(rendered, "package main")
+	assert.Less(t, fileIdx, lineIdx, "file-level annotation should appear before diff lines")
+}
+
+func TestModel_FileAnnotationCursorHighlighted(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add("a.go", 0, "", "file note")
+	m.focus = paneDiff
+	m.diffCursor = -1 // on file annotation line
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "file: file note", "file annotation should be rendered")
+}
+
+func TestModel_DeleteFileAnnotationViaD(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.store.Add("a.go", 0, "", "file note to delete")
+	m.diffCursor = -1 // on file annotation line
+
+	// press 'd' to delete file-level annotation
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+	assert.Empty(t, model.store.Get("a.go"), "file-level annotation should be deleted")
+	assert.GreaterOrEqual(t, model.diffCursor, 0, "cursor should move to first valid diff line after deletion")
+}
+
+func TestModel_DeleteFileAnnotationCursorNotOnFileLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add("a.go", 1, " ", "line note")
+	m.diffCursor = 0 // on regular line, not file annotation
+
+	// press 'd' should delete the line annotation, not the file annotation
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	model := result.(Model)
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "should only delete the line annotation")
+	assert.Equal(t, 0, anns[0].Line, "file-level annotation should remain")
+}
+
+func TestModel_CursorLineHasAnnotationExcludesFileLevel(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add("a.go", 0, "", "file note")
+	m.diffCursor = 0 // on line 1, not on file annotation
+	m.focus = paneDiff
+
+	// line 1 has no line-level annotation, only file-level exists
+	assert.False(t, m.cursorLineHasAnnotation(), "should not report file-level annotation as line annotation")
+}
+
+func TestModel_CursorOnFileAnnotationLineReportsAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add("a.go", 0, "", "file note")
+	m.diffCursor = -1
+
+	assert.True(t, m.cursorLineHasAnnotation(), "cursor on file annotation line should report annotation")
+}
+
+func TestModel_StatusBarShowsFileNoteHint(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// check from tree pane
+	m.focus = paneTree
+	view := m.View()
+	assert.Contains(t, view, "[A] file note", "tree pane should show file note hint when file is loaded")
+
+	// check from diff pane
+	m.focus = paneDiff
+	view = m.View()
+	assert.Contains(t, view, "[A] file note", "diff pane should show file note hint when file is loaded")
+}
+
+func TestModel_StatusBarHidesFileNoteHintWithoutFile(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.currFile = ""
+	m.focus = paneTree
+
+	view := m.View()
+	assert.NotContains(t, view, "[A] file note", "should not show file note hint when no file is loaded")
+}
+
+func TestModel_CursorNavigatesToFileAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+	m.diffCursor = 0
+	m.store.Add("a.go", 0, "", "file note")
+
+	// move up from first line should go to file annotation
+	m.moveDiffCursorUp()
+	assert.Equal(t, -1, m.diffCursor, "cursor should move to file annotation line (-1)")
+
+	// move down from file annotation should go to first non-divider line
+	m.moveDiffCursorDown()
+	assert.Equal(t, 0, m.diffCursor, "cursor should move from file annotation to first line")
+}
+
+func TestModel_HomeGoesToFileAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+	m.diffCursor = 1
+	m.store.Add("a.go", 0, "", "file note")
+	m.ready = true
+
+	m.moveDiffCursorToStart()
+	assert.Equal(t, -1, m.diffCursor, "Home should move to file annotation line when it exists")
+}
+
+func TestModel_CursorViewportYWithFileAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add("a.go", 0, "", "file note")
+
+	// cursor on file annotation line
+	m.diffCursor = -1
+	assert.Equal(t, 0, m.cursorViewportY(), "file annotation line should be at viewport Y=0")
+
+	// cursor on first diff line should be at Y=1 (file annotation occupies Y=0)
+	m.diffCursor = 0
+	assert.Equal(t, 1, m.cursorViewportY(), "first diff line should be at Y=1 when file annotation exists")
+
+	// cursor on second diff line
+	m.diffCursor = 1
+	assert.Equal(t, 2, m.cursorViewportY(), "second diff line should be at Y=2 when file annotation exists")
+}
+
+func TestModel_RenderDiffFileAnnotationInput(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.focus = paneDiff
+
+	// start file annotation and set text
+	m.startFileAnnotation()
+	m.annotateInput.SetValue("typing file note...")
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "typing file note...", "file annotation input should be visible in rendered diff")
+	assert.Contains(t, rendered, "file:", "should show file: prefix during input")
+}
+
+func TestModel_FileAnnotationExcludedFromRegularAnnotationMap(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add("a.go", 0, "", "file note")
+	m.store.Add("a.go", 1, " ", "line note")
+
+	set := m.buildAnnotationSet()
+	assert.Len(t, set, 1, "buildAnnotationSet should exclude file-level annotations")
+	assert.True(t, set["1: "], "line annotation should be in set")
+}
+
+func TestModel_StartAnnotationResetsFileAnnotating(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.diffCursor = 0
+	m.focus = paneDiff
+
+	// starting a regular annotation should set fileAnnotating to false
+	m.startAnnotation()
+	assert.True(t, m.annotating)
+	assert.False(t, m.fileAnnotating, "startAnnotation should set fileAnnotating=false")
 }

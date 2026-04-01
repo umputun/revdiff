@@ -36,6 +36,33 @@ func (m *Model) startAnnotation() tea.Cmd {
 
 	m.annotateInput = ti
 	m.annotating = true
+	m.fileAnnotating = false
+	return cmd
+}
+
+// startFileAnnotation enters annotation input mode for a file-level annotation (Line=0).
+func (m *Model) startFileAnnotation() tea.Cmd {
+	if m.currFile == "" {
+		return nil
+	}
+
+	ti := textinput.New()
+	ti.Placeholder = "file-level annotation..."
+	cmd := ti.Focus()
+	ti.CharLimit = 500
+	ti.Width = m.width - m.treeWidth - 10
+
+	// pre-fill with existing file-level annotation if one exists
+	for _, a := range m.store.Get(m.currFile) {
+		if a.Line == 0 {
+			ti.SetValue(a.Comment)
+			break
+		}
+	}
+
+	m.annotateInput = ti
+	m.annotating = true
+	m.fileAnnotating = true
 	return cmd
 }
 
@@ -44,6 +71,15 @@ func (m *Model) saveAnnotation() {
 	text := m.annotateInput.Value()
 	if text == "" {
 		m.cancelAnnotation()
+		return
+	}
+
+	if m.fileAnnotating {
+		m.store.Add(m.currFile, 0, "", text)
+		m.annotating = false
+		m.fileAnnotating = false
+		m.tree.refreshFilter(m.annotatedFiles())
+		m.viewport.SetContent(m.renderDiff())
 		return
 	}
 
@@ -63,12 +99,44 @@ func (m *Model) saveAnnotation() {
 // cancelAnnotation exits annotation input mode without saving.
 func (m *Model) cancelAnnotation() {
 	m.annotating = false
+	m.fileAnnotating = false
 	m.viewport.SetContent(m.renderDiff())
 }
 
+// deleteFileAnnotation removes the file-level annotation and adjusts cursor position.
+func (m *Model) deleteFileAnnotation() tea.Cmd {
+	if !m.store.Delete(m.currFile, 0, "") {
+		return nil
+	}
+	m.diffCursor = 0
+	// skip dividers at the start
+	for i, dl := range m.diffLines {
+		if dl.ChangeType != diff.ChangeDivider {
+			m.diffCursor = i
+			break
+		}
+	}
+	m.tree.refreshFilter(m.annotatedFiles())
+
+	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
+		m.loadSeq++
+		m.pendingFile = newFile
+		return m.loadFileDiff(newFile)
+	}
+
+	m.viewport.SetContent(m.renderDiff())
+	return nil
+}
+
 // deleteAnnotation removes the annotation on the current cursor line if one exists.
+// handles both file-level annotations (cursor at -1) and regular line annotations.
 // returns a command to load the new file if the tree selection changed after filter refresh.
 func (m *Model) deleteAnnotation() tea.Cmd {
+	// handle file-level annotation deletion when cursor is on the file annotation line
+	if m.cursorOnFileAnnotationLine() {
+		return m.deleteFileAnnotation()
+	}
+
 	dl, ok := m.cursorDiffLine()
 	if !ok || dl.ChangeType == diff.ChangeDivider {
 		return nil
@@ -108,18 +176,53 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // cursorLineHasAnnotation checks if the current diffCursor line has an annotation in the store.
+// returns true for file-level annotation when cursor is on the file annotation line (index -1 logically,
+// but rendered at top). for regular lines, excludes file-level annotations (Line=0).
 func (m Model) cursorLineHasAnnotation() bool {
+	// check if cursor is on the file-level annotation line at the top
+	if m.cursorOnFileAnnotationLine() {
+		return true
+	}
+
 	dl, ok := m.cursorDiffLine()
 	if !ok || dl.ChangeType == diff.ChangeDivider {
 		return false
 	}
 	lineNum := m.diffLineNum(dl)
 	for _, a := range m.store.Get(m.currFile) {
+		if a.Line == 0 {
+			continue // skip file-level annotations in regular per-line checks
+		}
 		if a.Line == lineNum && a.Type == dl.ChangeType {
 			return true
 		}
 	}
 	return false
+}
+
+// hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
+func (m Model) hasFileAnnotation() bool {
+	for _, a := range m.store.Get(m.currFile) {
+		if a.Line == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// fileAnnotationComment returns the file-level annotation comment, if one exists.
+func (m Model) fileAnnotationComment() string {
+	for _, a := range m.store.Get(m.currFile) {
+		if a.Line == 0 {
+			return a.Comment
+		}
+	}
+	return ""
+}
+
+// cursorOnFileAnnotationLine returns true if the diff cursor is on the file-level annotation line.
+func (m Model) cursorOnFileAnnotationLine() bool {
+	return m.diffCursor == -1 && m.hasFileAnnotation()
 }
 
 // diffLineNum returns the display line number for a diff line.
@@ -131,14 +234,25 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 }
 
 // cursorViewportY computes the actual viewport Y position of the cursor,
-// accounting for injected annotation lines.
+// accounting for injected annotation lines and the file-level annotation line.
 func (m Model) cursorViewportY() int {
 	if m.currFile == "" || len(m.diffLines) == 0 {
-		return m.diffCursor
+		return max(0, m.diffCursor)
+	}
+
+	// file-level annotation line at the top adds one visual row
+	fileAnnotationOffset := 0
+	if m.hasFileAnnotation() {
+		fileAnnotationOffset = 1
+	}
+
+	// cursor is on the file annotation line
+	if m.diffCursor == -1 {
+		return 0
 	}
 
 	annotationSet := m.buildAnnotationSet()
-	y := 0
+	y := fileAnnotationOffset
 	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
 		y++ // the diff line itself
 		dl := m.diffLines[i]
@@ -153,10 +267,14 @@ func (m Model) cursorViewportY() int {
 }
 
 // buildAnnotationSet returns a set of annotation keys for the current file.
+// excludes file-level annotations (Line=0) since they are rendered separately.
 func (m Model) buildAnnotationSet() map[string]bool {
 	annotations := m.store.Get(m.currFile)
 	set := make(map[string]bool, len(annotations))
 	for _, a := range annotations {
+		if a.Line == 0 {
+			continue
+		}
 		set[m.annotationKey(a.Line, a.Type)] = true
 	}
 	return set
