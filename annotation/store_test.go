@@ -306,3 +306,20 @@ func TestStore_FormatOutputSortedByFilename(t *testing.T) {
 	assert.Contains(t, out, "## a_file.go:1 (-)\nfirst\n")
 	assert.Contains(t, out, "## z_file.go:1 (+)\nlast\n")
 }
+
+func TestStore_Count(t *testing.T) {
+	s := NewStore()
+	assert.Equal(t, 0, s.Count(), "empty store should return 0")
+
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "one"})
+	assert.Equal(t, 1, s.Count())
+
+	s.Add(Annotation{File: "a.go", Line: 5, Type: "-", Comment: "two"})
+	assert.Equal(t, 2, s.Count())
+
+	s.Add(Annotation{File: "b.go", Line: 1, Type: "+", Comment: "three"})
+	assert.Equal(t, 3, s.Count(), "should count across multiple files")
+
+	s.Delete("a.go", 1, "+")
+	assert.Equal(t, 2, s.Count(), "count should decrease after delete")
+}

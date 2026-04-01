@@ -36,6 +36,13 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Syntax highlighting: `alecthomas/chroma/v2`
 - Testing: `stretchr/testify`, mocks via `matryer/moq`
 
+## Config
+- Config file: `~/.config/revdiff/config` (INI format via go-flags built-in IniParser)
+- Precedence: CLI flags > env vars > config file > built-in defaults
+- `--dump-config` outputs current defaults, `--config` overrides path
+- `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --version)
+- `ini-name` tags ensure config keys match CLI long flag names
+
 ## Gotchas
 - Project uses vendoring - run `go mod vendor` after adding/updating dependencies
 - Chroma API uses British spelling (`Colour`), suppress with `//nolint:misspell`

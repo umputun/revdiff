@@ -1,120 +1,194 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/jessevdk/go-flags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type cliOpts struct {
-	Ref struct {
-		Ref string `positional-arg-name:"ref"`
-	} `positional-args:"yes"`
-	Staged    bool `long:"staged" env:"REVDIFF_STAGED"`
-	TreeWidth int  `long:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"3"`
-	Version   bool `short:"V" long:"version"`
-	Colors    struct {
-		Accent     string `long:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#5f87ff"`
-		Border     string `long:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858"`
-		Normal     string `long:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0"`
-		Muted      string `long:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#6c6c6c"`
-		SelectedFg string `long:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf"`
-		SelectedBg string `long:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#303030"`
-		Annotation string `long:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700"`
-		CursorBg   string `long:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   default:"#3a3a3a"`
-		AddFg      string `long:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787"`
-		AddBg      string `long:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800"`
-		RemoveFg   string `long:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787"`
-		RemoveBg   string `long:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#3D0100"`
-	} `group:"color options"`
-}
-
-func TestCLI_Defaults(t *testing.T) {
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{})
+func TestParseArgs_Defaults(t *testing.T) {
+	opts, err := parseArgs([]string{})
 	require.NoError(t, err)
-	assert.Equal(t, 3, o.TreeWidth)
-	assert.False(t, o.Staged)
-	assert.False(t, o.Version)
-	assert.Empty(t, o.Ref.Ref)
+	assert.Equal(t, 3, opts.TreeWidth)
+	assert.Equal(t, 4, opts.TabWidth)
+	assert.Equal(t, "monokai", opts.ChromaStyle)
+	assert.False(t, opts.Staged)
+	assert.False(t, opts.NoColors)
+	assert.Empty(t, opts.Ref.Ref)
 }
 
-func TestCLI_TreeWidth(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want int
-	}{
-		{name: "default", args: []string{}, want: 3},
-		{name: "set to 5", args: []string{"--tree-width=5"}, want: 5},
-		{name: "set to 1", args: []string{"--tree-width=1"}, want: 1},
-		{name: "set to 10", args: []string{"--tree-width=10"}, want: 10},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			var o cliOpts
-			p := flags.NewParser(&o, flags.Default)
-			_, err := p.ParseArgs(tc.args)
-			require.NoError(t, err)
-			assert.Equal(t, tc.want, o.TreeWidth)
-		})
-	}
+func TestParseArgs_Flags(t *testing.T) {
+	opts, err := parseArgs([]string{"--staged", "--tree-width=5", "--tab-width=8", "--no-colors", "--chroma-style=dracula", "HEAD~3"})
+	require.NoError(t, err)
+	assert.True(t, opts.Staged)
+	assert.Equal(t, 5, opts.TreeWidth)
+	assert.Equal(t, 8, opts.TabWidth)
+	assert.True(t, opts.NoColors)
+	assert.Equal(t, "dracula", opts.ChromaStyle)
+	assert.Equal(t, "HEAD~3", opts.Ref.Ref)
 }
 
-func TestCLI_TreeWidthEnv(t *testing.T) {
+func TestParseArgs_ColorDefaults(t *testing.T) {
+	opts, err := parseArgs([]string{})
+	require.NoError(t, err)
+	assert.Equal(t, "#5f87ff", opts.Colors.Accent)
+	assert.Equal(t, "#585858", opts.Colors.Border)
+	assert.Equal(t, "#d0d0d0", opts.Colors.Normal)
+	assert.Equal(t, "#6c6c6c", opts.Colors.Muted)
+	assert.Equal(t, "#d7af00", opts.Colors.CursorBar)
+	assert.Equal(t, "#87d787", opts.Colors.AddFg)
+	assert.Equal(t, "#022800", opts.Colors.AddBg)
+	assert.Equal(t, "#ff8787", opts.Colors.RemoveFg)
+	assert.Equal(t, "#3D0100", opts.Colors.RemoveBg)
+}
+
+func TestParseArgs_ColorFlags(t *testing.T) {
+	opts, err := parseArgs([]string{"--color-accent=#aabbcc", "--color-remove-bg=#220000"})
+	require.NoError(t, err)
+	assert.Equal(t, "#aabbcc", opts.Colors.Accent)
+	assert.Equal(t, "#220000", opts.Colors.RemoveBg)
+}
+
+func TestParseArgs_EnvVars(t *testing.T) {
 	t.Setenv("REVDIFF_TREE_WIDTH", "7")
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{})
-	require.NoError(t, err)
-	assert.Equal(t, 7, o.TreeWidth)
-}
-
-func TestCLI_StagedFlag(t *testing.T) {
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{"--staged"})
-	require.NoError(t, err)
-	assert.True(t, o.Staged)
-}
-
-func TestCLI_PositionalRef(t *testing.T) {
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{"HEAD~3"})
-	require.NoError(t, err)
-	assert.Equal(t, "HEAD~3", o.Ref.Ref)
-}
-
-func TestCLI_ColorDefaults(t *testing.T) {
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{})
-	require.NoError(t, err)
-	assert.Equal(t, "#5f87ff", o.Colors.Accent)
-	assert.Equal(t, "#022800", o.Colors.AddBg)
-	assert.Equal(t, "#3D0100", o.Colors.RemoveBg)
-}
-
-func TestCLI_ColorEnv(t *testing.T) {
 	t.Setenv("REVDIFF_COLOR_ACCENT", "#ff0000")
-	t.Setenv("REVDIFF_COLOR_ADD_BG", "#001100")
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{})
+	opts, err := parseArgs([]string{})
 	require.NoError(t, err)
-	assert.Equal(t, "#ff0000", o.Colors.Accent)
-	assert.Equal(t, "#001100", o.Colors.AddBg)
+	assert.Equal(t, 7, opts.TreeWidth)
+	assert.Equal(t, "#ff0000", opts.Colors.Accent)
 }
 
-func TestCLI_ColorFlag(t *testing.T) {
-	var o cliOpts
-	p := flags.NewParser(&o, flags.Default)
-	_, err := p.ParseArgs([]string{"--color-accent=#aabbcc", "--color-remove-bg=#220000"})
+func TestParseArgs_CLIOverridesEnv(t *testing.T) {
+	t.Setenv("REVDIFF_TREE_WIDTH", "7")
+	opts, err := parseArgs([]string{"--tree-width=9"})
 	require.NoError(t, err)
-	assert.Equal(t, "#aabbcc", o.Colors.Accent)
-	assert.Equal(t, "#220000", o.Colors.RemoveBg)
+	assert.Equal(t, 9, opts.TreeWidth)
+}
+
+func TestParseArgs_ConfigFile(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte(`[Application Options]
+tab-width = 2
+chroma-style = nord
+
+[color options]
+color-accent = #112233
+`), 0o600)
+	require.NoError(t, err)
+
+	opts, err := parseArgs([]string{"--config", cfgPath})
+	require.NoError(t, err)
+	assert.Equal(t, 2, opts.TabWidth)
+	assert.Equal(t, "nord", opts.ChromaStyle)
+	assert.Equal(t, "#112233", opts.Colors.Accent)
+	// unset values keep defaults
+	assert.Equal(t, 3, opts.TreeWidth)
+	assert.Equal(t, "#585858", opts.Colors.Border)
+}
+
+func TestParseArgs_CLIOverridesConfig(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte(`[Application Options]
+tab-width = 2
+chroma-style = nord
+`), 0o600)
+	require.NoError(t, err)
+
+	opts, err := parseArgs([]string{"--config", cfgPath, "--tab-width=6"})
+	require.NoError(t, err)
+	assert.Equal(t, 6, opts.TabWidth, "CLI flag should override config")
+	assert.Equal(t, "nord", opts.ChromaStyle, "config value should be kept when no CLI override")
+}
+
+func TestParseArgs_ConfigFileNotFound(t *testing.T) {
+	opts, err := parseArgs([]string{"--config", "/nonexistent/path/config"})
+	require.NoError(t, err)
+	// should use defaults when config not found
+	assert.Equal(t, 4, opts.TabWidth)
+	assert.Equal(t, "monokai", opts.ChromaStyle)
+}
+
+func TestParseArgs_ConfigFileInvalid(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte(`[invalid
+this is not valid ini`), 0o600)
+	require.NoError(t, err)
+
+	// should still work, just warn on stderr
+	opts, err := parseArgs([]string{"--config", cfgPath})
+	require.NoError(t, err)
+	assert.Equal(t, 4, opts.TabWidth)
+}
+
+func TestParseArgs_ConfigColorsOnly(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte(`[color options]
+color-add-fg = #00ff00
+color-remove-fg = #ff0000
+color-cursor-bar = #ffff00
+`), 0o600)
+	require.NoError(t, err)
+
+	opts, err := parseArgs([]string{"--config", cfgPath})
+	require.NoError(t, err)
+	assert.Equal(t, "#00ff00", opts.Colors.AddFg)
+	assert.Equal(t, "#ff0000", opts.Colors.RemoveFg)
+	assert.Equal(t, "#ffff00", opts.Colors.CursorBar)
+	// other colors keep defaults
+	assert.Equal(t, "#5f87ff", opts.Colors.Accent)
+}
+
+func TestResolveConfigPath_FromArgs(t *testing.T) {
+	path := resolveConfigPath([]string{"--config", "/custom/path"})
+	assert.Equal(t, "/custom/path", path)
+}
+
+func TestResolveConfigPath_EqualsForm(t *testing.T) {
+	path := resolveConfigPath([]string{"--config=/custom/path"})
+	assert.Equal(t, "/custom/path", path)
+}
+
+func TestParseArgs_ConfigEqualsForm(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte("[Application Options]\ntab-width = 2\n"), 0o600)
+	require.NoError(t, err)
+
+	opts, err := parseArgs([]string{"--config=" + cfgPath})
+	require.NoError(t, err)
+	assert.Equal(t, 2, opts.TabWidth, "config with equals form should be loaded")
+}
+
+func TestResolveConfigPath_FromEnv(t *testing.T) {
+	t.Setenv("REVDIFF_CONFIG", "/env/config/path")
+	path := resolveConfigPath([]string{})
+	assert.Equal(t, "/env/config/path", path)
+}
+
+func TestResolveConfigPath_ArgsOverrideEnv(t *testing.T) {
+	t.Setenv("REVDIFF_CONFIG", "/env/path")
+	path := resolveConfigPath([]string{"--config", "/args/path"})
+	assert.Equal(t, "/args/path", path, "args should take precedence over env")
+}
+
+func TestResolveConfigPath_Default(t *testing.T) {
+	t.Setenv("REVDIFF_CONFIG", "") // clear env
+	path := resolveConfigPath([]string{})
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".config", "revdiff", "config"), path)
+}
+
+func TestDefaultConfigPath(t *testing.T) {
+	path := defaultConfigPath()
+	assert.Contains(t, path, ".config")
+	assert.Contains(t, path, "revdiff")
+	assert.Contains(t, path, "config")
 }

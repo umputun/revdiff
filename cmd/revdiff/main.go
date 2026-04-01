@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jessevdk/go-flags"
@@ -15,41 +17,42 @@ import (
 	"github.com/umputun/revdiff/ui"
 )
 
-var opts struct {
+type options struct {
 	Ref struct {
 		Ref string `positional-arg-name:"ref" description:"git ref to diff against (default: uncommitted changes)"`
 	} `positional-args:"yes"`
 
-	Staged      bool   `long:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	TreeWidth   int    `long:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"3" description:"file tree panel width in units (1-10, default 3 of 10)"`
-	TabWidth    int    `long:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
-	NoColors    bool   `long:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
-	ChromaStyle string `long:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
-	Version     bool   `short:"V" long:"version" description:"show version info"`
+	Staged      bool   `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
+	TreeWidth   int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"3" description:"file tree panel width in units (1-10, default 3 of 10)"`
+	TabWidth    int    `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
+	NoColors    bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	ChromaStyle string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
+	Config      string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
+	DumpConfig  bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
+	Version     bool   `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {
-		Accent     string `long:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#5f87ff" description:"active pane borders and directory names"`
-		Border     string `long:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858" description:"inactive pane borders"`
-		Normal     string `long:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0" description:"file entries and context lines"`
-		Muted      string `long:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#6c6c6c" description:"line numbers and status bar"`
-		SelectedFg string `long:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf" description:"selected file text color"`
-		SelectedBg string `long:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#303030" description:"selected file background color"`
-		Annotation string `long:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
-		CursorBg   string `long:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   default:"#3a3a3a" description:"diff cursor line background"`
-		CursorBar  string `long:"color-cursor-bar"  env:"REVDIFF_COLOR_CURSOR_BAR"  default:"#d7af00" description:"cursor line vertical bar color"`
-		AddFg      string `long:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
-		AddBg      string `long:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800" description:"added line background color"`
-		RemoveFg   string `long:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
-		RemoveBg   string `long:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#3D0100" description:"removed line background color"`
-	} `group:"color options"`
+		Accent     string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#5f87ff" description:"active pane borders and directory names"`
+		Border     string `long:"color-border"      ini-name:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858" description:"inactive pane borders"`
+		Normal     string `long:"color-normal"      ini-name:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0" description:"file entries and context lines"`
+		Muted      string `long:"color-muted"       ini-name:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#6c6c6c" description:"line numbers and status bar"`
+		SelectedFg string `long:"color-selected-fg" ini-name:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf" description:"selected file text color"`
+		SelectedBg string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#303030" description:"selected file background color"`
+		Annotation string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
+		CursorBg   string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   default:"#3a3a3a" description:"diff cursor line background"`
+		CursorBar  string `long:"color-cursor-bar"  ini-name:"color-cursor-bar"  env:"REVDIFF_COLOR_CURSOR_BAR"  default:"#d7af00" description:"cursor line vertical bar color"`
+		AddFg      string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
+		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#022800" description:"added line background color"`
+		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
+		RemoveBg   string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#3D0100" description:"removed line background color"`
+	} `group:"color options" ini-name:"colors"`
 }
 
 var revision = "unknown"
 
 func main() {
-	p := flags.NewParser(&opts, flags.Default)
-	p.Usage = "[OPTIONS] [ref]"
-	if _, err := p.Parse(); err != nil {
+	opts, err := parseArgs(os.Args[1:])
+	if err != nil {
 		var flagsErr *flags.Error
 		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
@@ -57,18 +60,101 @@ func main() {
 		os.Exit(1)
 	}
 
+	if opts.DumpConfig {
+		dumpConfig(os.Args[1:], os.Stdout)
+		os.Exit(0)
+	}
+
 	if opts.Version {
 		fmt.Printf("version: %s\ngo: %s\n", revision, runtime.Version())
 		os.Exit(0)
 	}
 
-	if err := run(); err != nil {
+	if err := run(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+// parseArgs parses CLI arguments with config file support.
+// config file is loaded first, then CLI args override.
+// precedence: CLI flags > env vars > config file > built-in defaults.
+func parseArgs(args []string) (options, error) {
+	var opts options
+	p := flags.NewParser(&opts, flags.Default)
+	p.Usage = "[OPTIONS] [ref]"
+
+	// determine config path from args before full parsing
+	configPath := resolveConfigPath(args)
+
+	// load config file before parsing CLI args (CLI overrides config)
+	iniParser := flags.NewIniParser(p)
+	loadConfigFile(iniParser, configPath)
+
+	if _, err := p.ParseArgs(args); err != nil {
+		return options{}, fmt.Errorf("parse args: %w", err)
+	}
+
+	return opts, nil
+}
+
+// dumpConfig writes the current config with defaults to the given writer.
+func dumpConfig(args []string, w *os.File) {
+	var opts options
+	p := flags.NewParser(&opts, flags.Default)
+	iniParser := flags.NewIniParser(p)
+	configPath := resolveConfigPath(args)
+	loadConfigFile(iniParser, configPath)
+	_, _ = p.ParseArgs(args)
+	iniParser.Write(w, flags.IniIncludeDefaults|flags.IniCommentDefaults|flags.IniIncludeComments)
+}
+
+// loadConfigFile attempts to parse a config file, logging a warning on parse errors.
+// silently ignores missing files or empty paths.
+func loadConfigFile(iniParser *flags.IniParser, configPath string) {
+	if configPath == "" {
+		return
+	}
+	err := iniParser.ParseFile(configPath)
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return // file access error (permission denied, etc.)
+	}
+	fmt.Fprintf(os.Stderr, "warning: config %s: %v\n", configPath, err)
+}
+
+// resolveConfigPath determines the config file path from args, env, or default location.
+func resolveConfigPath(args []string) string {
+	// check if --config was passed in args (supports both --config value and --config=value)
+	for i, arg := range args {
+		if arg == "--config" && i+1 < len(args) {
+			return args[i+1]
+		}
+		if after, ok := strings.CutPrefix(arg, "--config="); ok {
+			return after
+		}
+	}
+	// check env
+	if p := os.Getenv("REVDIFF_CONFIG"); p != "" {
+		return p
+	}
+	// default location
+	return defaultConfigPath()
+}
+
+// defaultConfigPath returns ~/.config/revdiff/config.
+func defaultConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "revdiff", "config")
+}
+
+func run(opts options) error {
 	renderer := diff.NewGit(".")
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
