@@ -36,6 +36,77 @@ go install github.com/umputun/revdiff/cmd/revdiff@latest
 
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
 
+## Claude Code Plugin
+
+revdiff ships with a Claude Code plugin for interactive code review directly from a Claude session. The plugin launches revdiff as a terminal overlay, captures annotations, and feeds them back to Claude for processing.
+
+The plugin requires one of the following terminals since Claude Code itself cannot display interactive TUI applications - the overlay runs revdiff in a separate terminal layer on top of the current session:
+
+| Terminal | Overlay method | Detection |
+|----------|---------------|-----------|
+| **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
+| **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
+| **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
+
+Priority: tmux → kitty → wezterm (first detected wins). If none are available, the plugin exits with an error.
+
+**Install:**
+
+```bash
+# add marketplace and install
+/plugin marketplace add umputun/revdiff
+/plugin install revdiff@umputun-revdiff
+```
+
+**Use with `/revdiff` command:**
+
+```
+/revdiff                  -- smart detection: uncommitted, last commit, or branch diff
+/revdiff HEAD~1           -- review last commit
+/revdiff main             -- review current branch against main
+/revdiff --staged         -- review staged changes only
+/revdiff HEAD~3           -- review last 3 commits
+```
+
+**Use with free text** (no slash command needed):
+
+```
+"review diff"                     -- smart detection, same as /revdiff
+"review diff HEAD~1"              -- last commit
+"review diff against main"        -- branch diff
+"review changes from last 2 days" -- Claude resolves the ref automatically
+"revdiff for staged changes"      -- staged only
+```
+
+When no ref is provided, the plugin detects what to review automatically:
+- On main/master with uncommitted changes — reviews uncommitted changes
+- On main/master with clean tree — reviews the last commit
+- On a feature branch with clean tree — reviews branch diff against main
+- On a feature branch with uncommitted changes — asks whether to review uncommitted only or the full branch diff
+
+The plugin includes built-in reference documentation and can answer questions about revdiff usage, available themes, keybindings, and configuration options. It can also create or modify the local config file (`~/.config/revdiff/config`) on request:
+
+```
+"what chroma themes does revdiff support?"
+"switch revdiff to dracula theme"
+"what are the revdiff keybindings?"
+"set tree width to 3 in revdiff config"
+```
+
+The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
+
+### Integration with Other Tools
+
+The structured stdout output works with any tool that can read text:
+
+```bash
+# capture annotations for processing
+annotations=$(revdiff main)
+if [ -n "$annotations" ]; then
+  echo "$annotations" | your-tool
+fi
+```
+
 ## Usage
 
 ```
@@ -169,44 +240,6 @@ use errors.Is() instead of direct comparison
 
 ## store.go:18 (-)
 don't remove this validation
-```
-
-## Claude Code Plugin
-
-revdiff ships with a [Claude Code](https://claude.ai/code) plugin for interactive code review directly from a Claude session. The plugin launches revdiff as a terminal overlay, captures annotations, and feeds them back to Claude for processing.
-
-The plugin requires one of the following terminals since Claude Code itself cannot display interactive TUI applications — the overlay runs revdiff in a separate terminal layer on top of the current session:
-
-| Terminal | Overlay method | Detection |
-|----------|---------------|-----------|
-| **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
-| **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
-| **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
-
-Priority: tmux → kitty → wezterm (first detected wins). If none are available, the plugin exits with an error.
-
-**Install:**
-
-```bash
-# add marketplace and install
-/plugin marketplace add umputun/revdiff
-/plugin install revdiff@umputun-revdiff
-```
-
-**Use:** `/revdiff [ref]` — opens a review session. Annotate the diff, quit, and Claude will address each annotation.
-
-The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
-
-### Integration with Other Tools
-
-The structured stdout output works with any tool that can read text:
-
-```bash
-# capture annotations for processing
-annotations=$(revdiff main)
-if [ -n "$annotations" ]; then
-  echo "$annotations" | your-tool
-fi
 ```
 
 ## Contributing
