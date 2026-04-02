@@ -26,6 +26,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoColors)
 	assert.False(t, opts.NoStatusBar)
 	assert.False(t, opts.NoConfirmDiscard)
+	assert.False(t, opts.Wrap)
 	assert.Empty(t, opts.Output)
 	assert.Empty(t, opts.Ref.Ref)
 }
@@ -52,6 +53,31 @@ func TestParseArgs_NoConfirmDiscard(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.NoConfirmDiscard)
+	})
+}
+
+func TestParseArgs_Wrap(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--wrap"))
+		require.NoError(t, err)
+		assert.True(t, opts.Wrap)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_WRAP", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.Wrap)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nwrap = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.Wrap)
 	})
 }
 

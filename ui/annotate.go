@@ -249,7 +249,7 @@ func (m Model) cursorViewportY() int {
 		if m.isCollapsedHidden(i, hunks) {
 			continue
 		}
-		y++ // the diff line itself
+		y += m.wrappedLineCount(i) // the diff line (may occupy multiple visual rows when wrapping)
 		// delete-only placeholders don't render annotations, skip counting them
 		if m.isDeleteOnlyPlaceholder(i, hunks) {
 			continue
@@ -262,9 +262,10 @@ func (m Model) cursorViewportY() int {
 			}
 		}
 	}
-	// if cursor is on the annotation sub-line, add one more row
+	// if cursor is on the annotation sub-line, offset by wrapped line count
+	// (annotation renders after all continuation lines of the diff line)
 	if m.cursorOnAnnotation {
-		y++
+		y += m.wrappedLineCount(m.diffCursor)
 	}
 	return y
 }

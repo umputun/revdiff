@@ -90,6 +90,40 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		style, hlStyle, gutter = m.styles.LineModify, m.styles.LineModifyHighlight, " ~ "
 	}
 
+	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+
+	textContent := lineContent
+	if hasHighlight {
+		textContent = hlContent
+	}
+
+	// wrap mode: break long lines at word boundaries with continuation markers
+	if m.wrapMode {
+		const gutterWidth = 3
+		wrapWidth := m.diffContentWidth() - gutterWidth
+		visualLines := m.wrapContent(textContent, wrapWidth)
+		for i, vl := range visualLines {
+			prefix := " ↪ "
+			if i == 0 {
+				prefix = gutter
+			}
+
+			var styled string
+			if hasHighlight {
+				styled = hlStyle.Render(prefix + vl)
+			} else {
+				styled = style.Render(prefix + vl)
+			}
+
+			cursor := " "
+			if i == 0 && isCursor {
+				cursor = m.styles.DiffCursorLine.Render("▶")
+			}
+			b.WriteString(cursor + styled + "\n")
+		}
+		return
+	}
+
 	content := style.Render(gutter + lineContent)
 	if hasHighlight {
 		content = hlStyle.Render(gutter + hlContent)
@@ -100,7 +134,6 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
 	}
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
@@ -126,6 +159,30 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	if count == 1 {
 		text = "⋯ 1 line deleted"
 	}
+
+	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+
+	// wrap mode: break long placeholder at word boundaries
+	if m.wrapMode {
+		const gutterWidth = 3
+		wrapWidth := m.diffContentWidth() - gutterWidth
+		visualLines := m.wrapContent(text, wrapWidth)
+		for i, vl := range visualLines {
+			prefix := " ↪ "
+			if i == 0 {
+				prefix = " - "
+			}
+			styled := m.styles.LineRemove.Render(prefix + vl)
+
+			cursor := " "
+			if i == 0 && isCursor {
+				cursor = m.styles.DiffCursorLine.Render("▶")
+			}
+			b.WriteString(cursor + styled + "\n")
+		}
+		return
+	}
+
 	content := m.styles.LineRemove.Render(" - " + text)
 
 	// apply horizontal scroll
@@ -133,7 +190,6 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
 	}
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")

@@ -30,6 +30,7 @@ type options struct {
 	NoColors         bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
 	NoStatusBar      bool   `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
 	NoConfirmDiscard bool   `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
+	Wrap             bool   `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
 	ChromaStyle      string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	Output           string `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Config           string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
@@ -177,6 +178,7 @@ func run(opts options) error {
 		NoColors:         opts.NoColors,
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,
+		Wrap:             opts.Wrap,
 		TabWidth:         opts.TabWidth,
 		Ref:              opts.Ref.Ref,
 		Staged:           opts.Staged,

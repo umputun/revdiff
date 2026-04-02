@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -1507,4 +1508,151 @@ func TestModel_CollapsedDeleteAnnotationBlockedOnPlaceholder(t *testing.T) {
 	// attempt delete - should be no-op since cursorOnAnnotation is false
 	m.deleteAnnotation()
 	assert.True(t, m.store.Has("a.go", 2, "-"), "annotation should not be deleted from placeholder")
+}
+
+func TestModel_CollapsedWrapAddLine(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "this is a very long modified line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, " ~ ", "modified line should have ~ gutter")
+	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
+	assert.NotContains(t, rendered, "old", "removed lines should be hidden")
+}
+
+func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "this is a very long pure add line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, " + ", "pure add line should have + gutter")
+	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
+}
+
+func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 30 // narrow width to force placeholder wrapping
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+		{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
+		{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "3 lines deleted", "placeholder should show line count")
+	assert.Contains(t, rendered, " - ", "placeholder should have - gutter")
+}
+
+func TestModel_CollapsedWrapShortLinesUnchanged(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 120
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	// short lines should not have continuation markers
+	assert.NotContains(t, rendered, "↪", "short lines should not have continuation markers")
+	assert.Contains(t, rendered, " + add", "short add should render normally")
+}
+
+func TestModel_CollapsedWrapNoScrollX(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.scrollX = 10 // should be ignored in wrap mode
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "this is a long added line that needs wrapping at boundary", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	// content should not be cut by scrollX when wrapping is on
+	assert.Contains(t, rendered, "this is a long", "full content should be visible, scrollX should be ignored")
+}
+
+func TestModel_CollapsedWrapCursorOnFirstLine(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "this is a very long line that will wrap into multiple visual rows when rendered", ChangeType: diff.ChangeAdd},
+	}
+	m.diffCursor = 0
+
+	rendered := m.renderDiff()
+	lines := strings.Split(rendered, "\n")
+
+	// cursor marker should only be on first visual line
+	cursorCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "▶") {
+			cursorCount++
+		}
+	}
+	assert.Equal(t, 1, cursorCount, "cursor should appear only on first visual line of wrapped content")
+}
+
+func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "this is a very long removed line that should be wrapped when expanded", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "this is a very long added line that should also be wrapped when expanded", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	// expand the hunk
+	m.collapsed.expandedHunks = map[int]bool{1: true}
+
+	rendered := m.renderDiff()
+	// expanded hunk uses renderDiffLine which handles wrapping via renderWrappedDiffLine
+	assert.Contains(t, rendered, " - ", "expanded remove should use standard - gutter")
+	assert.Contains(t, rendered, " + ", "expanded add should use standard + gutter")
+	assert.Contains(t, rendered, " ↪ ", "expanded long lines should have continuation markers")
 }
