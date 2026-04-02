@@ -65,3 +65,4 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - `DiffLine.Content` has no `+`/`-` prefix - prefix is re-added at render time
 - Tab replacement happens at render time in `renderDiffLine`, not in diff parsing
 - `run()` resolves git repo root via `git rev-parse --show-toplevel` so revdiff works from any subdirectory
+- Help overlay uses `overlayCenter()` (ANSI-aware compositing via `charmbracelet/x/ansi.Cut`) to render on top of existing content; background (tree pane) remains visible at the edges

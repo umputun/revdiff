@@ -2627,6 +2627,55 @@ func TestModel_StatusBarHunkOnlyInDiffPane(t *testing.T) {
 	assert.NotContains(t, status, "hunk")
 }
 
+func TestModel_StatusBarHunkCountOnContextLine(t *testing.T) {
+	t.Run("plural hunks", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "add1", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+			{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.currFile = "a.go"
+		m.focus = paneDiff
+
+		status := m.statusBarText()
+		assert.Contains(t, status, "2 hunks")
+		assert.NotContains(t, status, "hunk 0/")
+	})
+
+	t.Run("singular hunk", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "add1", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.currFile = "a.go"
+		m.focus = paneDiff
+
+		status := m.statusBarText()
+		assert.Contains(t, status, "1 hunk")
+		assert.NotContains(t, status, "1 hunks", "should use singular form for one hunk")
+	})
+}
+
+func TestModel_StatusBarPipeSeparators(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+	m.fileAdds = 1
+	m.diffCursor = 0
+	m.focus = paneDiff
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "a.go | +1/-0", "pipe separator between filename and stats")
+	assert.Contains(t, status, "+1/-0 | hunk", "pipe separator between stats and hunk")
+}
+
 func TestModel_EditExistingFileAnnotationShowsInput(t *testing.T) {
 	m := testModel(nil, nil)
 	m.currFile = "a.go"
@@ -3090,13 +3139,15 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	assert.NotContains(t, view, "Navigation")
 	assert.NotContains(t, view, "Annotations")
 
-	// with help, view should contain help sections
+	// with help, view should contain help sections overlaid on top of content
 	m.showHelp = true
 	view = m.View()
 	assert.Contains(t, view, "Navigation")
 	assert.Contains(t, view, "Annotations")
 	assert.Contains(t, view, "View")
 	assert.Contains(t, view, "Quit")
+	// overlay should preserve background content (tree pane visible on edges)
+	assert.Contains(t, view, "a.go", "tree pane should be visible behind help overlay")
 }
 
 func TestModel_HelpToggle(t *testing.T) {
