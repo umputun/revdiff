@@ -87,9 +87,7 @@ func TestNewStyles_ModifyStyles(t *testing.T) {
 
 func TestPlainStyles_ModifyStyles(t *testing.T) {
 	s := plainStyles()
-	// verify modify styles exist as no-op styles
-	assert.NotNil(t, s.LineModify)
-	assert.NotNil(t, s.LineModifyHighlight)
+	// verify modify styles render correctly as no-op styles
 	assert.NotEmpty(t, s.LineModify.Render("text"))
 	assert.NotEmpty(t, s.LineModifyHighlight.Render("text"))
 }
