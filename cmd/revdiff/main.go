@@ -24,16 +24,17 @@ type options struct {
 		Ref string `positional-arg-name:"ref" description:"git ref to diff against (default: uncommitted changes)"`
 	} `positional-args:"yes"`
 
-	Staged      bool   `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	TreeWidth   int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
-	TabWidth    int    `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
-	NoColors    bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
-	NoStatusBar bool   `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
-	ChromaStyle string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
-	Output      string `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
-	Config      string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
-	DumpConfig  bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
-	Version     bool   `short:"V" long:"version" no-ini:"true" description:"show version info"`
+	Staged           bool   `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
+	TreeWidth        int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
+	TabWidth         int    `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
+	NoColors         bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	NoStatusBar      bool   `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
+	NoConfirmDiscard bool   `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
+	ChromaStyle      string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"monokai" description:"chroma style for syntax highlighting"`
+	Output           string `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
+	Config           string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
+	DumpConfig       bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
+	Version          bool   `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {
 		Accent     string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#5f87ff" description:"active pane borders and directory names"`
@@ -171,12 +172,13 @@ func run(opts options) error {
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
-		NoColors:       opts.NoColors,
-		NoStatusBar:    opts.NoStatusBar,
-		TabWidth:       opts.TabWidth,
-		Ref:            opts.Ref.Ref,
-		Staged:         opts.Staged,
-		TreeWidthRatio: opts.TreeWidth,
+		NoColors:         opts.NoColors,
+		NoStatusBar:      opts.NoStatusBar,
+		NoConfirmDiscard: opts.NoConfirmDiscard,
+		TabWidth:         opts.TabWidth,
+		Ref:              opts.Ref.Ref,
+		Staged:           opts.Staged,
+		TreeWidthRatio:   opts.TreeWidth,
 		Colors: ui.Colors{
 			Accent:     opts.Colors.Accent,
 			Border:     opts.Colors.Border,
@@ -207,6 +209,9 @@ func run(opts options) error {
 	// output annotations to stdout or file
 	m, ok := finalModel.(ui.Model)
 	if !ok {
+		return nil
+	}
+	if m.Discarded() {
 		return nil
 	}
 	output := m.Store().FormatOutput()

@@ -123,6 +123,7 @@ revdiff [OPTIONS] [ref]
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
+| `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `monokai` |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
@@ -228,6 +229,7 @@ revdiff HEAD~1
 |-----|--------|
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `q` | Quit, output annotations to stdout |
+| `Q` | Discard all annotations and quit (confirms if annotations exist) |
 
 ### Output Format
 

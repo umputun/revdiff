@@ -45,6 +45,7 @@ revdiff HEAD~1       # review last commit
 |-----|--------|
 | `f` | Toggle filter: all files / annotated only |
 | `q` | Quit, output annotations to stdout |
+| `Q` | Discard all annotations and quit (confirms if annotations exist) |
 
 ## Output Format
 

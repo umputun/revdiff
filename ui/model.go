@@ -67,6 +67,10 @@ type Model struct {
 	fileAnnotating     bool              // true when annotating at file level (Line=0)
 	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
 	annotateInput      textinput.Model   // text input for annotations
+
+	discarded        bool // true when user chose to discard annotations and quit
+	inConfirmDiscard bool // true when showing discard confirmation prompt
+	noConfirmDiscard bool // skip confirmation prompt on discard quit
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -85,13 +89,14 @@ type filesLoadedMsg struct {
 
 // ModelConfig holds configuration options for NewModel.
 type ModelConfig struct {
-	Ref            string
-	Staged         bool
-	TreeWidthRatio int
-	TabWidth       int  // number of spaces per tab character
-	NoColors       bool // disable all colors including syntax highlighting
-	NoStatusBar    bool // hide the status bar
-	Colors         Colors
+	Ref              string
+	Staged           bool
+	TreeWidthRatio   int
+	TabWidth         int  // number of spaces per tab character
+	NoColors         bool // disable all colors including syntax highlighting
+	NoStatusBar      bool // hide the status bar
+	NoConfirmDiscard bool // skip confirmation prompt when discarding annotations
+	Colors           Colors
 }
 
 // NewModel creates a new Model with the given renderer, store, highlighter and configuration.
@@ -107,22 +112,28 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		s = plainStyles()
 	}
 	return Model{
-		styles:         s,
-		store:          store,
-		renderer:       renderer,
-		highlighter:    highlighter,
-		ref:            cfg.Ref,
-		staged:         cfg.Staged,
-		noStatusBar:    cfg.NoStatusBar,
-		focus:          paneTree,
-		treeWidthRatio: cfg.TreeWidthRatio,
-		tabSpaces:      strings.Repeat(" ", cfg.TabWidth),
+		styles:           s,
+		store:            store,
+		renderer:         renderer,
+		highlighter:      highlighter,
+		ref:              cfg.Ref,
+		staged:           cfg.Staged,
+		noStatusBar:      cfg.NoStatusBar,
+		noConfirmDiscard: cfg.NoConfirmDiscard,
+		focus:            paneTree,
+		treeWidthRatio:   cfg.TreeWidthRatio,
+		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
 	}
 }
 
 // Store returns the annotation store for reading results after quit.
 func (m Model) Store() *annotation.Store {
 	return m.store
+}
+
+// Discarded returns true when the user chose to discard annotations and quit.
+func (m Model) Discarded() bool {
+	return m.discarded
 }
 
 // Init initializes the model by loading changed files.
@@ -149,6 +160,9 @@ func (m Model) loadFileDiff(file string) tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.inConfirmDiscard {
+			return m.handleConfirmDiscardKey(msg)
+		}
 		return m.handleKey(msg)
 	case tea.WindowSizeMsg:
 		return m.handleResize(msg)
@@ -176,6 +190,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	case msg.String() == "Q":
+		return m.handleDiscardQuit()
+
 	case msg.String() == "q":
 		return m, tea.Quit
 
@@ -451,6 +468,10 @@ func (m Model) View() string {
 
 // statusBarText returns context-sensitive status bar hints.
 func (m Model) statusBarText(annotated map[string]bool) string {
+	if m.inConfirmDiscard {
+		return fmt.Sprintf("discard %d annotations? [y/n]", m.store.Count())
+	}
+
 	if m.annotating {
 		return "[enter] save  [esc] cancel"
 	}
@@ -473,7 +494,7 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 	var hints string
 	switch m.focus {
 	case paneTree:
-		hints = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [q] quit"
+		hints = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [Q] discard  [q] quit"
 	case paneDiff:
 		deleteHint := ""
 		if m.cursorLineHasAnnotation() {
@@ -483,7 +504,7 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		if cur, total := m.currentHunk(); total > 0 {
 			hunkHint = fmt.Sprintf("  [ ] hunk %d/%d", cur, total)
 		}
-		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [q] quit"
+		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [Q] discard  [q] quit"
 	}
 
 	if countHint != "" {
@@ -496,6 +517,29 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		}
 	}
 	return hints
+}
+
+// handleDiscardQuit handles the Q key press for discard-and-quit.
+func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
+	if m.store.Count() == 0 || m.noConfirmDiscard || m.noStatusBar {
+		m.discarded = true
+		return m, tea.Quit
+	}
+	m.inConfirmDiscard = true
+	return m, nil
+}
+
+// handleConfirmDiscardKey handles keys during discard confirmation prompt.
+func (m Model) handleConfirmDiscardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "Q":
+		m.discarded = true
+		return m, tea.Quit
+	case "n", "esc":
+		m.inConfirmDiscard = false
+		return m, nil
+	}
+	return m, nil
 }
 
 // annotatedFiles returns a set of files that have annotations.

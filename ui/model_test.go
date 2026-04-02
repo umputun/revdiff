@@ -2670,3 +2670,226 @@ func TestModel_ViewNoStatusBar(t *testing.T) {
 	assert.NotContains(t, view, "quit", "status bar should be hidden")
 	assert.Contains(t, view, "a.go", "tree content should still appear")
 }
+
+func TestModel_DiscardedAccessor(t *testing.T) {
+	t.Run("default is false", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		assert.False(t, m.Discarded())
+	})
+
+	t.Run("true when set", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.discarded = true
+		assert.True(t, m.Discarded())
+	})
+}
+
+func TestModel_NoConfirmDiscardWired(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+	m := NewModel(renderer, store, noopHighlighter(), ModelConfig{NoConfirmDiscard: true, TreeWidthRatio: 3})
+	assert.True(t, m.noConfirmDiscard, "noConfirmDiscard should be wired from ModelConfig")
+}
+
+func TestModel_QKeyDiscardNoAnnotations(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "should be discarded when no annotations")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit")
+}
+
+func TestModel_QKeyWithAnnotationsEntersConfirming(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	assert.Nil(t, cmd, "should not quit yet")
+
+	model := result.(Model)
+	assert.True(t, model.inConfirmDiscard, "should enter confirming state")
+	assert.False(t, model.Discarded(), "should not be discarded yet")
+}
+
+func TestModel_ConfirmDiscardY(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "y should confirm discard")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit after y")
+}
+
+func TestModel_ConfirmDiscardN(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	assert.Nil(t, cmd, "n should not quit")
+
+	model := result.(Model)
+	assert.False(t, model.inConfirmDiscard, "n should cancel confirmation")
+	assert.False(t, model.Discarded(), "should not be discarded")
+}
+
+func TestModel_ConfirmDiscardEsc(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	assert.Nil(t, cmd, "esc should not quit")
+
+	model := result.(Model)
+	assert.False(t, model.inConfirmDiscard, "esc should cancel confirmation")
+	assert.False(t, model.Discarded())
+}
+
+func TestModel_ConfirmDiscardSecondQ(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "second Q should confirm discard")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit after second Q")
+}
+
+func TestModel_QKeyDuringAnnotationIgnored(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	// load file
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 0
+
+	// enter annotation mode
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	model = result.(Model)
+	require.True(t, model.annotating)
+
+	// press Q - should be handled as text input, not discard
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	model = result.(Model)
+	assert.True(t, model.annotating, "should still be annotating")
+	assert.False(t, model.Discarded(), "should not be discarded")
+	assert.False(t, model.inConfirmDiscard, "should not enter confirming")
+	assert.Contains(t, model.annotateInput.Value(), "Q", "Q should be typed into input")
+}
+
+func TestModel_QKeyNoConfirmDiscardWithAnnotations(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.noConfirmDiscard = true
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "should immediately discard with noConfirmDiscard")
+	assert.False(t, model.inConfirmDiscard, "should not enter confirming state")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit immediately")
+}
+
+func TestModel_QKeyNoStatusBarSkipsConfirmation(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.noStatusBar = true
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "should immediately discard when status bar is hidden")
+	assert.False(t, model.inConfirmDiscard, "should not enter confirming state without status bar")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit immediately")
+}
+
+func TestModel_ConfirmDiscardBlocksOtherKeys(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	// pressing j (navigation) should be blocked
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	assert.Nil(t, cmd, "j should be blocked during confirmation")
+	model := result.(Model)
+	assert.True(t, model.inConfirmDiscard, "should still be confirming")
+
+	// pressing q should be blocked too
+	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.Nil(t, cmd, "q should be blocked during confirmation")
+	model = result.(Model)
+	assert.True(t, model.inConfirmDiscard, "should still be confirming")
+}
+
+func TestModel_ConfirmDiscardAllowsNonKeyMessages(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	// WindowSizeMsg should still be handled
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model := result.(Model)
+	assert.Equal(t, 100, model.width, "resize should be handled during confirmation")
+	assert.True(t, model.inConfirmDiscard, "should still be confirming after resize")
+}
+
+func TestModel_StatusBarDiscardConfirmation(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.width = 120
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "other"})
+	m.inConfirmDiscard = true
+
+	annotated := m.annotatedFiles()
+	status := m.statusBarText(annotated)
+	assert.Equal(t, "discard 2 annotations? [y/n]", status)
+}
+
+func TestModel_StatusBarShowsDiscardHint(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.width = 120
+
+	t.Run("tree pane", func(t *testing.T) {
+		m.focus = paneTree
+		status := m.statusBarText(m.annotatedFiles())
+		assert.Contains(t, status, "[Q] discard")
+		assert.Contains(t, status, "[q] quit")
+	})
+
+	t.Run("diff pane", func(t *testing.T) {
+		m.focus = paneDiff
+		status := m.statusBarText(m.annotatedFiles())
+		assert.Contains(t, status, "[Q] discard")
+		assert.Contains(t, status, "[q] quit")
+	})
+}

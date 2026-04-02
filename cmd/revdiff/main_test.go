@@ -11,11 +11,9 @@ import (
 
 // noConfigArgs returns args that point to a nonexistent config file,
 // isolating the test from user's real config.
-func noConfigArgs(t *testing.T, extra ...string) []string {
+func noConfigArgs(t *testing.T) []string {
 	t.Helper()
-	args := make([]string, 0, 2+len(extra))
-	args = append(args, "--config", filepath.Join(t.TempDir(), "none"))
-	return append(args, extra...)
+	return []string{"--config", filepath.Join(t.TempDir(), "none")}
 }
 
 func TestParseArgs_Defaults(t *testing.T) {
@@ -27,8 +25,34 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.Staged)
 	assert.False(t, opts.NoColors)
 	assert.False(t, opts.NoStatusBar)
+	assert.False(t, opts.NoConfirmDiscard)
 	assert.Empty(t, opts.Output)
 	assert.Empty(t, opts.Ref.Ref)
+}
+
+func TestParseArgs_NoConfirmDiscard(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--no-confirm-discard"))
+		require.NoError(t, err)
+		assert.True(t, opts.NoConfirmDiscard)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_NO_CONFIRM_DISCARD", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.NoConfirmDiscard)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nno-confirm-discard = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.NoConfirmDiscard)
+	})
 }
 
 func TestParseArgs_OutputFlag(t *testing.T) {
