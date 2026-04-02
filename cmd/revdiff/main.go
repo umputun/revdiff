@@ -50,6 +50,8 @@ type options struct {
 		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#123800" description:"added line background color"`
 		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
 		RemoveBg   string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#4D1100" description:"removed line background color"`
+		ModifyFg   string `long:"color-modify-fg"   ini-name:"color-modify-fg"   env:"REVDIFF_COLOR_MODIFY_FG"   default:"#f5c542" description:"modified line text color (collapsed mode)"`
+		ModifyBg   string `long:"color-modify-bg"   ini-name:"color-modify-bg"   env:"REVDIFF_COLOR_MODIFY_BG"   default:"#3D2E00" description:"modified line background color (collapsed mode)"`
 		TreeBg     string `long:"color-tree-bg"     ini-name:"color-tree-bg"     env:"REVDIFF_COLOR_TREE_BG"     description:"file tree pane background"`
 		DiffBg     string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
 		StatusFg   string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   default:"#2D2D2D" description:"status bar foreground"`
@@ -193,6 +195,8 @@ func run(opts options) error {
 			AddBg:      opts.Colors.AddBg,
 			RemoveFg:   opts.Colors.RemoveFg,
 			RemoveBg:   opts.Colors.RemoveBg,
+			ModifyFg:   opts.Colors.ModifyFg,
+			ModifyBg:   opts.Colors.ModifyBg,
 			TreeBg:     opts.Colors.TreeBg,
 			DiffBg:     opts.Colors.DiffBg,
 			StatusFg:   opts.Colors.StatusFg,

@@ -68,6 +68,9 @@ type Model struct {
 	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
 	annotateInput      textinput.Model   // text input for annotations
 
+	collapsed     bool         // true when viewing collapsed diff (final text only)
+	expandedHunks map[int]bool // hunks expanded inline in collapsed mode, key = diffLines start index
+
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
@@ -197,14 +200,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case msg.String() == "tab":
-		// switch panes: tree <-> diff (only switch to diff if a file is loaded)
-		if m.focus != paneTree {
-			m.focus = paneTree
-			return m, nil
-		}
-		if m.currFile != "" {
-			m.focus = paneDiff
-		}
+		m.togglePane()
 		return m, nil
 
 	case msg.String() == "f":
@@ -247,6 +243,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+
+	case msg.String() == "v":
+		m.toggleCollapsedMode()
+		return m, nil
 	}
 
 	// pane-specific navigation
@@ -257,6 +257,18 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDiffNav(msg)
 	}
 	return m, nil
+}
+
+// togglePane switches focus between tree and diff panes.
+// only switches to diff pane when a file is loaded.
+func (m *Model) togglePane() {
+	if m.focus != paneTree {
+		m.focus = paneTree
+		return
+	}
+	if m.currFile != "" {
+		m.focus = paneDiff
+	}
 }
 
 // loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
@@ -342,6 +354,9 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "d":
 		cmd := m.deleteAnnotation()
 		return m, cmd
+	case msg.String() == ".":
+		m.toggleHunkExpansion()
+		return m, nil
 	}
 	return m, nil
 }
@@ -402,20 +417,25 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
+	m.expandedHunks = make(map[int]bool)
 	m.skipInitialDividers()
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, nil
 }
 
-// skipInitialDividers positions diffCursor on the first non-divider line.
+// skipInitialDividers positions diffCursor on the first visible line.
+// skips divider lines, and in collapsed mode also skips removed lines
+// unless their hunk is expanded.
 func (m *Model) skipInitialDividers() {
 	m.diffCursor = 0
+	hunks := m.findHunks()
 	for i, dl := range m.diffLines {
-		if dl.ChangeType != diff.ChangeDivider {
-			m.diffCursor = i
-			break
+		if dl.ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
+			continue
 		}
+		m.diffCursor = i
+		return
 	}
 }
 
@@ -504,7 +524,19 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		if cur, total := m.currentHunk(); total > 0 {
 			hunkHint = fmt.Sprintf("  [ ] hunk %d/%d", cur, total)
 		}
-		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + filterHint + fileNoteHint + "  [n/p] next/prev  [Q] discard  [q] quit"
+		viewModeHint := "  [v] collapse"
+		if m.collapsed {
+			viewModeHint = "  [v] expand"
+		}
+		dotHint := ""
+		if m.collapsed {
+			if hs, ok := m.cursorHunkStart(); ok && m.expandedHunks[hs] {
+				dotHint = "  [.] collapse hunk"
+			} else if ok {
+				dotHint = "  [.] expand hunk"
+			}
+		}
+		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + viewModeHint + dotHint + filterHint + fileNoteHint + "  [n/p] next/prev  [Q] discard  [q] quit"
 	}
 
 	if countHint != "" {

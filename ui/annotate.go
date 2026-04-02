@@ -26,6 +26,14 @@ func (m *Model) startAnnotation() tea.Cmd {
 	if !ok || dl.ChangeType == diff.ChangeDivider {
 		return nil
 	}
+	// prevent annotating hidden or placeholder removed lines in collapsed mode
+	hunks := m.findHunks()
+	if m.isCollapsedHidden(m.diffCursor, hunks) {
+		return nil
+	}
+	if m.isDeleteOnlyPlaceholder(m.diffCursor, hunks) {
+		return nil
+	}
 
 	ti, cmd := m.newAnnotationInput("annotation...")
 
@@ -212,6 +220,7 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 
 // cursorViewportY computes the actual viewport Y position of the cursor,
 // accounting for injected annotation lines and the file-level annotation line.
+// in collapsed mode, hidden removed lines (those in non-expanded hunks) are not counted.
 func (m Model) cursorViewportY() int {
 	if m.currFile == "" || len(m.diffLines) == 0 {
 		return max(0, m.diffCursor)
@@ -229,10 +238,22 @@ func (m Model) cursorViewportY() int {
 	}
 
 	annotationSet := m.buildAnnotationSet()
+	var hunks []int
+	if m.collapsed {
+		hunks = m.findHunks()
+	}
 
 	y := fileAnnotationOffset
 	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
+		// skip hidden removed lines in collapsed mode
+		if m.isCollapsedHidden(i, hunks) {
+			continue
+		}
 		y++ // the diff line itself
+		// delete-only placeholders don't render annotations, skip counting them
+		if m.isDeleteOnlyPlaceholder(i, hunks) {
+			continue
+		}
 		dl := m.diffLines[i]
 		if dl.ChangeType != diff.ChangeDivider {
 			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
