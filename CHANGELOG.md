@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.3.0 - 2026-04-02
+
+### New Features
+
+- add Q hotkey to discard annotations and quit without output (#4)
+- update default color scheme to catppuccin-macchiato with warm accent colors
+
+### Improvements
+
+- expand Claude Code plugin section with usage examples and smart detection
+
 ## v0.2.4 - 2026-04-01
 
 ### New Features
