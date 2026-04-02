@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // fileTree manages the list of changed files grouped by directory.
@@ -235,17 +237,7 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 		if e.isDir {
 			line = s.DirEntry.Render(" " + ft.truncateDirName(e.name, width-3))
 		} else {
-			marker := "  "
-			if annotatedFiles[e.path] {
-				marker = s.AnnotationMark.Render(" *")
-			}
-			name := indent + e.name + marker
-
-			if idx == ft.cursor {
-				line = s.FileSelected.Width(width - 2).Render(name)
-			} else {
-				line = s.FileEntry.Render(name)
-			}
+			line = ft.renderFileEntry(e, idx, indent, width, annotatedFiles, s)
 		}
 
 		b.WriteString(line)
@@ -254,6 +246,30 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 		}
 	}
 	return b.String()
+}
+
+// renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.
+func (ft *fileTree) renderFileEntry(e treeEntry, idx int, indent string, width int, annotatedFiles map[string]bool, s styles) string {
+	marker := "  "
+	if annotatedFiles[e.path] {
+		marker = s.AnnotationMark.Render(" *")
+	}
+	name := indent + e.name + marker
+	maxWidth := width - 2
+
+	// truncate from the left of the filename when it exceeds pane width
+	if lipgloss.Width(name) > maxWidth && maxWidth > 4 {
+		budget := maxWidth - lipgloss.Width(indent) - lipgloss.Width(marker) - 1 // 1 for "…"
+		if budget > 0 && lipgloss.Width(e.name) > budget {
+			runes := []rune(e.name)
+			name = indent + "…" + string(runes[len(runes)-budget+1:]) + marker
+		}
+	}
+
+	if idx == ft.cursor {
+		return s.FileSelected.Width(maxWidth).Render(name)
+	}
+	return s.FileEntry.Render(name)
 }
 
 // filterFiles returns the subset of allFiles that have annotations.
