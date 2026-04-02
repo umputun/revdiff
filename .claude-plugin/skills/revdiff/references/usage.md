@@ -43,6 +43,8 @@ revdiff HEAD~1       # review last commit
 
 | Key | Action |
 |-----|--------|
+| `v` | Toggle collapsed diff mode (shows final text with change markers) |
+| `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |

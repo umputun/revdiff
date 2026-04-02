@@ -26,7 +26,11 @@ Terminal UI diff viewer with inline annotations, built with bubbletea.
 ```
 git diff → diff.ParseUnifiedDiff() → []DiffLine
   → highlight.HighlightLines() → []string (ANSI foreground-only)
-  → ui.renderDiffLine() → lipgloss styles (background) + chroma (foreground)
+  → ui.renderDiff() dispatches:
+    expanded (default): renderDiffLine() for each line
+    collapsed (`v` toggle): renderCollapsedDiff() → skips removed lines,
+      uses buildModifiedSet() to style adds as modify (amber ~) or pure add (green +)
+      expanded hunks (`.` toggle) show all lines inline
   → viewport.SetContent() → terminal
 ```
 
