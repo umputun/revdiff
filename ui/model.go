@@ -68,8 +68,7 @@ type Model struct {
 	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
 	annotateInput      textinput.Model   // text input for annotations
 
-	collapsed     bool         // true when viewing collapsed diff (final text only)
-	expandedHunks map[int]bool // hunks expanded inline in collapsed mode, key = diffLines start index
+	collapsed collapsedState // collapsed diff view state
 
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
@@ -417,7 +416,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
-	m.expandedHunks = make(map[int]bool)
+	m.collapsed.expandedHunks = make(map[int]bool)
 	m.skipInitialDividers()
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
@@ -525,12 +524,12 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 			hunkHint = fmt.Sprintf("  [ ] hunk %d/%d", cur, total)
 		}
 		viewModeHint := "  [v] collapse"
-		if m.collapsed {
+		if m.collapsed.enabled {
 			viewModeHint = "  [v] expand"
 		}
 		dotHint := ""
-		if m.collapsed {
-			if hs, ok := m.cursorHunkStart(); ok && m.expandedHunks[hs] {
+		if m.collapsed.enabled {
+			if hs, ok := m.cursorHunkStart(); ok && m.collapsed.expandedHunks[hs] {
 				dotHint = "  [.] collapse hunk"
 			} else if ok {
 				dotHint = "  [.] expand hunk"

@@ -239,7 +239,7 @@ func (m Model) cursorViewportY() int {
 
 	annotationSet := m.buildAnnotationSet()
 	var hunks []int
-	if m.collapsed {
+	if m.collapsed.enabled {
 		hunks = m.findHunks()
 	}
 
