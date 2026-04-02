@@ -76,6 +76,7 @@ type Model struct {
 	fileRemoves int // cached count of removed lines in current file
 
 	showHelp bool // true when help overlay is visible
+	wrapMode bool // true when line wrapping is enabled
 
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
@@ -105,6 +106,7 @@ type ModelConfig struct {
 	NoColors         bool // disable all colors including syntax highlighting
 	NoStatusBar      bool // hide the status bar
 	NoConfirmDiscard bool // skip confirmation prompt when discarding annotations
+	Wrap             bool // enable line wrapping
 	Colors           Colors
 }
 
@@ -129,6 +131,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		staged:           cfg.Staged,
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
+		wrapMode:         cfg.Wrap,
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
@@ -620,7 +623,7 @@ func (m Model) hunkSegment() string {
 	return fmt.Sprintf("%d hunks", total)
 }
 
-// statusModeIcons returns combined mode indicator icons (▼ for collapsed, ◉ for filter).
+// statusModeIcons returns combined mode indicator icons (▼ for collapsed, ◉ for filter, ↩ for wrap).
 func (m Model) statusModeIcons() string {
 	var icons []string
 	if m.collapsed.enabled {
@@ -628,6 +631,9 @@ func (m Model) statusModeIcons() string {
 	}
 	if m.tree.filter {
 		icons = append(icons, "◉")
+	}
+	if m.wrapMode {
+		icons = append(icons, "↩")
 	}
 	return strings.Join(icons, " ")
 }
