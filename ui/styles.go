@@ -56,6 +56,8 @@ type styles struct {
 	DiffCursorLine lipgloss.Style
 	// annotation
 	AnnotationLine lipgloss.Style
+
+	colors Colors // original color values for dynamic style construction
 }
 
 // normalizeColor ensures hex color values have a # prefix.
@@ -171,6 +173,8 @@ func newStyles(c Colors) styles {
 		AnnotationLine: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)).
 			Italic(true),
+
+		colors: c,
 	}
 }
 
