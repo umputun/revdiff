@@ -4,7 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileTree_BuildEntries(t *testing.T) {
@@ -439,6 +441,28 @@ func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 	assert.Contains(t, result, "…", "long dir name should be truncated with ellipsis")
 	assert.Contains(t, result, "references/", "truncated dir should show trailing path")
 	assert.NotContains(t, result, ".claude-plugin/skills/revdiff/references/", "full dir name should not appear")
+}
+
+func TestFileTree_RenderTruncatesLongFileNames(t *testing.T) {
+	files := []string{"docs/plans/completed/20260402-status-line-help-overlay.md"}
+	ft := newFileTree(files)
+	s := plainStyles()
+
+	// narrow tree pane should truncate long filename with ellipsis
+	result := ft.render(30, 10, nil, s)
+	lines := strings.Split(result, "\n")
+
+	// find the file entry line (not the dir entry)
+	var fileLine string
+	for _, l := range lines {
+		if strings.Contains(l, ".md") {
+			fileLine = l
+			break
+		}
+	}
+	require.NotEmpty(t, fileLine, "should find the .md file entry")
+	assert.Contains(t, fileLine, "…", "long filename should be truncated with ellipsis")
+	assert.LessOrEqual(t, lipgloss.Width(fileLine), 30, "file entry should not exceed pane width")
 }
 
 func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
