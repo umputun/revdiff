@@ -20,11 +20,18 @@ trap 'rm -f "$OUTPUT_FILE"' EXIT
 REVDIFF_CMD="$REVDIFF_BIN --output=$OUTPUT_FILE $*"
 CWD="$(pwd)"
 
-# build descriptive title: "revdiff: dirname [ref]"
+# build descriptive title: "rd: dirname [ref]"
 DIR_NAME=$(basename "$CWD")
 TITLE_REF=""
+SKIP_NEXT=0
 for arg in "$@"; do
-    case "$arg" in --*) ;; *) TITLE_REF="$arg"; break ;; esac
+    if [ "$SKIP_NEXT" -eq 1 ]; then SKIP_NEXT=0; continue; fi
+    case "$arg" in
+        -o|--output) SKIP_NEXT=1 ;;
+        --output=*) ;;
+        -*) ;;
+        *) TITLE_REF="$arg"; break ;;
+    esac
 done
 OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 
