@@ -70,6 +70,9 @@ type Model struct {
 
 	collapsed collapsedState // collapsed diff view state
 
+	fileAdds    int // cached count of added lines in current file
+	fileRemoves int // cached count of removed lines in current file
+
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
@@ -413,6 +416,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
@@ -421,6 +425,19 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, nil
+}
+
+// computeFileStats counts added and removed lines in the current diffLines.
+func (m *Model) computeFileStats() {
+	m.fileAdds, m.fileRemoves = 0, 0
+	for _, dl := range m.diffLines {
+		switch dl.ChangeType {
+		case diff.ChangeAdd:
+			m.fileAdds++
+		case diff.ChangeRemove:
+			m.fileRemoves++
+		}
+	}
 }
 
 // skipInitialDividers positions diffCursor on the first visible line.
