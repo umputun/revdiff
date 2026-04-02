@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
@@ -520,14 +521,9 @@ func (m Model) statusBarText() string {
 	// build left-side segments
 	var segments []string
 
-	// filename segment
+	// filename and diff stats segments
 	if m.currFile != "" {
-		segments = append(segments, m.currFile)
-	}
-
-	// diff stats segment
-	if m.currFile != "" {
-		segments = append(segments, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
 	}
 
 	// hunk position (only when cursor is on a changed line in diff pane)
@@ -548,7 +544,11 @@ func (m Model) statusBarText() string {
 	// build right-side segments
 	var rightParts []string
 	if cnt := m.store.Count(); cnt > 0 {
-		rightParts = append(rightParts, fmt.Sprintf("%d annotations", cnt))
+		suffix := "annotations"
+		if cnt == 1 {
+			suffix = "annotation"
+		}
+		rightParts = append(rightParts, fmt.Sprintf("%d %s", cnt, suffix))
 	}
 	rightParts = append(rightParts, "? help")
 
@@ -556,33 +556,45 @@ func (m Model) statusBarText() string {
 	right := strings.Join(rightParts, "  ")
 
 	// truncate filename from left with … if status line is too wide
-	minRight := len(right) + 4 // 2 for status bar padding + 2 for separator
+	minRight := lipgloss.Width(right) + 4 // 2 for status bar padding + 2 for separator
 	available := max(m.width-minRight, 0)
 
 	// graceful degradation: drop segments from right to left when too narrow
-	if len(left) > available {
+	if lipgloss.Width(left) > available {
 		// rebuild without mode icons first
 		segments = m.statusSegmentsNoIcons()
 		left = strings.Join(segments, "  ")
 	}
-	if len(left) > available {
+	if lipgloss.Width(left) > available {
 		// rebuild without hunk info
 		segments = m.statusSegmentsMinimal()
 		left = strings.Join(segments, "  ")
 	}
-	if len(left) > available && m.currFile != "" {
-		// truncate filename
+	if lipgloss.Width(left) > available && m.currFile != "" {
+		// truncate filename from left, keeping end of path.
+		// uses display-width measurement to handle wide characters (CJK, emoji)
 		statsStr := fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
-		nameMax := max(available-len(statsStr)-2, 4) // 2 for separator between name and stats
+		nameMax := max(available-lipgloss.Width(statsStr)-2, 4) // 2 for separator between name and stats
 		name := m.currFile
-		if len(name) > nameMax {
-			name = "…" + name[len(name)-nameMax+1:]
+		if lipgloss.Width(name) > nameMax {
+			budget := nameMax - 1 // reserve 1 cell for "…"
+			runes := []rune(name)
+			w, cutIdx := 0, len(runes)
+			for i := len(runes) - 1; i >= 0; i-- {
+				rw := runewidth.RuneWidth(runes[i])
+				if w+rw > budget {
+					break
+				}
+				w += rw
+				cutIdx = i
+			}
+			name = "…" + string(runes[cutIdx:])
 		}
 		left = name + "  " + statsStr
 	}
 
 	// pad left to push right section to the end
-	padding := m.width - len(left) - len(right) - 2 // 2 for status bar padding
+	padding := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2 // 2 for status bar padding
 	if padding > 0 {
 		return left + strings.Repeat(" ", padding) + right
 	}
@@ -619,28 +631,31 @@ func (m Model) statusSegmentsMinimal() []string {
 func (m Model) helpOverlay() string {
 	help := "" +
 		"Navigation\n" +
-		"  tab        switch pane\n" +
-		"  n / p      next / prev file\n" +
-		"  j / k      scroll down / up\n" +
-		"  g / G      top / bottom\n" +
-		"  h / l      scroll left / right\n" +
-		"  { / }      prev / next hunk\n" +
-		"  enter      focus diff pane\n" +
+		"  tab          switch pane\n" +
+		"  n / p        next / prev file\n" +
+		"  j / k        scroll down / up\n" +
+		"  PgDn/PgUp    page down / up\n" +
+		"  Ctrl+d/u     half-page down / up\n" +
+		"  Home/End     top / bottom\n" +
+		"  h / l        focus tree / diff pane\n" +
+		"  \u2190 / \u2192        scroll left / right (diff)\n" +
+		"  [ / ]        prev / next hunk\n" +
+		"  enter        focus diff pane\n" +
 		"\n" +
 		"Annotations\n" +
-		"  enter      annotate line (diff pane)\n" +
-		"  A          annotate file\n" +
-		"  f          filter annotated files\n" +
+		"  a / enter    annotate line (diff pane)\n" +
+		"  A            annotate file\n" +
+		"  d            delete annotation\n" +
 		"\n" +
 		"View\n" +
-		"  v          toggle collapsed mode\n" +
-		"  .          expand/collapse hunk\n" +
-		"  [ / ]      narrow / widen tree\n" +
+		"  v            toggle collapsed mode\n" +
+		"  .            expand/collapse hunk\n" +
+		"  f            filter annotated files\n" +
 		"\n" +
 		"Quit\n" +
-		"  q          quit\n" +
-		"  Q          discard annotations & quit\n" +
-		"  ? / esc    close help"
+		"  q            quit\n" +
+		"  Q            discard annotations & quit\n" +
+		"  ? / esc      close help"
 
 	border := lipgloss.NormalBorder()
 	boxStyle := lipgloss.NewStyle().

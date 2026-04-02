@@ -20,9 +20,17 @@ trap 'rm -f "$OUTPUT_FILE"' EXIT
 REVDIFF_CMD="$REVDIFF_BIN --output=$OUTPUT_FILE $*"
 CWD="$(pwd)"
 
+# build descriptive title: "revdiff: dirname [ref]"
+DIR_NAME=$(basename "$CWD")
+TITLE_REF=""
+for arg in "$@"; do
+    case "$arg" in --*) ;; *) TITLE_REF="$arg"; break ;; esac
+done
+OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w 90% -h 90% -T " revdiff " -d "$CWD" -- sh -c "$REVDIFF_CMD"
+    tmux display-popup -E -w 90% -h 90% -T " $OVERLAY_TITLE " -d "$CWD" -- sh -c "$REVDIFF_CMD"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -33,7 +41,7 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
     rm -f "$SENTINEL"
 
-    KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="revdiff" --cwd="$CWD")
+    KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd="$CWD")
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
         KITTY_ARGS+=(--match "id:${KITTY_WINDOW_ID}")
     fi
