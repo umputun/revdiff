@@ -32,7 +32,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 
 func TestParseArgs_NoConfirmDiscard(t *testing.T) {
 	t.Run("flag", func(t *testing.T) {
-		opts, err := parseArgs([]string{"--no-confirm-discard"})
+		opts, err := parseArgs(append(noConfigArgs(t), "--no-confirm-discard"))
 		require.NoError(t, err)
 		assert.True(t, opts.NoConfirmDiscard)
 	})
