@@ -436,6 +436,8 @@ func (m *Model) computeFileStats() {
 			m.fileAdds++
 		case diff.ChangeRemove:
 			m.fileRemoves++
+		case diff.ChangeContext, diff.ChangeDivider:
+			// not counted in stats
 		}
 	}
 }
@@ -498,12 +500,13 @@ func (m Model) View() string {
 		return mainView
 	}
 
-	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText(annotated))
+	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText())
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
 
-// statusBarText returns context-sensitive status bar hints.
-func (m Model) statusBarText(annotated map[string]bool) string {
+// statusBarText returns context-sensitive status line content.
+// shows filename, diff stats, hunk position, mode indicators, and right-aligned annotation count + help hint.
+func (m Model) statusBarText() string {
 	if m.inConfirmDiscard {
 		return fmt.Sprintf("discard %d annotations? [y/n]", m.store.Count())
 	}
@@ -512,59 +515,102 @@ func (m Model) statusBarText(annotated map[string]bool) string {
 		return "[enter] save  [esc] cancel"
 	}
 
-	filterHint := ""
-	if len(annotated) > 0 {
-		filterHint = "  [f] filter"
-	}
-	fileNoteHint := ""
+	// build left-side segments
+	var segments []string
+
+	// filename segment
 	if m.currFile != "" {
-		fileNoteHint = "  [A] file note"
+		segments = append(segments, m.currFile)
 	}
 
-	annotationCount := m.store.Count()
-	countHint := ""
-	if annotationCount > 0 {
-		countHint = fmt.Sprintf("  %d annotations", annotationCount)
+	// diff stats segment
+	if m.currFile != "" {
+		segments = append(segments, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
 	}
 
-	var hints string
-	switch m.focus {
-	case paneTree:
-		hints = "[j/k] navigate  [enter] select  [l/tab] diff" + filterHint + "  [n/p] next/prev  [Q] discard  [q] quit"
-	case paneDiff:
-		deleteHint := ""
-		if m.cursorLineHasAnnotation() {
-			deleteHint = "  [d] delete"
+	// hunk position (only when cursor is on a changed line in diff pane)
+	if m.focus == paneDiff {
+		if cur, total := m.currentHunk(); total > 0 && cur > 0 {
+			segments = append(segments, fmt.Sprintf("hunk %d/%d", cur, total))
 		}
-		hunkHint := ""
-		if cur, total := m.currentHunk(); total > 0 {
-			hunkHint = fmt.Sprintf("  [ ] hunk %d/%d", cur, total)
-		}
-		viewModeHint := "  [v] collapse"
-		if m.collapsed.enabled {
-			viewModeHint = "  [v] expand"
-		}
-		dotHint := ""
-		if m.collapsed.enabled {
-			if hs, ok := m.cursorHunkStart(); ok && m.collapsed.expandedHunks[hs] {
-				dotHint = "  [.] collapse hunk"
-			} else if ok {
-				dotHint = "  [.] expand hunk"
-			}
-		}
-		hints = "[j/k] scroll  [h/tab] files  [enter/a] annotate" + deleteHint + hunkHint + viewModeHint + dotHint + filterHint + fileNoteHint + "  [n/p] next/prev  [Q] discard  [q] quit"
 	}
 
-	if countHint != "" {
-		// pad hints to push annotation count to the right
-		padding := m.width - len(hints) - len(countHint) - 2 // 2 for status bar padding
-		if padding > 0 {
-			hints += strings.Repeat(" ", padding) + countHint
-		} else {
-			hints += countHint
+	// mode indicators
+	if m.collapsed.enabled {
+		segments = append(segments, "▼")
+	}
+	if m.tree.filter {
+		segments = append(segments, "◉")
+	}
+
+	// build right-side segments
+	var rightParts []string
+	if cnt := m.store.Count(); cnt > 0 {
+		rightParts = append(rightParts, fmt.Sprintf("%d annotations", cnt))
+	}
+	rightParts = append(rightParts, "? help")
+
+	left := strings.Join(segments, "  ")
+	right := strings.Join(rightParts, "  ")
+
+	// truncate filename from left with … if status line is too wide
+	minRight := len(right) + 4 // 2 for status bar padding + 2 for separator
+	available := max(m.width-minRight, 0)
+
+	// graceful degradation: drop segments from right to left when too narrow
+	if len(left) > available {
+		// rebuild without mode icons first
+		segments = m.statusSegmentsNoIcons()
+		left = strings.Join(segments, "  ")
+	}
+	if len(left) > available {
+		// rebuild without hunk info
+		segments = m.statusSegmentsMinimal()
+		left = strings.Join(segments, "  ")
+	}
+	if len(left) > available && m.currFile != "" {
+		// truncate filename
+		statsStr := fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
+		nameMax := max(available-len(statsStr)-2, 4) // 2 for separator between name and stats
+		name := m.currFile
+		if len(name) > nameMax {
+			name = "…" + name[len(name)-nameMax+1:]
+		}
+		left = name + "  " + statsStr
+	}
+
+	// pad left to push right section to the end
+	padding := m.width - len(left) - len(right) - 2 // 2 for status bar padding
+	if padding > 0 {
+		return left + strings.Repeat(" ", padding) + right
+	}
+	if left != "" {
+		return left + "  " + right
+	}
+	return right
+}
+
+// statusSegmentsNoIcons returns left segments without mode indicators (▼ ◉).
+func (m Model) statusSegmentsNoIcons() []string {
+	var segments []string
+	if m.currFile != "" {
+		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+	}
+	if m.focus == paneDiff {
+		if cur, total := m.currentHunk(); total > 0 && cur > 0 {
+			segments = append(segments, fmt.Sprintf("hunk %d/%d", cur, total))
 		}
 	}
-	return hints
+	return segments
+}
+
+// statusSegmentsMinimal returns left segments with only filename and stats.
+func (m Model) statusSegmentsMinimal() []string {
+	var segments []string
+	if m.currFile != "" {
+		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+	}
+	return segments
 }
 
 // handleDiscardQuit handles the Q key press for discard-and-quit.
