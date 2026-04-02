@@ -8,6 +8,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
 - Full-file diff view with syntax highlighting
+- Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Hunk navigation to jump between change groups
@@ -163,6 +164,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-add-bg` | Added line background | `#123800` |
 | `--color-remove-fg` | Removed line text | `#ff8787` |
 | `--color-remove-bg` | Removed line background | `#4D1100` |
+| `--color-modify-fg` | Modified line text (collapsed mode) | `#f5c542` |
+| `--color-modify-bg` | Modified line background (collapsed mode) | `#3D2E00` |
 | `--color-tree-bg` | File tree pane background | terminal default |
 | `--color-diff-bg` | Diff pane background | terminal default |
 | `--color-status-fg` | Status bar foreground | `#2D2D2D` |
@@ -227,6 +230,8 @@ revdiff HEAD~1
 
 | Key | Action |
 |-----|--------|
+| `v` | Toggle collapsed diff mode (shows final text with change markers) |
+| `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
