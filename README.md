@@ -13,6 +13,8 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Hunk navigation to jump between change groups
 - Filter file tree to show only annotated files
+- Status line with filename, diff stats, hunk position, and mode indicators
+- Help overlay (`?`) showing all keybindings organized by section
 - Fully customizable colors via environment variables, CLI flags, or config file
 
 ![revdiff screenshot](screenshot.png)
@@ -233,6 +235,7 @@ revdiff HEAD~1
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
+| `?` | Toggle help overlay showing all keybindings |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
 

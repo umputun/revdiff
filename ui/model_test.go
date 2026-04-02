@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -926,6 +927,23 @@ func TestModel_StatusBarFilenameTruncation(t *testing.T) {
 	assert.Contains(t, status, "? help", "should still show help hint")
 }
 
+func TestModel_StatusBarFilenameTruncationWideChars(t *testing.T) {
+	// CJK characters are 2 display cells wide per rune, the truncation must use
+	// display-width measurement, not rune count, to avoid overflowing the status line
+	wideFile := "path/to/日本語のファイル名/テスト.go"
+	m := testModel(nil, nil)
+	m.currFile = wideFile
+	m.fileAdds = 1
+	m.fileRemoves = 0
+	m.focus = paneDiff
+	m.width = 40
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "…", "should truncate wide-char filename with ellipsis")
+	assert.Contains(t, status, "+1/-0", "should still show stats after truncation")
+	assert.LessOrEqual(t, lipgloss.Width(status), m.width-2, "status text must fit within terminal width minus padding")
+}
+
 func TestModel_StatusBarModeIndicators(t *testing.T) {
 	m := testModel(nil, nil)
 	m.currFile = "a.go"
@@ -979,14 +997,15 @@ func TestModel_StatusBarNarrowTerminalDegradation(t *testing.T) {
 	})
 
 	t.Run("narrow terminal drops icons first", func(t *testing.T) {
-		m.width = 40
+		m.width = 35
 		status := m.statusBarText()
 		assert.Contains(t, status, "? help")
-		assert.NotContains(t, status, "◉", "icons should be dropped on narrow terminal")
+		assert.NotContains(t, status, "◉", "filter icon should be dropped on narrow terminal")
+		assert.NotContains(t, status, "▼", "collapsed icon should be dropped on narrow terminal")
 	})
 
 	t.Run("very narrow terminal drops hunk info", func(t *testing.T) {
-		m.width = 30
+		m.width = 28
 		status := m.statusBarText()
 		assert.Contains(t, status, "? help")
 		assert.NotContains(t, status, "hunk", "hunk should be dropped on very narrow terminal")
@@ -1507,7 +1526,7 @@ func TestModel_StatusBarNoShortcutHintsInDiffPane(t *testing.T) {
 	assert.NotContains(t, status, "[q]")
 	// should show filename, stats, annotation count, help hint
 	assert.Contains(t, status, "a.go")
-	assert.Contains(t, status, "1 annotations")
+	assert.Contains(t, status, "1 annotation")
 	assert.Contains(t, status, "? help")
 }
 
@@ -2261,7 +2280,7 @@ func TestModel_StatusBarNoFilenameWithoutFile(t *testing.T) {
 	m.focus = paneTree
 
 	status := m.statusBarText()
-	assert.NotContains(t, status, "+")
+	assert.NotContains(t, status, "/-", "no diff stats should be shown without a file")
 	assert.Contains(t, status, "? help")
 }
 
@@ -3048,8 +3067,8 @@ func TestModel_HelpOverlayKeyListings(t *testing.T) {
 
 	// verify key listings are present
 	keys := []string{
-		"tab", "n / p", "j / k", "g / G", "h / l", "{ / }",
-		"enter", "A", "f", "v", ".", "[ / ]",
+		"tab", "n / p", "j / k", "PgDn/PgUp", "Ctrl+d/u", "Home/End", "h / l", "← / →", "[ / ]",
+		"a / enter", "A", "d", "f", "v", ".",
 		"q", "Q", "? / esc",
 	}
 	for _, k := range keys {
@@ -3118,7 +3137,7 @@ func TestModel_HelpBlocksOtherKeys(t *testing.T) {
 	m.showHelp = true
 
 	// navigation keys should be blocked
-	for _, key := range []rune{'n', 'p', 'v', 'f', 'q', 'j', 'k'} {
+	for _, key := range []rune{'n', 'p', 'v', 'f', 'q', 'Q', 'j', 'k'} {
 		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
 		model := result.(Model)
 		assert.True(t, model.showHelp, "key %q should not close help", string(key))
