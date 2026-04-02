@@ -29,8 +29,17 @@ func (m Model) renderCollapsedDiff() string {
 	m.renderFileAnnotationHeader(&b, fileComment)
 
 	hasVisibleContent := false
+	hunkIdx := 0
 	for i, dl := range m.diffLines {
-		hunkStart := m.hunkStartFor(i, hunks)
+		// advance hunk tracker to the last hunk that starts at or before i
+		for hunkIdx+1 < len(hunks) && hunks[hunkIdx+1] <= i {
+			hunkIdx++
+		}
+		hunkStart := -1
+		isChange := dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove
+		if isChange && len(hunks) > 0 && hunks[hunkIdx] <= i {
+			hunkStart = hunks[hunkIdx]
+		}
 		expanded := hunkStart >= 0 && m.collapsed.expandedHunks[hunkStart]
 
 		switch dl.ChangeType {
