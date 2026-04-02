@@ -196,6 +196,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAnnotateKey(msg)
 	}
 
+	// help overlay: toggle with ?, dismiss with esc, block everything else
+	if msg.String() == "?" || m.showHelp {
+		return m.handleHelpKey(msg)
+	}
+
 	switch {
 	case msg.String() == "Q":
 		return m.handleDiscardQuit()
@@ -225,18 +230,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.loadSelectedIfChanged()
 
 	case msg.String() == "enter":
-		switch m.focus {
-		case paneTree:
-			if m.currFile != "" {
-				m.focus = paneDiff
-			}
-			return m, nil
-		case paneDiff:
-			cmd := m.startAnnotation()
-			m.viewport.SetContent(m.renderDiff())
-			return m, cmd
-		}
-		return m, nil
+		return m.handleEnterKey()
 
 	case msg.String() == "A":
 		// file-level annotation only from diff pane to avoid annotating the wrong file
@@ -664,6 +658,35 @@ func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	m.inConfirmDiscard = true
+	return m, nil
+}
+
+// handleEnterKey handles enter key based on current pane focus.
+func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
+	switch m.focus {
+	case paneTree:
+		if m.currFile != "" {
+			m.focus = paneDiff
+		}
+		return m, nil
+	case paneDiff:
+		cmd := m.startAnnotation()
+		m.viewport.SetContent(m.renderDiff())
+		return m, cmd
+	}
+	return m, nil
+}
+
+// handleHelpKey handles help overlay keys.
+// ? toggles the overlay, esc closes it, all other keys are blocked while showing.
+func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "?" {
+		m.showHelp = !m.showHelp
+		return m, nil
+	}
+	if msg.Type == tea.KeyEsc {
+		m.showHelp = false
+	}
 	return m, nil
 }
 

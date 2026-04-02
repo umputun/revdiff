@@ -3079,3 +3079,61 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	assert.Contains(t, view, "View")
 	assert.Contains(t, view, "Quit")
 }
+
+func TestModel_HelpToggle(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}}})
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	assert.False(t, m.showHelp)
+
+	// press ? to open help
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := result.(Model)
+	assert.True(t, model.showHelp)
+
+	// press ? again to close help
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model = result.(Model)
+	assert.False(t, model.showHelp)
+}
+
+func TestModel_HelpCloseWithEsc(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}}})
+	m.currFile = "a.go"
+	m.showHelp = true
+
+	// press esc to close help
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := result.(Model)
+	assert.False(t, model.showHelp)
+}
+
+func TestModel_HelpBlocksOtherKeys(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}},
+		"b.go": {{ChangeType: diff.ChangeContext, Content: "y"}},
+	})
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.showHelp = true
+
+	// navigation keys should be blocked
+	for _, key := range []rune{'n', 'p', 'v', 'f', 'q', 'j', 'k'} {
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+		model := result.(Model)
+		assert.True(t, model.showHelp, "key %q should not close help", string(key))
+		assert.Nil(t, cmd, "key %q should produce no command", string(key))
+	}
+
+	// tab should also be blocked
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model := result.(Model)
+	assert.True(t, model.showHelp, "tab should not close help")
+	assert.Nil(t, cmd, "tab should produce no command")
+
+	// enter should be blocked
+	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+	assert.True(t, model.showHelp, "enter should not close help")
+	assert.Nil(t, cmd, "enter should produce no command")
+}
