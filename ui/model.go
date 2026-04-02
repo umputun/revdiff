@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/annotation"
@@ -494,9 +495,9 @@ func (m Model) View() string {
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
 	if m.showHelp {
-		// replace main content with centered help overlay
+		// overlay help popup on top of current content
 		helpBox := m.helpOverlay()
-		mainView = lipgloss.Place(m.width, ph+2, lipgloss.Center, lipgloss.Center, helpBox)
+		mainView = m.overlayCenter(mainView, helpBox)
 	}
 
 	if m.noStatusBar {
@@ -526,19 +527,14 @@ func (m Model) statusBarText() string {
 		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
 	}
 
-	// hunk position (only when cursor is on a changed line in diff pane)
-	if m.focus == paneDiff {
-		if cur, total := m.currentHunk(); total > 0 && cur > 0 {
-			segments = append(segments, fmt.Sprintf("hunk %d/%d", cur, total))
-		}
+	// hunk position (always shown in diff pane when there are hunks)
+	if hs := m.hunkSegment(); hs != "" {
+		segments = append(segments, hs)
 	}
 
-	// mode indicators
-	if m.collapsed.enabled {
-		segments = append(segments, "▼")
-	}
-	if m.tree.filter {
-		segments = append(segments, "◉")
+	// mode indicators (combined into one segment)
+	if modeIcons := m.statusModeIcons(); modeIcons != "" {
+		segments = append(segments, modeIcons)
 	}
 
 	// build right-side segments
@@ -552,29 +548,30 @@ func (m Model) statusBarText() string {
 	}
 	rightParts = append(rightParts, "? help")
 
-	left := strings.Join(segments, "  ")
-	right := strings.Join(rightParts, "  ")
+	const sep = " | "
+	left := strings.Join(segments, sep)
+	right := strings.Join(rightParts, sep)
 
 	// truncate filename from left with … if status line is too wide
-	minRight := lipgloss.Width(right) + 4 // 2 for status bar padding + 2 for separator
+	minRight := lipgloss.Width(right) + 5 // 2 for status bar padding + 3 for separator
 	available := max(m.width-minRight, 0)
 
 	// graceful degradation: drop segments from right to left when too narrow
 	if lipgloss.Width(left) > available {
 		// rebuild without mode icons first
 		segments = m.statusSegmentsNoIcons()
-		left = strings.Join(segments, "  ")
+		left = strings.Join(segments, sep)
 	}
 	if lipgloss.Width(left) > available {
 		// rebuild without hunk info
 		segments = m.statusSegmentsMinimal()
-		left = strings.Join(segments, "  ")
+		left = strings.Join(segments, sep)
 	}
 	if lipgloss.Width(left) > available && m.currFile != "" {
 		// truncate filename from left, keeping end of path.
 		// uses display-width measurement to handle wide characters (CJK, emoji)
 		statsStr := fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
-		nameMax := max(available-lipgloss.Width(statsStr)-2, 4) // 2 for separator between name and stats
+		nameMax := max(available-lipgloss.Width(statsStr)-len(sep), 4) // reserve separator between name and stats
 		name := m.currFile
 		if lipgloss.Width(name) > nameMax {
 			budget := nameMax - 1 // reserve 1 cell for "…"
@@ -590,7 +587,7 @@ func (m Model) statusBarText() string {
 			}
 			name = "…" + string(runes[cutIdx:])
 		}
-		left = name + "  " + statsStr
+		left = name + sep + statsStr
 	}
 
 	// pad left to push right section to the end
@@ -599,9 +596,40 @@ func (m Model) statusBarText() string {
 		return left + strings.Repeat(" ", padding) + right
 	}
 	if left != "" {
-		return left + "  " + right
+		return left + sep + right
 	}
 	return right
+}
+
+// hunkSegment returns a formatted hunk position string for the status line.
+// returns "hunk X/Y" when cursor is on a changed line, "N hunks"/"1 hunk" otherwise, or empty if not in diff pane.
+func (m Model) hunkSegment() string {
+	if m.focus != paneDiff {
+		return ""
+	}
+	cur, total := m.currentHunk()
+	if total == 0 {
+		return ""
+	}
+	if cur > 0 {
+		return fmt.Sprintf("hunk %d/%d", cur, total)
+	}
+	if total == 1 {
+		return "1 hunk"
+	}
+	return fmt.Sprintf("%d hunks", total)
+}
+
+// statusModeIcons returns combined mode indicator icons (▼ for collapsed, ◉ for filter).
+func (m Model) statusModeIcons() string {
+	var icons []string
+	if m.collapsed.enabled {
+		icons = append(icons, "▼")
+	}
+	if m.tree.filter {
+		icons = append(icons, "◉")
+	}
+	return strings.Join(icons, " ")
 }
 
 // statusSegmentsNoIcons returns left segments without mode indicators (▼ ◉).
@@ -610,10 +638,8 @@ func (m Model) statusSegmentsNoIcons() []string {
 	if m.currFile != "" {
 		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
 	}
-	if m.focus == paneDiff {
-		if cur, total := m.currentHunk(); total > 0 && cur > 0 {
-			segments = append(segments, fmt.Sprintf("hunk %d/%d", cur, total))
-		}
+	if hs := m.hunkSegment(); hs != "" {
+		segments = append(segments, hs)
 	}
 	return segments
 }
@@ -664,6 +690,39 @@ func (m Model) helpOverlay() string {
 		Padding(1, 2)
 
 	return boxStyle.Render(help)
+}
+
+// overlayCenter composites fg on top of bg, centered horizontally and vertically.
+// uses ANSI-aware string cutting to preserve styling in both layers.
+func (m Model) overlayCenter(bg, fg string) string {
+	bgLines := strings.Split(bg, "\n")
+	fgLines := strings.Split(fg, "\n")
+
+	fgWidth := lipgloss.Width(fg)
+	fgHeight := len(fgLines)
+	bgHeight := len(bgLines)
+
+	startY := (bgHeight - fgHeight) / 2
+	startX := max((m.width-fgWidth)/2, 0)
+
+	for i, fgLine := range fgLines {
+		bgIdx := startY + i
+		if bgIdx < 0 || bgIdx >= bgHeight {
+			continue
+		}
+		bgLine := bgLines[bgIdx]
+		// pad bg line to full width so right part is always available
+		bgW := lipgloss.Width(bgLine)
+		if bgW < m.width {
+			bgLine += strings.Repeat(" ", m.width-bgW)
+		}
+
+		left := ansi.Cut(bgLine, 0, startX)
+		right := ansi.Cut(bgLine, startX+fgWidth, m.width)
+		bgLines[bgIdx] = left + fgLine + right
+	}
+
+	return strings.Join(bgLines, "\n")
 }
 
 // handleDiscardQuit handles the Q key press for discard-and-quit.
