@@ -91,6 +91,69 @@ func TestModel_FileLoaded(t *testing.T) {
 	assert.Len(t, model.diffLines, 2)
 }
 
+func TestModel_ComputeFileStats(t *testing.T) {
+	tests := []struct {
+		name    string
+		lines   []diff.DiffLine
+		adds    int
+		removes int
+	}{
+		{name: "empty diff", lines: nil, adds: 0, removes: 0},
+		{name: "context only", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "// comment", ChangeType: diff.ChangeContext},
+		}, adds: 0, removes: 0},
+		{name: "adds only", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+			{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		}, adds: 3, removes: 0},
+		{name: "removes only", lines: []diff.DiffLine{
+			{OldNum: 1, Content: "old1", ChangeType: diff.ChangeRemove},
+			{OldNum: 2, Content: "old2", ChangeType: diff.ChangeRemove},
+		}, adds: 0, removes: 2},
+		{name: "mixed changes", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old func", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new func", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "// ok", ChangeType: diff.ChangeContext},
+			{Content: "", ChangeType: diff.ChangeDivider},
+			{NewNum: 10, Content: "added line", ChangeType: diff.ChangeAdd},
+		}, adds: 2, removes: 1},
+		{name: "dividers ignored", lines: []diff.DiffLine{
+			{Content: "", ChangeType: diff.ChangeDivider},
+			{Content: "", ChangeType: diff.ChangeDivider},
+		}, adds: 0, removes: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tt.lines
+			m.computeFileStats()
+			assert.Equal(t, tt.adds, m.fileAdds, "fileAdds")
+			assert.Equal(t, tt.removes, m.fileRemoves, "fileRemoves")
+		})
+	}
+}
+
+func TestModel_FileLoadedComputesStats(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added2", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.loadSeq = 1
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: 1, lines: lines})
+	model := result.(Model)
+	assert.Equal(t, 2, model.fileAdds)
+	assert.Equal(t, 1, model.fileRemoves)
+}
+
 func TestModel_QuitKey(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 
