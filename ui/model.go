@@ -73,6 +73,8 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
+	showHelp bool // true when help overlay is visible
+
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
@@ -496,6 +498,12 @@ func (m Model) View() string {
 
 	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 
+	if m.showHelp {
+		// replace main content with centered help overlay
+		helpBox := m.helpOverlay()
+		mainView = lipgloss.Place(m.width, ph+2, lipgloss.Center, lipgloss.Center, helpBox)
+	}
+
 	if m.noStatusBar {
 		return mainView
 	}
@@ -611,6 +619,42 @@ func (m Model) statusSegmentsMinimal() []string {
 		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
 	}
 	return segments
+}
+
+// helpOverlay returns a bordered help popup with keybinding sections.
+func (m Model) helpOverlay() string {
+	help := "" +
+		"Navigation\n" +
+		"  tab        switch pane\n" +
+		"  n / p      next / prev file\n" +
+		"  j / k      scroll down / up\n" +
+		"  g / G      top / bottom\n" +
+		"  h / l      scroll left / right\n" +
+		"  { / }      prev / next hunk\n" +
+		"  enter      focus diff pane\n" +
+		"\n" +
+		"Annotations\n" +
+		"  enter      annotate line (diff pane)\n" +
+		"  A          annotate file\n" +
+		"  f          filter annotated files\n" +
+		"\n" +
+		"View\n" +
+		"  v          toggle collapsed mode\n" +
+		"  .          expand/collapse hunk\n" +
+		"  [ / ]      narrow / widen tree\n" +
+		"\n" +
+		"Quit\n" +
+		"  q          quit\n" +
+		"  Q          discard annotations & quit\n" +
+		"  ? / esc    close help"
+
+	border := lipgloss.NormalBorder()
+	boxStyle := lipgloss.NewStyle().
+		Border(border).
+		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
+		Padding(1, 2)
+
+	return boxStyle.Render(help)
 }
 
 // handleDiscardQuit handles the Q key press for discard-and-quit.

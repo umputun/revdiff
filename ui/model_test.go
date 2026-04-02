@@ -3028,3 +3028,54 @@ func TestModel_StatusBarNoKeyHints(t *testing.T) {
 		assert.Contains(t, status, "? help")
 	})
 }
+
+func TestModel_HelpOverlaySections(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	help := m.helpOverlay()
+
+	// verify section headers are present
+	assert.Contains(t, help, "Navigation")
+	assert.Contains(t, help, "Annotations")
+	assert.Contains(t, help, "View")
+	assert.Contains(t, help, "Quit")
+}
+
+func TestModel_HelpOverlayKeyListings(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	help := m.helpOverlay()
+
+	// verify key listings are present
+	keys := []string{
+		"tab", "n / p", "j / k", "g / G", "h / l", "{ / }",
+		"enter", "A", "f", "v", ".", "[ / ]",
+		"q", "Q", "? / esc",
+	}
+	for _, k := range keys {
+		assert.Contains(t, help, k, "help overlay should contain key: %s", k)
+	}
+}
+
+func TestModel_HelpOverlayInView(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	m.tree = newFileTree([]string{"a.go"})
+	m.ready = true
+	m.width = 80
+	m.height = 30
+
+	// without help, view should not contain help sections
+	m.showHelp = false
+	view := m.View()
+	assert.NotContains(t, view, "Navigation")
+	assert.NotContains(t, view, "Annotations")
+
+	// with help, view should contain help sections
+	m.showHelp = true
+	view = m.View()
+	assert.Contains(t, view, "Navigation")
+	assert.Contains(t, view, "Annotations")
+	assert.Contains(t, view, "View")
+	assert.Contains(t, view, "Quit")
+}
