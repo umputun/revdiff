@@ -1076,7 +1076,7 @@ func TestModel_CollapsedPageUpSkipsRemovedLines(t *testing.T) {
 	assert.NotEqual(t, diff.ChangeRemove, dl.ChangeType, "cursor should not land on hidden removed line")
 }
 
-func TestModel_StatusBarViewModeHint(t *testing.T) {
+func TestModel_StatusBarCollapsedIndicator(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
@@ -1087,29 +1087,21 @@ func TestModel_StatusBarViewModeHint(t *testing.T) {
 	m.focus = paneDiff
 	m.width = 200
 
-	t.Run("expanded mode shows collapse hint", func(t *testing.T) {
+	t.Run("expanded mode has no collapsed indicator", func(t *testing.T) {
 		m.collapsed.enabled = false
-		status := m.statusBarText(m.annotatedFiles())
-		assert.Contains(t, status, "[v] collapse")
-		assert.NotContains(t, status, "[v] expand")
+		status := m.statusBarText()
+		assert.NotContains(t, status, "▼")
 	})
 
-	t.Run("collapsed mode shows expand hint", func(t *testing.T) {
+	t.Run("collapsed mode shows indicator", func(t *testing.T) {
 		m.collapsed.enabled = true
 		m.collapsed.expandedHunks = make(map[int]bool)
-		status := m.statusBarText(m.annotatedFiles())
-		assert.Contains(t, status, "[v] expand")
-		assert.NotContains(t, status, "[v] collapse")
-	})
-
-	t.Run("tree pane does not show view mode hint", func(t *testing.T) {
-		m.focus = paneTree
-		status := m.statusBarText(m.annotatedFiles())
-		assert.NotContains(t, status, "[v]")
+		status := m.statusBarText()
+		assert.Contains(t, status, "▼")
 	})
 }
 
-func TestModel_StatusBarDotHint(t *testing.T) {
+func TestModel_StatusBarNoShortcutHints(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
@@ -1121,39 +1113,14 @@ func TestModel_StatusBarDotHint(t *testing.T) {
 	m.currFile = "a.go"
 	m.focus = paneDiff
 	m.width = 200
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffCursor = 2
 
-	t.Run("collapsed mode on hunk shows expand hunk hint", func(t *testing.T) {
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = make(map[int]bool)
-		m.diffCursor = 2 // on add line in hunk
-		status := m.statusBarText(m.annotatedFiles())
-		assert.Contains(t, status, "[.] expand hunk")
-		assert.NotContains(t, status, "[.] collapse hunk")
-	})
-
-	t.Run("collapsed mode on expanded hunk shows collapse hunk hint", func(t *testing.T) {
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = map[int]bool{1: true} // hunk starts at index 1
-		m.diffCursor = 2                                  // on add line in expanded hunk
-		status := m.statusBarText(m.annotatedFiles())
-		assert.Contains(t, status, "[.] collapse hunk")
-		assert.NotContains(t, status, "[.] expand hunk")
-	})
-
-	t.Run("collapsed mode on context line hides dot hint", func(t *testing.T) {
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = make(map[int]bool)
-		m.diffCursor = 0 // on context line
-		status := m.statusBarText(m.annotatedFiles())
-		assert.NotContains(t, status, "[.]")
-	})
-
-	t.Run("expanded mode hides dot hint", func(t *testing.T) {
-		m.collapsed.enabled = false
-		m.diffCursor = 2 // on changed line, but not collapsed
-		status := m.statusBarText(m.annotatedFiles())
-		assert.NotContains(t, status, "[.]")
-	})
+	status := m.statusBarText()
+	// shortcut hints are moved to help overlay, not in status line
+	assert.NotContains(t, status, "[.]")
+	assert.NotContains(t, status, "[v]")
 }
 
 func TestModel_CollapsedCursorToEndSkipsRemovedLines(t *testing.T) {

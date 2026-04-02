@@ -283,40 +283,32 @@ func TestModel_FKeyFilterToggle(t *testing.T) {
 	})
 }
 
-func TestModel_StatusBarFilterHint(t *testing.T) {
+func TestModel_StatusBarFilterIndicator(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 
-	t.Run("filter hint shown when annotations exist", func(t *testing.T) {
+	t.Run("filter icon shown when filter active", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = newFileTree([]string{"a.go"})
+		m.tree.filter = true
 		m.ready = true
 		m.currFile = "a.go"
 		m.diffLines = lines
-		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"})
+		m.width = 200
 
-		m.focus = paneTree
-		view := m.View()
-		assert.Contains(t, view, "[f] filter", "tree pane should show filter hint when annotations exist")
-
-		m.focus = paneDiff
-		view = m.View()
-		assert.Contains(t, view, "[f] filter", "diff pane should show filter hint when annotations exist")
+		status := m.statusBarText()
+		assert.Contains(t, status, "◉", "should show filter icon when filter active")
 	})
 
-	t.Run("filter hint hidden when no annotations", func(t *testing.T) {
+	t.Run("filter icon hidden when filter inactive", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = newFileTree([]string{"a.go"})
 		m.ready = true
 		m.currFile = "a.go"
 		m.diffLines = lines
+		m.width = 200
 
-		m.focus = paneTree
-		view := m.View()
-		assert.NotContains(t, view, "[f] filter", "tree pane should not show filter hint without annotations")
-
-		m.focus = paneDiff
-		view = m.View()
-		assert.NotContains(t, view, "[f] filter", "diff pane should not show filter hint without annotations")
+		status := m.statusBarText()
+		assert.NotContains(t, status, "◉", "should not show filter icon when filter inactive")
 	})
 }
 
@@ -510,19 +502,17 @@ func TestModel_ViewOutput(t *testing.T) {
 	m.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
 	m.ready = true
 
-	// tree pane focused - should show tree navigation hints
+	// tree pane focused - should show file tree and help hint
 	m.focus = paneTree
 	view := m.View()
 	assert.Contains(t, view, "a.go")
 	assert.Contains(t, view, "b.go")
-	assert.Contains(t, view, "quit")
-	assert.Contains(t, view, "navigate")
+	assert.Contains(t, view, "? help")
 
-	// diff pane focused - should show diff hints
+	// diff pane focused - should show help hint
 	m.focus = paneDiff
 	view = m.View()
-	assert.Contains(t, view, "annotate")
-	assert.Contains(t, view, "scroll")
+	assert.Contains(t, view, "? help")
 }
 
 func TestModel_ViewNotReady(t *testing.T) {
@@ -665,19 +655,23 @@ func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
 	assert.False(t, model.annotating, "enter on divider should not start annotation")
 }
 
-func TestModel_StatusBarShowsEnterAnnotateHint(t *testing.T) {
+func TestModel_StatusBarShowsFilenameAndStats(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.currFile = "a.go"
 	m.diffLines = lines
+	m.fileAdds = 1
 	m.focus = paneDiff
 
-	view := m.View()
-	assert.Contains(t, view, "[enter/a] annotate", "diff pane status bar should show enter/a annotate hint")
+	status := m.statusBarText()
+	assert.Contains(t, status, "a.go", "status bar should show filename")
+	assert.Contains(t, status, "+1/-0", "status bar should show diff stats")
+	assert.Contains(t, status, "? help", "status bar should show help hint")
 }
 
 func TestModel_AnnotateEnterSaves(t *testing.T) {
@@ -906,17 +900,109 @@ func TestModel_AnnotationCountInStatusBar(t *testing.T) {
 	m.width = 120
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
 	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "other"})
-	annotated := m.annotatedFiles()
-	status := m.statusBarText(annotated)
+	status := m.statusBarText()
 	assert.Contains(t, status, "2 annotations")
 }
 
 func TestModel_NoAnnotationCountWhenEmpty(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.width = 120
-	annotated := m.annotatedFiles()
-	status := m.statusBarText(annotated)
+	status := m.statusBarText()
 	assert.NotContains(t, status, "annotations")
+}
+
+func TestModel_StatusBarFilenameTruncation(t *testing.T) {
+	longFile := "very/long/path/to/some/deeply/nested/file/in/the/project/structure.go"
+	m := testModel(nil, nil)
+	m.currFile = longFile
+	m.fileAdds = 3
+	m.fileRemoves = 1
+	m.focus = paneDiff
+	m.width = 40 // narrow terminal forces truncation
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "…", "should truncate filename with ellipsis")
+	assert.Contains(t, status, "+3/-1", "should still show stats after truncation")
+	assert.Contains(t, status, "? help", "should still show help hint")
+}
+
+func TestModel_StatusBarModeIndicators(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+	m.diffCursor = 0
+	m.focus = paneDiff
+	m.width = 200
+
+	t.Run("both indicators when collapsed and filtered", func(t *testing.T) {
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.tree.filter = true
+		status := m.statusBarText()
+		assert.Contains(t, status, "▼")
+		assert.Contains(t, status, "◉")
+	})
+
+	t.Run("no indicators in default mode", func(t *testing.T) {
+		m.collapsed.enabled = false
+		m.tree.filter = false
+		status := m.statusBarText()
+		assert.NotContains(t, status, "▼")
+		assert.NotContains(t, status, "◉")
+	})
+}
+
+func TestModel_StatusBarNarrowTerminalDegradation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.tree.filter = true
+
+	t.Run("wide terminal shows all segments", func(t *testing.T) {
+		m.width = 200
+		status := m.statusBarText()
+		assert.Contains(t, status, "a.go")
+		assert.Contains(t, status, "+1/-0")
+		assert.Contains(t, status, "hunk 1/1")
+		assert.Contains(t, status, "▼")
+		assert.Contains(t, status, "◉")
+		assert.Contains(t, status, "? help")
+	})
+
+	t.Run("narrow terminal drops icons first", func(t *testing.T) {
+		m.width = 40
+		status := m.statusBarText()
+		assert.Contains(t, status, "? help")
+		assert.NotContains(t, status, "◉", "icons should be dropped on narrow terminal")
+	})
+
+	t.Run("very narrow terminal drops hunk info", func(t *testing.T) {
+		m.width = 30
+		status := m.statusBarText()
+		assert.Contains(t, status, "? help")
+		assert.NotContains(t, status, "hunk", "hunk should be dropped on very narrow terminal")
+	})
+}
+
+func TestModel_StatusBarStatsDisplay(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "main.go"
+	m.fileAdds = 10
+	m.fileRemoves = 5
+	m.width = 120
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "main.go")
+	assert.Contains(t, status, "+10/-5")
 }
 
 func TestModel_AnnotateStatusBar(t *testing.T) {
@@ -1397,7 +1483,7 @@ func TestModel_AnnotateRenderWithDividers(t *testing.T) {
 	assert.Contains(t, rendered, "...")
 }
 
-func TestModel_StatusBarShowsDeleteOnAnnotatedLine(t *testing.T) {
+func TestModel_StatusBarNoShortcutHintsInDiffPane(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
@@ -1408,37 +1494,21 @@ func TestModel_StatusBarShowsDeleteOnAnnotatedLine(t *testing.T) {
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.diffCursor = 0
-	m.cursorOnAnnotation = true // cursor on the annotation sub-line
+	m.cursorOnAnnotation = true
 	m.focus = paneDiff
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "review this"})
 
-	view := m.View()
-	assert.Contains(t, view, "[d] delete", "status bar should show delete hint on annotation sub-line")
-	assert.Contains(t, view, "annotate")
-}
-
-func TestModel_StatusBarHidesDeleteOnNonAnnotatedLine(t *testing.T) {
-	lines := []diff.DiffLine{
-		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
-	}
-	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
-	m.ready = true
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.diffCursor = 0
-	m.focus = paneDiff
-
-	// no annotations exist - delete hint should not appear
-	view := m.View()
-	assert.NotContains(t, view, "[d] delete", "status bar should not show delete hint on non-annotated line")
-	assert.Contains(t, view, "annotate")
-
-	// add annotation on line 2 (index 1), but cursor is on line 1 (index 0) - still no delete
-	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "some comment"})
-	view = m.View()
-	assert.NotContains(t, view, "[d] delete", "status bar should not show delete hint when cursor is on a different line")
+	status := m.statusBarText()
+	// shortcut hints moved to help overlay
+	assert.NotContains(t, status, "[d]")
+	assert.NotContains(t, status, "[enter/a]")
+	assert.NotContains(t, status, "[A]")
+	assert.NotContains(t, status, "[Q]")
+	assert.NotContains(t, status, "[q]")
+	// should show filename, stats, annotation count, help hint
+	assert.Contains(t, status, "a.go")
+	assert.Contains(t, status, "1 annotations")
+	assert.Contains(t, status, "? help")
 }
 
 func TestModel_PgDownMovesCursorByPageHeight(t *testing.T) {
@@ -2164,7 +2234,7 @@ func TestModel_CursorOnFileAnnotationLineReportsAnnotation(t *testing.T) {
 	assert.True(t, m.cursorLineHasAnnotation(), "cursor on file annotation line should report annotation")
 }
 
-func TestModel_StatusBarShowsFileNoteHint(t *testing.T) {
+func TestModel_StatusBarShowsHelpHint(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
@@ -2174,26 +2244,25 @@ func TestModel_StatusBarShowsFileNoteHint(t *testing.T) {
 	m.currFile = "a.go"
 	m.diffLines = lines
 
-	// tree pane should not show file note hint (A only works from diff pane)
 	m.focus = paneTree
-	view := m.View()
-	assert.NotContains(t, view, "[A] file note", "tree pane should not show file note hint")
+	status := m.statusBarText()
+	assert.Contains(t, status, "? help", "tree pane should show help hint")
 
-	// diff pane should show file note hint
 	m.focus = paneDiff
-	view = m.View()
-	assert.Contains(t, view, "[A] file note", "diff pane should show file note hint when file is loaded")
+	status = m.statusBarText()
+	assert.Contains(t, status, "? help", "diff pane should show help hint")
 }
 
-func TestModel_StatusBarHidesFileNoteHintWithoutFile(t *testing.T) {
+func TestModel_StatusBarNoFilenameWithoutFile(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.currFile = ""
 	m.focus = paneTree
 
-	view := m.View()
-	assert.NotContains(t, view, "[A] file note", "should not show file note hint when no file is loaded")
+	status := m.statusBarText()
+	assert.NotContains(t, status, "+")
+	assert.Contains(t, status, "? help")
 }
 
 func TestModel_CursorNavigatesToFileAnnotation(t *testing.T) {
@@ -2499,11 +2568,11 @@ func TestModel_StatusBarShowsHunkIndicator(t *testing.T) {
 	m.currFile = "a.go"
 	m.focus = paneDiff
 
-	status := m.statusBarText(m.annotatedFiles())
-	assert.Contains(t, status, "[ ] hunk 1/2")
+	status := m.statusBarText()
+	assert.Contains(t, status, "hunk 1/2")
 
 	m.diffCursor = 3
-	status = m.statusBarText(m.annotatedFiles())
+	status = m.statusBarText()
 	assert.Contains(t, status, "hunk 2/2")
 }
 
@@ -2519,24 +2588,24 @@ func TestModel_StatusBarNoHunkIndicatorWithoutChanges(t *testing.T) {
 	m.currFile = "a.go"
 	m.focus = paneDiff
 
-	status := m.statusBarText(m.annotatedFiles())
-	assert.NotContains(t, status, "[ ] hunk", "should not show hunk hint when no hunks")
+	status := m.statusBarText()
+	assert.NotContains(t, status, "hunk", "should not show hunk when cursor on context line")
 }
 
-func TestModel_StatusBarHunksHintInDiffPane(t *testing.T) {
+func TestModel_StatusBarHunkOnlyInDiffPane(t *testing.T) {
 	m := testModel(nil, nil)
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
 	m.diffCursor = 0
 	m.focus = paneDiff
 
-	status := m.statusBarText(m.annotatedFiles())
-	assert.Contains(t, status, "[ ] hunk 1/1")
+	status := m.statusBarText()
+	assert.Contains(t, status, "hunk 1/1")
 
-	// tree pane should not show hunk hint
+	// tree pane should not show hunk
 	m.focus = paneTree
-	status = m.statusBarText(m.annotatedFiles())
-	assert.NotContains(t, status, "[ ] hunk")
+	status = m.statusBarText()
+	assert.NotContains(t, status, "hunk")
 }
 
 func TestModel_EditExistingFileAnnotationShowsInput(t *testing.T) {
@@ -2933,26 +3002,29 @@ func TestModel_StatusBarDiscardConfirmation(t *testing.T) {
 	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "other"})
 	m.inConfirmDiscard = true
 
-	annotated := m.annotatedFiles()
-	status := m.statusBarText(annotated)
+	status := m.statusBarText()
 	assert.Equal(t, "discard 2 annotations? [y/n]", status)
 }
 
-func TestModel_StatusBarShowsDiscardHint(t *testing.T) {
+func TestModel_StatusBarNoKeyHints(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.width = 120
 
-	t.Run("tree pane", func(t *testing.T) {
+	t.Run("tree pane has no shortcut hints", func(t *testing.T) {
 		m.focus = paneTree
-		status := m.statusBarText(m.annotatedFiles())
-		assert.Contains(t, status, "[Q] discard")
-		assert.Contains(t, status, "[q] quit")
+		status := m.statusBarText()
+		assert.NotContains(t, status, "[Q]")
+		assert.NotContains(t, status, "[q]")
+		assert.NotContains(t, status, "[j/k]")
+		assert.Contains(t, status, "? help")
 	})
 
-	t.Run("diff pane", func(t *testing.T) {
+	t.Run("diff pane has no shortcut hints", func(t *testing.T) {
 		m.focus = paneDiff
-		status := m.statusBarText(m.annotatedFiles())
-		assert.Contains(t, status, "[Q] discard")
-		assert.Contains(t, status, "[q] quit")
+		status := m.statusBarText()
+		assert.NotContains(t, status, "[Q]")
+		assert.NotContains(t, status, "[q]")
+		assert.NotContains(t, status, "[enter/a]")
+		assert.Contains(t, status, "? help")
 	})
 }
