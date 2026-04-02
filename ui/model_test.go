@@ -313,6 +313,81 @@ func TestModel_StatusBarFilterIndicator(t *testing.T) {
 	})
 }
 
+func TestModel_WrapModeFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+
+	t.Run("wrap enabled via config", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Wrap: true, TreeWidthRatio: 2})
+		assert.True(t, m.wrapMode)
+	})
+
+	t.Run("wrap disabled by default", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		assert.False(t, m.wrapMode)
+	})
+}
+
+func TestModel_StatusModeIcons(t *testing.T) {
+	tests := []struct {
+		name      string
+		collapsed bool
+		filter    bool
+		wrap      bool
+		want      string
+	}{
+		{name: "no modes active", want: ""},
+		{name: "collapsed only", collapsed: true, want: "▼"},
+		{name: "filter only", filter: true, want: "◉"},
+		{name: "wrap only", wrap: true, want: "↩"},
+		{name: "collapsed and filter", collapsed: true, filter: true, want: "▼ ◉"},
+		{name: "collapsed and wrap", collapsed: true, wrap: true, want: "▼ ↩"},
+		{name: "all modes active", collapsed: true, filter: true, wrap: true, want: "▼ ◉ ↩"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.collapsed.enabled = tt.collapsed
+			m.tree.filter = tt.filter
+			m.wrapMode = tt.wrap
+			assert.Equal(t, tt.want, m.statusModeIcons())
+		})
+	}
+}
+
+func TestModel_StatusBarWrapIndicator(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+
+	t.Run("wrap icon shown when active", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.tree = newFileTree([]string{"a.go"})
+		m.ready = true
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.wrapMode = true
+		m.width = 200
+
+		status := m.statusBarText()
+		assert.Contains(t, status, "↩", "should show wrap icon when wrap active")
+	})
+
+	t.Run("wrap icon hidden when inactive", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.tree = newFileTree([]string{"a.go"})
+		m.ready = true
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.width = 200
+
+		status := m.statusBarText()
+		assert.NotContains(t, status, "↩", "should not show wrap icon when wrap inactive")
+	})
+}
+
 func TestModel_NextPrevFile(t *testing.T) {
 	files := []string{"a.go", "b.go", "c.go"}
 	m := testModel(files, map[string][]diff.DiffLine{
@@ -3206,4 +3281,314 @@ func TestModel_HelpBlocksOtherKeys(t *testing.T) {
 	model = result.(Model)
 	assert.True(t, model.showHelp, "enter should not close help")
 	assert.Nil(t, cmd, "enter should produce no command")
+}
+
+func TestModel_WrapContent(t *testing.T) {
+	m := testModel(nil, nil)
+
+	t.Run("short line unchanged", func(t *testing.T) {
+		lines := m.wrapContent("hello world", 40)
+		assert.Equal(t, []string{"hello world"}, lines)
+	})
+
+	t.Run("long line wraps at word boundary", func(t *testing.T) {
+		lines := m.wrapContent("the quick brown fox jumps over the lazy dog", 20)
+		assert.Greater(t, len(lines), 1, "should produce multiple lines")
+		for _, line := range lines {
+			assert.LessOrEqual(t, len(line), 20, "each line should fit within width")
+		}
+	})
+
+	t.Run("empty content", func(t *testing.T) {
+		lines := m.wrapContent("", 40)
+		assert.Equal(t, []string{""}, lines)
+	})
+
+	t.Run("zero width returns content as-is", func(t *testing.T) {
+		lines := m.wrapContent("hello", 0)
+		assert.Equal(t, []string{"hello"}, lines)
+	})
+
+	t.Run("negative width returns content as-is", func(t *testing.T) {
+		lines := m.wrapContent("hello", -5)
+		assert.Equal(t, []string{"hello"}, lines)
+	})
+
+	t.Run("single long word", func(t *testing.T) {
+		lines := m.wrapContent("abcdefghijklmnopqrstuvwxyz", 10)
+		require.NotEmpty(t, lines)
+		// ansi.Wrap hard-wraps words that exceed the limit
+		for _, line := range lines {
+			assert.LessOrEqual(t, len(line), 10+1, "long words should be hard-wrapped") // +1 for potential breakpoint
+		}
+	})
+
+	t.Run("content with ANSI codes", func(t *testing.T) {
+		ansiContent := "\033[32mgreen text\033[0m and normal"
+		lines := m.wrapContent(ansiContent, 15)
+		require.NotEmpty(t, lines)
+		// the wrapped output should still contain ANSI codes
+		joined := strings.Join(lines, "")
+		assert.Contains(t, joined, "\033[32m", "ANSI codes should be preserved")
+	})
+
+	t.Run("multi-byte characters", func(t *testing.T) {
+		lines := m.wrapContent("日本語テスト hello world", 10)
+		require.NotEmpty(t, lines)
+		assert.Greater(t, len(lines), 1, "CJK text should wrap")
+	})
+}
+
+func TestModel_RenderDiffLineWithWrap(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wrapMode = true
+	m.width = 60
+	m.treeWidth = 12
+	m.styles = plainStyles()
+
+	t.Run("short line no continuation", func(t *testing.T) {
+		var b strings.Builder
+		dl := diff.DiffLine{Content: "short", ChangeType: diff.ChangeAdd, NewNum: 1}
+		m.renderDiffLine(&b, 0, dl)
+		output := b.String()
+		assert.Contains(t, output, " + short")
+		assert.NotContains(t, output, "↪", "short line should not have continuation")
+		assert.Equal(t, 1, strings.Count(output, "\n"), "should produce exactly one line")
+	})
+
+	t.Run("long add line wraps with continuation markers", func(t *testing.T) {
+		var b strings.Builder
+		longContent := "this is a very long line that should definitely be wrapped at word boundaries to fit the viewport"
+		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeAdd, NewNum: 1}
+		m.renderDiffLine(&b, 0, dl)
+		output := b.String()
+
+		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+		require.Greater(t, len(lines), 1, "long line should wrap into multiple lines")
+
+		// first line should have " + " prefix
+		assert.Contains(t, lines[0], " + ", "first line should have add prefix")
+
+		// continuation lines should have " ↪ " prefix
+		for _, line := range lines[1:] {
+			assert.Contains(t, line, " ↪ ", "continuation lines should have ↪ marker")
+		}
+	})
+
+	t.Run("long remove line wraps with continuation markers", func(t *testing.T) {
+		var b strings.Builder
+		longContent := "this is a removed line that is very long and should be wrapped at word boundaries to fit the viewport width"
+		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeRemove, OldNum: 5}
+		m.renderDiffLine(&b, 0, dl)
+		output := b.String()
+
+		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+		require.Greater(t, len(lines), 1, "long line should wrap")
+		assert.Contains(t, lines[0], " - ", "first line should have remove prefix")
+		for _, line := range lines[1:] {
+			assert.Contains(t, line, " ↪ ", "continuation lines should have ↪ marker")
+		}
+	})
+
+	t.Run("long context line wraps with continuation markers", func(t *testing.T) {
+		var b strings.Builder
+		longContent := "this is a context line that is very long and should be wrapped at word boundaries for readability"
+		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeContext, NewNum: 10}
+		m.renderDiffLine(&b, 0, dl)
+		output := b.String()
+
+		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+		require.Greater(t, len(lines), 1, "long context line should wrap")
+		for _, line := range lines[1:] {
+			assert.Contains(t, line, " ↪ ", "continuation lines should have ↪ marker")
+		}
+	})
+
+	t.Run("divider lines are not wrapped", func(t *testing.T) {
+		var b strings.Builder
+		dl := diff.DiffLine{Content: "@@ -1,5 +1,7 @@", ChangeType: diff.ChangeDivider}
+		m.renderDiffLine(&b, 0, dl)
+		output := b.String()
+		assert.NotContains(t, output, "↪", "dividers should not be wrapped")
+		assert.Equal(t, 1, strings.Count(output, "\n"), "divider should be a single line")
+	})
+
+	t.Run("cursor only on first visual line", func(t *testing.T) {
+		m.diffCursor = 0
+		m.focus = paneDiff
+		m.cursorOnAnnotation = false
+
+		var b strings.Builder
+		longContent := "this is a very long line that should definitely be wrapped at word boundaries to test cursor placement"
+		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeAdd, NewNum: 1}
+		m.renderDiffLine(&b, 0, dl)
+		output := b.String()
+
+		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
+		require.Greater(t, len(lines), 1, "should have continuation lines")
+		assert.Contains(t, lines[0], "▶", "first line should have cursor")
+		for _, line := range lines[1:] {
+			assert.NotContains(t, line, "▶", "continuation lines should not have cursor")
+		}
+	})
+
+	t.Run("no horizontal scroll in wrap mode", func(t *testing.T) {
+		m.scrollX = 10
+		m.wrapMode = true
+
+		var b strings.Builder
+		dl := diff.DiffLine{Content: "@@ -1,3 +1,3 @@", ChangeType: diff.ChangeDivider}
+		m.renderDiffLine(&b, 0, dl)
+
+		// divider falls through to non-wrap path but ansi.Cut should be skipped
+		output := b.String()
+		assert.Contains(t, output, "@@", "divider content should not be scrolled in wrap mode")
+
+		m.scrollX = 0 // reset
+	})
+}
+
+func TestModel_StyleDiffContent(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+
+	t.Run("add line", func(t *testing.T) {
+		result := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false)
+		assert.Contains(t, result, " + content")
+	})
+
+	t.Run("remove line", func(t *testing.T) {
+		result := m.styleDiffContent(diff.ChangeRemove, " - ", "content", false)
+		assert.Contains(t, result, " - content")
+	})
+
+	t.Run("context line", func(t *testing.T) {
+		result := m.styleDiffContent(diff.ChangeContext, "   ", "content", false)
+		assert.Contains(t, result, "   content")
+	})
+
+	t.Run("highlighted add", func(t *testing.T) {
+		result := m.styleDiffContent(diff.ChangeAdd, " + ", "\033[32mgreen\033[0m", true)
+		assert.Contains(t, result, " + ")
+		assert.Contains(t, result, "\033[32m")
+	})
+}
+
+func TestModel_WrappedLineCount(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: strings.Repeat("x", 200), ChangeType: diff.ChangeAdd},
+		{Content: "@@ -1,3 +1,3 @@", ChangeType: diff.ChangeDivider},
+		{OldNum: 3, Content: strings.Repeat("y", 200), ChangeType: diff.ChangeRemove},
+	}
+
+	t.Run("wrap off returns 1 for all lines", func(t *testing.T) {
+		m.wrapMode = false
+		assert.Equal(t, 1, m.wrappedLineCount(0))
+		assert.Equal(t, 1, m.wrappedLineCount(1))
+		assert.Equal(t, 1, m.wrappedLineCount(2))
+		assert.Equal(t, 1, m.wrappedLineCount(3))
+	})
+
+	t.Run("wrap on, short line returns 1", func(t *testing.T) {
+		m.wrapMode = true
+		assert.Equal(t, 1, m.wrappedLineCount(0))
+	})
+
+	t.Run("wrap on, long line returns more than 1", func(t *testing.T) {
+		m.wrapMode = true
+		count := m.wrappedLineCount(1)
+		assert.Greater(t, count, 1, "long add line should wrap to multiple visual rows")
+	})
+
+	t.Run("wrap on, divider always returns 1", func(t *testing.T) {
+		m.wrapMode = true
+		assert.Equal(t, 1, m.wrappedLineCount(2))
+	})
+
+	t.Run("wrap on, long remove line wraps", func(t *testing.T) {
+		m.wrapMode = true
+		count := m.wrappedLineCount(3)
+		assert.Greater(t, count, 1, "long remove line should wrap to multiple visual rows")
+	})
+
+	t.Run("out of bounds returns 1", func(t *testing.T) {
+		m.wrapMode = true
+		assert.Equal(t, 1, m.wrappedLineCount(-1))
+		assert.Equal(t, 1, m.wrappedLineCount(100))
+	})
+}
+
+func TestModel_CursorViewportYWithWrap(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.wrapMode = true
+	// use a narrow width so wrapping is predictable
+	m.width = 60
+	m.treeWidth = 20
+
+	// diffContentWidth = 60 - 20 - 4 - 1 = 35
+	// wrapWidth = 35 - 3 (gutter) = 32
+
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "short line", ChangeType: diff.ChangeContext},                               // idx 0, fits in 1 row
+		{NewNum: 2, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeAdd},                        // idx 1, wraps to ~2 rows
+		{NewNum: 3, Content: "another short line", ChangeType: diff.ChangeContext},                        // idx 2, fits in 1 row
+		{NewNum: 4, Content: "this is a really long line that " + strings.Repeat("z", 60), ChangeType: diff.ChangeAdd}, // idx 3, wraps to ~3 rows
+	}
+
+	// verify wrapping counts are consistent
+	count0 := m.wrappedLineCount(0)
+	count1 := m.wrappedLineCount(1)
+	count2 := m.wrappedLineCount(2)
+	assert.Equal(t, 1, count0, "short context line should be 1 row")
+	assert.Greater(t, count1, 1, "long add line should wrap")
+	assert.Equal(t, 1, count2, "short context line should be 1 row")
+
+	t.Run("cursor at 0, no wrapping before it", func(t *testing.T) {
+		m.diffCursor = 0
+		m.cursorOnAnnotation = false
+		assert.Equal(t, 0, m.cursorViewportY())
+	})
+
+	t.Run("cursor at 1, after short line 0", func(t *testing.T) {
+		m.diffCursor = 1
+		m.cursorOnAnnotation = false
+		assert.Equal(t, count0, m.cursorViewportY())
+	})
+
+	t.Run("cursor at 2, after wrapped line 1", func(t *testing.T) {
+		m.diffCursor = 2
+		m.cursorOnAnnotation = false
+		assert.Equal(t, count0+count1, m.cursorViewportY())
+	})
+
+	t.Run("cursor at 3, after lines 0+1+2", func(t *testing.T) {
+		m.diffCursor = 3
+		m.cursorOnAnnotation = false
+		assert.Equal(t, count0+count1+count2, m.cursorViewportY())
+	})
+
+	t.Run("cursor on annotation after wrapped line", func(t *testing.T) {
+		// add annotation on line 2 (idx 1, the long wrapped add line)
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "note"})
+		defer func() { m.store.Delete("a.go", 2, "+") }()
+
+		m.diffCursor = 2
+		m.cursorOnAnnotation = false
+		// cursor at line 2: count0 + count1 + 1 (annotation row after line 1)
+		assert.Equal(t, count0+count1+1, m.cursorViewportY())
+	})
+
+	t.Run("cursor on annotation sub-line of wrapped line", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: " ", Comment: "note on ctx"})
+		defer func() { m.store.Delete("a.go", 3, " ") }()
+
+		m.diffCursor = 2
+		m.cursorOnAnnotation = true
+		// on annotation sub-line of line 2: offset is line0 + line1 rows + wrappedLineCount(2)
+		assert.Equal(t, count0+count1+count2, m.cursorViewportY())
+	})
 }

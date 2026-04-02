@@ -65,8 +65,8 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 }
 
 // renderDiffLine writes a single styled diff line (with cursor highlight) to the builder.
+// when wrap mode is active, long lines are broken at word boundaries with ↪ continuation markers.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
-	// check for pre-computed syntax-highlighted content
 	hasHighlight := idx < len(m.highlightedLines)
 	hlContent := ""
 	if hasHighlight {
@@ -74,41 +74,127 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	}
 	lineContent := strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
 
-	var content string
-	switch dl.ChangeType {
-	case diff.ChangeAdd:
+	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+
+	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
+	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
+		textContent := lineContent
 		if hasHighlight {
-			content = m.styles.LineAddHighlight.Render(" + " + hlContent)
-		} else {
-			content = m.styles.LineAdd.Render(" + " + lineContent)
+			textContent = hlContent
 		}
-	case diff.ChangeRemove:
-		if hasHighlight {
-			content = m.styles.LineRemoveHighlight.Render(" - " + hlContent)
-		} else {
-			content = m.styles.LineRemove.Render(" - " + lineContent)
-		}
-	case diff.ChangeDivider:
-		content = m.styles.LineNumber.Render(" " + lineContent)
-	default:
-		if hasHighlight {
-			content = "   " + hlContent
-		} else {
-			content = m.styles.LineContext.Render("   " + lineContent)
-		}
+		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor)
+		return
 	}
 
-	// apply horizontal scroll to content (bar stays fixed)
-	if m.scrollX > 0 {
+	var content string
+	if dl.ChangeType == diff.ChangeDivider {
+		content = m.styles.LineNumber.Render(" " + lineContent)
+	} else {
+		textContent := lineContent
+		if hasHighlight {
+			textContent = hlContent
+		}
+		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight)
+	}
+
+	// apply horizontal scroll to content (bar stays fixed), disabled in wrap mode
+	if m.scrollX > 0 && !m.wrapMode {
 		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
 	}
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
 	b.WriteString(cursor + content + "\n")
+}
+
+// renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
+func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor bool) {
+	const gutterWidth = 3 // prefix width: " + ", " - ", "   ", " ↪ "
+	wrapWidth := m.diffContentWidth() - gutterWidth
+
+	visualLines := m.wrapContent(textContent, wrapWidth)
+	for i, vl := range visualLines {
+		prefix := " ↪ "
+		if i == 0 {
+			prefix = m.linePrefix(dl.ChangeType)
+		}
+
+		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight)
+
+		cursor := " "
+		if i == 0 && isCursor {
+			cursor = m.styles.DiffCursorLine.Render("▶")
+		}
+		b.WriteString(cursor + styled + "\n")
+	}
+}
+
+// wrappedLineCount returns the number of visual rows a diff line occupies.
+// returns 1 when wrap mode is off or for divider lines.
+// stays in sync with renderWrappedDiffLine by using the same wrapContent method and width calculation.
+func (m Model) wrappedLineCount(idx int) int {
+	if !m.wrapMode || idx < 0 || idx >= len(m.diffLines) {
+		return 1
+	}
+	dl := m.diffLines[idx]
+	if dl.ChangeType == diff.ChangeDivider {
+		return 1
+	}
+
+	// use highlighted content when available, matching renderDiffLine behavior
+	textContent := strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+	if idx < len(m.highlightedLines) {
+		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
+	}
+
+	const gutterWidth = 3 // same as renderWrappedDiffLine
+	wrapWidth := m.diffContentWidth() - gutterWidth
+	return len(m.wrapContent(textContent, wrapWidth))
+}
+
+// wrapContent wraps text content at the given width using word boundaries.
+// returns a slice of visual lines (at least one). handles ANSI escape sequences.
+func (m Model) wrapContent(content string, width int) []string {
+	if width <= 0 {
+		return []string{content}
+	}
+	wrapped := ansi.Wrap(content, width, "")
+	return strings.Split(wrapped, "\n")
+}
+
+// linePrefix returns the 3-character gutter prefix for a given change type.
+func (m Model) linePrefix(changeType diff.ChangeType) string {
+	switch changeType {
+	case diff.ChangeAdd:
+		return " + "
+	case diff.ChangeRemove:
+		return " - "
+	default:
+		return "   "
+	}
+}
+
+// styleDiffContent applies the appropriate line style based on change type.
+func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight bool) string {
+	switch changeType {
+	case diff.ChangeAdd:
+		if hasHighlight {
+			return m.styles.LineAddHighlight.Render(prefix + content)
+		}
+		return m.styles.LineAdd.Render(prefix + content)
+	case diff.ChangeRemove:
+		if hasHighlight {
+			return m.styles.LineRemoveHighlight.Render(prefix + content)
+		}
+		return m.styles.LineRemove.Render(prefix + content)
+	default:
+		if hasHighlight {
+			return prefix + content
+		}
+		return m.styles.LineContext.Render(prefix + content)
+	}
 }
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
