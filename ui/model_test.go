@@ -2739,16 +2739,43 @@ func TestModel_StatusBarHunkCountOnContextLine(t *testing.T) {
 }
 
 func TestModel_StatusBarPipeSeparators(t *testing.T) {
-	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
-	m.fileAdds = 1
-	m.diffCursor = 0
-	m.focus = paneDiff
+	t.Run("plain styles", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+		m.fileAdds = 1
+		m.diffCursor = 0
+		m.focus = paneDiff
 
-	status := m.statusBarText()
-	assert.Contains(t, status, "a.go | +1/-0", "pipe separator between filename and stats")
-	assert.Contains(t, status, "+1/-0 | hunk", "pipe separator between stats and hunk")
+		status := m.statusBarText()
+		assert.Contains(t, status, "|", "separator pipe must be present")
+		assert.NotContains(t, status, "\033[0m", "no full ANSI reset in separator")
+	})
+
+	t.Run("with colors", func(t *testing.T) {
+		colors := Colors{Muted: "#6c6c6c", StatusFg: "#202020", StatusBg: "#C5794F", Normal: "#d0d0d0"}
+		m := testModel(nil, nil)
+		m.styles = newStyles(colors)
+		m.currFile = "a.go"
+		m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+		m.fileAdds = 1
+		m.diffCursor = 0
+		m.focus = paneDiff
+
+		status := m.statusBarText()
+		assert.Contains(t, status, "|", "separator pipe must be present")
+		assert.NotContains(t, status, "\033[0m", "separator must use raw ANSI fg, not lipgloss Render")
+		assert.Contains(t, status, "\033[38;2;108;108;108m", "separator should have muted fg ANSI sequence")
+		assert.Contains(t, status, "\033[38;2;32;32;32m", "separator should restore status fg after pipe")
+	})
+}
+
+func TestModel_AnsiFg(t *testing.T) {
+	m := testModel(nil, nil)
+	assert.Equal(t, "\033[38;2;108;108;108m", m.ansiFg("#6c6c6c"))
+	assert.Equal(t, "\033[38;2;255;0;0m", m.ansiFg("#ff0000"))
+	assert.Equal(t, "\033[38;2;255;0;0m", m.ansiFg("ff0000"), "should work without # prefix")
+	assert.Empty(t, m.ansiFg("bad"), "should return empty for invalid hex")
 }
 
 func TestModel_EditExistingFileAnnotationShowsInput(t *testing.T) {

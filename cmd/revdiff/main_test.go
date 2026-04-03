@@ -116,7 +116,7 @@ func TestParseArgs_ColorDefaults(t *testing.T) {
 	assert.Equal(t, "#bbbb44", opts.Colors.CursorFg)
 	assert.Empty(t, opts.Colors.TreeBg, "tree bg should be empty by default")
 	assert.Empty(t, opts.Colors.DiffBg, "diff bg should be empty by default")
-	assert.Equal(t, "#2D2D2D", opts.Colors.StatusFg)
+	assert.Equal(t, "#202020", opts.Colors.StatusFg)
 	assert.Equal(t, "#C5794F", opts.Colors.StatusBg)
 }
 

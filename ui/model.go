@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -568,7 +569,13 @@ func (m Model) statusBarText() string {
 	}
 	rightParts = append(rightParts, "? help")
 
-	const sep = " | "
+	// build separator with muted foreground using raw ANSI (not lipgloss.Render)
+	// to avoid full reset that would break the status bar background
+	statusFg := m.styles.colors.Muted
+	if m.styles.colors.StatusFg != "" {
+		statusFg = m.styles.colors.StatusFg
+	}
+	sep := " " + m.ansiFg(m.styles.colors.Muted) + "|" + m.ansiFg(statusFg) + " "
 	left := strings.Join(segments, sep)
 	right := strings.Join(rightParts, sep)
 
@@ -591,7 +598,7 @@ func (m Model) statusBarText() string {
 		// truncate filename from left, keeping end of path.
 		// uses display-width measurement to handle wide characters (CJK, emoji)
 		statsStr := fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
-		nameMax := max(available-lipgloss.Width(statsStr)-len(sep), 4) // reserve separator between name and stats
+		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
 		name := m.currFile
 		if lipgloss.Width(name) > nameMax {
 			budget := nameMax - 1 // reserve 1 cell for "…"
@@ -638,6 +645,19 @@ func (m Model) hunkSegment() string {
 		return "1 hunk"
 	}
 	return fmt.Sprintf("%d hunks", total)
+}
+
+// ansiFg returns an ANSI 24-bit foreground escape sequence for a hex color (e.g. "#6c6c6c").
+// uses raw ANSI instead of lipgloss.Render to avoid full reset that breaks outer backgrounds.
+func (m Model) ansiFg(hex string) string {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return ""
+	}
+	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
+	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
+	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
+	return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
 }
 
 // statusModeIcons returns combined mode indicator icons (▼ for collapsed, ◉ for filter, ↩ for wrap).
