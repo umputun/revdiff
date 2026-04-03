@@ -250,6 +250,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "v":
 		m.toggleCollapsedMode()
 		return m, nil
+
+	case msg.String() == "w":
+		m.toggleWrapMode()
+		return m, nil
 	}
 
 	// pane-specific navigation
@@ -272,6 +276,19 @@ func (m *Model) togglePane() {
 	if m.currFile != "" {
 		m.focus = paneDiff
 	}
+}
+
+// toggleWrapMode toggles line wrapping on/off.
+// resets horizontal scroll when enabling wrap and re-renders the diff.
+func (m *Model) toggleWrapMode() {
+	if m.focus != paneDiff || m.currFile == "" {
+		return
+	}
+	m.wrapMode = !m.wrapMode
+	if m.wrapMode {
+		m.scrollX = 0
+	}
+	m.viewport.SetContent(m.renderDiff())
 }
 
 // loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
@@ -327,10 +344,10 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = paneTree
 		return m, nil
 	case msg.String() == "left":
-		m.scrollLeft()
+		m.handleHorizontalScroll(-1)
 		return m, nil
 	case msg.String() == "right":
-		m.scrollRight()
+		m.handleHorizontalScroll(1)
 		return m, nil
 	case msg.String() == "j" || msg.String() == "down":
 		m.moveDiffCursorDown()
@@ -681,6 +698,7 @@ func (m Model) helpOverlay() string {
 		"\n" +
 		"View\n" +
 		"  v            toggle collapsed mode\n" +
+		"  w            toggle word wrap\n" +
 		"  .            expand/collapse hunk\n" +
 		"  f            filter annotated files\n" +
 		"\n" +
