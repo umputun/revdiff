@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
@@ -218,6 +219,36 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 	return dl.NewNum
 }
 
+// wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
+// annotations always wrap at the pane width regardless of wrapMode.
+func (m Model) wrappedAnnotationLineCount(key string) int {
+	comment := ""
+	if key == "file" {
+		for _, a := range m.store.Get(m.currFile) {
+			if a.Line == 0 {
+				comment = "\U0001f4ac file: " + a.Comment
+				break
+			}
+		}
+	} else {
+		for _, a := range m.store.Get(m.currFile) {
+			aKey := m.annotationKey(a.Line, a.Type)
+			if aKey == key {
+				comment = "\U0001f4ac " + a.Comment
+				break
+			}
+		}
+	}
+	if comment == "" {
+		return 1
+	}
+	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+	if wrapWidth > 10 && lipgloss.Width(comment) > wrapWidth {
+		return len(m.wrapContent(comment, wrapWidth))
+	}
+	return 1
+}
+
 // cursorViewportY computes the actual viewport Y position of the cursor,
 // accounting for injected annotation lines and the file-level annotation line.
 // in collapsed mode, hidden removed lines (those in non-expanded hunks) are not counted.
@@ -226,10 +257,10 @@ func (m Model) cursorViewportY() int {
 		return max(0, m.diffCursor)
 	}
 
-	// file-level annotation line at the top adds one visual row
+	// file-level annotation line at the top (may wrap to multiple rows)
 	fileAnnotationOffset := 0
 	if m.hasFileAnnotation() {
-		fileAnnotationOffset = 1
+		fileAnnotationOffset = m.wrappedAnnotationLineCount("file")
 	}
 
 	// cursor is on the file annotation line
@@ -266,7 +297,7 @@ func (m Model) cursorViewportY() int {
 		if dl.ChangeType != diff.ChangeDivider {
 			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 			if annotationSet[key] {
-				y++ // the annotation line below it
+				y += m.wrappedAnnotationLineCount(key)
 			}
 		}
 	}

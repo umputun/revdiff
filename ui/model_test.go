@@ -2419,6 +2419,74 @@ func TestModel_CursorViewportYWithFileAnnotation(t *testing.T) {
 	assert.Equal(t, 2, m.cursorViewportY(), "second diff line should be at Y=2 when file annotation exists")
 }
 
+func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.width = 60
+	m.treeWidth = 20
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("long file annotation wraps to multiple rows", func(t *testing.T) {
+		longComment := strings.Repeat("word ", 20) // ~100 chars, wraps at ~34
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
+		defer m.store.Delete("a.go", 0, "")
+
+		wrapCount := m.wrappedAnnotationLineCount("file")
+		assert.Greater(t, wrapCount, 1, "long file annotation should wrap to multiple rows")
+
+		m.diffCursor = 0
+		assert.Equal(t, wrapCount, m.cursorViewportY(), "first diff line offset should equal wrap count")
+
+		m.diffCursor = 1
+		assert.Equal(t, wrapCount+1, m.cursorViewportY(), "second diff line offset should be wrap count + 1")
+	})
+
+	t.Run("long inline annotation wraps to multiple rows", func(t *testing.T) {
+		longComment := strings.Repeat("note ", 20) // ~100 chars
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: longComment})
+		defer m.store.Delete("a.go", 1, " ")
+
+		key := m.annotationKey(1, " ")
+		wrapCount := m.wrappedAnnotationLineCount(key)
+		assert.Greater(t, wrapCount, 1, "long inline annotation should wrap to multiple rows")
+
+		m.diffCursor = 1
+		assert.Equal(t, 1+wrapCount, m.cursorViewportY(), "second line should offset by annotation wrap count")
+	})
+
+	t.Run("short annotation stays one row", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "short"})
+		defer m.store.Delete("a.go", 0, "")
+
+		assert.Equal(t, 1, m.wrappedAnnotationLineCount("file"))
+	})
+}
+
+func TestModel_RenderWrappedAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.width = 60
+	m.treeWidth = 20
+	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m.focus = paneDiff
+
+	t.Run("long file annotation wraps in rendered output", func(t *testing.T) {
+		longComment := strings.Repeat("wrap ", 20)
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
+		defer m.store.Delete("a.go", 0, "")
+
+		wrapCount := m.wrappedAnnotationLineCount("file")
+		assert.Greater(t, wrapCount, 1, "annotation should wrap")
+		// cursor chevron appears exactly once (first line only)
+		m.diffCursor = -1
+		rendered := m.renderDiff()
+		assert.Equal(t, 1, strings.Count(rendered, "▶"), "cursor on first wrap line only")
+	})
+}
+
 func TestModel_RenderDiffFileAnnotationInput(t *testing.T) {
 	m := testModel(nil, nil)
 	m.currFile = "a.go"

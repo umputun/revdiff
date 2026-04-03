@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/umputun/revdiff/diff"
@@ -64,8 +65,7 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 		if m.diffCursor == -1 && m.focus == paneDiff {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		line := cursor + m.styles.AnnotationLine.Render("\U0001f4ac file: "+fileComment)
-		b.WriteString(line + "\n")
+		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
 	}
 }
 
@@ -305,10 +305,29 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
 				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
-			line := cursor + m.styles.AnnotationLine.Render("\U0001f4ac "+comment)
-			b.WriteString(line + "\n")
+			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
 		}
 	}
+}
+
+// renderWrappedAnnotation writes an annotation line with word wrapping.
+// annotations always wrap regardless of wrapMode since they contain prose.
+func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
+	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+
+	if wrapWidth > 10 && lipgloss.Width(text) > wrapWidth {
+		lines := m.wrapContent(text, wrapWidth)
+		for i, line := range lines {
+			c := " " // continuation lines get space instead of cursor
+			if i == 0 {
+				c = cursor
+			}
+			b.WriteString(c + m.styles.AnnotationLine.Render(line) + "\n")
+		}
+		return
+	}
+
+	b.WriteString(cursor + m.styles.AnnotationLine.Render(text) + "\n")
 }
 
 // cursorDiffLine returns the DiffLine at the current cursor position, if valid.
