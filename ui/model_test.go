@@ -3192,7 +3192,7 @@ func TestModel_HelpOverlayKeyListings(t *testing.T) {
 	// verify key listings are present
 	keys := []string{
 		"tab", "n / p", "j / k", "PgDn/PgUp", "Ctrl+d/u", "Home/End", "h / l", "← / →", "[ / ]",
-		"a / enter", "A", "d", "f", "v", ".",
+		"a / enter", "A", "d", "f", "v", "w", ".",
 		"q", "Q", "? / esc",
 	}
 	for _, k := range keys {
@@ -3533,9 +3533,9 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	// wrapWidth = 35 - 3 (gutter) = 32
 
 	m.diffLines = []diff.DiffLine{
-		{NewNum: 1, Content: "short line", ChangeType: diff.ChangeContext},                               // idx 0, fits in 1 row
-		{NewNum: 2, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeAdd},                        // idx 1, wraps to ~2 rows
-		{NewNum: 3, Content: "another short line", ChangeType: diff.ChangeContext},                        // idx 2, fits in 1 row
+		{NewNum: 1, Content: "short line", ChangeType: diff.ChangeContext},                                             // idx 0, fits in 1 row
+		{NewNum: 2, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeAdd},                                      // idx 1, wraps to ~2 rows
+		{NewNum: 3, Content: "another short line", ChangeType: diff.ChangeContext},                                     // idx 2, fits in 1 row
 		{NewNum: 4, Content: "this is a really long line that " + strings.Repeat("z", 60), ChangeType: diff.ChangeAdd}, // idx 3, wraps to ~3 rows
 	}
 
@@ -3591,4 +3591,119 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 		// on annotation sub-line of line 2: offset is line0 + line1 rows + wrappedLineCount(2)
 		assert.Equal(t, count0+count1+count2, m.cursorViewportY())
 	})
+}
+
+func TestModel_WrapToggle(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = []string{"x"}
+	m.focus = paneDiff
+	m.viewport.Width = 80
+	m.viewport.Height = 20
+	assert.False(t, m.wrapMode)
+
+	// press w to enable wrap
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model := result.(Model)
+	assert.True(t, model.wrapMode)
+
+	// press w again to disable wrap
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model = result.(Model)
+	assert.False(t, model.wrapMode)
+}
+
+func TestModel_WrapToggleResetsScrollX(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = []string{"x"}
+	m.focus = paneDiff
+	m.viewport.Width = 80
+	m.viewport.Height = 20
+	m.scrollX = 10
+
+	// enable wrap: scrollX should reset to 0
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model := result.(Model)
+	assert.True(t, model.wrapMode)
+	assert.Equal(t, 0, model.scrollX)
+}
+
+func TestModel_WrapToggleNoOpWithoutFile(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.focus = paneDiff
+	m.currFile = ""
+	assert.False(t, m.wrapMode)
+
+	// w should be no-op without a loaded file
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model := result.(Model)
+	assert.False(t, model.wrapMode)
+}
+
+func TestModel_WrapToggleNoOpInTreePane(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneTree
+	assert.False(t, m.wrapMode)
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model := result.(Model)
+	assert.False(t, model.wrapMode)
+}
+
+func TestModel_ScrollBlockedInWrapMode(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = []string{"x"}
+	m.focus = paneDiff
+	m.viewport.Width = 80
+	m.viewport.Height = 20
+	m.wrapMode = true
+	m.scrollX = 0
+
+	// right key should not change scrollX in wrap mode
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := result.(Model)
+	assert.Equal(t, 0, model.scrollX)
+
+	// left key should not change scrollX in wrap mode
+	model.scrollX = 0
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	model = result.(Model)
+	assert.Equal(t, 0, model.scrollX)
+}
+
+func TestModel_ScrollWorksWithoutWrapMode(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = []string{"x"}
+	m.focus = paneDiff
+	m.viewport.Width = 80
+	m.viewport.Height = 20
+	m.wrapMode = false
+	m.scrollX = 0
+
+	// right key should scroll in non-wrap mode
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := result.(Model)
+	assert.Positive(t, model.scrollX)
+}
+
+func TestModel_HelpOverlayContainsWordWrap(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	help := m.helpOverlay()
+	assert.Contains(t, help, "toggle word wrap")
+	assert.Contains(t, help, "w")
 }

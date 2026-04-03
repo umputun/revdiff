@@ -469,15 +469,18 @@ func (m *Model) centerViewportOnCursor() {
 
 const scrollStep = 4 // horizontal scroll step in characters
 
-// scrollRight moves the horizontal scroll offset to the right.
-func (m *Model) scrollRight() {
-	m.scrollX += scrollStep
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// scrollLeft moves the horizontal scroll offset to the left.
-func (m *Model) scrollLeft() {
-	m.scrollX = max(0, m.scrollX-scrollStep)
+// handleHorizontalScroll processes left/right scroll keys.
+// direction < 0 scrolls left, direction > 0 scrolls right.
+// no-op when wrap mode is active (content is already fully visible).
+func (m *Model) handleHorizontalScroll(direction int) {
+	if m.wrapMode {
+		return
+	}
+	if direction < 0 {
+		m.scrollX = max(0, m.scrollX-scrollStep)
+	} else {
+		m.scrollX += scrollStep
+	}
 	m.viewport.SetContent(m.renderDiff())
 }
 
