@@ -1,4 +1,14 @@
-# revdiff [![Build Status](https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg)](https://github.com/umputun/revdiff/actions/workflows/ci.yml) [![Coverage Status](https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master)](https://coveralls.io/github/umputun/revdiff?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/umputun/revdiff)](https://goreportcard.com/report/github.com/umputun/revdiff)
+<p align="center">
+  <img src="assets/logo.png" alt="revdiff" width="128">
+</p>
+
+<p align="center">
+  <a href="https://github.com/umputun/revdiff/actions/workflows/ci.yml"><img src="https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg" alt="build"></a>
+  <a href="https://coveralls.io/github/umputun/revdiff?branch=master"><img src="https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master" alt="Coverage Status"></a>
+  <a href="https://goreportcard.com/report/github.com/umputun/revdiff"><img src="https://goreportcard.com/badge/github.com/umputun/revdiff" alt="Go Report Card"></a>
+</p>
+
+<h1 align="center">revdiff</h1>
 
 Lightweight TUI for reviewing git diffs with inline annotations. Outputs structured annotations to stdout on quit, making it easy to pipe results into AI agents, scripts, or other tools.
 
@@ -19,7 +29,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Help overlay (`?`) showing all keybindings organized by section
 - Fully customizable colors via environment variables, CLI flags, or config file
 
-![revdiff screenshot](screenshot.png)
+![revdiff screenshot](assets/screenshot.png)
 
 ## Requirements
 
