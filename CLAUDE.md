@@ -34,6 +34,10 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
   when wrap mode is on (`w` toggle, orthogonal to above):
     wrapContent() splits long lines via ansi.Wrap,
     continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts
+  when search is active (`/` to search, `n`/`N` to navigate, `esc` to clear):
+    buildSearchMatchSet() converts match indices to O(1) map per render,
+    highlightSearchMatches() inserts raw ANSI fg+bg sequences around matched
+    substrings (character-level, ANSI-aware via ansi.Strip for position mapping)
   → viewport.SetContent() → terminal
 ```
 

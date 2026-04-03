@@ -197,11 +197,11 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - [x] run linter: `make lint`
 
 ### Task 9: [Final] Update documentation
-- [ ] update README.md with `/` search, `n`/`N` navigation keybindings
-- [ ] update `.claude-plugin/skills/revdiff/references/usage.md` with search keybindings
-- [ ] update `.claude-plugin/skills/revdiff/references/config.md` with search color options
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md with `/` search, `n`/`N` navigation keybindings
+- [x] update `.claude-plugin/skills/revdiff/references/usage.md` with search keybindings
+- [x] update `.claude-plugin/skills/revdiff/references/config.md` with search color options
+- [x] update CLAUDE.md if new patterns discovered
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
