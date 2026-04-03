@@ -108,7 +108,7 @@ func TestParseArgs_ColorDefaults(t *testing.T) {
 	assert.Equal(t, "#D5895F", opts.Colors.Accent)
 	assert.Equal(t, "#585858", opts.Colors.Border)
 	assert.Equal(t, "#d0d0d0", opts.Colors.Normal)
-	assert.Equal(t, "#6c6c6c", opts.Colors.Muted)
+	assert.Equal(t, "#585858", opts.Colors.Muted)
 	assert.Equal(t, "#87d787", opts.Colors.AddFg)
 	assert.Equal(t, "#123800", opts.Colors.AddBg)
 	assert.Equal(t, "#ff8787", opts.Colors.RemoveFg)

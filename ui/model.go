@@ -575,11 +575,6 @@ func (m Model) statusBarText() string {
 		segments = append(segments, ss)
 	}
 
-	// mode indicators (combined into one segment)
-	if modeIcons := m.statusModeIcons(); modeIcons != "" {
-		segments = append(segments, modeIcons)
-	}
-
 	// build right-side segments
 	var rightParts []string
 	if cnt := m.store.Count(); cnt > 0 {
@@ -589,7 +584,7 @@ func (m Model) statusBarText() string {
 		}
 		rightParts = append(rightParts, fmt.Sprintf("%d %s", cnt, suffix))
 	}
-	rightParts = append(rightParts, "? help")
+	rightParts = append(rightParts, m.statusModeIcons(), "? help")
 
 	// build separator with muted foreground using raw ANSI (not lipgloss.Render)
 	// to avoid full reset that would break the status bar background
@@ -605,10 +600,10 @@ func (m Model) statusBarText() string {
 	minRight := lipgloss.Width(right) + 5 // 2 for status bar padding + 3 for separator
 	available := max(m.width-minRight, 0)
 
-	// graceful degradation: drop segments from right to left when too narrow
+	// graceful degradation: drop left segments when too narrow
 	if lipgloss.Width(left) > available {
-		// rebuild without mode icons first
-		segments = m.statusSegmentsNoIcons()
+		// rebuild without search position
+		segments = m.statusSegmentsNoSearch()
 		left = strings.Join(segments, sep)
 	}
 	if lipgloss.Width(left) > available {
@@ -719,32 +714,46 @@ func (m Model) ansiFg(hex string) string { return m.ansiColor(hex, 38) }
 // ansiBg returns an ANSI 24-bit background escape sequence for a hex color.
 func (m Model) ansiBg(hex string) string { return m.ansiColor(hex, 48) }
 
-// statusModeIcons returns combined mode indicator icons (▼ for collapsed, ◉ for filter, ↩ for wrap).
+// statusModeIcons returns combined mode indicator icons (▼ collapsed, ◉ filter, ↩ wrap, ≋ search).
+// all icons are always shown; active modes use status foreground, inactive use muted color.
 func (m Model) statusModeIcons() string {
+	type indicator struct {
+		icon   string
+		active bool
+	}
+	indicators := []indicator{
+		{"▼", m.collapsed.enabled},
+		{"◉", m.tree.filter},
+		{"↩", m.wrapMode},
+		{"≋", len(m.searchMatches) > 0},
+	}
+
+	statusFg := m.styles.colors.Muted
+	if m.styles.colors.StatusFg != "" {
+		statusFg = m.styles.colors.StatusFg
+	}
+	mutedSeq := m.ansiFg(m.styles.colors.Muted)
+	activeSeq := m.ansiFg(statusFg)
+
 	var icons []string
-	if m.collapsed.enabled {
-		icons = append(icons, "▼")
+	for _, ind := range indicators {
+		if ind.active {
+			icons = append(icons, activeSeq+ind.icon)
+		} else {
+			icons = append(icons, mutedSeq+ind.icon)
+		}
 	}
-	if m.tree.filter {
-		icons = append(icons, "◉")
-	}
-	if m.wrapMode {
-		icons = append(icons, "↩")
-	}
-	return strings.Join(icons, " ")
+	return strings.Join(icons, " ") + activeSeq
 }
 
-// statusSegmentsNoIcons returns left segments without mode indicators (▼ ◉ ↩).
-func (m Model) statusSegmentsNoIcons() []string {
+// statusSegmentsNoSearch returns left segments without search position (for narrow terminals).
+func (m Model) statusSegmentsNoSearch() []string {
 	var segments []string
 	if m.currFile != "" {
 		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
-	}
-	if ss := m.searchSegment(); ss != "" {
-		segments = append(segments, ss)
 	}
 	return segments
 }
