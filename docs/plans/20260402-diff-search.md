@@ -88,14 +88,14 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `cmd/revdiff/main.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `SearchFg` and `SearchBg` string fields to `Colors` struct
-- [ ] add `SearchMatch lipgloss.Style` to `styles` struct
-- [ ] initialize `SearchMatch` style in `newStyles()` with foreground and background from colors
-- [ ] update `normalizeColors()` to normalize `SearchFg` and `SearchBg`
-- [ ] add CLI flags `--color-search-fg` (default `#1a1a1a`) and `--color-search-bg` (default `#d7d700`) in main.go opts
-- [ ] wire new color fields in `run()` function's `ui.Colors{}` literal
-- [ ] update `plainStyles()` to include `SearchMatch` for tests
-- [ ] run `make test` — must pass before task 2
+- [x] add `SearchFg` and `SearchBg` string fields to `Colors` struct
+- [x] add `SearchMatch lipgloss.Style` to `styles` struct
+- [x] initialize `SearchMatch` style in `newStyles()` with foreground and background from colors
+- [x] update `normalizeColors()` to normalize `SearchFg` and `SearchBg`
+- [x] add CLI flags `--color-search-fg` (default `#1a1a1a`) and `--color-search-bg` (default `#d7d700`) in main.go opts
+- [x] wire new color fields in `run()` function's `ui.Colors{}` literal
+- [x] update `plainStyles()` to include `SearchMatch` for tests
+- [x] run `make test` — must pass before task 2
 
 ### Task 2: Add search model fields and input handling
 
@@ -103,17 +103,17 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `searching bool`, `searchTerm string`, `searchMatches []int`, `searchCursor int`, `searchInput textinput.Model` fields to `Model`
-- [ ] add `startSearch()` method — creates textinput with `/` placeholder, sets `m.searching = true`
-- [ ] add `handleSearchKey(msg)` method — enter calls `submitSearch`, esc calls `cancelSearch`, default forwards to `searchInput.Update(msg)`
-- [ ] add `submitSearch()` method — if input empty, call `clearSearch()` and return; otherwise store lowercase search term, scan `diffLines` for case-insensitive matches, populate `searchMatches`, move cursor to first match forward, set `searching = false`
-- [ ] add `cancelSearch()` method — clears input, sets `searching = false`
-- [ ] forward non-key messages to `searchInput` in `Update()` when `m.searching` (parallel to annotating path)
-- [ ] handle `/` key in `handleKey()` — calls `startSearch()` (only from diff pane)
-- [ ] handle `searching` priority in `handleKey()` — check before help overlay, after annotation
-- [ ] write tests for `startSearch`, `submitSearch`, `cancelSearch` behavior
-- [ ] write tests for search input key handling (enter submits, esc cancels)
-- [ ] run `make test` — must pass before task 3
+- [x] add `searching bool`, `searchTerm string`, `searchMatches []int`, `searchCursor int`, `searchInput textinput.Model` fields to `Model`
+- [x] add `startSearch()` method — creates textinput with `/` placeholder, sets `m.searching = true`
+- [x] add `handleSearchKey(msg)` method — enter calls `submitSearch`, esc calls `cancelSearch`, default forwards to `searchInput.Update(msg)`
+- [x] add `submitSearch()` method — if input empty, call `clearSearch()` and return; otherwise store lowercase search term, scan `diffLines` for case-insensitive matches, populate `searchMatches`, move cursor to first match forward, set `searching = false`
+- [x] add `cancelSearch()` method — clears input, sets `searching = false`
+- [x] forward non-key messages to `searchInput` in `Update()` when `m.searching` (parallel to annotating path)
+- [x] handle `/` key in `handleKey()` — calls `startSearch()` (only from diff pane)
+- [x] handle `searching` priority in `handleKey()` — check before help overlay, after annotation
+- [x] write tests for `startSearch`, `submitSearch`, `cancelSearch` behavior
+- [x] write tests for search input key handling (enter submits, esc cancels)
+- [x] run `make test` — must pass before task 3
 
 ### Task 3: Add search match navigation (n/N keys)
 
@@ -121,14 +121,14 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `nextSearchMatch()` method — advances `searchCursor` with wrap, moves `diffCursor`, syncs viewport
-- [ ] add `prevSearchMatch()` method — same but backwards
-- [ ] modify `n` key handling: when `len(m.searchMatches) > 0`, call `nextSearchMatch()` instead of `tree.nextFile()`
-- [ ] add `N` key handling in `handleKey()`: when `len(m.searchMatches) > 0`, call `prevSearchMatch()`
-- [ ] write tests for next/prev match navigation including wrap-around
-- [ ] write tests that `n` falls through to next-file when no search active
-- [ ] write test that `N` does prev match when search active
-- [ ] run `make test` — must pass before task 4
+- [x] add `nextSearchMatch()` method — advances `searchCursor` with wrap, moves `diffCursor`, syncs viewport
+- [x] add `prevSearchMatch()` method — same but backwards
+- [x] modify `n` key handling: when `len(m.searchMatches) > 0`, call `nextSearchMatch()` instead of `tree.nextFile()`
+- [x] add `N` key handling in `handleKey()`: when `len(m.searchMatches) > 0`, call `prevSearchMatch()`
+- [x] write tests for next/prev match navigation including wrap-around
+- [x] write tests that `n` falls through to next-file when no search active
+- [x] write test that `N` does prev match when search active
+- [x] run `make test` — must pass before task 4
 
 ### Task 4: Highlight matching lines in diff rendering
 
@@ -137,14 +137,14 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `ui/collapsed.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `searchMatchSet map[int]bool` field to Model, computed in `renderDiff()` and `renderCollapsedDiff()` before line iteration
-- [ ] in `renderDiffLine`: when line index is in `m.searchMatchSet`, apply `m.styles.SearchMatch` background to content (after syntax highlight, before horizontal scroll/wrap — highlight propagates to all wrapped continuation rows automatically)
-- [ ] in `renderCollapsedAddLine`: same search match highlight check and styling (before wrap if word wrap is active)
-- [ ] ensure cursor line styling (`▶`) coexists with search highlight
-- [ ] verify search highlight works correctly with word wrap active (all continuation rows highlighted)
-- [ ] write tests verifying matched lines contain search highlight styling
-- [ ] write tests verifying non-matched lines are unchanged
-- [ ] run `make test` — must pass before task 5
+- [x] add `searchMatchSet map[int]bool` field to Model, computed in `renderDiff()` and `renderCollapsedDiff()` before line iteration
+- [x] in `renderDiffLine`: when line index is in `m.searchMatchSet`, apply `m.styles.SearchMatch` background to content (after syntax highlight, before horizontal scroll/wrap — highlight propagates to all wrapped continuation rows automatically)
+- [x] in `renderCollapsedAddLine`: same search match highlight check and styling (before wrap if word wrap is active)
+- [x] ensure cursor line styling (`▶`) coexists with search highlight
+- [x] verify search highlight works correctly with word wrap active (all continuation rows highlighted)
+- [x] write tests verifying matched lines contain search highlight styling
+- [x] write tests verifying non-matched lines are unchanged
+- [x] run `make test` — must pass before task 5
 
 ### Task 5: Status line search indicator and search input display
 
@@ -152,12 +152,12 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `if m.searching` branch in `statusBarText()` returning search input view with hints (before `inConfirmDiscard` check)
-- [ ] add `[X/Y]` search position segment to status line when `len(m.searchMatches) > 0` (between hunk and mode icons)
-- [ ] handle `searchMatches` in `statusSegmentsNoIcons()` and `statusSegmentsMinimal()` for narrow terminal degradation
-- [ ] write tests for status bar during active search input
-- [ ] write tests for `[X/Y]` display with various match counts
-- [ ] run `make test` — must pass before task 6
+- [x] add `if m.searching` branch in `statusBarText()` returning search input view with hints (before `inConfirmDiscard` check)
+- [x] add `[X/Y]` search position segment to status line when `len(m.searchMatches) > 0` (between hunk and mode icons)
+- [x] handle `searchMatches` in `statusSegmentsNoIcons()` and `statusSegmentsMinimal()` for narrow terminal degradation
+- [x] write tests for status bar during active search input
+- [x] write tests for `[X/Y]` display with various match counts
+- [x] run `make test` — must pass before task 6
 
 ### Task 6: Clear search on file change
 
@@ -165,11 +165,11 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `clearSearch()` method that resets `searchTerm`, `searchMatches`, `searchCursor`, `searchMatchSet`
-- [ ] call `clearSearch()` in `handleFileLoaded` after setting `m.diffLines`
-- [ ] write tests for search clearing on file load
-- [ ] write tests for empty search submit clearing matches (already wired in Task 2's `submitSearch`)
-- [ ] run `make test` — must pass before task 7
+- [x] add `clearSearch()` method that resets `searchTerm`, `searchMatches`, `searchCursor`, `searchMatchSet`
+- [x] call `clearSearch()` in `handleFileLoaded` after setting `m.diffLines`
+- [x] write tests for search clearing on file load
+- [x] write tests for empty search submit clearing matches (already wired in Task 2's `submitSearch`)
+- [x] run `make test` — must pass before task 7
 
 ### Task 7: Update help overlay
 
@@ -177,24 +177,24 @@ Add `/` search in the diff pane following vim/less conventions. Users can search
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add search entries to help overlay — either new "Search" section or under "Navigation"
-- [ ] entries: `/` = search, `n` = next match, `N` = prev match
-- [ ] update `n / p` entry to note search-active override
-- [ ] write test verifying help overlay contains search key listings
-- [ ] run `make test` — must pass before task 8
+- [x] add search entries to help overlay — either new "Search" section or under "Navigation"
+- [x] entries: `/` = search, `n` = next match, `N` = prev match
+- [x] update `n / p` entry to note search-active override
+- [x] write test verifying help overlay contains search key listings
+- [x] run `make test` — must pass before task 8
 
 ### Task 8: Verify acceptance criteria
-- [ ] verify `/` opens search input in diff pane
-- [ ] verify enter submits and jumps to first match
-- [ ] verify esc cancels without searching
-- [ ] verify `n`/`N` navigate matches with wrap-around
-- [ ] verify `n` reverts to next-file when no search active
-- [ ] verify all matches highlighted with search colors
-- [ ] verify `[X/Y]` shown in status line
-- [ ] verify search clears on file change
-- [ ] verify `--color-search-fg`/`--color-search-bg` flags work
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
+- [x] verify `/` opens search input in diff pane
+- [x] verify enter submits and jumps to first match
+- [x] verify esc cancels without searching
+- [x] verify `n`/`N` navigate matches with wrap-around
+- [x] verify `n` reverts to next-file when no search active
+- [x] verify all matches highlighted with search colors
+- [x] verify `[X/Y]` shown in status line
+- [x] verify search clears on file change
+- [x] verify `--color-search-fg`/`--color-search-bg` flags work
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
 
 ### Task 9: [Final] Update documentation
 - [ ] update README.md with `/` search, `n`/`N` navigation keybindings

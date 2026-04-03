@@ -23,6 +23,8 @@ type Colors struct {
 	DiffBg     string // diff pane background
 	StatusFg   string // status bar foreground
 	StatusBg   string // status bar background
+	SearchFg   string // search match foreground
+	SearchBg   string // search match background
 }
 
 // styles holds all lipgloss styles used in the TUI.
@@ -56,6 +58,8 @@ type styles struct {
 	DiffCursorLine lipgloss.Style
 	// annotation
 	AnnotationLine lipgloss.Style
+	// search
+	SearchMatch lipgloss.Style
 
 	colors Colors // original color values for dynamic style construction
 }
@@ -90,6 +94,8 @@ func normalizeColors(c Colors) Colors {
 	c.DiffBg = normalizeColor(c.DiffBg)
 	c.StatusFg = normalizeColor(c.StatusFg)
 	c.StatusBg = normalizeColor(c.StatusBg)
+	c.SearchFg = normalizeColor(c.SearchFg)
+	c.SearchBg = normalizeColor(c.SearchBg)
 	return c
 }
 
@@ -173,6 +179,9 @@ func newStyles(c Colors) styles {
 		AnnotationLine: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)).
 			Italic(true),
+		SearchMatch: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.SearchFg)).
+			Background(lipgloss.Color(c.SearchBg)),
 
 		colors: c,
 	}
@@ -219,5 +228,6 @@ func plainStyles() styles {
 
 		DiffCursorLine: lipgloss.NewStyle().Reverse(true),
 		AnnotationLine: lipgloss.NewStyle().Italic(true),
+		SearchMatch:    lipgloss.NewStyle().Reverse(true),
 	}
 }
