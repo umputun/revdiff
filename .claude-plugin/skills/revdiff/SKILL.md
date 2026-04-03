@@ -2,7 +2,7 @@
 name: revdiff
 description: Review git diffs with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/kitty/wezterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff", "git review with revdiff", "interactive diff review", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 argument-hint: 'optional git ref (e.g., HEAD~1, main)'
-allowed-tools: [Bash, Read, Edit, Write, Grep, Glob, EnterPlanMode, AskUserQuestion]
+allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
 
 # revdiff - TUI Diff Review
