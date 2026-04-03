@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -5196,6 +5197,20 @@ func TestModel_FilterOnly(t *testing.T) {
 		files := []string{"ui/model.go", "diff/diff.go"}
 		assert.Empty(t, m.filterOnly(files))
 	})
+}
+
+func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
+	m := testModel(nil, nil)
+	m.only = []string{"nonexistent.go"}
+	m.ready = true
+	m.width = 80
+	m.height = 24
+	m.viewport = viewport.New(76, 20)
+
+	result, cmd := m.Update(filesLoadedMsg{files: []string{"ui/model.go", "diff/diff.go"}})
+	model := result.(Model)
+	assert.Nil(t, cmd, "should not trigger file load when no files match")
+	assert.Contains(t, model.viewport.View(), "no files match --only filter")
 }
 
 func TestModel_SingleFileKeysNoOp(t *testing.T) {

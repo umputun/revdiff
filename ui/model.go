@@ -117,7 +117,7 @@ type ModelConfig struct {
 	NoStatusBar      bool // hide the status bar
 	NoConfirmDiscard bool // skip confirmation prompt when discarding annotations
 	Wrap             bool     // enable line wrapping
-	Only             []string // show only these files (filter by path suffix)
+	Only             []string // show only these files (match by exact path or path suffix)
 	Colors           Colors
 }
 
