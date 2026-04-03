@@ -56,7 +56,7 @@ func (m *Model) submitSearch() {
 		m.searchCursor = i
 		m.diffCursor = idx
 		m.cursorOnAnnotation = false
-		m.syncViewportToCursor()
+		m.centerViewportOnCursor()
 		return
 	}
 
@@ -68,7 +68,7 @@ func (m *Model) submitSearch() {
 		m.searchCursor = i
 		m.diffCursor = idx
 		m.cursorOnAnnotation = false
-		m.syncViewportToCursor()
+		m.centerViewportOnCursor()
 		return
 	}
 }
@@ -92,7 +92,7 @@ func (m *Model) nextSearchMatch() {
 	}
 	m.diffCursor = m.searchMatches[m.searchCursor]
 	m.cursorOnAnnotation = false
-	m.syncViewportToCursor()
+	m.centerViewportOnCursor()
 }
 
 // prevSearchMatch moves to the previous search match with wrap-around.
@@ -117,7 +117,7 @@ func (m *Model) prevSearchMatch() {
 	}
 	m.diffCursor = m.searchMatches[m.searchCursor]
 	m.cursorOnAnnotation = false
-	m.syncViewportToCursor()
+	m.centerViewportOnCursor()
 }
 
 // cancelSearch exits searching mode without submitting.
