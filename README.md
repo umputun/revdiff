@@ -159,7 +159,7 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-accent` | Active pane borders and directory names | `#D5895F` |
 | `--color-border` | Inactive pane borders | `#585858` |
 | `--color-normal` | File entries and context lines | `#d0d0d0` |
-| `--color-muted` | Divider lines and status bar | `#6c6c6c` |
+| `--color-muted` | Divider lines and status bar | `#585858` |
 | `--color-selected-fg` | Selected file text | `#ffffaf` |
 | `--color-selected-bg` | Selected file background | `#D5895F` |
 | `--color-annotation` | Annotation text and markers | `#ffd700` |
@@ -173,10 +173,10 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-modify-bg` | Modified line background (collapsed mode) | `#3D2E00` |
 | `--color-tree-bg` | File tree pane background | terminal default |
 | `--color-diff-bg` | Diff pane background | terminal default |
-| `--color-status-fg` | Status bar foreground | `#2D2D2D` |
+| `--color-status-fg` | Status bar foreground | `#202020` |
 | `--color-status-bg` | Status bar background | `#C5794F` |
 | `--color-search-fg` | Search match text | `#1a1a1a` |
-| `--color-search-bg` | Search match background | `#d7d700` |
+| `--color-search-bg` | Search match background | `#4a4a00` |
 
 </details>
 

@@ -8,6 +8,9 @@ import (
 	"github.com/umputun/revdiff/diff"
 )
 
+// matchRange represents a range of visible character positions for search match highlighting.
+type matchRange struct{ start, end int }
+
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
 // and injected annotation lines.
 func (m Model) renderDiff() string {
@@ -172,8 +175,8 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 }
 
 // highlightSearchMatches wraps each occurrence of the search term in the visible text
-// with ANSI fg+bg color sequences. works with both plain text and ANSI-coded content
-// by stripping ANSI to find match positions, then inserting highlights at correct visible-character positions.
+// with ANSI background color sequence (preserving syntax foreground within matches).
+// works with both plain text and ANSI-coded content by stripping ANSI to find match positions.
 func (m Model) highlightSearchMatches(s string) string {
 	if m.searchTerm == "" {
 		return s
@@ -188,7 +191,6 @@ func (m Model) highlightSearchMatches(s string) string {
 	}
 
 	// collect all match ranges in visible-character positions
-	type matchRange struct{ start, end int }
 	var matches []matchRange
 	offset := 0
 	for {
@@ -204,10 +206,21 @@ func (m Model) highlightSearchMatches(s string) string {
 		return s
 	}
 
-	hlOn := m.ansiFg(m.styles.colors.SearchFg) + m.ansiBg(m.styles.colors.SearchBg)
-	hlOff := "\033[39m\033[49m"
+	// background-only highlight preserves syntax foreground colors within matches
+	hlOn := m.ansiBg(m.styles.colors.SearchBg)
+	hlOff := "\033[49m"
+	if hlOn == "" {
+		// no-colors mode: fall back to reverse video so matches remain visible
+		hlOn = "\033[7m"
+		hlOff = "\033[27m"
+	}
 
-	// walk original string, track visible char position, insert highlights
+	return m.insertHighlightMarkers(s, matches, hlOn, hlOff)
+}
+
+// insertHighlightMarkers walks the string inserting hlOn/hlOff ANSI sequences at match positions,
+// skipping over existing ANSI escape sequences to preserve them.
+func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOff string) string {
 	var b strings.Builder
 	visPos := 0   // current position in visible text
 	matchIdx := 0 // current match we're processing
@@ -228,14 +241,13 @@ func (m Model) highlightSearchMatches(s string) string {
 			continue
 		}
 
-		// check if we need to insert highlight start/end at this visible position
+		// insert highlight start/end at match boundaries
 		if matchIdx < len(matches) && visPos == matches[matchIdx].start {
 			b.WriteString(hlOn)
 		}
 		if matchIdx < len(matches) && visPos == matches[matchIdx].end {
 			b.WriteString(hlOff)
 			matchIdx++
-			// check next match start at same position
 			if matchIdx < len(matches) && visPos == matches[matchIdx].start {
 				b.WriteString(hlOn)
 			}

@@ -36,8 +36,8 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
     continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts
   when search is active (`/` to search, `n`/`N` to navigate, `esc` to clear):
     buildSearchMatchSet() converts match indices to O(1) map per render,
-    highlightSearchMatches() inserts raw ANSI fg+bg sequences around matched
-    substrings (character-level, ANSI-aware via ansi.Strip for position mapping)
+    highlightSearchMatches() inserts ANSI bg-only sequence around matched substrings
+    (preserves syntax foreground; falls back to reverse video in --no-colors mode)
   → viewport.SetContent() → terminal
 ```
 

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -301,7 +302,7 @@ func TestModel_StatusBarFilterIndicator(t *testing.T) {
 		assert.Contains(t, status, "◉", "should show filter icon when filter active")
 	})
 
-	t.Run("filter icon hidden when filter inactive", func(t *testing.T) {
+	t.Run("filter icon always present", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = newFileTree([]string{"a.go"})
 		m.ready = true
@@ -310,7 +311,7 @@ func TestModel_StatusBarFilterIndicator(t *testing.T) {
 		m.width = 200
 
 		status := m.statusBarText()
-		assert.NotContains(t, status, "◉", "should not show filter icon when filter inactive")
+		assert.Contains(t, status, "◉", "indicator always shown, muted when inactive")
 	})
 }
 
@@ -333,31 +334,27 @@ func TestModel_WrapModeFromConfig(t *testing.T) {
 }
 
 func TestModel_StatusModeIcons(t *testing.T) {
-	tests := []struct {
-		name      string
-		collapsed bool
-		filter    bool
-		wrap      bool
-		want      string
-	}{
-		{name: "no modes active", want: ""},
-		{name: "collapsed only", collapsed: true, want: "▼"},
-		{name: "filter only", filter: true, want: "◉"},
-		{name: "wrap only", wrap: true, want: "↩"},
-		{name: "collapsed and filter", collapsed: true, filter: true, want: "▼ ◉"},
-		{name: "collapsed and wrap", collapsed: true, wrap: true, want: "▼ ↩"},
-		{name: "all modes active", collapsed: true, filter: true, wrap: true, want: "▼ ◉ ↩"},
-	}
+	t.Run("all icons always present", func(t *testing.T) {
+		m := testModel(nil, nil)
+		icons := m.statusModeIcons()
+		assert.Contains(t, icons, "▼")
+		assert.Contains(t, icons, "◉")
+		assert.Contains(t, icons, "↩")
+		assert.Contains(t, icons, "≋")
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := testModel(nil, nil)
-			m.collapsed.enabled = tt.collapsed
-			m.tree.filter = tt.filter
-			m.wrapMode = tt.wrap
-			assert.Equal(t, tt.want, m.statusModeIcons())
-		})
-	}
+	t.Run("with colors active icons use status fg", func(t *testing.T) {
+		colors := Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+		m := testModel(nil, nil)
+		m.styles = newStyles(colors)
+		m.collapsed.enabled = true
+		m.tree.filter = false
+		icons := m.statusModeIcons()
+		// active collapsed icon should have status fg sequence
+		assert.Contains(t, icons, "\033[38;2;32;32;32m▼")
+		// inactive filter icon should have muted fg sequence
+		assert.Contains(t, icons, "\033[38;2;108;108;108m◉")
+	})
 }
 
 func TestModel_StatusBarWrapIndicator(t *testing.T) {
@@ -376,7 +373,7 @@ func TestModel_StatusBarWrapIndicator(t *testing.T) {
 		assert.Contains(t, status, "↩", "should show wrap icon when wrap active")
 	})
 
-	t.Run("wrap icon hidden when inactive", func(t *testing.T) {
+	t.Run("wrap icon always present", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = newFileTree([]string{"a.go"})
 		m.ready = true
@@ -385,7 +382,7 @@ func TestModel_StatusBarWrapIndicator(t *testing.T) {
 		m.width = 200
 
 		status := m.statusBarText()
-		assert.NotContains(t, status, "↩", "should not show wrap icon when wrap inactive")
+		assert.Contains(t, status, "↩", "indicator always shown, muted when inactive")
 	})
 }
 
@@ -1037,12 +1034,12 @@ func TestModel_StatusBarModeIndicators(t *testing.T) {
 		assert.Contains(t, status, "◉")
 	})
 
-	t.Run("no indicators in default mode", func(t *testing.T) {
+	t.Run("indicators always present in default mode", func(t *testing.T) {
 		m.collapsed.enabled = false
 		m.tree.filter = false
 		status := m.statusBarText()
-		assert.NotContains(t, status, "▼")
-		assert.NotContains(t, status, "◉")
+		assert.Contains(t, status, "▼", "always shown, muted when inactive")
+		assert.Contains(t, status, "◉", "always shown, muted when inactive")
 	})
 }
 
@@ -1072,12 +1069,12 @@ func TestModel_StatusBarNarrowTerminalDegradation(t *testing.T) {
 		assert.Contains(t, status, "? help")
 	})
 
-	t.Run("narrow terminal drops icons first", func(t *testing.T) {
-		m.width = 35
+	t.Run("narrow terminal drops hunk from left first", func(t *testing.T) {
+		m.width = 50
 		status := m.statusBarText()
+		assert.Contains(t, status, "a.go")
+		assert.Contains(t, status, "+1/-0")
 		assert.Contains(t, status, "? help")
-		assert.NotContains(t, status, "◉", "filter icon should be dropped on narrow terminal")
-		assert.NotContains(t, status, "▼", "collapsed icon should be dropped on narrow terminal")
 	})
 
 	t.Run("very narrow terminal drops hunk info", func(t *testing.T) {
@@ -2821,10 +2818,10 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 	t.Run("plain text single match", func(t *testing.T) {
 		m.searchTerm = "hello"
 		result := m.highlightSearchMatches("say hello world")
-		assert.Contains(t, result, "\033[38;2;26;26;26m")  // search fg
+		assert.NotContains(t, result, "\033[38;2;", "should not set foreground (bg-only highlight)")
 		assert.Contains(t, result, "\033[48;2;215;215;0m") // search bg
 		assert.Contains(t, result, "hello")
-		assert.Contains(t, result, "\033[39m\033[49m") // reset
+		assert.Contains(t, result, "\033[49m") // bg reset
 	})
 
 	t.Run("multiple matches", func(t *testing.T) {
@@ -2855,8 +2852,16 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 		m.searchTerm = "world"
 		result := m.highlightSearchMatches("\033[32mhello world\033[0m")
 		assert.Contains(t, result, "\033[48;2;215;215;0m") // search bg on
-		assert.Contains(t, result, "\033[39m\033[49m")     // search highlight reset
+		assert.Contains(t, result, "\033[49m")             // search bg reset
 		assert.Contains(t, result, "\033[32m")             // original ansi preserved
+	})
+
+	t.Run("no-colors fallback", func(t *testing.T) {
+		noColorModel := testModel(nil, nil)
+		noColorModel.searchTerm = "hello"
+		result := noColorModel.highlightSearchMatches("say hello world")
+		assert.Contains(t, result, "\033[7m", "should use reverse video in no-colors mode")
+		assert.Contains(t, result, "\033[27m", "should reset reverse video")
 	})
 }
 
@@ -4395,7 +4400,7 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 		m.searchMatchSet = nil
 		rendered := m.renderDiff()
 		assert.Contains(t, rendered, "package main")
-		assert.Contains(t, rendered, "func hello")
+		assert.Contains(t, ansi.Strip(rendered), "func hello")
 		assert.Contains(t, rendered, "func world")
 		assert.Contains(t, rendered, "old line")
 	})
@@ -4406,7 +4411,7 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 		m.searchCursor = 0
 		rendered := m.renderDiff()
 		// matched and non-matched lines should both be rendered
-		assert.Contains(t, rendered, "func hello")
+		assert.Contains(t, ansi.Strip(rendered), "func hello")
 		assert.Contains(t, rendered, "func world")
 		assert.Contains(t, rendered, "old line")
 	})
@@ -4421,8 +4426,8 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 		renderedWithout := m.renderDiff()
 
 		// both should contain the same text content
-		assert.Contains(t, renderedWithSearch, "func hello")
-		assert.Contains(t, renderedWithout, "func hello")
+		assert.Contains(t, ansi.Strip(renderedWithSearch), "func hello")
+		assert.Contains(t, ansi.Strip(renderedWithout), "func hello")
 		assert.Contains(t, renderedWithSearch, "func world")
 		assert.Contains(t, renderedWithout, "func world")
 	})
@@ -4443,7 +4448,7 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 		}
 		require.NotEmpty(t, matchLine)
 		assert.Contains(t, matchLine, "▶", "cursor should be present on matched line")
-		assert.Contains(t, matchLine, "func hello", "content should be preserved with cursor on match")
+		assert.Contains(t, ansi.Strip(matchLine), "func hello", "content should be preserved with cursor on match")
 	})
 }
 
