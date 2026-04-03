@@ -27,8 +27,17 @@ revdiff HEAD~1       # review last commit
 | `Ctrl+d/Ctrl+u` | Page scroll in file tree and diff pane |
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
-| `n/p` | Next/previous changed file |
+| `n/p` | Next/previous changed file (n = next match when search active) |
 | `[` / `]` | Jump to previous/next change hunk in diff |
+
+**Search:**
+
+| Key | Action |
+|-----|--------|
+| `/` | Start search in diff pane |
+| `n` | Next search match (overrides next file when search active) |
+| `N` | Previous search match |
+| `Esc` | Cancel search input / clear search results |
 
 **Annotations:**
 

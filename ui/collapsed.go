@@ -159,8 +159,14 @@ func (m Model) deletePlaceholderText(hunkStart int) string {
 
 // renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
 // shows "⋯ N lines deleted" with remove styling so users know deletions exist and can expand with '.'.
+// when search is active, matching placeholders use search highlight instead of remove styling.
 func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	text := m.deletePlaceholderText(hunkStart)
+
+	style := m.styles.LineRemove
+	if m.searchMatchSet[idx] {
+		style = m.styles.SearchMatch
+	}
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
@@ -173,7 +179,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 			if i == 0 {
 				prefix = " - "
 			}
-			styled := m.styles.LineRemove.Render(prefix + vl)
+			styled := style.Render(prefix + vl)
 
 			cursor := " "
 			if i == 0 && isCursor {
@@ -184,7 +190,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 		return
 	}
 
-	content := m.styles.LineRemove.Render(" - " + text)
+	content := style.Render(" - " + text)
 
 	// apply horizontal scroll
 	if m.scrollX > 0 {
@@ -280,6 +286,7 @@ func (m *Model) toggleCollapsedMode() {
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.cursorOnAnnotation = false // visible lines change, reset annotation cursor state
 	m.adjustCursorIfHidden()
+	m.realignSearchCursor()
 	m.viewport.SetContent(m.renderDiff())
 }
 
@@ -297,6 +304,7 @@ func (m *Model) toggleHunkExpansion() {
 		delete(m.collapsed.expandedHunks, hunkStart)
 		m.cursorOnAnnotation = false // annotations on removed lines become invisible
 		m.adjustCursorIfHidden()
+		m.realignSearchCursor()
 	} else {
 		m.collapsed.expandedHunks[hunkStart] = true
 	}

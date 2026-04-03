@@ -55,6 +55,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-diff-bg` | Diff pane background | terminal default |
 | `--color-status-fg` | Status bar foreground | `#2D2D2D` |
 | `--color-status-bg` | Status bar background | `#C5794F` |
+| `--color-search-fg` | Search match text | `#1a1a1a` |
+| `--color-search-bg` | Search match background | `#d7d700` |
 
 ## Chroma Syntax Highlighting Styles
 

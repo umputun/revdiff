@@ -171,15 +171,93 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 	}
 }
 
-// styleDiffContent applies the appropriate line style based on change type.
-// when isSearchMatch is true, search highlight replaces the change-type background.
-func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
-	if isSearchMatch {
-		if hasHighlight {
-			// keep chroma foreground, override background with search color
-			return m.styles.SearchMatch.UnsetForeground().Render(prefix + content)
+// highlightSearchMatches wraps each occurrence of the search term in the visible text
+// with ANSI fg+bg color sequences. works with both plain text and ANSI-coded content
+// by stripping ANSI to find match positions, then inserting highlights at correct visible-character positions.
+func (m Model) highlightSearchMatches(s string) string {
+	if m.searchTerm == "" {
+		return s
+	}
+
+	// find match positions in visible (ANSI-stripped) text
+	plain := ansi.Strip(s)
+	plainLower := strings.ToLower(plain)
+	term := strings.ToLower(m.searchTerm)
+	if !strings.Contains(plainLower, term) {
+		return s
+	}
+
+	// collect all match ranges in visible-character positions
+	type matchRange struct{ start, end int }
+	var matches []matchRange
+	offset := 0
+	for {
+		idx := strings.Index(plainLower[offset:], term)
+		if idx < 0 {
+			break
 		}
-		return m.styles.SearchMatch.Render(prefix + content)
+		start := offset + idx
+		matches = append(matches, matchRange{start, start + len(term)})
+		offset = start + len(term)
+	}
+	if len(matches) == 0 {
+		return s
+	}
+
+	hlOn := m.ansiFg(m.styles.colors.SearchFg) + m.ansiBg(m.styles.colors.SearchBg)
+	hlOff := "\033[39m\033[49m"
+
+	// walk original string, track visible char position, insert highlights
+	var b strings.Builder
+	visPos := 0   // current position in visible text
+	matchIdx := 0 // current match we're processing
+	i := 0
+
+	for i < len(s) {
+		// skip ANSI escape sequences (copy them as-is)
+		if s[i] == '\033' {
+			j := i + 1
+			for j < len(s) && s[j] != 'm' {
+				j++
+			}
+			if j < len(s) {
+				j++ // include the 'm'
+			}
+			b.WriteString(s[i:j])
+			i = j
+			continue
+		}
+
+		// check if we need to insert highlight start/end at this visible position
+		if matchIdx < len(matches) && visPos == matches[matchIdx].start {
+			b.WriteString(hlOn)
+		}
+		if matchIdx < len(matches) && visPos == matches[matchIdx].end {
+			b.WriteString(hlOff)
+			matchIdx++
+			// check next match start at same position
+			if matchIdx < len(matches) && visPos == matches[matchIdx].start {
+				b.WriteString(hlOn)
+			}
+		}
+
+		b.WriteByte(s[i])
+		visPos++
+		i++
+	}
+
+	// close any unclosed highlight
+	if matchIdx < len(matches) && visPos >= matches[matchIdx].start && visPos <= matches[matchIdx].end {
+		b.WriteString(hlOff)
+	}
+
+	return b.String()
+}
+
+// styleDiffContent applies the appropriate line style based on change type.
+func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
+	if isSearchMatch && m.searchTerm != "" {
+		content = m.highlightSearchMatches(content)
 	}
 
 	switch changeType {

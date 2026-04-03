@@ -12,6 +12,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
+- Vim-style `/` search within diff with `n`/`N` match navigation
 - Hunk navigation to jump between change groups
 - Filter file tree to show only annotated files
 - Status line with filename, diff stats, hunk position, and mode indicators
@@ -174,6 +175,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-diff-bg` | Diff pane background | terminal default |
 | `--color-status-fg` | Status bar foreground | `#2D2D2D` |
 | `--color-status-bg` | Status bar background | `#C5794F` |
+| `--color-search-fg` | Search match text | `#1a1a1a` |
+| `--color-search-bg` | Search match background | `#d7d700` |
 
 </details>
 
@@ -218,8 +221,17 @@ revdiff HEAD~1
 | `Ctrl+d/Ctrl+u` | Page scroll in file tree and diff pane |
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
-| `n/p` | Next/previous changed file |
+| `n/p` | Next/previous changed file (n = next match when search active) |
 | `[` / `]` | Jump to previous/next change hunk in diff |
+
+**Search:**
+
+| Key | Action |
+|-----|--------|
+| `/` | Start search in diff pane |
+| `n` | Next search match (overrides next file when search active) |
+| `N` | Previous search match |
+| `Esc` | Cancel search input / clear search results |
 
 **Annotations:**
 

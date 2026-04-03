@@ -23,8 +23,8 @@ func (m *Model) startSearch() tea.Cmd {
 // empty input clears the search. otherwise stores lowercase term, scans for
 // case-insensitive matches, and jumps to the first match at or after the cursor.
 func (m *Model) submitSearch() {
-	query := strings.TrimSpace(m.searchInput.Value())
-	if query == "" {
+	query := m.searchInput.Value()
+	if strings.TrimSpace(query) == "" {
 		m.clearSearch()
 		m.searching = false
 		return
@@ -46,9 +46,11 @@ func (m *Model) submitSearch() {
 		return
 	}
 
-	// find first match at or after current cursor position
+	hunks := m.findHunks()
+
+	// find first visible match at or after current cursor position
 	for i, idx := range m.searchMatches {
-		if idx < m.diffCursor {
+		if idx < m.diffCursor || m.isCollapsedHidden(idx, hunks) {
 			continue
 		}
 		m.searchCursor = i
@@ -58,32 +60,60 @@ func (m *Model) submitSearch() {
 		return
 	}
 
-	// wrap to first match if no match found after cursor
-	m.searchCursor = 0
-	m.diffCursor = m.searchMatches[0]
-	m.cursorOnAnnotation = false
-	m.syncViewportToCursor()
+	// wrap: find first visible match from the beginning
+	for i, idx := range m.searchMatches {
+		if m.isCollapsedHidden(idx, hunks) {
+			continue
+		}
+		m.searchCursor = i
+		m.diffCursor = idx
+		m.cursorOnAnnotation = false
+		m.syncViewportToCursor()
+		return
+	}
 }
 
 // nextSearchMatch advances to the next search match with wrap-around.
+// in collapsed mode, hidden removed lines are skipped.
 func (m *Model) nextSearchMatch() {
 	if len(m.searchMatches) == 0 {
 		return
 	}
-	m.searchCursor = (m.searchCursor + 1) % len(m.searchMatches)
+	hunks := m.findHunks()
+	start := m.searchCursor
+	for {
+		m.searchCursor = (m.searchCursor + 1) % len(m.searchMatches)
+		if !m.isCollapsedHidden(m.searchMatches[m.searchCursor], hunks) {
+			break
+		}
+		if m.searchCursor == start {
+			return // all matches are hidden
+		}
+	}
 	m.diffCursor = m.searchMatches[m.searchCursor]
 	m.cursorOnAnnotation = false
 	m.syncViewportToCursor()
 }
 
 // prevSearchMatch moves to the previous search match with wrap-around.
+// in collapsed mode, hidden removed lines are skipped.
 func (m *Model) prevSearchMatch() {
 	if len(m.searchMatches) == 0 {
 		return
 	}
-	m.searchCursor--
-	if m.searchCursor < 0 {
-		m.searchCursor = len(m.searchMatches) - 1
+	hunks := m.findHunks()
+	start := m.searchCursor
+	for {
+		m.searchCursor--
+		if m.searchCursor < 0 {
+			m.searchCursor = len(m.searchMatches) - 1
+		}
+		if !m.isCollapsedHidden(m.searchMatches[m.searchCursor], hunks) {
+			break
+		}
+		if m.searchCursor == start {
+			return // all matches are hidden
+		}
 	}
 	m.diffCursor = m.searchMatches[m.searchCursor]
 	m.cursorOnAnnotation = false
@@ -93,6 +123,30 @@ func (m *Model) prevSearchMatch() {
 // cancelSearch exits searching mode without submitting.
 func (m *Model) cancelSearch() {
 	m.searching = false
+}
+
+// realignSearchCursor updates searchCursor to the nearest visible match at or after diffCursor.
+// called after adjustCursorIfHidden moves diffCursor so the [X/Y] display stays accurate
+// and n/N navigation starts from the correct position.
+func (m *Model) realignSearchCursor() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	hunks := m.findHunks()
+	// find first visible match at or after current cursor
+	for i, idx := range m.searchMatches {
+		if idx >= m.diffCursor && !m.isCollapsedHidden(idx, hunks) {
+			m.searchCursor = i
+			return
+		}
+	}
+	// wrap: find first visible match from the beginning
+	for i, idx := range m.searchMatches {
+		if !m.isCollapsedHidden(idx, hunks) {
+			m.searchCursor = i
+			return
+		}
+	}
 }
 
 // clearSearch resets all search state.
@@ -120,6 +174,7 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEnter:
 		m.submitSearch()
+		m.viewport.SetContent(m.renderDiff()) // refresh viewport to clear/update highlights
 		return m, nil
 	case tea.KeyEsc:
 		m.cancelSearch()

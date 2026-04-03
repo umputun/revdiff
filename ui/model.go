@@ -227,6 +227,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
+	case msg.Type == tea.KeyEsc:
+		return m.handleEscKey()
+
 	case msg.String() == "Q":
 		return m.handleDiscardQuit()
 
@@ -251,14 +254,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnterKey()
 
 	case msg.String() == "A":
-		// file-level annotation only from diff pane to avoid annotating the wrong file
-		// when tree selection differs from the currently displayed file.
-		if m.focus == paneDiff && m.currFile != "" {
-			cmd := m.startFileAnnotation()
-			m.viewport.SetContent(m.renderDiff())
-			return m, cmd
-		}
-		return m, nil
+		return m.handleFileAnnotateKey()
 
 	case msg.String() == "v":
 		m.toggleCollapsedMode()
@@ -546,10 +542,11 @@ func (m Model) View() string {
 }
 
 // statusBarText returns context-sensitive status line content.
-// shows filename, diff stats, hunk position, mode indicators, and right-aligned annotation count + help hint.
+// shows search input (when typing), or filename, diff stats, hunk position,
+// search match position, mode indicators, and right-aligned annotation count + help hint.
 func (m Model) statusBarText() string {
 	if m.searching {
-		return m.searchInput.View() + "  [enter] search  [esc] cancel"
+		return m.searchBarText()
 	}
 
 	if m.inConfirmDiscard {
@@ -642,15 +639,7 @@ func (m Model) statusBarText() string {
 		left = name + sep + statsStr
 	}
 
-	// pad left to push right section to the end
-	padding := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2 // 2 for status bar padding
-	if padding > 0 {
-		return left + strings.Repeat(" ", padding) + right
-	}
-	if left != "" {
-		return left + sep + right
-	}
-	return right
+	return m.joinStatusSections(left, right, sep)
 }
 
 // hunkSegment returns a formatted hunk position string for the status line.
@@ -672,18 +661,48 @@ func (m Model) hunkSegment() string {
 	return fmt.Sprintf("%d hunks", total)
 }
 
-// searchSegment returns a formatted search position string like "[X/Y]" for the status line.
-// returns empty string when no search matches exist.
+// joinStatusSections joins left and right status sections with padding and separators.
+func (m Model) joinStatusSections(left, right, sep string) string {
+	sepWidth := lipgloss.Width(sep)
+	padding := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2 // 2 for status bar padding
+	if left != "" && padding > sepWidth {
+		return left + sep + strings.Repeat(" ", padding-sepWidth) + right
+	}
+	if padding > 0 {
+		return left + strings.Repeat(" ", padding) + right
+	}
+	if left != "" {
+		return left + sep + right
+	}
+	return right
+}
+
+// searchBarText returns the status bar content during search input mode.
+func (m Model) searchBarText() string {
+	return "/" + m.searchInput.Value()
+}
+
+// searchSegment returns a formatted search position string like "X/Y" for the status line.
+// returns empty string when no search matches exist. shows 0/N when all matches are hidden
+// in collapsed mode (e.g. matches only on removed lines).
 func (m Model) searchSegment() string {
 	if len(m.searchMatches) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("[%d/%d]", m.searchCursor+1, len(m.searchMatches))
+	pos := m.searchCursor + 1
+	if m.collapsed.enabled && m.searchCursor < len(m.searchMatches) {
+		hunks := m.findHunks()
+		if m.isCollapsedHidden(m.searchMatches[m.searchCursor], hunks) {
+			pos = 0
+		}
+	}
+	return fmt.Sprintf("%d/%d", pos, len(m.searchMatches))
 }
 
-// ansiFg returns an ANSI 24-bit foreground escape sequence for a hex color (e.g. "#6c6c6c").
-// uses raw ANSI instead of lipgloss.Render to avoid full reset that breaks outer backgrounds.
-func (m Model) ansiFg(hex string) string {
+// ansiColor returns an ANSI 24-bit color escape sequence for a hex color.
+// code 38 = foreground, 48 = background. uses raw ANSI instead of lipgloss.Render
+// to avoid full reset that breaks outer backgrounds.
+func (m Model) ansiColor(hex string, code int) string {
 	hex = strings.TrimPrefix(hex, "#")
 	if len(hex) != 6 {
 		return ""
@@ -691,8 +710,14 @@ func (m Model) ansiFg(hex string) string {
 	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
 	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
 	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
-	return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
+	return fmt.Sprintf("\033[%d;2;%d;%d;%dm", code, r, g, b)
 }
+
+// ansiFg returns an ANSI 24-bit foreground escape sequence for a hex color.
+func (m Model) ansiFg(hex string) string { return m.ansiColor(hex, 38) }
+
+// ansiBg returns an ANSI 24-bit background escape sequence for a hex color.
+func (m Model) ansiBg(hex string) string { return m.ansiColor(hex, 48) }
 
 // statusModeIcons returns combined mode indicator icons (▼ for collapsed, ◉ for filter, ↩ for wrap).
 func (m Model) statusModeIcons() string {
@@ -818,6 +843,25 @@ func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	m.inConfirmDiscard = true
+	return m, nil
+}
+
+// handleFileAnnotateKey starts file-level annotation from diff pane only.
+func (m Model) handleFileAnnotateKey() (tea.Model, tea.Cmd) {
+	if m.focus == paneDiff && m.currFile != "" {
+		cmd := m.startFileAnnotation()
+		m.viewport.SetContent(m.renderDiff())
+		return m, cmd
+	}
+	return m, nil
+}
+
+// handleEscKey clears active search results on esc.
+func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
+	if len(m.searchMatches) > 0 {
+		m.clearSearch()
+		m.viewport.SetContent(m.renderDiff())
+	}
 	return m, nil
 }
 
