@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.1 - 2026-04-03
+
+### Bug Fixes
+
+- center viewport on search match navigation (matches hunk navigation centering behavior)
+
+### Improvements
+
+- add project logo and move assets to `assets/` directory
+
 ## v0.4.0 - 2026-04-02
 
 ### New Features
