@@ -398,11 +398,16 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	// adjust tree width based on ratio (N out of 10 units)
-	m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
-
-	diffWidth := m.width - m.treeWidth - 4 // borders
-	diffHeight := m.paneHeight() - 1       // pane height minus diff header
+	var diffWidth int
+	if m.singleFile {
+		m.treeWidth = 0
+		diffWidth = m.width - 2 // diff pane borders only
+	} else {
+		// adjust tree width based on ratio (N out of 10 units)
+		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
+		diffWidth = m.width - m.treeWidth - 4 // borders
+	}
+	diffHeight := m.paneHeight() - 1 // pane height minus diff header
 
 	if !m.ready {
 		m.viewport = viewport.New(diffWidth, diffHeight)
@@ -500,22 +505,6 @@ func (m Model) View() string {
 	}
 
 	ph := m.paneHeight()
-	annotated := m.annotatedFiles()
-	treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
-
-	// apply pane borders based on focus
-	treeStyle := m.styles.TreePane
-	diffStyle := m.styles.DiffPane
-	if m.focus == paneTree {
-		treeStyle = m.styles.TreePaneActive
-	} else {
-		diffStyle = m.styles.DiffPaneActive
-	}
-
-	treePane := treeStyle.
-		Width(m.treeWidth).
-		Height(ph).
-		Render(treeContent)
 
 	// diff pane title
 	diffTitle := "no file selected"
@@ -525,12 +514,39 @@ func (m Model) View() string {
 	diffHeader := m.styles.DirEntry.Render(" " + diffTitle)
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
 
-	diffPane := diffStyle.
-		Width(m.width - m.treeWidth - 4).
-		Height(ph).
-		Render(diffContent)
+	var mainView string
+	if m.singleFile {
+		// single-file mode: no tree pane, diff uses full width
+		diffPane := m.styles.DiffPaneActive.
+			Width(m.width - 2).
+			Height(ph).
+			Render(diffContent)
+		mainView = diffPane
+	} else {
+		annotated := m.annotatedFiles()
+		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
 
-	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
+		// apply pane borders based on focus
+		treeStyle := m.styles.TreePane
+		diffStyle := m.styles.DiffPane
+		if m.focus == paneTree {
+			treeStyle = m.styles.TreePaneActive
+		} else {
+			diffStyle = m.styles.DiffPaneActive
+		}
+
+		treePane := treeStyle.
+			Width(m.treeWidth).
+			Height(ph).
+			Render(treeContent)
+
+		diffPane := diffStyle.
+			Width(m.width - m.treeWidth - 4).
+			Height(ph).
+			Render(diffContent)
+
+		mainView = lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
+	}
 
 	if m.showHelp {
 		// overlay help popup on top of current content

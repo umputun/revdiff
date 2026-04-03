@@ -5056,3 +5056,57 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 		model.wrapMode = false
 	})
 }
+
+func TestModel_ViewSingleFileMode(t *testing.T) {
+	m := testModel([]string{"main.go"}, nil)
+	m.tree = newFileTree([]string{"main.go"})
+	m.singleFile = true
+	m.focus = paneDiff
+	m.currFile = "main.go"
+	m.ready = true
+
+	view := m.View()
+
+	// single-file mode should not render tree pane entries
+	assert.NotContains(t, ansi.Strip(view), "no changed files")
+	// diff pane with the file title should be present
+	assert.Contains(t, view, "main.go")
+
+	// multi-file mode for comparison: tree entries should appear
+	m2 := testModel([]string{"internal/a.go", "internal/b.go"}, nil)
+	m2.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
+	m2.singleFile = false
+	m2.focus = paneTree
+	m2.ready = true
+
+	view2 := m2.View()
+	stripped2 := ansi.Strip(view2)
+	assert.Contains(t, stripped2, "a.go")
+	assert.Contains(t, stripped2, "b.go")
+}
+
+func TestModel_DiffContentWidthSingleFile(t *testing.T) {
+	t.Run("single-file mode", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.width = 100
+		m.treeWidth = 0
+		assert.Equal(t, 97, m.diffContentWidth()) // width - 3 (borders + cursor bar)
+	})
+
+	t.Run("multi-file mode", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.singleFile = false
+		m.width = 120
+		m.treeWidth = 36
+		assert.Equal(t, 79, m.diffContentWidth()) // 120 - 36 - 4 - 1
+	})
+
+	t.Run("single-file mode minimum width", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.width = 5
+		m.treeWidth = 0
+		assert.Equal(t, 10, m.diffContentWidth()) // min 10
+	})
+}

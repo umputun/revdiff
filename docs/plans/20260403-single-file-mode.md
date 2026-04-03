@@ -60,12 +60,12 @@ When a diff contains exactly one file, automatically hide the file tree pane and
 - Modify: `ui/diffview.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in `View()`: when `m.singleFile`, skip tree pane rendering and set diff pane `Width(m.width - 2)`
-- [ ] in `handleResize`: when `m.singleFile`, set `m.treeWidth = 0` and `diffWidth = m.width - 2`
-- [ ] in `diffContentWidth()`: when `m.singleFile`, return `max(10, m.width-3)`
-- [ ] write test: `View()` output in single-file mode does not contain tree pane content
-- [ ] write test: `diffContentWidth()` returns correct width in single-file mode
-- [ ] run `make test` — must pass before task 3
+- [x] in `View()`: when `m.singleFile`, skip tree pane rendering and set diff pane `Width(m.width - 2)`
+- [x] in `handleResize`: when `m.singleFile`, set `m.treeWidth = 0` and `diffWidth = m.width - 2`
+- [x] in `diffContentWidth()`: when `m.singleFile`, return `max(10, m.width-3)`
+- [x] write test: `View()` output in single-file mode does not contain tree pane content
+- [x] write test: `diffContentWidth()` returns correct width in single-file mode
+- [x] run `make test` — must pass before task 3
 
 ### Task 3: Disable pane-switching keys in single-file mode
 

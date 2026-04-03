@@ -600,6 +600,10 @@ func (m *Model) handleHorizontalScroll(direction int) {
 
 // diffContentWidth returns the available width for diff line content (excluding cursor bar).
 func (m Model) diffContentWidth() int {
+	if m.singleFile {
+		// single-file mode: diff pane borders (2) + cursor bar (1)
+		return max(10, m.width-3)
+	}
 	// diff pane width minus borders (4) minus tree width, minus bar (1)
 	return max(10, m.width-m.treeWidth-4-1)
 }
