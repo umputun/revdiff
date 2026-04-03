@@ -47,11 +47,11 @@ When a diff contains exactly one file, automatically hide the file tree pane and
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `singleFile bool` field to Model struct
-- [ ] in `handleFilesLoaded`: set `m.singleFile = len(msg.files) == 1` and `m.focus = paneDiff` when single file
-- [ ] write test: single file sets `singleFile = true` and `focus = paneDiff`
-- [ ] write test: multiple files keeps `singleFile = false`
-- [ ] run `make test` — must pass before task 2
+- [x] add `singleFile bool` field to Model struct
+- [x] in `handleFilesLoaded`: set `m.singleFile = len(msg.files) == 1` and `m.focus = paneDiff` when single file
+- [x] write test: single file sets `singleFile = true` and `focus = paneDiff`
+- [x] write test: multiple files keeps `singleFile = false`
+- [x] run `make test` — must pass before task 2
 
 ### Task 2: Adjust View rendering for single-file mode
 

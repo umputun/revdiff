@@ -89,6 +89,7 @@ type Model struct {
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
+	singleFile       bool // true when diff contains exactly one file, hides tree pane
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -426,6 +427,10 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.tree = newFileTree(msg.files)
+	m.singleFile = len(msg.files) == 1
+	if m.singleFile {
+		m.focus = paneDiff
+	}
 
 	// auto-select first file
 	if f := m.tree.selectedFile(); f != "" {

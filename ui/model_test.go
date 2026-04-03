@@ -78,6 +78,24 @@ func TestModel_FilesLoadedError(t *testing.T) {
 	assert.Empty(t, model.tree.entries)
 }
 
+func TestModel_FilesLoadedSingleFile(t *testing.T) {
+	m := testModel(nil, nil)
+	result, cmd := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	model := result.(Model)
+
+	assert.True(t, model.singleFile, "singleFile should be true for one file")
+	assert.Equal(t, paneDiff, model.focus, "focus should be on diff pane in single-file mode")
+	assert.NotNil(t, cmd) // should auto-select first file
+}
+
+func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
+	m := testModel(nil, nil)
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go", "c.go"}})
+	model := result.(Model)
+
+	assert.False(t, model.singleFile, "singleFile should be false for multiple files")
+}
+
 func TestModel_FileLoaded(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = newFileTree([]string{"a.go"})
