@@ -288,7 +288,7 @@ func (m *Model) toggleWrapMode() {
 	if m.wrapMode {
 		m.scrollX = 0
 	}
-	m.viewport.SetContent(m.renderDiff())
+	m.syncViewportToCursor()
 }
 
 // loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
@@ -402,7 +402,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.tree.ensureVisible(m.treePageSize())
 
 	if m.currFile != "" {
-		m.viewport.SetContent(m.renderDiff())
+		m.syncViewportToCursor()
 	}
 
 	return m, nil
@@ -655,7 +655,7 @@ func (m Model) statusModeIcons() string {
 	return strings.Join(icons, " ")
 }
 
-// statusSegmentsNoIcons returns left segments without mode indicators (▼ ◉).
+// statusSegmentsNoIcons returns left segments without mode indicators (▼ ◉ ↩).
 func (m Model) statusSegmentsNoIcons() []string {
 	var segments []string
 	if m.currFile != "" {

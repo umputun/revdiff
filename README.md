@@ -9,6 +9,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
 - Full-file diff view with syntax highlighting
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
+- Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Hunk navigation to jump between change groups
@@ -126,6 +127,7 @@ revdiff [OPTIONS] [ref]
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
+| `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
@@ -233,6 +235,7 @@ revdiff HEAD~1
 | Key | Action |
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
+| `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
