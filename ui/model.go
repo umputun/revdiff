@@ -50,6 +50,7 @@ type Model struct {
 
 	ref            string
 	staged         bool
+	only           []string // filter to show only matching files
 	noStatusBar    bool
 	focus          pane
 	width          int
@@ -115,7 +116,8 @@ type ModelConfig struct {
 	NoColors         bool // disable all colors including syntax highlighting
 	NoStatusBar      bool // hide the status bar
 	NoConfirmDiscard bool // skip confirmation prompt when discarding annotations
-	Wrap             bool // enable line wrapping
+	Wrap             bool     // enable line wrapping
+	Only             []string // show only these files (match by exact path or path suffix)
 	Colors           Colors
 }
 
@@ -138,6 +140,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		highlighter:      highlighter,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
+		only:             cfg.Only,
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
@@ -437,13 +440,36 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// filterOnly returns only files matching the --only patterns, or all files if no filter is set.
+// matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
+func (m Model) filterOnly(files []string) []string {
+	if len(m.only) == 0 {
+		return files
+	}
+	var filtered []string
+	for _, f := range files {
+		for _, pattern := range m.only {
+			if f == pattern || strings.HasSuffix(f, "/"+pattern) {
+				filtered = append(filtered, f)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
 func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
 	}
-	m.tree = newFileTree(msg.files)
-	m.singleFile = len(msg.files) == 1
+	files := m.filterOnly(msg.files)
+	if len(files) == 0 && len(m.only) > 0 {
+		m.viewport.SetContent("no files match --only filter")
+		return m, nil
+	}
+	m.tree = newFileTree(files)
+	m.singleFile = len(files) == 1
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0

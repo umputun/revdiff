@@ -32,7 +32,8 @@ type options struct {
 	NoConfirmDiscard bool   `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
 	Wrap             bool   `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
 	ChromaStyle      string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
-	Output           string `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
+	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
+	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Config           string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig       bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version          bool   `short:"V" long:"version" no-ini:"true" description:"show version info"`
@@ -185,6 +186,7 @@ func run(opts options) error {
 		Ref:              opts.Ref.Ref,
 		Staged:           opts.Staged,
 		TreeWidthRatio:   opts.TreeWidth,
+		Only:             opts.Only,
 		Colors: ui.Colors{
 			Accent:     opts.Colors.Accent,
 			Border:     opts.Colors.Border,

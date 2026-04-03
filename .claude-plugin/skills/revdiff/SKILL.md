@@ -71,7 +71,7 @@ The script outputs structured fields:
 Run the launcher script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [ref] [--staged]
+${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [ref] [--staged] [--only=file1 --only=file2]
 ```
 
 The script:

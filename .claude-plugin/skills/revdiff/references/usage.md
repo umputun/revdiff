@@ -11,6 +11,8 @@ revdiff              # review uncommitted changes
 revdiff main         # review changes against a branch
 revdiff --staged     # review staged changes
 revdiff HEAD~1       # review last commit
+revdiff --only=model.go              # review only files matching model.go
+revdiff --only=ui/model.go --only=README.md  # review specific files
 ```
 
 ## Single-File Mode

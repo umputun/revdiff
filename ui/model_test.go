@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -5160,6 +5161,56 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 		m.treeWidth = 0
 		assert.Equal(t, 10, m.diffContentWidth()) // min 10
 	})
+}
+
+func TestModel_FilterOnly(t *testing.T) {
+	t.Run("no filter returns all files", func(t *testing.T) {
+		m := testModel(nil, nil)
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, files, m.filterOnly(files))
+	})
+
+	t.Run("exact path match", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"ui/model.go"}
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+	})
+
+	t.Run("suffix match", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"model.go"}
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+	})
+
+	t.Run("multiple patterns", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"model.go", "README.md"}
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go", "README.md"}, m.filterOnly(files))
+	})
+
+	t.Run("no matches returns empty", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"nonexistent.go"}
+		files := []string{"ui/model.go", "diff/diff.go"}
+		assert.Empty(t, m.filterOnly(files))
+	})
+}
+
+func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
+	m := testModel(nil, nil)
+	m.only = []string{"nonexistent.go"}
+	m.ready = true
+	m.width = 80
+	m.height = 24
+	m.viewport = viewport.New(76, 20)
+
+	result, cmd := m.Update(filesLoadedMsg{files: []string{"ui/model.go", "diff/diff.go"}})
+	model := result.(Model)
+	assert.Nil(t, cmd, "should not trigger file load when no files match")
+	assert.Contains(t, model.viewport.View(), "no files match --only filter")
 }
 
 func TestModel_SingleFileKeysNoOp(t *testing.T) {
