@@ -78,12 +78,7 @@ func (m Model) renderCollapsedDiff() string {
 
 // renderCollapsedAddLine renders an add line in collapsed mode with modify or add styling.
 func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffLine, modified bool) {
-	hasHighlight := idx < len(m.highlightedLines)
-	hlContent := ""
-	if hasHighlight {
-		hlContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
-	}
-	lineContent := strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 
 	style, hlStyle, gutter := m.styles.LineAdd, m.styles.LineAddHighlight, " + "
 	if modified {
@@ -92,15 +87,9 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
-	textContent := lineContent
-	if hasHighlight {
-		textContent = hlContent
-	}
-
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		const gutterWidth = 3
-		wrapWidth := m.diffContentWidth() - gutterWidth
+		wrapWidth := m.diffContentWidth() - wrapGutterWidth
 		visualLines := m.wrapContent(textContent, wrapWidth)
 		for i, vl := range visualLines {
 			prefix := " ↪ "
@@ -126,7 +115,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	content := style.Render(gutter + lineContent)
 	if hasHighlight {
-		content = hlStyle.Render(gutter + hlContent)
+		content = hlStyle.Render(gutter + textContent)
 	}
 
 	// apply horizontal scroll
@@ -141,9 +130,9 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	b.WriteString(cursor + content + "\n")
 }
 
-// renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
-// shows "⋯ N lines deleted" with remove styling so users know deletions exist and can expand with '.'.
-func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
+// deletePlaceholderText returns the text shown for a delete-only hunk placeholder starting at hunkStart.
+// used by both renderDeletePlaceholder and cursorViewportY to stay in sync.
+func (m Model) deletePlaceholderText(hunkStart int) string {
 	count := 0
 	for i := hunkStart; i < len(m.diffLines); i++ {
 		ct := m.diffLines[i].ChangeType
@@ -154,18 +143,22 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 			count++
 		}
 	}
-
-	text := fmt.Sprintf("⋯ %d lines deleted", count)
 	if count == 1 {
-		text = "⋯ 1 line deleted"
+		return "⋯ 1 line deleted"
 	}
+	return fmt.Sprintf("⋯ %d lines deleted", count)
+}
+
+// renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
+// shows "⋯ N lines deleted" with remove styling so users know deletions exist and can expand with '.'.
+func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
+	text := m.deletePlaceholderText(hunkStart)
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
 	// wrap mode: break long placeholder at word boundaries
 	if m.wrapMode {
-		const gutterWidth = 3
-		wrapWidth := m.diffContentWidth() - gutterWidth
+		wrapWidth := m.diffContentWidth() - wrapGutterWidth
 		visualLines := m.wrapContent(text, wrapWidth)
 		for i, vl := range visualLines {
 			prefix := " ↪ "

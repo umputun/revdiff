@@ -31,6 +31,9 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
     collapsed (`v` toggle): renderCollapsedDiff() → skips removed lines,
       uses buildModifiedSet() to style adds as modify (amber ~) or pure add (green +)
       expanded hunks (`.` toggle) show all lines inline
+  when wrap mode is on (`w` toggle, orthogonal to above):
+    wrapContent() splits long lines via ansi.Wrap,
+    continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts
   → viewport.SetContent() → terminal
 ```
 

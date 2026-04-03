@@ -249,11 +249,19 @@ func (m Model) cursorViewportY() int {
 		if m.isCollapsedHidden(i, hunks) {
 			continue
 		}
-		y += m.wrappedLineCount(i) // the diff line (may occupy multiple visual rows when wrapping)
-		// delete-only placeholders don't render annotations, skip counting them
+		// delete-only placeholders render synthetic text ("⋯ N lines deleted"), not original content.
+		// use placeholder text for wrapping to stay in sync with renderDeletePlaceholder.
 		if m.isDeleteOnlyPlaceholder(i, hunks) {
+			if m.wrapMode {
+				text := m.deletePlaceholderText(i)
+				wrapWidth := m.diffContentWidth() - wrapGutterWidth
+				y += len(m.wrapContent(text, wrapWidth))
+			} else {
+				y++ // placeholder is always 1 row when not wrapping
+			}
 			continue
 		}
+		y += m.wrappedLineCount(i) // the diff line (may occupy multiple visual rows when wrapping)
 		dl := m.diffLines[i]
 		if dl.ChangeType != diff.ChangeDivider {
 			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))

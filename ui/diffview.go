@@ -67,21 +67,12 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 // renderDiffLine writes a single styled diff line (with cursor highlight) to the builder.
 // when wrap mode is active, long lines are broken at word boundaries with ↪ continuation markers.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
-	hasHighlight := idx < len(m.highlightedLines)
-	hlContent := ""
-	if hasHighlight {
-		hlContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
-	}
-	lineContent := strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
 	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
 	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
-		textContent := lineContent
-		if hasHighlight {
-			textContent = hlContent
-		}
 		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor)
 		return
 	}
@@ -90,10 +81,6 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	if dl.ChangeType == diff.ChangeDivider {
 		content = m.styles.LineNumber.Render(" " + lineContent)
 	} else {
-		textContent := lineContent
-		if hasHighlight {
-			textContent = hlContent
-		}
 		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight)
 	}
 
@@ -111,8 +98,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
 func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor bool) {
-	const gutterWidth = 3 // prefix width: " + ", " - ", "   ", " ↪ "
-	wrapWidth := m.diffContentWidth() - gutterWidth
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth
 
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
@@ -143,14 +129,8 @@ func (m Model) wrappedLineCount(idx int) int {
 		return 1
 	}
 
-	// use highlighted content when available, matching renderDiffLine behavior
-	textContent := strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
-	if idx < len(m.highlightedLines) {
-		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
-	}
-
-	const gutterWidth = 3 // same as renderWrappedDiffLine
-	wrapWidth := m.diffContentWidth() - gutterWidth
+	_, textContent, _ := m.prepareLineContent(idx, dl)
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth
 	return len(m.wrapContent(textContent, wrapWidth))
 }
 
@@ -162,6 +142,18 @@ func (m Model) wrapContent(content string, width int) []string {
 	}
 	wrapped := ansi.Wrap(content, width, "")
 	return strings.Split(wrapped, "\n")
+}
+
+// prepareLineContent returns the display-ready content for a diff line with tabs replaced.
+// returns the raw line content, the best available content (highlighted if available), and whether highlight was used.
+func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textContent string, hasHighlight bool) {
+	lineContent = strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+	hasHighlight = idx < len(m.highlightedLines)
+	textContent = lineContent
+	if hasHighlight {
+		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
+	}
+	return lineContent, textContent, hasHighlight
 }
 
 // linePrefix returns the 3-character gutter prefix for a given change type.
@@ -467,7 +459,8 @@ func (m *Model) centerViewportOnCursor() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
-const scrollStep = 4 // horizontal scroll step in characters
+const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
+const scrollStep = 4      // horizontal scroll step in characters
 
 // handleHorizontalScroll processes left/right scroll keys.
 // direction < 0 scrolls left, direction > 0 scrolls right.

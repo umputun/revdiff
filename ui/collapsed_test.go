@@ -1551,22 +1551,61 @@ func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
 }
 
 func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
-	m := testModel(nil, nil)
-	m.styles = plainStyles()
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.wrapMode = true
-	m.width = 30 // narrow width to force placeholder wrapping
-	m.treeWidth = 0
-	m.diffLines = []diff.DiffLine{
-		{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
-		{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
-		{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
-	}
+	t.Run("wrapping", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.styles = plainStyles()
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.wrapMode = true
+		m.width = 15 // narrow width to force placeholder wrapping (wrapWidth=7, text ~17 chars)
+		m.treeWidth = 0
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
+		}
 
-	rendered := m.renderDiff()
-	assert.Contains(t, rendered, "3 lines deleted", "placeholder should show line count")
-	assert.Contains(t, rendered, " - ", "placeholder should have - gutter")
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, " - ", "placeholder should have - gutter on first line")
+		assert.Contains(t, rendered, " ↪ ", "long placeholder should have continuation markers")
+		assert.Contains(t, rendered, "deleted", "placeholder should contain deletion text")
+	})
+
+	t.Run("no wrapping needed", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.styles = plainStyles()
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.wrapMode = true
+		m.width = 80
+		m.treeWidth = 0
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
+		}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, "3 lines deleted", "placeholder should show line count")
+		assert.NotContains(t, rendered, "↪", "short placeholder should not wrap")
+	})
+
+	t.Run("singular line deleted", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.styles = plainStyles()
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.wrapMode = true
+		m.width = 80
+		m.treeWidth = 0
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+		}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, "1 line deleted", "singular placeholder text")
+		assert.NotContains(t, rendered, "lines deleted", "should not use plural form")
+	})
 }
 
 func TestModel_CollapsedWrapShortLinesUnchanged(t *testing.T) {

@@ -3593,6 +3593,37 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	})
 }
 
+func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.wrapMode = true
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.width = 60
+	m.treeWidth = 20
+
+	// diffContentWidth = 60 - 20 - 4 - 1 = 35, wrapWidth = 35 - 3 = 32
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
+		{OldNum: 1, Content: strings.Repeat("x", 80), ChangeType: diff.ChangeRemove}, // long remove, hunk start
+		{OldNum: 2, Content: strings.Repeat("y", 80), ChangeType: diff.ChangeRemove}, // long remove
+		{OldNum: 3, Content: strings.Repeat("z", 80), ChangeType: diff.ChangeRemove}, // long remove
+		{NewNum: 2, Content: "after context", ChangeType: diff.ChangeContext},
+	}
+
+	// placeholder text "⋯ 3 lines deleted" is short (~17 chars), fits in 1 row at wrapWidth=32.
+	// the original removed lines are 80 chars each and would wrap to ~3 rows.
+	// cursorViewportY must use placeholder text (1 row), not original content (~3 rows).
+
+	m.diffCursor = 4 // cursor on "after context" line
+	m.cursorOnAnnotation = false
+	m.focus = paneDiff
+
+	y := m.cursorViewportY()
+	// expected: 1 (context) + 1 (placeholder = 1 visual row) = 2
+	assert.Equal(t, 2, y, "viewport Y should count placeholder as 1 row, not original line content")
+}
+
 func TestModel_WrapToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
