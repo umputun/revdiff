@@ -88,6 +88,38 @@ func TestModel_FilesLoadedSingleFile(t *testing.T) {
 	assert.NotNil(t, cmd) // should auto-select first file
 }
 
+func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
+	m := testModel(nil, nil)
+	// simulate initial resize (viewport created with multi-file width)
+	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = resized.(Model)
+	assert.True(t, m.ready, "model should be ready after resize")
+
+	// now load single file — viewport width should be recalculated
+	result, _ := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	model := result.(Model)
+	assert.True(t, model.singleFile)
+	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in single-file mode")
+	assert.Equal(t, 98, model.viewport.Width, "viewport width should be width - 2 (borders only)")
+}
+
+func TestModel_ResizeInSingleFileMode(t *testing.T) {
+	m := testModel(nil, nil)
+	// set up single-file mode via filesLoadedMsg
+	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = resized.(Model)
+	loaded, _ := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	m = loaded.(Model)
+	require.True(t, m.singleFile)
+
+	// resize while in single-file mode
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	model := result.(Model)
+
+	assert.Equal(t, 0, model.treeWidth, "treeWidth stays 0 after resize in single-file mode")
+	assert.Equal(t, 78, model.viewport.Width, "viewport width should be new width - 2")
+}
+
 func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
 	m := testModel(nil, nil)
 	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go", "c.go"}})
@@ -5058,31 +5090,50 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 }
 
 func TestModel_ViewSingleFileMode(t *testing.T) {
-	m := testModel([]string{"main.go"}, nil)
-	m.tree = newFileTree([]string{"main.go"})
-	m.singleFile = true
-	m.focus = paneDiff
-	m.currFile = "main.go"
-	m.ready = true
+	t.Run("single-file mode renders full-width diff without tree pane", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.tree = newFileTree([]string{"main.go"})
+		m.singleFile = true
+		m.treeWidth = 0
+		m.focus = paneDiff
+		m.currFile = "main.go"
+		m.noStatusBar = true
+		m.ready = true
 
-	view := m.View()
+		view := m.View()
+		assert.Contains(t, view, "main.go")
 
-	// single-file mode should not render tree pane entries
-	assert.NotContains(t, ansi.Strip(view), "no changed files")
-	// diff pane with the file title should be present
-	assert.Contains(t, view, "main.go")
+		// every rendered line must be full terminal width (diff pane uses m.width - 2 + 2 border = m.width)
+		lines := strings.Split(view, "\n")
+		for i, line := range lines {
+			w := lipgloss.Width(line)
+			if w == 0 {
+				continue // skip empty trailing lines
+			}
+			assert.Equal(t, m.width, w, "line %d should be full width (%d), got %d", i, m.width, w)
+		}
 
-	// multi-file mode for comparison: tree entries should appear
-	m2 := testModel([]string{"internal/a.go", "internal/b.go"}, nil)
-	m2.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
-	m2.singleFile = false
-	m2.focus = paneTree
-	m2.ready = true
+		// single-file mode must not contain adjacent pane borders (││) from JoinHorizontal
+		stripped := ansi.Strip(view)
+		assert.NotContains(t, stripped, "││", "single-file mode should not have two adjacent pane borders")
+	})
 
-	view2 := m2.View()
-	stripped2 := ansi.Strip(view2)
-	assert.Contains(t, stripped2, "a.go")
-	assert.Contains(t, stripped2, "b.go")
+	t.Run("multi-file mode renders tree and diff panes side by side", func(t *testing.T) {
+		m := testModel([]string{"internal/a.go", "internal/b.go"}, nil)
+		m.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
+		m.singleFile = false
+		m.focus = paneTree
+		m.noStatusBar = true
+		m.ready = true
+
+		view := m.View()
+		stripped := ansi.Strip(view)
+		assert.Contains(t, stripped, "a.go")
+		assert.Contains(t, stripped, "b.go")
+
+		// multi-file mode should have adjacent pane borders from JoinHorizontal
+		assert.Contains(t, stripped, "││", "multi-file mode should have two pane borders from tree+diff join")
+	})
 }
 
 func TestModel_DiffContentWidthSingleFile(t *testing.T) {

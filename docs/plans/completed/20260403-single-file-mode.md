@@ -92,9 +92,9 @@ When a diff contains exactly one file, automatically hide the file tree pane and
 - [x] run linter: `make lint`
 
 ### Task 5: [Final] Update documentation
-- [ ] update README.md to mention single-file auto-detection
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md to mention single-file auto-detection
+- [x] update CLAUDE.md if new patterns discovered
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

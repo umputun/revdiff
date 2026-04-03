@@ -13,6 +13,10 @@ revdiff --staged     # review staged changes
 revdiff HEAD~1       # review last commit
 ```
 
+## Single-File Mode
+
+When a diff contains exactly one file, revdiff automatically hides the file tree pane and gives full terminal width to the diff view. Pane-switching keys (`Tab`, `h/l`, `n/p`, `f`) become no-ops. Search navigation (`n`/`N`) still works normally.
+
 ## Key Bindings
 
 **Navigation:**

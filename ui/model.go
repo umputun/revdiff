@@ -446,6 +446,10 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	m.singleFile = len(msg.files) == 1
 	if m.singleFile {
 		m.focus = paneDiff
+		m.treeWidth = 0
+		if m.ready {
+			m.viewport.Width = m.width - 2
+		}
 	}
 
 	// auto-select first file
@@ -963,7 +967,8 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePrevFile navigates to previous file. No-op in single-file mode.
+// handlePrevFile navigates to previous file.
+// no-op in single-file mode (tree pane is hidden).
 func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
 	if m.singleFile {
 		return m, nil
@@ -973,7 +978,8 @@ func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
 }
 
 // handleFileOrSearchNav handles n/N keys: navigates search matches when a search is active,
-// otherwise n falls through to next-file navigation. N does nothing without search.
+// otherwise n falls through to next-file navigation (no-op in single-file mode).
+// N does nothing without search.
 func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 	if len(m.searchMatches) > 0 {
 		if key == "n" {
