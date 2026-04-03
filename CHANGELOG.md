@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.0 - 2026-04-03
+
+### New Features
+
+- single-file auto-detection: when diff has exactly one file, hides the tree pane and gives full terminal width to the diff view (#10)
+
+### Bug Fixes
+
+- correct annotation input width to fit within diff pane, preventing cursor overflow
+
 ## v0.4.2 - 2026-04-03
 
 ### Bug Fixes
