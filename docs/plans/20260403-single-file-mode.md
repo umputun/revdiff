@@ -73,23 +73,23 @@ When a diff contains exactly one file, automatically hide the file tree pane and
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in `togglePane()`: early return when `m.singleFile`
-- [ ] in `handleDiffNav`: skip `h` key (switch to tree) when `m.singleFile`
-- [ ] in `handleKey`: skip `f` (filter) when `m.singleFile`
-- [ ] in `handleFileOrSearchNav` or `handleKey`: `n`/`p` file nav no-op when `m.singleFile` (search nav still works)
-- [ ] write tests: tab, h, f keys are no-ops in single-file mode
-- [ ] write test: `n` still navigates search matches in single-file mode
-- [ ] run `make test` — must pass before task 4
+- [x] in `togglePane()`: early return when `m.singleFile`
+- [x] in `handleDiffNav`: skip `h` key (switch to tree) when `m.singleFile`
+- [x] in `handleKey`: skip `f` (filter) when `m.singleFile`
+- [x] in `handleFileOrSearchNav` or `handleKey`: `n`/`p` file nav no-op when `m.singleFile` (search nav still works)
+- [x] write tests: tab, h, f keys are no-ops in single-file mode
+- [x] write test: `n` still navigates search matches in single-file mode
+- [x] run `make test` — must pass before task 4
 
 ### Task 4: Verify acceptance criteria
-- [ ] verify single-file diff shows no tree pane
-- [ ] verify diff pane uses full terminal width
-- [ ] verify focus starts on diff pane
-- [ ] verify pane-switching keys are no-ops
-- [ ] verify search, annotations, wrap, collapsed mode all work normally
-- [ ] verify multi-file mode is unchanged
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
+- [x] verify single-file diff shows no tree pane
+- [x] verify diff pane uses full terminal width
+- [x] verify focus starts on diff pane
+- [x] verify pane-switching keys are no-ops
+- [x] verify search, annotations, wrap, collapsed mode all work normally
+- [x] verify multi-file mode is unchanged
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
 
 ### Task 5: [Final] Update documentation
 - [ ] update README.md to mention single-file auto-detection

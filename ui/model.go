@@ -248,8 +248,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileOrSearchNav(msg.String())
 
 	case msg.String() == "p":
-		m.tree.prevFile()
-		return m.loadSelectedIfChanged()
+		return m.handlePrevFile()
 
 	case msg.String() == "enter":
 		return m.handleEnterKey()
@@ -278,7 +277,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // togglePane switches focus between tree and diff panes.
 // only switches to diff pane when a file is loaded.
+// no-op in single-file mode (tree pane is hidden).
 func (m *Model) togglePane() {
+	if m.singleFile {
+		return
+	}
 	if m.focus != paneTree {
 		m.focus = paneTree
 		return
@@ -286,6 +289,15 @@ func (m *Model) togglePane() {
 	if m.currFile != "" {
 		m.focus = paneDiff
 	}
+}
+
+// handleSwitchToTree switches focus to tree pane from diff.
+// no-op in single-file mode (tree pane is hidden).
+func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
+	if !m.singleFile {
+		m.focus = paneTree
+	}
+	return m, nil
 }
 
 // toggleWrapMode toggles line wrapping on/off.
@@ -351,8 +363,7 @@ func (m Model) paneHeight() int {
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.String() == "h":
-		m.focus = paneTree
-		return m, nil
+		return m.handleSwitchToTree()
 	case msg.String() == "left":
 		m.handleHorizontalScroll(-1)
 		return m, nil
@@ -938,7 +949,11 @@ func (m Model) handleConfirmDiscardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleFilterToggle toggles the annotated files filter.
+// no-op in single-file mode (tree pane is hidden).
 func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
+	if m.singleFile {
+		return m, nil
+	}
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 {
 		m.tree.toggleFilter(annotated)
@@ -946,6 +961,15 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 		return m.loadSelectedIfChanged()
 	}
 	return m, nil
+}
+
+// handlePrevFile navigates to previous file. No-op in single-file mode.
+func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
+	if m.singleFile {
+		return m, nil
+	}
+	m.tree.prevFile()
+	return m.loadSelectedIfChanged()
 }
 
 // handleFileOrSearchNav handles n/N keys: navigates search matches when a search is active,
@@ -960,7 +984,7 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderDiff())
 		return m, nil
 	}
-	if key == "n" {
+	if key == "n" && !m.singleFile {
 		m.tree.nextFile()
 		return m.loadSelectedIfChanged()
 	}
