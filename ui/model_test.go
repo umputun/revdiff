@@ -78,6 +78,56 @@ func TestModel_FilesLoadedError(t *testing.T) {
 	assert.Empty(t, model.tree.entries)
 }
 
+func TestModel_FilesLoadedSingleFile(t *testing.T) {
+	m := testModel(nil, nil)
+	result, cmd := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	model := result.(Model)
+
+	assert.True(t, model.singleFile, "singleFile should be true for one file")
+	assert.Equal(t, paneDiff, model.focus, "focus should be on diff pane in single-file mode")
+	assert.NotNil(t, cmd) // should auto-select first file
+}
+
+func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
+	m := testModel(nil, nil)
+	// simulate initial resize (viewport created with multi-file width)
+	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = resized.(Model)
+	assert.True(t, m.ready, "model should be ready after resize")
+
+	// now load single file — viewport width should be recalculated
+	result, _ := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	model := result.(Model)
+	assert.True(t, model.singleFile)
+	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in single-file mode")
+	assert.Equal(t, 98, model.viewport.Width, "viewport width should be width - 2 (borders only)")
+}
+
+func TestModel_ResizeInSingleFileMode(t *testing.T) {
+	m := testModel(nil, nil)
+	// set up single-file mode via filesLoadedMsg
+	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = resized.(Model)
+	loaded, _ := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	m = loaded.(Model)
+	require.True(t, m.singleFile)
+
+	// resize while in single-file mode
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	model := result.(Model)
+
+	assert.Equal(t, 0, model.treeWidth, "treeWidth stays 0 after resize in single-file mode")
+	assert.Equal(t, 78, model.viewport.Width, "viewport width should be new width - 2")
+}
+
+func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
+	m := testModel(nil, nil)
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go", "c.go"}})
+	model := result.(Model)
+
+	assert.False(t, model.singleFile, "singleFile should be false for multiple files")
+}
+
 func TestModel_FileLoaded(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = newFileTree([]string{"a.go"})
@@ -5037,4 +5087,287 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 		assert.Contains(t, rendered, "2 lines deleted")
 		model.wrapMode = false
 	})
+}
+
+func TestModel_ViewSingleFileMode(t *testing.T) {
+	t.Run("single-file mode renders full-width diff without tree pane", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.tree = newFileTree([]string{"main.go"})
+		m.singleFile = true
+		m.treeWidth = 0
+		m.focus = paneDiff
+		m.currFile = "main.go"
+		m.noStatusBar = true
+		m.ready = true
+
+		view := m.View()
+		assert.Contains(t, view, "main.go")
+
+		// every rendered line must be full terminal width (diff pane uses m.width - 2 + 2 border = m.width)
+		lines := strings.Split(view, "\n")
+		for i, line := range lines {
+			w := lipgloss.Width(line)
+			if w == 0 {
+				continue // skip empty trailing lines
+			}
+			assert.Equal(t, m.width, w, "line %d should be full width (%d), got %d", i, m.width, w)
+		}
+
+		// single-file mode must not contain adjacent pane borders (││) from JoinHorizontal
+		stripped := ansi.Strip(view)
+		assert.NotContains(t, stripped, "││", "single-file mode should not have two adjacent pane borders")
+	})
+
+	t.Run("multi-file mode renders tree and diff panes side by side", func(t *testing.T) {
+		m := testModel([]string{"internal/a.go", "internal/b.go"}, nil)
+		m.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
+		m.singleFile = false
+		m.focus = paneTree
+		m.noStatusBar = true
+		m.ready = true
+
+		view := m.View()
+		stripped := ansi.Strip(view)
+		assert.Contains(t, stripped, "a.go")
+		assert.Contains(t, stripped, "b.go")
+
+		// multi-file mode should have adjacent pane borders from JoinHorizontal
+		assert.Contains(t, stripped, "││", "multi-file mode should have two pane borders from tree+diff join")
+	})
+}
+
+func TestModel_DiffContentWidthSingleFile(t *testing.T) {
+	t.Run("single-file mode", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.width = 100
+		m.treeWidth = 0
+		assert.Equal(t, 97, m.diffContentWidth()) // width - 3 (borders + cursor bar)
+	})
+
+	t.Run("multi-file mode", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.singleFile = false
+		m.width = 120
+		m.treeWidth = 36
+		assert.Equal(t, 79, m.diffContentWidth()) // 120 - 36 - 4 - 1
+	})
+
+	t.Run("single-file mode minimum width", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.width = 5
+		m.treeWidth = 0
+		assert.Equal(t, 10, m.diffContentWidth()) // min 10
+	})
+}
+
+func TestModel_SingleFileKeysNoOp(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line two", ChangeType: diff.ChangeAdd},
+	}
+	setup := func() Model {
+		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": lines})
+		m.tree = newFileTree([]string{"main.go"})
+		m.singleFile = true
+		m.focus = paneDiff
+		m.currFile = "main.go"
+		m.diffLines = lines
+		m.highlightedLines = noopHighlighter().HighlightLines("main.go", lines)
+		m.styles = plainStyles()
+		return m
+	}
+
+	t.Run("tab is no-op in single-file mode", func(t *testing.T) {
+		m := setup()
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "tab should not switch pane in single-file mode")
+	})
+
+	t.Run("h is no-op in single-file mode", func(t *testing.T) {
+		m := setup()
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "h should not switch to tree in single-file mode")
+	})
+
+	t.Run("f is no-op in single-file mode", func(t *testing.T) {
+		m := setup()
+		m.store.Add(annotation.Annotation{File: "main.go", Line: 1, Type: "+", Comment: "test"})
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.False(t, model.tree.filter, "f should not toggle filter in single-file mode")
+	})
+
+	t.Run("p is no-op in single-file mode", func(t *testing.T) {
+		m := setup()
+		selected := m.tree.selectedFile()
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		model := result.(Model)
+		assert.Equal(t, selected, model.tree.selectedFile(), "p should not change file in single-file mode")
+	})
+
+	t.Run("n is no-op for file nav in single-file mode", func(t *testing.T) {
+		m := setup()
+		selected := m.tree.selectedFile()
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+		model := result.(Model)
+		assert.Equal(t, selected, model.tree.selectedFile(), "n should not advance file in single-file mode")
+	})
+}
+
+func TestModel_SingleFileSearchNavStillWorks(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "no hit", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "match two", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
+	model = result.(Model)
+	model.singleFile = true
+	model.focus = paneDiff
+	model.searchMatches = []int{0, 2}
+	model.searchCursor = 0
+	model.diffCursor = 0
+
+	// n should navigate to next search match
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model = result.(Model)
+	assert.Equal(t, 1, model.searchCursor, "n should advance search cursor in single-file mode")
+	assert.Equal(t, 2, model.diffCursor, "cursor should move to second match")
+
+	// N should navigate to previous search match
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.searchCursor, "N should go back in single-file mode")
+	assert.Equal(t, 0, model.diffCursor, "cursor should return to first match")
+}
+
+func TestModel_SingleFileWrapModeWorks(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "short line", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: strings.Repeat("long ", 50), ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
+	model = result.(Model)
+	model.singleFile = true
+	model.focus = paneDiff
+
+	assert.False(t, model.wrapMode, "wrap should be off initially")
+
+	// toggle wrap on
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model = result.(Model)
+	assert.True(t, model.wrapMode, "w should toggle wrap on in single-file mode")
+	assert.Equal(t, 0, model.scrollX, "wrap should reset horizontal scroll")
+
+	// toggle wrap off
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model = result.(Model)
+	assert.False(t, model.wrapMode, "w should toggle wrap off in single-file mode")
+}
+
+func TestModel_SingleFileCollapsedModeWorks(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
+	model = result.(Model)
+	model.singleFile = true
+	model.focus = paneDiff
+
+	assert.False(t, model.collapsed.enabled, "collapsed should be off initially")
+
+	// toggle collapsed on
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	model = result.(Model)
+	assert.True(t, model.collapsed.enabled, "v should toggle collapsed on in single-file mode")
+
+	// toggle collapsed off
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	model = result.(Model)
+	assert.False(t, model.collapsed.enabled, "v should toggle collapsed off in single-file mode")
+}
+
+func TestModel_SingleFileAnnotationWorks(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added line", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
+	model = result.(Model)
+	model.singleFile = true
+	model.focus = paneDiff
+	model.diffCursor = 1 // on the add line
+	model.styles = plainStyles()
+
+	// press enter to start annotation
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+	assert.True(t, model.annotating, "enter should start annotation in single-file mode")
+
+	// type annotation text
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	model = result.(Model)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	model = result.(Model)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	model = result.(Model)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+	model = result.(Model)
+
+	// press enter to save
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+	assert.False(t, model.annotating, "annotation should be saved")
+	assert.Equal(t, 1, model.store.Count(), "annotation should be stored")
+}
+
+func TestModel_SingleFileMultiFileModeUnchanged(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line one", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(filesLoadedMsg{files: []string{"a.go", "b.go"}})
+	model = result.(Model)
+
+	assert.False(t, model.singleFile, "multi-file should not be in single-file mode")
+	assert.Equal(t, paneTree, model.focus, "multi-file should start on tree pane")
+
+	// tab should switch panes
+	model.focus = paneTree
+	model.currFile = "a.go"
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = result.(Model)
+	assert.Equal(t, paneDiff, model.focus, "tab should switch to diff pane in multi-file mode")
+
+	// tab back to tree
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = result.(Model)
+	assert.Equal(t, paneTree, model.focus, "tab should switch back to tree in multi-file mode")
+
+	// f should toggle filter (with annotations present)
+	model.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	model.focus = paneDiff
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model = result.(Model)
+	assert.True(t, model.tree.filter, "f should toggle filter in multi-file mode")
 }

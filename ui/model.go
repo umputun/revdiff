@@ -89,6 +89,7 @@ type Model struct {
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
+	singleFile       bool // true when diff contains exactly one file, hides tree pane
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -247,8 +248,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileOrSearchNav(msg.String())
 
 	case msg.String() == "p":
-		m.tree.prevFile()
-		return m.loadSelectedIfChanged()
+		return m.handlePrevFile()
 
 	case msg.String() == "enter":
 		return m.handleEnterKey()
@@ -277,7 +277,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // togglePane switches focus between tree and diff panes.
 // only switches to diff pane when a file is loaded.
+// no-op in single-file mode (tree pane is hidden).
 func (m *Model) togglePane() {
+	if m.singleFile {
+		return
+	}
 	if m.focus != paneTree {
 		m.focus = paneTree
 		return
@@ -285,6 +289,15 @@ func (m *Model) togglePane() {
 	if m.currFile != "" {
 		m.focus = paneDiff
 	}
+}
+
+// handleSwitchToTree switches focus to tree pane from diff.
+// no-op in single-file mode (tree pane is hidden).
+func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
+	if !m.singleFile {
+		m.focus = paneTree
+	}
+	return m, nil
 }
 
 // toggleWrapMode toggles line wrapping on/off.
@@ -350,8 +363,7 @@ func (m Model) paneHeight() int {
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.String() == "h":
-		m.focus = paneTree
-		return m, nil
+		return m.handleSwitchToTree()
 	case msg.String() == "left":
 		m.handleHorizontalScroll(-1)
 		return m, nil
@@ -397,11 +409,16 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 
-	// adjust tree width based on ratio (N out of 10 units)
-	m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
-
-	diffWidth := m.width - m.treeWidth - 4 // borders
-	diffHeight := m.paneHeight() - 1       // pane height minus diff header
+	var diffWidth int
+	if m.singleFile {
+		m.treeWidth = 0
+		diffWidth = m.width - 2 // diff pane borders only
+	} else {
+		// adjust tree width based on ratio (N out of 10 units)
+		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
+		diffWidth = m.width - m.treeWidth - 4 // borders
+	}
+	diffHeight := m.paneHeight() - 1 // pane height minus diff header
 
 	if !m.ready {
 		m.viewport = viewport.New(diffWidth, diffHeight)
@@ -426,6 +443,14 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.tree = newFileTree(msg.files)
+	m.singleFile = len(msg.files) == 1
+	if m.singleFile {
+		m.focus = paneDiff
+		m.treeWidth = 0
+		if m.ready {
+			m.viewport.Width = m.width - 2
+		}
+	}
 
 	// auto-select first file
 	if f := m.tree.selectedFile(); f != "" {
@@ -495,22 +520,6 @@ func (m Model) View() string {
 	}
 
 	ph := m.paneHeight()
-	annotated := m.annotatedFiles()
-	treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
-
-	// apply pane borders based on focus
-	treeStyle := m.styles.TreePane
-	diffStyle := m.styles.DiffPane
-	if m.focus == paneTree {
-		treeStyle = m.styles.TreePaneActive
-	} else {
-		diffStyle = m.styles.DiffPaneActive
-	}
-
-	treePane := treeStyle.
-		Width(m.treeWidth).
-		Height(ph).
-		Render(treeContent)
 
 	// diff pane title
 	diffTitle := "no file selected"
@@ -520,12 +529,39 @@ func (m Model) View() string {
 	diffHeader := m.styles.DirEntry.Render(" " + diffTitle)
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
 
-	diffPane := diffStyle.
-		Width(m.width - m.treeWidth - 4).
-		Height(ph).
-		Render(diffContent)
+	var mainView string
+	if m.singleFile {
+		// single-file mode: no tree pane, diff uses full width
+		diffPane := m.styles.DiffPaneActive.
+			Width(m.width - 2).
+			Height(ph).
+			Render(diffContent)
+		mainView = diffPane
+	} else {
+		annotated := m.annotatedFiles()
+		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
 
-	mainView := lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
+		// apply pane borders based on focus
+		treeStyle := m.styles.TreePane
+		diffStyle := m.styles.DiffPane
+		if m.focus == paneTree {
+			treeStyle = m.styles.TreePaneActive
+		} else {
+			diffStyle = m.styles.DiffPaneActive
+		}
+
+		treePane := treeStyle.
+			Width(m.treeWidth).
+			Height(ph).
+			Render(treeContent)
+
+		diffPane := diffStyle.
+			Width(m.width - m.treeWidth - 4).
+			Height(ph).
+			Render(diffContent)
+
+		mainView = lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
+	}
 
 	if m.showHelp {
 		// overlay help popup on top of current content
@@ -917,7 +953,11 @@ func (m Model) handleConfirmDiscardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // handleFilterToggle toggles the annotated files filter.
+// no-op in single-file mode (tree pane is hidden).
 func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
+	if m.singleFile {
+		return m, nil
+	}
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 {
 		m.tree.toggleFilter(annotated)
@@ -927,8 +967,19 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handlePrevFile navigates to previous file.
+// no-op in single-file mode (tree pane is hidden).
+func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
+	if m.singleFile {
+		return m, nil
+	}
+	m.tree.prevFile()
+	return m.loadSelectedIfChanged()
+}
+
 // handleFileOrSearchNav handles n/N keys: navigates search matches when a search is active,
-// otherwise n falls through to next-file navigation. N does nothing without search.
+// otherwise n falls through to next-file navigation (no-op in single-file mode).
+// N does nothing without search.
 func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 	if len(m.searchMatches) > 0 {
 		if key == "n" {
@@ -939,7 +990,7 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderDiff())
 		return m, nil
 	}
-	if key == "n" {
+	if key == "n" && !m.singleFile {
 		m.tree.nextFile()
 		return m.loadSelectedIfChanged()
 	}

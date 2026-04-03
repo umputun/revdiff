@@ -17,7 +17,7 @@ func (m *Model) newAnnotationInput(placeholder string) (textinput.Model, tea.Cmd
 	ti.Placeholder = placeholder
 	cmd := ti.Focus()
 	ti.CharLimit = 500
-	ti.Width = max(10, m.width-m.treeWidth-10)
+	ti.Width = max(10, m.diffContentWidth()-6) // cursor col + emoji prefix "💬 " + border margin
 	return ti, cmd
 }
 

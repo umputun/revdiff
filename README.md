@@ -21,6 +21,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
+- Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Vim-style `/` search within diff with `n`/`N` match navigation
 - Hunk navigation to jump between change groups
