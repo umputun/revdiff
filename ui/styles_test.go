@@ -27,6 +27,7 @@ func TestNormalizeColors(t *testing.T) {
 		Accent: "5f87ff", Border: "#585858", Normal: "d0d0d0",
 		ModifyFg: "f5c542", ModifyBg: "#3D2E00",
 		TreeBg: "1a1a1a", DiffBg: "", StatusFg: "aabbcc", StatusBg: "",
+		SearchFg: "1a1a1a", SearchBg: "#d7d700",
 	})
 	assert.Equal(t, "#5f87ff", c.Accent, "should add # prefix")
 	assert.Equal(t, "#585858", c.Border, "should keep existing #")
@@ -37,6 +38,8 @@ func TestNormalizeColors(t *testing.T) {
 	assert.Empty(t, c.DiffBg, "empty should stay empty")
 	assert.Equal(t, "#aabbcc", c.StatusFg)
 	assert.Empty(t, c.StatusBg, "empty should stay empty")
+	assert.Equal(t, "#1a1a1a", c.SearchFg, "should add # prefix to search fg")
+	assert.Equal(t, "#d7d700", c.SearchBg, "should keep existing # on search bg")
 }
 
 func TestNewStyles_OptionalBackgrounds(t *testing.T) {
@@ -90,4 +93,21 @@ func TestPlainStyles_ModifyStyles(t *testing.T) {
 	// verify modify styles render correctly as no-op styles
 	assert.NotEmpty(t, s.LineModify.Render("text"))
 	assert.NotEmpty(t, s.LineModifyHighlight.Render("text"))
+}
+
+func TestNewStyles_SearchMatchStyle(t *testing.T) {
+	s := newStyles(Colors{
+		Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c",
+		SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700",
+		CursorBg: "#3a3a3a",
+		AddFg:    "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100",
+		SearchFg: "#1a1a1a", SearchBg: "#d7d700",
+	})
+	assert.NotNil(t, s.SearchMatch)
+	assert.NotEmpty(t, s.SearchMatch.Render("matched text"))
+}
+
+func TestPlainStyles_SearchMatchStyle(t *testing.T) {
+	s := plainStyles()
+	assert.NotEmpty(t, s.SearchMatch.Render("matched text"))
 }

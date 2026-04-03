@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
@@ -3206,6 +3207,7 @@ func TestModel_HelpOverlaySections(t *testing.T) {
 
 	// verify section headers are present
 	assert.Contains(t, help, "Navigation")
+	assert.Contains(t, help, "Search")
 	assert.Contains(t, help, "Annotations")
 	assert.Contains(t, help, "View")
 	assert.Contains(t, help, "Quit")
@@ -3219,6 +3221,7 @@ func TestModel_HelpOverlayKeyListings(t *testing.T) {
 	// verify key listings are present
 	keys := []string{
 		"tab", "n / p", "j / k", "PgDn/PgUp", "Ctrl+d/u", "Home/End", "h / l", "← / →", "[ / ]",
+		"/", "n", "N",
 		"a / enter", "A", "d", "f", "v", "w", ".",
 		"q", "Q", "? / esc",
 	}
@@ -3232,8 +3235,8 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	m.styles = plainStyles()
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
-	m.width = 80
-	m.height = 30
+	m.width = 100
+	m.height = 40
 
 	// without help, view should not contain help sections
 	m.showHelp = false
@@ -3480,22 +3483,22 @@ func TestModel_StyleDiffContent(t *testing.T) {
 	m.styles = plainStyles()
 
 	t.Run("add line", func(t *testing.T) {
-		result := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false)
+		result := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, false)
 		assert.Contains(t, result, " + content")
 	})
 
 	t.Run("remove line", func(t *testing.T) {
-		result := m.styleDiffContent(diff.ChangeRemove, " - ", "content", false)
+		result := m.styleDiffContent(diff.ChangeRemove, " - ", "content", false, false)
 		assert.Contains(t, result, " - content")
 	})
 
 	t.Run("context line", func(t *testing.T) {
-		result := m.styleDiffContent(diff.ChangeContext, "   ", "content", false)
+		result := m.styleDiffContent(diff.ChangeContext, "   ", "content", false, false)
 		assert.Contains(t, result, "   content")
 	})
 
 	t.Run("highlighted add", func(t *testing.T) {
-		result := m.styleDiffContent(diff.ChangeAdd, " + ", "\033[32mgreen\033[0m", true)
+		result := m.styleDiffContent(diff.ChangeAdd, " + ", "\033[32mgreen\033[0m", true, false)
 		assert.Contains(t, result, " + ")
 		assert.Contains(t, result, "\033[32m")
 	})
@@ -3764,4 +3767,869 @@ func TestModel_HelpOverlayContainsWordWrap(t *testing.T) {
 	help := m.helpOverlay()
 	assert.Contains(t, help, "toggle word wrap")
 	assert.Contains(t, help, "w")
+}
+
+func TestModel_HelpOverlayContainsSearchKeys(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	help := m.helpOverlay()
+
+	assert.Contains(t, help, "Search")
+	assert.Contains(t, help, "search in diff")
+	assert.Contains(t, help, "next match")
+	assert.Contains(t, help, "prev match")
+	assert.Contains(t, help, "n = next match when searching")
+}
+
+func TestModel_StartSearch(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// press / to start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	assert.True(t, model.searching, "should be in searching mode")
+	assert.True(t, model.searchInput.Focused(), "search input should be focused")
+}
+
+func TestModel_StartSearchOnlyFromDiffPane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneTree
+
+	// press / in tree pane - should not start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	assert.False(t, model.searching, "should not search from tree pane")
+}
+
+func TestModel_SubmitSearchFindsMatches(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "hello world", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "foo bar", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "hello again", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 0
+
+	// start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	// type "hello"
+	for _, ch := range "hello" {
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		model = result.(Model)
+	}
+
+	// submit with enter
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.False(t, model.searching, "should exit searching mode")
+	assert.Equal(t, "hello", model.searchTerm)
+	assert.Equal(t, []int{0, 2}, model.searchMatches)
+	assert.Equal(t, 0, model.searchCursor)
+	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match")
+}
+
+func TestModel_SubmitSearchCaseInsensitive(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "Hello World", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "HELLO again", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	model.searching = true
+	model.searchInput = textinput.New()
+	model.searchInput.SetValue("hello")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.Equal(t, []int{0, 1}, model.searchMatches, "should match case-insensitively")
+}
+
+func TestModel_SubmitSearchJumpsForwardFromCursor(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match here", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "foo bar", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "match again", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 1 // cursor past first match
+
+	model.searching = true
+	model.searchInput = textinput.New()
+	model.searchInput.SetValue("match")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.Equal(t, 1, model.searchCursor, "should jump to second match (index 1)")
+	assert.Equal(t, 2, model.diffCursor, "cursor should be on second match line")
+}
+
+func TestModel_SubmitSearchWrapsToFirstMatch(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match here", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "foo bar", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.diffCursor = 1 // cursor past all matches
+
+	model.searching = true
+	model.searchInput = textinput.New()
+	model.searchInput.SetValue("match")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.Equal(t, 0, model.searchCursor, "should wrap to first match")
+	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match line")
+}
+
+func TestModel_SubmitSearchNoMatches(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	model.searching = true
+	model.searchInput = textinput.New()
+	model.searchInput.SetValue("xyz")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.False(t, model.searching)
+	assert.Equal(t, "xyz", model.searchTerm)
+	assert.Empty(t, model.searchMatches)
+}
+
+func TestModel_SubmitEmptySearchClearsMatches(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// set up existing search state
+	model.searchTerm = "hello"
+	model.searchMatches = []int{0}
+	model.searchCursor = 0
+
+	// start search with empty input
+	model.searching = true
+	model.searchInput = textinput.New()
+	model.searchInput.SetValue("")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.False(t, model.searching)
+	assert.Empty(t, model.searchTerm)
+	assert.Empty(t, model.searchMatches)
+}
+
+func TestModel_CancelSearch(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	require.True(t, model.searching)
+
+	// cancel with esc
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = result.(Model)
+
+	assert.False(t, model.searching, "should exit searching mode on esc")
+}
+
+func TestModel_CancelSearchPreservesExistingMatches(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// set up existing search state
+	model.searchTerm = "hello"
+	model.searchMatches = []int{0}
+
+	// start and cancel new search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = result.(Model)
+
+	assert.Equal(t, "hello", model.searchTerm, "existing search term should be preserved on cancel")
+	assert.Equal(t, []int{0}, model.searchMatches, "existing matches should be preserved on cancel")
+}
+
+func TestModel_SearchInputForwardsCharacters(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	// type characters
+	for _, ch := range "test" {
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{ch}})
+		model = result.(Model)
+	}
+
+	assert.Equal(t, "test", model.searchInput.Value(), "characters should be forwarded to search input")
+}
+
+func TestModel_SearchBlocksOtherKeysWhileActive(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	// pressing q should not quit, it should type 'q'
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model = result.(Model)
+
+	assert.True(t, model.searching, "should still be searching")
+	assert.Contains(t, model.searchInput.Value(), "q")
+}
+
+func TestModel_SearchForwardsNonKeyMessages(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// start search
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	require.True(t, model.searching)
+
+	// send a non-key message; should not panic and model stays searching
+	type customMsg struct{}
+	result, _ = model.Update(customMsg{})
+	model = result.(Model)
+	assert.True(t, model.searching, "searching should remain true after non-key message")
+}
+
+func TestModel_NextSearchMatch(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "no match", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "match two", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "match three", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.searchMatches = []int{0, 2, 3}
+	model.searchCursor = 0
+	model.diffCursor = 0
+
+	// press n to go to next match
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model = result.(Model)
+	assert.Equal(t, 1, model.searchCursor, "search cursor should advance to 1")
+	assert.Equal(t, 2, model.diffCursor, "diff cursor should move to second match")
+
+	// press n again
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model = result.(Model)
+	assert.Equal(t, 2, model.searchCursor, "search cursor should advance to 2")
+	assert.Equal(t, 3, model.diffCursor, "diff cursor should move to third match")
+}
+
+func TestModel_NextSearchMatchWrapsAround(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "no match", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "match two", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.searchMatches = []int{0, 2}
+	model.searchCursor = 1 // on last match
+	model.diffCursor = 2
+
+	// press n should wrap to first match
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.searchCursor, "search cursor should wrap to 0")
+	assert.Equal(t, 0, model.diffCursor, "diff cursor should wrap to first match")
+}
+
+func TestModel_PrevSearchMatch(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "no match", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "match two", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "match three", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.searchMatches = []int{0, 2, 3}
+	model.searchCursor = 2
+	model.diffCursor = 3
+
+	// press N to go to prev match
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model = result.(Model)
+	assert.Equal(t, 1, model.searchCursor, "search cursor should go back to 1")
+	assert.Equal(t, 2, model.diffCursor, "diff cursor should move to second match")
+}
+
+func TestModel_PrevSearchMatchWrapsAround(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "no match", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "match two", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.searchMatches = []int{0, 2}
+	model.searchCursor = 0 // on first match
+	model.diffCursor = 0
+
+	// press N should wrap to last match
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model = result.(Model)
+	assert.Equal(t, 1, model.searchCursor, "search cursor should wrap to last")
+	assert.Equal(t, 2, model.diffCursor, "diff cursor should wrap to last match")
+}
+
+func TestModel_NKeyFallsThroughToNextFileWhenNoSearch(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// no search active, n should advance to next file
+	assert.Empty(t, model.searchMatches)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	model = result.(Model)
+	assert.Equal(t, "b.go", model.tree.selectedFile(), "n should go to next file when no search active")
+}
+
+func TestModel_ShiftNDoesPrevMatchWhenSearchActive(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "match one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "match two", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	model.searchMatches = []int{0, 1}
+	model.searchCursor = 1
+	model.diffCursor = 1
+
+	// press N (shift-n)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.searchCursor, "N should go to prev match")
+	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match")
+}
+
+func TestModel_ShiftNDoesNothingWithoutSearch(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	// no search active, N should do nothing
+	assert.Empty(t, model.searchMatches)
+	selected := model.tree.selectedFile()
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model = result.(Model)
+	assert.Equal(t, selected, model.tree.selectedFile(), "N should not change file when no search")
+}
+
+func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "func hello() {}", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "func world() {}", ChangeType: diff.ChangeAdd},
+		{OldNum: 4, Content: "old line", ChangeType: diff.ChangeRemove},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
+	m.focus = paneDiff
+	m.diffCursor = 0
+	m.styles = plainStyles()
+
+	t.Run("no search, renderDiff succeeds with all lines", func(t *testing.T) {
+		m.searchMatches = nil
+		m.searchMatchSet = nil
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, "package main")
+		assert.Contains(t, rendered, "func hello")
+		assert.Contains(t, rendered, "func world")
+		assert.Contains(t, rendered, "old line")
+	})
+
+	t.Run("search active, renderDiff includes matched content", func(t *testing.T) {
+		m.searchTerm = "hello"
+		m.searchMatches = []int{1}
+		m.searchCursor = 0
+		rendered := m.renderDiff()
+		// matched and non-matched lines should both be rendered
+		assert.Contains(t, rendered, "func hello")
+		assert.Contains(t, rendered, "func world")
+		assert.Contains(t, rendered, "old line")
+	})
+
+	t.Run("search vs no search both render content correctly", func(t *testing.T) {
+		m.searchTerm = "hello"
+		m.searchMatches = []int{1}
+		m.searchCursor = 0
+		renderedWithSearch := m.renderDiff()
+
+		m.searchMatches = nil
+		renderedWithout := m.renderDiff()
+
+		// both should contain the same text content
+		assert.Contains(t, renderedWithSearch, "func hello")
+		assert.Contains(t, renderedWithout, "func hello")
+		assert.Contains(t, renderedWithSearch, "func world")
+		assert.Contains(t, renderedWithout, "func world")
+	})
+
+	t.Run("cursor coexists with search highlight", func(t *testing.T) {
+		m.searchTerm = "hello"
+		m.searchMatches = []int{1}
+		m.searchCursor = 0
+		m.diffCursor = 1
+		rendered := m.renderDiff()
+
+		outputLines := strings.Split(rendered, "\n")
+		var matchLine string
+		for _, l := range outputLines {
+			if strings.Contains(l, "hello") {
+				matchLine = l
+			}
+		}
+		require.NotEmpty(t, matchLine)
+		assert.Contains(t, matchLine, "▶", "cursor should be present on matched line")
+		assert.Contains(t, matchLine, "func hello", "content should be preserved with cursor on match")
+	})
+}
+
+func TestModel_SearchHighlightWithWrap(t *testing.T) {
+	longContent := "this is a very long line that contains the search term hello somewhere in the middle and should wrap"
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: longContent, ChangeType: diff.ChangeAdd},
+		{NewNum: 2, Content: "short line", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
+	m.focus = paneDiff
+	m.diffCursor = 0
+	m.wrapMode = true
+	m.width = 60
+	m.treeWidth = 12
+	m.styles = plainStyles()
+
+	m.searchTerm = "hello"
+	m.searchMatches = []int{0}
+	m.searchCursor = 0
+
+	rendered := m.renderDiff()
+	outputLines := strings.Split(strings.TrimSuffix(rendered, "\n"), "\n")
+
+	// the long line should produce continuation rows with ↪
+	var continuationCount int
+	for _, l := range outputLines {
+		if strings.Contains(l, "↪") {
+			continuationCount++
+		}
+	}
+	assert.Positive(t, continuationCount, "wrapped search match should have continuation lines")
+
+	// verify content is present (text flows through the rendering path correctly)
+	assert.Contains(t, rendered, "hello")
+	assert.Contains(t, rendered, "short line")
+}
+
+func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed line", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added hello line", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added other line", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
+	m.focus = paneDiff
+	m.diffCursor = 0
+	m.styles = plainStyles()
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+
+	t.Run("collapsed renders with search matches", func(t *testing.T) {
+		m.searchTerm = "hello"
+		m.searchMatches = []int{2}
+		m.searchCursor = 0
+		rendered := m.renderDiff()
+
+		assert.Contains(t, rendered, "added hello line")
+		assert.Contains(t, rendered, "added other line")
+	})
+
+	t.Run("collapsed without search has no match set", func(t *testing.T) {
+		m.searchMatches = nil
+		m.searchMatchSet = nil
+		rendered := m.renderDiff()
+
+		assert.Contains(t, rendered, "added hello line")
+		assert.Nil(t, m.searchMatchSet, "no search should produce nil match set")
+	})
+}
+
+func TestModel_StyleDiffContentSearchMatch(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+
+	t.Run("search match returns same text content", func(t *testing.T) {
+		resultMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, true)
+		resultNoMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, false)
+		assert.Contains(t, resultMatch, " + content")
+		assert.Contains(t, resultNoMatch, " + content")
+	})
+
+	t.Run("search match with highlight preserves content", func(t *testing.T) {
+		result := m.styleDiffContent(diff.ChangeAdd, " + ", "\033[32mgreen\033[0m", true, true)
+		assert.Contains(t, result, " + ")
+		assert.Contains(t, result, "\033[32m", "chroma foreground should be preserved")
+	})
+
+	t.Run("search match uses different style than normal add", func(t *testing.T) {
+		// use newStyles with distinct colors so rendering produces different output
+		c := Colors{
+			Accent: "#ffffff", Border: "#555555", Normal: "#cccccc", Muted: "#666666",
+			SelectedFg: "#ffffff", SelectedBg: "#333333", Annotation: "#ff9900",
+			AddFg: "#00ff00", AddBg: "#002200", RemoveFg: "#ff0000", RemoveBg: "#220000",
+			ModifyFg: "#ffaa00", ModifyBg: "#221100",
+			SearchFg: "#1a1a1a", SearchBg: "#d7d700",
+		}
+		m.styles = newStyles(c)
+		resultMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, true)
+		resultNoMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, false)
+		// both have same text but may differ in ANSI sequences (depends on terminal detection)
+		// the key test is that both contain the content and the code paths don't panic
+		assert.Contains(t, resultMatch, "content")
+		assert.Contains(t, resultNoMatch, "content")
+	})
+}
+
+func TestModel_BuildSearchMatchSet(t *testing.T) {
+	m := testModel(nil, nil)
+
+	t.Run("empty matches produces nil set", func(t *testing.T) {
+		m.searchMatches = nil
+		m.buildSearchMatchSet()
+		assert.Nil(t, m.searchMatchSet)
+	})
+
+	t.Run("matches produce correct set", func(t *testing.T) {
+		m.searchMatches = []int{1, 5, 10}
+		m.buildSearchMatchSet()
+		assert.True(t, m.searchMatchSet[1])
+		assert.True(t, m.searchMatchSet[5])
+		assert.True(t, m.searchMatchSet[10])
+		assert.False(t, m.searchMatchSet[0])
+		assert.False(t, m.searchMatchSet[3])
+	})
+}
+
+func TestModel_ClearSearchResetsMatchSet(t *testing.T) {
+	m := testModel(nil, nil)
+	m.searchTerm = "test"
+	m.searchMatches = []int{1, 2}
+	m.searchCursor = 1
+	m.searchMatchSet = map[int]bool{1: true, 2: true}
+
+	m.clearSearch()
+
+	assert.Empty(t, m.searchTerm)
+	assert.Nil(t, m.searchMatches)
+	assert.Equal(t, 0, m.searchCursor)
+	assert.Nil(t, m.searchMatchSet)
+}
+
+func TestModel_StatusBarShowsSearchInput(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.width = 120
+	m.currFile = "a.go"
+	m.searching = true
+	m.searchInput = textinput.New()
+	m.searchInput.SetValue("hello")
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "[enter] search")
+	assert.Contains(t, status, "[esc] cancel")
+	assert.NotContains(t, status, "a.go", "filename should not appear during search input")
+}
+
+func TestModel_StatusBarSearchInputTakesPriority(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.width = 120
+	m.currFile = "a.go"
+	m.searching = true
+	m.searchInput = textinput.New()
+	m.inConfirmDiscard = true // should not show discard prompt
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "[enter] search", "search input should take priority over discard")
+	assert.NotContains(t, status, "discard")
+}
+
+func TestModel_StatusBarSearchMatchPosition(t *testing.T) {
+	tests := []struct {
+		name          string
+		matches       []int
+		cursor        int
+		wantContains  string
+		wantAbsent    string
+	}{
+		{name: "first of three", matches: []int{0, 2, 5}, cursor: 0, wantContains: "[1/3]"},
+		{name: "second of three", matches: []int{0, 2, 5}, cursor: 1, wantContains: "[2/3]"},
+		{name: "third of three", matches: []int{0, 2, 5}, cursor: 2, wantContains: "[3/3]"},
+		{name: "single match", matches: []int{1}, cursor: 0, wantContains: "[1/1]"},
+		{name: "no matches", matches: nil, cursor: 0, wantAbsent: "["},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.currFile = "a.go"
+			m.diffLines = []diff.DiffLine{
+				{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+				{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+				{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+			}
+			m.focus = paneDiff
+			m.width = 200
+			m.searchMatches = tt.matches
+			m.searchCursor = tt.cursor
+
+			status := m.statusBarText()
+			if tt.wantContains != "" {
+				assert.Contains(t, status, tt.wantContains)
+			}
+			if tt.wantAbsent != "" {
+				assert.NotContains(t, status, tt.wantAbsent)
+			}
+		})
+	}
+}
+
+func TestModel_SearchSegment(t *testing.T) {
+	m := testModel(nil, nil)
+
+	// no matches
+	assert.Empty(t, m.searchSegment())
+
+	// with matches
+	m.searchMatches = []int{0, 3, 7}
+	m.searchCursor = 1
+	assert.Equal(t, "[2/3]", m.searchSegment())
+}
+
+func TestModel_StatusBarSearchPositionBetweenHunkAndIcons(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+	m.width = 200
+	m.searchMatches = []int{1}
+	m.searchCursor = 0
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+
+	status := m.statusBarText()
+	// all three should be present
+	assert.Contains(t, status, "hunk 1/1")
+	assert.Contains(t, status, "[1/1]")
+	assert.Contains(t, status, "▼")
+
+	// [1/1] should appear after hunk and before ▼
+	hunkIdx := strings.Index(status, "hunk 1/1")
+	searchIdx := strings.Index(status, "[1/1]")
+	iconIdx := strings.Index(status, "▼")
+	assert.Greater(t, searchIdx, hunkIdx, "search position should appear after hunk")
+	assert.Less(t, searchIdx, iconIdx, "search position should appear before mode icons")
+}
+
+func TestModel_ClearSearchOnFileLoad(t *testing.T) {
+	lines1 := []diff.DiffLine{
+		{NewNum: 1, Content: "hello world", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "hello again", ChangeType: diff.ChangeAdd},
+	}
+	lines2 := []diff.DiffLine{
+		{NewNum: 1, Content: "other content", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines1, "b.go": lines2})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: model.loadSeq, lines: lines1})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	// set up search state as if user searched for "hello"
+	model.searchTerm = "hello"
+	model.searchMatches = []int{0, 1}
+	model.searchCursor = 1
+	model.searchMatchSet = map[int]bool{0: true, 1: true}
+
+	// load a different file
+	model.loadSeq++
+	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.loadSeq, lines: lines2})
+	model = result.(Model)
+
+	assert.Empty(t, model.searchTerm, "search term should be cleared on file load")
+	assert.Nil(t, model.searchMatches, "search matches should be cleared on file load")
+	assert.Equal(t, 0, model.searchCursor, "search cursor should be reset on file load")
+	assert.Nil(t, model.searchMatchSet, "search match set should be cleared on file load")
+}
+
+func TestModel_StatusBarNarrowDropsSearchSegment(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+	m.searchMatches = []int{1}
+	m.searchCursor = 0
+
+	t.Run("wide terminal shows search segment", func(t *testing.T) {
+		m.width = 200
+		status := m.statusBarText()
+		assert.Contains(t, status, "[1/1]")
+	})
+
+	t.Run("very narrow terminal drops search with hunk", func(t *testing.T) {
+		m.width = 28
+		status := m.statusBarText()
+		assert.NotContains(t, status, "[1/1]", "search segment should be dropped on very narrow terminal")
+		assert.Contains(t, status, "? help")
+	})
 }

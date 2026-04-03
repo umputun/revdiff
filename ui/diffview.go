@@ -19,6 +19,8 @@ func (m Model) renderDiff() string {
 		return m.renderCollapsedDiff()
 	}
 
+	m.buildSearchMatchSet()
+
 	annotationMap, fileComment := m.buildAnnotationMap()
 	var b strings.Builder
 	m.renderFileAnnotationHeader(&b, fileComment)
@@ -68,12 +70,13 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 // when wrap mode is active, long lines are broken at word boundaries with ↪ continuation markers.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
+	isSearchMatch := m.searchMatchSet[idx]
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
 	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
 	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
-		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor)
+		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor, isSearchMatch)
 		return
 	}
 
@@ -81,7 +84,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	if dl.ChangeType == diff.ChangeDivider {
 		content = m.styles.LineNumber.Render(" " + lineContent)
 	} else {
-		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight)
+		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight, isSearchMatch)
 	}
 
 	// apply horizontal scroll to content (bar stays fixed), disabled in wrap mode
@@ -97,7 +100,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 }
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
-func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor bool) {
+func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
 	wrapWidth := m.diffContentWidth() - wrapGutterWidth
 
 	visualLines := m.wrapContent(textContent, wrapWidth)
@@ -107,7 +110,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 			prefix = m.linePrefix(dl.ChangeType)
 		}
 
-		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight)
+		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
 
 		cursor := " "
 		if i == 0 && isCursor {
@@ -169,7 +172,16 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 }
 
 // styleDiffContent applies the appropriate line style based on change type.
-func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight bool) string {
+// when isSearchMatch is true, search highlight replaces the change-type background.
+func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
+	if isSearchMatch {
+		if hasHighlight {
+			// keep chroma foreground, override background with search color
+			return m.styles.SearchMatch.UnsetForeground().Render(prefix + content)
+		}
+		return m.styles.SearchMatch.Render(prefix + content)
+	}
+
 	switch changeType {
 	case diff.ChangeAdd:
 		if hasHighlight {
