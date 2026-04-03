@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.4.0 - 2026-04-02
+
+### New Features
+
+- collapsed diff mode — toggle with `v`, shows final text with change markers, expand individual hunks with `.`
+- status line with filename, diff stats, hunk position, and always-visible mode indicators (▼ ◉ ↩ ≋)
+- help overlay — press `?` for organized keybinding reference, composited on top of content
+- word wrap mode — toggle with `w`, wraps long lines with `↪` continuation markers, `--wrap` CLI flag
+- vim-style `/` search in diff pane with `n`/`N` match navigation, `esc` to clear
+- configurable search highlight colors (`--color-search-fg`, `--color-search-bg`)
+
+### Improvements
+
+- search highlighting uses background-only ANSI to preserve syntax colors within matches
+- reverse video fallback for search highlights in `--no-colors` mode
+- mode indicators always visible (muted when inactive, active foreground when on)
+- muted pipe separators in status line using raw ANSI to preserve background
+- truncate long filenames in tree pane to prevent selection highlight wrapping
+- extract collapsed diff mode into separate file for maintainability
+
+### Fixed
+
+- help overlay renders on top of content instead of replacing it
+- hunk count always shown in status line (not just when cursor is on changed line)
+- singular/plural handling for "1 hunk" vs "N hunks"
+- launch script flag parsing hardened for short flags and `-o`/`--output`
+
 ## v0.3.0 - 2026-04-02
 
 ### New Features
