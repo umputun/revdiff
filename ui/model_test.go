@@ -5162,6 +5162,42 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 	})
 }
 
+func TestModel_FilterOnly(t *testing.T) {
+	t.Run("no filter returns all files", func(t *testing.T) {
+		m := testModel(nil, nil)
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, files, m.filterOnly(files))
+	})
+
+	t.Run("exact path match", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"ui/model.go"}
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+	})
+
+	t.Run("suffix match", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"model.go"}
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+	})
+
+	t.Run("multiple patterns", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"model.go", "README.md"}
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go", "README.md"}, m.filterOnly(files))
+	})
+
+	t.Run("no matches returns empty", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"nonexistent.go"}
+		files := []string{"ui/model.go", "diff/diff.go"}
+		assert.Empty(t, m.filterOnly(files))
+	})
+}
+
 func TestModel_SingleFileKeysNoOp(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line one", ChangeType: diff.ChangeContext},
