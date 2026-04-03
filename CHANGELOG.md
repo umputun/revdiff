@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.2 - 2026-04-03
+
+### Bug Fixes
+
+- wrap long annotations at pane width regardless of wrap mode
+
 ## v0.4.1 - 2026-04-03
 
 ### Bug Fixes
