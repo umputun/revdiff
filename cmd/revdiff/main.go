@@ -57,6 +57,8 @@ type options struct {
 		DiffBg     string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
 		StatusFg   string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   default:"#202020" description:"status bar foreground"`
 		StatusBg   string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   default:"#C5794F" description:"status bar background"`
+		SearchFg   string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
+		SearchBg   string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#d7d700" description:"search match background"`
 	} `group:"color options"`
 }
 
@@ -203,6 +205,8 @@ func run(opts options) error {
 			DiffBg:     opts.Colors.DiffBg,
 			StatusFg:   opts.Colors.StatusFg,
 			StatusBg:   opts.Colors.StatusBg,
+			SearchFg:   opts.Colors.SearchFg,
+			SearchBg:   opts.Colors.SearchBg,
 		},
 	})
 

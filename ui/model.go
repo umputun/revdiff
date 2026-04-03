@@ -79,6 +79,13 @@ type Model struct {
 	showHelp bool // true when help overlay is visible
 	wrapMode bool // true when line wrapping is enabled
 
+	searching      bool            // true when search textinput is active (typing)
+	searchTerm     string          // last submitted search query
+	searchMatches  []int           // indices into diffLines that match
+	searchCursor   int             // current position in searchMatches (0-based)
+	searchInput    textinput.Model // dedicated textinput for search
+	searchMatchSet map[int]bool    // set of diffLines indices that match search, computed per render
+
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
@@ -193,6 +200,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// forward other messages to search textinput when searching (e.g. cursor blink)
+	if m.searching {
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 
@@ -200,6 +214,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// annotation input mode takes priority
 	if m.annotating {
 		return m.handleAnnotateKey(msg)
+	}
+
+	// search input mode takes priority after annotation
+	if m.searching {
+		return m.handleSearchKey(msg)
 	}
 
 	// help overlay: toggle with ?, dismiss with esc, block everything else
@@ -219,17 +238,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case msg.String() == "f":
-		annotated := m.annotatedFiles()
-		if len(annotated) > 0 {
-			m.tree.toggleFilter(annotated)
-			m.tree.ensureVisible(m.treePageSize())
-			return m.loadSelectedIfChanged()
-		}
-		return m, nil
+		return m.handleFilterToggle()
 
-	case msg.String() == "n":
-		m.tree.nextFile()
-		return m.loadSelectedIfChanged()
+	case msg.String() == "n" || msg.String() == "N":
+		return m.handleFileOrSearchNav(msg.String())
 
 	case msg.String() == "p":
 		m.tree.prevFile()
@@ -378,6 +390,9 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == ".":
 		m.toggleHunkExpansion()
 		return m, nil
+	case msg.String() == "/":
+		cmd := m.startSearch()
+		return m, cmd
 	}
 	return m, nil
 }
@@ -435,6 +450,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	m.clearSearch()
 	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
 	m.cursorOnAnnotation = false
@@ -532,6 +548,10 @@ func (m Model) View() string {
 // statusBarText returns context-sensitive status line content.
 // shows filename, diff stats, hunk position, mode indicators, and right-aligned annotation count + help hint.
 func (m Model) statusBarText() string {
+	if m.searching {
+		return m.searchInput.View() + "  [enter] search  [esc] cancel"
+	}
+
 	if m.inConfirmDiscard {
 		return fmt.Sprintf("discard %d annotations? [y/n]", m.store.Count())
 	}
@@ -551,6 +571,11 @@ func (m Model) statusBarText() string {
 	// hunk position (always shown in diff pane when there are hunks)
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
+	}
+
+	// search match position
+	if ss := m.searchSegment(); ss != "" {
+		segments = append(segments, ss)
 	}
 
 	// mode indicators (combined into one segment)
@@ -647,6 +672,15 @@ func (m Model) hunkSegment() string {
 	return fmt.Sprintf("%d hunks", total)
 }
 
+// searchSegment returns a formatted search position string like "[X/Y]" for the status line.
+// returns empty string when no search matches exist.
+func (m Model) searchSegment() string {
+	if len(m.searchMatches) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("[%d/%d]", m.searchCursor+1, len(m.searchMatches))
+}
+
 // ansiFg returns an ANSI 24-bit foreground escape sequence for a hex color (e.g. "#6c6c6c").
 // uses raw ANSI instead of lipgloss.Render to avoid full reset that breaks outer backgrounds.
 func (m Model) ansiFg(hex string) string {
@@ -684,6 +718,9 @@ func (m Model) statusSegmentsNoIcons() []string {
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
 	}
+	if ss := m.searchSegment(); ss != "" {
+		segments = append(segments, ss)
+	}
 	return segments
 }
 
@@ -701,7 +738,7 @@ func (m Model) helpOverlay() string {
 	help := "" +
 		"Navigation\n" +
 		"  tab          switch pane\n" +
-		"  n / p        next / prev file\n" +
+		"  n / p        next / prev file (n = next match when searching)\n" +
 		"  j / k        scroll down / up\n" +
 		"  PgDn/PgUp    page down / up\n" +
 		"  Ctrl+d/u     half-page down / up\n" +
@@ -710,6 +747,11 @@ func (m Model) helpOverlay() string {
 		"  \u2190 / \u2192        scroll left / right (diff)\n" +
 		"  [ / ]        prev / next hunk\n" +
 		"  enter        focus diff pane\n" +
+		"\n" +
+		"Search\n" +
+		"  /            search in diff\n" +
+		"  n            next match (overrides next file)\n" +
+		"  N            prev match\n" +
 		"\n" +
 		"Annotations\n" +
 		"  a / enter    annotate line (diff pane)\n" +
@@ -817,6 +859,36 @@ func (m Model) handleConfirmDiscardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "n", "esc":
 		m.inConfirmDiscard = false
 		return m, nil
+	}
+	return m, nil
+}
+
+// handleFilterToggle toggles the annotated files filter.
+func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
+	annotated := m.annotatedFiles()
+	if len(annotated) > 0 {
+		m.tree.toggleFilter(annotated)
+		m.tree.ensureVisible(m.treePageSize())
+		return m.loadSelectedIfChanged()
+	}
+	return m, nil
+}
+
+// handleFileOrSearchNav handles n/N keys: navigates search matches when a search is active,
+// otherwise n falls through to next-file navigation. N does nothing without search.
+func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
+	if len(m.searchMatches) > 0 {
+		if key == "n" {
+			m.nextSearchMatch()
+		} else {
+			m.prevSearchMatch()
+		}
+		m.viewport.SetContent(m.renderDiff())
+		return m, nil
+	}
+	if key == "n" {
+		m.tree.nextFile()
+		return m.loadSelectedIfChanged()
 	}
 	return m, nil
 }

@@ -21,6 +21,8 @@ type collapsedState struct {
 // removed lines are hidden unless their hunk is expanded. added lines are styled
 // as "modified" (amber ~) when paired with removes, or "pure add" (green +) otherwise.
 func (m Model) renderCollapsedDiff() string {
+	m.buildSearchMatchSet()
+
 	annotationMap, fileComment := m.buildAnnotationMap()
 	hunks := m.findHunks()
 	modifiedSet := m.buildModifiedSet(hunks)
@@ -77,12 +79,18 @@ func (m Model) renderCollapsedDiff() string {
 }
 
 // renderCollapsedAddLine renders an add line in collapsed mode with modify or add styling.
+// when search is active, matching lines use search highlight instead of add/modify styling.
 func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffLine, modified bool) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
+	isSearchMatch := m.searchMatchSet[idx]
 
 	style, hlStyle, gutter := m.styles.LineAdd, m.styles.LineAddHighlight, " + "
 	if modified {
 		style, hlStyle, gutter = m.styles.LineModify, m.styles.LineModifyHighlight, " ~ "
+	}
+	if isSearchMatch {
+		style = m.styles.SearchMatch
+		hlStyle = m.styles.SearchMatch.UnsetForeground()
 	}
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
