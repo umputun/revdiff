@@ -93,6 +93,11 @@ type Model struct {
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
 	singleFile       bool // true when diff contains exactly one file, hides tree pane
+
+	showAnnotList   bool                    // true when annotation list popup is visible
+	annotListCursor int                     // selected item in the flat list
+	annotListOffset int                     // scroll offset for the annotation list
+	annotListItems  []annotation.Annotation // flat sorted list of all annotations
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -614,7 +619,11 @@ func (m Model) View() string {
 		mainView = lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 	}
 
-	if m.showHelp {
+	if m.showAnnotList {
+		// annotation list popup takes priority over help overlay
+		annotBox := m.annotListOverlay()
+		mainView = m.overlayCenter(mainView, annotBox)
+	} else if m.showHelp {
 		// overlay help popup on top of current content
 		helpBox := m.helpOverlay()
 		mainView = m.overlayCenter(mainView, helpBox)

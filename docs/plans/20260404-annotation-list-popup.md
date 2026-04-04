@@ -86,14 +86,14 @@ File loading is async (returns a `tea.Cmd`). When jumping to an annotation in a 
 - Create: `ui/annotlist_test.go`
 - Modify: `ui/model.go`
 
-- [ ] add `showAnnotList bool`, `annotListCursor int`, `annotListOffset int`, `annotListItems []annotation.Annotation`, `pendingAnnotJump *annotation.Annotation` fields to Model
-- [ ] create `ui/annotlist.go` with `buildAnnotListItems()` method: iterates `store.Files()`, then `store.Get(file)` for each, builds flat sorted list
-- [ ] add `annotListOverlay()` method in `annotlist.go`: renders bordered popup with item list, highlighted cursor, scrolling, handles empty state
-- [ ] truncate comments to fit popup width, show file:line prefix with change type styling
-- [ ] render annotation list popup in `View()` using `overlayCenter()` when `showAnnotList` is true (takes priority over help overlay)
-- [ ] write tests in `ui/annotlist_test.go` for `buildAnnotListItems()` with multiple files and annotations
-- [ ] write tests for `annotListOverlay()` verifying content, highlighting, empty state, scrolling
-- [ ] run `make test` — must pass before task 2
+- [x] add `showAnnotList bool`, `annotListCursor int`, `annotListOffset int`, `annotListItems []annotation.Annotation`, `pendingAnnotJump *annotation.Annotation` fields to Model
+- [x] create `ui/annotlist.go` with `buildAnnotListItems()` method: iterates `store.Files()`, then `store.Get(file)` for each, builds flat sorted list
+- [x] add `annotListOverlay()` method in `annotlist.go`: renders bordered popup with item list, highlighted cursor, scrolling, handles empty state
+- [x] truncate comments to fit popup width, show file:line prefix with change type styling
+- [x] render annotation list popup in `View()` using `overlayCenter()` when `showAnnotList` is true (takes priority over help overlay)
+- [x] write tests in `ui/annotlist_test.go` for `buildAnnotListItems()` with multiple files and annotations
+- [x] write tests for `annotListOverlay()` verifying content, highlighting, empty state, scrolling
+- [x] run `make test` — must pass before task 2
 
 ### Task 2: Wire up key handling and popup toggle
 
