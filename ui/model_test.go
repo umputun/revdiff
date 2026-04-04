@@ -191,6 +191,36 @@ func TestModel_ComputeFileStats(t *testing.T) {
 	}
 }
 
+func TestModel_FileStatsText(t *testing.T) {
+	tests := []struct {
+		name    string
+		lines   []diff.DiffLine
+		adds    int
+		removes int
+		want    string
+	}{
+		{name: "context only shows line count", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+			{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		}, adds: 0, removes: 0, want: "3 lines"},
+		{name: "diff shows adds/removes", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+			{NewNum: 2, Content: "ctx", ChangeType: diff.ChangeContext},
+		}, adds: 1, removes: 0, want: "+1/-0"},
+		{name: "empty diff shows +0/-0", lines: nil, adds: 0, removes: 0, want: "+0/-0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tt.lines
+			m.fileAdds = tt.adds
+			m.fileRemoves = tt.removes
+			assert.Equal(t, tt.want, m.fileStatsText())
+		})
+	}
+}
+
 func TestModel_FileLoadedComputesStats(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},

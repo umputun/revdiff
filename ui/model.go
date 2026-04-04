@@ -538,6 +538,15 @@ func (m *Model) computeFileStats() {
 	}
 }
 
+// fileStatsText returns the stats segment for the status bar.
+// shows total line count for context-only files, or +adds/-removes for diffs.
+func (m Model) fileStatsText() string {
+	if m.fileAdds == 0 && m.fileRemoves == 0 && len(m.diffLines) > 0 {
+		return fmt.Sprintf("%d lines", len(m.diffLines))
+	}
+	return fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
+}
+
 // skipInitialDividers positions diffCursor on the first visible line.
 // skips divider lines, and in collapsed mode also skips removed lines
 // unless their hunk is expanded.
@@ -638,7 +647,7 @@ func (m Model) statusBarText() string {
 
 	// filename and diff stats segments
 	if m.currFile != "" {
-		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, m.fileStatsText())
 	}
 
 	// hunk position (always shown in diff pane when there are hunks)
@@ -690,7 +699,7 @@ func (m Model) statusBarText() string {
 	if lipgloss.Width(left) > available && m.currFile != "" {
 		// truncate filename from left, keeping end of path.
 		// uses display-width measurement to handle wide characters (CJK, emoji)
-		statsStr := fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
+		statsStr := m.fileStatsText()
 		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
 		name := m.currFile
 		if lipgloss.Width(name) > nameMax {
@@ -826,7 +835,7 @@ func (m Model) statusModeIcons() string {
 func (m Model) statusSegmentsNoSearch() []string {
 	var segments []string
 	if m.currFile != "" {
-		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, m.fileStatsText())
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
@@ -838,7 +847,7 @@ func (m Model) statusSegmentsNoSearch() []string {
 func (m Model) statusSegmentsMinimal() []string {
 	var segments []string
 	if m.currFile != "" {
-		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, m.fileStatsText())
 	}
 	return segments
 }
