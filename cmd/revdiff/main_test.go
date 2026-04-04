@@ -139,6 +139,20 @@ func TestParseArgs_NoRef(t *testing.T) {
 	assert.Empty(t, opts.ref())
 }
 
+func TestParseArgs_StagedWithTwoRefs(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--staged", "main", "feature"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--staged cannot be used with two-ref diff")
+}
+
+func TestParseArgs_StagedWithSingleRef(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--staged", "HEAD~3"))
+	require.NoError(t, err)
+	assert.True(t, opts.Staged)
+	assert.Equal(t, "HEAD~3", opts.Refs.Base)
+	assert.Empty(t, opts.Refs.Against)
+}
+
 func TestParseArgs_ColorDefaults(t *testing.T) {
 	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)

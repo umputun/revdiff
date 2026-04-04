@@ -227,6 +227,12 @@ revdiff --staged
 # review last commit
 revdiff HEAD~1
 
+# diff between two refs
+revdiff main feature
+
+# same with git dot-dot syntax
+revdiff main..feature
+
 # review only specific files
 revdiff --only=model.go --only=README.md
 
