@@ -24,6 +24,7 @@ Then uncomment and edit the values you want to change.
 | `--no-colors` | `REVDIFF_NO_COLORS` | Disable all colors including syntax highlighting | `false` |
 | `--no-status-bar` | `REVDIFF_NO_STATUS_BAR` | Hide the status bar | `false` |
 | `--wrap` | `REVDIFF_WRAP` | Enable line wrapping in diff view | `false` |
+| `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
 | `--chroma-style` | `REVDIFF_CHROMA_STYLE` | Chroma color theme for syntax highlighting | `catppuccin-macchiato` |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |

@@ -414,6 +414,24 @@ func TestModel_WrapModeFromConfig(t *testing.T) {
 	})
 }
 
+func TestModel_CollapsedModeFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+
+	t.Run("collapsed enabled via config", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Collapsed: true, TreeWidthRatio: 2})
+		assert.True(t, m.collapsed.enabled)
+	})
+
+	t.Run("collapsed disabled by default", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		assert.False(t, m.collapsed.enabled)
+	})
+}
+
 func TestModel_StatusModeIcons(t *testing.T) {
 	t.Run("all icons always present", func(t *testing.T) {
 		m := testModel(nil, nil)

@@ -119,6 +119,7 @@ type ModelConfig struct {
 	NoStatusBar      bool     // hide the status bar
 	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
 	Wrap             bool     // enable line wrapping
+	Collapsed        bool     // start in collapsed diff mode
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
 	Colors           Colors
@@ -148,6 +149,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
+		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
