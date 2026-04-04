@@ -13,11 +13,20 @@ revdiff --staged     # review staged changes
 revdiff HEAD~1       # review last commit
 revdiff --only=model.go              # review only files matching model.go
 revdiff --only=ui/model.go --only=README.md  # review specific files
+revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
+revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
 ```
 
 ## Single-File Mode
 
 When a diff contains exactly one file, revdiff automatically hides the file tree pane and gives full terminal width to the diff view. Pane-switching keys (`Tab`, `h/l`, `n/p`, `f`) become no-ops. Search navigation (`n`/`N`) still works normally.
+
+## Context-Only File Review
+
+When `--only` specifies a file that has no git changes (or when no git repo exists), revdiff shows the file in context-only mode: all lines displayed without `+`/`-` markers, with full annotation and syntax highlighting support.
+
+- **Inside a git repo**: `--only` files not in the diff are read from disk alongside changed files
+- **Outside a git repo**: `--only` is required; files are read directly from disk
 
 ## Key Bindings
 

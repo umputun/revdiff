@@ -24,19 +24,19 @@ type options struct {
 		Ref string `positional-arg-name:"ref" description:"git ref to diff against (default: uncommitted changes)"`
 	} `positional-args:"yes"`
 
-	Staged           bool   `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	TreeWidth        int    `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
-	TabWidth         int    `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
-	NoColors         bool   `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
-	NoStatusBar      bool   `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
-	NoConfirmDiscard bool   `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
-	Wrap             bool   `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
-	ChromaStyle      string `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
+	Staged           bool     `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
+	TreeWidth        int      `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
+	TabWidth         int      `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
+	NoColors         bool     `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	NoStatusBar      bool     `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
+	NoConfirmDiscard bool     `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
+	Wrap             bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
+	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
-	Config           string `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
-	DumpConfig       bool   `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
-	Version          bool   `short:"V" long:"version" no-ini:"true" description:"show version info"`
+	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
+	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
+	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {
 		Accent     string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
@@ -170,11 +170,11 @@ func defaultConfigPath() string {
 }
 
 func run(opts options) error {
-	repoRoot, err := gitTopLevel()
+	gitRoot, gitErr := gitTopLevel()
+	renderer, workDir, err := makeRenderer(opts.Only, gitRoot, gitErr)
 	if err != nil {
-		return fmt.Errorf("find git root: %w", err)
+		return err
 	}
-	renderer := diff.NewGit(repoRoot)
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
@@ -187,6 +187,7 @@ func run(opts options) error {
 		Staged:           opts.Staged,
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
+		WorkDir:          workDir,
 		Colors: ui.Colors{
 			Accent:     opts.Colors.Accent,
 			Border:     opts.Colors.Border,
@@ -238,6 +239,32 @@ func run(opts options) error {
 	}
 	fmt.Print(output)
 	return nil
+}
+
+// makeRenderer selects the appropriate renderer based on git availability and --only flags.
+// if git is available with --only, it wraps diff.Git with FallbackRenderer.
+// if git is available without --only, it returns diff.Git directly.
+// if git is unavailable and --only is set, it uses FileReader to read files directly from disk.
+// if git is unavailable and --only is not set, it returns an error.
+func makeRenderer(only []string, gitRoot string, gitErr error) (ui.Renderer, string, error) {
+	if gitErr == nil {
+		inner := diff.NewGit(gitRoot)
+		if len(only) > 0 {
+			return diff.NewFallbackRenderer(inner, only, gitRoot), gitRoot, nil
+		}
+		return inner, gitRoot, nil
+	}
+
+	// no git repo available
+	if len(only) > 0 {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, "", fmt.Errorf("get working directory: %w", err)
+		}
+		return diff.NewFileReader(only, cwd), cwd, nil
+	}
+
+	return nil, "", fmt.Errorf("find git root: %w", gitErr)
 }
 
 // gitTopLevel returns the root directory of the current git repository.

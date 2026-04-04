@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/diff"
 )
 
 // noConfigArgs returns args that point to a nonexistent config file,
@@ -282,6 +285,46 @@ func TestDefaultConfigPath(t *testing.T) {
 	assert.Contains(t, path, ".config")
 	assert.Contains(t, path, "revdiff")
 	assert.Contains(t, path, "config")
+}
+
+func TestMakeRenderer_GitWithOnly(t *testing.T) {
+	dir := t.TempDir()
+	renderer, workDir, err := makeRenderer([]string{"file.md"}, dir, nil)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeRenderer_GitWithoutOnly(t *testing.T) {
+	dir := t.TempDir()
+	renderer, workDir, err := makeRenderer(nil, dir, nil)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	// with no --only, returns *diff.Git directly without FallbackRenderer wrapper
+	assert.IsType(t, &diff.Git{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeRenderer_NoGitWithOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir) // set cwd for FileReader
+	gitErr := errors.New("not a git repository")
+
+	renderer, workDir, err := makeRenderer([]string{"file.md"}, "", gitErr)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.FileReader{}, renderer)
+	assert.Equal(t, tmpDir, workDir)
+}
+
+func TestMakeRenderer_NoGitNoOnly(t *testing.T) {
+	gitErr := errors.New("not a git repository")
+	renderer, workDir, err := makeRenderer(nil, "", gitErr)
+	require.Error(t, err)
+	assert.Nil(t, renderer)
+	assert.Empty(t, workDir)
+	assert.Contains(t, err.Error(), "find git root")
 }
 
 func TestGitTopLevel(t *testing.T) {

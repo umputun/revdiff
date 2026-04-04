@@ -28,13 +28,14 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Filter file tree to show only annotated files
 - Status line with filename, diff stats, hunk position, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
+- No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Fully customizable colors via environment variables, CLI flags, or config file
 
 ![revdiff screenshot](assets/screenshot.png)
 
 ## Requirements
 
-- `git` (used to generate diffs)
+- `git` (used to generate diffs; optional when using `--only` for standalone file review)
 
 ## Installation
 
@@ -220,7 +221,22 @@ revdiff HEAD~1
 
 # review only specific files
 revdiff --only=model.go --only=README.md
+
+# review a file outside a git repo (context-only, no diff markers)
+revdiff --only=/tmp/plan.md
+
+# review a file that has no git changes (context-only view with annotations)
+revdiff --only=docs/notes.txt
 ```
+
+### Context-Only File Review
+
+When `--only` specifies a file that has no git changes (or when no git repo exists at all), revdiff shows the file in context-only mode: all lines are displayed without `+`/`-` gutter markers, with full annotation and syntax highlighting support. This enables reviewing arbitrary files without requiring git context.
+
+Two scenarios trigger this mode:
+
+1. **Inside a git repo** - `--only` files not in the diff are read from disk and shown alongside any changed files
+2. **Outside a git repo** - `--only` is required; files are read directly from disk
 
 ### Key Bindings
 

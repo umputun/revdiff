@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,7 @@ type Model struct {
 	ref            string
 	staged         bool
 	only           []string // filter to show only matching files
+	workDir        string   // working directory for resolving absolute --only paths
 	noStatusBar    bool
 	focus          pane
 	width          int
@@ -112,12 +114,13 @@ type ModelConfig struct {
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TabWidth         int  // number of spaces per tab character
-	NoColors         bool // disable all colors including syntax highlighting
-	NoStatusBar      bool // hide the status bar
-	NoConfirmDiscard bool // skip confirmation prompt when discarding annotations
+	TabWidth         int      // number of spaces per tab character
+	NoColors         bool     // disable all colors including syntax highlighting
+	NoStatusBar      bool     // hide the status bar
+	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
 	Wrap             bool     // enable line wrapping
 	Only             []string // show only these files (match by exact path or path suffix)
+	WorkDir          string   // working directory for resolving absolute --only paths
 	Colors           Colors
 }
 
@@ -141,6 +144,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
 		only:             cfg.Only,
+		workDir:          cfg.WorkDir,
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
@@ -442,6 +446,8 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 // filterOnly returns only files matching the --only patterns, or all files if no filter is set.
 // matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
+// when a pattern is an absolute path, it is also resolved relative to workDir for matching
+// (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
 func (m Model) filterOnly(files []string) []string {
 	if len(m.only) == 0 {
 		return files
@@ -452,6 +458,14 @@ func (m Model) filterOnly(files []string) []string {
 			if f == pattern || strings.HasSuffix(f, "/"+pattern) {
 				filtered = append(filtered, f)
 				break
+			}
+			// resolve absolute pattern relative to workDir for matching against repo-relative files
+			if m.workDir != "" && filepath.IsAbs(pattern) {
+				rel, err := filepath.Rel(m.workDir, pattern)
+				if err == nil && !strings.HasPrefix(rel, "..") && (f == rel || strings.HasSuffix(f, "/"+rel)) {
+					filtered = append(filtered, f)
+					break
+				}
 			}
 		}
 	}
@@ -522,6 +536,15 @@ func (m *Model) computeFileStats() {
 			// not counted in stats
 		}
 	}
+}
+
+// fileStatsText returns the stats segment for the status bar.
+// shows total line count for context-only files, or +adds/-removes for diffs.
+func (m Model) fileStatsText() string {
+	if m.fileAdds == 0 && m.fileRemoves == 0 && len(m.diffLines) > 0 {
+		return fmt.Sprintf("%d lines", len(m.diffLines))
+	}
+	return fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
 }
 
 // skipInitialDividers positions diffCursor on the first visible line.
@@ -624,7 +647,7 @@ func (m Model) statusBarText() string {
 
 	// filename and diff stats segments
 	if m.currFile != "" {
-		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, m.fileStatsText())
 	}
 
 	// hunk position (always shown in diff pane when there are hunks)
@@ -676,7 +699,7 @@ func (m Model) statusBarText() string {
 	if lipgloss.Width(left) > available && m.currFile != "" {
 		// truncate filename from left, keeping end of path.
 		// uses display-width measurement to handle wide characters (CJK, emoji)
-		statsStr := fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
+		statsStr := m.fileStatsText()
 		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
 		name := m.currFile
 		if lipgloss.Width(name) > nameMax {
@@ -812,7 +835,7 @@ func (m Model) statusModeIcons() string {
 func (m Model) statusSegmentsNoSearch() []string {
 	var segments []string
 	if m.currFile != "" {
-		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, m.fileStatsText())
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
@@ -824,7 +847,7 @@ func (m Model) statusSegmentsNoSearch() []string {
 func (m Model) statusSegmentsMinimal() []string {
 	var segments []string
 	if m.currFile != "" {
-		segments = append(segments, m.currFile, fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves))
+		segments = append(segments, m.currFile, m.fileStatsText())
 	}
 	return segments
 }

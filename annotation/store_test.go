@@ -307,6 +307,39 @@ func TestStore_FormatOutputSortedByFilename(t *testing.T) {
 	assert.Contains(t, out, "## z_file.go:1 (+)\nlast\n")
 }
 
+// verifies that annotations work correctly on context-only lines (type " "),
+// which is the type used when viewing files without git changes.
+func TestStore_ContextOnlyAnnotations(t *testing.T) {
+	s := NewStore()
+
+	// add annotations on context lines (type " ")
+	s.Add(Annotation{File: "plan.md", Line: 3, Type: " ", Comment: "clarify this step"})
+	s.Add(Annotation{File: "plan.md", Line: 7, Type: " ", Comment: "add more detail"})
+
+	anns := s.Get("plan.md")
+	require.Len(t, anns, 2)
+	assert.Equal(t, 3, anns[0].Line)
+	assert.Equal(t, " ", anns[0].Type)
+	assert.Equal(t, "clarify this step", anns[0].Comment)
+	assert.Equal(t, 7, anns[1].Line)
+
+	// verify output format
+	out := s.FormatOutput()
+	assert.Contains(t, out, "## plan.md:3 ( )")
+	assert.Contains(t, out, "clarify this step")
+	assert.Contains(t, out, "## plan.md:7 ( )")
+	assert.Contains(t, out, "add more detail")
+
+	// verify Has works
+	assert.True(t, s.Has("plan.md", 3, " "))
+	assert.False(t, s.Has("plan.md", 3, "+"))
+
+	// verify Delete works
+	ok := s.Delete("plan.md", 3, " ")
+	assert.True(t, ok)
+	assert.Len(t, s.Get("plan.md"), 1)
+}
+
 func TestStore_Count(t *testing.T) {
 	s := NewStore()
 	assert.Equal(t, 0, s.Count(), "empty store should return 0")
