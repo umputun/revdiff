@@ -237,8 +237,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
-	// annotation list popup: toggle with @, navigate, jump, close (before help to avoid dead state)
-	if msg.String() == "@" || m.showAnnotList {
+	// annotation list popup: keep precedence when already open, but don't allow @ to open it over help
+	if m.showAnnotList || (msg.String() == "@" && !m.showHelp) {
 		return m.handleAnnotListKey(msg)
 	}
 
