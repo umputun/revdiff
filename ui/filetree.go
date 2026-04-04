@@ -307,6 +307,18 @@ func (ft *fileTree) toggleFilter(annotatedFiles map[string]bool) {
 	}
 }
 
+// selectByPath sets the cursor to the file entry matching the given path.
+// returns true if the file was found and cursor moved, false otherwise.
+func (ft *fileTree) selectByPath(path string) bool {
+	for i, e := range ft.entries {
+		if !e.isDir && e.path == path {
+			ft.cursor = i
+			return true
+		}
+	}
+	return false
+}
+
 // truncateDirName trims a directory name from the left to fit maxWidth,
 // prepending an ellipsis when truncated.
 func (ft *fileTree) truncateDirName(name string, maxWidth int) string {

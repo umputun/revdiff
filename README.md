@@ -25,6 +25,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
 - Vim-style `/` search within diff with `n`/`N` match navigation
 - Hunk navigation to jump between change groups
+- Annotation list popup (`@`): browse all annotations across files, jump to any annotation
 - Filter file tree to show only annotated files
 - Status line with filename, diff stats, hunk position, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
@@ -285,6 +286,7 @@ Two scenarios trigger this mode:
 |-----|--------|
 | `a` or `Enter` (diff pane) | Annotate current diff line |
 | `A` | Add file-level annotation (stored at top of diff) |
+| `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `d` | Delete annotation under cursor |
 | `Esc` | Cancel annotation input |
 

@@ -93,6 +93,12 @@ type Model struct {
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
 	singleFile       bool // true when diff contains exactly one file, hides tree pane
+
+	showAnnotList    bool                    // true when annotation list popup is visible
+	annotListCursor  int                     // selected item in the flat list
+	annotListOffset  int                     // scroll offset for the annotation list
+	annotListItems   []annotation.Annotation // flat sorted list of all annotations
+	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -231,45 +237,42 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
+	// annotation list popup: handle keys when already open
+	if m.showAnnotList {
+		return m.handleAnnotListKey(msg)
+	}
+
 	// help overlay: toggle with ?, dismiss with esc, block everything else
 	if msg.String() == "?" || m.showHelp {
 		return m.handleHelpKey(msg)
 	}
 
-	switch {
-	case msg.Type == tea.KeyEsc:
+	switch msg.String() {
+	case "@":
+		return m.handleAnnotListKey(msg)
+	case "esc":
 		return m.handleEscKey()
-
-	case msg.String() == "Q":
+	case "Q":
 		return m.handleDiscardQuit()
-
-	case msg.String() == "q":
+	case "q":
 		return m, tea.Quit
-
-	case msg.String() == "tab":
+	case "tab":
 		m.togglePane()
 		return m, nil
-
-	case msg.String() == "f":
+	case "f":
 		return m.handleFilterToggle()
-
-	case msg.String() == "n" || msg.String() == "N":
+	case "n", "N":
 		return m.handleFileOrSearchNav(msg.String())
-
-	case msg.String() == "p":
+	case "p":
 		return m.handlePrevFile()
-
-	case msg.String() == "enter":
+	case "enter":
 		return m.handleEnterKey()
-
-	case msg.String() == "A":
+	case "A":
 		return m.handleFileAnnotateKey()
-
-	case msg.String() == "v":
+	case "v":
 		m.toggleCollapsedMode()
 		return m, nil
-
-	case msg.String() == "w":
+	case "w":
 		m.toggleWrapMode()
 		return m, nil
 	}
@@ -351,6 +354,7 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.focus = paneDiff
 		}
 	}
+	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.tree.ensureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
 }
@@ -520,6 +524,15 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.skipInitialDividers()
+
+	// handle pending annotation list jump
+	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
+		a := *m.pendingAnnotJump
+		m.pendingAnnotJump = nil
+		m.positionOnAnnotation(a)
+		return m, nil
+	}
+
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, nil
@@ -614,10 +627,11 @@ func (m Model) View() string {
 		mainView = lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
 	}
 
-	if m.showHelp {
-		// overlay help popup on top of current content
-		helpBox := m.helpOverlay()
-		mainView = m.overlayCenter(mainView, helpBox)
+	switch {
+	case m.showAnnotList:
+		mainView = m.overlayCenter(mainView, m.annotListOverlay())
+	case m.showHelp:
+		mainView = m.overlayCenter(mainView, m.helpOverlay())
 	}
 
 	if m.noStatusBar {
@@ -878,6 +892,7 @@ func (m Model) helpOverlay() string {
 		"  a / enter    annotate line (diff pane)\n" +
 		"  A            annotate file\n" +
 		"  d            delete annotation\n" +
+		"  @            annotation list\n" +
 		"\n" +
 		"View\n" +
 		"  v            toggle collapsed mode\n" +
@@ -1011,6 +1026,7 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	}
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 {
+		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 		m.tree.toggleFilter(annotated)
 		m.tree.ensureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
@@ -1024,6 +1040,7 @@ func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
 	if m.singleFile {
 		return m, nil
 	}
+	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.tree.prevFile()
 	return m.loadSelectedIfChanged()
 }
@@ -1042,6 +1059,7 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if key == "n" && !m.singleFile {
+		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 		m.tree.nextFile()
 		return m.loadSelectedIfChanged()
 	}
