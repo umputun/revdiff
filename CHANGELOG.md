@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.0 - 2026-04-04
+
+### New Features
+
+- annotation list popup (`@` key) to view, navigate, and jump to any annotation across all files (#15)
+
 ## v0.7.2 - 2026-04-04
 
 ### Bug Fixes
