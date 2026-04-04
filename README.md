@@ -10,7 +10,7 @@
 
 <h1 align="center">revdiff</h1>
 
-Lightweight TUI for reviewing git diffs with inline annotations. Also supports reviewing arbitrary files outside a git repo via `--only`. Outputs structured annotations to stdout on quit, making it easy to pipe results into AI agents, scripts, or other tools.
+Lightweight TUI for reviewing git diffs with inline annotations. Outputs structured annotations to stdout on quit, making it easy to pipe results into AI agents, scripts, or other tools.
 
 Built for a specific use case: reviewing code changes without leaving a terminal-based AI coding session (e.g., Claude Code). Just enough UI to navigate a full-file diff, annotate specific lines, and return the results to the calling process - no more, no less.
 
