@@ -19,4 +19,4 @@ go install github.com/umputun/revdiff/cmd/revdiff@latest
 /plugin install revdiff@umputun-revdiff
 ```
 
-Use: `/revdiff [ref]` — opens review session in a terminal overlay (tmux, kitty, or wezterm).
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, kitty, or wezterm).

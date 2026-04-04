@@ -1,7 +1,7 @@
 # Usage
 
 ```
-revdiff [OPTIONS] [ref]
+revdiff [OPTIONS] [base] [against]
 ```
 
 ## Examples
@@ -11,6 +11,9 @@ revdiff              # review uncommitted changes
 revdiff main         # review changes against a branch
 revdiff --staged     # review staged changes
 revdiff HEAD~1       # review last commit
+revdiff main feature # diff between two refs
+revdiff main..feature  # same as above, git dot-dot syntax
+revdiff main...feature # changes since feature diverged from main
 revdiff --only=model.go              # review only files matching model.go
 revdiff --only=ui/model.go --only=README.md  # review specific files
 revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
