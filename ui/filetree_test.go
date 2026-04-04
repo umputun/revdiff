@@ -432,6 +432,27 @@ func TestFileTree_EnsureVisibleResetsOffsetWhenTreeFitsViewport(t *testing.T) {
 	assert.Equal(t, 0, ft.offset, "offset should reset to 0 when all entries fit in viewport")
 }
 
+func TestFileTree_SelectByPath(t *testing.T) {
+	t.Run("selects existing file", func(t *testing.T) {
+		ft := newFileTree([]string{"internal/handler.go", "internal/store.go", "main.go"})
+		ok := ft.selectByPath("internal/store.go")
+		assert.True(t, ok)
+		assert.Equal(t, "internal/store.go", ft.selectedFile())
+	})
+
+	t.Run("returns false for non-existent file", func(t *testing.T) {
+		ft := newFileTree([]string{"a.go", "b.go"})
+		ok := ft.selectByPath("c.go")
+		assert.False(t, ok)
+	})
+
+	t.Run("does not select directory entries", func(t *testing.T) {
+		ft := newFileTree([]string{"internal/a.go"})
+		ok := ft.selectByPath("internal/")
+		assert.False(t, ok)
+	})
+}
+
 func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 	files := []string{".claude-plugin/skills/revdiff/references/config.md"}
 	ft := newFileTree(files)

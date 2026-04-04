@@ -63,6 +63,7 @@ When `--only` specifies a file that has no git changes (or when no git repo exis
 |-----|--------|
 | `a` or `Enter` (diff pane) | Annotate current diff line |
 | `A` | Add file-level annotation (stored at top of diff) |
+| `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `d` | Delete annotation under cursor |
 | `Esc` | Cancel annotation input |
 
