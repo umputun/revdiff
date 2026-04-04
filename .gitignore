@@ -13,9 +13,6 @@ coverage.out
 coverage_no_mocks.out
 profile.cov
 
-# dependency directories
-vendor/
-
 # ide and editor
 .idea/
 .vscode/
