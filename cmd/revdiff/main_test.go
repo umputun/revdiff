@@ -145,6 +145,18 @@ func TestParseArgs_StagedWithTwoRefs(t *testing.T) {
 	assert.Contains(t, err.Error(), "--staged cannot be used with two-ref diff")
 }
 
+func TestParseArgs_StagedWithDotDotRef(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--staged", "main..feature"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--staged cannot be used with two-ref diff")
+}
+
+func TestParseArgs_StagedWithTripleDotRef(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--staged", "main...feature"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--staged cannot be used with two-ref diff")
+}
+
 func TestParseArgs_StagedWithSingleRef(t *testing.T) {
 	opts, err := parseArgs(append(noConfigArgs(t), "--staged", "HEAD~3"))
 	require.NoError(t, err)

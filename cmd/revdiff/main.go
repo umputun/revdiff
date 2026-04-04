@@ -120,7 +120,7 @@ func parseArgs(args []string) (options, error) {
 		return options{}, fmt.Errorf("parse args: %w", err)
 	}
 
-	if opts.Staged && opts.Refs.Against != "" {
+	if opts.Staged && (opts.Refs.Against != "" || strings.Contains(opts.Refs.Base, "..")) {
 		return options{}, errors.New("--staged cannot be used with two-ref diff")
 	}
 
