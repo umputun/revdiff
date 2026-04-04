@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.0 - 2026-04-03
+
+### New Features
+
+- `--only`/`-F` flag to filter files by exact path or suffix, may be repeated (#11)
+- shows "no files match --only filter" message when filter has no matches
+
 ## v0.5.0 - 2026-04-03
 
 ### New Features
