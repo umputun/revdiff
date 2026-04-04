@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.1 - 2026-04-04
+
+### New Features
+
+- two-ref positional args: `revdiff base against` (e.g. `revdiff main feature`) for diffing between arbitrary refs (#13)
+- `..` and `...` syntax supported in single arg (e.g. `revdiff main..feature`)
+- validation: `--staged` rejected with two-ref or range diffs
+
 ## v0.7.0 - 2026-04-04
 
 ### New Features
