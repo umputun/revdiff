@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.2 - 2026-04-04
+
+### Bug Fixes
+
+- add `--collapsed` flag to start in collapsed diff mode, allowing users to persist preference via CLI, config file, or `REVDIFF_COLLAPSED` env var (#14)
+
 ## v0.7.1 - 2026-04-04
 
 ### New Features
