@@ -19,12 +19,13 @@ Terminal UI diff viewer with inline annotations, built with bubbletea.
 - `ui/mocks/` - moq-generated mocks (never edit manually)
 
 ## Key Interfaces (consumer-side, in `ui/`)
-- `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`
+- `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`, `diff.FallbackRenderer`, `diff.FileReader`
 - `SyntaxHighlighter` - `HighlightLines()` - implemented by `highlight.Highlighter`
 
 ## Data Flow
 ```
 git diff → diff.ParseUnifiedDiff() → []DiffLine
+  (or: disk file → diff.readFileAsContext() → []DiffLine, all ChangeContext)
   → highlight.HighlightLines() → []string (ANSI foreground-only)
   → ui.renderDiff() dispatches:
     expanded (default): renderDiffLine() for each line
@@ -71,7 +72,7 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Highlighted lines are pre-computed once per file load, stored parallel to `diffLines`
 - `DiffLine.Content` has no `+`/`-` prefix - prefix is re-added at render time
 - Tab replacement happens at render time in `renderDiffLine`, not in diff parsing
-- `run()` resolves git repo root via `git rev-parse --show-toplevel` so revdiff works from any subdirectory
+- `run()` resolves git repo root via `git rev-parse --show-toplevel`; if git is unavailable and `--only` is set, uses `FileReader` for standalone file review. Renderer selection is in `makeRenderer()`
 - Help overlay uses `overlayCenter()` (ANSI-aware compositing via `charmbracelet/x/ansi.Cut`) to render on top of existing content; background (tree pane) remains visible at the edges
 - **ANSI nesting with lipgloss**: `lipgloss.Render()` emits `\033[0m` (full reset) which breaks outer style backgrounds. For styled substrings inside a lipgloss container (status bar separators, search highlights), use raw ANSI sequences via `ansiColor(hex, code)` — code 38 for fg, 48 for bg. Never use `lipgloss.NewStyle().Render()` for inline elements within a lipgloss-rendered parent.
 - Status bar mode icons (`▼ ◉ ↩ ≋`) are always rendered on the right side via `statusModeIcons()`. Active modes use `StatusFg`, inactive use `Muted` — both via raw ANSI fg sequences. Graceful degradation on narrow terminals drops left segments: search position first (`statusSegmentsNoSearch`), then hunk info (`statusSegmentsMinimal`), then truncates filename.
