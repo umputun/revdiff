@@ -237,8 +237,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSearchKey(msg)
 	}
 
-	// annotation list popup: keep precedence when already open, but don't allow @ to open it over help
-	if m.showAnnotList || (msg.String() == "@" && !m.showHelp) {
+	// annotation list popup: handle keys when already open
+	if m.showAnnotList {
 		return m.handleAnnotListKey(msg)
 	}
 
@@ -248,6 +248,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.String() {
+	case "@":
+		return m.handleAnnotListKey(msg)
 	case "esc":
 		return m.handleEscKey()
 	case "Q":
