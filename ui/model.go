@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,7 @@ type Model struct {
 	ref            string
 	staged         bool
 	only           []string // filter to show only matching files
+	workDir        string   // working directory for resolving absolute --only paths
 	noStatusBar    bool
 	focus          pane
 	width          int
@@ -112,12 +114,13 @@ type ModelConfig struct {
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TabWidth         int  // number of spaces per tab character
-	NoColors         bool // disable all colors including syntax highlighting
-	NoStatusBar      bool // hide the status bar
-	NoConfirmDiscard bool // skip confirmation prompt when discarding annotations
+	TabWidth         int      // number of spaces per tab character
+	NoColors         bool     // disable all colors including syntax highlighting
+	NoStatusBar      bool     // hide the status bar
+	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
 	Wrap             bool     // enable line wrapping
 	Only             []string // show only these files (match by exact path or path suffix)
+	WorkDir          string   // working directory for resolving absolute --only paths
 	Colors           Colors
 }
 
@@ -141,6 +144,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
 		only:             cfg.Only,
+		workDir:          cfg.WorkDir,
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
@@ -442,6 +446,8 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 // filterOnly returns only files matching the --only patterns, or all files if no filter is set.
 // matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
+// when a pattern is an absolute path, it is also resolved relative to workDir for matching
+// (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
 func (m Model) filterOnly(files []string) []string {
 	if len(m.only) == 0 {
 		return files
@@ -452,6 +458,14 @@ func (m Model) filterOnly(files []string) []string {
 			if f == pattern || strings.HasSuffix(f, "/"+pattern) {
 				filtered = append(filtered, f)
 				break
+			}
+			// resolve absolute pattern relative to workDir for matching against repo-relative files
+			if m.workDir != "" && filepath.IsAbs(pattern) {
+				rel, err := filepath.Rel(m.workDir, pattern)
+				if err == nil && !strings.HasPrefix(rel, "..") && (f == rel || strings.HasSuffix(f, "/"+rel)) {
+					filtered = append(filtered, f)
+					break
+				}
 			}
 		}
 	}

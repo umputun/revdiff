@@ -5191,6 +5191,38 @@ func TestModel_FilterOnly(t *testing.T) {
 		assert.Equal(t, []string{"ui/model.go", "README.md"}, m.filterOnly(files))
 	})
 
+	t.Run("absolute path pattern resolved against workDir", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"/repo/README.md"}
+		m.workDir = "/repo"
+		files := []string{"ui/model.go", "README.md"}
+		assert.Equal(t, []string{"README.md"}, m.filterOnly(files))
+	})
+
+	t.Run("absolute path pattern with subdirectory", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"/repo/ui/model.go"}
+		m.workDir = "/repo"
+		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+	})
+
+	t.Run("absolute path outside workDir does not match", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"/other/README.md"}
+		m.workDir = "/repo"
+		files := []string{"README.md", "ui/model.go"}
+		assert.Empty(t, m.filterOnly(files))
+	})
+
+	t.Run("absolute path suffix match via resolved relative", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.only = []string{"/repo/model.go"}
+		m.workDir = "/repo"
+		files := []string{"ui/model.go", "diff/diff.go"}
+		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+	})
+
 	t.Run("no matches returns empty", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"nonexistent.go"}
