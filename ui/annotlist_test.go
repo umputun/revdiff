@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -194,4 +195,166 @@ func TestModel_ViewWithAnnotList(t *testing.T) {
 	view := m.View()
 	// should show empty annotation list overlay
 	assert.Contains(t, view, "no annotations")
+}
+
+func TestModel_HandleAnnotListKey(t *testing.T) {
+	t.Run("@ opens popup and rebuilds items", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 5, Type: "+", Comment: "note"})
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+		model := result.(Model)
+		assert.True(t, model.showAnnotList)
+		assert.Len(t, model.annotListItems, 1)
+		assert.Equal(t, 0, model.annotListCursor)
+		assert.Equal(t, 0, model.annotListOffset)
+	})
+
+	t.Run("@ closes popup when already open", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList)
+	})
+
+	t.Run("esc closes popup", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList)
+	})
+
+	t.Run("j moves cursor down", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{
+			{File: "a.go", Line: 1, Type: "+"},
+			{File: "a.go", Line: 2, Type: "+"},
+			{File: "a.go", Line: 3, Type: "+"},
+		}
+		m.annotListCursor = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Equal(t, 1, model.annotListCursor)
+	})
+
+	t.Run("k moves cursor up", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{
+			{File: "a.go", Line: 1, Type: "+"},
+			{File: "a.go", Line: 2, Type: "+"},
+		}
+		m.annotListCursor = 1
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		model := result.(Model)
+		assert.Equal(t, 0, model.annotListCursor)
+	})
+
+	t.Run("j does not go past last item", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+		m.annotListCursor = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Equal(t, 0, model.annotListCursor)
+	})
+
+	t.Run("k does not go above first item", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+		m.annotListCursor = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		model := result.(Model)
+		assert.Equal(t, 0, model.annotListCursor)
+	})
+
+	t.Run("scroll offset adjusts when cursor moves below visible area", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.height = 10 // maxVisible = max(min(N, 10-6), 1) = max(min(N, 4), 1) = 4
+
+		items := make([]annotation.Annotation, 10)
+		for i := range items {
+			items[i] = annotation.Annotation{File: "a.go", Line: i + 1, Type: "+"}
+		}
+		m.annotListItems = items
+		m.annotListCursor = 3 // last visible item at offset 0
+		m.annotListOffset = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Equal(t, 4, model.annotListCursor)
+		assert.Equal(t, 1, model.annotListOffset) // scrolled down
+	})
+
+	t.Run("scroll offset adjusts when cursor moves above visible area", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.height = 10
+
+		items := make([]annotation.Annotation, 10)
+		for i := range items {
+			items[i] = annotation.Annotation{File: "a.go", Line: i + 1, Type: "+"}
+		}
+		m.annotListItems = items
+		m.annotListCursor = 3
+		m.annotListOffset = 3 // cursor is at top of visible area
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		model := result.(Model)
+		assert.Equal(t, 2, model.annotListCursor)
+		assert.Equal(t, 2, model.annotListOffset) // scrolled up to follow cursor
+	})
+
+	t.Run("enter closes popup", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+		m.annotListCursor = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList)
+	})
+
+	t.Run("other keys are consumed and do nothing", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+		model := result.(Model)
+		assert.True(t, model.showAnnotList) // still open, key consumed
+	})
+
+	t.Run("arrow keys work for navigation", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{
+			{File: "a.go", Line: 1, Type: "+"},
+			{File: "a.go", Line: 2, Type: "+"},
+		}
+		m.annotListCursor = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		model := result.(Model)
+		assert.Equal(t, 1, model.annotListCursor)
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+		model = result.(Model)
+		assert.Equal(t, 0, model.annotListCursor)
+	})
 }

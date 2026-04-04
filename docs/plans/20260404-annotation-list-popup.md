@@ -101,11 +101,11 @@ File loading is async (returns a `tea.Cmd`). When jumping to an annotation in a 
 - Modify: `ui/annotlist.go`
 - Modify: `ui/model.go`
 
-- [ ] add `handleAnnotListKey(msg)` method in `annotlist.go`: `j`/`k`/`↑`/`↓` for navigation with scroll offset, `Enter` for jump, `Esc`/`@` for close, consume all other keys
-- [ ] add `showAnnotList` check in `handleKey()` after annotating/searching, parallel to `showHelp`: `if msg.String() == "@" || m.showAnnotList { return m.handleAnnotListKey(msg) }`
-- [ ] on `@` open: rebuild items via `buildAnnotListItems()`, reset cursor and offset
-- [ ] write tests for popup toggle, list navigation, scroll offset, close with esc
-- [ ] run `make test` — must pass before task 3
+- [x] add `handleAnnotListKey(msg)` method in `annotlist.go`: `j`/`k`/`↑`/`↓` for navigation with scroll offset, `Enter` for jump, `Esc`/`@` for close, consume all other keys
+- [x] add `showAnnotList` check in `handleKey()` after annotating/searching, parallel to `showHelp`: `if msg.String() == "@" || m.showAnnotList { return m.handleAnnotListKey(msg) }`
+- [x] on `@` open: rebuild items via `buildAnnotListItems()`, reset cursor and offset
+- [x] write tests for popup toggle, list navigation, scroll offset, close with esc
+- [x] run `make test` — must pass before task 3
 
 ### Task 3: Implement jump-to-annotation logic
 

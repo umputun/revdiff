@@ -241,40 +241,35 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpKey(msg)
 	}
 
-	switch {
-	case msg.Type == tea.KeyEsc:
+	// annotation list popup: toggle with @, navigate, jump, close
+	if msg.String() == "@" || m.showAnnotList {
+		return m.handleAnnotListKey(msg)
+	}
+
+	switch msg.String() {
+	case "esc":
 		return m.handleEscKey()
-
-	case msg.String() == "Q":
+	case "Q":
 		return m.handleDiscardQuit()
-
-	case msg.String() == "q":
+	case "q":
 		return m, tea.Quit
-
-	case msg.String() == "tab":
+	case "tab":
 		m.togglePane()
 		return m, nil
-
-	case msg.String() == "f":
+	case "f":
 		return m.handleFilterToggle()
-
-	case msg.String() == "n" || msg.String() == "N":
+	case "n", "N":
 		return m.handleFileOrSearchNav(msg.String())
-
-	case msg.String() == "p":
+	case "p":
 		return m.handlePrevFile()
-
-	case msg.String() == "enter":
+	case "enter":
 		return m.handleEnterKey()
-
-	case msg.String() == "A":
+	case "A":
 		return m.handleFileAnnotateKey()
-
-	case msg.String() == "v":
+	case "v":
 		m.toggleCollapsedMode()
 		return m, nil
-
-	case msg.String() == "w":
+	case "w":
 		m.toggleWrapMode()
 		return m, nil
 	}

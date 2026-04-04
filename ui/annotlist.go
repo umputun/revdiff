@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/annotation"
@@ -173,4 +174,60 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 
 	boxLines[0] = newTop
 	return strings.Join(boxLines, "\n")
+}
+
+// handleAnnotListKey handles keys when the annotation list popup is visible.
+// @ toggles the popup, j/k/arrows navigate, Enter jumps to annotation, Esc closes, all other keys consumed.
+func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "@":
+		if m.showAnnotList {
+			m.showAnnotList = false
+			return m, nil
+		}
+		// open popup
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0
+		m.annotListOffset = 0
+		m.showAnnotList = true
+		return m, nil
+
+	case "k", "up":
+		if m.annotListCursor > 0 {
+			m.annotListCursor--
+			// scroll up if cursor is above visible area
+			if m.annotListCursor < m.annotListOffset {
+				m.annotListOffset = m.annotListCursor
+			}
+		}
+		return m, nil
+
+	case "j", "down":
+		if m.annotListCursor < len(m.annotListItems)-1 {
+			m.annotListCursor++
+			// scroll down if cursor is below visible area
+			maxVisible := m.annotListMaxVisible()
+			if m.annotListCursor >= m.annotListOffset+maxVisible {
+				m.annotListOffset = m.annotListCursor - maxVisible + 1
+			}
+		}
+		return m, nil
+
+	case "enter":
+		// jump-to-annotation logic will be added in task 3
+		m.showAnnotList = false
+		return m, nil
+
+	case "esc":
+		m.showAnnotList = false
+		return m, nil
+	}
+
+	// consume all other keys while popup is open
+	return m, nil
+}
+
+// annotListMaxVisible returns the maximum number of visible items in the annotation list popup.
+func (m Model) annotListMaxVisible() int {
+	return max(min(len(m.annotListItems), m.height-6), 1)
 }
