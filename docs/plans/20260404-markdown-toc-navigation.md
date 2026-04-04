@@ -75,13 +75,13 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Modify: `ui/mdtoc.go`
 - Modify: `ui/mdtoc_test.go`
 
-- [ ] implement `moveUp()` / `moveDown()` — move cursor between entries, clamp to bounds
-- [ ] implement `ensureVisible(height int)` — adjust offset to keep cursor in visible range (mirror `fileTree.ensureVisible`)
-- [ ] implement `updateActiveSection(diffCursor int)` — find nearest entry with `lineIdx <= diffCursor`, set `activeSection`
-- [ ] write tests for cursor movement — boundaries, wrap behavior (or clamp)
-- [ ] write tests for `ensureVisible` — cursor above/below viewport, already visible
-- [ ] write tests for `updateActiveSection` — cursor before first header, between headers, after last header, no entries
-- [ ] run tests — must pass before task 3
+- [x] implement `moveUp()` / `moveDown()` — move cursor between entries, clamp to bounds
+- [x] implement `ensureVisible(height int)` — adjust offset to keep cursor in visible range (mirror `fileTree.ensureVisible`)
+- [x] implement `updateActiveSection(diffCursor int)` — find nearest entry with `lineIdx <= diffCursor`, set `activeSection`
+- [x] write tests for cursor movement — boundaries, wrap behavior (or clamp)
+- [x] write tests for `ensureVisible` — cursor above/below viewport, already visible
+- [x] write tests for `updateActiveSection` — cursor before first header, between headers, after last header, no entries
+- [x] run tests — must pass before task 3
 
 ### Task 3: mdTOC rendering
 

@@ -99,6 +99,119 @@ func TestParseTOC(t *testing.T) {
 	}
 }
 
+func TestMdTOC_MoveUpDown(t *testing.T) {
+	toc := &mdTOC{entries: []tocEntry{
+		{title: "A", level: 1, lineIdx: 0},
+		{title: "B", level: 2, lineIdx: 5},
+		{title: "C", level: 2, lineIdx: 10},
+	}, cursor: 0, activeSection: -1}
+
+	t.Run("move down from first", func(t *testing.T) {
+		toc.cursor = 0
+		toc.moveDown()
+		assert.Equal(t, 1, toc.cursor)
+	})
+
+	t.Run("move down to last", func(t *testing.T) {
+		toc.cursor = 1
+		toc.moveDown()
+		assert.Equal(t, 2, toc.cursor)
+	})
+
+	t.Run("move down clamped at last", func(t *testing.T) {
+		toc.cursor = 2
+		toc.moveDown()
+		assert.Equal(t, 2, toc.cursor)
+	})
+
+	t.Run("move up from last", func(t *testing.T) {
+		toc.cursor = 2
+		toc.moveUp()
+		assert.Equal(t, 1, toc.cursor)
+	})
+
+	t.Run("move up clamped at first", func(t *testing.T) {
+		toc.cursor = 0
+		toc.moveUp()
+		assert.Equal(t, 0, toc.cursor)
+	})
+
+	t.Run("single entry no movement", func(t *testing.T) {
+		single := &mdTOC{entries: []tocEntry{{title: "Only", level: 1, lineIdx: 0}}, cursor: 0}
+		single.moveUp()
+		assert.Equal(t, 0, single.cursor)
+		single.moveDown()
+		assert.Equal(t, 0, single.cursor)
+	})
+}
+
+func TestMdTOC_EnsureVisible(t *testing.T) {
+	tests := []struct {
+		name       string
+		entries    int
+		cursor     int
+		offset     int
+		height     int
+		wantOffset int
+	}{
+		{name: "cursor already visible", entries: 10, cursor: 3, offset: 0, height: 5, wantOffset: 0},
+		{name: "cursor above viewport", entries: 10, cursor: 1, offset: 3, height: 5, wantOffset: 1},
+		{name: "cursor below viewport", entries: 10, cursor: 8, offset: 0, height: 5, wantOffset: 4},
+		{name: "cursor at last with small height", entries: 10, cursor: 9, offset: 0, height: 3, wantOffset: 7},
+		{name: "zero height", entries: 10, cursor: 5, offset: 0, height: 0, wantOffset: 0},
+		{name: "height larger than entries", entries: 3, cursor: 2, offset: 0, height: 10, wantOffset: 0},
+		{name: "offset clamped to max", entries: 5, cursor: 2, offset: 10, height: 3, wantOffset: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entries := make([]tocEntry, tt.entries)
+			for i := range entries {
+				entries[i] = tocEntry{title: "H", level: 1, lineIdx: i * 10}
+			}
+			toc := &mdTOC{entries: entries, cursor: tt.cursor, offset: tt.offset}
+			toc.ensureVisible(tt.height)
+			assert.Equal(t, tt.wantOffset, toc.offset)
+		})
+	}
+}
+
+func TestMdTOC_UpdateActiveSection(t *testing.T) {
+	toc := &mdTOC{entries: []tocEntry{
+		{title: "Intro", level: 1, lineIdx: 0},
+		{title: "Setup", level: 2, lineIdx: 10},
+		{title: "Usage", level: 2, lineIdx: 25},
+		{title: "API", level: 2, lineIdx: 50},
+	}, activeSection: -1}
+
+	tests := []struct {
+		name       string
+		diffCursor int
+		wantActive int
+	}{
+		{name: "before first header", diffCursor: -1, wantActive: -1},
+		{name: "at first header", diffCursor: 0, wantActive: 0},
+		{name: "between first and second", diffCursor: 5, wantActive: 0},
+		{name: "at second header", diffCursor: 10, wantActive: 1},
+		{name: "between second and third", diffCursor: 20, wantActive: 1},
+		{name: "at last header", diffCursor: 50, wantActive: 3},
+		{name: "after last header", diffCursor: 100, wantActive: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toc.updateActiveSection(tt.diffCursor)
+			assert.Equal(t, tt.wantActive, toc.activeSection)
+		})
+	}
+
+	t.Run("empty entries", func(t *testing.T) {
+		empty := &mdTOC{entries: nil, activeSection: 5}
+		empty.updateActiveSection(10)
+		assert.Equal(t, -1, empty.activeSection)
+	})
+}
+
 func TestModel_IsFullContext(t *testing.T) {
 	m := &Model{}
 	tests := []struct {

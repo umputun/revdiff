@@ -79,6 +79,49 @@ func parseTOC(lines []diff.DiffLine) *mdTOC {
 	return &mdTOC{entries: entries, activeSection: -1}
 }
 
+// moveUp moves cursor to the previous entry, clamped to first entry.
+func (toc *mdTOC) moveUp() {
+	if toc.cursor > 0 {
+		toc.cursor--
+	}
+}
+
+// moveDown moves cursor to the next entry, clamped to last entry.
+func (toc *mdTOC) moveDown() {
+	if toc.cursor < len(toc.entries)-1 {
+		toc.cursor++
+	}
+}
+
+// ensureVisible adjusts offset so the cursor is within the visible range of given height.
+func (toc *mdTOC) ensureVisible(height int) {
+	if height <= 0 {
+		return
+	}
+	if toc.cursor < toc.offset {
+		toc.offset = toc.cursor
+	} else if toc.cursor >= toc.offset+height {
+		toc.offset = toc.cursor - height + 1
+	}
+	if toc.offset < 0 {
+		toc.offset = 0
+	}
+	if maxOff := max(len(toc.entries)-height, 0); toc.offset > maxOff {
+		toc.offset = maxOff
+	}
+}
+
+// updateActiveSection finds the nearest entry with lineIdx <= diffCursor and sets activeSection.
+func (toc *mdTOC) updateActiveSection(diffCursor int) {
+	toc.activeSection = -1
+	for i, e := range toc.entries {
+		if e.lineIdx > diffCursor {
+			break
+		}
+		toc.activeSection = i
+	}
+}
+
 // isFullContext returns true when all lines are ChangeContext (skips ChangeDivider).
 func (m *Model) isFullContext(lines []diff.DiffLine) bool {
 	hasContext := false
