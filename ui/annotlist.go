@@ -7,12 +7,13 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/umputun/revdiff/annotation"
 )
 
-// buildAnnotListItems builds a flat sorted list of all annotations across all files.
-// sorted by file name then line number within each file.
+// buildAnnotListItems builds a flat list of all annotations across all files.
+// items are ordered by file name then line number, as returned by the store.
 func (m *Model) buildAnnotListItems() []annotation.Annotation {
 	files := m.store.Files()
 	items := make([]annotation.Annotation, 0, m.store.Count())
@@ -31,7 +32,7 @@ func (m Model) annotListOverlay() string {
 	}
 
 	// calculate visible height for items (excluding border and title padding)
-	maxVisibleItems := max(min(len(m.annotListItems), m.height-6), 1)
+	maxVisibleItems := m.annotListMaxVisible()
 
 	// content width inside the box (minus padding)
 	contentWidth := popupWidth - 4 // 2 for border + 2 for padding
@@ -100,7 +101,7 @@ func (m Model) formatAnnotListItem(a annotation.Annotation, width int, selected 
 	if commentSpace > 3 && a.Comment != "" {
 		comment = a.Comment
 		if lipgloss.Width(comment) > commentSpace {
-			comment = comment[:max(commentSpace-3, 0)] + "..."
+			comment = ansi.Truncate(comment, commentSpace-3, "...")
 		}
 	}
 
@@ -242,26 +243,53 @@ func (m Model) jumpToAnnotation() (tea.Model, tea.Cmd) {
 
 	if a.File == m.currFile {
 		// same file: position cursor directly
-		if a.Line == 0 {
-			m.diffCursor = -1
-		} else {
-			idx := m.findDiffLineIndex(a.Line, a.Type)
-			if idx >= 0 {
-				m.diffCursor = idx
-			}
-		}
-		m.focus = paneDiff
-		m.viewport.SetContent(m.renderDiff())
-		m.centerViewportOnCursor()
+		m.positionOnAnnotation(a)
 		return m, nil
 	}
 
 	// different file: set pending jump and trigger file load
 	m.pendingAnnotJump = &a
 	if !m.singleFile {
-		m.tree.selectByPath(a.File)
+		if !m.tree.selectByPath(a.File) {
+			m.pendingAnnotJump = nil // file not in tree, cancel jump
+			return m, nil
+		}
 	}
 	return m.loadSelectedIfChanged()
+}
+
+// positionOnAnnotation moves the cursor to the given annotation's line, re-renders, and centers the viewport.
+// in collapsed mode, expands the hunk containing the target line so removed lines are visible.
+func (m *Model) positionOnAnnotation(a annotation.Annotation) {
+	if a.Line == 0 {
+		m.diffCursor = -1
+	} else {
+		idx := m.findDiffLineIndex(a.Line, a.Type)
+		if idx >= 0 {
+			m.diffCursor = idx
+			m.ensureHunkExpanded(idx)
+		}
+	}
+	m.focus = paneDiff
+	m.viewport.SetContent(m.renderDiff())
+	m.centerViewportOnCursor()
+}
+
+// ensureHunkExpanded expands the hunk containing diffLines[idx] when collapsed mode is active.
+// this ensures the target line is visible after a jump (e.g., annotation on a removed line).
+// also expands delete-only placeholder hunks where the first line is "visible" as a synthetic
+// placeholder but annotations are not rendered (renderCollapsedDiff skips them).
+func (m *Model) ensureHunkExpanded(idx int) {
+	if !m.collapsed.enabled {
+		return
+	}
+	hunks := m.findHunks()
+	if m.isCollapsedHidden(idx, hunks) || m.isDeleteOnlyPlaceholder(idx, hunks) {
+		hunkStart := m.hunkStartFor(idx, hunks)
+		if hunkStart >= 0 {
+			m.collapsed.expandedHunks[hunkStart] = true
+		}
+	}
 }
 
 // findDiffLineIndex finds the index into diffLines matching the given line number and change type.

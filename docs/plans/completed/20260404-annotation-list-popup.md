@@ -135,10 +135,10 @@ File loading is async (returns a `tea.Cmd`). When jumping to an annotation in a 
 - [x] run linter: `make lint`
 
 ### Task 5: [Final] Update documentation
-- [ ] update README.md with `@` annotation list keybinding
-- [ ] update `.claude-plugin/skills/revdiff/references/usage.md` with annotation list feature
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md with `@` annotation list keybinding
+- [x] update `.claude-plugin/skills/revdiff/references/usage.md` with annotation list feature
+- [x] update CLAUDE.md if new patterns discovered
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

@@ -527,6 +527,117 @@ func TestModel_JumpToAnnotation_StalePendingGuard(t *testing.T) {
 	})
 }
 
+func TestModel_PendingAnnotJump_ClearedByTreeNav(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "line1", OldNum: 1, NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 1}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+	m.focus = paneTree
+
+	t.Run("tree j clears pending jump", func(t *testing.T) {
+		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Nil(t, model.pendingAnnotJump)
+	})
+
+	t.Run("tree k clears pending jump", func(t *testing.T) {
+		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		model := result.(Model)
+		assert.Nil(t, model.pendingAnnotJump)
+	})
+}
+
+func TestModel_PendingAnnotJump_ClearedByFilterToggle(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "line1", OldNum: 1, NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 1}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// add annotation so filter has something to toggle
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
+	m.focus = paneDiff
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model := result.(Model)
+	assert.Nil(t, model.pendingAnnotJump)
+}
+
+func TestModel_PositionOnAnnotation_CollapsedMode(t *testing.T) {
+	// set up a file with a remove line inside a hunk
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {
+			{ChangeType: diff.ChangeDivider, Content: "@@ -1,3 +1,2 @@"},
+			{ChangeType: diff.ChangeContext, Content: "ctx", OldNum: 1, NewNum: 1},
+			{ChangeType: diff.ChangeRemove, Content: "old", OldNum: 2, NewNum: 0},
+			{ChangeType: diff.ChangeAdd, Content: "new", OldNum: 0, NewNum: 2},
+		},
+	}
+	m := testModel([]string{"a.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// enable collapsed mode - remove line at index 2 should be hidden
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+
+	a := annotation.Annotation{File: "a.go", Line: 2, Type: "-"}
+	m.positionOnAnnotation(a)
+
+	// hunk should be expanded so the remove line is visible
+	assert.Equal(t, 2, m.diffCursor)
+	hunks := m.findHunks()
+	assert.False(t, m.isCollapsedHidden(m.diffCursor, hunks), "target line should be visible after jump")
+}
+
+func TestModel_PositionOnAnnotation_DeleteOnlyHunk(t *testing.T) {
+	// delete-only hunk: first line is a placeholder in collapsed mode,
+	// ensureHunkExpanded must expand it so the annotation is visible
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {
+			{ChangeType: diff.ChangeDivider, Content: "@@ -1,2 +1,0 @@"},
+			{ChangeType: diff.ChangeRemove, Content: "deleted1", OldNum: 1, NewNum: 0},
+			{ChangeType: diff.ChangeRemove, Content: "deleted2", OldNum: 2, NewNum: 0},
+		},
+	}
+	m := testModel([]string{"a.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// enable collapsed mode - first remove line is a delete-only placeholder
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+
+	a := annotation.Annotation{File: "a.go", Line: 1, Type: "-"}
+	m.positionOnAnnotation(a)
+
+	// hunk must be expanded so the actual line and annotation are visible
+	assert.Equal(t, 1, m.diffCursor)
+	hunks := m.findHunks()
+	hunkStart := m.hunkStartFor(m.diffCursor, hunks)
+	assert.True(t, m.collapsed.expandedHunks[hunkStart], "delete-only hunk should be expanded after jump")
+	assert.False(t, m.isDeleteOnlyPlaceholder(m.diffCursor, hunks), "line should not be a placeholder after expansion")
+}
+
 func TestModel_JumpToAnnotation_EmptyList(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.showAnnotList = true
