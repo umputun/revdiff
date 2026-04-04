@@ -59,15 +59,15 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Create: `ui/mdtoc.go`
 - Create: `ui/mdtoc_test.go`
 
-- [ ] create `tocEntry` struct with `title`, `level`, `lineIdx` fields
-- [ ] create `mdTOC` struct with `entries []tocEntry`, `cursor`, `offset`, `activeSection` fields
-- [ ] implement `parseTOC(lines []diff.DiffLine) mdTOC` — scans for markdown headers in context lines, skips headers inside fenced code blocks (track ``` state)
-- [ ] implement `(m Model) isFullContext(lines []diff.DiffLine) bool` method — returns true when all lines are `ChangeContext` (skips `ChangeDivider`)
-- [ ] implement `(m Model) isMarkdownFile(filename string) bool` method — checks `.md`/`.markdown` extension
-- [ ] write tests for `parseTOC` — empty input, single header, nested headers (h1-h6), non-header lines, headers inside fenced code blocks are excluded
-- [ ] write tests for `isFullContext` — all context, mixed types, empty, divider-only
-- [ ] write tests for `isMarkdownFile` — `.md`, `.markdown`, `.go`, `.MD` (case sensitivity), no extension
-- [ ] run tests — must pass before task 2
+- [x] create `tocEntry` struct with `title`, `level`, `lineIdx` fields
+- [x] create `mdTOC` struct with `entries []tocEntry`, `cursor`, `offset`, `activeSection` fields
+- [x] implement `parseTOC(lines []diff.DiffLine) mdTOC` — scans for markdown headers in context lines, skips headers inside fenced code blocks (track ``` state)
+- [x] implement `(m Model) isFullContext(lines []diff.DiffLine) bool` method — returns true when all lines are `ChangeContext` (skips `ChangeDivider`)
+- [x] implement `(m Model) isMarkdownFile(filename string) bool` method — checks `.md`/`.markdown` extension
+- [x] write tests for `parseTOC` — empty input, single header, nested headers (h1-h6), non-header lines, headers inside fenced code blocks are excluded
+- [x] write tests for `isFullContext` — all context, mixed types, empty, divider-only
+- [x] write tests for `isMarkdownFile` — `.md`, `.markdown`, `.go`, `.MD` (case sensitivity), no extension
+- [x] run tests — must pass before task 2
 
 ### Task 2: mdTOC cursor movement and scrolling
 
