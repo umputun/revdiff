@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.7.0 - 2026-04-04
+
+### New Features
+
+- no-git file review mode: `--only` files without git changes shown as context-only with full annotation and syntax highlighting support (#12)
+- standalone file review outside a git repo via `--only` (reads files directly from disk)
+
+### Improvements
+
+- plugin skill updated with file review mode guidance (v0.2.3)
+
 ## v0.6.0 - 2026-04-03
 
 ### New Features
