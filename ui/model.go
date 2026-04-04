@@ -97,7 +97,8 @@ type Model struct {
 	showAnnotList   bool                    // true when annotation list popup is visible
 	annotListCursor int                     // selected item in the flat list
 	annotListOffset int                     // scroll offset for the annotation list
-	annotListItems  []annotation.Annotation // flat sorted list of all annotations
+	annotListItems    []annotation.Annotation  // flat sorted list of all annotations
+	pendingAnnotJump *annotation.Annotation   // pending jump target after cross-file annotation list jump
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -520,6 +521,25 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.skipInitialDividers()
+
+	// handle pending annotation list jump
+	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
+		a := m.pendingAnnotJump
+		m.pendingAnnotJump = nil
+		if a.Line == 0 {
+			m.diffCursor = -1
+		} else {
+			idx := m.findDiffLineIndex(a.Line, a.Type)
+			if idx >= 0 {
+				m.diffCursor = idx
+			}
+		}
+		m.focus = paneDiff
+		m.viewport.SetContent(m.renderDiff())
+		m.centerViewportOnCursor()
+		return m, nil
+	}
+
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, nil
@@ -1028,6 +1048,7 @@ func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
 	if m.singleFile {
 		return m, nil
 	}
+	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.tree.prevFile()
 	return m.loadSelectedIfChanged()
 }
@@ -1046,6 +1067,7 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if key == "n" && !m.singleFile {
+		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 		m.tree.nextFile()
 		return m.loadSelectedIfChanged()
 	}

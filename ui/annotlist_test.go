@@ -358,3 +358,182 @@ func TestModel_HandleAnnotListKey(t *testing.T) {
 		assert.Equal(t, 0, model.annotListCursor)
 	})
 }
+
+func TestModel_FindDiffLineIndex(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {
+			{ChangeType: diff.ChangeContext, Content: "ctx1", OldNum: 1, NewNum: 1},
+			{ChangeType: diff.ChangeRemove, Content: "old", OldNum: 2, NewNum: 0},
+			{ChangeType: diff.ChangeAdd, Content: "new", OldNum: 0, NewNum: 2},
+			{ChangeType: diff.ChangeContext, Content: "ctx2", OldNum: 3, NewNum: 3},
+		},
+	}
+	m := testModel([]string{"a.go"}, diffs)
+	m.diffLines = diffs["a.go"]
+
+	t.Run("find add line by NewNum", func(t *testing.T) {
+		idx := m.findDiffLineIndex(2, "+")
+		assert.Equal(t, 2, idx)
+	})
+
+	t.Run("find remove line by OldNum", func(t *testing.T) {
+		idx := m.findDiffLineIndex(2, "-")
+		assert.Equal(t, 1, idx)
+	})
+
+	t.Run("find context line by NewNum", func(t *testing.T) {
+		idx := m.findDiffLineIndex(3, " ")
+		assert.Equal(t, 3, idx)
+	})
+
+	t.Run("not found returns -1", func(t *testing.T) {
+		idx := m.findDiffLineIndex(99, "+")
+		assert.Equal(t, -1, idx)
+	})
+
+	t.Run("wrong change type returns -1", func(t *testing.T) {
+		idx := m.findDiffLineIndex(2, " ")
+		assert.Equal(t, -1, idx)
+	})
+}
+
+func TestModel_JumpToAnnotation_SameFile(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {
+			{ChangeType: diff.ChangeContext, Content: "line1", OldNum: 1, NewNum: 1},
+			{ChangeType: diff.ChangeAdd, Content: "new", OldNum: 0, NewNum: 2},
+			{ChangeType: diff.ChangeContext, Content: "line3", OldNum: 2, NewNum: 3},
+		},
+	}
+	m := testModel([]string{"a.go"}, diffs)
+
+	// simulate file load
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "check this"})
+
+	t.Run("same-file jump positions cursor", func(t *testing.T) {
+		m.showAnnotList = true
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList)
+		assert.Equal(t, 1, model.diffCursor) // index 1 is the add line
+		assert.Equal(t, paneDiff, model.focus)
+	})
+
+	t.Run("file-level annotation sets cursor to -1", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+		m.showAnnotList = true
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0 // file-level comes first (line 0)
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList)
+		assert.Equal(t, -1, model.diffCursor)
+	})
+}
+
+func TestModel_JumpToAnnotation_CrossFile(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "line1", OldNum: 1, NewNum: 1}},
+		"b.go": {
+			{ChangeType: diff.ChangeContext, Content: "ctx", OldNum: 1, NewNum: 1},
+			{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 2},
+		},
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+
+	// load files and first file
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+	assert.Equal(t, "a.go", m.currFile)
+
+	// add annotation in b.go
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 2, Type: "+", Comment: "check"})
+
+	t.Run("cross-file jump sets pending and triggers load", func(t *testing.T) {
+		m.showAnnotList = true
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0
+
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList)
+		assert.NotNil(t, model.pendingAnnotJump)
+		assert.Equal(t, "b.go", model.pendingAnnotJump.File)
+		require.NotNil(t, cmd)
+
+		// simulate file loaded
+		loadMsg := cmd()
+		result, _ = model.Update(loadMsg)
+		model = result.(Model)
+		assert.Equal(t, "b.go", model.currFile)
+		assert.Nil(t, model.pendingAnnotJump)
+		assert.Equal(t, 1, model.diffCursor) // index 1 is the add line
+		assert.Equal(t, paneDiff, model.focus)
+	})
+}
+
+func TestModel_JumpToAnnotation_StalePendingGuard(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "line1", OldNum: 1, NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 1}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+
+	// load files and first file
+	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go"}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	t.Run("stale pending jump is ignored when file does not match", func(t *testing.T) {
+		// set pending for b.go but simulate a.go being loaded
+		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
+		m.loadSeq++
+		loadMsg := fileLoadedMsg{file: "a.go", seq: m.loadSeq, lines: diffs["a.go"]}
+		result, _ := m.Update(loadMsg)
+		model := result.(Model)
+		// pending should not be cleared (file mismatch)
+		assert.NotNil(t, model.pendingAnnotJump)
+		assert.Equal(t, "b.go", model.pendingAnnotJump.File)
+	})
+
+	t.Run("n key clears pending jump", func(t *testing.T) {
+		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
+		m.focus = paneDiff
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+		model := result.(Model)
+		assert.Nil(t, model.pendingAnnotJump)
+	})
+
+	t.Run("p key clears pending jump", func(t *testing.T) {
+		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+		model := result.(Model)
+		assert.Nil(t, model.pendingAnnotJump)
+	})
+}
+
+func TestModel_JumpToAnnotation_EmptyList(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.showAnnotList = true
+	m.annotListItems = nil // empty
+	m.annotListCursor = 0
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.False(t, model.showAnnotList)
+}

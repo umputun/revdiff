@@ -214,9 +214,11 @@ func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
-		// jump-to-annotation logic will be added in task 3
-		m.showAnnotList = false
-		return m, nil
+		if len(m.annotListItems) == 0 {
+			m.showAnnotList = false
+			return m, nil
+		}
+		return m.jumpToAnnotation()
 
 	case "esc":
 		m.showAnnotList = false
@@ -230,4 +232,49 @@ func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // annotListMaxVisible returns the maximum number of visible items in the annotation list popup.
 func (m Model) annotListMaxVisible() int {
 	return max(min(len(m.annotListItems), m.height-6), 1)
+}
+
+// jumpToAnnotation handles Enter in the annotation list popup.
+// jumps to the selected annotation, loading a different file if needed.
+func (m Model) jumpToAnnotation() (tea.Model, tea.Cmd) {
+	a := m.annotListItems[m.annotListCursor]
+	m.showAnnotList = false
+
+	if a.File == m.currFile {
+		// same file: position cursor directly
+		if a.Line == 0 {
+			m.diffCursor = -1
+		} else {
+			idx := m.findDiffLineIndex(a.Line, a.Type)
+			if idx >= 0 {
+				m.diffCursor = idx
+			}
+		}
+		m.focus = paneDiff
+		m.viewport.SetContent(m.renderDiff())
+		m.centerViewportOnCursor()
+		return m, nil
+	}
+
+	// different file: set pending jump and trigger file load
+	m.pendingAnnotJump = &a
+	if !m.singleFile {
+		m.tree.selectByPath(a.File)
+	}
+	return m.loadSelectedIfChanged()
+}
+
+// findDiffLineIndex finds the index into diffLines matching the given line number and change type.
+// uses diffLineNum() semantics: compares against OldNum for removes, NewNum for adds/context.
+// returns -1 if not found.
+func (m Model) findDiffLineIndex(line int, changeType string) int {
+	for i, dl := range m.diffLines {
+		if string(dl.ChangeType) != changeType {
+			continue
+		}
+		if m.diffLineNum(dl) == line {
+			return i
+		}
+	}
+	return -1
 }

@@ -114,25 +114,25 @@ File loading is async (returns a `tea.Cmd`). When jumping to an annotation in a 
 - Modify: `ui/model.go`
 - Modify: `ui/filetree.go`
 
-- [ ] create `selectByPath(path string)` method on `fileTree` — sets cursor to matching file entry
-- [ ] add `findDiffLineIndex(line int, changeType string) int` method in `annotlist.go` — uses `diffLineNum()` semantics: compares against `dl.OldNum` for removes, `dl.NewNum` for adds/context; returns -1 if not found
-- [ ] on Enter: for file-level annotations (`Line == 0`), set `diffCursor = -1`; for same-file, use `findDiffLineIndex` + `centerViewportOnCursor()`; for different file, set `pendingAnnotJump` and trigger file load via `selectByPath` + `loadSelectedIfChanged()`
-- [ ] in `handleFileLoaded`: check `pendingAnnotJump` and verify `pendingAnnotJump.File == msg.file` (guard against stale jumps), position cursor, center viewport, clear pending
-- [ ] clear `pendingAnnotJump` when non-annotation file navigation triggers a load (n/p keys)
-- [ ] write tests for same-file jump, cross-file jump (pending mechanism), file-level annotation jump, stale pending guard, line matching with OldNum/NewNum semantics
-- [ ] run `make test` — must pass before next task
+- [x] create `selectByPath(path string)` method on `fileTree` — sets cursor to matching file entry
+- [x] add `findDiffLineIndex(line int, changeType string) int` method in `annotlist.go` — uses `diffLineNum()` semantics: compares against `dl.OldNum` for removes, `dl.NewNum` for adds/context; returns -1 if not found
+- [x] on Enter: for file-level annotations (`Line == 0`), set `diffCursor = -1`; for same-file, use `findDiffLineIndex` + `centerViewportOnCursor()`; for different file, set `pendingAnnotJump` and trigger file load via `selectByPath` + `loadSelectedIfChanged()`
+- [x] in `handleFileLoaded`: check `pendingAnnotJump` and verify `pendingAnnotJump.File == msg.file` (guard against stale jumps), position cursor, center viewport, clear pending
+- [x] clear `pendingAnnotJump` when non-annotation file navigation triggers a load (n/p keys)
+- [x] write tests for same-file jump, cross-file jump (pending mechanism), file-level annotation jump, stale pending guard, line matching with OldNum/NewNum semantics
+- [x] run `make test` — must pass before next task
 
 ### Task 4: Verify acceptance criteria
-- [ ] verify `@` opens and closes annotation list popup
-- [ ] verify list shows all annotations sorted by file then line
-- [ ] verify arrow keys navigate the list with visual highlight
-- [ ] verify Enter jumps to same-file annotation correctly
-- [ ] verify Enter jumps to cross-file annotation correctly (loads file, positions cursor)
-- [ ] verify Esc closes without jumping
-- [ ] verify empty state ("no annotations") when no annotations exist
-- [ ] verify popup scrolls with long annotation lists
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
+- [x] verify `@` opens and closes annotation list popup
+- [x] verify list shows all annotations sorted by file then line
+- [x] verify arrow keys navigate the list with visual highlight
+- [x] verify Enter jumps to same-file annotation correctly
+- [x] verify Enter jumps to cross-file annotation correctly (loads file, positions cursor)
+- [x] verify Esc closes without jumping
+- [x] verify empty state ("no annotations") when no annotations exist
+- [x] verify popup scrolls with long annotation lists
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
 
 ### Task 5: [Final] Update documentation
 - [ ] update README.md with `@` annotation list keybinding
