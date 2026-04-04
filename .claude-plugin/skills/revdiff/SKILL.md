@@ -42,7 +42,12 @@ which revdiff
 If not found, guide installation:
 - `go install github.com/umputun/revdiff/cmd/revdiff@latest`
 
-### Step 1: Determine Ref
+### Step 1: Determine Ref or File Review Mode
+
+If `$ARGUMENTS` is a file path (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`), use **file review mode**:
+- Skip ref detection entirely
+- Go directly to Step 2 with `--only=<filepath>` (no ref argument)
+- Works both inside and outside a git repo — revdiff reads the file from disk as context-only
 
 If `$ARGUMENTS` contains an explicit ref (e.g., `HEAD~1`, `main`), use it as-is.
 
