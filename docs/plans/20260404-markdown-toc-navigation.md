@@ -89,11 +89,11 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Modify: `ui/mdtoc.go`
 - Modify: `ui/mdtoc_test.go`
 
-- [ ] implement `render(width, height int, focusedPane pane, s styles) string` — renders TOC entries with indentation by level, highlights cursor entry when TOC is focused, highlights active section when diff is focused
-- [ ] indent entries: 2 spaces per level (h1=0, h2=2, h3=4, etc.), truncate long titles with `…`
-- [ ] use `styles.FileSelected` for cursor highlight (same as file tree), different style for active section marker
-- [ ] write tests for render — empty TOC, various header levels, cursor highlight, active section highlight, truncation, scrolling offset
-- [ ] run tests — must pass before task 4
+- [x] implement `render(width, height int, focusedPane pane, s styles) string` — renders TOC entries with indentation by level, highlights cursor entry when TOC is focused, highlights active section when diff is focused
+- [x] indent entries: 2 spaces per level (h1=0, h2=2, h3=4, etc.), truncate long titles with `…`
+- [x] use `styles.FileSelected` for cursor highlight (same as file tree), different style for active section marker
+- [x] write tests for render — empty TOC, various header levels, cursor highlight, active section highlight, truncation, scrolling offset
+- [x] run tests — must pass before task 4
 
 ### Task 4: integrate mdTOC into Model
 

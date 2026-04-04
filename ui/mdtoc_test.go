@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -210,6 +212,124 @@ func TestMdTOC_UpdateActiveSection(t *testing.T) {
 		empty.updateActiveSection(10)
 		assert.Equal(t, -1, empty.activeSection)
 	})
+}
+
+func TestMdTOC_Render(t *testing.T) {
+	s := plainStyles()
+
+	t.Run("empty TOC", func(t *testing.T) {
+		toc := &mdTOC{entries: nil}
+		got := toc.render(40, 10, paneTree, s)
+		assert.Equal(t, "  no headers", got)
+	})
+
+	t.Run("single h1 entry, tree focused", func(t *testing.T) {
+		toc := &mdTOC{entries: []tocEntry{{title: "Title", level: 1, lineIdx: 0}}, cursor: 0, activeSection: -1}
+		got := toc.render(40, 10, paneTree, s)
+		assert.Contains(t, got, "Title")
+		// cursor should be highlighted with FileSelected style (reverse in plain)
+		assert.NotEqual(t, "  Title", got) // styled, not plain
+	})
+
+	t.Run("indentation by level", func(t *testing.T) {
+		toc := &mdTOC{entries: []tocEntry{
+			{title: "H1", level: 1, lineIdx: 0},
+			{title: "H2", level: 2, lineIdx: 5},
+			{title: "H3", level: 3, lineIdx: 10},
+		}, cursor: 0, activeSection: -1}
+		got := toc.render(40, 10, paneDiff, s)
+		lines := strings.Split(got, "\n")
+		require.Len(t, lines, 3)
+		// h1 has no indent (level-1=0), h2 has 2 spaces, h3 has 4 spaces
+		assert.True(t, strings.HasPrefix(lines[0], "  H1"), "h1 should have prefix spaces only: %q", lines[0])
+		assert.Contains(t, lines[1], "  H2", "h2 should have 2 extra spaces indent: %q", lines[1])
+		assert.Contains(t, lines[2], "    H3", "h3 should have 4 extra spaces indent: %q", lines[2])
+	})
+
+	t.Run("active section marker in diff focus", func(t *testing.T) {
+		toc := &mdTOC{entries: []tocEntry{
+			{title: "First", level: 1, lineIdx: 0},
+			{title: "Second", level: 1, lineIdx: 10},
+		}, cursor: 0, activeSection: 1}
+		got := toc.render(40, 10, paneDiff, s)
+		lines := strings.Split(got, "\n")
+		require.Len(t, lines, 2)
+		assert.True(t, strings.HasPrefix(lines[0], "  "), "non-active entry should have space prefix")
+		assert.Contains(t, lines[1], "▸", "active entry should have ▸ marker")
+	})
+
+	t.Run("no active marker in tree focus", func(t *testing.T) {
+		toc := &mdTOC{entries: []tocEntry{
+			{title: "First", level: 1, lineIdx: 0},
+			{title: "Second", level: 1, lineIdx: 10},
+		}, cursor: 1, activeSection: 0}
+		got := toc.render(40, 10, paneTree, s)
+		// active section marker (▸) should not appear when tree is focused
+		assert.NotContains(t, got, "▸")
+	})
+
+	t.Run("truncation of long title", func(t *testing.T) {
+		toc := &mdTOC{entries: []tocEntry{
+			{title: "This is a very long title that should be truncated", level: 1, lineIdx: 0},
+		}, cursor: 0, activeSection: -1}
+		got := toc.render(20, 10, paneDiff, s)
+		assert.Contains(t, got, "…")
+	})
+
+	t.Run("scrolling offset", func(t *testing.T) {
+		entries := make([]tocEntry, 20)
+		for i := range entries {
+			entries[i] = tocEntry{title: fmt.Sprintf("Header %d", i), level: 1, lineIdx: i * 10}
+		}
+		toc := &mdTOC{entries: entries, cursor: 15, offset: 0, activeSection: -1}
+		got := toc.render(40, 5, paneTree, s)
+		lines := strings.Split(got, "\n")
+		assert.Len(t, lines, 5)
+		assert.Contains(t, got, "Header 15") // cursor entry should be visible
+		assert.NotContains(t, got, "Header 0") // first entry should not be visible
+	})
+
+	t.Run("cursor highlight vs active section", func(t *testing.T) {
+		toc := &mdTOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 10},
+			{title: "C", level: 1, lineIdx: 20},
+		}, cursor: 1, activeSection: 2}
+		// in tree focus, cursor entry is highlighted, active section is not specially marked
+		gotTree := toc.render(40, 10, paneTree, s)
+		assert.NotContains(t, gotTree, "▸")
+
+		// in diff focus, active section gets ▸ marker
+		gotDiff := toc.render(40, 10, paneDiff, s)
+		lines := strings.Split(gotDiff, "\n")
+		require.Len(t, lines, 3)
+		assert.Contains(t, lines[2], "▸")
+		assert.True(t, strings.HasPrefix(lines[0], "  "))
+		assert.True(t, strings.HasPrefix(lines[1], "  "))
+	})
+}
+
+func TestMdTOC_TruncateTitle(t *testing.T) {
+	toc := &mdTOC{}
+	tests := []struct {
+		name     string
+		title    string
+		maxWidth int
+		want     string
+	}{
+		{name: "fits", title: "Hello", maxWidth: 10, want: "Hello"},
+		{name: "exact fit", title: "Hello", maxWidth: 5, want: "Hello"},
+		{name: "truncated", title: "Hello World", maxWidth: 8, want: "Hello W…"},
+		{name: "very narrow", title: "Hello", maxWidth: 1, want: "…"},
+		{name: "zero width", title: "Hello", maxWidth: 0, want: ""},
+		{name: "negative width", title: "Hello", maxWidth: -1, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, toc.truncateTitle(tt.title, tt.maxWidth))
+		})
+	}
 }
 
 func TestModel_IsFullContext(t *testing.T) {

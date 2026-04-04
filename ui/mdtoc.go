@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/diff"
 )
@@ -120,6 +123,58 @@ func (toc *mdTOC) updateActiveSection(diffCursor int) {
 		}
 		toc.activeSection = i
 	}
+}
+
+// render produces the TOC display string with indentation by level, cursor highlight, and active section marker.
+// when focusedPane is paneTree, the cursor entry gets FileSelected style.
+// when focusedPane is paneDiff, the active section entry gets a marker prefix.
+func (toc *mdTOC) render(width, height int, focusedPane pane, s styles) string {
+	if len(toc.entries) == 0 {
+		return "  no headers"
+	}
+
+	toc.ensureVisible(height)
+	end := min(toc.offset+height, len(toc.entries))
+
+	var b strings.Builder
+	for idx := toc.offset; idx < end; idx++ {
+		e := toc.entries[idx]
+		indent := strings.Repeat("  ", e.level-1) // h1=0 indent, h2=2, h3=4, etc.
+		prefix := "  "
+		if idx == toc.activeSection && focusedPane == paneDiff {
+			prefix = "▸ "
+		}
+
+		title := toc.truncateTitle(e.title, width-len(indent)-len(prefix)-1)
+		line := fmt.Sprintf("%s%s%s", prefix, indent, title)
+
+		if focusedPane == paneTree && idx == toc.cursor {
+			line = s.FileSelected.Width(max(width-2, 1)).Render(line)
+		} else if idx == toc.activeSection && focusedPane == paneDiff {
+			line = lipgloss.NewStyle().Bold(true).Render(line)
+		}
+
+		b.WriteString(line)
+		if idx < end-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// truncateTitle trims a title to fit maxWidth, appending ellipsis when truncated.
+func (toc *mdTOC) truncateTitle(title string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	runes := []rune(title)
+	if len(runes) <= maxWidth {
+		return title
+	}
+	if maxWidth <= 1 {
+		return "…"
+	}
+	return string(runes[:maxWidth-1]) + "…"
 }
 
 // isFullContext returns true when all lines are ChangeContext (skips ChangeDivider).
