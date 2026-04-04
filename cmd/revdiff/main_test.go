@@ -30,6 +30,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoStatusBar)
 	assert.False(t, opts.NoConfirmDiscard)
 	assert.False(t, opts.Wrap)
+	assert.False(t, opts.Collapsed)
 	assert.Empty(t, opts.Output)
 	assert.Empty(t, opts.Refs.Base)
 	assert.Empty(t, opts.Refs.Against)
@@ -82,6 +83,31 @@ func TestParseArgs_Wrap(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.Wrap)
+	})
+}
+
+func TestParseArgs_Collapsed(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--collapsed"))
+		require.NoError(t, err)
+		assert.True(t, opts.Collapsed)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_COLLAPSED", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.Collapsed)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\ncollapsed = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.Collapsed)
 	})
 }
 

@@ -32,6 +32,7 @@ type options struct {
 	NoStatusBar      bool     `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
 	NoConfirmDiscard bool     `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
 	Wrap             bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
+	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
@@ -196,6 +197,7 @@ func run(opts options) error {
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,
 		Wrap:             opts.Wrap,
+		Collapsed:        opts.Collapsed,
 		TabWidth:         opts.TabWidth,
 		Ref:              opts.ref(),
 		Staged:           opts.Staged,
