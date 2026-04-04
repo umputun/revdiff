@@ -127,14 +127,22 @@ fi
 ## Usage
 
 ```
-revdiff [OPTIONS] [ref]
+revdiff [OPTIONS] [base] [against]
 ```
+
+Positional arguments support several forms:
+- `revdiff` — uncommitted changes
+- `revdiff HEAD~3` — diff a single ref against the working tree
+- `revdiff main feature` — diff between two refs
+- `revdiff main..feature` — same as above, using git's dot-dot syntax
+- `revdiff main...feature` — changes since `feature` diverged from `main`
 
 ### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `ref` | Git ref to diff against | uncommitted changes |
+| `base` | Git ref to diff against | uncommitted changes |
+| `against` | Second git ref for two-ref diff | |
 | `--staged` | Show staged changes, env: `REVDIFF_STAGED` | `false` |
 | `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `2` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |

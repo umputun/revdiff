@@ -5354,7 +5354,7 @@ func TestModel_SingleFileSearchNavStillWorks(t *testing.T) {
 	assert.Equal(t, 1, model.searchCursor, "n should advance search cursor in single-file mode")
 	assert.Equal(t, 2, model.diffCursor, "cursor should move to second match")
 
-	// N should navigate to previous search match
+	// n should navigate to previous search match
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model = result.(Model)
 	assert.Equal(t, 0, model.searchCursor, "N should go back in single-file mode")

@@ -31,7 +31,8 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoConfirmDiscard)
 	assert.False(t, opts.Wrap)
 	assert.Empty(t, opts.Output)
-	assert.Empty(t, opts.Ref.Ref)
+	assert.Empty(t, opts.Refs.Base)
+	assert.Empty(t, opts.Refs.Against)
 }
 
 func TestParseArgs_NoConfirmDiscard(t *testing.T) {
@@ -102,7 +103,40 @@ func TestParseArgs_Flags(t *testing.T) {
 	assert.Equal(t, 8, opts.TabWidth)
 	assert.True(t, opts.NoColors)
 	assert.Equal(t, "dracula", opts.ChromaStyle)
-	assert.Equal(t, "HEAD~3", opts.Ref.Ref)
+	assert.Equal(t, "HEAD~3", opts.Refs.Base)
+	assert.Empty(t, opts.Refs.Against)
+}
+
+func TestParseArgs_TwoRefs(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "main", "feature"))
+	require.NoError(t, err)
+	assert.Equal(t, "main", opts.Refs.Base)
+	assert.Equal(t, "feature", opts.Refs.Against)
+	assert.Equal(t, "main..feature", opts.ref())
+}
+
+func TestParseArgs_SingleRef(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "HEAD~3"))
+	require.NoError(t, err)
+	assert.Equal(t, "HEAD~3", opts.Refs.Base)
+	assert.Empty(t, opts.Refs.Against)
+	assert.Equal(t, "HEAD~3", opts.ref())
+}
+
+func TestParseArgs_DotDotRef(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "main..feature"))
+	require.NoError(t, err)
+	assert.Equal(t, "main..feature", opts.Refs.Base)
+	assert.Empty(t, opts.Refs.Against)
+	assert.Equal(t, "main..feature", opts.ref())
+}
+
+func TestParseArgs_NoRef(t *testing.T) {
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+	assert.Empty(t, opts.Refs.Base)
+	assert.Empty(t, opts.Refs.Against)
+	assert.Empty(t, opts.ref())
 }
 
 func TestParseArgs_ColorDefaults(t *testing.T) {

@@ -20,8 +20,9 @@ import (
 )
 
 type options struct {
-	Ref struct {
-		Ref string `positional-arg-name:"ref" description:"git ref to diff against (default: uncommitted changes)"`
+	Refs struct {
+		Base    string `positional-arg-name:"base" description:"git ref to diff against (default: uncommitted changes)"`
+		Against string `positional-arg-name:"against" description:"second git ref for two-ref diff (e.g. revdiff main feature)"`
 	} `positional-args:"yes"`
 
 	Staged           bool     `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
@@ -63,6 +64,15 @@ type options struct {
 	} `group:"color options"`
 }
 
+// ref returns the combined ref string from positional args.
+// two refs are joined with ".." to form a range (e.g. "main..feature").
+func (o options) ref() string {
+	if o.Refs.Against != "" {
+		return o.Refs.Base + ".." + o.Refs.Against
+	}
+	return o.Refs.Base
+}
+
 var revision = "unknown"
 
 func main() {
@@ -97,7 +107,7 @@ func main() {
 func parseArgs(args []string) (options, error) {
 	var opts options
 	p := flags.NewParser(&opts, flags.Default)
-	p.Usage = "[OPTIONS] [ref]"
+	p.Usage = "[OPTIONS] [base] [against]"
 
 	// determine config path from args before full parsing
 	configPath := resolveConfigPath(args)
@@ -183,7 +193,7 @@ func run(opts options) error {
 		NoConfirmDiscard: opts.NoConfirmDiscard,
 		Wrap:             opts.Wrap,
 		TabWidth:         opts.TabWidth,
-		Ref:              opts.Ref.Ref,
+		Ref:              opts.ref(),
 		Staged:           opts.Staged,
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
