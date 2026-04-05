@@ -1,7 +1,7 @@
 ---
 name: revdiff
-description: Review git diffs with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/kitty/wezterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff", "git review with revdiff", "interactive diff review", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
-argument-hint: 'optional git ref(s) (e.g., HEAD~1, main, main feature)'
+description: Review git diffs with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/kitty/wezterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff", "git review with revdiff", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
+argument-hint: 'optional: git ref(s), "all files", or file path'
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
 
@@ -13,6 +13,8 @@ Review git diffs with inline annotations using revdiff TUI in a terminal overlay
 
 - "revdiff", "review diff", "annotate diff"
 - "revdiff HEAD~1", "revdiff main"
+- "revdiff all files", "review all files", "browse all files"
+- "revdiff all files exclude vendor"
 
 ## Answering Questions
 
@@ -42,16 +44,22 @@ which revdiff
 If not found, guide installation:
 - `go install github.com/umputun/revdiff/cmd/revdiff@latest`
 
-### Step 1: Determine Ref or File Review Mode
+### Step 1: Determine Review Mode
 
-If `$ARGUMENTS` is a file path (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`), use **file review mode**:
+**All-files mode**: If `$ARGUMENTS` matches "all files", "all-files", or "browse all files" (with optional "exclude <prefix>" parts), use **all-files mode**:
+- Pass `--all-files` to the launcher
+- If user mentions exclude patterns (e.g., "exclude vendor", "exclude vendor and mocks"), pass each as `--exclude=<prefix>`
+- Skip ref detection entirely, go directly to Step 2
+- Example: "all files exclude vendor" → `--all-files --exclude=vendor`
+
+**File review mode**: If `$ARGUMENTS` is a file path (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`):
 - Skip ref detection entirely
 - Go directly to Step 2 with `--only=<filepath>` (no ref argument)
 - Works both inside and outside a git repo — revdiff reads the file from disk as context-only
 
-If `$ARGUMENTS` contains explicit ref(s) (e.g., `HEAD~1`, `main`, or `main feature` for two-ref diff), use as-is.
+**Ref mode**: If `$ARGUMENTS` contains explicit ref(s) (e.g., `HEAD~1`, `main`, or `main feature` for two-ref diff), use as-is.
 
-If no ref provided, run the smart detection script:
+**Auto-detect**: If no ref provided, run the smart detection script:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/detect-ref.sh
@@ -76,7 +84,7 @@ The script outputs structured fields:
 Run the launcher script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1 --only=file2]
+${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
 ```
 
 The script:
@@ -122,7 +130,7 @@ After fixing, run the launcher script again with the same ref. The user can:
 
 When the script produces no output, the review is complete. Inform the user.
 
-## Example Session
+## Example Sessions
 
 ```
 User: "revdiff HEAD~1"
@@ -136,4 +144,11 @@ User: "revdiff HEAD~1"
 → re-launch revdiff HEAD~1
 → user sees fix, quits without annotations
 → "review complete"
+```
+
+```
+User: "revdiff all files exclude vendor"
+→ launch revdiff with --all-files --exclude=vendor
+→ user browses all tracked files, annotates as needed
+→ same annotation loop as above
 ```
