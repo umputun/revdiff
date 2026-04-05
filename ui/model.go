@@ -1154,6 +1154,11 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case paneDiff:
+		if m.cursorOnFileAnnotationLine() {
+			cmd := m.startFileAnnotation()
+			m.viewport.SetContent(m.renderDiff())
+			return m, cmd
+		}
 		cmd := m.startAnnotation()
 		m.viewport.SetContent(m.renderDiff())
 		return m, cmd

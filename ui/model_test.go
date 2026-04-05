@@ -2358,6 +2358,66 @@ func TestModel_FileAnnotationCursorHighlighted(t *testing.T) {
 	assert.Contains(t, rendered, "file: file note", "file annotation should be rendered")
 }
 
+func TestModel_EnterOnFileAnnotationLineTriggersFileAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+	m.diffCursor = -1 // on file annotation line
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "existing note"})
+
+	// press enter on file annotation line - should start file annotation mode
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.True(t, model.annotating, "enter on file annotation line should start annotation mode")
+	assert.True(t, model.fileAnnotating, "enter on file annotation line should set fileAnnotating")
+	assert.NotNil(t, cmd, "should return textinput blink command")
+}
+
+func TestModel_EnterOnFileAnnotationLinePreFillsText(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+	m.diffCursor = -1 // on file annotation line
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "pre-existing comment"})
+
+	// press enter - should pre-fill with existing annotation text
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.Equal(t, "pre-existing comment", model.annotateInput.Value(), "should pre-fill with existing file annotation")
+}
+
+func TestModel_EnterOnRegularDiffLineStillTriggersLineAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneDiff
+	m.diffCursor = 1 // on regular diff line, not file annotation
+	// add a file annotation to ensure it doesn't interfere
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+
+	// press enter on regular line - should start line annotation, not file annotation
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	assert.True(t, model.annotating, "enter on regular line should start annotation mode")
+	assert.False(t, model.fileAnnotating, "enter on regular line should not set fileAnnotating")
+	assert.NotNil(t, cmd, "should return textinput blink command")
+}
+
 func TestModel_DeleteFileAnnotationViaD(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},

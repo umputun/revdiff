@@ -75,7 +75,6 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 	m.fileAnnotating = true
 	m.diffCursor = -1 // position cursor on the file annotation line
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.renderDiff())
 	return cmd
 }
 

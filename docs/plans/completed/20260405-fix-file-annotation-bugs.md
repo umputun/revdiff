@@ -53,25 +53,25 @@ to `startFileAnnotation()`.
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in `handleEnterKey`, add branch before `startAnnotation()`: when `m.cursorOnFileAnnotationLine()`, call `startFileAnnotation()` instead
-- [ ] write test: Enter on file annotation line (diffCursor == -1) triggers file annotation edit
-- [ ] write test: Enter on file annotation line pre-fills existing annotation text
-- [ ] write test: Enter on regular diff line still triggers line annotation (regression check)
-- [ ] run tests — must pass before task 3
+- [x] in `handleEnterKey`, add branch before `startAnnotation()`: when `m.cursorOnFileAnnotationLine()`, call `startFileAnnotation()` instead
+- [x] write test: Enter on file annotation line (diffCursor == -1) triggers file annotation edit
+- [x] write test: Enter on file annotation line pre-fills existing annotation text
+- [x] write test: Enter on regular diff line still triggers line annotation (regression check)
+- [x] run tests — must pass before task 3
 
 ### Task 3: Verify acceptance criteria
 
-- [ ] verify: file-level annotation input stays within terminal width
-- [ ] verify: Enter on existing file annotation opens edit with pre-filled text
-- [ ] verify: line-level annotations still work identically
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
-- [ ] run formatters: `make fmt`
+- [x] verify: file-level annotation input stays within terminal width
+- [x] verify: Enter on existing file annotation opens edit with pre-filled text
+- [x] verify: line-level annotations still work identically
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
+- [x] run formatters: `make fmt`
 
 ### Task 4: [Final] Update documentation
 
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update CLAUDE.md if new patterns discovered
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
