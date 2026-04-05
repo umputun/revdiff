@@ -32,7 +32,10 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return nil, fmt.Errorf("git ls-files: %s", string(exitErr.Stderr))
+			stderr := strings.TrimSpace(string(exitErr.Stderr))
+			if stderr != "" {
+				return nil, fmt.Errorf("git ls-files: %s", stderr)
+			}
 		}
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}

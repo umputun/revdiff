@@ -58,6 +58,14 @@ func TestExcludeFilter_matchesExclude_trailingSlash(t *testing.T) {
 	assert.False(t, ef.matchesExclude("src/vendor/foo.go"))
 }
 
+func TestExcludeFilter_matchesExclude_whitespaceAndEmpty(t *testing.T) {
+	// prefixes with whitespace (e.g., from env var "vendor, mocks") should be trimmed
+	ef := NewExcludeFilter(&mockRenderer{}, []string{" vendor ", " mocks", ""})
+	assert.True(t, ef.matchesExclude("vendor/foo.go"))
+	assert.True(t, ef.matchesExclude("mocks/mock.go"))
+	assert.Len(t, ef.prefixes, 2, "empty prefix should be skipped")
+}
+
 func TestExcludeFilter_ChangedFiles(t *testing.T) {
 	inner := &mockRenderer{
 		changedFiles: []string{"cmd/main.go", "vendor/lib.go", "diff/diff.go", "vendor/pkg/x.go", "ui/mocks/m.go"},

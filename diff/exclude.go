@@ -20,10 +20,16 @@ type ExcludeFilter struct {
 
 // NewExcludeFilter creates an ExcludeFilter that removes files matching any prefix from results.
 func NewExcludeFilter(inner renderer, prefixes []string) *ExcludeFilter {
-	// normalize prefixes: strip trailing slashes so "vendor/" and "vendor" both work
-	normalized := make([]string, len(prefixes))
-	for i, p := range prefixes {
-		normalized[i] = strings.TrimRight(p, "/")
+	// normalize prefixes: trim whitespace, strip trailing slashes so "vendor/" and "vendor" both work,
+	// and skip empty values from env/config inputs like trailing commas.
+	normalized := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		p = strings.TrimSpace(p)
+		p = strings.TrimRight(p, "/")
+		if p == "" {
+			continue
+		}
+		normalized = append(normalized, p)
 	}
 	return &ExcludeFilter{inner: inner, prefixes: normalized}
 }
