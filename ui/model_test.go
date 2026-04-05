@@ -16,6 +16,7 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/keymap"
 	"github.com/umputun/revdiff/ui/mocks"
 )
 
@@ -4999,22 +5000,20 @@ func TestModel_ShiftNDoesPrevMatchWhenSearchActive(t *testing.T) {
 	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match")
 }
 
-func TestModel_ShiftNDoesNothingWithoutSearch(t *testing.T) {
+func TestModel_ShiftNNavigatesPrevFileWithoutSearch(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
 	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
-	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	model := result.(Model)
+	m.tree.cursor = 2 // start at second file (b.go); entries: [dir=0, a.go=1, b.go=2]
+	m.currFile = "b.go"
 
-	// no search active, N should do nothing
-	assert.Empty(t, model.searchMatches)
-	selected := model.tree.selectedFile()
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
-	model = result.(Model)
-	assert.Equal(t, selected, model.tree.selectedFile(), "N should not change file when no search")
+	// no search active, N (prev_item) should navigate to previous file
+	assert.Empty(t, m.searchMatches)
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.tree.selectedFile(), "N should navigate to previous file")
 }
 
 func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
@@ -6774,9 +6773,9 @@ func TestModel_ToggleLineNumbers(t *testing.T) {
 	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
 
 	assert.False(t, m.lineNumbers)
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.True(t, m.lineNumbers)
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.False(t, m.lineNumbers)
 }
 
@@ -6838,7 +6837,7 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	m.diffLines = lines
 
 	// toggle on
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.True(t, m.lineNumbers)
 	assert.Equal(t, 2, m.lineNumWidth)
 
@@ -6849,9 +6848,55 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	assert.Contains(t, stripped, "   11")
 
 	// toggle off
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.False(t, m.lineNumbers)
 	rendered = m.renderDiff()
 	stripped = ansi.Strip(rendered)
 	assert.NotContains(t, stripped, "10 10")
+}
+
+func TestModel_CustomKeymapQuitOverride(t *testing.T) {
+	// map "x" to quit, unbind "q" — verify "x" quits and "q" does not
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionQuit)
+	km.Unbind("q")
+
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	// "x" should quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	require.NotNil(t, cmd, "x should produce a command")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "x should trigger quit")
+
+	// "q" should not quit (unbound)
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.Nil(t, cmd, "q should not produce a command when unbound")
+}
+
+func TestModel_CustomKeymapViewToggle(t *testing.T) {
+	// map "x" to toggle_wrap — verify "x" toggles wrap and "w" still works
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionToggleWrap)
+
+	lines := []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.keymap = km
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	assert.False(t, m.wrapMode)
+
+	// "x" should toggle wrap
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+	assert.True(t, model.wrapMode, "x should toggle wrap mode on")
+
+	// "w" should also toggle wrap (still bound by default)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model = result.(Model)
+	assert.False(t, model.wrapMode, "w should toggle wrap mode off")
 }

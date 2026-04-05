@@ -195,13 +195,13 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `ui/model.go` (handleKey function)
 - Modify: `ui/model_test.go`
 
-- [ ] refactor `handleKey()` (ui/model.go:234-289) to switch on `m.keymap.Resolve(msg.String())` instead of raw key strings
-- [ ] keep modal checks at top unchanged (annotating, searching, showAnnotList, showHelp — these stay hardcoded)
-- [ ] map current cases: `"@"` → `annot_list`, `"esc"` → `dismiss`, `"Q"` → `discard_quit`, `"q"` → `quit`, `"tab"` → `toggle_pane`, `"f"` → `filter`, `"n"`/`"N"` → `next_item`/`prev_item` (handler checks search state internally), `"p"` → `prev_item`, `"enter"` → `confirm`, `"A"` → `annotate_file`, view toggle actions (`toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`)
-- [ ] refactor `handleViewToggle()` to accept/switch on action names (not raw key strings) — otherwise custom bindings like `map x toggle_wrap` won't work since `handleViewToggle("x")` won't match
-- [ ] verify all existing handleKey tests still pass with default keymap
-- [ ] write test: override a global key (e.g., map `x` to `quit`), verify `x` quits and `q` doesn't
-- [ ] run tests, run linter
+- [x] refactor `handleKey()` (ui/model.go:234-289) to switch on `m.keymap.Resolve(msg.String())` instead of raw key strings
+- [x] keep modal checks at top unchanged (annotating, searching, showAnnotList, showHelp — these stay hardcoded)
+- [x] map current cases: `"@"` → `annot_list`, `"esc"` → `dismiss`, `"Q"` → `discard_quit`, `"q"` → `quit`, `"tab"` → `toggle_pane`, `"f"` → `filter`, `"n"`/`"N"` → `next_item`/`prev_item` (handler checks search state internally), `"p"` → `prev_item`, `"enter"` → `confirm`, `"A"` → `annotate_file`, view toggle actions (`toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`)
+- [x] refactor `handleViewToggle()` to accept/switch on action names (not raw key strings) — otherwise custom bindings like `map x toggle_wrap` won't work since `handleViewToggle("x")` won't match
+- [x] verify all existing handleKey tests still pass with default keymap
+- [x] write test: override a global key (e.g., map `x` to `quit`), verify `x` quits and `q` doesn't
+- [x] run tests, run linter
 
 ### Task 6: Refactor handleDiffNav to use keymap
 

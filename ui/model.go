@@ -255,35 +255,38 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAnnotListKey(msg)
 	}
 
-	// help overlay: toggle with ?, dismiss with esc, block everything else
-	if msg.String() == "?" || m.showHelp {
+	action := m.keymap.Resolve(msg.String())
+
+	// help overlay: toggle with help action, dismiss with esc, block everything else
+	if action == keymap.ActionHelp || m.showHelp {
 		return m.handleHelpKey(msg)
 	}
 
-	switch msg.String() {
-	case "@":
+	switch action {
+	case keymap.ActionAnnotList:
 		return m.handleAnnotListKey(msg)
-	case "esc":
+	case keymap.ActionDismiss:
 		return m.handleEscKey()
-	case "Q":
+	case keymap.ActionDiscardQuit:
 		return m.handleDiscardQuit()
-	case "q":
+	case keymap.ActionQuit:
 		return m, tea.Quit
-	case "tab":
+	case keymap.ActionTogglePane:
 		m.togglePane()
 		return m, nil
-	case "f":
+	case keymap.ActionFilter:
 		return m.handleFilterToggle()
-	case "n", "N":
-		return m.handleFileOrSearchNav(msg.String())
-	case "p":
-		return m.handlePrevFile()
-	case "enter":
+	case keymap.ActionNextItem:
+		return m.handleFileOrSearchNav(true)
+	case keymap.ActionPrevItem:
+		return m.handleFileOrSearchNav(false)
+	case keymap.ActionConfirm:
 		return m.handleEnterKey()
-	case "A":
+	case keymap.ActionAnnotateFile:
 		return m.handleFileAnnotateKey()
-	case "v", "w", "t", "L":
-		return m.handleViewToggle(msg.String()), nil
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums:
+		return m.handleViewToggle(action), nil
+	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
 	// pane-specific navigation
@@ -362,16 +365,16 @@ func (m Model) computeLineNumWidth() int {
 	return len(strconv.Itoa(maxNum))
 }
 
-// handleViewToggle dispatches view mode toggle keys (v, w, t, L).
-func (m Model) handleViewToggle(key string) Model {
-	switch key {
-	case "v":
+// handleViewToggle dispatches view mode toggle actions.
+func (m Model) handleViewToggle(action keymap.Action) Model {
+	switch action { //nolint:exhaustive // only toggle actions are dispatched here
+	case keymap.ActionToggleCollapsed:
 		m.toggleCollapsedMode()
-	case "w":
+	case keymap.ActionToggleWrap:
 		m.toggleWrapMode()
-	case "t":
+	case keymap.ActionToggleTree:
 		m.toggleTreePane()
-	case "L":
+	case keymap.ActionToggleLineNums:
 		m.toggleLineNumbers()
 	}
 	return m
@@ -1276,13 +1279,14 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 }
 
 // handleHelpKey handles help overlay keys.
-// ? toggles the overlay, esc closes it, all other keys are blocked while showing.
+// help action toggles the overlay, dismiss/esc closes it, all other keys are blocked while showing.
 func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "?" {
+	action := m.keymap.Resolve(msg.String())
+	if action == keymap.ActionHelp {
 		m.showHelp = !m.showHelp
 		return m, nil
 	}
-	if msg.Type == tea.KeyEsc {
+	if action == keymap.ActionDismiss || msg.Type == tea.KeyEsc {
 		m.showHelp = false
 	}
 	return m, nil
@@ -1317,25 +1321,11 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePrevFile navigates to previous file, or previous TOC entry in markdown mode.
-func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
-	if m.singleFile && m.mdTOC != nil {
-		return m.jumpTOCEntry(-1), nil
-	}
-	if m.singleFile {
-		return m, nil
-	}
-	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-	m.tree.prevFile()
-	return m.loadSelectedIfChanged()
-}
-
-// handleFileOrSearchNav handles n/N keys: navigates search matches when a search is active,
-// otherwise n falls through to next-file navigation (no-op in single-file mode).
-// N does nothing without search.
-func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
+// handleFileOrSearchNav handles next/prev item navigation: navigates search matches when a search
+// is active, otherwise navigates files or TOC entries (no-op in single-file mode without TOC).
+func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 	if len(m.searchMatches) > 0 {
-		if key == "n" {
+		if forward {
 			m.nextSearchMatch()
 		} else {
 			m.prevSearchMatch()
@@ -1344,12 +1334,20 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderDiff())
 		return m, nil
 	}
-	if key == "n" && m.singleFile && m.mdTOC != nil {
-		return m.jumpTOCEntry(1), nil
+	dir := 1
+	if !forward {
+		dir = -1
 	}
-	if key == "n" && !m.singleFile {
+	if m.singleFile && m.mdTOC != nil {
+		return m.jumpTOCEntry(dir), nil
+	}
+	if !m.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-		m.tree.nextFile()
+		if forward {
+			m.tree.nextFile()
+		} else {
+			m.tree.prevFile()
+		}
 		return m.loadSelectedIfChanged()
 	}
 	return m, nil
