@@ -167,8 +167,8 @@ func (toc *mdTOC) render(width, height int, focusedPane pane, s styles) string {
 	var b strings.Builder
 	for idx := toc.offset; idx < end; idx++ {
 		e := toc.entries[idx]
-		indent := strings.Repeat("  ", e.level-1) // h1=0 indent, h2=2, h3=4, etc.
-		title := toc.truncateTitle(e.title, width-len(indent)-3) // 2 prefix + 1 padding
+		indent := strings.Repeat("  ", e.level-1)                // h1=0 indent, h2=2, h3=4, etc.
+		title := toc.truncateTitle(e.title, width-len(indent)-4) // 2 prefix + 2 padding (matches FileSelected width-2)
 		line := fmt.Sprintf("  %s%s", indent, title)
 
 		if idx == highlighted {
