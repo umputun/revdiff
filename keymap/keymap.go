@@ -3,6 +3,11 @@
 package keymap
 
 import (
+	"bufio"
+	"fmt"
+	"io"
+	"log"
+	"os"
 	"sort"
 	"strings"
 )
@@ -249,4 +254,128 @@ func (km *Keymap) HelpSections() []HelpSection {
 	}
 
 	return sections
+}
+
+// mapEntry represents a parsed "map <key> <action>" line.
+type mapEntry struct {
+	key    string
+	action Action
+}
+
+// keyAliases maps user-friendly key names to bubbletea's KeyMsg.String() output.
+// keys that already match bubbletea's output are not listed here.
+var keyAliases = map[string]string{
+	"page_down":  "pgdown",
+	"page_up":    "pgup",
+	"pagedown":   "pgdown",
+	"pageup":     "pgup",
+	"escape":     "esc",
+	"return":     "enter",
+	"space":      " ",
+	"ctrl+enter": "ctrl+m", // bubbletea maps enter to ctrl+m internally
+}
+
+// normalizeKey converts a user-provided key name to the canonical form
+// used by bubbletea's KeyMsg.String(). Returns the normalized key.
+func normalizeKey(key string) string {
+	lower := strings.ToLower(key)
+	if alias, ok := keyAliases[lower]; ok {
+		return alias
+	}
+	// ctrl+ prefixed keys are always lowercase in bubbletea
+	if strings.HasPrefix(lower, "ctrl+") {
+		return lower
+	}
+	// preserve original case for single chars (j vs J matters)
+	return key
+}
+
+// Parse reads keybinding definitions from r and returns map entries and unmap keys.
+// Format: "map <key> <action>" or "unmap <key>", with # comments and blank lines ignored.
+// Unknown action names are reported via log and skipped. Duplicate mappings: last wins.
+func Parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
+	scanner := bufio.NewScanner(r)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			log.Printf("[WARN] keybindings:%d: invalid line %q, skipping", lineNum, line)
+			continue
+		}
+
+		cmd := strings.ToLower(fields[0])
+		switch cmd {
+		case "map":
+			if len(fields) < 3 {
+				log.Printf("[WARN] keybindings:%d: map requires key and action, skipping", lineNum)
+				continue
+			}
+			key := normalizeKey(fields[1])
+			action := Action(fields[2])
+			if !IsValidAction(action) {
+				log.Printf("[WARN] keybindings:%d: unknown action %q, skipping", lineNum, action)
+				continue
+			}
+			maps = append(maps, mapEntry{key: key, action: action})
+		case "unmap":
+			key := normalizeKey(fields[1])
+			unmaps = append(unmaps, key)
+		default:
+			log.Printf("[WARN] keybindings:%d: unknown command %q, skipping", lineNum, line)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, nil, fmt.Errorf("reading keybindings: %w", err)
+	}
+	return maps, unmaps, nil
+}
+
+// Load reads a keybindings file from path and returns a Keymap with defaults
+// overridden by the file contents. Returns error if the file exists but cannot be read/parsed.
+func Load(path string) (*Keymap, error) {
+	f, err := os.Open(path) //nolint:gosec // path is user-provided config file location
+	if err != nil {
+		return nil, fmt.Errorf("opening keybindings file: %w", err)
+	}
+	defer f.Close()
+
+	maps, unmaps, err := Parse(f)
+	if err != nil {
+		return nil, err
+	}
+
+	km := Default()
+
+	// apply unmaps first, then maps (so "unmap q" + "map x quit" works)
+	for _, key := range unmaps {
+		km.Unbind(key)
+	}
+	for _, m := range maps {
+		km.Bind(m.key, m.action)
+	}
+
+	return km, nil
+}
+
+// LoadOrDefault loads keybindings from path if the file exists, otherwise returns
+// Default(). Parse errors are logged as warnings and Default() is returned.
+func LoadOrDefault(path string) *Keymap {
+	if path == "" {
+		return Default()
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return Default()
+	}
+	km, err := Load(path)
+	if err != nil {
+		log.Printf("[WARN] failed to load keybindings from %s: %v, using defaults", path, err)
+		return Default()
+	}
+	return km
 }

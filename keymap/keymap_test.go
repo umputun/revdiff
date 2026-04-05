@@ -1,6 +1,8 @@
 package keymap
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -222,4 +224,179 @@ func TestKeysFor_sorted(t *testing.T) {
 	keys := km.KeysFor(ActionDown)
 	// should be sorted: "down" before "j"
 	assert.Equal(t, []string{"down", "j"}, keys)
+}
+
+func TestNormalizeKey(t *testing.T) {
+	tests := []struct {
+		input, want string
+	}{
+		{"j", "j"}, {"J", "J"}, // preserve case for single chars
+		{"pgdown", "pgdown"}, {"pgup", "pgup"}, // already canonical
+		{"page_down", "pgdown"}, {"page_up", "pgup"}, // alias
+		{"pagedown", "pgdown"}, {"pageup", "pgup"},    // alias
+		{"escape", "esc"}, {"return", "enter"},         // alias
+		{"space", " "},                                 // alias
+		{"ctrl+d", "ctrl+d"}, {"Ctrl+D", "ctrl+d"},    // ctrl always lowercase
+		{"esc", "esc"}, {"enter", "enter"}, {"tab", "tab"}, // pass-through
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, normalizeKey(tt.input))
+		})
+	}
+}
+
+func TestParse_validMapLines(t *testing.T) {
+	input := strings.NewReader("map x quit\nmap ctrl+d half_page_down\n")
+	maps, unmaps, err := Parse(input)
+	require.NoError(t, err)
+	assert.Empty(t, unmaps)
+	require.Len(t, maps, 2)
+	assert.Equal(t, "x", maps[0].key)
+	assert.Equal(t, ActionQuit, maps[0].action)
+	assert.Equal(t, "ctrl+d", maps[1].key)
+	assert.Equal(t, ActionHalfPageDown, maps[1].action)
+}
+
+func TestParse_unmapLines(t *testing.T) {
+	input := strings.NewReader("unmap q\nunmap j\n")
+	maps, unmaps, err := Parse(input)
+	require.NoError(t, err)
+	assert.Empty(t, maps)
+	assert.Equal(t, []string{"q", "j"}, unmaps)
+}
+
+func TestParse_commentsAndBlanks(t *testing.T) {
+	input := strings.NewReader("# comment\n\n  # indented comment\n  \nmap x quit\n")
+	maps, unmaps, err := Parse(input)
+	require.NoError(t, err)
+	assert.Empty(t, unmaps)
+	require.Len(t, maps, 1)
+	assert.Equal(t, "x", maps[0].key)
+}
+
+func TestParse_unknownAction(t *testing.T) {
+	input := strings.NewReader("map x fly_away\nmap y quit\n")
+	maps, unmaps, err := Parse(input)
+	require.NoError(t, err)
+	assert.Empty(t, unmaps)
+	// unknown action skipped, valid one kept
+	require.Len(t, maps, 1)
+	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
+func TestParse_invalidLines(t *testing.T) {
+	input := strings.NewReader("map\nfoo bar baz\nmap x quit\n")
+	maps, _, err := Parse(input)
+	require.NoError(t, err)
+	// only valid line parsed
+	require.Len(t, maps, 1)
+	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
+func TestParse_duplicateMapLastWins(t *testing.T) {
+	input := strings.NewReader("map x quit\nmap x help\n")
+	maps, _, err := Parse(input)
+	require.NoError(t, err)
+	// both entries returned; Load applies them in order (last wins)
+	require.Len(t, maps, 2)
+	assert.Equal(t, ActionQuit, maps[0].action)
+	assert.Equal(t, ActionHelp, maps[1].action)
+}
+
+func TestParse_keyNormalization(t *testing.T) {
+	input := strings.NewReader("map page_down page_down\nmap Ctrl+D half_page_down\n")
+	maps, _, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 2)
+	assert.Equal(t, "pgdown", maps[0].key)  // normalized from page_down
+	assert.Equal(t, "ctrl+d", maps[1].key)  // normalized ctrl case
+}
+
+func TestParse_unmapNormalization(t *testing.T) {
+	input := strings.NewReader("unmap page_down\n")
+	_, unmaps, err := Parse(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"pgdown"}, unmaps)
+}
+
+func TestLoad_withOverrides(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	err := os.WriteFile(tmpFile, []byte("map x quit\nunmap j\n"), 0o600)
+	require.NoError(t, err)
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+	assert.Equal(t, ActionQuit, km.Resolve("x"))    // new binding
+	assert.Equal(t, ActionQuit, km.Resolve("q"))     // default still works
+	assert.Equal(t, Action(""), km.Resolve("j"))     // unmapped
+	assert.Equal(t, ActionDown, km.Resolve("down"))  // other default still works
+}
+
+func TestLoad_unmapThenRemap(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	err := os.WriteFile(tmpFile, []byte("unmap q\nmap x quit\n"), 0o600)
+	require.NoError(t, err)
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+	assert.Equal(t, Action(""), km.Resolve("q"))   // unmapped
+	assert.Equal(t, ActionQuit, km.Resolve("x"))    // remapped
+}
+
+func TestLoad_missingFile(t *testing.T) {
+	_, err := Load("/nonexistent/path/keybindings")
+	assert.Error(t, err)
+}
+
+func TestLoad_malformedLines(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	err := os.WriteFile(tmpFile, []byte("garbage line\nmap x quit\n"), 0o600)
+	require.NoError(t, err)
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+	assert.Equal(t, ActionQuit, km.Resolve("x")) // valid line still applied
+}
+
+func TestLoadOrDefault_noFile(t *testing.T) {
+	km := LoadOrDefault("/nonexistent/path/keybindings")
+	// should return defaults
+	assert.Equal(t, ActionDown, km.Resolve("j"))
+	assert.Equal(t, ActionQuit, km.Resolve("q"))
+}
+
+func TestLoadOrDefault_emptyPath(t *testing.T) {
+	km := LoadOrDefault("")
+	assert.Equal(t, ActionDown, km.Resolve("j"))
+}
+
+func TestLoadOrDefault_withFile(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	err := os.WriteFile(tmpFile, []byte("map x quit\n"), 0o600)
+	require.NoError(t, err)
+
+	km := LoadOrDefault(tmpFile)
+	assert.Equal(t, ActionQuit, km.Resolve("x"))
+	assert.Equal(t, ActionDown, km.Resolve("j")) // defaults still present
+}
+
+func TestLoad_unmapOfUnboundKey(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	err := os.WriteFile(tmpFile, []byte("unmap z\n"), 0o600)
+	require.NoError(t, err)
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+	// should not panic, defaults should be intact
+	assert.Equal(t, ActionDown, km.Resolve("j"))
+}
+
+func TestParse_casePreservedForSingleChars(t *testing.T) {
+	input := strings.NewReader("map N prev_item\nmap n next_item\n")
+	maps, _, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 2)
+	assert.Equal(t, "N", maps[0].key)
+	assert.Equal(t, "n", maps[1].key)
 }

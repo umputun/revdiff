@@ -152,15 +152,15 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `keymap/keymap.go`
 - Modify: `keymap/keymap_test.go`
 
-- [ ] implement `Parse(r io.Reader) (maps []mapEntry, unmaps []string, err error)` — parses `map`/`unmap` lines, skips comments and blanks
-- [ ] implement key name normalization (handle `pgdown`→bubbletea string, `ctrl+d` already matches)
-- [ ] implement `Load(path string) (*Keymap, error)` — reads file, calls Parse, applies overrides on Default()
-- [ ] implement `LoadOrDefault(path string) *Keymap` — returns Default() if file doesn't exist, warns on parse errors
-- [ ] handle edge cases: unknown action names (warn + skip), duplicate mappings (last wins), unmap of unbound key (no-op)
-- [ ] write tests for Parse() — valid map, unmap, comments, blank lines, invalid lines
-- [ ] write tests for Load() — file with overrides, file with unmaps, missing file, malformed lines
-- [ ] write tests for key normalization
-- [ ] run tests, run linter
+- [x] implement `Parse(r io.Reader) (maps []mapEntry, unmaps []string, err error)` — parses `map`/`unmap` lines, skips comments and blanks
+- [x] implement key name normalization (handle `pgdown`→bubbletea string, `ctrl+d` already matches)
+- [x] implement `Load(path string) (*Keymap, error)` — reads file, calls Parse, applies overrides on Default()
+- [x] implement `LoadOrDefault(path string) *Keymap` — returns Default() if file doesn't exist, warns on parse errors
+- [x] handle edge cases: unknown action names (warn + skip), duplicate mappings (last wins), unmap of unbound key (no-op)
+- [x] write tests for Parse() — valid map, unmap, comments, blank lines, invalid lines
+- [x] write tests for Load() — file with overrides, file with unmaps, missing file, malformed lines
+- [x] write tests for key normalization
+- [x] run tests, run linter
 
 ### Task 3: Add Dump functionality
 
