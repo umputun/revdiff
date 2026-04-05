@@ -70,22 +70,22 @@
 - [x] run tests — must pass before next task
 
 ### Task 4: Verify acceptance criteria
-- [ ] verify `revdiff --all-files` shows all git-tracked files in file tree
-- [ ] verify `revdiff --all-files --exclude vendor` filters correctly
-- [ ] verify `--exclude` in config file works persistently
-- [ ] verify `--exclude` works in normal diff mode (e.g., `revdiff --exclude vendor`)
-- [ ] verify `--all-files` with refs or `--staged` produces clear error
-- [ ] run full test suite
-- [ ] run linter — all issues must be fixed
-- [ ] verify test coverage meets 80%+
+- [x] verify `revdiff --all-files` shows all git-tracked files in file tree
+- [x] verify `revdiff --all-files --exclude vendor` filters correctly
+- [x] verify `--exclude` in config file works persistently
+- [x] verify `--exclude` works in normal diff mode (e.g., `revdiff --exclude vendor`)
+- [x] verify `--all-files` with refs or `--staged` produces clear error
+- [x] run full test suite
+- [x] run linter — all issues must be fixed
+- [x] verify test coverage meets 80%+
 
 ### Task 5: [Final] Update documentation
-- [ ] update README.md with `--all-files` and `--exclude` flag documentation
-- [ ] update `.claude-plugin/skills/revdiff/references/usage.md` with `--all-files` examples
-- [ ] update `.claude-plugin/skills/revdiff/references/config.md` with `--exclude` config option
-- [ ] update CLAUDE.md if new patterns or gotchas discovered
-- [ ] verify `--dump-config` output includes `exclude` field
-- [ ] ask about plugin version bump (plugin reference docs changed)
+- [x] update README.md with `--all-files` and `--exclude` flag documentation
+- [x] update `.claude-plugin/skills/revdiff/references/usage.md` with `--all-files` examples
+- [x] update `.claude-plugin/skills/revdiff/references/config.md` with `--exclude` config option
+- [x] update CLAUDE.md if new patterns or gotchas discovered
+- [x] verify `--dump-config` output includes `exclude` field
+- [x] ask about plugin version bump (plugin reference docs changed)
 
 ## Technical Details
 

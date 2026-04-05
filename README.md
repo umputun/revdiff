@@ -30,6 +30,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Status line with filename, diff stats, hunk position, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
+- All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Fully customizable colors via environment variables, CLI flags, or config file
 
@@ -164,6 +165,8 @@ Positional arguments support several forms:
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
+| `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
+| `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
@@ -249,12 +252,42 @@ revdiff main..feature
 # review only specific files
 revdiff --only=model.go --only=README.md
 
+# browse all git-tracked files in a project
+revdiff --all-files
+
+# browse all files, excluding vendor and mocks directories
+revdiff --all-files --exclude vendor --exclude mocks
+
+# exclude paths in normal diff mode
+revdiff main --exclude vendor
+
 # review a file outside a git repo (context-only, no diff markers)
 revdiff --only=/tmp/plan.md
 
 # review a file that has no git changes (context-only view with annotations)
 revdiff --only=docs/notes.txt
 ```
+
+### All-Files Mode
+
+Use `--all-files` (or `-A`) to browse all git-tracked files in a project, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode (no `+`/`-` markers) with full annotation and syntax highlighting support.
+
+`--all-files` requires a git repository (uses `git ls-files` for file discovery) and is mutually exclusive with refs, `--staged`, and `--only`.
+
+Combine with `--exclude` (or `-X`) to filter out unwanted paths:
+
+```bash
+revdiff --all-files --exclude vendor --exclude mocks
+```
+
+`--exclude` uses prefix matching: `--exclude vendor` skips `vendor/`, `vendor/foo.go`, etc. It works in both `--all-files` and normal diff modes. The exclude option can be persisted in the config file:
+
+```ini
+exclude = vendor
+exclude = mocks
+```
+
+Or via environment variable (comma-separated): `REVDIFF_EXCLUDE=vendor,mocks`.
 
 ### Context-Only File Review
 
