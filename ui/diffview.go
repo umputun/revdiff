@@ -514,6 +514,7 @@ func (m *Model) moveDiffCursorPageUp() {
 }
 
 // moveDiffCursorHalfPageDown moves the diff cursor down by half a visual page.
+// scrolls viewport by half page explicitly, matching vim/less ctrl+d behavior.
 func (m *Model) moveDiffCursorHalfPageDown() {
 	halfPage := max(1, m.viewport.Height/2)
 	startY := m.cursorViewportY()
@@ -527,10 +528,13 @@ func (m *Model) moveDiffCursorHalfPageDown() {
 			break
 		}
 	}
-	m.syncViewportToCursor()
+	maxOffset := max(0, m.viewport.TotalLineCount()-m.viewport.Height)
+	m.viewport.SetYOffset(min(m.viewport.YOffset+halfPage, maxOffset))
+	m.viewport.SetContent(m.renderDiff())
 }
 
 // moveDiffCursorHalfPageUp moves the diff cursor up by half a visual page.
+// scrolls viewport by half page explicitly, matching vim/less ctrl+u behavior.
 func (m *Model) moveDiffCursorHalfPageUp() {
 	halfPage := max(1, m.viewport.Height/2)
 	startY := m.cursorViewportY()
@@ -544,7 +548,8 @@ func (m *Model) moveDiffCursorHalfPageUp() {
 			break
 		}
 	}
-	m.syncViewportToCursor()
+	m.viewport.SetYOffset(max(0, m.viewport.YOffset-halfPage))
+	m.viewport.SetContent(m.renderDiff())
 }
 
 // moveDiffCursorToStart moves the diff cursor to the first selectable position.

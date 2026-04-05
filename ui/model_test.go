@@ -1792,10 +1792,11 @@ func TestModel_CtrlDMovesHalfPageDown(t *testing.T) {
 	halfPage := pageHeight / 2
 	require.Positive(t, halfPage, "half page must be positive")
 
-	// ctrl+d moves half page
+	// ctrl+d moves cursor and viewport by half page
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model = result.(Model)
 	assert.Equal(t, halfPage, model.diffCursor, "ctrl+d should move cursor by half viewport height")
+	assert.Equal(t, halfPage, model.viewport.YOffset, "ctrl+d should scroll viewport by half page")
 
 	// PgDn moves full page from start for comparison
 	model.diffCursor = 0
@@ -1825,13 +1826,17 @@ func TestModel_CtrlUMovesHalfPageUp(t *testing.T) {
 	halfPage := pageHeight / 2
 	require.Positive(t, halfPage, "half page must be positive")
 
-	// start at line 80
+	// start at line 80 with viewport scrolled to match
 	model.diffCursor = 80
+	model.viewport.SetYOffset(80)
+	model.viewport.SetContent(model.renderDiff())
+	prevOffset := model.viewport.YOffset
 
-	// ctrl+u moves half page up
+	// ctrl+u moves cursor and viewport by half page up
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model = result.(Model)
 	assert.Equal(t, 80-halfPage, model.diffCursor, "ctrl+u should move cursor up by half viewport height")
+	assert.Equal(t, prevOffset-halfPage, model.viewport.YOffset, "ctrl+u should scroll viewport up by half page")
 
 	// PgUp moves full page up from 80 for comparison
 	model.diffCursor = 80
