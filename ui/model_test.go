@@ -5743,3 +5743,281 @@ func TestModel_DiffContentWidthWithTOCActive(t *testing.T) {
 		assert.Equal(t, 10, m.diffContentWidth()) // min 10
 	})
 }
+
+func TestModel_TabTogglingWithTOC(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "some text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Section", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("tab cycles between TOC and diff", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+		m.currFile = "README.md"
+		m.focus = paneDiff
+
+		// tab from diff -> TOC (paneTree)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneTree, model.focus)
+
+		// tab from TOC -> diff
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model = result.(Model)
+		assert.Equal(t, paneDiff, model.focus)
+	})
+
+	t.Run("tab no-op in single-file without TOC", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.mdTOC = nil
+		m.currFile = "main.go"
+		m.focus = paneDiff
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "tab should be no-op without TOC in single-file mode")
+	})
+}
+
+func TestModel_HKeySwitchesToTOC(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "## Section", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("h key in diff pane switches to TOC", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+		m.currFile = "README.md"
+		m.diffLines = mdLines
+		m.focus = paneDiff
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+		model := result.(Model)
+		assert.Equal(t, paneTree, model.focus, "h key should switch to TOC pane")
+	})
+
+	t.Run("h key no-op in single-file without TOC", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.mdTOC = nil
+		m.currFile = "main.go"
+		m.focus = paneDiff
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "h key should be no-op without TOC")
+	})
+}
+
+func TestModel_TOCPaneNavigation(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "text", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext},
+	}
+
+	setup := func() Model {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+		m.currFile = "README.md"
+		m.diffLines = mdLines
+		m.focus = paneTree
+		return m
+	}
+
+	t.Run("j moves cursor down in TOC", func(t *testing.T) {
+		m := setup()
+		assert.Equal(t, 0, m.mdTOC.cursor)
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Equal(t, 1, model.mdTOC.cursor)
+	})
+
+	t.Run("k moves cursor up in TOC", func(t *testing.T) {
+		m := setup()
+		m.mdTOC.cursor = 2
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		model := result.(Model)
+		assert.Equal(t, 1, model.mdTOC.cursor)
+	})
+
+	t.Run("j clamped at last entry", func(t *testing.T) {
+		m := setup()
+		m.mdTOC.cursor = 2 // last entry
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Equal(t, 2, model.mdTOC.cursor)
+	})
+
+	t.Run("k clamped at first entry", func(t *testing.T) {
+		m := setup()
+		assert.Equal(t, 0, m.mdTOC.cursor)
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+		model := result.(Model)
+		assert.Equal(t, 0, model.mdTOC.cursor)
+	})
+
+	t.Run("home moves to first entry", func(t *testing.T) {
+		m := setup()
+		m.mdTOC.cursor = 2
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
+		model := result.(Model)
+		assert.Equal(t, 0, model.mdTOC.cursor)
+	})
+
+	t.Run("end moves to last entry", func(t *testing.T) {
+		m := setup()
+		assert.Equal(t, 0, m.mdTOC.cursor)
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+		model := result.(Model)
+		assert.Equal(t, 2, model.mdTOC.cursor)
+	})
+
+	t.Run("l switches to diff pane", func(t *testing.T) {
+		m := setup()
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus)
+	})
+
+	t.Run("pgdn moves cursor by page size", func(t *testing.T) {
+		m := setup()
+		assert.Equal(t, 0, m.mdTOC.cursor)
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model := result.(Model)
+		assert.Equal(t, 2, model.mdTOC.cursor, "pgdn should move to last entry (only 3 entries)")
+	})
+
+	t.Run("pgup moves cursor by page size", func(t *testing.T) {
+		m := setup()
+		m.mdTOC.cursor = 2
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		model := result.(Model)
+		assert.Equal(t, 0, model.mdTOC.cursor, "pgup should move to first entry")
+	})
+}
+
+func TestModel_EnterInTOCPane(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "text line 1", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "text line 2", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "## Second", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "text line 3", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "### Third", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("enter jumps to header line", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+		m.currFile = "README.md"
+		m.diffLines = mdLines
+		m.highlightedLines = make([]string, len(mdLines))
+		m.focus = paneTree
+
+		// move cursor to second entry (## Second at lineIdx=3)
+		m.mdTOC.cursor = 1
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model := result.(Model)
+
+		assert.Equal(t, 3, model.diffCursor, "diffCursor should jump to Second header at index 3")
+		assert.Equal(t, paneDiff, model.focus, "focus should switch to diff pane after enter")
+		assert.Equal(t, 1, model.mdTOC.activeSection, "active section should track jumped entry")
+	})
+
+	t.Run("enter on last TOC entry", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+		m.currFile = "README.md"
+		m.diffLines = mdLines
+		m.highlightedLines = make([]string, len(mdLines))
+		m.focus = paneTree
+		m.mdTOC.cursor = 2 // ### Third at lineIdx=5
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model := result.(Model)
+
+		assert.Equal(t, 5, model.diffCursor, "diffCursor should jump to Third header at index 5")
+		assert.Equal(t, paneDiff, model.focus)
+	})
+}
+
+func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "text", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "text", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("scrolling diff updates TOC active section", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+		m.currFile = "README.md"
+		m.diffLines = mdLines
+		m.highlightedLines = make([]string, len(mdLines))
+		m.focus = paneDiff
+		m.diffCursor = 0
+
+		// move down one line at a time and check active section
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Equal(t, 0, model.mdTOC.activeSection, "cursor at line 1 should be in First section")
+
+		// move to line 2 (## Second)
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model = result.(Model)
+		assert.Equal(t, 1, model.mdTOC.activeSection, "cursor at line 2 should be in Second section")
+
+		// move to line 4 (### Third)
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model = result.(Model)
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model = result.(Model)
+		assert.Equal(t, 2, model.mdTOC.activeSection, "cursor at line 4 should be in Third section")
+	})
+
+	t.Run("no TOC does not crash on scroll", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.mdTOC = nil
+		m.currFile = "main.go"
+		m.diffLines = []diff.DiffLine{{Content: "package main", ChangeType: diff.ChangeContext}}
+		m.highlightedLines = []string{"package main"}
+		m.focus = paneDiff
+		m.diffCursor = 0
+
+		// should not panic
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model := result.(Model)
+		assert.Nil(t, model.mdTOC)
+	})
+}

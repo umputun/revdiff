@@ -129,18 +129,18 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] modify `togglePane()`: when `singleFile && mdTOC != nil`, toggle between `paneTree` and `paneDiff` (reuse existing pane constants — TOC uses `paneTree` slot)
-- [ ] modify `handleSwitchToTree()`: allow switching to tree pane when `mdTOC != nil` (currently blocked by `!m.singleFile` guard) — needed for `h` key in diff pane
-- [ ] in `handleTreeNav`: when `mdTOC != nil`, handle `j`/`k`/`pgdn`/`pgup`/`home`/`end` as TOC cursor movement instead of file tree movement
-- [ ] in `handleTreeNav`: when `mdTOC != nil`, handle `l`/`right` to switch to diff pane (same as file tree)
-- [ ] in `handleEnterKey`: when `focus == paneTree && mdTOC != nil`, jump to selected header — set `m.diffCursor = entry.lineIdx`, call `centerViewportOnCursor()`
-- [ ] in `handleDiffNav`: on cursor movement (`j`/`k`/pgdn/pgup/home/end), call `mdTOC.updateActiveSection(m.diffCursor)` when TOC is active
-- [ ] write tests for Tab toggling with TOC active — cycles between TOC and diff
-- [ ] write tests for `h` key in diff pane switching to TOC
-- [ ] write tests for j/k/pgdn/pgup/home/end in TOC pane — cursor moves between headers
-- [ ] write tests for Enter in TOC pane — diffCursor jumps to header line
-- [ ] write tests for active section tracking — scrolling diff updates TOC highlight
-- [ ] run tests — must pass before task 7
+- [x] modify `togglePane()`: when `singleFile && mdTOC != nil`, toggle between `paneTree` and `paneDiff` (reuse existing pane constants — TOC uses `paneTree` slot)
+- [x] modify `handleSwitchToTree()`: allow switching to tree pane when `mdTOC != nil` (currently blocked by `!m.singleFile` guard) — needed for `h` key in diff pane
+- [x] in `handleTreeNav`: when `mdTOC != nil`, handle `j`/`k`/`pgdn`/`pgup`/`home`/`end` as TOC cursor movement instead of file tree movement
+- [x] in `handleTreeNav`: when `mdTOC != nil`, handle `l`/`right` to switch to diff pane (same as file tree)
+- [x] in `handleEnterKey`: when `focus == paneTree && mdTOC != nil`, jump to selected header — set `m.diffCursor = entry.lineIdx`, call `centerViewportOnCursor()`
+- [x] in `handleDiffNav`: on cursor movement (`j`/`k`/pgdn/pgup/home/end), call `mdTOC.updateActiveSection(m.diffCursor)` when TOC is active
+- [x] write tests for Tab toggling with TOC active — cycles between TOC and diff
+- [x] write tests for `h` key in diff pane switching to TOC
+- [x] write tests for j/k/pgdn/pgup/home/end in TOC pane — cursor moves between headers
+- [x] write tests for Enter in TOC pane — diffCursor jumps to header line
+- [x] write tests for active section tracking — scrolling diff updates TOC highlight
+- [x] run tests — must pass before task 7
 
 ### Task 7: help overlay and edge cases
 
