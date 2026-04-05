@@ -303,6 +303,7 @@ This mode activates when all three conditions are met: single file, markdown ext
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
+| `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |

@@ -3972,6 +3972,95 @@ func TestModel_WrapToggleNoOpInTreePane(t *testing.T) {
 	assert.False(t, model.wrapMode)
 }
 
+func TestModel_TreePaneToggle(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneTree
+	m.viewport = viewport.New(80, 30)
+	origTreeWidth := m.treeWidth
+
+	t.Run("t hides tree pane", func(t *testing.T) {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.True(t, model.treeHidden)
+		assert.Equal(t, 0, model.treeWidth)
+		assert.Equal(t, paneDiff, model.focus, "focus should move to diff when hiding tree")
+		assert.Equal(t, model.width-2, model.viewport.Width, "diff should use full width")
+	})
+
+	t.Run("t shows tree pane again", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.treeWidth = 0
+		m2.focus = paneDiff
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.False(t, model.treeHidden)
+		assert.Equal(t, origTreeWidth, model.treeWidth)
+	})
+
+	t.Run("tab is no-op when tree hidden", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.focus = paneDiff
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "tab should not switch pane when tree hidden")
+	})
+
+	t.Run("h is no-op when tree hidden", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.focus = paneDiff
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "h should not switch to tree when hidden")
+	})
+
+	t.Run("no-op in single-file mode without TOC", func(t *testing.T) {
+		m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m2.singleFile = true
+		m2.viewport = viewport.New(80, 30)
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.False(t, model.treeHidden, "t should be no-op in single-file mode without TOC")
+	})
+
+	t.Run("toggle works in single-file markdown with TOC", func(t *testing.T) {
+		m2 := testModel([]string{"readme.md"}, map[string][]diff.DiffLine{"readme.md": lines})
+		m2.singleFile = true
+		m2.mdTOC = &mdTOC{entries: []tocEntry{{title: "Header", level: 1, lineIdx: 0}}}
+		m2.treeWidth = max(minTreeWidth, m2.width*m2.treeWidthRatio/10)
+		m2.viewport = viewport.New(80, 30)
+		m2.focus = paneTree
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.True(t, model.treeHidden, "t should hide TOC pane in single-file markdown mode")
+		assert.Equal(t, 0, model.treeWidth)
+		assert.Equal(t, paneDiff, model.focus)
+	})
+
+	t.Run("resize preserves hidden state", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.treeWidth = 0
+		result, _ := m2.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+		model := result.(Model)
+		assert.True(t, model.treeHidden)
+		assert.Equal(t, 0, model.treeWidth)
+	})
+
+	t.Run("status icon shows when hidden", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		icons := m2.statusModeIcons()
+		assert.Contains(t, icons, "⊟")
+	})
+}
+
 func TestModel_ScrollBlockedInWrapMode(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})

@@ -607,8 +607,8 @@ func (m *Model) handleHorizontalScroll(direction int) {
 
 // diffContentWidth returns the available width for diff line content (excluding cursor bar).
 func (m Model) diffContentWidth() int {
-	if m.singleFile && m.mdTOC == nil {
-		// single-file mode without TOC: diff pane borders (2) + cursor bar (1)
+	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+		// tree hidden or single-file without TOC: diff pane borders (2) + cursor bar (1)
 		return max(10, m.width-3)
 	}
 	// multi-file or single-file with TOC: diff pane width minus borders (4) minus tree width, minus bar (1)

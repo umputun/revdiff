@@ -55,6 +55,7 @@ type Model struct {
 	workDir        string   // working directory for resolving absolute --only paths
 	noStatusBar    bool
 	focus          pane
+	treeHidden     bool // user toggled tree/TOC pane off
 	width          int
 	height         int
 	treeWidth      int
@@ -271,12 +272,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnterKey()
 	case "A":
 		return m.handleFileAnnotateKey()
-	case "v":
-		m.toggleCollapsedMode()
-		return m, nil
-	case "w":
-		m.toggleWrapMode()
-		return m, nil
+	case "v", "w", "t":
+		return m.handleViewToggle(msg.String()), nil
 	}
 
 	// pane-specific navigation
@@ -293,7 +290,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // only switches to diff pane when a file is loaded.
 // no-op in single-file mode unless mdTOC is active (TOC uses paneTree slot).
 func (m *Model) togglePane() {
-	if m.singleFile && m.mdTOC == nil {
+	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
 		return
 	}
 	if m.focus != paneTree {
@@ -306,9 +303,44 @@ func (m *Model) togglePane() {
 	}
 }
 
+// toggleTreePane hides or shows the tree/TOC pane.
+// no-op in single-file mode without TOC (already no tree).
+func (m *Model) toggleTreePane() {
+	if m.singleFile && m.mdTOC == nil {
+		return
+	}
+	m.treeHidden = !m.treeHidden
+	if m.treeHidden {
+		m.treeWidth = 0
+		m.focus = paneDiff
+		m.viewport.Width = m.width - 2
+	} else {
+		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
+		m.viewport.Width = m.width - m.treeWidth - 4
+	}
+	m.viewport.Height = m.paneHeight() - 1
+	m.syncViewportToCursor()
+}
+
+// handleViewToggle dispatches view mode toggle keys (v, w, t).
+func (m Model) handleViewToggle(key string) Model {
+	switch key {
+	case "v":
+		m.toggleCollapsedMode()
+	case "w":
+		m.toggleWrapMode()
+	case "t":
+		m.toggleTreePane()
+	}
+	return m
+}
+
 // handleSwitchToTree switches focus to tree pane from diff.
-// no-op in single-file mode unless mdTOC is active.
+// no-op in single-file mode unless mdTOC is active, or when tree is hidden.
 func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
+	if m.treeHidden {
+		return m, nil
+	}
 	if !m.singleFile || m.mdTOC != nil {
 		m.focus = paneTree
 		m.syncTOCCursorToActive()
@@ -498,7 +530,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = msg.Height
 
 	var diffWidth int
-	if m.singleFile && m.mdTOC == nil {
+	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
 		m.treeWidth = 0
 		diffWidth = m.width - 2 // diff pane borders only
 	} else {
@@ -606,10 +638,11 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	} else {
 		m.mdTOC = nil
 	}
-	if m.mdTOC != nil {
+	switch {
+	case m.mdTOC != nil && !m.treeHidden:
 		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 		m.viewport.Width = m.width - m.treeWidth - 4
-	} else if m.singleFile {
+	case m.singleFile || m.treeHidden:
 		m.treeWidth = 0
 		m.viewport.Width = m.width - 2
 	}
@@ -687,8 +720,8 @@ func (m Model) View() string {
 
 	var mainView string
 	switch {
-	case m.singleFile && m.mdTOC == nil:
-		// single-file mode without TOC: no tree pane, diff uses full width
+	case m.treeHidden || (m.singleFile && m.mdTOC == nil):
+		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
 		diffPane := m.styles.DiffPaneActive.
 			Width(m.width - 2).
 			Height(ph).
@@ -945,6 +978,7 @@ func (m Model) statusModeIcons() string {
 		{"◉", m.tree.filter},
 		{"↩", m.wrapMode},
 		{"≋", len(m.searchMatches) > 0},
+		{"⊟", m.treeHidden},
 	}
 
 	statusFg := m.styles.colors.Muted
@@ -1022,6 +1056,7 @@ func (m Model) helpOverlay() string {
 		"  v            toggle collapsed mode\n" +
 		"  w            toggle word wrap\n" +
 		"  .            expand/collapse hunk\n" +
+		"  t            toggle tree/TOC pane\n" +
 		"  f            filter annotated files\n" +
 		"\n" +
 		"Quit\n" +
