@@ -11,6 +11,7 @@
 
 ### Bug Fixes
 
+- fix ctrl+d/u to scroll half-page instead of full page (matches help text and vim convention)
 - fix TOC highlighted entry wrapping to two lines
 
 ## v0.9.0 - 2026-04-04

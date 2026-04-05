@@ -1861,6 +1861,23 @@ func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.selectedFile(),
 		"ctrl+d should move by half page")
 
+	// ctrl+u from end area
+	m3 := testModel(files, nil)
+	m3.tree = newFileTree(files)
+	m3.focus = paneTree
+	m3.height = 20
+	// move to file 39
+	m3.tree.moveToLast()
+	for range 10 {
+		m3.tree.moveUp()
+	}
+	assert.Equal(t, "pkg/file39.go", m3.tree.selectedFile())
+
+	result, _ = m3.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model3 := result.(Model)
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", 39-halfPage), model3.tree.selectedFile(),
+		"ctrl+u should move by half page")
+
 	// PgDn from start should move full page
 	m2 := testModel(files, nil)
 	m2.tree = newFileTree(files)
