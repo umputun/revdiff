@@ -233,10 +233,10 @@ func TestNormalizeKey(t *testing.T) {
 		{"j", "j"}, {"J", "J"}, // preserve case for single chars
 		{"pgdown", "pgdown"}, {"pgup", "pgup"}, // already canonical
 		{"page_down", "pgdown"}, {"page_up", "pgup"}, // alias
-		{"pagedown", "pgdown"}, {"pageup", "pgup"},    // alias
-		{"escape", "esc"}, {"return", "enter"},         // alias
-		{"space", " "},                                 // alias
-		{"ctrl+d", "ctrl+d"}, {"Ctrl+D", "ctrl+d"},    // ctrl always lowercase
+		{"pagedown", "pgdown"}, {"pageup", "pgup"}, // alias
+		{"escape", "esc"}, {"return", "enter"}, // alias
+		{"space", " "},                             // alias
+		{"ctrl+d", "ctrl+d"}, {"Ctrl+D", "ctrl+d"}, // ctrl always lowercase
 		{"esc", "esc"}, {"enter", "enter"}, {"tab", "tab"}, // pass-through
 	}
 	for _, tt := range tests {
@@ -309,8 +309,8 @@ func TestParse_keyNormalization(t *testing.T) {
 	maps, _, err := Parse(input)
 	require.NoError(t, err)
 	require.Len(t, maps, 2)
-	assert.Equal(t, "pgdown", maps[0].key)  // normalized from page_down
-	assert.Equal(t, "ctrl+d", maps[1].key)  // normalized ctrl case
+	assert.Equal(t, "pgdown", maps[0].key) // normalized from page_down
+	assert.Equal(t, "ctrl+d", maps[1].key) // normalized ctrl case
 }
 
 func TestParse_unmapNormalization(t *testing.T) {
@@ -328,9 +328,9 @@ func TestLoad_withOverrides(t *testing.T) {
 	km, err := Load(tmpFile)
 	require.NoError(t, err)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))    // new binding
-	assert.Equal(t, ActionQuit, km.Resolve("q"))     // default still works
-	assert.Equal(t, Action(""), km.Resolve("j"))     // unmapped
-	assert.Equal(t, ActionDown, km.Resolve("down"))  // other default still works
+	assert.Equal(t, ActionQuit, km.Resolve("q"))    // default still works
+	assert.Equal(t, Action(""), km.Resolve("j"))    // unmapped
+	assert.Equal(t, ActionDown, km.Resolve("down")) // other default still works
 }
 
 func TestLoad_unmapThenRemap(t *testing.T) {
@@ -340,8 +340,8 @@ func TestLoad_unmapThenRemap(t *testing.T) {
 
 	km, err := Load(tmpFile)
 	require.NoError(t, err)
-	assert.Equal(t, Action(""), km.Resolve("q"))   // unmapped
-	assert.Equal(t, ActionQuit, km.Resolve("x"))    // remapped
+	assert.Equal(t, Action(""), km.Resolve("q")) // unmapped
+	assert.Equal(t, ActionQuit, km.Resolve("x")) // remapped
 }
 
 func TestLoad_missingFile(t *testing.T) {

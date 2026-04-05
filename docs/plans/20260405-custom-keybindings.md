@@ -179,15 +179,15 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `cmd/revdiff/main.go` (options struct, parseArgs, run)
 - Modify: `cmd/revdiff/main_test.go`
 
-- [ ] add `Keymap *keymap.Keymap` field to `ModelConfig`
-- [ ] add `keymap *keymap.Keymap` field to `Model` struct, set in `NewModel()`. If `cfg.Keymap == nil`, default to `keymap.Default()` — this ensures all ~180 existing tests work without modification (same pattern as TreeWidthRatio defaulting)
-- [ ] add `Keys string` and `DumpKeys bool` fields to `options` struct with appropriate go-flags tags (`--keys`, `--dump-keys`, `no-ini:"true"`)
-- [ ] add `resolveKeysPath()` function (same pattern as `resolveConfigPath` — check --keys flag, env `REVDIFF_KEYS`, default `~/.config/revdiff/keybindings`)
-- [ ] call `keymap.LoadOrDefault(keysPath)` in `run()`, pass to `ModelConfig`
-- [ ] handle `--dump-keys`: call `km.Dump(os.Stdout)` and exit (same pattern as `--dump-config`)
-- [ ] write tests for --keys flag parsing, --dump-keys flag, resolveKeysPath()
-- [ ] run tests, run linter
-- [ ] run `go mod vendor` if keymap package needs vendoring (internal package, should not)
+- [x] add `Keymap *keymap.Keymap` field to `ModelConfig`
+- [x] add `keymap *keymap.Keymap` field to `Model` struct, set in `NewModel()`. If `cfg.Keymap == nil`, default to `keymap.Default()` — this ensures all ~180 existing tests work without modification (same pattern as TreeWidthRatio defaulting)
+- [x] add `Keys string` and `DumpKeys bool` fields to `options` struct with appropriate go-flags tags (`--keys`, `--dump-keys`, `no-ini:"true"`)
+- [x] add `resolveKeysPath()` function (same pattern as `resolveConfigPath` — check --keys flag, env `REVDIFF_KEYS`, default `~/.config/revdiff/keybindings`)
+- [x] call `keymap.LoadOrDefault(keysPath)` in `run()`, pass to `ModelConfig`
+- [x] handle `--dump-keys`: call `km.Dump(os.Stdout)` and exit (same pattern as `--dump-config`)
+- [x] write tests for --keys flag parsing, --dump-keys flag, resolveKeysPath()
+- [x] run tests, run linter
+- [x] run `go mod vendor` if keymap package needs vendoring (internal package, should not)
 
 ### Task 5: Refactor handleKey to use keymap
 

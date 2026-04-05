@@ -18,6 +18,7 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/keymap"
 )
 
 // Renderer provides methods to extract changed files and build full-file diff views.
@@ -48,6 +49,7 @@ type Model struct {
 	viewport viewport.Model
 	store    *annotation.Store
 	renderer Renderer
+	keymap   *keymap.Keymap
 
 	ref            string
 	staged         bool
@@ -125,14 +127,15 @@ type ModelConfig struct {
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TabWidth         int      // number of spaces per tab character
-	NoColors         bool     // disable all colors including syntax highlighting
-	NoStatusBar      bool     // hide the status bar
-	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
-	Wrap             bool     // enable line wrapping
-	Collapsed        bool     // start in collapsed diff mode
-	Only             []string // show only these files (match by exact path or path suffix)
-	WorkDir          string   // working directory for resolving absolute --only paths
+	TabWidth         int            // number of spaces per tab character
+	NoColors         bool           // disable all colors including syntax highlighting
+	NoStatusBar      bool           // hide the status bar
+	NoConfirmDiscard bool           // skip confirmation prompt when discarding annotations
+	Wrap             bool           // enable line wrapping
+	Collapsed        bool           // start in collapsed diff mode
+	Only             []string       // show only these files (match by exact path or path suffix)
+	WorkDir          string         // working directory for resolving absolute --only paths
+	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
 	Colors           Colors
 }
 
@@ -144,12 +147,17 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 	if cfg.TabWidth < 1 {
 		cfg.TabWidth = 4
 	}
+	km := cfg.Keymap
+	if km == nil {
+		km = keymap.Default()
+	}
 	s := newStyles(cfg.Colors)
 	if cfg.NoColors {
 		s = plainStyles()
 	}
 	return Model{
 		styles:           s,
+		keymap:           km,
 		store:            store,
 		renderer:         renderer,
 		highlighter:      highlighter,

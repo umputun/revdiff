@@ -508,6 +508,61 @@ func TestMakeRenderer_AllFilesWithExclude(t *testing.T) {
 	assert.Equal(t, dir, workDir)
 }
 
+func TestParseArgs_KeysFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--keys", "/custom/keybindings"))
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/keybindings", opts.Keys)
+}
+
+func TestParseArgs_KeysEqualsForm(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--keys=/custom/keybindings"))
+	require.NoError(t, err)
+	assert.Equal(t, "/custom/keybindings", opts.Keys)
+}
+
+func TestParseArgs_DumpKeysFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--dump-keys"))
+	require.NoError(t, err)
+	assert.True(t, opts.DumpKeys)
+}
+
+func TestResolveKeysPath_FromArgs(t *testing.T) {
+	path := resolveKeysPath([]string{"--keys", "/custom/keybindings"})
+	assert.Equal(t, "/custom/keybindings", path)
+}
+
+func TestResolveKeysPath_EqualsForm(t *testing.T) {
+	path := resolveKeysPath([]string{"--keys=/custom/keybindings"})
+	assert.Equal(t, "/custom/keybindings", path)
+}
+
+func TestResolveKeysPath_FromEnv(t *testing.T) {
+	t.Setenv("REVDIFF_KEYS", "/env/keybindings")
+	path := resolveKeysPath([]string{})
+	assert.Equal(t, "/env/keybindings", path)
+}
+
+func TestResolveKeysPath_ArgsOverrideEnv(t *testing.T) {
+	t.Setenv("REVDIFF_KEYS", "/env/keybindings")
+	path := resolveKeysPath([]string{"--keys", "/args/keybindings"})
+	assert.Equal(t, "/args/keybindings", path)
+}
+
+func TestResolveKeysPath_Default(t *testing.T) {
+	t.Setenv("REVDIFF_KEYS", "") // clear env
+	path := resolveKeysPath([]string{})
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(home, ".config", "revdiff", "keybindings"), path)
+}
+
+func TestDefaultKeysPath(t *testing.T) {
+	path := defaultKeysPath()
+	assert.Contains(t, path, ".config")
+	assert.Contains(t, path, "revdiff")
+	assert.Contains(t, path, "keybindings")
+}
+
 func TestGitTopLevel(t *testing.T) {
 	t.Run("inside repo", func(t *testing.T) {
 		root, err := gitTopLevel()

@@ -17,6 +17,7 @@ import (
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
 	"github.com/umputun/revdiff/highlight"
+	"github.com/umputun/revdiff/keymap"
 	"github.com/umputun/revdiff/ui"
 )
 
@@ -39,6 +40,8 @@ type options struct {
 	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
+	Keys             string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
+	DumpKeys         bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
 	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
@@ -94,6 +97,12 @@ func main() {
 
 	if opts.DumpConfig {
 		dumpConfig(os.Args[1:], os.Stdout)
+		os.Exit(0)
+	}
+
+	if opts.DumpKeys {
+		km := keymap.LoadOrDefault(resolveKeysPath(os.Args[1:]))
+		km.Dump(os.Stdout)
 		os.Exit(0)
 	}
 
@@ -202,6 +211,34 @@ func defaultConfigPath() string {
 	return filepath.Join(home, ".config", "revdiff", "config")
 }
 
+// resolveKeysPath determines the keybindings file path from args, env, or default location.
+func resolveKeysPath(args []string) string {
+	// check if --keys was passed in args (supports both --keys value and --keys=value)
+	for i, arg := range args {
+		if arg == "--keys" && i+1 < len(args) {
+			return args[i+1]
+		}
+		if after, ok := strings.CutPrefix(arg, "--keys="); ok {
+			return after
+		}
+	}
+	// check env
+	if p := os.Getenv("REVDIFF_KEYS"); p != "" {
+		return p
+	}
+	// default location
+	return defaultKeysPath()
+}
+
+// defaultKeysPath returns ~/.config/revdiff/keybindings.
+func defaultKeysPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "revdiff", "keybindings")
+}
+
 func run(opts options) error {
 	gitRoot, gitErr := gitTopLevel()
 	renderer, workDir, err := makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
@@ -210,7 +247,9 @@ func run(opts options) error {
 	}
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
+	km := keymap.LoadOrDefault(resolveKeysPath(os.Args[1:]))
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
+		Keymap:           km,
 		NoColors:         opts.NoColors,
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,
