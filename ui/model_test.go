@@ -2903,6 +2903,76 @@ func TestModel_StatusBarHunkCountOnContextLine(t *testing.T) {
 	})
 }
 
+func TestModel_LineNumberSegment(t *testing.T) {
+	t.Run("context line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneDiff
+		assert.Equal(t, "L:10/11", m.lineNumberSegment())
+	})
+
+	t.Run("add line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 0, NewNum: 6, Content: "new", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("remove line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 6, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("divider line returns empty", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{Content: "...", ChangeType: diff.ChangeDivider},
+			{OldNum: 50, NewNum: 50, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "", m.lineNumberSegment())
+	})
+
+	t.Run("empty diffLines returns empty", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.diffLines = nil
+		m.diffCursor = 0
+		m.focus = paneDiff
+		assert.Equal(t, "", m.lineNumberSegment())
+	})
+
+	t.Run("tree focus returns empty", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneTree
+		assert.Equal(t, "", m.lineNumberSegment())
+	})
+}
+
 func TestModel_StatusBarPipeSeparators(t *testing.T) {
 	t.Run("plain styles", func(t *testing.T) {
 		m := testModel(nil, nil)

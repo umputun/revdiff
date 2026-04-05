@@ -908,6 +908,38 @@ func (m Model) hunkSegment() string {
 	return fmt.Sprintf("%d hunks", total)
 }
 
+// lineNumberSegment returns a formatted line number string like "L:42/380" for the status line.
+// returns empty string when focus is not on diff pane, cursor is out of range, or on a divider line.
+func (m Model) lineNumberSegment() string {
+	if m.focus != paneDiff {
+		return ""
+	}
+	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+		return ""
+	}
+	dl := m.diffLines[m.diffCursor]
+	if dl.ChangeType == diff.ChangeDivider {
+		return ""
+	}
+	lineNum := m.diffLineNum(dl)
+	if lineNum == 0 {
+		return ""
+	}
+	total := 0
+	for _, l := range m.diffLines {
+		if l.OldNum > total {
+			total = l.OldNum
+		}
+		if l.NewNum > total {
+			total = l.NewNum
+		}
+	}
+	if total == 0 {
+		return ""
+	}
+	return fmt.Sprintf("L:%d/%d", lineNum, total)
+}
+
 // joinStatusSections joins left and right status sections with padding and separators.
 func (m Model) joinStatusSections(left, right, sep string) string {
 	sepWidth := lipgloss.Width(sep)
