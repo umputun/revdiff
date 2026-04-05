@@ -32,6 +32,15 @@ Then uncomment and edit the values you want to change.
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
 
+## Popup Size (Claude Code plugin)
+
+When launched via the Claude Code plugin skill, revdiff opens in a terminal overlay. The popup size is configurable via env vars:
+
+| Env var | Description | Default |
+|---------|-------------|---------|
+| `REVDIFF_POPUP_WIDTH` | Tmux popup width (e.g., `100%`, `80%`) | `90%` |
+| `REVDIFF_POPUP_HEIGHT` | Tmux popup height / wezterm split percent | `90%` |
+
 ## Color Customization
 
 All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_COLOR_*` env vars.
