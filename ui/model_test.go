@@ -1728,11 +1728,12 @@ func TestModel_PgDownMovesCursorByPageHeight(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, pageHeight, model.diffCursor, "PgDown should move cursor by viewport height")
 
-	// ctrl+d should also move by page height from current position
+	// ctrl+d should move by half page height from current position
 	prevCursor := model.diffCursor
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model = result.(Model)
-	assert.Equal(t, prevCursor+pageHeight, model.diffCursor, "ctrl+d should move cursor by viewport height")
+	halfPage := pageHeight / 2
+	assert.Equal(t, prevCursor+halfPage, model.diffCursor, "ctrl+d should move cursor by half viewport height")
 }
 
 func TestModel_PgUpMovesCursorByPageHeight(t *testing.T) {
@@ -1763,11 +1764,135 @@ func TestModel_PgUpMovesCursorByPageHeight(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, 80-pageHeight, model.diffCursor, "PgUp should move cursor up by viewport height")
 
-	// ctrl+u should also move up by page height
+	// ctrl+u should move up by half page height
 	model.diffCursor = 80
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model = result.(Model)
-	assert.Equal(t, 80-pageHeight, model.diffCursor, "ctrl+u should move cursor up by viewport height")
+	halfPage := pageHeight / 2
+	assert.Equal(t, 80-halfPage, model.diffCursor, "ctrl+u should move cursor up by half viewport height")
+}
+
+func TestModel_CtrlDMovesHalfPageDown(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+	assert.Equal(t, 0, model.diffCursor)
+
+	pageHeight := model.viewport.Height
+	halfPage := pageHeight / 2
+	require.Positive(t, halfPage, "half page must be positive")
+
+	// ctrl+d moves cursor and viewport by half page
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	model = result.(Model)
+	assert.Equal(t, halfPage, model.diffCursor, "ctrl+d should move cursor by half viewport height")
+	assert.Equal(t, halfPage, model.viewport.YOffset, "ctrl+d should scroll viewport by half page")
+
+	// PgDn moves full page from start for comparison
+	model.diffCursor = 0
+	model.viewport.SetYOffset(0)
+	model.viewport.SetContent(model.renderDiff())
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Equal(t, pageHeight, model.diffCursor, "PgDown should move cursor by full viewport height")
+}
+
+func TestModel_CtrlUMovesHalfPageUp(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.focus = paneDiff
+
+	pageHeight := model.viewport.Height
+	halfPage := pageHeight / 2
+	require.Positive(t, halfPage, "half page must be positive")
+
+	// start at line 80 with viewport scrolled to match
+	model.diffCursor = 80
+	model.viewport.SetYOffset(80)
+	model.viewport.SetContent(model.renderDiff())
+	prevOffset := model.viewport.YOffset
+
+	// ctrl+u moves cursor and viewport by half page up
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model = result.(Model)
+	assert.Equal(t, 80-halfPage, model.diffCursor, "ctrl+u should move cursor up by half viewport height")
+	assert.Equal(t, prevOffset-halfPage, model.viewport.YOffset, "ctrl+u should scroll viewport up by half page")
+
+	// PgUp moves full page up from 80 for comparison
+	model.diffCursor = 80
+	model.viewport.SetYOffset(80)
+	model.viewport.SetContent(model.renderDiff())
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+	assert.Equal(t, 80-pageHeight, model.diffCursor, "PgUp should move cursor up by full viewport height")
+}
+
+func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
+	files := make([]string, 50)
+	for i := range files {
+		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
+	}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+	m.height = 20
+
+	pageSize := m.treePageSize()
+	halfPage := max(1, pageSize/2)
+
+	// ctrl+d from start
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	model := result.(Model)
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.selectedFile(),
+		"ctrl+d should move by half page")
+
+	// ctrl+u from end area
+	m3 := testModel(files, nil)
+	m3.tree = newFileTree(files)
+	m3.focus = paneTree
+	m3.height = 20
+	// move to file 39
+	m3.tree.moveToLast()
+	for range 10 {
+		m3.tree.moveUp()
+	}
+	assert.Equal(t, "pkg/file39.go", m3.tree.selectedFile())
+
+	result, _ = m3.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
+	model3 := result.(Model)
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", 39-halfPage), model3.tree.selectedFile(),
+		"ctrl+u should move by half page")
+
+	// PgDn from start should move full page
+	m2 := testModel(files, nil)
+	m2.tree = newFileTree(files)
+	m2.focus = paneTree
+	m2.height = 20
+
+	result, _ = m2.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model2 := result.(Model)
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model2.tree.selectedFile(),
+		"PgDn should move by full page")
 }
 
 func TestModel_HomeEndMoveCursorToBoundaries(t *testing.T) {
@@ -2058,7 +2183,7 @@ func TestModel_TreePgUpMovesCursorByPage(t *testing.T) {
 	assert.Equal(t, expected, model.tree.selectedFile(), "PgUp in tree should move cursor by page size")
 }
 
-func TestModel_TreeCtrlDMovesCursorByPage(t *testing.T) {
+func TestModel_TreeCtrlDMovesCursorByHalfPage(t *testing.T) {
 	files := make([]string, 50)
 	for i := range files {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
@@ -2072,14 +2197,15 @@ func TestModel_TreeCtrlDMovesCursorByPage(t *testing.T) {
 
 	pageSize := m.treePageSize()
 	require.Positive(t, pageSize)
+	halfPage := max(1, pageSize/2)
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model := result.(Model)
-	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model.tree.selectedFile(),
-		"ctrl+d in tree should move cursor by page size")
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.selectedFile(),
+		"ctrl+d in tree should move cursor by half page size")
 }
 
-func TestModel_TreeCtrlUMovesCursorByPage(t *testing.T) {
+func TestModel_TreeCtrlUMovesCursorByHalfPage(t *testing.T) {
 	files := make([]string, 50)
 	for i := range files {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
@@ -2091,6 +2217,7 @@ func TestModel_TreeCtrlUMovesCursorByPage(t *testing.T) {
 
 	pageSize := m.treePageSize()
 	require.Positive(t, pageSize)
+	halfPage := max(1, pageSize/2)
 
 	m.tree.moveToLast()
 	for range 10 {
@@ -2100,8 +2227,8 @@ func TestModel_TreeCtrlUMovesCursorByPage(t *testing.T) {
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model := result.(Model)
-	expected := fmt.Sprintf("pkg/file%02d.go", 39-pageSize)
-	assert.Equal(t, expected, model.tree.selectedFile(), "ctrl+u in tree should move cursor by page size")
+	expected := fmt.Sprintf("pkg/file%02d.go", 39-halfPage)
+	assert.Equal(t, expected, model.tree.selectedFile(), "ctrl+u in tree should move cursor by half page size")
 }
 
 func TestModel_TreeHomeEndMoveToBoundaries(t *testing.T) {

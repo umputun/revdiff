@@ -513,6 +513,45 @@ func (m *Model) moveDiffCursorPageUp() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
+// moveDiffCursorHalfPageDown moves the diff cursor down by half a visual page.
+// scrolls viewport by half page explicitly, matching vim/less ctrl+d behavior.
+func (m *Model) moveDiffCursorHalfPageDown() {
+	halfPage := max(1, m.viewport.Height/2)
+	startY := m.cursorViewportY()
+	for {
+		prev := m.diffCursor
+		m.moveDiffCursorDown()
+		if m.diffCursor == prev {
+			break
+		}
+		if m.cursorViewportY()-startY >= halfPage {
+			break
+		}
+	}
+	maxOffset := max(0, m.viewport.TotalLineCount()-m.viewport.Height)
+	m.viewport.SetYOffset(min(m.viewport.YOffset+halfPage, maxOffset))
+	m.viewport.SetContent(m.renderDiff())
+}
+
+// moveDiffCursorHalfPageUp moves the diff cursor up by half a visual page.
+// scrolls viewport by half page explicitly, matching vim/less ctrl+u behavior.
+func (m *Model) moveDiffCursorHalfPageUp() {
+	halfPage := max(1, m.viewport.Height/2)
+	startY := m.cursorViewportY()
+	for {
+		prev := m.diffCursor
+		m.moveDiffCursorUp()
+		if m.diffCursor == prev {
+			break
+		}
+		if startY-m.cursorViewportY() >= halfPage {
+			break
+		}
+	}
+	m.viewport.SetYOffset(max(0, m.viewport.YOffset-halfPage))
+	m.viewport.SetContent(m.renderDiff())
+}
+
 // moveDiffCursorToStart moves the diff cursor to the first selectable position.
 // if a file-level annotation exists, the cursor goes to -1 (file annotation line).
 func (m *Model) moveDiffCursorToStart() {
