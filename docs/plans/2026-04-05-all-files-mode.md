@@ -34,15 +34,15 @@
 ## Implementation Steps
 
 ### Task 1: Add ExcludeFilter wrapper
-- [ ] create `diff/exclude.go` with local `renderer` interface (same signatures as `ui.Renderer`: `ChangedFiles`, `FileDiff`) to avoid import cycle (diff cannot import ui)
-- [ ] create `ExcludeFilter` struct wrapping the local `renderer` interface
-- [ ] implement `ChangedFiles()` that delegates to inner renderer then filters out files matching any exclude prefix
-- [ ] implement `FileDiff()` that delegates directly to inner renderer (filtering happens at file list level only)
-- [ ] implement `matchesExclude()` helper method for prefix matching logic
-- [ ] write tests in `diff/exclude_test.go` for prefix matching (exact prefix, nested paths, no false matches)
-- [ ] write tests for `ChangedFiles()` filtering with mock renderer
-- [ ] write tests for `FileDiff()` passthrough behavior
-- [ ] run tests — must pass before next task
+- [x] create `diff/exclude.go` with local `renderer` interface (same signatures as `ui.Renderer`: `ChangedFiles`, `FileDiff`) to avoid import cycle (diff cannot import ui)
+- [x] create `ExcludeFilter` struct wrapping the local `renderer` interface
+- [x] implement `ChangedFiles()` that delegates to inner renderer then filters out files matching any exclude prefix
+- [x] implement `FileDiff()` that delegates directly to inner renderer (filtering happens at file list level only)
+- [x] implement `matchesExclude()` helper method for prefix matching logic
+- [x] write tests in `diff/exclude_test.go` for prefix matching (exact prefix, nested paths, no false matches)
+- [x] write tests for `ChangedFiles()` filtering with mock renderer
+- [x] write tests for `FileDiff()` passthrough behavior
+- [x] run tests — must pass before next task
 
 ### Task 2: Add DirectoryReader
 - [ ] create `diff/directory.go` with `DirectoryReader` struct (workDir string)
