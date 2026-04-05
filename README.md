@@ -68,8 +68,9 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
 | **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
+| **ghostty** | AppleScript split + zoom (macOS only) | `$TERM_PROGRAM` + AppleScript probe |
 
-Priority: tmux → kitty → wezterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: tmux → kitty → wezterm → ghostty (first detected wins). If none are available, the plugin exits with an error.
 
 **Install:**
 
