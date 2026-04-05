@@ -6697,3 +6697,34 @@ func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
 	assert.Contains(t, help, "L")
 	assert.Contains(t, help, "line numbers")
 }
+
+func TestModel_LineNumbersEndToEnd(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 10, NewNum: 10, Content: "context", ChangeType: diff.ChangeContext},
+		{OldNum: 11, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 11, Content: "new", ChangeType: diff.ChangeAdd},
+		{Content: "@@ -10,3 +10,3 @@", ChangeType: diff.ChangeDivider},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// toggle on
+	m = m.handleViewToggle("L")
+	assert.True(t, m.lineNumbers)
+	assert.Equal(t, 2, m.lineNumWidth)
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+	assert.Contains(t, stripped, "10 10")
+	assert.Contains(t, stripped, "11   ")
+	assert.Contains(t, stripped, "   11")
+
+	// toggle off
+	m = m.handleViewToggle("L")
+	assert.False(t, m.lineNumbers)
+	rendered = m.renderDiff()
+	stripped = ansi.Strip(rendered)
+	assert.NotContains(t, stripped, "10 10")
+}
