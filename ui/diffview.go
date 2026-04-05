@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -11,6 +12,39 @@ import (
 
 // matchRange represents a range of visible character positions for search match highlighting.
 type matchRange struct{ start, end int }
+
+// lineNumGutterWidth returns the total character width of the line number gutter.
+// layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
+func (m Model) lineNumGutterWidth() int {
+	return m.lineNumWidth*2 + 2
+}
+
+// lineNumGutter returns the formatted line number gutter string for a diff line.
+// uses muted color via raw ANSI to avoid lipgloss reset breaking outer backgrounds.
+// layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
+// blank columns for adds (no old), removes (no new), and dividers (both blank).
+func (m Model) lineNumGutter(dl diff.DiffLine) string {
+	w := m.lineNumWidth
+	blank := strings.Repeat(" ", w)
+
+	var old, new string
+	switch {
+	case dl.ChangeType == diff.ChangeDivider:
+		old, new = blank, blank
+	case dl.ChangeType == diff.ChangeAdd:
+		old = blank
+		new = fmt.Sprintf("%*d", w, dl.NewNum)
+	case dl.ChangeType == diff.ChangeRemove:
+		old = fmt.Sprintf("%*d", w, dl.OldNum)
+		new = blank
+	default: // context
+		old = fmt.Sprintf("%*d", w, dl.OldNum)
+		new = fmt.Sprintf("%*d", w, dl.NewNum)
+	}
+
+	gutter := " " + old + " " + new
+	return m.styles.LineNumber.Render(gutter)
+}
 
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
 // and injected annotation lines.
