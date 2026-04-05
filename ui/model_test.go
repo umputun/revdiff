@@ -5372,7 +5372,7 @@ func TestModel_SingleFileSearchNavStillWorks(t *testing.T) {
 	assert.Equal(t, 1, model.searchCursor, "n should advance search cursor in single-file mode")
 	assert.Equal(t, 2, model.diffCursor, "cursor should move to second match")
 
-	// N should navigate to previous search match
+	// n should navigate to previous search match
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model = result.(Model)
 	assert.Equal(t, 0, model.searchCursor, "N should go back in single-file mode")
@@ -5927,9 +5927,9 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	t.Run("tab back to TOC syncs cursor to active section", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		m.mdTOC.cursor = 0              // cursor was on top entry
-		m.mdTOC.activeSection = 3       // but diff scrolled to Third section
-		m.diffCursor = 4                // cursor on Third header line
+		m.mdTOC.cursor = 0        // cursor was on top entry
+		m.mdTOC.activeSection = 3 // but diff scrolled to Third section
+		m.diffCursor = 4          // cursor on Third header line
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
@@ -5941,7 +5941,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
 		m.mdTOC.cursor = 0
-		m.mdTOC.activeSection = 2 // Second section
+		m.mdTOC.activeSection = 2 // second section
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 		model := result.(Model)
