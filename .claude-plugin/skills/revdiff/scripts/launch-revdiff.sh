@@ -39,7 +39,7 @@ for arg in "$@"; do
 done
 OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 
-# overlay size: override via REVDIFF_POPUP_WIDTH / REVDIFF_POPUP_HEIGHT env vars
+# popup size: override via REVDIFF_POPUP_WIDTH / REVDIFF_POPUP_HEIGHT env vars (tmux and wezterm)
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
@@ -77,7 +77,9 @@ if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
     SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
     rm -f "$SENTINEL"
 
-    wezterm cli split-pane --bottom --percent 90 \
+    WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
+    WEZTERM_PCT="${WEZTERM_PCT%%%}"
+    wezterm cli split-pane --bottom --percent "$WEZTERM_PCT" \
         --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
 
     while [ ! -f "$SENTINEL" ]; do
