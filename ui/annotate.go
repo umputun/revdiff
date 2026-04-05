@@ -287,7 +287,11 @@ func (m Model) cursorViewportY() int {
 		if m.isDeleteOnlyPlaceholder(i, hunks) {
 			if m.wrapMode {
 				text := m.deletePlaceholderText(i)
-				wrapWidth := m.diffContentWidth() - wrapGutterWidth
+				gutterExtra := 0
+				if m.lineNumbers {
+					gutterExtra = m.lineNumGutterWidth()
+				}
+				wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 				y += len(m.wrapContent(text, wrapWidth))
 			} else {
 				y++ // placeholder is always 1 row when not wrapping

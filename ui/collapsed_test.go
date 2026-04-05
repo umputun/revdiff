@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1694,4 +1695,22 @@ func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
 	assert.Contains(t, rendered, " - ", "expanded remove should use standard - gutter")
 	assert.Contains(t, rendered, " + ", "expanded add should use standard + gutter")
 	assert.Contains(t, rendered, " ↪ ", "expanded long lines should have continuation markers")
+}
+
+func TestModel_CollapsedRenderWithLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	m.lineNumWidth = 2
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 0, NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+
+	assert.Contains(t, stripped, " 1  1")
+	assert.Contains(t, stripped, "    2")
 }

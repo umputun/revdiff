@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -11,6 +12,40 @@ import (
 
 // matchRange represents a range of visible character positions for search match highlighting.
 type matchRange struct{ start, end int }
+
+// lineNumGutterWidth returns the total character width of the line number gutter.
+// layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
+func (m Model) lineNumGutterWidth() int {
+	return m.lineNumWidth*2 + 2
+}
+
+// lineNumGutter returns the formatted line number gutter string for a diff line.
+// uses muted color via lipgloss style (m.styles.LineNumber); safe here because the gutter
+// is concatenated before content, so the lipgloss reset doesn't break outer backgrounds.
+// layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
+// blank columns for adds (no old), removes (no new), and dividers (both blank).
+func (m Model) lineNumGutter(dl diff.DiffLine) string {
+	w := m.lineNumWidth
+	blank := strings.Repeat(" ", w)
+
+	var oldCol, newCol string
+	switch dl.ChangeType {
+	case diff.ChangeDivider:
+		oldCol, newCol = blank, blank
+	case diff.ChangeAdd:
+		oldCol = blank
+		newCol = fmt.Sprintf("%*d", w, dl.NewNum)
+	case diff.ChangeRemove:
+		oldCol = fmt.Sprintf("%*d", w, dl.OldNum)
+		newCol = blank
+	default: // context
+		oldCol = fmt.Sprintf("%*d", w, dl.OldNum)
+		newCol = fmt.Sprintf("%*d", w, dl.NewNum)
+	}
+
+	gutter := " " + oldCol + " " + newCol
+	return m.styles.LineNumber.Render(gutter)
+}
 
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
 // and injected annotation lines.
@@ -83,6 +118,11 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		return
 	}
 
+	numGutter := ""
+	if m.lineNumbers {
+		numGutter = m.lineNumGutter(dl)
+	}
+
 	var content string
 	if dl.ChangeType == diff.ChangeDivider {
 		content = m.styles.LineNumber.Render(" " + lineContent)
@@ -92,25 +132,42 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 	// apply horizontal scroll to content (bar stays fixed), disabled in wrap mode
 	if m.scrollX > 0 && !m.wrapMode {
-		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
+		cutWidth := m.diffContentWidth()
+		if m.lineNumbers {
+			cutWidth -= m.lineNumGutterWidth()
+		}
+		if cutWidth > 0 {
+			content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+		}
 	}
 
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + content + "\n")
+	b.WriteString(cursor + numGutter + content + "\n")
 }
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
 func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth
+	gutterExtra := 0
+	numGutter := ""
+	numBlank := ""
+	if m.lineNumbers {
+		gutterExtra = m.lineNumGutterWidth()
+		numGutter = m.lineNumGutter(dl)
+		numBlank = strings.Repeat(" ", gutterExtra)
+	}
+
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
 		prefix := " ↪ "
+		ng := numBlank
 		if i == 0 {
 			prefix = m.linePrefix(dl.ChangeType)
+			ng = numGutter
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
@@ -119,7 +176,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		if i == 0 && isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		b.WriteString(cursor + styled + "\n")
+		b.WriteString(cursor + ng + styled + "\n")
 	}
 }
 
@@ -136,7 +193,11 @@ func (m Model) wrappedLineCount(idx int) int {
 	}
 
 	_, textContent, _ := m.prepareLineContent(idx, dl)
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth
+	gutterExtra := 0
+	if m.lineNumbers {
+		gutterExtra = m.lineNumGutterWidth()
+	}
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 	return len(m.wrapContent(textContent, wrapWidth))
 }
 

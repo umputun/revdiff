@@ -3744,7 +3744,7 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.width = 100
-	m.height = 40
+	m.height = 50
 
 	// without help, view should not contain help sections
 	m.showHelp = false
@@ -6634,4 +6634,97 @@ func TestModel_MarkdownNoHeadersFallback(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	model = result.(Model)
 	assert.Equal(t, paneDiff, model.focus, "tab should be no-op without TOC")
+}
+
+func TestModel_ToggleLineNumbers(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		},
+	})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+
+	assert.False(t, m.lineNumbers)
+	m = m.handleViewToggle("L")
+	assert.True(t, m.lineNumbers)
+	m = m.handleViewToggle("L")
+	assert.False(t, m.lineNumbers)
+}
+
+func TestModel_ComputeLineNumWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []diff.DiffLine
+		want  int
+	}{
+		{name: "single digit", lines: []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, ChangeType: diff.ChangeContext},
+		}, want: 1},
+		{name: "two digits", lines: []diff.DiffLine{
+			{OldNum: 99, NewNum: 99, ChangeType: diff.ChangeContext},
+		}, want: 2},
+		{name: "mixed old larger", lines: []diff.DiffLine{
+			{OldNum: 100, NewNum: 5, ChangeType: diff.ChangeContext},
+		}, want: 3},
+		{name: "mixed new larger", lines: []diff.DiffLine{
+			{OldNum: 5, NewNum: 1000, ChangeType: diff.ChangeContext},
+		}, want: 4},
+		{name: "empty", lines: nil, want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tt.lines
+			assert.Equal(t, tt.want, m.computeLineNumWidth())
+		})
+	}
+}
+
+func TestModel_StatusModeIconsLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "#")
+}
+
+func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 120
+	m.height = 40
+	help := m.helpOverlay()
+	assert.Contains(t, help, "L")
+	assert.Contains(t, help, "line numbers")
+}
+
+func TestModel_LineNumbersEndToEnd(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 10, NewNum: 10, Content: "context", ChangeType: diff.ChangeContext},
+		{OldNum: 11, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 11, Content: "new", ChangeType: diff.ChangeAdd},
+		{Content: "@@ -10,3 +10,3 @@", ChangeType: diff.ChangeDivider},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// toggle on
+	m = m.handleViewToggle("L")
+	assert.True(t, m.lineNumbers)
+	assert.Equal(t, 2, m.lineNumWidth)
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+	assert.Contains(t, stripped, "10 10")
+	assert.Contains(t, stripped, "11   ")
+	assert.Contains(t, stripped, "   11")
+
+	// toggle off
+	m = m.handleViewToggle("L")
+	assert.False(t, m.lineNumbers)
+	rendered = m.renderDiff()
+	stripped = ansi.Strip(rendered)
+	assert.NotContains(t, stripped, "10 10")
 }
