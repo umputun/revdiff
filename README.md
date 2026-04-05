@@ -114,6 +114,16 @@ The plugin includes built-in reference documentation and can answer questions ab
 
 The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
 
+### Plan Review Plugin
+
+A separate `revdiff-planning` plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again — looping until you're satisfied.
+
+```bash
+/plugin install revdiff-planning@umputun-revdiff
+```
+
+This plugin is independent from the main `revdiff` plugin and does not conflict with other planning plugins (e.g., `planning` from `cc-thingz`).
+
 ### Integration with Other Tools
 
 The structured stdout output works with any tool that can read text:

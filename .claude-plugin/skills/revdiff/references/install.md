@@ -20,3 +20,11 @@ go install github.com/umputun/revdiff/cmd/revdiff@latest
 ```
 
 Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, kitty, or wezterm).
+
+### Plan Review Plugin
+
+Automatically opens revdiff when Claude exits plan mode for interactive annotation:
+
+```bash
+/plugin install revdiff-planning@umputun-revdiff
+```

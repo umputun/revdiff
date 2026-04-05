@@ -13,6 +13,15 @@
       "author": {
         "name": "umputun"
       }
+    },
+    {
+      "name": "revdiff-planning",
+      "source": "./plugins/revdiff-planning",
+      "description": "Automatic plan review with revdiff",
+      "version": "0.1.0",
+      "author": {
+        "name": "umputun"
+      }
     }
   ]
 }

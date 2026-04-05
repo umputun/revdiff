@@ -1,0 +1,11 @@
+{
+  "name": "revdiff-planning",
+  "description": "Automatic plan review with revdiff",
+  "version": "0.1.0",
+  "author": {
+    "name": "umputun"
+  },
+  "homepage": "https://github.com/umputun/revdiff",
+  "repository": "https://github.com/umputun/revdiff",
+  "license": "MIT"
+}
