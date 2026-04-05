@@ -6652,3 +6652,32 @@ func TestModel_ToggleLineNumbers(t *testing.T) {
 	m = m.handleViewToggle("L")
 	assert.False(t, m.lineNumbers)
 }
+
+func TestModel_ComputeLineNumWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []diff.DiffLine
+		want  int
+	}{
+		{name: "single digit", lines: []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, ChangeType: diff.ChangeContext},
+		}, want: 1},
+		{name: "two digits", lines: []diff.DiffLine{
+			{OldNum: 99, NewNum: 99, ChangeType: diff.ChangeContext},
+		}, want: 2},
+		{name: "mixed old larger", lines: []diff.DiffLine{
+			{OldNum: 100, NewNum: 5, ChangeType: diff.ChangeContext},
+		}, want: 3},
+		{name: "mixed new larger", lines: []diff.DiffLine{
+			{OldNum: 5, NewNum: 1000, ChangeType: diff.ChangeContext},
+		}, want: 4},
+		{name: "empty", lines: nil, want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tt.lines
+			assert.Equal(t, tt.want, m.computeLineNumWidth())
+		})
+	}
+}

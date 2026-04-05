@@ -662,6 +662,9 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.clearSearch()
 	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
+	if m.lineNumbers {
+		m.lineNumWidth = m.computeLineNumWidth()
+	}
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
