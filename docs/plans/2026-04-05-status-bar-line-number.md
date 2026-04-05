@@ -54,11 +54,11 @@
 - [x] run tests — must pass before next task
 
 ### Task 3: Verify acceptance criteria
-- [ ] verify line number shows for context, add, and remove lines
-- [ ] verify divider lines show no line number
-- [ ] verify line number not shown when focus is on tree pane
-- [ ] run full test suite (unit tests)
-- [ ] run linter — all issues must be fixed
+- [x] verify line number shows for context, add, and remove lines
+- [x] verify divider lines show no line number
+- [x] verify line number not shown when focus is on tree pane
+- [x] run full test suite (unit tests)
+- [x] run linter — all issues must be fixed
 
 ### Task 4: [Final] Update documentation
 - [ ] update README.md if needed (add L:N/M to status bar description if documented)
