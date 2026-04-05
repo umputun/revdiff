@@ -354,7 +354,7 @@ func (m Model) computeLineNumWidth() int {
 	return len(strconv.Itoa(maxNum))
 }
 
-// handleViewToggle dispatches view mode toggle keys (v, w, t).
+// handleViewToggle dispatches view mode toggle keys (v, w, t, L).
 func (m Model) handleViewToggle(key string) Model {
 	switch key {
 	case "v":

@@ -135,7 +135,9 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		if m.lineNumbers {
 			cutWidth -= m.lineNumGutterWidth()
 		}
-		content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+		if cutWidth > 0 {
+			content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+		}
 	}
 
 	cursor := " "
