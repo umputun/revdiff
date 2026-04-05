@@ -54,20 +54,20 @@
 - [x] run tests — must pass before next task
 
 ### Task 3: Add CLI flags and wiring
-- [ ] add `AllFiles` flag to `options` struct: `long:"all-files" short:"A" no-ini:"true"`
-- [ ] add `Exclude` flag to `options` struct: `long:"exclude" short:"X" ini-name:"exclude"` (repeatable `[]string`)
-- [ ] add `env:"REVDIFF_EXCLUDE" env-delim:","` to Exclude field (comma-separated in env, repeated in CLI/config)
-- [ ] add validation in `parseArgs()`: `--all-files` conflicts with refs, `--staged`, and `--only`
-- [ ] update `makeRenderer()` signature to accept allFiles/excludes params (or pass via opts struct)
-- [ ] create `DirectoryReader` when `--all-files` is set (error if no git repo)
-- [ ] wrap any renderer with `ExcludeFilter` when `--exclude` patterns are present
-- [ ] update `run()` to pass new opts to `makeRenderer()`
-- [ ] write tests in `cmd/revdiff/main_test.go` for parseArgs validation (conflict detection)
-- [ ] write tests for makeRenderer with `--all-files` returning DirectoryReader
-- [ ] write tests for makeRenderer with `--exclude` wrapping with ExcludeFilter
-- [ ] write tests for `--exclude` combined with normal diff mode (ExcludeFilter wrapping Git renderer)
-- [ ] write tests for `--all-files` conflicting with `--only`
-- [ ] run tests — must pass before next task
+- [x] add `AllFiles` flag to `options` struct: `long:"all-files" short:"A" no-ini:"true"`
+- [x] add `Exclude` flag to `options` struct: `long:"exclude" short:"X" ini-name:"exclude"` (repeatable `[]string`)
+- [x] add `env:"REVDIFF_EXCLUDE" env-delim:","` to Exclude field (comma-separated in env, repeated in CLI/config)
+- [x] add validation in `parseArgs()`: `--all-files` conflicts with refs, `--staged`, and `--only`
+- [x] update `makeRenderer()` signature to accept allFiles/excludes params (or pass via opts struct)
+- [x] create `DirectoryReader` when `--all-files` is set (error if no git repo)
+- [x] wrap any renderer with `ExcludeFilter` when `--exclude` patterns are present
+- [x] update `run()` to pass new opts to `makeRenderer()`
+- [x] write tests in `cmd/revdiff/main_test.go` for parseArgs validation (conflict detection)
+- [x] write tests for makeRenderer with `--all-files` returning DirectoryReader
+- [x] write tests for makeRenderer with `--exclude` wrapping with ExcludeFilter
+- [x] write tests for `--exclude` combined with normal diff mode (ExcludeFilter wrapping Git renderer)
+- [x] write tests for `--all-files` conflicting with `--only`
+- [x] run tests — must pass before next task
 
 ### Task 4: Verify acceptance criteria
 - [ ] verify `revdiff --all-files` shows all git-tracked files in file tree
