@@ -99,6 +99,8 @@ type Model struct {
 	annotListOffset  int                     // scroll offset for the annotation list
 	annotListItems   []annotation.Annotation // flat sorted list of all annotations
 	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
+
+	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -423,11 +425,12 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = msg.Height
 
 	var diffWidth int
-	if m.singleFile {
+	if m.singleFile && m.mdTOC == nil {
 		m.treeWidth = 0
 		diffWidth = m.width - 2 // diff pane borders only
 	} else {
-		// adjust tree width based on ratio (N out of 10 units)
+		// adjust tree width based on ratio (N out of 10 units);
+		// applies to multi-file mode and single-file markdown with TOC
 		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 		diffWidth = m.width - m.treeWidth - 4 // borders
 	}
@@ -523,6 +526,18 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
+
+	// detect markdown full-context mode and build TOC
+	if m.singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines) {
+		m.mdTOC = parseTOC(msg.lines)
+	} else {
+		m.mdTOC = nil
+	}
+	if m.mdTOC != nil {
+		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
+		m.viewport.Width = m.width - m.treeWidth - 4
+	}
+
 	m.skipInitialDividers()
 
 	// handle pending annotation list jump

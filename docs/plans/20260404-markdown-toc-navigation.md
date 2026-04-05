@@ -101,13 +101,13 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `mdTOC *mdTOC` field to `Model` struct (nil when not applicable)
-- [ ] in `handleFileLoaded`: after `highlightedLines` assignment, check `singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines)` — if true, parse TOC, set `treeWidth` to ratio-based width (overrides the `treeWidth=0` set earlier in `handleFilesLoaded`), adjust viewport width
-- [ ] in `handleFileLoaded`: if conditions don't match (or TOC has no entries), set `mdTOC = nil`, keep `treeWidth = 0`
-- [ ] in `handleResize`: modify existing `if m.singleFile` branch — only set `treeWidth=0` when `m.mdTOC == nil`; when `m.mdTOC != nil`, compute `treeWidth` from ratio (same as multi-file)
-- [ ] write tests for TOC detection in `handleFileLoaded` — markdown full-context triggers TOC, non-markdown doesn't, markdown with diff changes doesn't, markdown with no headers produces nil TOC
-- [ ] write tests for resize with TOC active — treeWidth computed correctly
-- [ ] run tests — must pass before task 5
+- [x] add `mdTOC *mdTOC` field to `Model` struct (nil when not applicable)
+- [x] in `handleFileLoaded`: after `highlightedLines` assignment, check `singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines)` — if true, parse TOC, set `treeWidth` to ratio-based width (overrides the `treeWidth=0` set earlier in `handleFilesLoaded`), adjust viewport width
+- [x] in `handleFileLoaded`: if conditions don't match (or TOC has no entries), set `mdTOC = nil`, keep `treeWidth = 0`
+- [x] in `handleResize`: modify existing `if m.singleFile` branch — only set `treeWidth=0` when `m.mdTOC == nil`; when `m.mdTOC != nil`, compute `treeWidth` from ratio (same as multi-file)
+- [x] write tests for TOC detection in `handleFileLoaded` — markdown full-context triggers TOC, non-markdown doesn't, markdown with diff changes doesn't, markdown with no headers produces nil TOC
+- [x] write tests for resize with TOC active — treeWidth computed correctly
+- [x] run tests — must pass before task 5
 
 ### Task 5: TOC pane rendering in View
 

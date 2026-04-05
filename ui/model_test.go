@@ -5502,3 +5502,151 @@ func TestModel_SingleFileMultiFileModeUnchanged(t *testing.T) {
 	model = result.(Model)
 	assert.True(t, model.tree.filter, "f should toggle filter in multi-file mode")
 }
+
+func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "some text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Section", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "more text", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("markdown full-context triggers TOC", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+		m.focus = paneDiff
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model := result.(Model)
+
+		require.NotNil(t, model.mdTOC, "mdTOC should be set for markdown full-context")
+		assert.Len(t, model.mdTOC.entries, 2)
+		assert.Equal(t, "Title", model.mdTOC.entries[0].title)
+		assert.Equal(t, "Section", model.mdTOC.entries[1].title)
+		assert.Positive(t, model.treeWidth, "treeWidth should be set when TOC is active")
+	})
+
+	t.Run("non-markdown file does not trigger TOC", func(t *testing.T) {
+		goLines := []diff.DiffLine{
+			{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		}
+		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": goLines})
+		m.singleFile = true
+
+		result, _ := m.Update(fileLoadedMsg{file: "main.go", lines: goLines})
+		model := result.(Model)
+
+		assert.Nil(t, model.mdTOC, "mdTOC should be nil for non-markdown file")
+	})
+
+	t.Run("markdown with diff changes does not trigger TOC", func(t *testing.T) {
+		mixedLines := []diff.DiffLine{
+			{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "added line", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mixedLines})
+		m.singleFile = true
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mixedLines})
+		model := result.(Model)
+
+		assert.Nil(t, model.mdTOC, "mdTOC should be nil when file has diff changes")
+	})
+
+	t.Run("markdown with no headers produces nil TOC", func(t *testing.T) {
+		noHeaders := []diff.DiffLine{
+			{NewNum: 1, Content: "just text", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "more text", ChangeType: diff.ChangeContext},
+		}
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": noHeaders})
+		m.singleFile = true
+		m.treeWidth = 0 // single-file mode starts with treeWidth=0
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: noHeaders})
+		model := result.(Model)
+
+		assert.Nil(t, model.mdTOC, "mdTOC should be nil when no headers found")
+		assert.Equal(t, 0, model.treeWidth, "treeWidth should stay 0 when no TOC")
+	})
+
+	t.Run("multi-file mode does not trigger TOC", func(t *testing.T) {
+		m := testModel([]string{"README.md", "main.go"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = false
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model := result.(Model)
+
+		assert.Nil(t, model.mdTOC, "mdTOC should be nil in multi-file mode")
+	})
+}
+
+func TestModel_ResizeWithTOCActive(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "## Section", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("resize preserves treeWidth when TOC active", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.mdTOC = parseTOC(mdLines)
+		require.NotNil(t, m.mdTOC)
+
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+		model := result.(Model)
+
+		expectedTreeWidth := max(minTreeWidth, 100*model.treeWidthRatio/10)
+		assert.Equal(t, expectedTreeWidth, model.treeWidth, "treeWidth should be ratio-based when TOC is active")
+		assert.Equal(t, 100-expectedTreeWidth-4, model.viewport.Width, "viewport width accounts for TOC pane")
+	})
+
+	t.Run("resize sets treeWidth=0 when single-file without TOC", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.mdTOC = nil
+
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+		model := result.(Model)
+
+		assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 for single-file without TOC")
+		assert.Equal(t, 78, model.viewport.Width, "viewport width should be width - 2")
+	})
+}
+
+func TestModel_DiffContentWidthWithTOC(t *testing.T) {
+	m := testModel([]string{"README.md"}, nil)
+	m.singleFile = true
+	m.width = 100
+	m.treeWidth = 30
+	m.mdTOC = &mdTOC{entries: []tocEntry{{title: "Title", level: 1, lineIdx: 0}}, activeSection: -1}
+
+	// with TOC active, should use multi-file formula: width - treeWidth - 4 - 1
+	assert.Equal(t, 65, m.diffContentWidth()) // 100 - 30 - 4 - 1
+}
+
+func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "## Section", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+
+	// simulate initial resize then single-file load
+	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = resized.(Model)
+	loaded, _ := m.Update(filesLoadedMsg{files: []string{"README.md"}})
+	m = loaded.(Model)
+	require.True(t, m.singleFile)
+	require.Equal(t, 0, m.treeWidth, "treeWidth starts at 0 in single-file mode")
+
+	// loading the markdown file should set up TOC and adjust widths
+	result, _ := m.Update(fileLoadedMsg{file: "README.md", seq: m.loadSeq, lines: mdLines})
+	model := result.(Model)
+
+	require.NotNil(t, model.mdTOC)
+	assert.Positive(t, model.treeWidth, "treeWidth should be set for TOC pane")
+	expectedTreeWidth := max(minTreeWidth, 100*model.treeWidthRatio/10)
+	assert.Equal(t, expectedTreeWidth, model.treeWidth)
+	assert.Equal(t, 100-expectedTreeWidth-4, model.viewport.Width, "viewport width adjusted for TOC")
+}
