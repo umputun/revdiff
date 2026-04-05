@@ -246,15 +246,15 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 
 ### Task 9: Verify acceptance criteria
 
-- [ ] verify: no keybindings file → identical behavior to current (all defaults work)
-- [ ] verify: `map x quit` in keybindings file → `x` quits, `q` still quits (additive)
-- [ ] verify: `unmap q` + `map x quit` → only `x` quits
-- [ ] verify: `--dump-keys` prints all effective bindings
-- [ ] verify: `--keys /path/to/file` loads custom file
-- [ ] verify: help overlay reflects custom bindings
-- [ ] verify: invalid action names in file produce warning, don't crash
-- [ ] run full test suite: `go test -race ./...`
-- [ ] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] verify: no keybindings file → identical behavior to current (all defaults work)
+- [x] verify: `map x quit` in keybindings file → `x` quits, `q` still quits (additive)
+- [x] verify: `unmap q` + `map x quit` → only `x` quits
+- [x] verify: `--dump-keys` prints all effective bindings
+- [x] verify: `--keys /path/to/file` loads custom file
+- [x] verify: help overlay reflects custom bindings
+- [x] verify: invalid action names in file produce warning, don't crash
+- [x] run full test suite: `go test -race ./...`
+- [x] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
 
 ### Task 10: [Final] Update documentation
 

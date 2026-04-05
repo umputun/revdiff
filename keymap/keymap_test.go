@@ -469,6 +469,94 @@ func TestDump_unmappedActionOmitted(t *testing.T) {
 	assert.NotContains(t, output, "search")
 }
 
+// acceptance tests verifying end-to-end keybinding scenarios
+
+func TestAcceptance_defaultKeymapPreservesAllBindings(t *testing.T) {
+	// no keybindings file → identical behavior to current defaults
+	km := Default()
+	assert.Equal(t, ActionDown, km.Resolve("j"))
+	assert.Equal(t, ActionUp, km.Resolve("k"))
+	assert.Equal(t, ActionQuit, km.Resolve("q"))
+	assert.Equal(t, ActionHelp, km.Resolve("?"))
+	assert.Equal(t, ActionSearch, km.Resolve("/"))
+	assert.Equal(t, ActionToggleCollapsed, km.Resolve("v"))
+	assert.Equal(t, ActionConfirm, km.Resolve("enter"))
+	assert.Equal(t, ActionNextHunk, km.Resolve("]"))
+	assert.Equal(t, ActionPrevHunk, km.Resolve("["))
+}
+
+func TestAcceptance_additiveBinding(t *testing.T) {
+	// map x quit → x quits, q still quits (additive, not replacement)
+	km := Default()
+	km.Bind("x", ActionQuit)
+	assert.Equal(t, ActionQuit, km.Resolve("x"), "x should quit after binding")
+	assert.Equal(t, ActionQuit, km.Resolve("q"), "q should still quit (additive)")
+}
+
+func TestAcceptance_unmapThenRemap(t *testing.T) {
+	// unmap q + map x quit → only x quits
+	km := Default()
+	km.Unbind("q")
+	km.Bind("x", ActionQuit)
+	assert.Equal(t, ActionQuit, km.Resolve("x"), "x should quit")
+	assert.Equal(t, Action(""), km.Resolve("q"), "q should not quit after unmap")
+}
+
+func TestAcceptance_dumpKeysShowsEffective(t *testing.T) {
+	// --dump-keys prints all effective bindings in parseable format
+	km := Default()
+	var buf strings.Builder
+	km.Dump(&buf)
+	output := buf.String()
+	assert.Contains(t, output, "map j down")
+	assert.Contains(t, output, "map q quit")
+	assert.Contains(t, output, "map ? help")
+}
+
+func TestAcceptance_loadCustomFile(t *testing.T) {
+	// --keys /path/to/file loads custom bindings
+	tmp, err := os.CreateTemp("", "keybindings-*")
+	require.NoError(t, err)
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	_, err = tmp.WriteString("map x quit\nunmap q\n")
+	require.NoError(t, err)
+	require.NoError(t, tmp.Close())
+
+	km, err := Load(tmp.Name())
+	require.NoError(t, err)
+	assert.Equal(t, ActionQuit, km.Resolve("x"))
+	assert.Equal(t, Action(""), km.Resolve("q"))
+}
+
+func TestAcceptance_helpReflectsCustomBindings(t *testing.T) {
+	// help overlay reflects custom bindings
+	km := Default()
+	km.Bind("x", ActionQuit)
+	sections := km.HelpSections()
+
+	found := false
+	for _, sec := range sections {
+		for _, entry := range sec.Entries {
+			if entry.Action == ActionQuit {
+				keys := km.KeysFor(ActionQuit)
+				assert.Contains(t, keys, "q")
+				assert.Contains(t, keys, "x")
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "quit action should appear in help sections")
+}
+
+func TestAcceptance_invalidActionWarnsNoCrash(t *testing.T) {
+	// invalid action names produce no error, just skip
+	input := strings.NewReader("map x fly_away\nmap y unknown_action\nmap z quit\n")
+	maps, _, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 1, "only valid action should be parsed")
+	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
 func TestParse_casePreservedForSingleChars(t *testing.T) {
 	input := strings.NewReader("map N prev_item\nmap n next_item\n")
 	maps, _, err := Parse(input)

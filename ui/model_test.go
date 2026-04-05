@@ -6995,3 +6995,45 @@ func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
 	model := result.(Model)
 	assert.Equal(t, paneDiff, model.focus, "right key (scroll_right) should focus diff in tree pane")
 }
+
+func TestModel_AcceptanceAdditiveQuitBinding(t *testing.T) {
+	// map x quit (additive) — both x and q should quit
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionQuit)
+
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	// "x" should quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	require.NotNil(t, cmd, "x should produce a command")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "x should trigger quit")
+
+	// "q" should also still quit (additive binding)
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd, "q should still produce a command")
+	msg = cmd()
+	_, ok = msg.(tea.QuitMsg)
+	assert.True(t, ok, "q should still trigger quit")
+}
+
+func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
+	// no keybindings file → identical behavior to current defaults
+	m := testModel([]string{"a.go"}, nil)
+	// m.keymap is set to Default() in testModel via NewModel
+
+	// q should quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "q should quit with default keymap")
+
+	// ? should open help
+	m2 := testModel([]string{"a.go"}, nil)
+	result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := result.(Model)
+	assert.True(t, model.showHelp, "? should open help with default keymap")
+}
