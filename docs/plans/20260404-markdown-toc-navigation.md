@@ -157,15 +157,15 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 
 ### Task 8: verify acceptance criteria
 
-- [ ] verify: single-file markdown in full-context mode shows TOC pane
-- [ ] verify: non-markdown single-file still hides tree pane
-- [ ] verify: markdown with actual diff changes (adds/removes) does not show TOC
-- [ ] verify: Tab switches focus, j/k navigates, Enter jumps
-- [ ] verify: active section tracks cursor position in diff
-- [ ] verify: multi-file mode completely unaffected
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
-- [ ] run formatters: `make fmt`
+- [x] verify: single-file markdown in full-context mode shows TOC pane
+- [x] verify: non-markdown single-file still hides tree pane
+- [x] verify: markdown with actual diff changes (adds/removes) does not show TOC
+- [x] verify: Tab switches focus, j/k navigates, Enter jumps
+- [x] verify: active section tracks cursor position in diff
+- [x] verify: multi-file mode completely unaffected
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
+- [x] run formatters: `make fmt`
 
 ### Task 9: [Final] Update documentation
 
