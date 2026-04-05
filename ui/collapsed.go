@@ -95,14 +95,27 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
+	numGutter := ""
+	if m.lineNumbers {
+		numGutter = m.lineNumGutter(dl)
+	}
+
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		wrapWidth := m.diffContentWidth() - wrapGutterWidth
+		gutterExtra := 0
+		numBlank := ""
+		if m.lineNumbers {
+			gutterExtra = m.lineNumGutterWidth()
+			numBlank = strings.Repeat(" ", gutterExtra)
+		}
+		wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 		visualLines := m.wrapContent(textContent, wrapWidth)
 		for i, vl := range visualLines {
 			prefix := " ↪ "
+			ng := numBlank
 			if i == 0 {
 				prefix = gutter
+				ng = numGutter
 			}
 
 			var styled string
@@ -116,7 +129,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 			if i == 0 && isCursor {
 				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
-			b.WriteString(cursor + styled + "\n")
+			b.WriteString(cursor + ng + styled + "\n")
 		}
 		return
 	}
@@ -135,7 +148,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + content + "\n")
+	b.WriteString(cursor + numGutter + content + "\n")
 }
 
 // deletePlaceholderText returns the text shown for a delete-only hunk placeholder starting at hunkStart.
@@ -170,14 +183,28 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
+	numGutter := ""
+	if m.lineNumbers {
+		// blank columns for placeholder
+		numGutter = m.lineNumGutter(diff.DiffLine{ChangeType: diff.ChangeDivider})
+	}
+
 	// wrap mode: break long placeholder at word boundaries
 	if m.wrapMode {
-		wrapWidth := m.diffContentWidth() - wrapGutterWidth
+		gutterExtra := 0
+		numBlank := ""
+		if m.lineNumbers {
+			gutterExtra = m.lineNumGutterWidth()
+			numBlank = strings.Repeat(" ", gutterExtra)
+		}
+		wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 		visualLines := m.wrapContent(text, wrapWidth)
 		for i, vl := range visualLines {
 			prefix := " ↪ "
+			ng := numBlank
 			if i == 0 {
 				prefix = " - "
+				ng = numGutter
 			}
 			styled := style.Render(prefix + vl)
 
@@ -185,7 +212,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 			if i == 0 && isCursor {
 				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
-			b.WriteString(cursor + styled + "\n")
+			b.WriteString(cursor + ng + styled + "\n")
 		}
 		return
 	}
@@ -201,7 +228,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + content + "\n")
+	b.WriteString(cursor + numGutter + content + "\n")
 }
 
 // hunkStartFor returns the findHunks() start index for the hunk containing diffLines[idx].
