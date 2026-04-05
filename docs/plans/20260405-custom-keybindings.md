@@ -221,13 +221,13 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `ui/model.go` (handleTreeNav, handleTOCNav functions)
 - Modify: `ui/model_test.go`
 
-- [ ] refactor `handleTreeNav()` (ui/model.go:436-467) to switch on `m.keymap.Resolve(msg.String())`
-- [ ] refactor `handleTOCNav()` (ui/model.go:470-505) to switch on `m.keymap.Resolve(msg.String())`
-- [ ] both use same action names: `down`, `up`, `page_down`, `half_page_down`, `page_up`, `half_page_up`, `home`, `end`, `focus_diff`
-- [ ] tree/TOC handlers must also accept `scroll_right` as `focus_diff` (tree has no horizontal scroll; `right` key maps to `scroll_right` globally but means "focus diff" in tree — implicit fallback)
-- [ ] verify all existing tree/TOC nav tests still pass
-- [ ] write test: custom tree binding
-- [ ] run tests, run linter
+- [x] refactor `handleTreeNav()` (ui/model.go:436-467) to switch on `m.keymap.Resolve(msg.String())`
+- [x] refactor `handleTOCNav()` (ui/model.go:470-505) to switch on `m.keymap.Resolve(msg.String())`
+- [x] both use same action names: `down`, `up`, `page_down`, `half_page_down`, `page_up`, `half_page_up`, `home`, `end`, `focus_diff`
+- [x] tree/TOC handlers must also accept `scroll_right` as `focus_diff` (tree has no horizontal scroll; `right` key maps to `scroll_right` globally but means "focus diff" in tree — implicit fallback)
+- [x] verify all existing tree/TOC nav tests still pass
+- [x] write test: custom tree binding
+- [x] run tests, run linter
 
 ### Task 8: Dynamic help overlay
 

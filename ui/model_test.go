@@ -6933,3 +6933,42 @@ func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, 0, model.diffCursor, "] should not jump when unbound")
 }
+
+func TestModel_CustomKeymapTreeNav(t *testing.T) {
+	// map "x" to down, unbind "j" — verify "x" moves tree cursor and "j" does not
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionDown)
+	km.Unbind("j")
+
+	files := []string{"a.go", "b.go", "c.go"}
+	m := testModel(files, nil)
+	m.keymap = km
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+
+	assert.Equal(t, "a.go", m.tree.selectedFile())
+
+	// "x" should move down
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+	assert.Equal(t, "b.go", model.tree.selectedFile(), "x should move tree cursor down")
+
+	// "j" should not move (unbound)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = result.(Model)
+	assert.Equal(t, "b.go", model.tree.selectedFile(), "j should not move when unbound")
+}
+
+func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
+	// scroll_right in tree pane should focus diff (implicit fallback)
+	files := []string{"a.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.currFile = "a.go"
+	m.focus = paneTree
+
+	// right key maps to scroll_right by default, should focus diff in tree pane
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.focus, "right key (scroll_right) should focus diff in tree pane")
+}

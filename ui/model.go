@@ -450,27 +450,29 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleTOCNav(msg)
 	}
 
-	switch {
-	case msg.String() == "j" || msg.String() == "down":
+	action := m.keymap.Resolve(msg.String())
+	switch action {
+	case keymap.ActionDown:
 		m.tree.moveDown()
-	case msg.String() == "k" || msg.String() == "up":
+	case keymap.ActionUp:
 		m.tree.moveUp()
-	case msg.Type == tea.KeyPgDown:
+	case keymap.ActionPageDown:
 		m.tree.pageDown(m.treePageSize())
-	case msg.String() == "ctrl+d":
+	case keymap.ActionHalfPageDown:
 		m.tree.pageDown(max(1, m.treePageSize()/2))
-	case msg.Type == tea.KeyPgUp:
+	case keymap.ActionPageUp:
 		m.tree.pageUp(m.treePageSize())
-	case msg.String() == "ctrl+u":
+	case keymap.ActionHalfPageUp:
 		m.tree.pageUp(max(1, m.treePageSize()/2))
-	case msg.Type == tea.KeyHome:
+	case keymap.ActionHome:
 		m.tree.moveToFirst()
-	case msg.Type == tea.KeyEnd:
+	case keymap.ActionEnd:
 		m.tree.moveToLast()
-	case msg.String() == "l" || msg.String() == "right":
+	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
+	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.tree.ensureVisible(m.treePageSize())
@@ -479,36 +481,38 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleTOCNav handles navigation keys when the TOC pane is focused.
 func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case msg.String() == "j" || msg.String() == "down":
+	action := m.keymap.Resolve(msg.String())
+	switch action {
+	case keymap.ActionDown:
 		m.mdTOC.moveDown()
-	case msg.String() == "k" || msg.String() == "up":
+	case keymap.ActionUp:
 		m.mdTOC.moveUp()
-	case msg.Type == tea.KeyPgDown:
+	case keymap.ActionPageDown:
 		for range m.treePageSize() {
 			m.mdTOC.moveDown()
 		}
-	case msg.String() == "ctrl+d":
+	case keymap.ActionHalfPageDown:
 		for range max(1, m.treePageSize()/2) {
 			m.mdTOC.moveDown()
 		}
-	case msg.Type == tea.KeyPgUp:
+	case keymap.ActionPageUp:
 		for range m.treePageSize() {
 			m.mdTOC.moveUp()
 		}
-	case msg.String() == "ctrl+u":
+	case keymap.ActionHalfPageUp:
 		for range max(1, m.treePageSize()/2) {
 			m.mdTOC.moveUp()
 		}
-	case msg.Type == tea.KeyHome:
+	case keymap.ActionHome:
 		m.mdTOC.cursor = 0
-	case msg.Type == tea.KeyEnd:
+	case keymap.ActionEnd:
 		m.mdTOC.cursor = max(0, len(m.mdTOC.entries)-1)
-	case msg.String() == "l" || msg.String() == "right":
+	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
 		return m, nil // switch pane without re-jumping viewport
+	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.mdTOC.ensureVisible(m.treePageSize())
 	m.syncDiffToTOCCursor()
