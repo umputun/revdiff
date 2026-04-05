@@ -1137,50 +1137,79 @@ func (m Model) statusSegmentsMinimal() []string {
 	return segments
 }
 
+// helpKeyDisplay maps bubbletea key names to user-friendly display names.
+var helpKeyDisplay = map[string]string{
+	"pgdown": "PgDn",
+	"pgup":   "PgUp",
+	"left":   "←",
+	"right":  "→",
+	"home":   "Home",
+	"end":    "End",
+	"enter":  "Enter",
+	"esc":    "Esc",
+	"tab":    "Tab",
+	"up":     "↑",
+	"down":   "↓",
+}
+
+// displayKeyName returns a user-friendly display name for a bubbletea key.
+func displayKeyName(key string) string {
+	if d, ok := helpKeyDisplay[key]; ok {
+		return d
+	}
+	if strings.HasPrefix(key, "ctrl+") {
+		return "Ctrl+" + key[5:]
+	}
+	return key
+}
+
+// formatKeysForHelp returns a formatted key string for a given action using display names.
+func (m Model) formatKeysForHelp(action keymap.Action) string {
+	keys := m.keymap.KeysFor(action)
+	display := make([]string, len(keys))
+	for i, k := range keys {
+		display[i] = displayKeyName(k)
+	}
+	return strings.Join(display, " / ")
+}
+
 // helpOverlay returns a bordered help popup with keybinding sections.
+// sections and key bindings are rendered dynamically from the keymap.
 func (m Model) helpOverlay() string {
-	help := "" +
-		"Navigation\n" +
-		"  tab          switch pane\n" +
-		"  n / p        next / prev file (n = next match when searching)\n" +
-		"  j / k        scroll down / up\n" +
-		"  PgDn/PgUp    page down / up\n" +
-		"  Ctrl+d/u     half-page down / up\n" +
-		"  Home/End     top / bottom\n" +
-		"  h / l        focus tree / diff pane\n" +
-		"  \u2190 / \u2192        scroll left / right (diff)\n" +
-		"  [ / ]        prev / next hunk\n" +
-		"  enter        focus diff pane\n" +
-		"\n" +
-		"Markdown TOC (single-file full-context mode)\n" +
-		"  tab          switch between TOC and diff\n" +
-		"  j / k        navigate TOC entries\n" +
-		"  n / p        next / prev header\n" +
-		"  enter        jump to header in diff\n" +
-		"\n" +
-		"Search\n" +
-		"  /            search in diff\n" +
-		"  n            next match (overrides next file)\n" +
-		"  N            prev match\n" +
-		"\n" +
-		"Annotations\n" +
-		"  a / enter    annotate line (diff pane)\n" +
-		"  A            annotate file\n" +
-		"  d            delete annotation\n" +
-		"  @            annotation list\n" +
-		"\n" +
-		"View\n" +
-		"  v            toggle collapsed mode\n" +
-		"  w            toggle word wrap\n" +
-		"  .            expand/collapse hunk\n" +
-		"  t            toggle tree/TOC pane\n" +
-		"  L            toggle line numbers\n" +
-		"  f            filter annotated files\n" +
-		"\n" +
-		"Quit\n" +
-		"  q            quit\n" +
-		"  Q            discard annotations & quit\n" +
-		"  ? / esc      close help"
+	sections := m.keymap.HelpSections()
+
+	var buf strings.Builder
+	for i, sec := range sections {
+		if i > 0 {
+			buf.WriteString("\n")
+		}
+		buf.WriteString(sec.Name)
+		buf.WriteString("\n")
+
+		// compute max key width for column alignment
+		type helpLine struct{ keys, desc string }
+		lines := make([]helpLine, 0, len(sec.Entries))
+		maxW := 0
+		for _, e := range sec.Entries {
+			keys := m.formatKeysForHelp(e.Action)
+			lines = append(lines, helpLine{keys, e.Description})
+			if w := runewidth.StringWidth(keys); w > maxW {
+				maxW = w
+			}
+		}
+		for _, l := range lines {
+			pad := max(maxW-runewidth.StringWidth(l.keys), 0)
+			fmt.Fprintf(&buf, "  %s%s  %s\n", l.keys, strings.Repeat(" ", pad), l.desc)
+		}
+
+		// add Markdown TOC note after Pane section
+		if sec.Name == "Pane" {
+			buf.WriteString("\n")
+			m.writeTOCHelpSection(&buf)
+		}
+	}
+
+	help := strings.TrimRight(buf.String(), "\n")
 
 	border := lipgloss.NormalBorder()
 	boxStyle := lipgloss.NewStyle().
@@ -1189,6 +1218,47 @@ func (m Model) helpOverlay() string {
 		Padding(1, 2)
 
 	return boxStyle.Render(help)
+}
+
+// writeTOCHelpSection writes the Markdown TOC contextual help section.
+// keys are resolved dynamically from the keymap.
+func (m Model) writeTOCHelpSection(buf *strings.Builder) {
+	// collect display keys for multiple actions combined
+	mergedKeys := func(actions ...keymap.Action) string {
+		var all []string
+		seen := map[string]bool{}
+		for _, a := range actions {
+			for _, k := range m.keymap.KeysFor(a) {
+				dk := displayKeyName(k)
+				if !seen[dk] {
+					all = append(all, dk)
+					seen[dk] = true
+				}
+			}
+		}
+		return strings.Join(all, " / ")
+	}
+
+	type helpLine struct{ keys, desc string }
+	lines := []helpLine{
+		{mergedKeys(keymap.ActionTogglePane), "switch between TOC and diff"},
+		{mergedKeys(keymap.ActionDown, keymap.ActionUp), "navigate TOC entries"},
+		{mergedKeys(keymap.ActionNextItem, keymap.ActionPrevItem), "next / prev header"},
+		{mergedKeys(keymap.ActionConfirm), "jump to header in diff"},
+	}
+
+	maxW := 0
+	for _, l := range lines {
+		if w := runewidth.StringWidth(l.keys); w > maxW {
+			maxW = w
+		}
+	}
+
+	buf.WriteString("Markdown TOC (single-file full-context mode)\n")
+	for _, l := range lines {
+		pad := max(maxW-runewidth.StringWidth(l.keys), 0)
+		fmt.Fprintf(buf, "  %s%s  %s\n", l.keys, strings.Repeat(" ", pad), l.desc)
+	}
 }
 
 // overlayCenter composites fg on top of bg, centered horizontally and vertically.

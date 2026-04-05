@@ -134,7 +134,7 @@ func defaultDescriptions() []HelpEntry {
 
 		// view toggles
 		{ActionToggleCollapsed, "toggle collapsed view", "View"},
-		{ActionToggleWrap, "toggle line wrap", "View"},
+		{ActionToggleWrap, "toggle word wrap", "View"},
 		{ActionToggleTree, "toggle tree pane", "View"},
 		{ActionToggleLineNums, "toggle line numbers", "View"},
 		{ActionToggleHunk, "toggle hunk in collapsed", "View"},

@@ -235,14 +235,14 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `ui/model.go` (helpOverlay function)
 - Modify: `ui/model_test.go`
 
-- [ ] replace hardcoded `helpOverlay()` string with dynamic rendering from `m.keymap.HelpSections()`
-- [ ] format each section: section name header, then `"  key1 / key2    description"` lines with aligned columns
-- [ ] handle actions with no keys (unmapped) — skip them in help
-- [ ] handle actions with multiple keys — show as `"key1 / key2"` (same as current `"j / k"` format)
-- [ ] verify help overlay tests still pass (content will change if bindings are customized but structure stays same)
-- [ ] write test: custom binding appears in help overlay
-- [ ] write test: unmapped action doesn't appear in help
-- [ ] run tests, run linter
+- [x] replace hardcoded `helpOverlay()` string with dynamic rendering from `m.keymap.HelpSections()`
+- [x] format each section: section name header, then `"  key1 / key2    description"` lines with aligned columns
+- [x] handle actions with no keys (unmapped) — skip them in help
+- [x] handle actions with multiple keys — show as `"key1 / key2"` (same as current `"j / k"` format)
+- [x] verify help overlay tests still pass (content will change if bindings are customized but structure stays same)
+- [x] write test: custom binding appears in help overlay
+- [x] write test: unmapped action doesn't appear in help
+- [x] run tests, run linter
 
 ### Task 9: Verify acceptance criteria
 

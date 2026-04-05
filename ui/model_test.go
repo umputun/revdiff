@@ -3854,12 +3854,12 @@ func TestModel_HelpOverlayKeyListings(t *testing.T) {
 	m.styles = plainStyles()
 	help := m.helpOverlay()
 
-	// verify key listings are present
+	// verify key listings are present (dynamic rendering uses display names)
 	keys := []string{
-		"tab", "n / p", "j / k", "PgDn/PgUp", "Ctrl+d/u", "Home/End", "h / l", "← / →", "[ / ]",
-		"/", "n", "N",
-		"a / enter", "A", "d", "f", "v", "w", ".",
-		"q", "Q", "? / esc",
+		"Tab", "PgDn", "PgUp", "Ctrl+d", "Ctrl+u", "Home", "End",
+		"j", "k", "n", "N", "h", "l",
+		"/", "Enter", "A", "d", "@", "f", "v", "w", ".", "L", "t",
+		"q", "Q", "?", "Esc",
 	}
 	for _, k := range keys {
 		assert.Contains(t, help, k, "help overlay should contain key: %s", k)
@@ -3872,7 +3872,7 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.width = 100
-	m.height = 50
+	m.height = 80
 
 	// without help, view should not contain help sections
 	m.showHelp = false
@@ -4501,9 +4501,9 @@ func TestModel_HelpOverlayContainsSearchKeys(t *testing.T) {
 
 	assert.Contains(t, help, "Search")
 	assert.Contains(t, help, "search in diff")
-	assert.Contains(t, help, "next match")
-	assert.Contains(t, help, "prev match")
-	assert.Contains(t, help, "n = next match when searching")
+	// n/N for next/prev search match is shown via File/Hunk section's "next file / search match"
+	assert.Contains(t, help, "next file / search match")
+	assert.Contains(t, help, "prev file / search match")
 }
 
 func TestModel_StartSearch(t *testing.T) {
@@ -6822,6 +6822,29 @@ func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
 	help := m.helpOverlay()
 	assert.Contains(t, help, "L")
 	assert.Contains(t, help, "line numbers")
+}
+
+func TestModel_HelpOverlayCustomBinding(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	m.keymap.Bind("x", keymap.ActionQuit)
+	help := m.helpOverlay()
+
+	// custom binding should appear alongside default
+	assert.Contains(t, help, "x")
+	assert.Contains(t, help, "q")
+	assert.Contains(t, help, "quit")
+}
+
+func TestModel_HelpOverlayUnmappedAction(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	// unbind all keys for search action
+	m.keymap.Unbind("/")
+	help := m.helpOverlay()
+
+	// search section should still exist but "search in diff" description should be gone
+	assert.NotContains(t, help, "search in diff")
 }
 
 func TestModel_LineNumbersEndToEnd(t *testing.T) {
