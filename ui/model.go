@@ -530,50 +530,52 @@ func (m Model) paneHeight() int {
 }
 
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case msg.String() == "h":
+	action := m.keymap.Resolve(msg.String())
+	switch action {
+	case keymap.ActionFocusTree:
 		return m.handleSwitchToTree()
-	case msg.String() == "left":
+	case keymap.ActionScrollLeft:
 		m.handleHorizontalScroll(-1)
 		return m, nil
-	case msg.String() == "right":
+	case keymap.ActionScrollRight:
 		m.handleHorizontalScroll(1)
 		return m, nil
-	case msg.String() == "j" || msg.String() == "down":
+	case keymap.ActionDown:
 		m.moveDiffCursorDown()
 		m.syncViewportToCursor()
-	case msg.String() == "k" || msg.String() == "up":
+	case keymap.ActionUp:
 		m.moveDiffCursorUp()
 		m.syncViewportToCursor()
-	case msg.Type == tea.KeyPgDown:
+	case keymap.ActionPageDown:
 		m.moveDiffCursorPageDown()
-	case msg.String() == "ctrl+d":
+	case keymap.ActionHalfPageDown:
 		m.moveDiffCursorHalfPageDown()
-	case msg.Type == tea.KeyPgUp:
+	case keymap.ActionPageUp:
 		m.moveDiffCursorPageUp()
-	case msg.String() == "ctrl+u":
+	case keymap.ActionHalfPageUp:
 		m.moveDiffCursorHalfPageUp()
-	case msg.Type == tea.KeyHome:
+	case keymap.ActionHome:
 		m.moveDiffCursorToStart()
-	case msg.Type == tea.KeyEnd:
+	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
-	case msg.String() == "]":
+	case keymap.ActionNextHunk:
 		m.moveToNextHunk()
-	case msg.String() == "[":
+	case keymap.ActionPrevHunk:
 		m.moveToPrevHunk()
-	case msg.String() == "a":
+	case keymap.ActionConfirm:
 		cmd := m.startAnnotation()
 		m.viewport.SetContent(m.renderDiff())
 		return m, cmd
-	case msg.String() == "d":
+	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
-	case msg.String() == ".":
+	case keymap.ActionToggleHunk:
 		m.toggleHunkExpansion()
 		return m, nil
-	case msg.String() == "/":
+	case keymap.ActionSearch:
 		cmd := m.startSearch()
 		return m, cmd
+	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.syncTOCActiveSection()
 	return m, nil

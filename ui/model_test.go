@@ -6900,3 +6900,36 @@ func TestModel_CustomKeymapViewToggle(t *testing.T) {
 	model = result.(Model)
 	assert.False(t, model.wrapMode, "w should toggle wrap mode off")
 }
+
+func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
+	// map "x" to next_hunk, unbind "]" — verify "x" jumps to next hunk and "]" does not
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionNextHunk)
+	km.Unbind("]")
+
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},
+	}
+
+	m := testModel(nil, nil)
+	m.keymap = km
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.viewport.Height = 20
+
+	// "x" should jump to next hunk
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.diffCursor, "x should jump to first hunk")
+
+	// "]" should not jump (unbound)
+	model.diffCursor = 0
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.diffCursor, "] should not jump when unbound")
+}

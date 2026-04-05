@@ -209,11 +209,11 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `ui/model.go` (handleDiffNav function)
 - Modify: `ui/model_test.go`
 
-- [ ] refactor `handleDiffNav()` (ui/model.go:521-568) to switch on `m.keymap.Resolve(msg.String())`
-- [ ] map: `h` → `focus_tree`, `left/right` → `scroll_left/scroll_right`, `j/down` → `down`, `k/up` → `up`, `pgdown` → `page_down`, `ctrl+d` → `half_page_down`, `pgup` → `page_up`, `ctrl+u` → `half_page_up`, `home/end` → `home/end`, `]/[` → `next_hunk/prev_hunk`, `a` → `annotate`, `d` → `delete_annotation`, `.` → `toggle_hunk`, `/` → `search`
-- [ ] verify all existing diff nav tests still pass
-- [ ] write test: custom diff binding (e.g., map `x` to `next_hunk`)
-- [ ] run tests, run linter
+- [x] refactor `handleDiffNav()` (ui/model.go:521-568) to switch on `m.keymap.Resolve(msg.String())`
+- [x] map: `h` → `focus_tree`, `left/right` → `scroll_left/scroll_right`, `j/down` → `down`, `k/up` → `up`, `pgdown` → `page_down`, `ctrl+d` → `half_page_down`, `pgup` → `page_up`, `ctrl+u` → `half_page_up`, `home/end` → `home/end`, `]/[` → `next_hunk/prev_hunk`, `a` → `annotate`, `d` → `delete_annotation`, `.` → `toggle_hunk`, `/` → `search`
+- [x] verify all existing diff nav tests still pass
+- [x] write test: custom diff binding (e.g., map `x` to `next_hunk`)
+- [x] run tests, run linter
 
 ### Task 7: Refactor handleTreeNav and handleTOCNav to use keymap
 
