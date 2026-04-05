@@ -2928,7 +2928,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 		assert.Equal(t, "L:6/6", m.lineNumberSegment())
 	})
 
-	t.Run("remove line", func(t *testing.T) {
+	t.Run("remove line uses old max", func(t *testing.T) {
 		lines := []diff.DiffLine{
 			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
 			{OldNum: 6, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
@@ -2938,6 +2938,34 @@ func TestModel_LineNumberSegment(t *testing.T) {
 		m.diffCursor = 1
 		m.focus = paneDiff
 		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("remove line denominator differs from new max", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		// on removed line: denominator = maxOld (12), not maxNew (9)
+		assert.Equal(t, "L:11/12", m.lineNumberSegment())
+	})
+
+	t.Run("context line uses new max not old", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneDiff
+		// on context line: denominator = maxNew (9), not maxOld (12)
+		assert.Equal(t, "L:9/9", m.lineNumberSegment())
 	})
 
 	t.Run("divider line returns empty", func(t *testing.T) {
@@ -2950,7 +2978,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 		m.diffLines = lines
 		m.diffCursor = 1
 		m.focus = paneDiff
-		assert.Equal(t, "", m.lineNumberSegment())
+		assert.Empty(t, m.lineNumberSegment())
 	})
 
 	t.Run("empty diffLines returns empty", func(t *testing.T) {
@@ -2958,7 +2986,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 		m.diffLines = nil
 		m.diffCursor = 0
 		m.focus = paneDiff
-		assert.Equal(t, "", m.lineNumberSegment())
+		assert.Empty(t, m.lineNumberSegment())
 	})
 
 	t.Run("tree focus returns empty", func(t *testing.T) {
@@ -2969,7 +2997,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 		m.diffLines = lines
 		m.diffCursor = 0
 		m.focus = paneTree
-		assert.Equal(t, "", m.lineNumberSegment())
+		assert.Empty(t, m.lineNumberSegment())
 	})
 }
 

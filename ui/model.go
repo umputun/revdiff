@@ -914,7 +914,9 @@ func (m Model) hunkSegment() string {
 }
 
 // lineNumberSegment returns a formatted line number string like "L:42/380" for the status line.
-// returns empty string when focus is not on diff pane, cursor is out of range, or on a divider line.
+// The denominator is dynamic: on removed lines it shows the old file's max line number,
+// on context/added lines it shows the new file's max line number.
+// Returns empty string when focus is not on diff pane, cursor is out of range, or on a divider line.
 func (m Model) lineNumberSegment() string {
 	if m.focus != paneDiff {
 		return ""
@@ -930,14 +932,18 @@ func (m Model) lineNumberSegment() string {
 	if lineNum == 0 {
 		return ""
 	}
-	total := 0
+	var maxOld, maxNew int
 	for _, l := range m.diffLines {
-		if l.OldNum > total {
-			total = l.OldNum
+		if l.OldNum > maxOld {
+			maxOld = l.OldNum
 		}
-		if l.NewNum > total {
-			total = l.NewNum
+		if l.NewNum > maxNew {
+			maxNew = l.NewNum
 		}
+	}
+	total := maxNew
+	if dl.ChangeType == diff.ChangeRemove {
+		total = maxOld
 	}
 	if total == 0 {
 		return ""
