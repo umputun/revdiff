@@ -15,7 +15,7 @@
 ## Design Decisions
 - Split pane with `toggle_split_zoom` — zooms revdiff pane to fill the tab (closest to kitty overlay / tmux popup)
 - Temp launch script avoids AppleScript nested quoting issues
-- Detection guard probes AppleScript availability (`get version`) — if unavailable, falls through to generic error
+- Detection guard checks `TERM_PROGRAM=ghostty` + `command -v osascript` (skips on Linux); if AppleScript is disabled, the split osascript fails with a descriptive error on stderr
 - `wait after command` set to `false` so pane auto-closes after revdiff exits
 - Terminal closed via `close terminal id` after sentinel fires to dismiss "press any key" prompt
 - `launch-revdiff.sh` sets `initial working directory` for CWD; `launch-plan-review.sh` omits it since `--only` uses absolute paths

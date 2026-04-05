@@ -79,28 +79,32 @@ if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
 fi
 
 # ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
-if [ "${TERM_PROGRAM:-}" = "ghostty" ] && osascript -e 'tell application "Ghostty" to get version' >/dev/null 2>&1; then
+if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
 
     SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $REVDIFF_CMD; touch '$SENTINEL'
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    GHOSTTY_TERM_ID=$(osascript <<APPLESCRIPT
-tell application "Ghostty"
-    set cfg to new surface configuration
-    set command of cfg to "$LAUNCH_SCRIPT"
-    set wait after command of cfg to false
-    set ft to focused terminal of selected tab of front window
-    set newTerm to split ft direction down with configuration cfg
-    perform action "toggle_split_zoom" on newTerm
-    return id of newTerm
-end tell
+    GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" <<'APPLESCRIPT'
+on run argv
+    set launchScript to item 1 of argv
+    tell application "Ghostty"
+        set cfg to new surface configuration
+        set command of cfg to launchScript
+        set wait after command of cfg to false
+        set ft to focused terminal of selected tab of front window
+        set newTerm to split ft direction down with configuration cfg
+        perform action "toggle_split_zoom" on newTerm
+        return id of newTerm
+    end tell
+end run
 APPLESCRIPT
     )
     if [ $? -ne 0 ]; then
@@ -111,7 +115,11 @@ APPLESCRIPT
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
-    osascript -e "tell application \"Ghostty\" to close terminal id \"$GHOSTTY_TERM_ID\"" 2>/dev/null
+    osascript - "$GHOSTTY_TERM_ID" <<'APPLESCRIPT' 2>/dev/null
+on run argv
+    tell application "Ghostty" to close terminal id (item 1 of argv)
+end run
+APPLESCRIPT
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit 0
