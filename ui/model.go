@@ -326,7 +326,7 @@ func (m *Model) toggleTreePane() {
 
 // toggleLineNumbers toggles line number display on/off and recomputes gutter width.
 func (m *Model) toggleLineNumbers() {
-	if m.currFile == "" {
+	if m.focus != paneDiff || m.currFile == "" {
 		return
 	}
 	m.lineNumbers = !m.lineNumbers
