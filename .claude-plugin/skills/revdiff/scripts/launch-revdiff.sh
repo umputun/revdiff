@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launch revdiff in a terminal overlay (tmux/kitty/wezterm/ghostty) and capture annotations.
+# launch revdiff in a terminal overlay (tmux/kitty/wezterm/ghostty/iterm2) and capture annotations.
 # usage: launch-revdiff.sh [ref] [--staged] [--only=file1 ...]
 # output: annotation text from revdiff stdout (empty if no annotations)
 
@@ -140,5 +140,58 @@ APPLESCRIPT
     exit 0
 fi
 
-echo "error: no overlay terminal available (requires tmux, kitty, wezterm, or ghostty on macOS)" >&2
+# iterm2: split-pane via osascript with sentinel file for blocking
+if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
+    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+    rm -f "$SENTINEL"
+
+    # ITERM_SESSION_ID format is "w0t0p0:UUID"; AppleScript session id is just the UUID part
+    ITERM_UUID="${ITERM_SESSION_ID##*:}"
+
+    # use "command" parameter so iTerm2 runs the command directly, bypassing shell init
+    ITERM_CMD="cd '$CWD' && $REVDIFF_CMD; touch '$SENTINEL'"
+
+    # single osascript call: find target session by UUID, read its dimensions, split
+    OSASCRIPT_ERR=$(osascript - "$ITERM_UUID" "$ITERM_CMD" <<'APPLESCRIPT' 2>&1 >/dev/null
+on run argv
+    set targetId to item 1 of argv
+    set cmd to item 2 of argv
+    tell application id "com.googlecode.iterm2"
+        repeat with w in windows
+            repeat with t in tabs of w
+                repeat with s in sessions of t
+                    if id of s is targetId then
+                        set cols to columns of s
+                        set rows to rows of s
+                        tell s
+                            -- enough room for two 80-col panes side by side
+                            if cols >= 160 and cols > (rows * 2) then
+                                split vertically with same profile command cmd
+                            else
+                                split horizontally with same profile command cmd
+                            end if
+                        end tell
+                        return
+                    end if
+                end repeat
+            end repeat
+        end repeat
+    end tell
+    error "session not found: " & targetId
+end run
+APPLESCRIPT
+    ) || {
+        echo "error: failed to open iTerm2 split via osascript: $OSASCRIPT_ERR" >&2
+        exit 1
+    }
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    rm -f "$SENTINEL"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
+echo "error: no overlay terminal available (requires tmux, kitty, wezterm, ghostty, or iTerm2)" >&2
 exit 1
