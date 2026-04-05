@@ -444,10 +444,14 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tree.moveDown()
 	case msg.String() == "k" || msg.String() == "up":
 		m.tree.moveUp()
-	case msg.Type == tea.KeyPgDown || msg.String() == "ctrl+d":
+	case msg.Type == tea.KeyPgDown:
 		m.tree.pageDown(m.treePageSize())
-	case msg.Type == tea.KeyPgUp || msg.String() == "ctrl+u":
+	case msg.String() == "ctrl+d":
+		m.tree.pageDown(max(1, m.treePageSize()/2))
+	case msg.Type == tea.KeyPgUp:
 		m.tree.pageUp(m.treePageSize())
+	case msg.String() == "ctrl+u":
+		m.tree.pageUp(max(1, m.treePageSize()/2))
 	case msg.Type == tea.KeyHome:
 		m.tree.moveToFirst()
 	case msg.Type == tea.KeyEnd:
@@ -469,12 +473,20 @@ func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.mdTOC.moveDown()
 	case msg.String() == "k" || msg.String() == "up":
 		m.mdTOC.moveUp()
-	case msg.Type == tea.KeyPgDown || msg.String() == "ctrl+d":
+	case msg.Type == tea.KeyPgDown:
 		for range m.treePageSize() {
 			m.mdTOC.moveDown()
 		}
-	case msg.Type == tea.KeyPgUp || msg.String() == "ctrl+u":
+	case msg.String() == "ctrl+d":
+		for range max(1, m.treePageSize()/2) {
+			m.mdTOC.moveDown()
+		}
+	case msg.Type == tea.KeyPgUp:
 		for range m.treePageSize() {
+			m.mdTOC.moveUp()
+		}
+	case msg.String() == "ctrl+u":
+		for range max(1, m.treePageSize()/2) {
 			m.mdTOC.moveUp()
 		}
 	case msg.Type == tea.KeyHome:
@@ -522,10 +534,14 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case msg.String() == "k" || msg.String() == "up":
 		m.moveDiffCursorUp()
 		m.syncViewportToCursor()
-	case msg.Type == tea.KeyPgDown || msg.String() == "ctrl+d":
+	case msg.Type == tea.KeyPgDown:
 		m.moveDiffCursorPageDown()
-	case msg.Type == tea.KeyPgUp || msg.String() == "ctrl+u":
+	case msg.String() == "ctrl+d":
+		m.moveDiffCursorHalfPageDown()
+	case msg.Type == tea.KeyPgUp:
 		m.moveDiffCursorPageUp()
+	case msg.String() == "ctrl+u":
+		m.moveDiffCursorHalfPageUp()
 	case msg.Type == tea.KeyHome:
 		m.moveDiffCursorToStart()
 	case msg.Type == tea.KeyEnd:
