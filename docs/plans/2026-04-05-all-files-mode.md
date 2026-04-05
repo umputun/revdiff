@@ -45,13 +45,13 @@
 - [x] run tests — must pass before next task
 
 ### Task 2: Add DirectoryReader
-- [ ] create `diff/directory.go` with `DirectoryReader` struct (workDir string)
-- [ ] implement `ChangedFiles()` using `git ls-files` to list tracked files, return sorted relative paths
-- [ ] implement `FileDiff()` delegating to existing `readFileAsContext()`
-- [ ] write tests in `diff/directory_test.go` for `ChangedFiles()` with a temp git repo
-- [ ] write tests for `FileDiff()` reading files as all-context lines
-- [ ] write tests for edge cases (empty repo, binary files in list)
-- [ ] run tests — must pass before next task
+- [x] create `diff/directory.go` with `DirectoryReader` struct (workDir string)
+- [x] implement `ChangedFiles()` using `git ls-files` to list tracked files, return sorted relative paths
+- [x] implement `FileDiff()` delegating to existing `readFileAsContext()`
+- [x] write tests in `diff/directory_test.go` for `ChangedFiles()` with a temp git repo
+- [x] write tests for `FileDiff()` reading files as all-context lines
+- [x] write tests for edge cases (empty repo, binary files in list)
+- [x] run tests — must pass before next task
 
 ### Task 3: Add CLI flags and wiring
 - [ ] add `AllFiles` flag to `options` struct: `long:"all-files" short:"A" no-ini:"true"`
