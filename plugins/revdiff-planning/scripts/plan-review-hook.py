@@ -11,7 +11,7 @@ returns PreToolUse hook JSON response with permissionDecision:
 
 requirements:
   - revdiff binary in PATH
-  - tmux, kitty, or wezterm terminal
+  - tmux, kitty, wezterm, or ghostty (macOS) terminal
 """
 
 import json
