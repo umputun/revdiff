@@ -271,6 +271,7 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 		}
 	}
 	m.focus = paneDiff
+	m.syncTOCActiveSection()
 	m.viewport.SetContent(m.renderDiff())
 	m.centerViewportOnCursor()
 }

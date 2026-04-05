@@ -99,6 +99,8 @@ type Model struct {
 	annotListOffset  int                     // scroll offset for the annotation list
 	annotListItems   []annotation.Annotation // flat sorted list of all annotations
 	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
+
+	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -289,13 +291,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // togglePane switches focus between tree and diff panes.
 // only switches to diff pane when a file is loaded.
-// no-op in single-file mode (tree pane is hidden).
+// no-op in single-file mode unless mdTOC is active (TOC uses paneTree slot).
 func (m *Model) togglePane() {
-	if m.singleFile {
+	if m.singleFile && m.mdTOC == nil {
 		return
 	}
 	if m.focus != paneTree {
 		m.focus = paneTree
+		m.syncTOCCursorToActive()
 		return
 	}
 	if m.currFile != "" {
@@ -304,12 +307,41 @@ func (m *Model) togglePane() {
 }
 
 // handleSwitchToTree switches focus to tree pane from diff.
-// no-op in single-file mode (tree pane is hidden).
+// no-op in single-file mode unless mdTOC is active.
 func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
-	if !m.singleFile {
+	if !m.singleFile || m.mdTOC != nil {
 		m.focus = paneTree
+		m.syncTOCCursorToActive()
 	}
 	return m, nil
+}
+
+// jumpTOCEntry moves the TOC cursor by delta (+1 next, -1 prev) and jumps the diff viewport.
+func (m Model) jumpTOCEntry(delta int) Model {
+	if m.mdTOC == nil {
+		return m
+	}
+	m.mdTOC.cursor = max(0, min(m.mdTOC.cursor+delta, len(m.mdTOC.entries)-1))
+	m.syncDiffToTOCCursor()
+	return m
+}
+
+// syncTOCCursorToActive sets the TOC cursor to the current active section.
+func (m *Model) syncTOCCursorToActive() {
+	if m.mdTOC != nil && m.mdTOC.activeSection >= 0 {
+		m.mdTOC.cursor = m.mdTOC.activeSection
+	}
+}
+
+// syncDiffToTOCCursor jumps the diff viewport to the TOC entry at the current cursor position.
+func (m *Model) syncDiffToTOCCursor() {
+	if m.mdTOC == nil || m.mdTOC.cursor >= len(m.mdTOC.entries) {
+		return
+	}
+	m.diffCursor = m.mdTOC.entries[m.mdTOC.cursor].lineIdx
+	m.cursorOnAnnotation = false
+	m.mdTOC.updateActiveSection(m.diffCursor)
+	m.topAlignViewportOnCursor()
 }
 
 // toggleWrapMode toggles line wrapping on/off.
@@ -336,6 +368,11 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// when mdTOC is active, route navigation to TOC instead of file tree
+	if m.mdTOC != nil {
+		return m.handleTOCNav(msg)
+	}
+
 	switch {
 	case msg.String() == "j" || msg.String() == "down":
 		m.tree.moveDown()
@@ -357,6 +394,36 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.tree.ensureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
+}
+
+// handleTOCNav handles navigation keys when the TOC pane is focused.
+func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.String() == "j" || msg.String() == "down":
+		m.mdTOC.moveDown()
+	case msg.String() == "k" || msg.String() == "up":
+		m.mdTOC.moveUp()
+	case msg.Type == tea.KeyPgDown || msg.String() == "ctrl+d":
+		for range m.treePageSize() {
+			m.mdTOC.moveDown()
+		}
+	case msg.Type == tea.KeyPgUp || msg.String() == "ctrl+u":
+		for range m.treePageSize() {
+			m.mdTOC.moveUp()
+		}
+	case msg.Type == tea.KeyHome:
+		m.mdTOC.cursor = 0
+	case msg.Type == tea.KeyEnd:
+		m.mdTOC.cursor = max(0, len(m.mdTOC.entries)-1)
+	case msg.String() == "l" || msg.String() == "right":
+		if m.currFile != "" {
+			m.focus = paneDiff
+		}
+		return m, nil // switch pane without re-jumping viewport
+	}
+	m.mdTOC.ensureVisible(m.treePageSize())
+	m.syncDiffToTOCCursor()
+	return m, nil
 }
 
 // treePageSize returns the number of visible lines in the tree pane.
@@ -415,7 +482,15 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := m.startSearch()
 		return m, cmd
 	}
+	m.syncTOCActiveSection()
 	return m, nil
+}
+
+// syncTOCActiveSection updates the TOC active section to match the current diff cursor position.
+func (m *Model) syncTOCActiveSection() {
+	if m.mdTOC != nil {
+		m.mdTOC.updateActiveSection(m.diffCursor)
+	}
 }
 
 func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
@@ -423,11 +498,12 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = msg.Height
 
 	var diffWidth int
-	if m.singleFile {
+	if m.singleFile && m.mdTOC == nil {
 		m.treeWidth = 0
 		diffWidth = m.width - 2 // diff pane borders only
 	} else {
-		// adjust tree width based on ratio (N out of 10 units)
+		// adjust tree width based on ratio (N out of 10 units);
+		// applies to multi-file mode and single-file markdown with TOC
 		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 		diffWidth = m.width - m.treeWidth - 4 // borders
 	}
@@ -523,7 +599,23 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
+
+	// detect markdown full-context mode and build TOC
+	if m.singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines) {
+		m.mdTOC = parseTOC(msg.lines, msg.file)
+	} else {
+		m.mdTOC = nil
+	}
+	if m.mdTOC != nil {
+		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
+		m.viewport.Width = m.width - m.treeWidth - 4
+	} else if m.singleFile {
+		m.treeWidth = 0
+		m.viewport.Width = m.width - 2
+	}
+
 	m.skipInitialDividers()
+	m.syncTOCActiveSection()
 
 	// handle pending annotation list jump
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
@@ -594,14 +686,40 @@ func (m Model) View() string {
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
 
 	var mainView string
-	if m.singleFile {
-		// single-file mode: no tree pane, diff uses full width
+	switch {
+	case m.singleFile && m.mdTOC == nil:
+		// single-file mode without TOC: no tree pane, diff uses full width
 		diffPane := m.styles.DiffPaneActive.
 			Width(m.width - 2).
 			Height(ph).
 			Render(diffContent)
 		mainView = diffPane
-	} else {
+
+	case m.singleFile && m.mdTOC != nil:
+		// single-file markdown with TOC: two-pane layout with TOC in left pane
+		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.styles)
+
+		treeStyle := m.styles.TreePane
+		diffStyle := m.styles.DiffPane
+		if m.focus == paneTree {
+			treeStyle = m.styles.TreePaneActive
+		} else {
+			diffStyle = m.styles.DiffPaneActive
+		}
+
+		tocPane := treeStyle.
+			Width(m.treeWidth).
+			Height(ph).
+			Render(tocContent)
+
+		diffPane := diffStyle.
+			Width(m.width - m.treeWidth - 4).
+			Height(ph).
+			Render(diffContent)
+
+		mainView = lipgloss.JoinHorizontal(lipgloss.Top, tocPane, diffPane)
+
+	default:
 		annotated := m.annotatedFiles()
 		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
 
@@ -883,6 +1001,12 @@ func (m Model) helpOverlay() string {
 		"  [ / ]        prev / next hunk\n" +
 		"  enter        focus diff pane\n" +
 		"\n" +
+		"Markdown TOC (single-file full-context mode)\n" +
+		"  tab          switch between TOC and diff\n" +
+		"  j / k        navigate TOC entries\n" +
+		"  n / p        next / prev header\n" +
+		"  enter        jump to header in diff\n" +
+		"\n" +
 		"Search\n" +
 		"  /            search in diff\n" +
 		"  n            next match (overrides next file)\n" +
@@ -980,6 +1104,16 @@ func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
 func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case paneTree:
+		if m.mdTOC != nil && m.mdTOC.cursor < len(m.mdTOC.entries) {
+			// jump to selected header in diff
+			entry := m.mdTOC.entries[m.mdTOC.cursor]
+			m.diffCursor = entry.lineIdx
+			m.cursorOnAnnotation = false
+			m.mdTOC.updateActiveSection(m.diffCursor)
+			m.focus = paneDiff
+			m.topAlignViewportOnCursor()
+			return m, nil
+		}
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
@@ -1034,9 +1168,11 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePrevFile navigates to previous file.
-// no-op in single-file mode (tree pane is hidden).
+// handlePrevFile navigates to previous file, or previous TOC entry in markdown mode.
 func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
+	if m.singleFile && m.mdTOC != nil {
+		return m.jumpTOCEntry(-1), nil
+	}
 	if m.singleFile {
 		return m, nil
 	}
@@ -1055,8 +1191,12 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		} else {
 			m.prevSearchMatch()
 		}
+		m.syncTOCActiveSection()
 		m.viewport.SetContent(m.renderDiff())
 		return m, nil
+	}
+	if key == "n" && m.singleFile && m.mdTOC != nil {
+		return m.jumpTOCEntry(1), nil
 	}
 	if key == "n" && !m.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
