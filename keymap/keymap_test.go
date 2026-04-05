@@ -117,7 +117,7 @@ func TestKeysFor(t *testing.T) {
 		assert.Len(t, keys, 2)
 	})
 
-	t.Run("three keys action", func(t *testing.T) {
+	t.Run("two keys action", func(t *testing.T) {
 		keys := km.KeysFor(ActionPrevItem)
 		assert.Contains(t, keys, "N")
 		assert.Contains(t, keys, "p")
@@ -248,7 +248,7 @@ func TestNormalizeKey(t *testing.T) {
 
 func TestParse_validMapLines(t *testing.T) {
 	input := strings.NewReader("map x quit\nmap ctrl+d half_page_down\n")
-	maps, unmaps, err := Parse(input)
+	maps, unmaps, err := parse(input)
 	require.NoError(t, err)
 	assert.Empty(t, unmaps)
 	require.Len(t, maps, 2)
@@ -260,7 +260,7 @@ func TestParse_validMapLines(t *testing.T) {
 
 func TestParse_unmapLines(t *testing.T) {
 	input := strings.NewReader("unmap q\nunmap j\n")
-	maps, unmaps, err := Parse(input)
+	maps, unmaps, err := parse(input)
 	require.NoError(t, err)
 	assert.Empty(t, maps)
 	assert.Equal(t, []string{"q", "j"}, unmaps)
@@ -268,7 +268,7 @@ func TestParse_unmapLines(t *testing.T) {
 
 func TestParse_commentsAndBlanks(t *testing.T) {
 	input := strings.NewReader("# comment\n\n  # indented comment\n  \nmap x quit\n")
-	maps, unmaps, err := Parse(input)
+	maps, unmaps, err := parse(input)
 	require.NoError(t, err)
 	assert.Empty(t, unmaps)
 	require.Len(t, maps, 1)
@@ -277,7 +277,7 @@ func TestParse_commentsAndBlanks(t *testing.T) {
 
 func TestParse_unknownAction(t *testing.T) {
 	input := strings.NewReader("map x fly_away\nmap y quit\n")
-	maps, unmaps, err := Parse(input)
+	maps, unmaps, err := parse(input)
 	require.NoError(t, err)
 	assert.Empty(t, unmaps)
 	// unknown action skipped, valid one kept
@@ -287,7 +287,7 @@ func TestParse_unknownAction(t *testing.T) {
 
 func TestParse_invalidLines(t *testing.T) {
 	input := strings.NewReader("map\nfoo bar baz\nmap x quit\n")
-	maps, _, err := Parse(input)
+	maps, _, err := parse(input)
 	require.NoError(t, err)
 	// only valid line parsed
 	require.Len(t, maps, 1)
@@ -296,7 +296,7 @@ func TestParse_invalidLines(t *testing.T) {
 
 func TestParse_duplicateMapLastWins(t *testing.T) {
 	input := strings.NewReader("map x quit\nmap x help\n")
-	maps, _, err := Parse(input)
+	maps, _, err := parse(input)
 	require.NoError(t, err)
 	// both entries returned; Load applies them in order (last wins)
 	require.Len(t, maps, 2)
@@ -306,7 +306,7 @@ func TestParse_duplicateMapLastWins(t *testing.T) {
 
 func TestParse_keyNormalization(t *testing.T) {
 	input := strings.NewReader("map page_down page_down\nmap Ctrl+D half_page_down\n")
-	maps, _, err := Parse(input)
+	maps, _, err := parse(input)
 	require.NoError(t, err)
 	require.Len(t, maps, 2)
 	assert.Equal(t, "pgdown", maps[0].key) // normalized from page_down
@@ -315,7 +315,7 @@ func TestParse_keyNormalization(t *testing.T) {
 
 func TestParse_unmapNormalization(t *testing.T) {
 	input := strings.NewReader("unmap page_down\n")
-	_, unmaps, err := Parse(input)
+	_, unmaps, err := parse(input)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"pgdown"}, unmaps)
 }
@@ -422,7 +422,7 @@ func TestDump_roundTrip(t *testing.T) {
 	km.Dump(&buf)
 
 	// parse the dumped output
-	maps, unmaps, err := Parse(strings.NewReader(buf.String()))
+	maps, unmaps, err := parse(strings.NewReader(buf.String()))
 	require.NoError(t, err)
 	assert.Empty(t, unmaps)
 
@@ -455,6 +455,29 @@ func TestDump_customBindings(t *testing.T) {
 	// x should appear as quit binding, q should not
 	assert.Contains(t, output, "map x quit")
 	assert.NotContains(t, output, "map q quit")
+}
+
+func TestDump_spaceKeyRoundTrip(t *testing.T) {
+	km := Default()
+	km.Bind(" ", ActionPageDown) // bind space to an action
+
+	var buf strings.Builder
+	km.Dump(&buf)
+	output := buf.String()
+
+	// space key should be written as "space" alias, not literal " "
+	assert.Contains(t, output, "map space page_down")
+	assert.NotContains(t, output, "map  page_down") // no bare space
+
+	// round-trip: parse the dump and verify space binding survives
+	maps, _, err := parse(strings.NewReader(output))
+	require.NoError(t, err)
+
+	rebuilt := &Keymap{bindings: make(map[string]Action), descriptions: defaultDescriptions()}
+	for _, m := range maps {
+		rebuilt.Bind(m.key, m.action)
+	}
+	assert.Equal(t, ActionPageDown, rebuilt.Resolve(" "), "space binding should survive round-trip")
 }
 
 func TestDump_unmappedActionOmitted(t *testing.T) {
@@ -551,7 +574,7 @@ func TestAcceptance_helpReflectsCustomBindings(t *testing.T) {
 func TestAcceptance_invalidActionWarnsNoCrash(t *testing.T) {
 	// invalid action names produce no error, just skip
 	input := strings.NewReader("map x fly_away\nmap y unknown_action\nmap z quit\n")
-	maps, _, err := Parse(input)
+	maps, _, err := parse(input)
 	require.NoError(t, err)
 	require.Len(t, maps, 1, "only valid action should be parsed")
 	assert.Equal(t, ActionQuit, maps[0].action)
@@ -559,7 +582,7 @@ func TestAcceptance_invalidActionWarnsNoCrash(t *testing.T) {
 
 func TestParse_casePreservedForSingleChars(t *testing.T) {
 	input := strings.NewReader("map N prev_item\nmap n next_item\n")
-	maps, _, err := Parse(input)
+	maps, _, err := parse(input)
 	require.NoError(t, err)
 	require.Len(t, maps, 2)
 	assert.Equal(t, "N", maps[0].key)

@@ -264,10 +264,10 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `.claude-plugin/skills/revdiff/references/config.md`
 - Modify: `.claude-plugin/skills/revdiff/references/usage.md`
 
-- [ ] add keybindings section to README.md (file location, format, example, --keys flag, --dump-keys)
-- [ ] update CLAUDE.md with keymap package info, action names, keybindings file format
-- [ ] update plugin reference docs (config.md with --keys/--dump-keys, usage.md with keybinding customization)
-- [ ] move this plan to `docs/plans/completed/`
+- [x] add keybindings section to README.md (file location, format, example, --keys flag, --dump-keys)
+- [x] update CLAUDE.md with keymap package info, action names, keybindings file format
+- [x] update plugin reference docs (config.md with --keys/--dump-keys, usage.md with keybinding customization)
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

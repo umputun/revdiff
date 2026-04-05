@@ -264,7 +264,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch action {
 	case keymap.ActionAnnotList:
-		return m.handleAnnotListKey(msg)
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0
+		m.annotListOffset = 0
+		m.showAnnotList = true
+		return m, nil
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -566,10 +570,6 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveToNextHunk()
 	case keymap.ActionPrevHunk:
 		m.moveToPrevHunk()
-	case keymap.ActionConfirm:
-		cmd := m.startAnnotation()
-		m.viewport.SetContent(m.renderDiff())
-		return m, cmd
 	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
@@ -1150,6 +1150,7 @@ var helpKeyDisplay = map[string]string{
 	"tab":    "Tab",
 	"up":     "↑",
 	"down":   "↓",
+	" ":      "Space",
 }
 
 // displayKeyName returns a user-friendly display name for a bubbletea key.

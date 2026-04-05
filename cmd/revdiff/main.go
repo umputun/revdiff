@@ -247,7 +247,11 @@ func run(opts options) error {
 	}
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
-	km := keymap.LoadOrDefault(resolveKeysPath(os.Args[1:]))
+	keysPath := opts.Keys
+	if keysPath == "" {
+		keysPath = defaultKeysPath()
+	}
+	km := keymap.LoadOrDefault(keysPath)
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
 		Keymap:           km,
 		NoColors:         opts.NoColors,

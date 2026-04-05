@@ -31,6 +31,8 @@ Then uncomment and edit the values you want to change.
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
+| `--keys` | `REVDIFF_KEYS` | Path to keybindings file | `~/.config/revdiff/keybindings` |
+| `--dump-keys` | | Print effective keybindings to stdout and exit | |
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
 
@@ -80,3 +82,22 @@ Set via `--chroma-style=<name>`, env var `REVDIFF_CHROMA_STYLE`, or config file 
 **Light themes:** `autumn`, `borland`, `catppuccin-latte`, `colorful`, `emacs`, `friendly`, `github`, `gruvbox-light`, `igor`, `lovelace`, `manni`, `modus-operandi`, `monokailight`, `murphy`, `paraiso-light`, `pastie`, `perldoc`, `pygments`, `rainbow_dash`, `rose-pine-dawn`, `solarized-light`, `tango`, `tokyonight-day`, `trac`, `vs`, `xcode`
 
 **Other:** `RPGLE`, `abap`, `algol`, `algol_nu`, `arduino`, `ashen`, `average`, `bw`, `hr_high_contrast`, `onesenterprise`, `swapoff`
+
+## Custom Keybindings
+
+Location: `~/.config/revdiff/keybindings`. Override with `--keys` flag or `REVDIFF_KEYS` env var.
+
+Format: `map <key> <action>` to bind, `unmap <key>` to remove a default binding. `#` comments and blank lines are ignored. Defaults are preserved unless explicitly unmapped.
+
+Generate a template: `revdiff --dump-keys > ~/.config/revdiff/keybindings`
+
+Example:
+```
+map x quit
+unmap q
+map ctrl+d half_page_down
+```
+
+Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `filter`, `quit`, `discard_quit`, `help`, `dismiss`
+
+Modal keys (annotation input, search input, help overlay, confirm discard) are not remappable.

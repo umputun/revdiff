@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/umputun/revdiff/annotation"
+	"github.com/umputun/revdiff/keymap"
 )
 
 // buildAnnotListItems builds a flat list of all annotations across all files.
@@ -178,21 +179,16 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 }
 
 // handleAnnotListKey handles keys when the annotation list popup is visible.
-// @ toggles the popup, j/k/arrows navigate, Enter jumps to annotation, Esc closes, all other keys consumed.
+// j/k/arrows navigate, Enter jumps to annotation, Esc/@/action-key closes, all other keys consumed.
 func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "@":
-		if m.showAnnotList {
-			m.showAnnotList = false
-			return m, nil
-		}
-		// open popup
-		m.annotListItems = m.buildAnnotListItems()
-		m.annotListCursor = 0
-		m.annotListOffset = 0
-		m.showAnnotList = true
+	// resolve action to allow closing popup with the same key that opens it (remappable)
+	action := m.keymap.Resolve(msg.String())
+	if action == keymap.ActionAnnotList {
+		m.showAnnotList = false
 		return m, nil
+	}
 
+	switch msg.String() {
 	case "k", "up":
 		if m.annotListCursor > 0 {
 			m.annotListCursor--

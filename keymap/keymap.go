@@ -198,7 +198,7 @@ func Default() *Keymap {
 	}
 }
 
-// Resolve returns the action bound to the given key, or empty string if unbound.
+// Resolve returns the action bound to the given key, or empty Action if unbound.
 func (km *Keymap) Resolve(key string) Action {
 	return km.bindings[key]
 }
@@ -268,10 +268,25 @@ func (km *Keymap) Dump(w io.Writer) {
 		for _, entry := range sec.Entries {
 			keys := km.KeysFor(entry.Action)
 			for _, k := range keys {
-				_, _ = fmt.Fprintf(w, "map %s %s\n", k, entry.Action)
+				_, _ = fmt.Fprintf(w, "map %s %s\n", dumpKeyName(k), entry.Action)
 			}
 		}
 	}
+}
+
+// reverseAliases maps canonical bubbletea key strings back to user-friendly names
+// for keys that would not survive a round-trip through strings.Fields.
+var reverseAliases = map[string]string{
+	" ": "space",
+}
+
+// dumpKeyName converts a canonical key string to a user-friendly name for dump output.
+// keys that are whitespace-only need special handling so the output can be reloaded.
+func dumpKeyName(key string) string {
+	if alias, ok := reverseAliases[key]; ok {
+		return alias
+	}
+	return key
 }
 
 // mapEntry represents a parsed "map <key> <action>" line.
@@ -308,10 +323,10 @@ func normalizeKey(key string) string {
 	return key
 }
 
-// Parse reads keybinding definitions from r and returns map entries and unmap keys.
-// Format: "map <key> <action>" or "unmap <key>", with # comments and blank lines ignored.
-// Unknown action names are reported via log and skipped. Duplicate mappings: last wins.
-func Parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
+// parse reads keybinding definitions from r and returns map entries and unmap keys.
+// format: "map <key> <action>" or "unmap <key>", with # comments and blank lines ignored.
+// unknown action names are reported via log and skipped. Duplicate mappings: last wins.
+func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 	scanner := bufio.NewScanner(r)
 	lineNum := 0
 	for scanner.Scan() {
@@ -355,7 +370,7 @@ func Parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 }
 
 // Load reads a keybindings file from path and returns a Keymap with defaults
-// overridden by the file contents. Returns error if the file exists but cannot be read/parsed.
+// overridden by the file contents. Returns error if the file cannot be opened or parsed.
 func Load(path string) (*Keymap, error) {
 	f, err := os.Open(path) //nolint:gosec // path is user-provided config file location
 	if err != nil {
@@ -363,7 +378,7 @@ func Load(path string) (*Keymap, error) {
 	}
 	defer f.Close()
 
-	maps, unmaps, err := Parse(f)
+	maps, unmaps, err := parse(f)
 	if err != nil {
 		return nil, err
 	}
