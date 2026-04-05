@@ -40,12 +40,12 @@ to `startFileAnnotation()`.
 - Modify: `ui/diffview.go`
 - Modify: `ui/model_test.go`
 
-- [ ] change `newAnnotationInput` to accept a `prefixWidth int` parameter instead of hardcoded 6
-- [ ] update `startAnnotation` call to pass 6 (line-level prefix width)
-- [ ] update `startFileAnnotation` call to pass 12 (file-level prefix width: cursor col + `"💬 file: "` + margin)
-- [ ] verify the rendered prefix in `renderFileAnnotationHeader` (`"💬 file: "`) matches the offset
-- [ ] write test: file-level annotation input width is narrower than line-level to account for wider prefix
-- [ ] run tests — must pass before task 2
+- [x] change `newAnnotationInput` to accept a `prefixWidth int` parameter instead of hardcoded 6
+- [x] update `startAnnotation` call to pass 6 (line-level prefix width)
+- [x] update `startFileAnnotation` call to pass 12 (file-level prefix width: cursor col + `"💬 file: "` + margin)
+- [x] verify the rendered prefix in `renderFileAnnotationHeader` (`"💬 file: "`) matches the offset
+- [x] write test: file-level annotation input width is narrower than line-level to account for wider prefix
+- [x] run tests — must pass before task 2
 
 ### Task 2: Fix Enter key to edit existing file annotation
 

@@ -2241,6 +2241,34 @@ func TestModel_AnnotationInputWidthNarrowTerminal(t *testing.T) {
 	assert.GreaterOrEqual(t, m.annotateInput.Width, 10, "file text input width should be at least 10")
 }
 
+func TestModel_FileAnnotationInputWidthNarrowerThanLineLevel(t *testing.T) {
+	// file-level annotation has wider prefix ("💬 file: " vs "💬 "), so input should be narrower
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.focus = paneDiff
+	m.width = 120
+	m.treeWidth = 30
+	m.treeHidden = false
+
+	// line-level annotation
+	m.startAnnotation()
+	lineWidth := m.annotateInput.Width
+
+	// file-level annotation
+	m.annotating = false
+	m.startFileAnnotation()
+	fileWidth := m.annotateInput.Width
+
+	assert.Greater(t, lineWidth, fileWidth, "file-level input should be narrower than line-level due to wider prefix")
+	assert.Equal(t, 6, lineWidth-fileWidth, "width difference should match prefix width difference (12-6=6)")
+}
+
 func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
