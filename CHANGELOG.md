@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.0 - 2026-04-05
+
+### New Features
+
+- add --all-files and --exclude modes (#19)
+- add t hotkey to toggle tree/TOC pane visibility (#18)
+- pass REVDIFF_CONFIG to overlay and add configurable popup size (#17)
+- add revdiff-planning plugin for automatic plan review
+
+### Bug Fixes
+
+- fix TOC highlighted entry wrapping to two lines
+
 ## v0.9.0 - 2026-04-04
 
 ### New Features
