@@ -1154,12 +1154,12 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case paneDiff:
+		var cmd tea.Cmd
 		if m.cursorOnFileAnnotationLine() {
-			cmd := m.startFileAnnotation()
-			m.viewport.SetContent(m.renderDiff())
-			return m, cmd
+			cmd = m.startFileAnnotation()
+		} else {
+			cmd = m.startAnnotation()
 		}
-		cmd := m.startAnnotation()
 		m.viewport.SetContent(m.renderDiff())
 		return m, cmd
 	}
