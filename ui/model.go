@@ -80,8 +80,10 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp bool // true when help overlay is visible
-	wrapMode bool // true when line wrapping is enabled
+	showHelp     bool // true when help overlay is visible
+	wrapMode     bool // true when line wrapping is enabled
+	lineNumbers  bool // true when line numbers are shown in gutter
+	lineNumWidth int  // digit width for line number columns (max digits across old/new nums)
 
 	searching      bool            // true when search textinput is active (typing)
 	searchTerm     string          // last submitted search query
@@ -272,7 +274,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnterKey()
 	case "A":
 		return m.handleFileAnnotateKey()
-	case "v", "w", "t":
+	case "v", "w", "t", "L":
 		return m.handleViewToggle(msg.String()), nil
 	}
 
@@ -322,6 +324,36 @@ func (m *Model) toggleTreePane() {
 	m.syncViewportToCursor()
 }
 
+// toggleLineNumbers toggles line number display on/off and recomputes gutter width.
+func (m *Model) toggleLineNumbers() {
+	if m.currFile == "" {
+		return
+	}
+	m.lineNumbers = !m.lineNumbers
+	if m.lineNumbers {
+		m.lineNumWidth = m.computeLineNumWidth()
+	}
+	m.syncViewportToCursor()
+}
+
+// computeLineNumWidth returns the digit width needed for line number columns.
+// scans all diffLines to find the maximum old or new line number.
+func (m Model) computeLineNumWidth() int {
+	maxNum := 0
+	for _, dl := range m.diffLines {
+		if dl.OldNum > maxNum {
+			maxNum = dl.OldNum
+		}
+		if dl.NewNum > maxNum {
+			maxNum = dl.NewNum
+		}
+	}
+	if maxNum == 0 {
+		return 1
+	}
+	return len(strconv.Itoa(maxNum))
+}
+
 // handleViewToggle dispatches view mode toggle keys (v, w, t).
 func (m Model) handleViewToggle(key string) Model {
 	switch key {
@@ -331,6 +363,8 @@ func (m Model) handleViewToggle(key string) Model {
 		m.toggleWrapMode()
 	case "t":
 		m.toggleTreePane()
+	case "L":
+		m.toggleLineNumbers()
 	}
 	return m
 }

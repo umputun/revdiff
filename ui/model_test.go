@@ -6635,3 +6635,20 @@ func TestModel_MarkdownNoHeadersFallback(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, paneDiff, model.focus, "tab should be no-op without TOC")
 }
+
+func TestModel_ToggleLineNumbers(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		},
+	})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+
+	assert.False(t, m.lineNumbers)
+	m = m.handleViewToggle("L")
+	assert.True(t, m.lineNumbers)
+	m = m.handleViewToggle("L")
+	assert.False(t, m.lineNumbers)
+}
