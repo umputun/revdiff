@@ -143,13 +143,24 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
 func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth
+	gutterExtra := 0
+	numGutter := ""
+	numBlank := ""
+	if m.lineNumbers {
+		gutterExtra = m.lineNumGutterWidth()
+		numGutter = m.lineNumGutter(dl)
+		numBlank = strings.Repeat(" ", gutterExtra)
+	}
+
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
 		prefix := " ↪ "
+		ng := numBlank
 		if i == 0 {
 			prefix = m.linePrefix(dl.ChangeType)
+			ng = numGutter
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
@@ -158,7 +169,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		if i == 0 && isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		b.WriteString(cursor + styled + "\n")
+		b.WriteString(cursor + ng + styled + "\n")
 	}
 }
 
@@ -175,7 +186,11 @@ func (m Model) wrappedLineCount(idx int) int {
 	}
 
 	_, textContent, _ := m.prepareLineContent(idx, dl)
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth
+	gutterExtra := 0
+	if m.lineNumbers {
+		gutterExtra = m.lineNumGutterWidth()
+	}
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 	return len(m.wrapContent(textContent, wrapWidth))
 }
 

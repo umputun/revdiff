@@ -84,6 +84,26 @@ func TestModel_RenderDiffLineWithoutLineNumbers(t *testing.T) {
 	assert.Contains(t, stripped, "hello")
 }
 
+func TestModel_RenderWrappedDiffLineWithLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	m.lineNumWidth = 2
+	m.wrapMode = true
+	m.focus = paneDiff
+	m.width = 50
+	m.treeWidth = 0
+	m.singleFile = true
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 5, NewNum: 5, Content: "short", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+
+	// first line should have numbers
+	assert.Contains(t, stripped, " 5  5")
+}
+
 func TestModel_LineNumGutterWidth(t *testing.T) {
 	m := testModel(nil, nil)
 	m.lineNumWidth = 3
