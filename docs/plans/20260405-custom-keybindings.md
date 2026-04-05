@@ -168,9 +168,9 @@ The parser normalizes input to match bubbletea's `KeyMsg.String()` output. Speci
 - Modify: `keymap/keymap.go`
 - Modify: `keymap/keymap_test.go`
 
-- [ ] implement `Dump(w io.Writer)` — writes effective bindings in `map <key> <action>` format, grouped by section with `#` comments
-- [ ] write test for Dump() — verify output format, round-trip (dump then parse produces same keymap)
-- [ ] run tests, run linter
+- [x] implement `Dump(w io.Writer)` — writes effective bindings in `map <key> <action>` format, grouped by section with `#` comments
+- [x] write test for Dump() — verify output format, round-trip (dump then parse produces same keymap)
+- [x] run tests, run linter
 
 ### Task 4: Wire keymap into Model and CLI
 

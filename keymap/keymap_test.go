@@ -392,6 +392,83 @@ func TestLoad_unmapOfUnboundKey(t *testing.T) {
 	assert.Equal(t, ActionDown, km.Resolve("j"))
 }
 
+func TestDump_format(t *testing.T) {
+	km := Default()
+	var buf strings.Builder
+	km.Dump(&buf)
+	output := buf.String()
+
+	// should contain section headers
+	assert.Contains(t, output, "# Navigation")
+	assert.Contains(t, output, "# File/Hunk")
+	assert.Contains(t, output, "# Pane")
+	assert.Contains(t, output, "# Search")
+	assert.Contains(t, output, "# Annotations")
+	assert.Contains(t, output, "# View")
+	assert.Contains(t, output, "# Quit")
+
+	// should contain map lines for known bindings
+	assert.Contains(t, output, "map j down")
+	assert.Contains(t, output, "map q quit")
+	assert.Contains(t, output, "map / search")
+
+	// should not contain unmap lines (dump only writes effective bindings)
+	assert.NotContains(t, output, "unmap")
+}
+
+func TestDump_roundTrip(t *testing.T) {
+	km := Default()
+	var buf strings.Builder
+	km.Dump(&buf)
+
+	// parse the dumped output
+	maps, unmaps, err := Parse(strings.NewReader(buf.String()))
+	require.NoError(t, err)
+	assert.Empty(t, unmaps)
+
+	// rebuild a keymap from parsed output (start empty, apply all maps)
+	rebuilt := &Keymap{
+		bindings:     make(map[string]Action),
+		descriptions: defaultDescriptions(),
+	}
+	for _, m := range maps {
+		rebuilt.Bind(m.key, m.action)
+	}
+
+	// verify all original bindings are present in rebuilt
+	for key, action := range km.bindings {
+		assert.Equal(t, action, rebuilt.Resolve(key), "round-trip: key %q should map to %q", key, action)
+	}
+	// verify no extra bindings
+	assert.Len(t, rebuilt.bindings, len(km.bindings))
+}
+
+func TestDump_customBindings(t *testing.T) {
+	km := Default()
+	km.Unbind("q")
+	km.Bind("x", ActionQuit)
+
+	var buf strings.Builder
+	km.Dump(&buf)
+	output := buf.String()
+
+	// x should appear as quit binding, q should not
+	assert.Contains(t, output, "map x quit")
+	assert.NotContains(t, output, "map q quit")
+}
+
+func TestDump_unmappedActionOmitted(t *testing.T) {
+	km := Default()
+	km.Unbind("/") // search only has one key
+
+	var buf strings.Builder
+	km.Dump(&buf)
+	output := buf.String()
+
+	// search action should not appear at all
+	assert.NotContains(t, output, "search")
+}
+
 func TestParse_casePreservedForSingleChars(t *testing.T) {
 	input := strings.NewReader("map N prev_item\nmap n next_item\n")
 	maps, _, err := Parse(input)

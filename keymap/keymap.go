@@ -256,6 +256,24 @@ func (km *Keymap) HelpSections() []HelpSection {
 	return sections
 }
 
+// Dump writes the effective bindings to w in the keybindings file format,
+// grouped by section with # comments. Output can be loaded back with Parse.
+func (km *Keymap) Dump(w io.Writer) {
+	sections := km.HelpSections()
+	for i, sec := range sections {
+		if i > 0 {
+			_, _ = fmt.Fprintln(w)
+		}
+		_, _ = fmt.Fprintf(w, "# %s\n", sec.Name)
+		for _, entry := range sec.Entries {
+			keys := km.KeysFor(entry.Action)
+			for _, k := range keys {
+				_, _ = fmt.Fprintf(w, "map %s %s\n", k, entry.Action)
+			}
+		}
+	}
+}
+
 // mapEntry represents a parsed "map <key> <action>" line.
 type mapEntry struct {
 	key    string
