@@ -17,7 +17,11 @@ fi
 OUTPUT_FILE=$(mktemp /tmp/revdiff-output-XXXXXX)
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-REVDIFF_CMD="$REVDIFF_BIN --output=$OUTPUT_FILE $*"
+CONFIG_FLAG=""
+if [ -n "${REVDIFF_CONFIG:-}" ] && [ -f "$REVDIFF_CONFIG" ]; then
+    CONFIG_FLAG="--config=$REVDIFF_CONFIG"
+fi
+REVDIFF_CMD="$REVDIFF_BIN $CONFIG_FLAG --output=$OUTPUT_FILE $*"
 CWD="$(pwd)"
 
 # build descriptive title: "rd: dirname [ref]"
@@ -35,9 +39,13 @@ for arg in "$@"; do
 done
 OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 
+# overlay size: override via REVDIFF_POPUP_WIDTH / REVDIFF_POPUP_HEIGHT env vars
+POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
+POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w 90% -h 90% -T " $OVERLAY_TITLE " -d "$CWD" -- sh -c "$REVDIFF_CMD"
+    tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -T " $OVERLAY_TITLE " -d "$CWD" -- sh -c "$REVDIFF_CMD"
     cat "$OUTPUT_FILE"
     exit 0
 fi
