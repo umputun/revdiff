@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/umputun/revdiff/diff"
@@ -102,35 +103,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		gutterExtra := 0
-		numBlank := ""
-		if m.lineNumbers {
-			gutterExtra = m.lineNumGutterWidth()
-			numBlank = strings.Repeat(" ", gutterExtra)
-		}
-		wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
-		visualLines := m.wrapContent(textContent, wrapWidth)
-		for i, vl := range visualLines {
-			prefix := " ↪ "
-			ng := numBlank
-			if i == 0 {
-				prefix = gutter
-				ng = numGutter
-			}
-
-			var styled string
-			if hasHighlight {
-				styled = hlStyle.Render(prefix + vl)
-			} else {
-				styled = style.Render(prefix + vl)
-			}
-
-			cursor := " "
-			if i == 0 && isCursor {
-				cursor = m.styles.DiffCursorLine.Render("▶")
-			}
-			b.WriteString(cursor + ng + styled + "\n")
-		}
+		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, isCursor, hasHighlight, style, hlStyle)
 		return
 	}
 
@@ -155,6 +128,40 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
 	b.WriteString(cursor + numGutter + content + "\n")
+}
+
+// renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
+func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter string,
+	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style) {
+	gutterExtra := 0
+	numBlank := ""
+	if m.lineNumbers {
+		gutterExtra = m.lineNumGutterWidth()
+		numBlank = strings.Repeat(" ", gutterExtra)
+	}
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+	visualLines := m.wrapContent(textContent, wrapWidth)
+	for i, vl := range visualLines {
+		prefix := " ↪ "
+		ng := numBlank
+		if i == 0 {
+			prefix = gutter
+			ng = numGutter
+		}
+
+		var styled string
+		if hasHighlight {
+			styled = hlStyle.Render(prefix + vl)
+		} else {
+			styled = style.Render(prefix + vl)
+		}
+
+		cursor := " "
+		if i == 0 && isCursor {
+			cursor = m.styles.DiffCursorLine.Render("▶")
+		}
+		b.WriteString(cursor + ng + styled + "\n")
+	}
 }
 
 // deletePlaceholderText returns the text shown for a delete-only hunk placeholder starting at hunkStart.
