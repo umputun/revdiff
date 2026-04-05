@@ -47,11 +47,11 @@
 - [x] run tests — must pass before next task
 
 ### Task 2: Integrate into statusBarText and degradation
-- [ ] in `statusBarText()` (line 824), append `lineNumberSegment()` after hunk segment and before search segment
-- [ ] in `statusSegmentsNoSearch()` (line 1002), append `lineNumberSegment()` after hunk segment
-- [ ] line number drops at `statusSegmentsMinimal()` level (no change needed — it's already excluded)
-- [ ] write tests: status bar contains line number, degradation drops it at minimal level
-- [ ] run tests — must pass before next task
+- [x] in `statusBarText()` (line 824), append `lineNumberSegment()` after hunk segment and before search segment
+- [x] in `statusSegmentsNoSearch()` (line 1002), append `lineNumberSegment()` after hunk segment
+- [x] line number drops at `statusSegmentsMinimal()` level (no change needed — it's already excluded)
+- [x] write tests: status bar contains line number, degradation drops it at minimal level
+- [x] run tests — must pass before next task
 
 ### Task 3: Verify acceptance criteria
 - [ ] verify line number shows for context, add, and remove lines

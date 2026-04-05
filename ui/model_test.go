@@ -2973,6 +2973,75 @@ func TestModel_LineNumberSegment(t *testing.T) {
 	})
 }
 
+func TestModel_StatusBarShowsLineNumber(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 10, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.fileAdds = 0
+	m.focus = paneDiff
+	m.width = 200
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "L:10/11", "status bar should show line number")
+}
+
+func TestModel_StatusBarLineNumberAfterHunk(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 0, NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+	m.width = 200
+
+	status := m.statusBarText()
+	hunkIdx := strings.Index(status, "hunk")
+	lineIdx := strings.Index(status, "L:2/2")
+	assert.Greater(t, hunkIdx, -1, "should contain hunk segment")
+	assert.Greater(t, lineIdx, -1, "should contain line number segment")
+	assert.Greater(t, lineIdx, hunkIdx, "line number should appear after hunk")
+}
+
+func TestModel_StatusBarLineNumberDegradation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 0, NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+
+	t.Run("wide terminal shows line number", func(t *testing.T) {
+		m.width = 200
+		status := m.statusBarText()
+		assert.Contains(t, status, "L:2/2")
+	})
+
+	t.Run("no-search level still shows line number", func(t *testing.T) {
+		segments := m.statusSegmentsNoSearch()
+		joined := strings.Join(segments, " | ")
+		assert.Contains(t, joined, "L:2/2")
+	})
+
+	t.Run("minimal level drops line number", func(t *testing.T) {
+		segments := m.statusSegmentsMinimal()
+		joined := strings.Join(segments, " | ")
+		assert.NotContains(t, joined, "L:", "minimal degradation should not contain line number")
+	})
+}
+
 func TestModel_StatusBarPipeSeparators(t *testing.T) {
 	t.Run("plain styles", func(t *testing.T) {
 		m := testModel(nil, nil)

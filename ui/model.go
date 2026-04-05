@@ -822,6 +822,11 @@ func (m Model) statusBarText() string {
 		segments = append(segments, hs)
 	}
 
+	// line number position
+	if ls := m.lineNumberSegment(); ls != "" {
+		segments = append(segments, ls)
+	}
+
 	// search match position
 	if ss := m.searchSegment(); ss != "" {
 		segments = append(segments, ss)
@@ -1039,6 +1044,9 @@ func (m Model) statusSegmentsNoSearch() []string {
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
+	}
+	if ls := m.lineNumberSegment(); ls != "" {
+		segments = append(segments, ls)
 	}
 	return segments
 }
