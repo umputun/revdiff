@@ -115,13 +115,13 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] in `View()`: replace single-file branch — when `mdTOC != nil`, render two-pane layout with TOC in left pane (reuse multi-file layout pattern), otherwise keep current single-pane layout
-- [ ] TOC pane uses `TreePane`/`TreePaneActive` styles based on focus (same as file tree)
-- [ ] diff pane width = `m.width - m.treeWidth - 4` when TOC is shown
-- [ ] in `diffContentWidth()`: narrow existing `if m.singleFile` condition to `m.singleFile && m.mdTOC == nil`; when `mdTOC != nil`, falls through to the existing multi-file formula
-- [ ] write tests for `View()` output — TOC pane appears for markdown full-context, doesn't appear for non-markdown single-file
-- [ ] write tests for `diffContentWidth` with TOC active
-- [ ] run tests — must pass before task 6
+- [x] in `View()`: replace single-file branch — when `mdTOC != nil`, render two-pane layout with TOC in left pane (reuse multi-file layout pattern), otherwise keep current single-pane layout
+- [x] TOC pane uses `TreePane`/`TreePaneActive` styles based on focus (same as file tree)
+- [x] diff pane width = `m.width - m.treeWidth - 4` when TOC is shown
+- [x] in `diffContentWidth()`: narrow existing `if m.singleFile` condition to `m.singleFile && m.mdTOC == nil`; when `mdTOC != nil`, falls through to the existing multi-file formula
+- [x] write tests for `View()` output — TOC pane appears for markdown full-context, doesn't appear for non-markdown single-file
+- [x] write tests for `diffContentWidth` with TOC active
+- [x] run tests — must pass before task 6
 
 ### Task 6: focus switching and key handling
 

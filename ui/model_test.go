@@ -5650,3 +5650,96 @@ func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
 	assert.Equal(t, expectedTreeWidth, model.treeWidth)
 	assert.Equal(t, 100-expectedTreeWidth-4, model.viewport.Width, "viewport width adjusted for TOC")
 }
+
+func TestModel_ViewWithTOCPane(t *testing.T) {
+	t.Run("markdown single-file with TOC renders two-pane layout", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, nil)
+		m.tree = newFileTree([]string{"README.md"})
+		m.singleFile = true
+		m.treeWidth = 25
+		m.focus = paneDiff
+		m.currFile = "README.md"
+		m.noStatusBar = true
+		m.ready = true
+		m.mdTOC = &mdTOC{entries: []tocEntry{
+			{title: "Title", level: 1, lineIdx: 0},
+			{title: "Section", level: 2, lineIdx: 5},
+		}, cursor: 0, activeSection: 0}
+
+		view := m.View()
+		stripped := ansi.Strip(view)
+
+		// TOC pane should contain header titles
+		assert.Contains(t, stripped, "Title")
+		assert.Contains(t, stripped, "Section")
+
+		// two-pane layout should have adjacent pane borders from JoinHorizontal
+		assert.Contains(t, stripped, "││", "TOC + diff layout should have two adjacent pane borders")
+	})
+
+	t.Run("non-markdown single-file without TOC renders full width", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.tree = newFileTree([]string{"main.go"})
+		m.singleFile = true
+		m.treeWidth = 0
+		m.focus = paneDiff
+		m.currFile = "main.go"
+		m.noStatusBar = true
+		m.ready = true
+
+		view := m.View()
+		stripped := ansi.Strip(view)
+		assert.Contains(t, stripped, "main.go")
+
+		// single-file mode without TOC must not have adjacent pane borders
+		assert.NotContains(t, stripped, "││", "single-file without TOC should not have two pane borders")
+	})
+
+	t.Run("TOC pane uses active style when focused", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, nil)
+		m.tree = newFileTree([]string{"README.md"})
+		m.singleFile = true
+		m.treeWidth = 25
+		m.focus = paneTree // TOC pane focused
+		m.currFile = "README.md"
+		m.noStatusBar = true
+		m.ready = true
+		m.mdTOC = &mdTOC{entries: []tocEntry{
+			{title: "Title", level: 1, lineIdx: 0},
+		}, cursor: 0, activeSection: -1}
+
+		view := m.View()
+		stripped := ansi.Strip(view)
+		assert.Contains(t, stripped, "Title")
+		// two-pane layout present
+		assert.Contains(t, stripped, "││")
+	})
+}
+
+func TestModel_DiffContentWidthWithTOCActive(t *testing.T) {
+	t.Run("single-file without TOC uses full width", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.singleFile = true
+		m.width = 100
+		m.treeWidth = 0
+		assert.Equal(t, 97, m.diffContentWidth()) // width - 3
+	})
+
+	t.Run("single-file with TOC uses multi-file formula", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, nil)
+		m.singleFile = true
+		m.width = 100
+		m.treeWidth = 30
+		m.mdTOC = &mdTOC{entries: []tocEntry{{title: "T", level: 1, lineIdx: 0}}, activeSection: -1}
+		assert.Equal(t, 65, m.diffContentWidth()) // 100 - 30 - 4 - 1
+	})
+
+	t.Run("minimum width enforced", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, nil)
+		m.singleFile = true
+		m.width = 20
+		m.treeWidth = 15
+		m.mdTOC = &mdTOC{entries: []tocEntry{{title: "T", level: 1, lineIdx: 0}}, activeSection: -1}
+		assert.Equal(t, 10, m.diffContentWidth()) // min 10
+	})
+}

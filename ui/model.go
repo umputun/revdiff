@@ -609,14 +609,40 @@ func (m Model) View() string {
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
 
 	var mainView string
-	if m.singleFile {
-		// single-file mode: no tree pane, diff uses full width
+	switch {
+	case m.singleFile && m.mdTOC == nil:
+		// single-file mode without TOC: no tree pane, diff uses full width
 		diffPane := m.styles.DiffPaneActive.
 			Width(m.width - 2).
 			Height(ph).
 			Render(diffContent)
 		mainView = diffPane
-	} else {
+
+	case m.singleFile && m.mdTOC != nil:
+		// single-file markdown with TOC: two-pane layout with TOC in left pane
+		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.styles)
+
+		treeStyle := m.styles.TreePane
+		diffStyle := m.styles.DiffPane
+		if m.focus == paneTree {
+			treeStyle = m.styles.TreePaneActive
+		} else {
+			diffStyle = m.styles.DiffPaneActive
+		}
+
+		tocPane := treeStyle.
+			Width(m.treeWidth).
+			Height(ph).
+			Render(tocContent)
+
+		diffPane := diffStyle.
+			Width(m.width - m.treeWidth - 4).
+			Height(ph).
+			Render(diffContent)
+
+		mainView = lipgloss.JoinHorizontal(lipgloss.Top, tocPane, diffPane)
+
+	default:
 		annotated := m.annotatedFiles()
 		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
 
