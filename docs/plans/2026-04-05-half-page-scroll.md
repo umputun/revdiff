@@ -44,15 +44,15 @@
 - [x] run tests — must pass before next task
 
 ### Task 2: Verify acceptance criteria
-- [ ] verify ctrl+d/u moves half page in diff pane
-- [ ] verify PgDn/PgUp still moves full page in diff pane
-- [ ] verify ctrl+d/u moves half page in tree and TOC panes
-- [ ] run full test suite (unit tests)
-- [ ] run linter — all issues must be fixed
+- [x] verify ctrl+d/u moves half page in diff pane
+- [x] verify PgDn/PgUp still moves full page in diff pane
+- [x] verify ctrl+d/u moves half page in tree and TOC panes
+- [x] run full test suite (unit tests)
+- [x] run linter — all issues must be fixed
 
 ### Task 3: [Final] Update documentation
-- [ ] verify help overlay text is correct (already says "half-page" — no change needed)
-- [ ] update CLAUDE.md if new patterns discovered
+- [x] verify help overlay text is correct (already says "half-page" — no change needed)
+- [x] update CLAUDE.md if new patterns discovered
 
 ## Technical Details
 
