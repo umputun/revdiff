@@ -16,6 +16,9 @@ revdiff main..feature  # same as above, git dot-dot syntax
 revdiff main...feature # changes since feature diverged from main
 revdiff --only=model.go              # review only files matching model.go
 revdiff --only=ui/model.go --only=README.md  # review specific files
+revdiff --all-files                  # browse all git-tracked files in a project
+revdiff --all-files --exclude vendor # browse all files, excluding vendor directory
+revdiff main --exclude vendor        # diff against main, excluding vendor
 revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
 ```
@@ -27,6 +30,23 @@ When a diff contains exactly one file, revdiff automatically hides the file tree
 ## Markdown TOC Navigation
 
 When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), a table-of-contents pane appears on the left listing all markdown headers with indentation by level. Use `Tab` to switch between TOC and diff, `j`/`k` to navigate headers, `n`/`p` to jump to next/prev header from either pane, `Enter` to jump to a header. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.
+
+## All-Files Mode
+
+Use `--all-files` (`-A`) to browse all git-tracked files, not just diffs. Turns revdiff into a general-purpose code annotation tool. All files shown in context-only mode with full annotation and syntax highlighting support.
+
+- Requires a git repository (uses `git ls-files` for file discovery)
+- Mutually exclusive with refs, `--staged`, and `--only`
+- Combine with `--exclude` (`-X`) to filter out paths by prefix matching
+
+```bash
+revdiff --all-files                          # all tracked files
+revdiff --all-files --exclude vendor         # skip vendor/
+revdiff --all-files --exclude vendor --exclude mocks  # skip both
+revdiff main --exclude vendor                # normal diff, excluding vendor
+```
+
+`--exclude` can be persisted in config file (`exclude = vendor`) or via env var (`REVDIFF_EXCLUDE=vendor,mocks`).
 
 ## Context-Only File Review
 

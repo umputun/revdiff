@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -349,15 +350,9 @@ func TestResolveConfigPath_Default(t *testing.T) {
 }
 
 func TestDumpConfig(t *testing.T) {
-	tmpFile, err := os.CreateTemp(t.TempDir(), "config-dump")
-	require.NoError(t, err)
-	defer tmpFile.Close()
-
-	dumpConfig([]string{"--config", filepath.Join(t.TempDir(), "nonexistent")}, tmpFile)
-
-	data, err := os.ReadFile(tmpFile.Name())
-	require.NoError(t, err)
-	output := string(data)
+	var buf bytes.Buffer
+	dumpConfig([]string{"--config", filepath.Join(t.TempDir(), "nonexistent")}, &buf)
+	output := buf.String()
 
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
@@ -375,7 +370,7 @@ func TestDefaultConfigPath(t *testing.T) {
 
 func TestMakeRenderer_GitWithOnly(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer([]string{"file.md"}, dir, nil)
+	renderer, workDir, err := makeRenderer([]string{"file.md"}, nil, false, dir, nil)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
@@ -384,7 +379,7 @@ func TestMakeRenderer_GitWithOnly(t *testing.T) {
 
 func TestMakeRenderer_GitWithoutOnly(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer(nil, dir, nil)
+	renderer, workDir, err := makeRenderer(nil, nil, false, dir, nil)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// with no --only, returns *diff.Git directly without FallbackRenderer wrapper
@@ -397,7 +392,7 @@ func TestMakeRenderer_NoGitWithOnly(t *testing.T) {
 	t.Chdir(tmpDir) // set cwd for FileReader
 	gitErr := errors.New("not a git repository")
 
-	renderer, workDir, err := makeRenderer([]string{"file.md"}, "", gitErr)
+	renderer, workDir, err := makeRenderer([]string{"file.md"}, nil, false, "", gitErr)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FileReader{}, renderer)
@@ -406,11 +401,111 @@ func TestMakeRenderer_NoGitWithOnly(t *testing.T) {
 
 func TestMakeRenderer_NoGitNoOnly(t *testing.T) {
 	gitErr := errors.New("not a git repository")
-	renderer, workDir, err := makeRenderer(nil, "", gitErr)
+	renderer, workDir, err := makeRenderer(nil, nil, false, "", gitErr)
 	require.Error(t, err)
 	assert.Nil(t, renderer)
 	assert.Empty(t, workDir)
 	assert.Contains(t, err.Error(), "find git root")
+}
+
+func TestParseArgs_AllFilesFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--all-files"))
+	require.NoError(t, err)
+	assert.True(t, opts.AllFiles)
+}
+
+func TestParseArgs_AllFilesShortFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "-A"))
+	require.NoError(t, err)
+	assert.True(t, opts.AllFiles)
+}
+
+func TestParseArgs_ExcludeFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--exclude", "vendor", "--exclude", "mocks"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vendor", "mocks"}, opts.Exclude)
+}
+
+func TestParseArgs_ExcludeShortFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "-X", "vendor"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vendor"}, opts.Exclude)
+}
+
+func TestParseArgs_ExcludeEnvVar(t *testing.T) {
+	t.Setenv("REVDIFF_EXCLUDE", "vendor,mocks,testdata")
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vendor", "mocks", "testdata"}, opts.Exclude)
+}
+
+func TestParseArgs_ExcludeConfigFile(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte("[Application Options]\nexclude = vendor\nexclude = mocks\n"), 0o600)
+	require.NoError(t, err)
+	opts, err := parseArgs([]string{"--config", cfgPath})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vendor", "mocks"}, opts.Exclude)
+}
+
+func TestParseArgs_AllFilesConflictsWithRefs(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--all-files", "HEAD~3"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-files cannot be used with refs")
+}
+
+func TestParseArgs_AllFilesConflictsWithTwoRefs(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--all-files", "main", "feature"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-files cannot be used with refs")
+}
+
+func TestParseArgs_AllFilesConflictsWithStaged(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--all-files", "--staged"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-files cannot be used with --staged")
+}
+
+func TestParseArgs_AllFilesConflictsWithOnly(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--all-files", "--only", "file.go"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-files cannot be used with --only")
+}
+
+func TestMakeRenderer_AllFiles(t *testing.T) {
+	dir := t.TempDir()
+	renderer, workDir, err := makeRenderer(nil, nil, true, dir, nil)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.DirectoryReader{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeRenderer_AllFilesNoGit(t *testing.T) {
+	gitErr := errors.New("not a git repository")
+	_, _, err := makeRenderer(nil, nil, true, "", gitErr)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--all-files requires a git repository")
+}
+
+func TestMakeRenderer_WithExclude(t *testing.T) {
+	dir := t.TempDir()
+	renderer, workDir, err := makeRenderer(nil, []string{"vendor"}, false, dir, nil)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeRenderer_AllFilesWithExclude(t *testing.T) {
+	dir := t.TempDir()
+	renderer, workDir, err := makeRenderer(nil, []string{"vendor", "mocks"}, true, dir, nil)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	// should be ExcludeFilter wrapping DirectoryReader
+	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
 }
 
 func TestGitTopLevel(t *testing.T) {

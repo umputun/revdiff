@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,6 +35,8 @@ type options struct {
 	Wrap             bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
 	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
+	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all git-tracked files, not just diffs"`
+	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
@@ -83,6 +86,9 @@ func main() {
 		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
+		if !errors.As(err, &flagsErr) {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 
@@ -125,11 +131,23 @@ func parseArgs(args []string) (options, error) {
 		return options{}, errors.New("--staged cannot be used with two-ref diff")
 	}
 
+	if opts.AllFiles {
+		if opts.Refs.Base != "" || opts.Refs.Against != "" {
+			return options{}, errors.New("--all-files cannot be used with refs")
+		}
+		if opts.Staged {
+			return options{}, errors.New("--all-files cannot be used with --staged")
+		}
+		if len(opts.Only) > 0 {
+			return options{}, errors.New("--all-files cannot be used with --only")
+		}
+	}
+
 	return opts, nil
 }
 
 // dumpConfig writes the current config with defaults to the given writer.
-func dumpConfig(args []string, w *os.File) {
+func dumpConfig(args []string, w io.Writer) {
 	var opts options
 	p := flags.NewParser(&opts, flags.Default)
 	iniParser := flags.NewIniParser(p)
@@ -186,7 +204,7 @@ func defaultConfigPath() string {
 
 func run(opts options) error {
 	gitRoot, gitErr := gitTopLevel()
-	renderer, workDir, err := makeRenderer(opts.Only, gitRoot, gitErr)
+	renderer, workDir, err := makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
 	if err != nil {
 		return err
 	}
@@ -257,30 +275,44 @@ func run(opts options) error {
 	return nil
 }
 
-// makeRenderer selects the appropriate renderer based on git availability and --only flags.
+// makeRenderer selects the appropriate renderer based on git availability and flags.
+// if --all-files is set, returns DirectoryReader (requires git repo).
 // if git is available with --only, it wraps diff.Git with FallbackRenderer.
 // if git is available without --only, it returns diff.Git directly.
 // if git is unavailable and --only is set, it uses FileReader to read files directly from disk.
 // if git is unavailable and --only is not set, it returns an error.
-func makeRenderer(only []string, gitRoot string, gitErr error) (ui.Renderer, string, error) {
-	if gitErr == nil {
-		inner := diff.NewGit(gitRoot)
-		if len(only) > 0 {
-			return diff.NewFallbackRenderer(inner, only, gitRoot), gitRoot, nil
-		}
-		return inner, gitRoot, nil
-	}
+// when --exclude prefixes are present, wraps the result with ExcludeFilter.
+func makeRenderer(only, exclude []string, allFiles bool, gitRoot string, gitErr error) (ui.Renderer, string, error) {
+	var r ui.Renderer
+	var workDir string
 
-	// no git repo available
-	if len(only) > 0 {
+	switch {
+	case allFiles && gitErr == nil:
+		r = diff.NewDirectoryReader(gitRoot)
+		workDir = gitRoot
+	case allFiles:
+		return nil, "", errors.New("--all-files requires a git repository")
+	case gitErr == nil && len(only) > 0:
+		r = diff.NewFallbackRenderer(diff.NewGit(gitRoot), only, gitRoot)
+		workDir = gitRoot
+	case gitErr == nil:
+		r = diff.NewGit(gitRoot)
+		workDir = gitRoot
+	case len(only) > 0:
 		cwd, err := os.Getwd()
 		if err != nil {
 			return nil, "", fmt.Errorf("get working directory: %w", err)
 		}
-		return diff.NewFileReader(only, cwd), cwd, nil
+		r = diff.NewFileReader(only, cwd)
+		workDir = cwd
+	default:
+		return nil, "", fmt.Errorf("find git root: %w", gitErr)
 	}
 
-	return nil, "", fmt.Errorf("find git root: %w", gitErr)
+	if len(exclude) > 0 {
+		r = diff.NewExcludeFilter(r, exclude)
+	}
+	return r, workDir, nil
 }
 
 // gitTopLevel returns the root directory of the current git repository.
