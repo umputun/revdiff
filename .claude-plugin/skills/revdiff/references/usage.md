@@ -22,11 +22,11 @@ revdiff --only=docs/notes.txt        # review a file with no git changes (contex
 
 ## Single-File Mode
 
-When a diff contains exactly one file, revdiff automatically hides the file tree pane and gives full terminal width to the diff view. Pane-switching keys (`Tab`, `h/l`, `n/p`, `f`) become no-ops. Search navigation (`n`/`N`) still works normally.
+When a diff contains exactly one file, revdiff automatically hides the file tree pane and gives full terminal width to the diff view. Pane-switching keys (`Tab`, `h/l`, `n/p`, `f`) become no-ops, except when markdown TOC is active (see below). Search navigation (`n`/`N`) still works normally.
 
 ## Markdown TOC Navigation
 
-When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), a table-of-contents pane appears on the left listing all markdown headers with indentation by level. Use `Tab` to switch between TOC and diff, `j`/`k` to navigate headers, `Enter` to jump to a header. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.
+When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), a table-of-contents pane appears on the left listing all markdown headers with indentation by level. Use `Tab` to switch between TOC and diff, `j`/`k` to navigate headers, `n`/`p` to jump to next/prev header from either pane, `Enter` to jump to a header. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.
 
 ## Context-Only File Review
 
@@ -49,7 +49,7 @@ When `--only` specifies a file that has no git changes (or when no git repo exis
 | `Ctrl+d/Ctrl+u` | Page scroll in file tree and diff pane |
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
-| `n/p` | Next/previous changed file (n = next match when search active) |
+| `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
 | `[` / `]` | Jump to previous/next change hunk in diff |
 
 **Search:**

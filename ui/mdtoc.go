@@ -27,7 +27,7 @@ type mdTOC struct {
 // headers inside fenced code blocks (```) are excluded.
 // fence tracking is CommonMark-compliant: closing fence must use the same character
 // with at least the same length as the opening fence.
-func parseTOC(lines []diff.DiffLine) *mdTOC {
+func parseTOC(lines []diff.DiffLine, filename string) *mdTOC {
 	var entries []tocEntry
 	var fenceChar rune // 0 when outside code block, '`' or '~' when inside
 	var fenceLen int   // length of the opening fence sequence
@@ -93,6 +93,10 @@ func parseTOC(lines []diff.DiffLine) *mdTOC {
 		return nil
 	}
 
+	// prepend a synthetic filename entry so user can jump back to the beginning
+	name := filepath.Base(filename)
+	entries = append([]tocEntry{{title: name, level: 1, lineIdx: 0}}, entries...)
+
 	return &mdTOC{entries: entries, activeSection: -1}
 }
 
@@ -139,34 +143,36 @@ func (toc *mdTOC) updateActiveSection(diffCursor int) {
 	}
 }
 
-// render produces the TOC display string with indentation by level, cursor highlight, and active section marker.
-// when focusedPane is paneTree, the cursor entry gets FileSelected style.
-// when focusedPane is paneDiff, the active section entry gets a marker prefix.
+// render produces the TOC display string with indentation by level.
+// the highlighted entry uses FileSelected style in both modes:
+// when TOC is focused it highlights the cursor, when diff is focused it highlights the active section.
 func (toc *mdTOC) render(width, height int, focusedPane pane, s styles) string {
 	if len(toc.entries) == 0 {
 		return "  no headers"
 	}
 
+	// determine which entry to highlight — cursor when TOC focused, active section when diff focused
+	highlighted := toc.cursor
+	if focusedPane == paneDiff && toc.activeSection >= 0 {
+		highlighted = toc.activeSection
+	}
+
+	// ensure the highlighted entry is visible in the viewport
+	savedCursor := toc.cursor
+	toc.cursor = highlighted
 	toc.ensureVisible(height)
+	toc.cursor = savedCursor
 	end := min(toc.offset+height, len(toc.entries))
 
 	var b strings.Builder
 	for idx := toc.offset; idx < end; idx++ {
 		e := toc.entries[idx]
 		indent := strings.Repeat("  ", e.level-1) // h1=0 indent, h2=2, h3=4, etc.
-		prefix := "  "
-		if idx == toc.activeSection && focusedPane == paneDiff {
-			prefix = "▸ "
-		}
+		title := toc.truncateTitle(e.title, width-len(indent)-3) // 2 prefix + 1 padding
+		line := fmt.Sprintf("  %s%s", indent, title)
 
-		const prefixWidth = 2 // both "  " and "▸ " are 2 visual cells
-		title := toc.truncateTitle(e.title, width-len(indent)-prefixWidth-1)
-		line := fmt.Sprintf("%s%s%s", prefix, indent, title)
-
-		if focusedPane == paneTree && idx == toc.cursor {
+		if idx == highlighted {
 			line = s.FileSelected.Width(max(width-2, 1)).Render(line)
-		} else if idx == toc.activeSection && focusedPane == paneDiff {
-			line = "\033[1m" + line + "\033[22m" // raw ANSI bold to avoid lipgloss full-reset
 		}
 
 		b.WriteString(line)

@@ -152,20 +152,31 @@ func TestParseTOC(t *testing.T) {
 		}, want: []tocEntry{{title: "Title", level: 1, lineIdx: 1}}},
 	}
 
+	topEntry := tocEntry{title: "test.md", level: 1, lineIdx: 0}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseTOC(tt.lines)
+			got := parseTOC(tt.lines, "test.md")
 			if tt.wantNil {
 				assert.Nil(t, got)
 				return
 			}
 			require.NotNil(t, got)
-			assert.Equal(t, tt.want, got.entries)
+			// first entry is always the synthetic "top" entry
+			wantWithTop := append([]tocEntry{topEntry}, tt.want...)
+			assert.Equal(t, wantWithTop, got.entries)
 			assert.Equal(t, 0, got.cursor)
 			assert.Equal(t, 0, got.offset)
 			assert.Equal(t, -1, got.activeSection)
 		})
 	}
+}
+
+func TestParseTOC_FilenamePathStripping(t *testing.T) {
+	lines := []diff.DiffLine{{Content: "# Title", ChangeType: diff.ChangeContext}}
+	got := parseTOC(lines, "docs/plans/guide.md")
+	require.NotNil(t, got)
+	assert.Equal(t, "guide.md", got.entries[0].title, "top entry should use base filename, not full path")
+	assert.Equal(t, "Title", got.entries[1].title)
 }
 
 func TestMdTOC_MoveUpDown(t *testing.T) {
@@ -313,7 +324,7 @@ func TestMdTOC_Render(t *testing.T) {
 		assert.Contains(t, lines[2], "    H3", "h3 should have 4 extra spaces indent: %q", lines[2])
 	})
 
-	t.Run("active section marker in diff focus", func(t *testing.T) {
+	t.Run("active section highlighted in diff focus", func(t *testing.T) {
 		toc := &mdTOC{entries: []tocEntry{
 			{title: "First", level: 1, lineIdx: 0},
 			{title: "Second", level: 1, lineIdx: 10},
@@ -321,18 +332,23 @@ func TestMdTOC_Render(t *testing.T) {
 		got := toc.render(40, 10, paneDiff, s)
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 2)
-		assert.True(t, strings.HasPrefix(lines[0], "  "), "non-active entry should have space prefix")
-		assert.Contains(t, lines[1], "▸", "active entry should have ▸ marker")
+		// active section (Second) should be highlighted, first should not
+		assert.Contains(t, lines[0], "First")
+		assert.Contains(t, lines[1], "Second")
+		// both lines contain their text, active section uses FileSelected (same as cursor)
+		assert.Greater(t, len(lines[1]), len(lines[0]), "highlighted line should have style sequences")
 	})
 
-	t.Run("no active marker in tree focus", func(t *testing.T) {
+	t.Run("cursor highlighted in tree focus", func(t *testing.T) {
 		toc := &mdTOC{entries: []tocEntry{
 			{title: "First", level: 1, lineIdx: 0},
 			{title: "Second", level: 1, lineIdx: 10},
 		}, cursor: 1, activeSection: 0}
 		got := toc.render(40, 10, paneTree, s)
-		// active section marker (▸) should not appear when tree is focused
-		assert.NotContains(t, got, "▸")
+		lines := strings.Split(got, "\n")
+		require.Len(t, lines, 2)
+		// cursor (Second) should be highlighted, not active section
+		assert.Greater(t, len(lines[1]), len(lines[0]), "cursor line should have style sequences")
 	})
 
 	t.Run("truncation of long title", func(t *testing.T) {
@@ -356,24 +372,40 @@ func TestMdTOC_Render(t *testing.T) {
 		assert.NotContains(t, got, "Header 0") // first entry should not be visible
 	})
 
-	t.Run("cursor highlight vs active section", func(t *testing.T) {
+	t.Run("tree focus highlights cursor, diff focus highlights active section", func(t *testing.T) {
 		toc := &mdTOC{entries: []tocEntry{
 			{title: "A", level: 1, lineIdx: 0},
 			{title: "B", level: 1, lineIdx: 10},
 			{title: "C", level: 1, lineIdx: 20},
 		}, cursor: 1, activeSection: 2}
-		// in tree focus, cursor entry is highlighted, active section is not specially marked
+		// in tree focus, cursor (B at idx 1) is highlighted
 		gotTree := toc.render(40, 10, paneTree, s)
-		assert.NotContains(t, gotTree, "▸")
+		treeLines := strings.Split(gotTree, "\n")
+		require.Len(t, treeLines, 3)
+		assert.Greater(t, len(treeLines[1]), len(treeLines[0]), "cursor B should be highlighted in tree focus")
+		assert.Less(t, len(treeLines[2]), len(treeLines[1]), "C should not be highlighted in tree focus")
 
-		// in diff focus, active section gets ▸ marker
+		// in diff focus, active section (C at idx 2) is highlighted
 		gotDiff := toc.render(40, 10, paneDiff, s)
-		lines := strings.Split(gotDiff, "\n")
-		require.Len(t, lines, 3)
-		assert.Contains(t, lines[2], "▸")
-		assert.True(t, strings.HasPrefix(lines[0], "  "))
-		assert.True(t, strings.HasPrefix(lines[1], "  "))
+		diffLines := strings.Split(gotDiff, "\n")
+		require.Len(t, diffLines, 3)
+		assert.Greater(t, len(diffLines[2]), len(diffLines[0]), "active section C should be highlighted in diff focus")
+		assert.Less(t, len(diffLines[1]), len(diffLines[2]), "B should not be highlighted in diff focus")
 	})
+}
+
+func TestMdTOC_Render_ActiveSectionViewportVisibility(t *testing.T) {
+	// when diff pane is focused and activeSection is far from cursor,
+	// the TOC viewport should scroll to keep activeSection visible
+	s := plainStyles()
+	entries := make([]tocEntry, 30)
+	for i := range entries {
+		entries[i] = tocEntry{title: fmt.Sprintf("Header %d", i), level: 1, lineIdx: i * 10}
+	}
+	toc := &mdTOC{entries: entries, cursor: 0, offset: 0, activeSection: 25}
+	got := toc.render(40, 5, paneDiff, s)
+	assert.Contains(t, got, "Header 25", "active section entry should be visible in viewport")
+	assert.NotContains(t, got, "Header 0", "cursor entry should scroll out of viewport")
 }
 
 func TestMdTOC_TruncateTitle(t *testing.T) {

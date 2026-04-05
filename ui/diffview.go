@@ -580,6 +580,13 @@ func (m *Model) centerViewportOnCursor() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
+// topAlignViewportOnCursor scrolls the viewport to place the cursor at the top of the page.
+func (m *Model) topAlignViewportOnCursor() {
+	cursorY := m.cursorViewportY()
+	m.viewport.SetYOffset(max(0, cursorY))
+	m.viewport.SetContent(m.renderDiff())
+}
+
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
 const scrollStep = 4      // horizontal scroll step in characters
 
