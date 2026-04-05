@@ -61,8 +61,8 @@
 - [x] run linter — all issues must be fixed
 
 ### Task 4: [Final] Update documentation
-- [ ] update README.md if needed (add L:N/M to status bar description if documented)
-- [ ] update CLAUDE.md if new patterns discovered
+- [x] update README.md if needed (add L:N/M to status bar description if documented)
+- [x] update CLAUDE.md if new patterns discovered
 
 ## Technical Details
 

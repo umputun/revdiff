@@ -27,7 +27,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Hunk navigation to jump between change groups
 - Annotation list popup (`@`): browse all annotations across files, jump to any annotation
 - Filter file tree to show only annotated files
-- Status line with filename, diff stats, hunk position, and mode indicators
+- Status line with filename, diff stats, hunk position, line number, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
