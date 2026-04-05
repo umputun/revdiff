@@ -29,6 +29,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - Filter file tree to show only annotated files
 - Status line with filename, diff stats, hunk position, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
+- Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Fully customizable colors via environment variables, CLI flags, or config file
 
@@ -253,6 +254,12 @@ Two scenarios trigger this mode:
 
 1. **Inside a git repo** - `--only` files not in the diff are read from disk and shown alongside any changed files
 2. **Outside a git repo** - `--only` is required; files are read directly from disk
+
+### Markdown TOC Navigation
+
+When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
+
+This mode activates when all three conditions are met: single file, markdown extension (`.md`/`.markdown`), and all lines are context (no diff changes). Headers inside fenced code blocks are excluded from the TOC.
 
 ### Key Bindings
 

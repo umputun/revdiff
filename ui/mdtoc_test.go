@@ -68,6 +68,73 @@ func TestParseTOC(t *testing.T) {
 			{Content: "# comment in code", ChangeType: diff.ChangeContext},
 			{Content: "```", ChangeType: diff.ChangeContext},
 		}, want: []tocEntry{{title: "Header", level: 1, lineIdx: 0}}},
+		{name: "tilde fenced code block excluded", lines: []diff.DiffLine{
+			{Content: "# Before", ChangeType: diff.ChangeContext},
+			{Content: "~~~", ChangeType: diff.ChangeContext},
+			{Content: "# Inside Tilde Fence", ChangeType: diff.ChangeContext},
+			{Content: "~~~", ChangeType: diff.ChangeContext},
+			{Content: "# After", ChangeType: diff.ChangeContext},
+		}, want: []tocEntry{
+			{title: "Before", level: 1, lineIdx: 0},
+			{title: "After", level: 1, lineIdx: 4},
+		}},
+		{name: "mixed fences do not cross-close", lines: []diff.DiffLine{
+			{Content: "# Before", ChangeType: diff.ChangeContext},
+			{Content: "~~~", ChangeType: diff.ChangeContext},
+			{Content: "```", ChangeType: diff.ChangeContext},
+			{Content: "# Leaked Header", ChangeType: diff.ChangeContext},
+			{Content: "~~~", ChangeType: diff.ChangeContext},
+			{Content: "# After", ChangeType: diff.ChangeContext},
+		}, want: []tocEntry{
+			{title: "Before", level: 1, lineIdx: 0},
+			{title: "After", level: 1, lineIdx: 5},
+		}},
+		{name: "backtick fence ignores tilde inside", lines: []diff.DiffLine{
+			{Content: "# Before", ChangeType: diff.ChangeContext},
+			{Content: "```", ChangeType: diff.ChangeContext},
+			{Content: "~~~", ChangeType: diff.ChangeContext},
+			{Content: "# Inside Backtick", ChangeType: diff.ChangeContext},
+			{Content: "```", ChangeType: diff.ChangeContext},
+			{Content: "# After", ChangeType: diff.ChangeContext},
+		}, want: []tocEntry{
+			{title: "Before", level: 1, lineIdx: 0},
+			{title: "After", level: 1, lineIdx: 5},
+		}},
+		{name: "4-backtick fence not closed by 3 backticks", lines: []diff.DiffLine{
+			{Content: "# Before", ChangeType: diff.ChangeContext},
+			{Content: "````", ChangeType: diff.ChangeContext},
+			{Content: "```go", ChangeType: diff.ChangeContext},
+			{Content: "# Inside Nested", ChangeType: diff.ChangeContext},
+			{Content: "```", ChangeType: diff.ChangeContext},
+			{Content: "# Still Inside", ChangeType: diff.ChangeContext},
+			{Content: "````", ChangeType: diff.ChangeContext},
+			{Content: "# After", ChangeType: diff.ChangeContext},
+		}, want: []tocEntry{
+			{title: "Before", level: 1, lineIdx: 0},
+			{title: "After", level: 1, lineIdx: 7},
+		}},
+		{name: "closing fence with trailing text does not close", lines: []diff.DiffLine{
+			{Content: "# Before", ChangeType: diff.ChangeContext},
+			{Content: "```", ChangeType: diff.ChangeContext},
+			{Content: "```not a close", ChangeType: diff.ChangeContext},
+			{Content: "# Still Inside", ChangeType: diff.ChangeContext},
+			{Content: "```", ChangeType: diff.ChangeContext},
+			{Content: "# After", ChangeType: diff.ChangeContext},
+		}, want: []tocEntry{
+			{title: "Before", level: 1, lineIdx: 0},
+			{title: "After", level: 1, lineIdx: 5},
+		}},
+		{name: "5-tilde fence requires 5+ tildes to close", lines: []diff.DiffLine{
+			{Content: "# Before", ChangeType: diff.ChangeContext},
+			{Content: "~~~~~", ChangeType: diff.ChangeContext},
+			{Content: "~~~", ChangeType: diff.ChangeContext},
+			{Content: "# Leaked?", ChangeType: diff.ChangeContext},
+			{Content: "~~~~~", ChangeType: diff.ChangeContext},
+			{Content: "# After", ChangeType: diff.ChangeContext},
+		}, want: []tocEntry{
+			{title: "Before", level: 1, lineIdx: 0},
+			{title: "After", level: 1, lineIdx: 5},
+		}},
 		{name: "no space after hash is not a header", lines: []diff.DiffLine{
 			{Content: "#nospace", ChangeType: diff.ChangeContext},
 			{Content: "##also-no", ChangeType: diff.ChangeContext},

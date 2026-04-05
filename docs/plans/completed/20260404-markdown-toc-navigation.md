@@ -169,11 +169,11 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 
 ### Task 9: [Final] Update documentation
 
-- [ ] update README.md with markdown TOC navigation feature
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] update `.claude-plugin/skills/revdiff/references/usage.md` with TOC keybindings
-- [ ] ask about bumping plugin version in `plugin.json` and `marketplace.json`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update README.md with markdown TOC navigation feature
+- [x] update CLAUDE.md if new patterns discovered
+- [x] update `.claude-plugin/skills/revdiff/references/usage.md` with TOC keybindings
+- [x] ask about bumping plugin version in `plugin.json` and `marketplace.json`
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

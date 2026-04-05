@@ -580,6 +580,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.skipInitialDividers()
+	m.syncTOCActiveSection()
 
 	// handle pending annotation list jump
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {

@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/umputun/revdiff/diff"
 )
 
@@ -27,9 +25,12 @@ type mdTOC struct {
 
 // parseTOC scans diff lines for markdown headers and builds a TOC.
 // headers inside fenced code blocks (```) are excluded.
+// fence tracking is CommonMark-compliant: closing fence must use the same character
+// with at least the same length as the opening fence.
 func parseTOC(lines []diff.DiffLine) *mdTOC {
 	var entries []tocEntry
-	inCodeBlock := false
+	var fenceChar rune // 0 when outside code block, '`' or '~' when inside
+	var fenceLen int   // length of the opening fence sequence
 
 	for i, line := range lines {
 		if line.ChangeType == diff.ChangeDivider {
@@ -38,13 +39,26 @@ func parseTOC(lines []diff.DiffLine) *mdTOC {
 
 		content := line.Content
 
-		// track fenced code block state
+		// track fenced code block state per CommonMark spec.
+		// opening fence: 3+ consecutive backticks or tildes (after optional indent).
+		// closing fence: same char, at least same length, only whitespace after.
 		trimmed := strings.TrimSpace(content)
-		if strings.HasPrefix(trimmed, "```") {
-			inCodeBlock = !inCodeBlock
-			continue
+		if fenceChar == 0 {
+			if ch, n := fencePrefix(trimmed); n >= 3 {
+				fenceChar = ch
+				fenceLen = n
+				continue
+			}
+		} else if ch, n := fencePrefix(trimmed); ch == fenceChar && n >= fenceLen {
+			// closing fence must have no non-whitespace after the fence chars
+			rest := strings.TrimSpace(trimmed[n:])
+			if rest == "" {
+				fenceChar = 0
+				fenceLen = 0
+				continue
+			}
 		}
-		if inCodeBlock {
+		if fenceChar != 0 {
 			continue
 		}
 
@@ -145,13 +159,14 @@ func (toc *mdTOC) render(width, height int, focusedPane pane, s styles) string {
 			prefix = "▸ "
 		}
 
-		title := toc.truncateTitle(e.title, width-len(indent)-len(prefix)-1)
+		const prefixWidth = 2 // both "  " and "▸ " are 2 visual cells
+		title := toc.truncateTitle(e.title, width-len(indent)-prefixWidth-1)
 		line := fmt.Sprintf("%s%s%s", prefix, indent, title)
 
 		if focusedPane == paneTree && idx == toc.cursor {
 			line = s.FileSelected.Width(max(width-2, 1)).Render(line)
 		} else if idx == toc.activeSection && focusedPane == paneDiff {
-			line = lipgloss.NewStyle().Bold(true).Render(line)
+			line = "\033[1m" + line + "\033[22m" // raw ANSI bold to avoid lipgloss full-reset
 		}
 
 		b.WriteString(line)
@@ -177,8 +192,28 @@ func (toc *mdTOC) truncateTitle(title string, maxWidth int) string {
 	return string(runes[:maxWidth-1]) + "…"
 }
 
+// fencePrefix returns the fence character ('`' or '~') and count of leading consecutive
+// occurrences. Returns (0, 0) if the string doesn't start with backticks or tildes.
+func fencePrefix(s string) (rune, int) {
+	if s == "" {
+		return 0, 0
+	}
+	ch := rune(s[0])
+	if ch != '`' && ch != '~' {
+		return 0, 0
+	}
+	n := 0
+	for _, r := range s {
+		if r != ch {
+			break
+		}
+		n++
+	}
+	return ch, n
+}
+
 // isFullContext returns true when all lines are ChangeContext (skips ChangeDivider).
-func (m *Model) isFullContext(lines []diff.DiffLine) bool {
+func (m Model) isFullContext(lines []diff.DiffLine) bool {
 	hasContext := false
 	for _, line := range lines {
 		if line.ChangeType == diff.ChangeDivider {
@@ -193,7 +228,7 @@ func (m *Model) isFullContext(lines []diff.DiffLine) bool {
 }
 
 // isMarkdownFile checks if the filename has a markdown extension (.md or .markdown).
-func (m *Model) isMarkdownFile(filename string) bool {
+func (m Model) isMarkdownFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return ext == ".md" || ext == ".markdown"
 }

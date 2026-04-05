@@ -5825,7 +5825,8 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext},
 	}
 
-	setup := func() Model {
+	setup := func(t *testing.T) Model {
+		t.Helper()
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
 		m.singleFile = true
 		m.mdTOC = parseTOC(mdLines)
@@ -5837,7 +5838,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	}
 
 	t.Run("j moves cursor down in TOC", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		assert.Equal(t, 0, m.mdTOC.cursor)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
@@ -5846,7 +5847,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("k moves cursor up in TOC", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		m.mdTOC.cursor = 2
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
@@ -5855,7 +5856,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("j clamped at last entry", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		m.mdTOC.cursor = 2 // last entry
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
@@ -5864,7 +5865,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("k clamped at first entry", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		assert.Equal(t, 0, m.mdTOC.cursor)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
@@ -5873,7 +5874,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("home moves to first entry", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		m.mdTOC.cursor = 2
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
@@ -5882,7 +5883,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("end moves to last entry", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		assert.Equal(t, 0, m.mdTOC.cursor)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
@@ -5891,7 +5892,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("l switches to diff pane", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 		model := result.(Model)
@@ -5899,7 +5900,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("pgdn moves cursor by page size", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		assert.Equal(t, 0, m.mdTOC.cursor)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
@@ -5908,7 +5909,7 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	})
 
 	t.Run("pgup moves cursor by page size", func(t *testing.T) {
-		m := setup()
+		m := setup(t)
 		m.mdTOC.cursor = 2
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})

@@ -24,6 +24,10 @@ revdiff --only=docs/notes.txt        # review a file with no git changes (contex
 
 When a diff contains exactly one file, revdiff automatically hides the file tree pane and gives full terminal width to the diff view. Pane-switching keys (`Tab`, `h/l`, `n/p`, `f`) become no-ops. Search navigation (`n`/`N`) still works normally.
 
+## Markdown TOC Navigation
+
+When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), a table-of-contents pane appears on the left listing all markdown headers with indentation by level. Use `Tab` to switch between TOC and diff, `j`/`k` to navigate headers, `Enter` to jump to a header. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.
+
 ## Context-Only File Review
 
 When `--only` specifies a file that has no git changes (or when no git repo exists), revdiff shows the file in context-only mode: all lines displayed without `+`/`-` markers, with full annotation and syntax highlighting support.
