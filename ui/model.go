@@ -339,6 +339,7 @@ func (m *Model) syncDiffToTOCCursor() {
 		return
 	}
 	m.diffCursor = m.mdTOC.entries[m.mdTOC.cursor].lineIdx
+	m.cursorOnAnnotation = false
 	m.mdTOC.updateActiveSection(m.diffCursor)
 	m.topAlignViewportOnCursor()
 }
@@ -418,6 +419,7 @@ func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
+		return m, nil // switch pane without re-jumping viewport
 	}
 	m.mdTOC.ensureVisible(m.treePageSize())
 	m.syncDiffToTOCCursor()
@@ -607,6 +609,9 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.mdTOC != nil {
 		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 		m.viewport.Width = m.width - m.treeWidth - 4
+	} else if m.singleFile {
+		m.treeWidth = 0
+		m.viewport.Width = m.width - 2
 	}
 
 	m.skipInitialDividers()
@@ -1103,6 +1108,7 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 			// jump to selected header in diff
 			entry := m.mdTOC.entries[m.mdTOC.cursor]
 			m.diffCursor = entry.lineIdx
+			m.cursorOnAnnotation = false
 			m.mdTOC.updateActiveSection(m.diffCursor)
 			m.focus = paneDiff
 			m.topAlignViewportOnCursor()
