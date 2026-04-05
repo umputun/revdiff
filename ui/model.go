@@ -1059,6 +1059,7 @@ func (m Model) statusModeIcons() string {
 		{"↩", m.wrapMode},
 		{"≋", len(m.searchMatches) > 0},
 		{"⊟", m.treeHidden},
+		{"#", m.lineNumbers},
 	}
 
 	statusFg := m.styles.colors.Muted
@@ -1140,6 +1141,7 @@ func (m Model) helpOverlay() string {
 		"  w            toggle word wrap\n" +
 		"  .            expand/collapse hunk\n" +
 		"  t            toggle tree/TOC pane\n" +
+		"  L            toggle line numbers\n" +
 		"  f            filter annotated files\n" +
 		"\n" +
 		"Quit\n" +

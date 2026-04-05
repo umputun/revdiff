@@ -3744,7 +3744,7 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.width = 100
-	m.height = 40
+	m.height = 50
 
 	// without help, view should not contain help sections
 	m.showHelp = false
@@ -6680,4 +6680,20 @@ func TestModel_ComputeLineNumWidth(t *testing.T) {
 			assert.Equal(t, tt.want, m.computeLineNumWidth())
 		})
 	}
+}
+
+func TestModel_StatusModeIconsLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "#")
+}
+
+func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 120
+	m.height = 40
+	help := m.helpOverlay()
+	assert.Contains(t, help, "L")
+	assert.Contains(t, help, "line numbers")
 }
