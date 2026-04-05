@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9.0 - 2026-04-04
+
+### New Features
+
+- markdown TOC navigation pane for single-file full-context mode (#16)
+
+### Improvements
+
+- track vendor directory and update dependencies
+
 ## v0.8.0 - 2026-04-04
 
 ### New Features
