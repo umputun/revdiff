@@ -12,12 +12,13 @@ import (
 )
 
 // newAnnotationInput creates and focuses a text input for annotation editing.
-func (m *Model) newAnnotationInput(placeholder string) (textinput.Model, tea.Cmd) {
+// prefixWidth accounts for the visible prefix characters (cursor col + emoji + label + margin).
+func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinput.Model, tea.Cmd) {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
 	cmd := ti.Focus()
 	ti.CharLimit = 500
-	ti.Width = max(10, m.diffContentWidth()-6) // cursor col + emoji prefix "💬 " + border margin
+	ti.Width = max(10, m.diffContentWidth()-prefixWidth)
 	return ti, cmd
 }
 
@@ -36,7 +37,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti, cmd := m.newAnnotationInput("annotation...")
+	ti, cmd := m.newAnnotationInput("annotation...", 6) // cursor col + emoji prefix "💬 " + border margin
 
 	// pre-fill with existing annotation if one exists
 	lineNum := m.diffLineNum(dl)
@@ -59,7 +60,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti, cmd := m.newAnnotationInput("file-level annotation...")
+	ti, cmd := m.newAnnotationInput("file-level annotation...", 12) // cursor col + "💬 file: " prefix + border margin
 
 	// pre-fill with existing file-level annotation if one exists
 	for _, a := range m.store.Get(m.currFile) {
@@ -74,7 +75,6 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 	m.fileAnnotating = true
 	m.diffCursor = -1 // position cursor on the file annotation line
 	m.viewport.GotoTop()
-	m.viewport.SetContent(m.renderDiff())
 	return cmd
 }
 
