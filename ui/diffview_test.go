@@ -49,6 +49,41 @@ func TestModel_LineNumGutter(t *testing.T) {
 	}
 }
 
+func TestModel_RenderDiffLineWithLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	m.lineNumWidth = 2
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 5, NewNum: 5, Content: "hello", ChangeType: diff.ChangeContext},
+		{OldNum: 6, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 6, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m.highlightedLines = nil
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+
+	assert.Contains(t, stripped, " 5  5")
+	assert.Contains(t, stripped, " 6    ")
+	assert.Contains(t, stripped, "    6")
+}
+
+func TestModel_RenderDiffLineWithoutLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = false
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 5, NewNum: 5, Content: "hello", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+
+	// should NOT contain number gutter, just the prefix
+	assert.NotContains(t, stripped, " 5  5")
+	assert.Contains(t, stripped, "hello")
+}
+
 func TestModel_LineNumGutterWidth(t *testing.T) {
 	m := testModel(nil, nil)
 	m.lineNumWidth = 3

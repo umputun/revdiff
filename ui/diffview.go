@@ -117,6 +117,11 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		return
 	}
 
+	numGutter := ""
+	if m.lineNumbers {
+		numGutter = m.lineNumGutter(dl)
+	}
+
 	var content string
 	if dl.ChangeType == diff.ChangeDivider {
 		content = m.styles.LineNumber.Render(" " + lineContent)
@@ -133,7 +138,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + content + "\n")
+	b.WriteString(cursor + numGutter + content + "\n")
 }
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
