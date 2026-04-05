@@ -864,7 +864,7 @@ func (m Model) statusBarText() string {
 		left = strings.Join(segments, sep)
 	}
 	if lipgloss.Width(left) > available {
-		// rebuild without hunk info
+		// rebuild without hunk info and line number
 		segments = m.statusSegmentsMinimal()
 		left = strings.Join(segments, sep)
 	}
