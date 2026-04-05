@@ -822,6 +822,11 @@ func (m Model) statusBarText() string {
 		segments = append(segments, hs)
 	}
 
+	// line number position
+	if ls := m.lineNumberSegment(); ls != "" {
+		segments = append(segments, ls)
+	}
+
 	// search match position
 	if ss := m.searchSegment(); ss != "" {
 		segments = append(segments, ss)
@@ -859,7 +864,7 @@ func (m Model) statusBarText() string {
 		left = strings.Join(segments, sep)
 	}
 	if lipgloss.Width(left) > available {
-		// rebuild without hunk info
+		// rebuild without hunk info and line number
 		segments = m.statusSegmentsMinimal()
 		left = strings.Join(segments, sep)
 	}
@@ -906,6 +911,44 @@ func (m Model) hunkSegment() string {
 		return "1 hunk"
 	}
 	return fmt.Sprintf("%d hunks", total)
+}
+
+// lineNumberSegment returns a formatted line number string like "L:42/380" for the status line.
+// The denominator is dynamic: on removed lines it shows the old file's max line number,
+// on context/added lines it shows the new file's max line number.
+// Returns empty string when focus is not on diff pane, cursor is out of range, or on a divider line.
+func (m Model) lineNumberSegment() string {
+	if m.focus != paneDiff {
+		return ""
+	}
+	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+		return ""
+	}
+	dl := m.diffLines[m.diffCursor]
+	if dl.ChangeType == diff.ChangeDivider {
+		return ""
+	}
+	lineNum := m.diffLineNum(dl)
+	if lineNum == 0 {
+		return ""
+	}
+	var maxOld, maxNew int
+	for _, l := range m.diffLines {
+		if l.OldNum > maxOld {
+			maxOld = l.OldNum
+		}
+		if l.NewNum > maxNew {
+			maxNew = l.NewNum
+		}
+	}
+	total := maxNew
+	if dl.ChangeType == diff.ChangeRemove {
+		total = maxOld
+	}
+	if total == 0 {
+		return ""
+	}
+	return fmt.Sprintf("L:%d/%d", lineNum, total)
 }
 
 // joinStatusSections joins left and right status sections with padding and separators.
@@ -1007,6 +1050,9 @@ func (m Model) statusSegmentsNoSearch() []string {
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
+	}
+	if ls := m.lineNumberSegment(); ls != "" {
+		segments = append(segments, ls)
 	}
 	return segments
 }

@@ -2991,6 +2991,173 @@ func TestModel_StatusBarHunkCountOnContextLine(t *testing.T) {
 	})
 }
 
+func TestModel_LineNumberSegment(t *testing.T) {
+	t.Run("context line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneDiff
+		assert.Equal(t, "L:10/11", m.lineNumberSegment())
+	})
+
+	t.Run("add line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 0, NewNum: 6, Content: "new", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("remove line uses old max", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 6, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("remove line denominator differs from new max", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		// on removed line: denominator = maxOld (12), not maxNew (9)
+		assert.Equal(t, "L:11/12", m.lineNumberSegment())
+	})
+
+	t.Run("context line uses new max not old", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneDiff
+		// on context line: denominator = maxNew (9), not maxOld (12)
+		assert.Equal(t, "L:9/9", m.lineNumberSegment())
+	})
+
+	t.Run("divider line returns empty", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{Content: "...", ChangeType: diff.ChangeDivider},
+			{OldNum: 50, NewNum: 50, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Empty(t, m.lineNumberSegment())
+	})
+
+	t.Run("empty diffLines returns empty", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.diffLines = nil
+		m.diffCursor = 0
+		m.focus = paneDiff
+		assert.Empty(t, m.lineNumberSegment())
+	})
+
+	t.Run("tree focus returns empty", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneTree
+		assert.Empty(t, m.lineNumberSegment())
+	})
+}
+
+func TestModel_StatusBarShowsLineNumber(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 10, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.fileAdds = 0
+	m.focus = paneDiff
+	m.width = 200
+
+	status := m.statusBarText()
+	assert.Contains(t, status, "L:10/11", "status bar should show line number")
+}
+
+func TestModel_StatusBarLineNumberAfterHunk(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 0, NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+	m.width = 200
+
+	status := m.statusBarText()
+	hunkIdx := strings.Index(status, "hunk")
+	lineIdx := strings.Index(status, "L:2/2")
+	assert.Greater(t, hunkIdx, -1, "should contain hunk segment")
+	assert.Greater(t, lineIdx, -1, "should contain line number segment")
+	assert.Greater(t, lineIdx, hunkIdx, "line number should appear after hunk")
+}
+
+func TestModel_StatusBarLineNumberDegradation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 0, NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1
+	m.fileAdds = 1
+	m.focus = paneDiff
+
+	t.Run("wide terminal shows line number", func(t *testing.T) {
+		m.width = 200
+		status := m.statusBarText()
+		assert.Contains(t, status, "L:2/2")
+	})
+
+	t.Run("no-search level still shows line number", func(t *testing.T) {
+		segments := m.statusSegmentsNoSearch()
+		joined := strings.Join(segments, " | ")
+		assert.Contains(t, joined, "L:2/2")
+	})
+
+	t.Run("minimal level drops line number", func(t *testing.T) {
+		segments := m.statusSegmentsMinimal()
+		joined := strings.Join(segments, " | ")
+		assert.NotContains(t, joined, "L:", "minimal degradation should not contain line number")
+	})
+}
+
 func TestModel_StatusBarPipeSeparators(t *testing.T) {
 	t.Run("plain styles", func(t *testing.T) {
 		m := testModel(nil, nil)
