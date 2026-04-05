@@ -6021,3 +6021,191 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 		assert.Nil(t, model.mdTOC)
 	})
 }
+
+func TestModel_HelpOverlayContainsTOCSection(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	help := m.helpOverlay()
+
+	assert.Contains(t, help, "Markdown TOC")
+	assert.Contains(t, help, "switch between TOC and diff")
+	assert.Contains(t, help, "navigate TOC entries")
+	assert.Contains(t, help, "jump to header in diff")
+}
+
+func TestModel_AnnotationsWithTOCActive(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "some text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Section", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "more text", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("annotate line in diff pane with TOC active", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model := result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneDiff
+		model.diffCursor = 1 // on "some text" line
+
+		// press 'a' to start annotation
+		result, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		model = result.(Model)
+		assert.True(t, model.annotating, "should enter annotation mode in diff pane with TOC")
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("file annotation with TOC active", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model := result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneDiff
+
+		// press 'A' for file annotation
+		result, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+		model = result.(Model)
+		assert.True(t, model.annotating, "should enter file annotation mode with TOC")
+		assert.True(t, model.fileAnnotating, "should be file-level annotation")
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("annotation list with TOC active", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model := result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneDiff
+		model.diffCursor = 1
+
+		// add an annotation first
+		model.store.Add(annotation.Annotation{File: "README.md", Line: 2, Type: " ", Comment: "test annotation"})
+
+		// press '@' to open annotation list
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+		model = result.(Model)
+		assert.True(t, model.showAnnotList, "annotation list should open with TOC active")
+	})
+
+	t.Run("annotation keys blocked in TOC pane", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model := result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneTree // TOC pane
+
+		// press 'a' in TOC pane - should not start annotation
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		model = result.(Model)
+		assert.False(t, model.annotating, "annotation should not start from TOC pane")
+	})
+}
+
+func TestModel_SearchWithTOCActive(t *testing.T) {
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "some text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Section", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "more text with title", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("start search from diff pane with TOC", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model = result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneDiff
+
+		// press '/' to start search
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		model = result.(Model)
+		assert.True(t, model.searching, "should enter search mode in diff pane with TOC")
+	})
+
+	t.Run("search not started from TOC pane", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model = result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneTree // TOC pane
+
+		// press '/' in TOC pane - should not start search
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+		model = result.(Model)
+		assert.False(t, model.searching, "search should not start from TOC pane")
+	})
+
+	t.Run("TOC active section updates after search navigation", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.singleFile = true
+		m.treeWidth = 0
+
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
+		model = result.(Model)
+		require.NotNil(t, model.mdTOC)
+
+		model.focus = paneDiff
+		model.searchMatches = []int{3} // match on line 3
+		model.searchCursor = 0
+
+		// navigate to search match via 'n' key
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+		model = result.(Model)
+		// active section should reflect the cursor position after search nav
+		assert.Equal(t, 1, model.mdTOC.activeSection, "TOC should track active section after search jump")
+	})
+}
+
+func TestModel_MarkdownNoHeadersFallback(t *testing.T) {
+	noHeaders := []diff.DiffLine{
+		{NewNum: 1, Content: "just text", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "more text", ChangeType: diff.ChangeContext},
+	}
+
+	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": noHeaders})
+	m.singleFile = true
+	m.treeWidth = 0
+	m.focus = paneDiff
+
+	result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: noHeaders})
+	model := result.(Model)
+
+	assert.Nil(t, model.mdTOC, "mdTOC should be nil when no headers")
+	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in fallback mode")
+
+	// tab should be no-op in single-file mode without TOC
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model = result.(Model)
+	assert.Equal(t, paneDiff, model.focus, "tab should be no-op without TOC")
+}

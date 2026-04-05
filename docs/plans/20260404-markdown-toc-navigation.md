@@ -148,12 +148,12 @@ the tree in this mode). `togglePane()` and key dispatch work as-is since TOC use
 - Modify: `ui/model.go`
 - Modify: `ui/model_test.go`
 
-- [ ] update help overlay text to mention TOC navigation for markdown files (Tab to switch, j/k to navigate, Enter to jump)
-- [ ] handle edge case: markdown file with no headers — `mdTOC` is nil, falls back to normal single-file mode
-- [ ] verify annotation workflow still works with TOC pane (annotating in diff pane, file-level annotation)
-- [ ] verify search still works with TOC pane (search input width, match navigation)
-- [ ] write tests for annotations and search with TOC active
-- [ ] run tests — must pass before task 8
+- [x] update help overlay text to mention TOC navigation for markdown files (Tab to switch, j/k to navigate, Enter to jump)
+- [x] handle edge case: markdown file with no headers — `mdTOC` is nil, falls back to normal single-file mode
+- [x] verify annotation workflow still works with TOC pane (annotating in diff pane, file-level annotation)
+- [x] verify search still works with TOC pane (search input width, match navigation)
+- [x] write tests for annotations and search with TOC active
+- [x] run tests — must pass before task 8
 
 ### Task 8: verify acceptance criteria
 

@@ -965,6 +965,11 @@ func (m Model) helpOverlay() string {
 		"  [ / ]        prev / next hunk\n" +
 		"  enter        focus diff pane\n" +
 		"\n" +
+		"Markdown TOC (single-file full-context mode)\n" +
+		"  tab          switch between TOC and diff\n" +
+		"  j / k        navigate TOC entries\n" +
+		"  enter        jump to header in diff\n" +
+		"\n" +
 		"Search\n" +
 		"  /            search in diff\n" +
 		"  n            next match (overrides next file)\n" +
@@ -1146,6 +1151,7 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		} else {
 			m.prevSearchMatch()
 		}
+		m.syncTOCActiveSection()
 		m.viewport.SetContent(m.renderDiff())
 		return m, nil
 	}
