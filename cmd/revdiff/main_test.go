@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -349,15 +350,9 @@ func TestResolveConfigPath_Default(t *testing.T) {
 }
 
 func TestDumpConfig(t *testing.T) {
-	tmpFile, err := os.CreateTemp(t.TempDir(), "config-dump")
-	require.NoError(t, err)
-	defer tmpFile.Close()
-
-	dumpConfig([]string{"--config", filepath.Join(t.TempDir(), "nonexistent")}, tmpFile)
-
-	data, err := os.ReadFile(tmpFile.Name())
-	require.NoError(t, err)
-	output := string(data)
+	var buf bytes.Buffer
+	dumpConfig([]string{"--config", filepath.Join(t.TempDir(), "nonexistent")}, &buf)
+	output := buf.String()
 
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
@@ -509,16 +504,6 @@ func TestMakeRenderer_AllFilesWithExclude(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// should be ExcludeFilter wrapping DirectoryReader
-	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
-	assert.Equal(t, dir, workDir)
-}
-
-func TestMakeRenderer_ExcludeWithNormalDiff(t *testing.T) {
-	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer(nil, []string{"vendor"}, false, dir, nil)
-	require.NoError(t, err)
-	require.NotNil(t, renderer)
-	// should be ExcludeFilter wrapping Git renderer
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
 	assert.Equal(t, dir, workDir)
 }

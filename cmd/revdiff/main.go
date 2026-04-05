@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,6 +86,9 @@ func main() {
 		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
+		if !errors.As(err, &flagsErr) {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
 		os.Exit(1)
 	}
 
@@ -143,7 +147,7 @@ func parseArgs(args []string) (options, error) {
 }
 
 // dumpConfig writes the current config with defaults to the given writer.
-func dumpConfig(args []string, w *os.File) {
+func dumpConfig(args []string, w io.Writer) {
 	var opts options
 	p := flags.NewParser(&opts, flags.Default)
 	iniParser := flags.NewIniParser(p)

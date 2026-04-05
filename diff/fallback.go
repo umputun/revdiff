@@ -2,9 +2,12 @@ package diff
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -176,12 +179,45 @@ func (r *FileReader) FileDiff(_, file string, _ bool) ([]DiffLine, error) {
 
 // readFileAsContext reads a file from disk and returns all lines as context DiffLines.
 // each line gets ChangeContext type with both OldNum and NewNum set to the 1-based line number.
+// binary files (detected by null bytes in the first 8KB) return a single placeholder line.
 func readFileAsContext(path string) ([]DiffLine, error) {
+	// stat follows symlinks — reject non-regular files (FIFOs, sockets, devices)
+	// to avoid blocking reads that could hang the TUI
+	info, err := os.Stat(path)
+	if err != nil {
+		// broken symlink: lstat succeeds (symlink entry exists) but stat fails because target is gone.
+		// only treat as broken symlink when target is actually missing (ENOENT), not for other errors
+		// like permission denied or I/O errors — those should propagate as real errors.
+		if os.IsNotExist(err) {
+			if linfo, lErr := os.Lstat(path); lErr == nil && linfo.Mode()&os.ModeSymlink != 0 {
+				return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(broken symlink)", ChangeType: ChangeContext}}, nil
+			}
+		}
+		return nil, fmt.Errorf("stat file %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(not a regular file)", ChangeType: ChangeContext}}, nil
+	}
+
 	f, err := os.Open(path) //nolint:gosec // path comes from user-provided --only flag
 	if err != nil {
 		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
 	defer f.Close()
+
+	// check for binary content by looking for null bytes in the first 8KB
+	probe := make([]byte, 8192)
+	n, readErr := f.Read(probe)
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
+		return nil, fmt.Errorf("read file %s: %w", path, readErr)
+	}
+	if slices.Contains(probe[:n], byte(0)) {
+		return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(binary file)", ChangeType: ChangeContext}}, nil
+	}
+	// seek back to start for the full scan
+	if _, err = f.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("seek file %s: %w", path, err)
+	}
 
 	var lines []DiffLine
 	scanner := bufio.NewScanner(f)
@@ -197,6 +233,11 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 		})
 	}
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			// file has lines exceeding 1MB — likely a binary without NUL bytes or minified code.
+			// return a placeholder instead of propagating a hard error.
+			return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(file has lines too long to display)", ChangeType: ChangeContext}}, nil
+		}
 		return nil, fmt.Errorf("scan file %s: %w", path, err)
 	}
 	return lines, nil

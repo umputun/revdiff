@@ -3,6 +3,7 @@ package diff
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,7 +37,7 @@ func TestReadFileAsContext_EmptyFile(t *testing.T) {
 func TestReadFileAsContext_NonexistentFile(t *testing.T) {
 	_, err := readFileAsContext("/nonexistent/file.txt")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "read file")
+	assert.Contains(t, err.Error(), "stat file")
 }
 
 func TestReadFileAsContext_NoTrailingNewline(t *testing.T) {
@@ -68,6 +69,130 @@ func TestReadFileAsContext_AllContextType(t *testing.T) {
 		assert.Positive(t, l.NewNum, "NewNum must be positive")
 		assert.Equal(t, l.OldNum, l.NewNum, "OldNum and NewNum must be equal")
 	}
+}
+
+func TestReadFileAsContext_BinaryFile(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("file with null bytes returns placeholder", func(t *testing.T) {
+		path := filepath.Join(dir, "image.png")
+		// simulate binary content with null bytes
+		data := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}
+		require.NoError(t, os.WriteFile(path, data, 0o600))
+
+		lines, err := readFileAsContext(path)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(binary file)", lines[0].Content)
+		assert.Equal(t, ChangeContext, lines[0].ChangeType)
+		assert.Equal(t, 1, lines[0].OldNum)
+		assert.Equal(t, 1, lines[0].NewNum)
+	})
+
+	t.Run("text file without null bytes reads normally", func(t *testing.T) {
+		path := filepath.Join(dir, "code.go")
+		require.NoError(t, os.WriteFile(path, []byte("package main\nfunc main() {}\n"), 0o600))
+
+		lines, err := readFileAsContext(path)
+		require.NoError(t, err)
+		require.Len(t, lines, 2)
+		assert.Equal(t, "package main", lines[0].Content)
+		assert.Equal(t, "func main() {}", lines[1].Content)
+	})
+
+	t.Run("large binary file detected early", func(t *testing.T) {
+		path := filepath.Join(dir, "large.bin")
+		// create a binary with null byte at position 100
+		data := make([]byte, 1024)
+		for i := range data {
+			data[i] = 0x41 // 'A'
+		}
+		data[100] = 0x00 // null byte
+		require.NoError(t, os.WriteFile(path, data, 0o600))
+
+		lines, err := readFileAsContext(path)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(binary file)", lines[0].Content)
+	})
+
+	t.Run("file with line exceeding 1MB returns placeholder", func(t *testing.T) {
+		path := filepath.Join(dir, "huge-line.txt")
+		// create a file with a single line >1MB, no NUL bytes, no newlines
+		data := make([]byte, 1024*1024+100)
+		for i := range data {
+			data[i] = 'x'
+		}
+		require.NoError(t, os.WriteFile(path, data, 0o600))
+
+		lines, err := readFileAsContext(path)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(file has lines too long to display)", lines[0].Content)
+		assert.Equal(t, ChangeContext, lines[0].ChangeType)
+	})
+}
+
+func TestReadFileAsContext_NonRegularFile(t *testing.T) {
+	dir := t.TempDir()
+
+	t.Run("fifo returns placeholder", func(t *testing.T) {
+		fifoPath := filepath.Join(dir, "test.fifo")
+		require.NoError(t, syscall.Mkfifo(fifoPath, 0o600))
+
+		lines, err := readFileAsContext(fifoPath)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(not a regular file)", lines[0].Content)
+		assert.Equal(t, ChangeContext, lines[0].ChangeType)
+	})
+
+	t.Run("directory returns placeholder", func(t *testing.T) {
+		subDir := filepath.Join(dir, "subdir")
+		require.NoError(t, os.Mkdir(subDir, 0o750))
+
+		lines, err := readFileAsContext(subDir)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(not a regular file)", lines[0].Content)
+	})
+
+	t.Run("symlink to fifo returns placeholder", func(t *testing.T) {
+		fifoPath := filepath.Join(dir, "target.fifo")
+		require.NoError(t, syscall.Mkfifo(fifoPath, 0o600))
+		linkPath := filepath.Join(dir, "link-to-fifo")
+		require.NoError(t, os.Symlink(fifoPath, linkPath))
+
+		lines, err := readFileAsContext(linkPath)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(not a regular file)", lines[0].Content)
+	})
+
+	t.Run("broken symlink returns placeholder", func(t *testing.T) {
+		linkPath := filepath.Join(dir, "broken-link")
+		require.NoError(t, os.Symlink("/nonexistent/target", linkPath))
+
+		lines, err := readFileAsContext(linkPath)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(broken symlink)", lines[0].Content)
+		assert.Equal(t, ChangeContext, lines[0].ChangeType)
+		assert.Equal(t, 1, lines[0].OldNum)
+		assert.Equal(t, 1, lines[0].NewNum)
+	})
+
+	t.Run("symlink to regular file reads normally", func(t *testing.T) {
+		realFile := filepath.Join(dir, "real.txt")
+		require.NoError(t, os.WriteFile(realFile, []byte("hello\n"), 0o600))
+		linkPath := filepath.Join(dir, "link-to-real")
+		require.NoError(t, os.Symlink(realFile, linkPath))
+
+		lines, err := readFileAsContext(linkPath)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "hello", lines[0].Content)
+	})
 }
 
 func TestFallbackRenderer_ChangedFiles_FileInDiff(t *testing.T) {
@@ -438,7 +563,7 @@ func TestFileReader_FileDiff_NonexistentFile(t *testing.T) {
 	r := NewFileReader([]string{"missing.go"}, dir)
 	_, err := r.FileDiff("", "missing.go", false)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "read file")
+	assert.Contains(t, err.Error(), "stat file")
 }
 
 // acceptance criteria verification tests

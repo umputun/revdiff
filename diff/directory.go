@@ -1,10 +1,10 @@
 package diff
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -25,7 +25,8 @@ func NewDirectoryReader(workDir string) *DirectoryReader {
 // ChangedFiles returns all git-tracked files as sorted relative paths.
 // ref and staged parameters are ignored since all tracked files are returned.
 func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "ls-files")
+	// use -z for NUL-separated output to avoid C-quoting of paths with non-ASCII characters
+	cmd := exec.CommandContext(context.Background(), "git", "ls-files", "-z")
 	cmd.Dir = dr.workDir
 	out, err := cmd.Output()
 	if err != nil {
@@ -37,12 +38,17 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
 	}
 
 	var files []string
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line != "" {
-			files = append(files, line)
+	for entry := range strings.SplitSeq(string(out), "\x00") {
+		if entry == "" {
+			continue
 		}
+		// skip files that are tracked in the index but deleted locally (unstaged deletion).
+		// use Lstat to avoid following symlinks — broken symlinks are still valid tracked entries.
+		resolved := resolvePath(dr.workDir, entry)
+		if _, statErr := os.Lstat(resolved); statErr != nil && os.IsNotExist(statErr) {
+			continue
+		}
+		files = append(files, entry)
 	}
 	sort.Strings(files)
 	return files, nil

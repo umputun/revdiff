@@ -91,6 +91,65 @@ func TestDirectoryReader_ChangedFiles_binaryFiles(t *testing.T) {
 	assert.Equal(t, []string{"code.go", "image.png"}, files)
 }
 
+func TestDirectoryReader_ChangedFiles_deletedFile(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	// create and commit two files
+	writeFile(t, dir, "keep.go", "package main\n")
+	writeFile(t, dir, "deleted.go", "package main\n")
+	gitCmd(t, dir, "add", ".")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	// delete one file locally without staging the deletion
+	require.NoError(t, os.Remove(filepath.Join(dir, "deleted.go")))
+
+	dr := NewDirectoryReader(dir)
+	files, err := dr.ChangedFiles("", false)
+	require.NoError(t, err)
+	// deleted file should not appear in the list
+	assert.Equal(t, []string{"keep.go"}, files)
+}
+
+func TestDirectoryReader_ChangedFiles_brokenSymlink(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	// create a regular file and a symlink pointing to a nonexistent target
+	writeFile(t, dir, "real.go", "package main\n")
+	require.NoError(t, os.Symlink("/nonexistent/target", filepath.Join(dir, "broken.link")))
+	gitCmd(t, dir, "add", ".")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	dr := NewDirectoryReader(dir)
+	files, err := dr.ChangedFiles("", false)
+	require.NoError(t, err)
+	// broken symlink should still appear — it's a valid tracked entry
+	assert.Equal(t, []string{"broken.link", "real.go"}, files)
+}
+
+func TestDirectoryReader_FileDiff_brokenSymlink(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	// create a regular file and a broken symlink, commit both
+	writeFile(t, dir, "real.go", "package main\n")
+	require.NoError(t, os.Symlink("/nonexistent/target", filepath.Join(dir, "broken.link")))
+	gitCmd(t, dir, "add", ".")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	dr := NewDirectoryReader(dir)
+
+	// broken symlink should be in the file list
+	files, err := dr.ChangedFiles("", false)
+	require.NoError(t, err)
+	assert.Contains(t, files, "broken.link")
+
+	// FileDiff should return a placeholder, not an error
+	lines, err := dr.FileDiff("", "broken.link", false)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(broken symlink)", lines[0].Content)
+	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+}
+
 func TestDirectoryReader_ChangedFiles_notGitRepo(t *testing.T) {
 	dir := t.TempDir() // not a git repo
 	dr := NewDirectoryReader(dir)
@@ -135,6 +194,23 @@ func TestDirectoryReader_FileDiff_emptyFile(t *testing.T) {
 	assert.Empty(t, lines)
 }
 
+func TestDirectoryReader_FileDiff_binaryFile(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	// create and commit a binary file
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "image.png"),
+		[]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}, 0o600))
+	gitCmd(t, dir, "add", ".")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	dr := NewDirectoryReader(dir)
+	lines, err := dr.FileDiff("", "image.png", false)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(binary file)", lines[0].Content)
+	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+}
+
 func TestDirectoryReader_FileDiff_nonexistentFile(t *testing.T) {
 	dir := setupTestRepo(t)
 
@@ -145,7 +221,7 @@ func TestDirectoryReader_FileDiff_nonexistentFile(t *testing.T) {
 	dr := NewDirectoryReader(dir)
 	_, err := dr.FileDiff("", "missing.go", false)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "read file")
+	assert.Contains(t, err.Error(), "stat file")
 }
 
 func TestDirectoryReader_FileDiff_subdirectory(t *testing.T) {
