@@ -141,7 +141,11 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	// apply horizontal scroll
 	if m.scrollX > 0 {
-		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
+		cutWidth := m.diffContentWidth()
+		if m.lineNumbers {
+			cutWidth -= m.lineNumGutterWidth()
+		}
+		content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
 	}
 
 	cursor := " "
@@ -221,7 +225,11 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 	// apply horizontal scroll
 	if m.scrollX > 0 {
-		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
+		cutWidth := m.diffContentWidth()
+		if m.lineNumbers {
+			cutWidth -= m.lineNumGutterWidth()
+		}
+		content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
 	}
 
 	cursor := " "

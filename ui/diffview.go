@@ -131,7 +131,11 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 	// apply horizontal scroll to content (bar stays fixed), disabled in wrap mode
 	if m.scrollX > 0 && !m.wrapMode {
-		content = ansi.Cut(content, m.scrollX, m.scrollX+m.diffContentWidth())
+		cutWidth := m.diffContentWidth()
+		if m.lineNumbers {
+			cutWidth -= m.lineNumGutterWidth()
+		}
+		content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
 	}
 
 	cursor := " "
