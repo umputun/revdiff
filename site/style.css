@@ -25,7 +25,11 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+html { scroll-padding-top: 72px; }
+
+@media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+}
 
 body {
     font-family: var(--font-sans);
@@ -33,6 +37,8 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    /* Prevent horizontal wiggle on iOS */
+    overflow-x: hidden;
 }
 
 a { color: var(--accent); text-decoration: none; transition: color 0.15s; }
@@ -59,6 +65,11 @@ code {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
+    /* Promote to GPU compositing layer to prevent wiggle on iOS Safari
+       when address bar shows/hides and triggers layout recalculation */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
 }
 
 .nav-inner {
@@ -649,7 +660,10 @@ section h2 {
     display: grid;
     grid-template-columns: 220px 1fr;
     gap: 48px;
+    /* 100dvh = dynamic viewport height (excludes browser chrome on iOS Safari)
+       falls back to 100vh for older browsers */
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .docs-sidebar {
