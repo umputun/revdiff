@@ -3,10 +3,9 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -644,7 +643,34 @@ func TestApplyTheme(t *testing.T) {
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
 		applyTheme(&opts, th)
 		assert.Equal(t, "#new-accent", opts.Colors.Accent)
-		assert.Equal(t, "#original-border", opts.Colors.Border, "unset theme key should not change opts")
+		assert.Equal(t, "#original-border", opts.Colors.Border, "unset required key should not change opts")
+	})
+
+	t.Run("optional keys cleared when absent from theme", func(t *testing.T) {
+		opts := options{}
+		opts.Colors.CursorBg = "#111111"
+		opts.Colors.TreeBg = "#222222"
+		opts.Colors.DiffBg = "#333333"
+		opts.Colors.Accent = "#original-accent"
+
+		// theme has accent but omits all optional keys
+		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
+		applyTheme(&opts, th)
+
+		assert.Equal(t, "#new-accent", opts.Colors.Accent)
+		assert.Empty(t, opts.Colors.CursorBg, "optional cursor-bg should be cleared when theme omits it")
+		assert.Empty(t, opts.Colors.TreeBg, "optional tree-bg should be cleared when theme omits it")
+		assert.Empty(t, opts.Colors.DiffBg, "optional diff-bg should be cleared when theme omits it")
+	})
+
+	t.Run("optional keys preserved when present in theme", func(t *testing.T) {
+		opts := options{}
+		opts.Colors.TreeBg = "#old-value"
+
+		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-tree-bg": "#new-tree-bg"}}
+		applyTheme(&opts, th)
+
+		assert.Equal(t, "#new-tree-bg", opts.Colors.TreeBg, "optional key present in theme should overwrite")
 	})
 }
 
@@ -690,6 +716,12 @@ func TestDumpThemeOutput(t *testing.T) {
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
 	assert.Contains(t, output, "color-accent = #D5895F")
 	assert.Contains(t, output, "color-add-fg = #87d787")
+
+	// verify dump output can be parsed back (roundtrip)
+	th, err := theme.Parse(strings.NewReader(output))
+	require.NoError(t, err, "dump-theme output must be parseable")
+	assert.Equal(t, opts.ChromaStyle, th.ChromaStyle)
+	assert.Equal(t, colors["color-accent"], th.Colors["color-accent"])
 }
 
 func TestListThemesOutput(t *testing.T) {
@@ -708,7 +740,46 @@ func TestCollectColors(t *testing.T) {
 	assert.Equal(t, "#D5895F", colors["color-accent"])
 	assert.Equal(t, "#585858", colors["color-border"])
 	assert.Equal(t, "#87d787", colors["color-add-fg"])
-	assert.Len(t, colors, 21)
+	// 3 optional keys (cursor-bg, tree-bg, diff-bg) have no default and are omitted
+	assert.Len(t, colors, 18)
+	assert.Empty(t, colors["color-cursor-bg"])
+	assert.Empty(t, colors["color-tree-bg"])
+	assert.Empty(t, colors["color-diff-bg"])
+}
+
+func TestColorFieldPtrs(t *testing.T) {
+	t.Run("returns 21 entries matching theme.ColorKeys", func(t *testing.T) {
+		opts := options{}
+		ptrs := colorFieldPtrs(&opts)
+		assert.Len(t, ptrs, 21)
+		for _, key := range theme.ColorKeys() {
+			_, ok := ptrs[key]
+			assert.True(t, ok, "missing key %q in colorFieldPtrs", key)
+		}
+	})
+
+	t.Run("pointers write to correct fields", func(t *testing.T) {
+		opts := options{}
+		ptrs := colorFieldPtrs(&opts)
+		*ptrs["color-accent"] = "#aaa"
+		*ptrs["color-search-bg"] = "#bbb"
+		assert.Equal(t, "#aaa", opts.Colors.Accent)
+		assert.Equal(t, "#bbb", opts.Colors.SearchBg)
+	})
+
+	t.Run("applyTheme and collectColors round-trip", func(t *testing.T) {
+		// set all colors via applyTheme, then collectColors should return same values
+		opts := options{}
+		th := theme.Theme{ChromaStyle: "test-style", Colors: map[string]string{}}
+		for _, key := range theme.ColorKeys() {
+			th.Colors[key] = "#" + key[:6] // unique value per key
+		}
+		applyTheme(&opts, th)
+		collected := collectColors(opts)
+		for _, key := range theme.ColorKeys() {
+			assert.Equal(t, th.Colors[key], collected[key], "round-trip mismatch for %q", key)
+		}
+	})
 }
 
 func TestThemeOverridesColorFlags(t *testing.T) {
@@ -750,37 +821,109 @@ func TestResolveThemeConflicts(t *testing.T) {
 	})
 }
 
+func TestHandleThemes_InitThemes(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	var stdout, stderr bytes.Buffer
+	opts := options{InitThemes: true}
+
+	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	require.NoError(t, err)
+	assert.True(t, done, "init-themes should signal exit")
+	assert.Contains(t, stdout.String(), "bundled themes written to")
+	assert.Contains(t, stdout.String(), themesDir)
+}
+
+func TestHandleThemes_InitThemesEmptyDir(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	opts := options{InitThemes: true}
+
+	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	require.Error(t, err)
+	assert.False(t, done)
+	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
+}
+
+func TestHandleThemes_ListThemes(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+	var stdout, stderr bytes.Buffer
+	opts := options{ListThemes: true}
+
+	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	require.NoError(t, err)
+	assert.True(t, done, "list-themes should signal exit")
+	assert.Contains(t, stdout.String(), "dracula")
+	assert.Contains(t, stdout.String(), "nord")
+}
+
+func TestHandleThemes_ListThemesEmptyDir(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	opts := options{ListThemes: true}
+
+	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	require.Error(t, err)
+	assert.False(t, done)
+	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
+}
+
+func TestHandleThemes_LoadTheme(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+	var stdout, stderr bytes.Buffer
+	opts := options{Theme: "dracula"}
+	opts.Colors.Accent = "#original"
+
+	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	require.NoError(t, err)
+	assert.False(t, done, "load theme should not signal exit")
+	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme should override accent color")
+	assert.Equal(t, "dracula", opts.ChromaStyle)
+}
+
+func TestHandleThemes_LoadThemeNotFound(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+	var stdout, stderr bytes.Buffer
+	opts := options{Theme: "nonexistent"}
+
+	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	require.Error(t, err)
+	assert.False(t, done)
+}
+
+func TestHandleThemes_LoadThemeEmptyDir(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	opts := options{Theme: "dracula"}
+
+	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	require.Error(t, err)
+	assert.False(t, done)
+	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
+}
+
 func TestHandleThemes_NoColorsWarning(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
 	require.NoError(t, theme.InitBundled(themesDir))
-
-	// capture stderr
-	origStderr := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-
+	var stdout, stderr bytes.Buffer
 	opts := options{Theme: "dracula", NoColors: true}
-	// override defaultThemesDir by setting env for the themes dir; instead, call the pieces directly
-	// to avoid os.Exit paths. replicate the warning + resolve logic from handleThemes.
-	if opts.Theme != "" && opts.NoColors {
-		fmt.Fprintln(os.Stderr, "warning: --no-colors ignored when --theme is set")
-	}
-	resolveThemeConflicts(&opts)
-	th, loadErr := theme.Load("dracula", themesDir)
-	require.NoError(t, loadErr)
-	applyTheme(&opts, th)
 
-	require.NoError(t, w.Close())
-	os.Stderr = origStderr
-
-	var buf bytes.Buffer
-	_, copyErr := io.Copy(&buf, r)
-	require.NoError(t, copyErr)
-
-	assert.Contains(t, buf.String(), "warning: --no-colors ignored when --theme is set")
+	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	require.NoError(t, err)
+	assert.False(t, done)
+	assert.Contains(t, stderr.String(), "warning: --no-colors ignored when --theme is set")
 	assert.False(t, opts.NoColors, "--no-colors should be cleared")
 	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme colors should be applied")
+}
+
+func TestHandleThemes_NoOp(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	opts := options{}
+
+	done, err := handleThemes(&opts, "/some/dir", &stdout, &stderr)
+	require.NoError(t, err)
+	assert.False(t, done)
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 func TestDefaultThemesDir(t *testing.T) {

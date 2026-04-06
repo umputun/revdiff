@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -37,10 +38,26 @@ var colorKeys = []string{
 	"color-search-fg", "color-search-bg",
 }
 
+// optionalColorKeys lists color keys that may be omitted from theme files.
+// these correspond to CLI flags with no default value (terminal background is used instead).
+var optionalColorKeys = map[string]bool{
+	"color-cursor-bg": true,
+	"color-tree-bg":   true,
+	"color-diff-bg":   true,
+}
+
 // ColorKeys returns the ordered list of recognized color key names.
 func ColorKeys() []string {
 	result := make([]string, len(colorKeys))
 	copy(result, colorKeys)
+	return result
+}
+
+// OptionalColorKeys returns the set of color keys that may be omitted from theme files.
+// these correspond to CLI flags with no default value (terminal background is used instead).
+func OptionalColorKeys() map[string]bool {
+	result := make(map[string]bool, len(optionalColorKeys))
+	maps.Copy(result, optionalColorKeys)
 	return result
 }
 
@@ -113,9 +130,12 @@ func Parse(r io.Reader) (Theme, error) {
 		return Theme{}, errors.New("theme missing required key: chroma-style")
 	}
 
-	// validate that all required color keys are present
+	// validate that all required color keys are present (optional keys may be omitted)
 	var missing []string
 	for _, key := range colorKeys {
+		if optionalColorKeys[key] {
+			continue
+		}
 		if _, ok := t.Colors[key]; !ok {
 			missing = append(missing, key)
 		}

@@ -67,14 +67,14 @@ Fix 5 validated issues from external code review: theme color validation, annota
 - Modify: `cmd/revdiff/main.go`
 - Modify: `cmd/revdiff/main_test.go`
 
-- [ ] change handleThemes signature to accept `io.Writer` for stdout/stderr (matches dumpConfig pattern)
-- [ ] change return type to `(bool, error)` where bool=true means "should exit"
-- [ ] remove os.Exit calls, return appropriate values instead
-- [ ] write output to the io.Writer params instead of os.Stdout/os.Stderr directly
-- [ ] update caller in run() to handle (bool, error) and call os.Exit there
-- [ ] write tests calling handleThemes directly with bytes.Buffer writers
-- [ ] test init-themes, list-themes, load-theme, error cases via return values
-- [ ] run `make test && make lint`
+- [x] change handleThemes signature to accept `io.Writer` for stdout/stderr (matches dumpConfig pattern)
+- [x] change return type to `(bool, error)` where bool=true means "should exit"
+- [x] remove os.Exit calls, return appropriate values instead
+- [x] write output to the io.Writer params instead of os.Stdout/os.Stderr directly
+- [x] update caller in run() to handle (bool, error) and call os.Exit there
+- [x] write tests calling handleThemes directly with bytes.Buffer writers
+- [x] test init-themes, list-themes, load-theme, error cases via return values
+- [x] run `make test && make lint`
 
 ### Task 5: Unify color schema to single source of truth
 
@@ -82,21 +82,21 @@ Fix 5 validated issues from external code review: theme color validation, annota
 - Modify: `cmd/revdiff/main.go`
 - Modify: `cmd/revdiff/main_test.go`
 
-- [ ] add unexported `colorFieldPtrs(opts *options) map[string]*string` in main.go that maps color key names to opts.Colors field pointers
-- [ ] refactor applyTheme() to use colorFieldPtrs() instead of its hardcoded map
-- [ ] refactor collectColors() to use colorFieldPtrs() instead of its hardcoded map
-- [ ] ensure adding a new color only requires changes in theme.go colorKeys + options struct + colorFieldPtrs
-- [ ] verify applyTheme and collectColors produce identical results to before (existing tests)
-- [ ] run `make test && make lint`
+- [x] add unexported `colorFieldPtrs(opts *options) map[string]*string` in main.go that maps color key names to opts.Colors field pointers
+- [x] refactor applyTheme() to use colorFieldPtrs() instead of its hardcoded map
+- [x] refactor collectColors() to use colorFieldPtrs() instead of its hardcoded map
+- [x] ensure adding a new color only requires changes in theme.go colorKeys + options struct + colorFieldPtrs
+- [x] verify applyTheme and collectColors produce identical results to before (existing tests)
+- [x] run `make test && make lint`
 
 ### Task 6: Verify acceptance criteria
 
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
-- [ ] verify all 5 bundled themes parse correctly (existing test covers this)
-- [ ] verify `--dump-keys` and `--dump-theme` still work
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
+- [x] verify all 5 bundled themes parse correctly (existing test covers this)
+- [x] verify `--dump-keys` and `--dump-theme` still work
 
 ### Task 7: [Final] Update documentation
 
-- [ ] update CLAUDE.md if new patterns discovered
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update CLAUDE.md if new patterns discovered
+- [x] move this plan to `docs/plans/completed/`
