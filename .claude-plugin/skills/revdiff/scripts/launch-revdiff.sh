@@ -22,6 +22,9 @@ if [ -n "${REVDIFF_CONFIG:-}" ] && [ -f "$REVDIFF_CONFIG" ]; then
     CONFIG_FLAG="--config=$REVDIFF_CONFIG"
 fi
 REVDIFF_CMD="$REVDIFF_BIN $CONFIG_FLAG --output=$OUTPUT_FILE $*"
+# capture caller's PATH to pass into overlay subprocesses, which otherwise
+# start with a minimal PATH missing user-installed tools (e.g. git-lfs)
+CALLER_PATH="$PATH"
 CWD="$(pwd)"
 
 # build descriptive title: "rd: dirname [ref]"
@@ -45,7 +48,7 @@ POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -T " $OVERLAY_TITLE " -d "$CWD" -- sh -c "$REVDIFF_CMD"
+    tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -T " $OVERLAY_TITLE " -d "$CWD" -e "PATH=$CALLER_PATH" -- sh -c "$REVDIFF_CMD"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -56,7 +59,7 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
     rm -f "$SENTINEL"
 
-    KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd="$CWD")
+    KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd="$CWD" --env "PATH=$CALLER_PATH")
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
         KITTY_ARGS+=(--match "id:${KITTY_WINDOW_ID}")
     fi
@@ -80,7 +83,8 @@ if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
     WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
     WEZTERM_PCT="${WEZTERM_PCT%%%}"
     wezterm cli split-pane --bottom --percent "$WEZTERM_PCT" \
-        --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+        --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- \
+        env "PATH=$CALLER_PATH" sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
