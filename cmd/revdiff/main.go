@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -103,7 +102,7 @@ func main() {
 
 	// early-exit commands that don't need theme resolution
 	if opts.Version {
-		fmt.Printf("version: %s\ngo: %s\n", revision, runtime.Version())
+		fmt.Printf("version: %s\n", revision)
 		os.Exit(0)
 	}
 
