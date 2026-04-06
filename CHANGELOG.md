@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.12.0 - 2026-04-06
+
+### New Features
+
+- git blame gutter toggle (B key) (#38)
+- --line-numbers config option (#37)
+- kaku terminal support for wezterm-based terminals (#42)
+- cmux terminal support for overlay launcher (#35)
+- Emacs vterm support (#33)
+- project website and branding
+
+### Improvements
+
+- "beyond code review" section with use cases for --only flag
+
+### Bug Fixes
+
+- skip tmux -T title flag on versions older than 3.3 (#40)
+- Safari iOS mobile layout issues (#39)
+- improve site readability by lifting dark theme palette
+- increase docs page font sizes
+
+## v0.11.0 - 2026-04-05
+
+### New Features
+
+- custom keybindings via ~/.config/revdiff/keymap
+- color theme system with 5 bundled themes (dracula, nord, gruvbox, solarized-dark, catppuccin-mocha)
+- Ghostty terminal support
+- line numbers gutter toggle (L key)
+
 ## v0.10.0 - 2026-04-05
 
 ### New Features
