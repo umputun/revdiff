@@ -188,8 +188,8 @@ func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch msg.String() {
-	case "k", "up":
+	switch action { //nolint:exhaustive // only navigation actions are relevant in annotation list overlay
+	case keymap.ActionUp:
 		if m.annotListCursor > 0 {
 			m.annotListCursor--
 			// scroll up if cursor is above visible area
@@ -199,7 +199,7 @@ func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "j", "down":
+	case keymap.ActionDown:
 		if m.annotListCursor < len(m.annotListItems)-1 {
 			m.annotListCursor++
 			// scroll down if cursor is below visible area
@@ -209,15 +209,17 @@ func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
 
-	case "enter":
+	switch {
+	case msg.Type == tea.KeyEnter:
 		if len(m.annotListItems) == 0 {
 			m.showAnnotList = false
 			return m, nil
 		}
 		return m.jumpToAnnotation()
 
-	case "esc":
+	case action == keymap.ActionDismiss || msg.Type == tea.KeyEsc:
 		m.showAnnotList = false
 		return m, nil
 	}

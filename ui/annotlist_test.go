@@ -10,6 +10,7 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/keymap"
 )
 
 func TestModel_BuildAnnotListItems(t *testing.T) {
@@ -356,6 +357,58 @@ func TestModel_HandleAnnotListKey(t *testing.T) {
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
 		model = result.(Model)
 		assert.Equal(t, 0, model.annotListCursor)
+	})
+
+	t.Run("remapped key navigates down via keymap", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		// remap: unbind j, bind x to ActionDown
+		km := keymap.Default()
+		km.Unbind("j")
+		km.Bind("x", keymap.ActionDown)
+		m.keymap = km
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{
+			{File: "a.go", Line: 1, Type: "+"},
+			{File: "a.go", Line: 2, Type: "+"},
+			{File: "a.go", Line: 3, Type: "+"},
+		}
+		m.annotListCursor = 0
+
+		// x should navigate down (remapped)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+		model := result.(Model)
+		assert.Equal(t, 1, model.annotListCursor)
+
+		// j should no longer navigate (unbound)
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		model = result.(Model)
+		assert.Equal(t, 1, model.annotListCursor, "j should be consumed as no-op after unbind")
+	})
+
+	t.Run("enter and esc work regardless of keymap remapping", func(t *testing.T) {
+		km := keymap.Default()
+		km.Unbind("esc") // unbind esc from ActionDismiss
+
+		// esc still closes popup via tea.KeyEsc fallback
+		m := testModel([]string{"a.go"}, nil)
+		m.keymap = km
+		m.showAnnotList = true
+		m.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		model := result.(Model)
+		assert.False(t, model.showAnnotList, "esc should close popup even when unbound from keymap")
+
+		// enter still works regardless of keymap
+		m2 := testModel([]string{"a.go"}, nil)
+		m2.keymap = km
+		m2.showAnnotList = true
+		m2.annotListItems = []annotation.Annotation{{File: "a.go", Line: 1, Type: "+"}}
+		m2.annotListCursor = 0
+
+		result, _ = m2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		model = result.(Model)
+		assert.False(t, model.showAnnotList, "enter should close popup regardless of keymap")
 	})
 }
 

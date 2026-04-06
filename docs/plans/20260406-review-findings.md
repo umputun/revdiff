@@ -39,13 +39,13 @@ Fix 5 validated issues from external code review: theme color validation, annota
 - Modify: `ui/annotlist.go`
 - Modify: `ui/annotlist_test.go`
 
-- [ ] replace hardcoded `"j"`, `"down"` with `m.keymap.Resolve(msg.String()) == keymap.ActionDown`
-- [ ] replace hardcoded `"k"`, `"up"` with `m.keymap.Resolve(msg.String()) == keymap.ActionUp`
-- [ ] keep `"enter"` hardcoded (modal overlay convention, same as confirm discard)
-- [ ] for `"esc"`, use hybrid pattern: `action == keymap.ActionDismiss || msg.Type == tea.KeyEsc` (matches handleHelpKey)
-- [ ] add test: remap j to x, verify x navigates down in annotation list
-- [ ] add test: verify enter and esc still work regardless of keymap remapping
-- [ ] run `make test && make lint`
+- [x] replace hardcoded `"j"`, `"down"` with `m.keymap.Resolve(msg.String()) == keymap.ActionDown`
+- [x] replace hardcoded `"k"`, `"up"` with `m.keymap.Resolve(msg.String()) == keymap.ActionUp`
+- [x] keep `"enter"` hardcoded (modal overlay convention, same as confirm discard)
+- [x] for `"esc"`, use hybrid pattern: `action == keymap.ActionDismiss || msg.Type == tea.KeyEsc` (matches handleHelpKey)
+- [x] add test: remap j to x, verify x navigates down in annotation list
+- [x] add test: verify enter and esc still work regardless of keymap remapping
+- [x] run `make test && make lint`
 
 ### Task 3: Return error from Keymap.Dump()
 
