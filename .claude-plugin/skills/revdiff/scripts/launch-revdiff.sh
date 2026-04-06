@@ -140,38 +140,46 @@ APPLESCRIPT
     exit 0
 fi
 
-# iterm2: split-pane via osascript with sentinel file for blocking
+# iterm2: split pane via AppleScript (macOS only)
 if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
     SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
     rm -f "$SENTINEL"
 
-    # ITERM_SESSION_ID format is "w0t0p0:UUID"; AppleScript session id is just the UUID part
+    # use launcher script to avoid single-quote injection in paths
+    LAUNCH_SCRIPT=$(mktemp /tmp/revdiff-launch-XXXXXX.sh)
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+cd "\$1" && $REVDIFF_CMD; touch "\$2"
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    # ITERM_SESSION_ID format is "w0t0p0:UUID"; AppleScript session id is the UUID part
     ITERM_UUID="${ITERM_SESSION_ID##*:}"
 
-    # use "command" parameter so iTerm2 runs the command directly, bypassing shell init
-    ITERM_CMD="cd '$CWD' && $REVDIFF_CMD; touch '$SENTINEL'"
-
-    # single osascript call: find target session by UUID, read its dimensions, split
-    OSASCRIPT_ERR=$(osascript - "$ITERM_UUID" "$ITERM_CMD" <<'APPLESCRIPT' 2>&1 >/dev/null
+    # find target session by UUID, auto-detect split direction, capture new session id
+    ITERM_NEW_SESSION=$(osascript - "$ITERM_UUID" "$LAUNCH_SCRIPT" "$CWD" "$SENTINEL" <<'APPLESCRIPT' 2>&1
 on run argv
     set targetId to item 1 of argv
-    set cmd to item 2 of argv
+    set launchScript to item 2 of argv
+    set cwd to item 3 of argv
+    set sentinel to item 4 of argv
+    set cmd to launchScript & " " & quoted form of cwd & " " & quoted form of sentinel
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
             repeat with t in tabs of w
                 repeat with s in sessions of t
                     if id of s is targetId then
-                        set cols to columns of s
-                        set rows to rows of s
+                        set colCount to columns of s
+                        set rowCount to rows of s
                         tell s
-                            -- enough room for two 80-col panes side by side
-                            if cols >= 160 and cols > (rows * 2) then
-                                split vertically with same profile command cmd
+                            if colCount ≥ 160 and colCount > (rowCount * 2) then
+                                set newSession to split vertically with same profile command cmd
                             else
-                                split horizontally with same profile command cmd
+                                set newSession to split horizontally with same profile command cmd
                             end if
                         end tell
-                        return
+                        return id of newSession
                     end if
                 end repeat
             end repeat
@@ -181,14 +189,33 @@ on run argv
 end run
 APPLESCRIPT
     ) || {
-        echo "error: failed to open iTerm2 split via osascript: $OSASCRIPT_ERR" >&2
+        echo "error: failed to open iTerm2 split via osascript: $ITERM_NEW_SESSION" >&2
+        rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
         exit 1
     }
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
-    rm -f "$SENTINEL"
+    # close the split pane to avoid a dead session
+    osascript - "$ITERM_NEW_SESSION" <<'APPLESCRIPT' 2>/dev/null
+on run argv
+    set sid to item 1 of argv
+    tell application id "com.googlecode.iterm2"
+        repeat with w in windows
+            repeat with t in tabs of w
+                repeat with s in sessions of t
+                    if id of s is sid then
+                        tell s to close
+                        return
+                    end if
+                end repeat
+            end repeat
+        end repeat
+    end tell
+end run
+APPLESCRIPT
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit 0
 fi
