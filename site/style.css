@@ -25,7 +25,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-padding-top: 72px; }
+html {
+    scroll-padding-top: 72px;
+    overflow-x: hidden;
+}
 
 @media (prefers-reduced-motion: no-preference) {
     html { scroll-behavior: smooth; }
@@ -37,7 +40,6 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-    /* Prevent horizontal wiggle on iOS */
     overflow-x: hidden;
 }
 
@@ -65,11 +67,17 @@ code {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
-    /* Promote to GPU compositing layer to prevent wiggle on iOS Safari
-       when address bar shows/hides and triggers layout recalculation */
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
-    will-change: transform;
+}
+
+/* backdrop-filter blur is expensive on iOS — disable on mobile */
+@media (max-width: 900px) {
+    .nav {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(13, 15, 18, 0.97);
+    }
 }
 
 .nav-inner {
@@ -649,6 +657,9 @@ section h2 {
     .terminal-grid { grid-template-columns: repeat(2, 1fr); }
     section h2 { font-size: 1.25rem; }
     .footer-inner { flex-direction: column; gap: 16px; }
+    /* prevent code blocks from overflowing viewport width */
+    .code-block { max-width: calc(100vw - 48px); }
+    .install-grid-2 { grid-template-columns: 1fr; }
 }
 
 /* === docs page === */
