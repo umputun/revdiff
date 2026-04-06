@@ -173,7 +173,7 @@ on run argv
                         set colCount to columns of s
                         set rowCount to rows of s
                         tell s
-                            if colCount ≥ 160 and colCount > (rowCount * 2) then
+                            if colCount >= 160 and colCount > (rowCount * 2) then
                                 set newSession to split vertically with same profile command cmd
                             else
                                 set newSession to split horizontally with same profile command cmd
