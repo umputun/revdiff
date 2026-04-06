@@ -362,14 +362,14 @@ unmap q</code></div>
                 <tr><td><strong>tmux</strong></td><td><code>display-popup</code> (blocks until quit)</td><td><code>$TMUX</code></td></tr>
                 <tr><td><strong>kitty</strong></td><td><code>kitty @ launch --type=overlay</code></td><td><code>$KITTY_LISTEN_ON</code></td></tr>
                 <tr><td><strong>wezterm</strong></td><td><code>wezterm cli split-pane</code></td><td><code>$WEZTERM_PANE</code></td></tr>
-                <tr><td><strong>Kaku</strong></td><td><code>kaku cli split-pane</code> (same API as wezterm)</td><td><code>$WEZTERM_PANE</code></td></tr>
+                <tr><td><strong>kaku</strong></td><td><code>kaku cli split-pane</code> (same API as wezterm)</td><td><code>$WEZTERM_PANE</code></td></tr>
                 <tr><td><strong>cmux</strong></td><td><code>cmux new-split</code> + <code>cmux send</code></td><td><code>$CMUX_SURFACE_ID</code></td></tr>
                 <tr><td><strong>ghostty</strong></td><td>AppleScript split + zoom (macOS only)</td><td><code>$TERM_PROGRAM</code></td></tr>
                 <tr><td><strong>iTerm2</strong></td><td>AppleScript split pane (macOS only)</td><td><code>$ITERM_SESSION_ID</code></td></tr>
                 <tr><td><strong>Emacs vterm</strong></td><td>New frame via <code>emacsclient</code></td><td><code>$INSIDE_EMACS</code></td></tr>
             </tbody>
         </table>
-        <p>Priority: tmux &rarr; kitty &rarr; wezterm/Kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty because it also sets <code>$TERM_PROGRAM=ghostty</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
+        <p>Priority: tmux &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty because it also sets <code>$TERM_PROGRAM=ghostty</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
 
         <h2 id="plugin-usage">Plugin usage</h2>
         <h3>Slash commands</h3>
