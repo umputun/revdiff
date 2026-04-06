@@ -456,6 +456,14 @@ section h2 {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 16px;
+    align-items: stretch;
+}
+
+.install-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    align-items: stretch;
 }
 
 .install-card {
@@ -463,6 +471,8 @@ section h2 {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius);
     padding: 24px;
+    display: flex;
+    flex-direction: column;
 }
 
 .install-card h3 {
