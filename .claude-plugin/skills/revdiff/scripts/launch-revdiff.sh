@@ -80,22 +80,31 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     exit 0
 fi
 
-# wezterm: split-pane with sentinel file for blocking
-if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
-    rm -f "$SENTINEL"
+# wezterm/kaku: split-pane with sentinel file for blocking
+if [ -n "${WEZTERM_PANE:-}" ]; then
+    WEZTERM_CLI=()
+    if command -v wezterm >/dev/null 2>&1; then
+        WEZTERM_CLI=(wezterm cli)
+    elif command -v kaku >/dev/null 2>&1; then
+        WEZTERM_CLI=(kaku cli)
+    fi
 
-    WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
-    WEZTERM_PCT="${WEZTERM_PCT%%%}"
-    wezterm cli split-pane --bottom --percent "$WEZTERM_PCT" \
-        --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+    if [ ${#WEZTERM_CLI[@]} -gt 0 ]; then
+        SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+        rm -f "$SENTINEL"
 
-    while [ ! -f "$SENTINEL" ]; do
-        sleep 0.3
-    done
-    rm -f "$SENTINEL"
-    cat "$OUTPUT_FILE"
-    exit 0
+        WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
+        WEZTERM_PCT="${WEZTERM_PCT%%%}"
+        "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
+            --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+
+        while [ ! -f "$SENTINEL" ]; do
+            sleep 0.3
+        done
+        rm -f "$SENTINEL"
+        cat "$OUTPUT_FILE"
+        exit 0
+    fi
 fi
 
 # cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)
