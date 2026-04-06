@@ -22,6 +22,10 @@ const (
 
 	fullFileContext = "-U1000000" // request full file as diff context
 
+	// MaxLineLength is the maximum line length (in bytes) that scanners will accept.
+	// Used by ParseUnifiedDiff, readReaderAsContext, and parseBlame.
+	MaxLineLength = 1024 * 1024
+
 	// BinaryPlaceholder is the content used for binary file placeholders.
 	// ParseUnifiedDiff returns this when git reports "Binary files ... differ".
 	BinaryPlaceholder = "(binary file)"
@@ -246,7 +250,7 @@ var binaryFilesRe = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
 func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
 	var lines []DiffLine
 	scanner := bufio.NewScanner(strings.NewReader(raw))
-	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024) // 1MB max line
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)
 
 	// skip diff header lines (---, +++, diff --git, index, etc.)
 	inHeader := true
