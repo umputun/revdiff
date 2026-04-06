@@ -108,6 +108,28 @@ func TestRelativeAge(t *testing.T) {
 	}
 }
 
+func TestBlameTargetRef(t *testing.T) {
+	tests := []struct {
+		name string
+		ref  string
+		want string
+	}{
+		{"double-dot", "HEAD~3..HEAD", "HEAD"},
+		{"triple-dot", "main...feature", "feature"},
+		{"single ref", "HEAD~3", ""},
+		{"empty", "", ""},
+		{"double-dot missing left", "..HEAD", ""},
+		{"double-dot missing right", "HEAD..", ""},
+		{"triple-dot missing left", "...HEAD", ""},
+		{"triple-dot missing right", "HEAD...", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, blameTargetRef(tt.ref))
+		})
+	}
+}
+
 func TestGit_FileBlame_UsesWorktreeForSingleRefDiffs(t *testing.T) {
 	dir := setupTestRepo(t)
 	g := NewGit(dir)

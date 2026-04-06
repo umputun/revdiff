@@ -61,11 +61,20 @@ func (g *Git) writeStagedBlameFile(file string) (string, error) {
 }
 
 func blameTargetRef(ref string) string {
-	parts := strings.Split(ref, "..")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return ""
+	// check triple-dot first so "A...B" isn't mis-split on ".."
+	if left, right, ok := strings.Cut(ref, "..."); ok {
+		if left == "" || right == "" {
+			return ""
+		}
+		return right
 	}
-	return parts[1]
+	if left, right, ok := strings.Cut(ref, ".."); ok {
+		if left == "" || right == "" {
+			return ""
+		}
+		return right
+	}
+	return ""
 }
 
 // parseBlame parses git blame --line-porcelain output into a map of line number to BlameLine.
