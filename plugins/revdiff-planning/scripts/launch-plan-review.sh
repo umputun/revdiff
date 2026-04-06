@@ -37,9 +37,10 @@ OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # -T (title) requires tmux 3.3+; skip on older versions
     TMUX_ARGS=(tmux display-popup -E -w 90% -h 90%)
-    TMUX_VER=$(tmux -V 2>/dev/null | sed 's/[^0-9.]//g')
-    if [ -n "$TMUX_VER" ] && [ "$(printf '%s\n' "3.3" "$TMUX_VER" | sort -V | head -1)" = "3.3" ]; then
-        TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+    if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
+        if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
+            TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+        fi
     fi
     TMUX_ARGS+=(-- sh -c "$REVDIFF_CMD")
     "${TMUX_ARGS[@]}"
