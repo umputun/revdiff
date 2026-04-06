@@ -5841,7 +5841,7 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 		m.singleFile = true
 		m.width = 100
 		m.treeWidth = 0
-		assert.Equal(t, 97, m.diffContentWidth()) // width - 3 (borders + cursor bar)
+		assert.Equal(t, 96, m.diffContentWidth()) // width - 4 (borders + cursor bar + right padding)
 	})
 
 	t.Run("multi-file mode", func(t *testing.T) {
@@ -5849,7 +5849,7 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 		m.singleFile = false
 		m.width = 120
 		m.treeWidth = 36
-		assert.Equal(t, 79, m.diffContentWidth()) // 120 - 36 - 4 - 1
+		assert.Equal(t, 78, m.diffContentWidth()) // 120 - 36 - 4 - 2
 	})
 
 	t.Run("single-file mode minimum width", func(t *testing.T) {
@@ -6272,8 +6272,8 @@ func TestModel_DiffContentWidthWithTOC(t *testing.T) {
 	m.treeWidth = 30
 	m.mdTOC = &mdTOC{entries: []tocEntry{{title: "Title", level: 1, lineIdx: 0}}, activeSection: -1}
 
-	// with TOC active, should use multi-file formula: width - treeWidth - 4 - 1
-	assert.Equal(t, 65, m.diffContentWidth()) // 100 - 30 - 4 - 1
+	// with TOC active, should use multi-file formula: width - treeWidth - 4 - 2
+	assert.Equal(t, 64, m.diffContentWidth()) // 100 - 30 - 4 - 2
 }
 
 func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
@@ -6373,7 +6373,7 @@ func TestModel_DiffContentWidthWithTOCActive(t *testing.T) {
 		m.singleFile = true
 		m.width = 100
 		m.treeWidth = 0
-		assert.Equal(t, 97, m.diffContentWidth()) // width - 3
+		assert.Equal(t, 96, m.diffContentWidth()) // width - 4
 	})
 
 	t.Run("single-file with TOC uses multi-file formula", func(t *testing.T) {
@@ -6382,7 +6382,7 @@ func TestModel_DiffContentWidthWithTOCActive(t *testing.T) {
 		m.width = 100
 		m.treeWidth = 30
 		m.mdTOC = &mdTOC{entries: []tocEntry{{title: "T", level: 1, lineIdx: 0}}, activeSection: -1}
-		assert.Equal(t, 65, m.diffContentWidth()) // 100 - 30 - 4 - 1
+		assert.Equal(t, 64, m.diffContentWidth()) // 100 - 30 - 4 - 2
 	})
 
 	t.Run("minimum width enforced", func(t *testing.T) {
