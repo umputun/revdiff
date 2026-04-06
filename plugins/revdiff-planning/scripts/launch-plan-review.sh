@@ -30,7 +30,7 @@ trap 'rm -f "$OUTPUT_FILE"' EXIT
 # make plan path absolute for the overlay shell
 PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
 
-REVDIFF_CMD="$REVDIFF_BIN --only=$PLAN_ABS --output=$OUTPUT_FILE"
+REVDIFF_CMD="$REVDIFF_BIN --only=$PLAN_ABS --output=$OUTPUT_FILE --wrap"
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
 # tmux: display-popup -E blocks until command exits

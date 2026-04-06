@@ -18,7 +18,7 @@
       "name": "revdiff-planning",
       "source": "./plugins/revdiff-planning",
       "description": "Automatic plan review with revdiff",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "author": {
         "name": "umputun"
       }
