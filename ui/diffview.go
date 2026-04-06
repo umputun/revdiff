@@ -328,6 +328,8 @@ func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOf
 }
 
 // styleDiffContent applies the appropriate line style based on change type.
+// for add/remove lines, extends the background to the full content width so padContentBg
+// at the View level doesn't replace it with DiffBg.
 func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
 	if isSearchMatch && m.searchTerm != "" {
 		content = m.highlightSearchMatches(content)
@@ -336,20 +338,42 @@ func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content stri
 	switch changeType {
 	case diff.ChangeAdd:
 		if hasHighlight {
-			return m.styles.LineAddHighlight.Render(prefix + content)
+			return m.extendLineBg(m.styles.LineAddHighlight.Render(prefix+content), m.styles.colors.AddBg)
 		}
-		return m.styles.LineAdd.Render(prefix + content)
+		return m.extendLineBg(m.styles.LineAdd.Render(prefix+content), m.styles.colors.AddBg)
 	case diff.ChangeRemove:
 		if hasHighlight {
-			return m.styles.LineRemoveHighlight.Render(prefix + content)
+			return m.extendLineBg(m.styles.LineRemoveHighlight.Render(prefix+content), m.styles.colors.RemoveBg)
 		}
-		return m.styles.LineRemove.Render(prefix + content)
+		return m.extendLineBg(m.styles.LineRemove.Render(prefix+content), m.styles.colors.RemoveBg)
 	default:
 		if hasHighlight {
-			return prefix + content
+			return m.styles.LineContextHighlight.Render(prefix + content)
 		}
 		return m.styles.LineContext.Render(prefix + content)
 	}
+}
+
+// extendLineBg extends a styled line's background to the full diff content width
+// using raw ANSI sequences. this ensures add/remove/modify backgrounds fill the entire line.
+// subtracts line number gutter width when line numbers are enabled.
+func (m Model) extendLineBg(styled, bgColor string) string {
+	if bgColor == "" {
+		return styled
+	}
+	// target = content area minus cursor bar (1) minus line number gutter (if on)
+	// diffContentWidth() already excludes cursor bar; subtract gutter if line numbers enabled
+	targetWidth := m.diffContentWidth()
+	if m.lineNumbers {
+		targetWidth -= m.lineNumGutterWidth()
+	}
+	// leave 1 char gap before right border
+	targetWidth--
+	currentWidth := lipgloss.Width(styled)
+	if pad := targetWidth - currentWidth; pad > 0 {
+		return styled + m.ansiBg(bgColor) + strings.Repeat(" ", pad) + "\033[49m"
+	}
+	return styled
 }
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.

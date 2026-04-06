@@ -101,9 +101,14 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		numGutter = m.lineNumGutter(dl)
 	}
 
+	bgColor := m.styles.colors.AddBg
+	if modified {
+		bgColor = m.styles.colors.ModifyBg
+	}
+
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, isCursor, hasHighlight, style, hlStyle)
+		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, isCursor, hasHighlight, style, hlStyle, bgColor)
 		return
 	}
 
@@ -111,6 +116,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	if hasHighlight {
 		content = hlStyle.Render(gutter + textContent)
 	}
+	content = m.extendLineBg(content, bgColor)
 
 	// apply horizontal scroll
 	if m.scrollX > 0 {
@@ -132,7 +138,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
 func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter string,
-	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style) {
+	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style, bgColor string) {
 	gutterExtra := 0
 	numBlank := ""
 	if m.lineNumbers {
@@ -155,6 +161,7 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutte
 		} else {
 			styled = style.Render(prefix + vl)
 		}
+		styled = m.extendLineBg(styled, bgColor)
 
 		cursor := " "
 		if i == 0 && isCursor {
@@ -220,6 +227,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 				ng = numGutter
 			}
 			styled := style.Render(prefix + vl)
+			styled = m.extendLineBg(styled, m.styles.colors.RemoveBg)
 
 			cursor := " "
 			if i == 0 && isCursor {
@@ -231,6 +239,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	}
 
 	content := style.Render(" - " + text)
+	content = m.extendLineBg(content, m.styles.colors.RemoveBg)
 
 	// apply horizontal scroll
 	if m.scrollX > 0 {

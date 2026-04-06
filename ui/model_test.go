@@ -3333,6 +3333,73 @@ func TestModel_AnsiBg(t *testing.T) {
 	assert.Empty(t, m.ansiBg("bad"), "should return empty for invalid hex")
 }
 
+func TestModel_PadContentBg(t *testing.T) {
+	m := testModel(nil, nil)
+
+	t.Run("empty bgHex is no-op", func(t *testing.T) {
+		assert.Equal(t, "hello", m.padContentBg("hello", 20, ""))
+	})
+
+	t.Run("zero width is no-op", func(t *testing.T) {
+		assert.Equal(t, "hello", m.padContentBg("hello", 0, "#2e3440"))
+	})
+
+	t.Run("pads short line", func(t *testing.T) {
+		result := m.padContentBg("hi", 10, "#2e3440")
+		assert.Contains(t, result, "\033[48;2;46;52;64m")
+		assert.Contains(t, result, "\033[49m")
+		assert.Equal(t, 10, lipgloss.Width(result))
+	})
+
+	t.Run("strips trailing spaces before padding", func(t *testing.T) {
+		result := m.padContentBg("hi      ", 10, "#2e3440")
+		assert.Contains(t, result, "\033[48;2;46;52;64m")
+		assert.Equal(t, 10, lipgloss.Width(result))
+	})
+
+	t.Run("multi-line pads each line", func(t *testing.T) {
+		result := m.padContentBg("ab\ncd", 5, "#2e3440")
+		lines := strings.Split(result, "\n")
+		assert.Len(t, lines, 2)
+		assert.Equal(t, 5, lipgloss.Width(lines[0]))
+		assert.Equal(t, 5, lipgloss.Width(lines[1]))
+	})
+
+	t.Run("line at target width is no-op", func(t *testing.T) {
+		result := m.padContentBg("abcde", 5, "#2e3440")
+		assert.Equal(t, "abcde", result)
+	})
+}
+
+func TestModel_ExtendLineBg(t *testing.T) {
+	t.Run("empty bgColor is no-op", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.width = 80
+		assert.Equal(t, "hello", m.extendLineBg("hello", ""))
+	})
+
+	t.Run("pads to content width", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.width = 80
+		result := m.extendLineBg("hi", "#2e3440")
+		assert.Contains(t, result, "\033[48;2;46;52;64m")
+		assert.Contains(t, result, "\033[49m")
+		w := lipgloss.Width(result)
+		assert.Greater(t, w, 2, "should be wider than input")
+	})
+
+	t.Run("with line numbers subtracts gutter", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.width = 80
+		m.lineNumbers = true
+		m.lineNumWidth = 3
+		resultWithNums := m.extendLineBg("hi", "#2e3440")
+		m.lineNumbers = false
+		resultWithout := m.extendLineBg("hi", "#2e3440")
+		assert.Less(t, lipgloss.Width(resultWithNums), lipgloss.Width(resultWithout), "line numbers should reduce target width")
+	})
+}
+
 func TestModel_HandleEscKeyClearsSearch(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "hello world"}},

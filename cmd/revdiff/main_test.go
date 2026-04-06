@@ -698,7 +698,7 @@ func TestListThemesOutput(t *testing.T) {
 
 	names, err := theme.List(themesDir)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"dracula", "nord", "solarized-dark"}, names)
+	assert.Equal(t, []string{"catppuccin-mocha", "dracula", "gruvbox", "nord", "solarized-dark"}, names)
 }
 
 func TestCollectColors(t *testing.T) {

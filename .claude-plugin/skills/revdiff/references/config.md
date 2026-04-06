@@ -51,7 +51,7 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 
 ## Themes
 
-Three bundled themes: **dracula**, **nord**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.
+Five bundled themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.
 
 ```bash
 revdiff --theme dracula          # apply a theme
@@ -61,6 +61,8 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom  # export current colo
 ```
 
 Set default theme in config: `theme = dracula`. Or env: `REVDIFF_THEME=dracula`.
+
+**Custom themes:** customize colors in config or via `--color-*` flags, then `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`. Or copy a bundled theme file and edit directly — each has all 21 color keys + `chroma-style`.
 
 Precedence: `--theme` takes over completely — overwrites all color fields, ignoring `--color-*` flags and env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints warning and applies theme.
 

@@ -277,7 +277,7 @@ func TestInitBundled_createsDirAndFiles(t *testing.T) {
 
 	names, err := List(dir)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"dracula", "nord", "solarized-dark"}, names)
+	assert.Equal(t, []string{"catppuccin-mocha", "dracula", "gruvbox", "nord", "solarized-dark"}, names)
 
 	// verify files are non-empty
 	for _, name := range names {
@@ -324,7 +324,7 @@ func TestInitBundled_overwritesBundledThemes(t *testing.T) {
 
 func TestBundledNames(t *testing.T) {
 	names := BundledNames()
-	assert.Equal(t, []string{"dracula", "nord", "solarized-dark"}, names)
+	assert.Equal(t, []string{"catppuccin-mocha", "dracula", "gruvbox", "nord", "solarized-dark"}, names)
 }
 
 func TestBundledThemes_parseCorrectly(t *testing.T) {

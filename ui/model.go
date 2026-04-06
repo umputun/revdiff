@@ -792,8 +792,10 @@ func (m Model) View() string {
 	switch {
 	case m.treeHidden || (m.singleFile && m.mdTOC == nil):
 		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
+		paneW := m.width - 2
+		diffContent = m.padContentBg(diffContent, paneW, m.styles.colors.DiffBg)
 		diffPane := m.styles.DiffPaneActive.
-			Width(m.width - 2).
+			Width(paneW).
 			Height(ph).
 			Render(diffContent)
 		mainView = diffPane
@@ -810,13 +812,17 @@ func (m Model) View() string {
 			diffStyle = m.styles.DiffPaneActive
 		}
 
+		diffW := m.width - m.treeWidth - 4
+		tocContent = m.padContentBg(tocContent, m.treeWidth, m.styles.colors.TreeBg)
+		diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
+
 		tocPane := treeStyle.
 			Width(m.treeWidth).
 			Height(ph).
 			Render(tocContent)
 
 		diffPane := diffStyle.
-			Width(m.width - m.treeWidth - 4).
+			Width(diffW).
 			Height(ph).
 			Render(diffContent)
 
@@ -835,13 +841,17 @@ func (m Model) View() string {
 			diffStyle = m.styles.DiffPaneActive
 		}
 
+		diffW := m.width - m.treeWidth - 4
+		treeContent = m.padContentBg(treeContent, m.treeWidth, m.styles.colors.TreeBg)
+		diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
+
 		treePane := treeStyle.
 			Width(m.treeWidth).
 			Height(ph).
 			Render(treeContent)
 
 		diffPane := diffStyle.
-			Width(m.width - m.treeWidth - 4).
+			Width(diffW).
 			Height(ph).
 			Render(diffContent)
 
@@ -1057,6 +1067,35 @@ func (m Model) searchSegment() string {
 		}
 	}
 	return fmt.Sprintf("%d/%d", pos, len(m.searchMatches))
+}
+
+// padContentBg pads every line in content to targetWidth using raw ANSI background.
+// strips trailing plain spaces first (left by viewport/lipgloss padding after \033[0m reset),
+// then re-pads with bg-colored spaces. this ensures the background fills the entire pane
+// interior, working around lipgloss full-reset that kills outer pane backgrounds.
+// no-op when bgHex is empty.
+func (m Model) padContentBg(content string, targetWidth int, bgHex string) string {
+	if bgHex == "" || targetWidth <= 0 {
+		return content
+	}
+	bg := m.ansiBg(bgHex)
+	if bg == "" {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		// strip trailing plain spaces left by viewport/lipgloss padding after ANSI reset
+		trimmed := strings.TrimRight(line, " ")
+		w := lipgloss.Width(trimmed)
+		pad := targetWidth - w
+		if pad > 0 {
+			lines[i] = trimmed + bg + strings.Repeat(" ", pad) + "\033[49m"
+		} else {
+			lines[i] = trimmed
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // ansiColor returns an ANSI 24-bit color escape sequence for a hex color.

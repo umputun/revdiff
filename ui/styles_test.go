@@ -111,3 +111,56 @@ func TestPlainStyles_SearchMatchStyle(t *testing.T) {
 	s := plainStyles()
 	assert.NotEmpty(t, s.SearchMatch.Render("matched text"))
 }
+
+func TestContextStyle_DiffBgConditional(t *testing.T) {
+	t.Run("no DiffBg creates style without panic", func(t *testing.T) {
+		s := contextStyle(Colors{Normal: "#d0d0d0"})
+		assert.NotEmpty(t, s.Render("text"))
+	})
+
+	t.Run("DiffBg creates style without panic", func(t *testing.T) {
+		s := contextStyle(Colors{Normal: "#d0d0d0", DiffBg: "#2e3440"})
+		assert.NotEmpty(t, s.Render("text"))
+	})
+}
+
+func TestLineNumberStyle_DiffBgConditional(t *testing.T) {
+	t.Run("no DiffBg creates style without panic", func(t *testing.T) {
+		s := lineNumberStyle(Colors{Muted: "#585858"})
+		assert.NotEmpty(t, s.Render("42"))
+	})
+
+	t.Run("DiffBg creates style without panic", func(t *testing.T) {
+		s := lineNumberStyle(Colors{Muted: "#585858", DiffBg: "#2e3440"})
+		assert.NotEmpty(t, s.Render("42"))
+	})
+}
+
+func TestContextHighlightStyle_DiffBgConditional(t *testing.T) {
+	t.Run("no DiffBg creates no-op style", func(t *testing.T) {
+		s := contextHighlightStyle(Colors{})
+		assert.NotEmpty(t, s.Render("text"))
+	})
+
+	t.Run("DiffBg creates style without panic", func(t *testing.T) {
+		s := contextHighlightStyle(Colors{DiffBg: "#2e3440"})
+		assert.NotEmpty(t, s.Render("text"))
+	})
+}
+
+func TestNewStyles_ContextHighlightIncluded(t *testing.T) {
+	s := newStyles(Colors{
+		Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c",
+		SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700",
+		AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100",
+		DiffBg: "#222222",
+	})
+	assert.NotEmpty(t, s.LineContextHighlight.Render("text"))
+	assert.NotEmpty(t, s.LineContext.Render("text"))
+	assert.NotEmpty(t, s.LineNumber.Render("42"))
+}
+
+func TestPlainStyles_ContextHighlightIncluded(t *testing.T) {
+	s := plainStyles()
+	assert.NotEmpty(t, s.LineContextHighlight.Render("text"))
+}

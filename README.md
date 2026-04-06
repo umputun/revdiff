@@ -197,7 +197,7 @@ Then uncomment and edit the values you want to change.
 
 ### Themes
 
-revdiff ships with three bundled color themes: **dracula**, **nord**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
+revdiff ships with five bundled color themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
 
 ```bash
 # apply a theme
@@ -213,7 +213,10 @@ revdiff --init-themes
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
 ```
 
-Each theme file defines all 21 color keys plus `chroma-style` in INI format with metadata in comments:
+**Creating custom themes** — two approaches:
+
+1. **From current colors:** customize individual colors in your config file or via `--color-*` flags, then dump the resolved result as a theme: `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`
+2. **From scratch:** copy a bundled theme and edit it directly — each file defines all 21 color keys plus `chroma-style` in INI format:
 
 ```ini
 # name: my-custom
@@ -221,7 +224,7 @@ Each theme file defines all 21 color keys plus `chroma-style` in INI format with
 chroma-style = dracula
 color-accent = #bd93f9
 color-border = #6272a4
-...
+...all 21 color keys...
 ```
 
 Set a default theme in the config file:

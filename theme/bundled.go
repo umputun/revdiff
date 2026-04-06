@@ -43,12 +43,12 @@ color-selected-bg = #88c0d0
 color-annotation = #ebcb8b
 color-cursor-fg = #a3be8c
 color-cursor-bg = #3b4252
-color-add-fg = #a3be8c
-color-add-bg = #2b3328
-color-remove-fg = #bf616a
-color-remove-bg = #3b2228
-color-modify-fg = #ebcb8b
-color-modify-bg = #3b3328
+color-add-fg = #b4d09a
+color-add-bg = #1a3a1a
+color-remove-fg = #d06c75
+color-remove-bg = #4a1a1a
+color-modify-fg = #f0d399
+color-modify-bg = #4a3a1a
 color-tree-bg = #2e3440
 color-diff-bg = #2e3440
 color-status-fg = #2e3440
@@ -84,9 +84,65 @@ color-search-fg = #002b36
 color-search-bg = #cb4b16
 `
 
+const bundledCatppuccinMocha = `# name: catppuccin-mocha
+# description: pastel colors on dark base, warm and cozy
+
+chroma-style = catppuccin-mocha
+color-accent = #89b4fa
+color-border = #45475a
+color-normal = #cdd6f4
+color-muted = #7f849c
+color-selected-fg = #1e1e2e
+color-selected-bg = #89b4fa
+color-annotation = #f9e2af
+color-cursor-fg = #a6e3a1
+color-cursor-bg = #313244
+color-add-fg = #a6e3a1
+color-add-bg = #1a3a1a
+color-remove-fg = #f38ba8
+color-remove-bg = #4a1a1a
+color-modify-fg = #fab387
+color-modify-bg = #4a3a1a
+color-tree-bg = #1e1e2e
+color-diff-bg = #1e1e2e
+color-status-fg = #1e1e2e
+color-status-bg = #89b4fa
+color-search-fg = #1e1e2e
+color-search-bg = #f9e2af
+`
+
+const bundledGruvbox = `# name: gruvbox
+# description: warm retro colors on dark background
+
+chroma-style = gruvbox
+color-accent = #fabd2f
+color-border = #504945
+color-normal = #ebdbb2
+color-muted = #928374
+color-selected-fg = #282828
+color-selected-bg = #fabd2f
+color-annotation = #fe8019
+color-cursor-fg = #b8bb26
+color-cursor-bg = #3c3836
+color-add-fg = #b8bb26
+color-add-bg = #1d3a1a
+color-remove-fg = #fb4934
+color-remove-bg = #4a1a1a
+color-modify-fg = #fabd2f
+color-modify-bg = #4a3a1a
+color-tree-bg = #282828
+color-diff-bg = #282828
+color-status-fg = #282828
+color-status-bg = #fabd2f
+color-search-fg = #282828
+color-search-bg = #fe8019
+`
+
 // bundledThemes maps theme name to its file content.
 var bundledThemes = map[string]string{
-	"dracula":        bundledDracula,
-	"nord":           bundledNord,
-	"solarized-dark": bundledSolarizedDark,
+	"catppuccin-mocha": bundledCatppuccinMocha,
+	"dracula":          bundledDracula,
+	"gruvbox":          bundledGruvbox,
+	"nord":             bundledNord,
+	"solarized-dark":   bundledSolarizedDark,
 }
