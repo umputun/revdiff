@@ -258,20 +258,27 @@ func (km *Keymap) HelpSections() []HelpSection {
 
 // Dump writes the effective bindings to w in the keybindings file format,
 // grouped by section with # comments. Output can be loaded back with Parse.
-func (km *Keymap) Dump(w io.Writer) {
+func (km *Keymap) Dump(w io.Writer) error {
 	sections := km.HelpSections()
 	for i, sec := range sections {
 		if i > 0 {
-			_, _ = fmt.Fprintln(w)
+			if _, err := fmt.Fprintln(w); err != nil {
+				return fmt.Errorf("dump keybindings: %w", err)
+			}
 		}
-		_, _ = fmt.Fprintf(w, "# %s\n", sec.Name)
+		if _, err := fmt.Fprintf(w, "# %s\n", sec.Name); err != nil {
+			return fmt.Errorf("dump keybindings: %w", err)
+		}
 		for _, entry := range sec.Entries {
 			keys := km.KeysFor(entry.Action)
 			for _, k := range keys {
-				_, _ = fmt.Fprintf(w, "map %s %s\n", dumpKeyName(k), entry.Action)
+				if _, err := fmt.Fprintf(w, "map %s %s\n", dumpKeyName(k), entry.Action); err != nil {
+					return fmt.Errorf("dump keybindings: %w", err)
+				}
 			}
 		}
 	}
+	return nil
 }
 
 // reverseAliases maps canonical bubbletea key strings back to user-friendly names

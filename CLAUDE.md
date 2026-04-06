@@ -16,7 +16,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `ui/` - bubbletea TUI model, views, styles, file tree, annotations
 - `highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
-- `theme/` - color theme system: Parse, Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
+- `theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
 - `annotation/` - in-memory annotation store, structured output formatting
 - `ui/mocks/` - moq-generated mocks (never edit manually)
 
@@ -62,12 +62,12 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Themes dir: `~/.config/revdiff/themes/` with 5 bundled themes (catppuccin-mocha, dracula, gruvbox, nord, solarized-dark), auto-created on first run
 - `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
 - Theme precedence: `--theme` takes over completely — overwrites all 21 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
-- Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`
+- Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`. `colorFieldPtrs(opts)` is the single source of truth for the color key → struct field mapping, used by both `applyTheme()` and `collectColors()` — adding a new color requires changes in `theme.go` colorKeys + options struct + `colorFieldPtrs()`
 - `ini-name` tags ensure config keys match CLI long flag names
 - Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)
 - `--keys` overrides keybindings path, `--dump-keys` prints effective bindings
 - `keymap.Keymap` passed to `Model` via `ModelConfig.Keymap`; handlers switch on `m.keymap.Resolve(msg.String())` instead of raw key strings
-- ~30 `Action` constants in `keymap/keymap.go` (e.g., `ActionDown`, `ActionQuit`); modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded; help toggle is routed through `ActionHelp`
+- ~30 `Action` constants in `keymap/keymap.go` (e.g., `ActionDown`, `ActionQuit`); modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded; modal overlay navigation (annotation list, help) uses keymap for j/k/up/down but keeps `enter` and `esc` hardcoded
 - Help overlay is dynamically rendered from `m.keymap.HelpSections()`
 
 ## Website
@@ -103,4 +103,4 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Single-file mode (`m.singleFile`): when diff has exactly one file, tree pane is hidden, `treeWidth = 0`, diff gets full width (`m.width - 2` for borders, content width `m.width - 3`). Pane-switching keys (tab, h, l) and file navigation (n/p, f) become no-ops. Search nav (n/N) still works. Detection happens in `handleFilesLoaded`. Exception: when the file is markdown and full-context (all `ChangeContext` lines), an `mdTOC` pane replaces the tree pane with header navigation — see `ui/mdtoc.go`.
 - Tree pane toggle (`t` key): `m.treeHidden` hides the tree/TOC pane and gives diff full width. Orthogonal to `singleFile` — sets `treeWidth = 0`, forces `focus = paneDiff`, blocks `togglePane()`/`handleSwitchToTree()`. `handleViewToggle()` dispatches `v`, `w`, `t`, and `L` keys. `handleFileLoaded` respects `treeHidden` when setting up mdTOC layout.
 - Markdown TOC (`ui/mdtoc.go`): `mdTOC` component mirrors `fileTree` pattern (entries/cursor/offset/render). Activated in `handleFileLoaded` when `singleFile && isMarkdownFile && isFullContext`. Uses `paneTree` slot so `togglePane()` and key dispatch work unchanged. `handleTOCNav` routes j/k/pgdn/pgup/home/end to TOC cursor; Enter jumps to header line via `centerViewportOnCursor()`. `n/p` keys in diff pane jump to next/prev TOC entry via `jumpTOCEntry()`. `syncTOCActiveSection()` called on diff cursor movement to track current section. `syncTOCCursorToActive()` syncs cursor when switching back to TOC pane. `syncDiffToTOCCursor()` jumps diff viewport to current TOC cursor.
-- Annotation list popup (`@` key): `ui/annotlist.go` — overlay listing all annotations across files. Cross-file jumps use `pendingAnnotJump` field: stores target annotation, triggers file load via `selectByPath`, then `handleFileLoaded` checks and positions cursor. Guard: `pendingAnnotJump.File == msg.file` prevents stale jumps.
+- Annotation list popup (`@` key): `ui/annotlist.go` — overlay listing all annotations across files. Navigation keys (j/k/up/down) routed through `m.keymap.Resolve()`, `enter` and `esc` hardcoded (modal overlay convention). Cross-file jumps use `pendingAnnotJump` field: stores target annotation, triggers file load via `selectByPath`, then `handleFileLoaded` checks and positions cursor. Guard: `pendingAnnotJump.File == msg.file` prevents stale jumps.

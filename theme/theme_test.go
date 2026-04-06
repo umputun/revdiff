@@ -347,6 +347,112 @@ func TestBundledThemes_parseCorrectly(t *testing.T) {
 	}
 }
 
+func TestValidateHexColor(t *testing.T) {
+	tests := []struct {
+		name    string
+		color   string
+		wantErr bool
+	}{
+		{name: "valid lowercase", color: "#aabbcc", wantErr: false},
+		{name: "valid uppercase", color: "#AABBCC", wantErr: false},
+		{name: "valid mixed case", color: "#aAbBcC", wantErr: false},
+		{name: "valid digits", color: "#123456", wantErr: false},
+		{name: "valid black", color: "#000000", wantErr: false},
+		{name: "valid white", color: "#ffffff", wantErr: false},
+		{name: "missing hash", color: "aabbcc", wantErr: true},
+		{name: "too short", color: "#abc", wantErr: true},
+		{name: "too long", color: "#aabbccdd", wantErr: true},
+		{name: "non-hex chars", color: "#gghhii", wantErr: true},
+		{name: "empty string", color: "", wantErr: true},
+		{name: "hash only", color: "#", wantErr: true},
+		{name: "spaces", color: "# aabb", wantErr: true},
+		{name: "rgb notation", color: "rgb(0,0,0)", wantErr: true},
+		{name: "named color", color: "red", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateHexColor(tc.color)
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid hex color")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestParse_invalidHexColor(t *testing.T) {
+	tests := []struct {
+		name  string
+		color string
+	}{
+		{name: "no hash prefix", color: "bd93f9"},
+		{name: "three digit shorthand", color: "#abc"},
+		{name: "non-hex characters", color: "#zzzzzz"},
+		{name: "empty value", color: ""},
+		{name: "named color word", color: "purple"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := "chroma-style = dracula\ncolor-accent = " + tc.color + "\n"
+			_, err := Parse(strings.NewReader(input))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid hex color")
+		})
+	}
+}
+
+func TestParse_optionalKeysOmitted(t *testing.T) {
+	// theme without color-cursor-bg, color-tree-bg, color-diff-bg should parse successfully
+	input := `chroma-style = dracula
+color-accent = #bd93f9
+color-border = #6272a4
+color-normal = #f8f8f2
+color-muted = #6272a4
+color-selected-fg = #f8f8f2
+color-selected-bg = #44475a
+color-annotation = #f1fa8c
+color-cursor-fg = #282a36
+color-add-fg = #50fa7b
+color-add-bg = #2a4a2a
+color-remove-fg = #ff5555
+color-remove-bg = #4a2a2a
+color-modify-fg = #ffb86c
+color-modify-bg = #3a3a2a
+color-status-fg = #f8f8f2
+color-status-bg = #44475a
+color-search-fg = #282a36
+color-search-bg = #f1fa8c
+`
+	th, err := Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	assert.Equal(t, "dracula", th.ChromaStyle)
+	assert.Len(t, th.Colors, 18) // 21 - 3 optional
+	assert.Empty(t, th.Colors["color-cursor-bg"])
+	assert.Empty(t, th.Colors["color-tree-bg"])
+	assert.Empty(t, th.Colors["color-diff-bg"])
+}
+
+func TestDump_Parse_roundtrip_withoutOptionalKeys(t *testing.T) {
+	// dump a theme without optional keys, then parse it back
+	colors := fullThemeColorsMap()
+	delete(colors, "color-cursor-bg")
+	delete(colors, "color-tree-bg")
+	delete(colors, "color-diff-bg")
+
+	var buf bytes.Buffer
+	err := Dump(Theme{Name: "minimal", ChromaStyle: "dracula", Colors: colors}, &buf)
+	require.NoError(t, err)
+
+	th, err := Parse(strings.NewReader(buf.String()))
+	require.NoError(t, err)
+	assert.Equal(t, "minimal", th.Name)
+	assert.Equal(t, "dracula", th.ChromaStyle)
+	assert.Len(t, th.Colors, 18)
+	assert.Equal(t, colors, th.Colors)
+}
+
 func TestColorKeys(t *testing.T) {
 	keys := ColorKeys()
 	assert.Len(t, keys, 21)
@@ -356,4 +462,16 @@ func TestColorKeys(t *testing.T) {
 	// verify it returns a copy
 	keys[0] = "modified"
 	assert.Equal(t, "color-accent", ColorKeys()[0])
+}
+
+func TestOptionalColorKeys(t *testing.T) {
+	opt := OptionalColorKeys()
+	assert.Len(t, opt, 3)
+	assert.True(t, opt["color-cursor-bg"])
+	assert.True(t, opt["color-tree-bg"])
+	assert.True(t, opt["color-diff-bg"])
+
+	// verify it returns a copy
+	opt["color-accent"] = true
+	assert.False(t, OptionalColorKeys()["color-accent"])
 }

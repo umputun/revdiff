@@ -4,9 +4,11 @@ package theme
 
 import (
 	"bufio"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,11 +38,38 @@ var colorKeys = []string{
 	"color-search-fg", "color-search-bg",
 }
 
+// optionalColorKeys lists color keys that may be omitted from theme files.
+// these correspond to CLI flags with no default value (terminal background is used instead).
+var optionalColorKeys = map[string]bool{
+	"color-cursor-bg": true,
+	"color-tree-bg":   true,
+	"color-diff-bg":   true,
+}
+
 // ColorKeys returns the ordered list of recognized color key names.
 func ColorKeys() []string {
 	result := make([]string, len(colorKeys))
 	copy(result, colorKeys)
 	return result
+}
+
+// OptionalColorKeys returns the set of color keys that may be omitted from theme files.
+// these correspond to CLI flags with no default value (terminal background is used instead).
+func OptionalColorKeys() map[string]bool {
+	result := make(map[string]bool, len(optionalColorKeys))
+	maps.Copy(result, optionalColorKeys)
+	return result
+}
+
+// validateHexColor checks that s is a valid 6-digit hex color (e.g. "#aabbcc").
+func validateHexColor(s string) error {
+	if len(s) != 7 || s[0] != '#' {
+		return fmt.Errorf("invalid hex color %q: must be #RRGGBB format", s)
+	}
+	if _, err := hex.DecodeString(s[1:]); err != nil {
+		return fmt.Errorf("invalid hex color %q: must be #RRGGBB format", s)
+	}
+	return nil
 }
 
 // Parse reads a theme file from r and returns the parsed Theme.
@@ -85,6 +114,9 @@ func Parse(r io.Reader) (Theme, error) {
 			continue
 		}
 		if strings.HasPrefix(key, "color-") {
+			if err := validateHexColor(val); err != nil {
+				return Theme{}, fmt.Errorf("key %q: %w", key, err)
+			}
 			t.Colors[key] = val
 		}
 	}
@@ -98,9 +130,12 @@ func Parse(r io.Reader) (Theme, error) {
 		return Theme{}, errors.New("theme missing required key: chroma-style")
 	}
 
-	// validate that all required color keys are present
+	// validate that all required color keys are present (optional keys may be omitted)
 	var missing []string
 	for _, key := range colorKeys {
+		if optionalColorKeys[key] {
+			continue
+		}
 		if _, ok := t.Colors[key]; !ok {
 			missing = append(missing, key)
 		}
