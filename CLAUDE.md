@@ -59,7 +59,7 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Precedence: CLI flags > env vars > config file > built-in defaults
 - `--dump-config` outputs current defaults, `--config` overrides path
 - `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --dump-theme, --list-themes, --init-themes, --version)
-- Themes dir: `~/.config/revdiff/themes/` with 3 bundled themes (dracula, nord, solarized-dark), auto-created on first run
+- Themes dir: `~/.config/revdiff/themes/` with 5 bundled themes (catppuccin-mocha, dracula, gruvbox, nord, solarized-dark), auto-created on first run
 - `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
 - Theme precedence: `--theme` takes over completely — overwrites all 21 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
 - Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`

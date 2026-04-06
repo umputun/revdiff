@@ -1,9 +1,9 @@
 # Theme Support for revdiff
 
 ## Overview
-- Add a theme system that bundles complete color palettes as `.theme` files in `~/.config/revdiff/themes/`
+- Add a theme system that loads complete color palettes by plain filename from `~/.config/revdiff/themes/`
 - Each theme defines all 21 color properties plus `chroma-style` in INI format
-- Ship 3 bundled themes (dracula, nord, solarized-dark) copied to disk on first run
+- Ship 5 bundled themes (catppuccin-mocha, dracula, gruvbox, nord, solarized-dark) copied to disk on first run
 - Users select themes via `--theme NAME` flag or `theme` config key
 - Users create custom themes via `--dump-theme` (outputs currently resolved colors)
 - Default colors remain hardcoded in code; no theme file for default
@@ -44,21 +44,14 @@ color-normal = #f8f8f2
 
 Key names match existing `ini-name` tags. `chroma-style` is a real key (not a comment). Comment lines `# name:` and `# description:` provide metadata for `--list-themes`.
 
-### Precedence
-```
-built-in defaults → config file → theme (if set in config or env) → env vars → CLI --color-* flags
-```
+### Precedence (simplified)
+`--theme` takes over completely — overwrites all 21 color fields + `chroma-style`, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme. Without `--theme`: built-in defaults → config file → env vars → CLI flags.
 
-Theme is loaded **inside `parseArgs()`** between `loadConfigFile()` and `p.ParseArgs(args)`.
-This way CLI args and env vars naturally override theme values through go-flags' standard precedence.
-The theme name is resolved from args using a `resolveThemePath`-style helper (same pattern as `resolveConfigPath`),
-or from the config file if already loaded. Theme values are applied to the parser via `Option.Set()` calls
-on the go-flags parser before `ParseArgs()` runs — this handles the struct field mapping without reflection.
+Theme is loaded in `handleThemes()` after `parseArgs()` completes. The `applyTheme()` function overwrites all opts.Colors fields from the loaded theme.
 
 ### Theme init behavior
-- First run: if `~/.config/revdiff/themes/` doesn't exist, create it and write 3 bundled theme files
-- `--init-themes`: re-create the 3 bundled theme files (always overwrites bundled names), don't touch user-added themes
-- `--no-colors` mode: skip theme loading entirely
+- First run: if `~/.config/revdiff/themes/` doesn't exist, create it and write 5 bundled theme files
+- `--init-themes`: re-create the 5 bundled theme files (always overwrites bundled names), don't touch user-added themes
 
 ### New `theme/` package
 - `Theme` struct: Name, Description, ChromaStyle, Colors (map[string]string for the 21 keys)
