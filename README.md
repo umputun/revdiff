@@ -127,6 +127,20 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 
 ### Integration with Other Tools
 
+#### OpenCode
+
+Drop-in configs for [OpenCode](https://opencode.ai) are available in [`plugins/opencode/`](plugins/opencode/). They add a `/revdiff` slash command and a tool that lets OpenCode launch revdiff directly from the chat.
+
+```sh
+mkdir -p ~/.config/opencode/tools ~/.config/opencode/commands
+cp plugins/opencode/tools/revdiff.ts ~/.config/opencode/tools/
+cp plugins/opencode/commands/revdiff.md ~/.config/opencode/commands/
+```
+
+Restart OpenCode after copying — tools and commands are loaded at startup.
+
+#### General
+
 The structured stdout output works with any tool that can read text:
 
 ```bash
