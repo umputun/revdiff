@@ -18,6 +18,7 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/keymap"
 )
 
 // Renderer provides methods to extract changed files and build full-file diff views.
@@ -48,6 +49,7 @@ type Model struct {
 	viewport viewport.Model
 	store    *annotation.Store
 	renderer Renderer
+	keymap   *keymap.Keymap
 
 	ref            string
 	staged         bool
@@ -125,14 +127,15 @@ type ModelConfig struct {
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TabWidth         int      // number of spaces per tab character
-	NoColors         bool     // disable all colors including syntax highlighting
-	NoStatusBar      bool     // hide the status bar
-	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
-	Wrap             bool     // enable line wrapping
-	Collapsed        bool     // start in collapsed diff mode
-	Only             []string // show only these files (match by exact path or path suffix)
-	WorkDir          string   // working directory for resolving absolute --only paths
+	TabWidth         int            // number of spaces per tab character
+	NoColors         bool           // disable all colors including syntax highlighting
+	NoStatusBar      bool           // hide the status bar
+	NoConfirmDiscard bool           // skip confirmation prompt when discarding annotations
+	Wrap             bool           // enable line wrapping
+	Collapsed        bool           // start in collapsed diff mode
+	Only             []string       // show only these files (match by exact path or path suffix)
+	WorkDir          string         // working directory for resolving absolute --only paths
+	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
 	Colors           Colors
 }
 
@@ -144,12 +147,17 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 	if cfg.TabWidth < 1 {
 		cfg.TabWidth = 4
 	}
+	km := cfg.Keymap
+	if km == nil {
+		km = keymap.Default()
+	}
 	s := newStyles(cfg.Colors)
 	if cfg.NoColors {
 		s = plainStyles()
 	}
 	return Model{
 		styles:           s,
+		keymap:           km,
 		store:            store,
 		renderer:         renderer,
 		highlighter:      highlighter,
@@ -247,35 +255,42 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleAnnotListKey(msg)
 	}
 
-	// help overlay: toggle with ?, dismiss with esc, block everything else
-	if msg.String() == "?" || m.showHelp {
+	action := m.keymap.Resolve(msg.String())
+
+	// help overlay: toggle with help action, dismiss with esc, block everything else
+	if action == keymap.ActionHelp || m.showHelp {
 		return m.handleHelpKey(msg)
 	}
 
-	switch msg.String() {
-	case "@":
-		return m.handleAnnotListKey(msg)
-	case "esc":
+	switch action {
+	case keymap.ActionAnnotList:
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0
+		m.annotListOffset = 0
+		m.showAnnotList = true
+		return m, nil
+	case keymap.ActionDismiss:
 		return m.handleEscKey()
-	case "Q":
+	case keymap.ActionDiscardQuit:
 		return m.handleDiscardQuit()
-	case "q":
+	case keymap.ActionQuit:
 		return m, tea.Quit
-	case "tab":
+	case keymap.ActionTogglePane:
 		m.togglePane()
 		return m, nil
-	case "f":
+	case keymap.ActionFilter:
 		return m.handleFilterToggle()
-	case "n", "N":
-		return m.handleFileOrSearchNav(msg.String())
-	case "p":
-		return m.handlePrevFile()
-	case "enter":
+	case keymap.ActionNextItem:
+		return m.handleFileOrSearchNav(true)
+	case keymap.ActionPrevItem:
+		return m.handleFileOrSearchNav(false)
+	case keymap.ActionConfirm:
 		return m.handleEnterKey()
-	case "A":
+	case keymap.ActionAnnotateFile:
 		return m.handleFileAnnotateKey()
-	case "v", "w", "t", "L":
-		return m.handleViewToggle(msg.String()), nil
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums:
+		return m.handleViewToggle(action), nil
+	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
 	// pane-specific navigation
@@ -354,16 +369,16 @@ func (m Model) computeLineNumWidth() int {
 	return len(strconv.Itoa(maxNum))
 }
 
-// handleViewToggle dispatches view mode toggle keys (v, w, t, L).
-func (m Model) handleViewToggle(key string) Model {
-	switch key {
-	case "v":
+// handleViewToggle dispatches view mode toggle actions.
+func (m Model) handleViewToggle(action keymap.Action) Model {
+	switch action { //nolint:exhaustive // only toggle actions are dispatched here
+	case keymap.ActionToggleCollapsed:
 		m.toggleCollapsedMode()
-	case "w":
+	case keymap.ActionToggleWrap:
 		m.toggleWrapMode()
-	case "t":
+	case keymap.ActionToggleTree:
 		m.toggleTreePane()
-	case "L":
+	case keymap.ActionToggleLineNums:
 		m.toggleLineNumbers()
 	}
 	return m
@@ -439,27 +454,29 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleTOCNav(msg)
 	}
 
-	switch {
-	case msg.String() == "j" || msg.String() == "down":
+	action := m.keymap.Resolve(msg.String())
+	switch action {
+	case keymap.ActionDown:
 		m.tree.moveDown()
-	case msg.String() == "k" || msg.String() == "up":
+	case keymap.ActionUp:
 		m.tree.moveUp()
-	case msg.Type == tea.KeyPgDown:
+	case keymap.ActionPageDown:
 		m.tree.pageDown(m.treePageSize())
-	case msg.String() == "ctrl+d":
+	case keymap.ActionHalfPageDown:
 		m.tree.pageDown(max(1, m.treePageSize()/2))
-	case msg.Type == tea.KeyPgUp:
+	case keymap.ActionPageUp:
 		m.tree.pageUp(m.treePageSize())
-	case msg.String() == "ctrl+u":
+	case keymap.ActionHalfPageUp:
 		m.tree.pageUp(max(1, m.treePageSize()/2))
-	case msg.Type == tea.KeyHome:
+	case keymap.ActionHome:
 		m.tree.moveToFirst()
-	case msg.Type == tea.KeyEnd:
+	case keymap.ActionEnd:
 		m.tree.moveToLast()
-	case msg.String() == "l" || msg.String() == "right":
+	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
+	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.tree.ensureVisible(m.treePageSize())
@@ -468,36 +485,38 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // handleTOCNav handles navigation keys when the TOC pane is focused.
 func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case msg.String() == "j" || msg.String() == "down":
+	action := m.keymap.Resolve(msg.String())
+	switch action {
+	case keymap.ActionDown:
 		m.mdTOC.moveDown()
-	case msg.String() == "k" || msg.String() == "up":
+	case keymap.ActionUp:
 		m.mdTOC.moveUp()
-	case msg.Type == tea.KeyPgDown:
+	case keymap.ActionPageDown:
 		for range m.treePageSize() {
 			m.mdTOC.moveDown()
 		}
-	case msg.String() == "ctrl+d":
+	case keymap.ActionHalfPageDown:
 		for range max(1, m.treePageSize()/2) {
 			m.mdTOC.moveDown()
 		}
-	case msg.Type == tea.KeyPgUp:
+	case keymap.ActionPageUp:
 		for range m.treePageSize() {
 			m.mdTOC.moveUp()
 		}
-	case msg.String() == "ctrl+u":
+	case keymap.ActionHalfPageUp:
 		for range max(1, m.treePageSize()/2) {
 			m.mdTOC.moveUp()
 		}
-	case msg.Type == tea.KeyHome:
+	case keymap.ActionHome:
 		m.mdTOC.cursor = 0
-	case msg.Type == tea.KeyEnd:
+	case keymap.ActionEnd:
 		m.mdTOC.cursor = max(0, len(m.mdTOC.entries)-1)
-	case msg.String() == "l" || msg.String() == "right":
+	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
 		}
 		return m, nil // switch pane without re-jumping viewport
+	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.mdTOC.ensureVisible(m.treePageSize())
 	m.syncDiffToTOCCursor()
@@ -519,50 +538,48 @@ func (m Model) paneHeight() int {
 }
 
 func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case msg.String() == "h":
+	action := m.keymap.Resolve(msg.String())
+	switch action {
+	case keymap.ActionFocusTree:
 		return m.handleSwitchToTree()
-	case msg.String() == "left":
+	case keymap.ActionScrollLeft:
 		m.handleHorizontalScroll(-1)
 		return m, nil
-	case msg.String() == "right":
+	case keymap.ActionScrollRight:
 		m.handleHorizontalScroll(1)
 		return m, nil
-	case msg.String() == "j" || msg.String() == "down":
+	case keymap.ActionDown:
 		m.moveDiffCursorDown()
 		m.syncViewportToCursor()
-	case msg.String() == "k" || msg.String() == "up":
+	case keymap.ActionUp:
 		m.moveDiffCursorUp()
 		m.syncViewportToCursor()
-	case msg.Type == tea.KeyPgDown:
+	case keymap.ActionPageDown:
 		m.moveDiffCursorPageDown()
-	case msg.String() == "ctrl+d":
+	case keymap.ActionHalfPageDown:
 		m.moveDiffCursorHalfPageDown()
-	case msg.Type == tea.KeyPgUp:
+	case keymap.ActionPageUp:
 		m.moveDiffCursorPageUp()
-	case msg.String() == "ctrl+u":
+	case keymap.ActionHalfPageUp:
 		m.moveDiffCursorHalfPageUp()
-	case msg.Type == tea.KeyHome:
+	case keymap.ActionHome:
 		m.moveDiffCursorToStart()
-	case msg.Type == tea.KeyEnd:
+	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
-	case msg.String() == "]":
+	case keymap.ActionNextHunk:
 		m.moveToNextHunk()
-	case msg.String() == "[":
+	case keymap.ActionPrevHunk:
 		m.moveToPrevHunk()
-	case msg.String() == "a":
-		cmd := m.startAnnotation()
-		m.viewport.SetContent(m.renderDiff())
-		return m, cmd
-	case msg.String() == "d":
+	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
-	case msg.String() == ".":
+	case keymap.ActionToggleHunk:
 		m.toggleHunkExpansion()
 		return m, nil
-	case msg.String() == "/":
+	case keymap.ActionSearch:
 		cmd := m.startSearch()
 		return m, cmd
+	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.syncTOCActiveSection()
 	return m, nil
@@ -1120,50 +1137,80 @@ func (m Model) statusSegmentsMinimal() []string {
 	return segments
 }
 
+// helpKeyDisplay maps bubbletea key names to user-friendly display names.
+var helpKeyDisplay = map[string]string{
+	"pgdown": "PgDn",
+	"pgup":   "PgUp",
+	"left":   "←",
+	"right":  "→",
+	"home":   "Home",
+	"end":    "End",
+	"enter":  "Enter",
+	"esc":    "Esc",
+	"tab":    "Tab",
+	"up":     "↑",
+	"down":   "↓",
+	" ":      "Space",
+}
+
+// displayKeyName returns a user-friendly display name for a bubbletea key.
+func displayKeyName(key string) string {
+	if d, ok := helpKeyDisplay[key]; ok {
+		return d
+	}
+	if strings.HasPrefix(key, "ctrl+") {
+		return "Ctrl+" + key[5:]
+	}
+	return key
+}
+
+// formatKeysForHelp returns a formatted key string for a given action using display names.
+func (m Model) formatKeysForHelp(action keymap.Action) string {
+	keys := m.keymap.KeysFor(action)
+	display := make([]string, len(keys))
+	for i, k := range keys {
+		display[i] = displayKeyName(k)
+	}
+	return strings.Join(display, " / ")
+}
+
 // helpOverlay returns a bordered help popup with keybinding sections.
+// sections and key bindings are rendered dynamically from the keymap.
 func (m Model) helpOverlay() string {
-	help := "" +
-		"Navigation\n" +
-		"  tab          switch pane\n" +
-		"  n / p        next / prev file (n = next match when searching)\n" +
-		"  j / k        scroll down / up\n" +
-		"  PgDn/PgUp    page down / up\n" +
-		"  Ctrl+d/u     half-page down / up\n" +
-		"  Home/End     top / bottom\n" +
-		"  h / l        focus tree / diff pane\n" +
-		"  \u2190 / \u2192        scroll left / right (diff)\n" +
-		"  [ / ]        prev / next hunk\n" +
-		"  enter        focus diff pane\n" +
-		"\n" +
-		"Markdown TOC (single-file full-context mode)\n" +
-		"  tab          switch between TOC and diff\n" +
-		"  j / k        navigate TOC entries\n" +
-		"  n / p        next / prev header\n" +
-		"  enter        jump to header in diff\n" +
-		"\n" +
-		"Search\n" +
-		"  /            search in diff\n" +
-		"  n            next match (overrides next file)\n" +
-		"  N            prev match\n" +
-		"\n" +
-		"Annotations\n" +
-		"  a / enter    annotate line (diff pane)\n" +
-		"  A            annotate file\n" +
-		"  d            delete annotation\n" +
-		"  @            annotation list\n" +
-		"\n" +
-		"View\n" +
-		"  v            toggle collapsed mode\n" +
-		"  w            toggle word wrap\n" +
-		"  .            expand/collapse hunk\n" +
-		"  t            toggle tree/TOC pane\n" +
-		"  L            toggle line numbers\n" +
-		"  f            filter annotated files\n" +
-		"\n" +
-		"Quit\n" +
-		"  q            quit\n" +
-		"  Q            discard annotations & quit\n" +
-		"  ? / esc      close help"
+	sections := m.keymap.HelpSections()
+
+	var buf strings.Builder
+	for i, sec := range sections {
+		if i > 0 {
+			buf.WriteString("\n")
+		}
+		buf.WriteString(sec.Name)
+		buf.WriteString("\n")
+
+		// compute max key width for column alignment
+		type helpLine struct{ keys, desc string }
+		lines := make([]helpLine, 0, len(sec.Entries))
+		maxW := 0
+		for _, e := range sec.Entries {
+			keys := m.formatKeysForHelp(e.Action)
+			lines = append(lines, helpLine{keys, e.Description})
+			if w := runewidth.StringWidth(keys); w > maxW {
+				maxW = w
+			}
+		}
+		for _, l := range lines {
+			pad := max(maxW-runewidth.StringWidth(l.keys), 0)
+			fmt.Fprintf(&buf, "  %s%s  %s\n", l.keys, strings.Repeat(" ", pad), l.desc)
+		}
+
+		// add Markdown TOC note after Pane section
+		if sec.Name == "Pane" {
+			buf.WriteString("\n")
+			m.writeTOCHelpSection(&buf)
+		}
+	}
+
+	help := strings.TrimRight(buf.String(), "\n")
 
 	border := lipgloss.NormalBorder()
 	boxStyle := lipgloss.NewStyle().
@@ -1172,6 +1219,47 @@ func (m Model) helpOverlay() string {
 		Padding(1, 2)
 
 	return boxStyle.Render(help)
+}
+
+// writeTOCHelpSection writes the Markdown TOC contextual help section.
+// keys are resolved dynamically from the keymap.
+func (m Model) writeTOCHelpSection(buf *strings.Builder) {
+	// collect display keys for multiple actions combined
+	mergedKeys := func(actions ...keymap.Action) string {
+		var all []string
+		seen := map[string]bool{}
+		for _, a := range actions {
+			for _, k := range m.keymap.KeysFor(a) {
+				dk := displayKeyName(k)
+				if !seen[dk] {
+					all = append(all, dk)
+					seen[dk] = true
+				}
+			}
+		}
+		return strings.Join(all, " / ")
+	}
+
+	type helpLine struct{ keys, desc string }
+	lines := []helpLine{
+		{mergedKeys(keymap.ActionTogglePane), "switch between TOC and diff"},
+		{mergedKeys(keymap.ActionDown, keymap.ActionUp), "navigate TOC entries"},
+		{mergedKeys(keymap.ActionNextItem, keymap.ActionPrevItem), "next / prev header"},
+		{mergedKeys(keymap.ActionConfirm), "jump to header in diff"},
+	}
+
+	maxW := 0
+	for _, l := range lines {
+		if w := runewidth.StringWidth(l.keys); w > maxW {
+			maxW = w
+		}
+	}
+
+	buf.WriteString("Markdown TOC (single-file full-context mode)\n")
+	for _, l := range lines {
+		pad := max(maxW-runewidth.StringWidth(l.keys), 0)
+		fmt.Fprintf(buf, "  %s%s  %s\n", l.keys, strings.Repeat(" ", pad), l.desc)
+	}
 }
 
 // overlayCenter composites fg on top of bg, centered horizontally and vertically.
@@ -1268,13 +1356,14 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 }
 
 // handleHelpKey handles help overlay keys.
-// ? toggles the overlay, esc closes it, all other keys are blocked while showing.
+// help action toggles the overlay, dismiss/esc closes it, all other keys are blocked while showing.
 func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "?" {
+	action := m.keymap.Resolve(msg.String())
+	if action == keymap.ActionHelp {
 		m.showHelp = !m.showHelp
 		return m, nil
 	}
-	if msg.Type == tea.KeyEsc {
+	if action == keymap.ActionDismiss || msg.Type == tea.KeyEsc {
 		m.showHelp = false
 	}
 	return m, nil
@@ -1309,25 +1398,11 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handlePrevFile navigates to previous file, or previous TOC entry in markdown mode.
-func (m Model) handlePrevFile() (tea.Model, tea.Cmd) {
-	if m.singleFile && m.mdTOC != nil {
-		return m.jumpTOCEntry(-1), nil
-	}
-	if m.singleFile {
-		return m, nil
-	}
-	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-	m.tree.prevFile()
-	return m.loadSelectedIfChanged()
-}
-
-// handleFileOrSearchNav handles n/N keys: navigates search matches when a search is active,
-// otherwise n falls through to next-file navigation (no-op in single-file mode).
-// N does nothing without search.
-func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
+// handleFileOrSearchNav handles next/prev item navigation: navigates search matches when a search
+// is active, otherwise navigates files or TOC entries (no-op in single-file mode without TOC).
+func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 	if len(m.searchMatches) > 0 {
-		if key == "n" {
+		if forward {
 			m.nextSearchMatch()
 		} else {
 			m.prevSearchMatch()
@@ -1336,12 +1411,20 @@ func (m Model) handleFileOrSearchNav(key string) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderDiff())
 		return m, nil
 	}
-	if key == "n" && m.singleFile && m.mdTOC != nil {
-		return m.jumpTOCEntry(1), nil
+	dir := 1
+	if !forward {
+		dir = -1
 	}
-	if key == "n" && !m.singleFile {
+	if m.singleFile && m.mdTOC != nil {
+		return m.jumpTOCEntry(dir), nil
+	}
+	if !m.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-		m.tree.nextFile()
+		if forward {
+			m.tree.nextFile()
+		} else {
+			m.tree.prevFile()
+		}
 		return m.loadSelectedIfChanged()
 	}
 	return m, nil

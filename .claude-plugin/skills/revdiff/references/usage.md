@@ -105,6 +105,22 @@ When `--only` specifies a file that has no git changes (or when no git repo exis
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
 
+## Custom Keybindings
+
+All keybindings can be customized via `~/.config/revdiff/keybindings` (override path with `--keys` or `REVDIFF_KEYS`).
+
+```
+# map <key> <action> — bind a key
+# unmap <key> — remove a default binding
+map x quit
+unmap q
+map ctrl+d half_page_down
+```
+
+Generate a template with all defaults: `revdiff --dump-keys > ~/.config/revdiff/keybindings`
+
+See the [configuration reference](config.md) for the full list of available actions.
+
 ## Output Format
 
 On quit, revdiff outputs annotations to stdout:

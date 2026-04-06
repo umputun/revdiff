@@ -34,6 +34,7 @@ Built for a specific use case: reviewing code changes without leaving a terminal
 - All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Fully customizable colors via environment variables, CLI flags, or config file
+- Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
 
 ![revdiff screenshot](assets/screenshot.png)
 
@@ -172,6 +173,8 @@ Positional arguments support several forms:
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
+| `--keys` | Path to keybindings file, env: `REVDIFF_KEYS` | `~/.config/revdiff/keybindings` |
+| `--dump-keys` | Print effective keybindings to stdout and exit | |
 | `--dump-config` | Print default config to stdout and exit | |
 | `-V`, `--version` | Show version info | |
 
@@ -329,7 +332,7 @@ This mode activates when all three conditions are met: single file, markdown ext
 |-----|--------|
 | `/` | Start search in diff pane |
 | `n` | Next search match (overrides next file when search active) |
-| `N` | Previous search match |
+| `N` | Previous file (previous search match when searching) |
 | `Esc` | Cancel search input / clear search results |
 
 **Annotations:**
@@ -355,6 +358,51 @@ This mode activates when all three conditions are met: single file, markdown ext
 | `?` | Toggle help overlay showing all keybindings |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
+
+### Custom Keybindings
+
+All keybindings can be customized via a keybindings file at `~/.config/revdiff/keybindings`. Override the path with `--keys` flag or `REVDIFF_KEYS` env var.
+
+The file uses a simple `map`/`unmap` format (blank lines and `#` comments are ignored):
+
+```
+# ~/.config/revdiff/keybindings
+map ctrl+d half_page_down
+map ctrl+u half_page_up
+map x quit
+unmap q
+```
+
+- `map <key> <action>` — binds a key to an action (additive, defaults are kept unless explicitly unmapped)
+- `unmap <key>` — removes a default binding
+
+Generate a template with all current bindings:
+
+```bash
+mkdir -p ~/.config/revdiff
+revdiff --dump-keys > ~/.config/revdiff/keybindings
+```
+
+Then edit to taste. Modal keys (annotation input, search input, confirm discard) are not remappable.
+
+<details>
+<summary>Available actions (click to expand)</summary>
+
+**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`
+
+**File/Hunk:** `next_item`, `prev_item`, `next_hunk`, `prev_hunk`
+
+**Pane:** `toggle_pane`, `focus_tree`, `focus_diff`
+
+**Search:** `search`
+
+**Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
+
+**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `filter`
+
+**Quit:** `quit`, `discard_quit`, `help`, `dismiss`
+
+</details>
 
 ### Output Format
 

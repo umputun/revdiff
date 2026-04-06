@@ -16,6 +16,7 @@ import (
 
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/keymap"
 	"github.com/umputun/revdiff/ui/mocks"
 )
 
@@ -3853,12 +3854,12 @@ func TestModel_HelpOverlayKeyListings(t *testing.T) {
 	m.styles = plainStyles()
 	help := m.helpOverlay()
 
-	// verify key listings are present
+	// verify key listings are present (dynamic rendering uses display names)
 	keys := []string{
-		"tab", "n / p", "j / k", "PgDn/PgUp", "Ctrl+d/u", "Home/End", "h / l", "← / →", "[ / ]",
-		"/", "n", "N",
-		"a / enter", "A", "d", "f", "v", "w", ".",
-		"q", "Q", "? / esc",
+		"Tab", "PgDn", "PgUp", "Ctrl+d", "Ctrl+u", "Home", "End",
+		"j", "k", "n", "N", "h", "l",
+		"/", "Enter", "A", "d", "@", "f", "v", "w", ".", "L", "t",
+		"q", "Q", "?", "Esc",
 	}
 	for _, k := range keys {
 		assert.Contains(t, help, k, "help overlay should contain key: %s", k)
@@ -3871,7 +3872,7 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.width = 100
-	m.height = 50
+	m.height = 80
 
 	// without help, view should not contain help sections
 	m.showHelp = false
@@ -4500,9 +4501,9 @@ func TestModel_HelpOverlayContainsSearchKeys(t *testing.T) {
 
 	assert.Contains(t, help, "Search")
 	assert.Contains(t, help, "search in diff")
-	assert.Contains(t, help, "next match")
-	assert.Contains(t, help, "prev match")
-	assert.Contains(t, help, "n = next match when searching")
+	// n/N for next/prev search match is shown via File/Hunk section's "next file / search match"
+	assert.Contains(t, help, "next file / search match")
+	assert.Contains(t, help, "prev file / search match")
 }
 
 func TestModel_StartSearch(t *testing.T) {
@@ -4999,22 +5000,20 @@ func TestModel_ShiftNDoesPrevMatchWhenSearchActive(t *testing.T) {
 	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match")
 }
 
-func TestModel_ShiftNDoesNothingWithoutSearch(t *testing.T) {
+func TestModel_ShiftNNavigatesPrevFileWithoutSearch(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
 	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
-	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
-	model := result.(Model)
+	m.tree.cursor = 2 // start at second file (b.go); entries: [dir=0, a.go=1, b.go=2]
+	m.currFile = "b.go"
 
-	// no search active, N should do nothing
-	assert.Empty(t, model.searchMatches)
-	selected := model.tree.selectedFile()
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
-	model = result.(Model)
-	assert.Equal(t, selected, model.tree.selectedFile(), "N should not change file when no search")
+	// no search active, N (prev_item) should navigate to previous file
+	assert.Empty(t, m.searchMatches)
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.tree.selectedFile(), "N should navigate to previous file")
 }
 
 func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
@@ -6774,9 +6773,9 @@ func TestModel_ToggleLineNumbers(t *testing.T) {
 	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
 
 	assert.False(t, m.lineNumbers)
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.True(t, m.lineNumbers)
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.False(t, m.lineNumbers)
 }
 
@@ -6825,6 +6824,29 @@ func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
 	assert.Contains(t, help, "line numbers")
 }
 
+func TestModel_HelpOverlayCustomBinding(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	m.keymap.Bind("x", keymap.ActionQuit)
+	help := m.helpOverlay()
+
+	// custom binding should appear alongside default
+	assert.Contains(t, help, "x")
+	assert.Contains(t, help, "q")
+	assert.Contains(t, help, "quit")
+}
+
+func TestModel_HelpOverlayUnmappedAction(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.styles = plainStyles()
+	// unbind all keys for search action
+	m.keymap.Unbind("/")
+	help := m.helpOverlay()
+
+	// search section should still exist but "search in diff" description should be gone
+	assert.NotContains(t, help, "search in diff")
+}
+
 func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	lines := []diff.DiffLine{
 		{OldNum: 10, NewNum: 10, Content: "context", ChangeType: diff.ChangeContext},
@@ -6838,7 +6860,7 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	m.diffLines = lines
 
 	// toggle on
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.True(t, m.lineNumbers)
 	assert.Equal(t, 2, m.lineNumWidth)
 
@@ -6849,9 +6871,169 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	assert.Contains(t, stripped, "   11")
 
 	// toggle off
-	m = m.handleViewToggle("L")
+	m = m.handleViewToggle(keymap.ActionToggleLineNums)
 	assert.False(t, m.lineNumbers)
 	rendered = m.renderDiff()
 	stripped = ansi.Strip(rendered)
 	assert.NotContains(t, stripped, "10 10")
+}
+
+func TestModel_CustomKeymapQuitOverride(t *testing.T) {
+	// map "x" to quit, unbind "q" — verify "x" quits and "q" does not
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionQuit)
+	km.Unbind("q")
+
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	// "x" should quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	require.NotNil(t, cmd, "x should produce a command")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "x should trigger quit")
+
+	// "q" should not quit (unbound)
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.Nil(t, cmd, "q should not produce a command when unbound")
+}
+
+func TestModel_CustomKeymapViewToggle(t *testing.T) {
+	// map "x" to toggle_wrap — verify "x" toggles wrap and "w" still works
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionToggleWrap)
+
+	lines := []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.keymap = km
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	assert.False(t, m.wrapMode)
+
+	// "x" should toggle wrap
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+	assert.True(t, model.wrapMode, "x should toggle wrap mode on")
+
+	// "w" should also toggle wrap (still bound by default)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	model = result.(Model)
+	assert.False(t, model.wrapMode, "w should toggle wrap mode off")
+}
+
+func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
+	// map "x" to next_hunk, unbind "]" — verify "x" jumps to next hunk and "]" does not
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionNextHunk)
+	km.Unbind("]")
+
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},
+	}
+
+	m := testModel(nil, nil)
+	m.keymap = km
+	m.diffLines = lines
+	m.diffCursor = 0
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.viewport.Height = 20
+
+	// "x" should jump to next hunk
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.diffCursor, "x should jump to first hunk")
+
+	// "]" should not jump (unbound)
+	model.diffCursor = 0
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.diffCursor, "] should not jump when unbound")
+}
+
+func TestModel_CustomKeymapTreeNav(t *testing.T) {
+	// map "x" to down, unbind "j" — verify "x" moves tree cursor and "j" does not
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionDown)
+	km.Unbind("j")
+
+	files := []string{"a.go", "b.go", "c.go"}
+	m := testModel(files, nil)
+	m.keymap = km
+	m.tree = newFileTree(files)
+	m.focus = paneTree
+
+	assert.Equal(t, "a.go", m.tree.selectedFile())
+
+	// "x" should move down
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+	assert.Equal(t, "b.go", model.tree.selectedFile(), "x should move tree cursor down")
+
+	// "j" should not move (unbound)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = result.(Model)
+	assert.Equal(t, "b.go", model.tree.selectedFile(), "j should not move when unbound")
+}
+
+func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
+	// scroll_right in tree pane should focus diff (implicit fallback)
+	files := []string{"a.go"}
+	m := testModel(files, nil)
+	m.tree = newFileTree(files)
+	m.currFile = "a.go"
+	m.focus = paneTree
+
+	// right key maps to scroll_right by default, should focus diff in tree pane
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.focus, "right key (scroll_right) should focus diff in tree pane")
+}
+
+func TestModel_AcceptanceAdditiveQuitBinding(t *testing.T) {
+	// map x quit (additive) — both x and q should quit
+	km := keymap.Default()
+	km.Bind("x", keymap.ActionQuit)
+
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	// "x" should quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	require.NotNil(t, cmd, "x should produce a command")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "x should trigger quit")
+
+	// "q" should also still quit (additive binding)
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd, "q should still produce a command")
+	msg = cmd()
+	_, ok = msg.(tea.QuitMsg)
+	assert.True(t, ok, "q should still trigger quit")
+}
+
+func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
+	// no keybindings file → identical behavior to current defaults
+	m := testModel([]string{"a.go"}, nil)
+	// m.keymap is set to Default() in testModel via NewModel
+
+	// q should quit
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "q should quit with default keymap")
+
+	// ? should open help
+	m2 := testModel([]string{"a.go"}, nil)
+	result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := result.(Model)
+	assert.True(t, model.showHelp, "? should open help with default keymap")
 }
