@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -771,8 +772,8 @@ func TestColorFieldPtrs(t *testing.T) {
 		// set all colors via applyTheme, then collectColors should return same values
 		opts := options{}
 		th := theme.Theme{ChromaStyle: "test-style", Colors: map[string]string{}}
-		for _, key := range theme.ColorKeys() {
-			th.Colors[key] = "#" + key[:6] // unique value per key
+		for i, key := range theme.ColorKeys() {
+			th.Colors[key] = fmt.Sprintf("#%02x%02x%02x", i*10, i*11, i*12)
 		}
 		applyTheme(&opts, th)
 		collected := collectColors(opts)
@@ -919,7 +920,7 @@ func TestHandleThemes_NoOp(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	opts := options{}
 
-	done, err := handleThemes(&opts, "/some/dir", &stdout, &stderr)
+	done, err := handleThemes(&opts, t.TempDir(), &stdout, &stderr)
 	require.NoError(t, err)
 	assert.False(t, done)
 	assert.Empty(t, stdout.String())
