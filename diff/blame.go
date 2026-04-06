@@ -81,7 +81,7 @@ func blameTargetRef(ref string) string {
 func parseBlame(raw string) (map[int]BlameLine, error) {
 	result := make(map[int]BlameLine)
 	scanner := bufio.NewScanner(strings.NewReader(raw))
-	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)
 
 	var lineNum int
 	var author string

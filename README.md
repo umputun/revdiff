@@ -24,6 +24,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
+- Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
 - Fully customizable colors via environment variables, CLI flags, or config file
 - Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
 
@@ -31,7 +32,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 ## Requirements
 
-- `git` (used to generate diffs; optional when using `--only` for standalone file review)
+- `git` (used to generate diffs; optional when using `--only` or `--stdin`)
 
 ## Installation
 
@@ -174,6 +175,8 @@ Positional arguments support several forms:
 | `--list-themes` | Print available theme names to stdout and exit | |
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
 | `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
+| `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
+| `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
@@ -318,6 +321,12 @@ revdiff --only=/tmp/plan.md
 
 # review a file that has no git changes (context-only view with annotations)
 revdiff --only=docs/notes.txt
+
+# review arbitrary piped text as a scratch buffer
+printf '# Plan\n\nShip it\n' | revdiff --stdin --stdin-name plan.md
+
+# capture annotations from generated output
+some-command | revdiff --stdin --output /tmp/annotations.txt
 ```
 
 ### All-Files Mode
@@ -350,9 +359,23 @@ Two scenarios trigger this mode:
 1. **Inside a git repo** - `--only` files not in the diff are read from disk and shown alongside any changed files
 2. **Outside a git repo** - `--only` is required; files are read directly from disk
 
+### Scratch-Buffer Review
+
+Use `--stdin` to review arbitrary piped or redirected text as a single synthetic file. All lines are shown as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.
+
+`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, and `--exclude`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
+
+Use `--stdin-name` to control the synthetic filename. This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
+
+```bash
+echo "plain text" | revdiff --stdin
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
+git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md
+```
+
 ### Markdown TOC Navigation
 
-When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
+When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md` or `printf '# title\n' | revdiff --stdin --stdin-name plan.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
 
 This mode activates when all three conditions are met: single file, markdown extension (`.md`/`.markdown`), and all lines are context (no diff changes). Headers inside fenced code blocks are excluded from the TOC.
 
@@ -369,7 +392,7 @@ revdiff --only=docs/plans/feature.md
 revdiff --only=/tmp/draft-comment.md
 ```
 
-**Reviewing generated output** — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied. Load it into revdiff, annotate what needs fixing, feed annotations back to the generator.
+**Reviewing generated output** — CI configs, Terraform plans, generated migrations, or command output. Load files with `--only` or stream ephemeral output with `--stdin`, annotate what needs fixing, feed annotations back to the generator.
 
 ### Key Bindings
 

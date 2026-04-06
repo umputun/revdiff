@@ -183,6 +183,49 @@ func (r *FileReader) FileDiff(_, file string, _ bool) ([]DiffLine, error) {
 	return readFileAsContext(resolved)
 }
 
+type readerContextError struct {
+	op  string
+	err error
+}
+
+func (e readerContextError) Error() string { return e.op + ": " + e.err.Error() }
+func (e readerContextError) Unwrap() error { return e.err }
+
+// readReaderAsContext reads arbitrary text content and returns all lines as context DiffLines.
+// binary content (detected by null bytes in the first 8KB) returns a single placeholder line.
+func readReaderAsContext(r io.Reader) ([]DiffLine, error) {
+	reader := bufio.NewReaderSize(r, 8192)
+
+	probe, err := reader.Peek(8192)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, readerContextError{op: "read", err: err}
+	}
+	if slices.Contains(probe, byte(0)) {
+		return []DiffLine{{OldNum: 1, NewNum: 1, Content: BinaryPlaceholder, ChangeType: ChangeContext, IsBinary: true}}, nil
+	}
+
+	var lines []DiffLine
+	scanner := bufio.NewScanner(reader)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		lines = append(lines, DiffLine{
+			OldNum:     lineNum,
+			NewNum:     lineNum,
+			Content:    scanner.Text(),
+			ChangeType: ChangeContext,
+		})
+	}
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(file has lines too long to display)", ChangeType: ChangeContext}}, nil
+		}
+		return nil, readerContextError{op: "scan", err: err}
+	}
+	return lines, nil
+}
+
 // readFileAsContext reads a file from disk and returns all lines as context DiffLines.
 // each line gets ChangeContext type with both OldNum and NewNum set to the 1-based line number.
 // binary files (detected by null bytes in the first 8KB) return a single placeholder line.
@@ -211,40 +254,13 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 	}
 	defer f.Close()
 
-	// check for binary content by looking for null bytes in the first 8KB
-	probe := make([]byte, 8192)
-	n, readErr := f.Read(probe)
-	if readErr != nil && !errors.Is(readErr, io.EOF) {
-		return nil, fmt.Errorf("read file %s: %w", path, readErr)
-	}
-	if slices.Contains(probe[:n], byte(0)) {
-		return []DiffLine{{OldNum: 1, NewNum: 1, Content: BinaryPlaceholder, ChangeType: ChangeContext, IsBinary: true}}, nil
-	}
-	// seek back to start for the full scan
-	if _, err = f.Seek(0, 0); err != nil {
-		return nil, fmt.Errorf("seek file %s: %w", path, err)
-	}
-
-	var lines []DiffLine
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), 1024*1024) // 1MB max line, same as ParseUnifiedDiff
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		lines = append(lines, DiffLine{
-			OldNum:     lineNum,
-			NewNum:     lineNum,
-			Content:    scanner.Text(),
-			ChangeType: ChangeContext,
-		})
-	}
-	if err := scanner.Err(); err != nil {
-		if errors.Is(err, bufio.ErrTooLong) {
-			// file has lines exceeding 1MB — likely a binary without NUL bytes or minified code.
-			// return a placeholder instead of propagating a hard error.
-			return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(file has lines too long to display)", ChangeType: ChangeContext}}, nil
+	lines, err := readReaderAsContext(f)
+	if err != nil {
+		var ctxErr readerContextError
+		if errors.As(err, &ctxErr) {
+			return nil, fmt.Errorf("%s file %s: %w", ctxErr.op, path, ctxErr.err)
 		}
-		return nil, fmt.Errorf("scan file %s: %w", path, err)
+		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
 	return lines, nil
 }

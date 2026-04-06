@@ -1,14 +1,48 @@
 package diff
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestReadReaderAsContext(t *testing.T) {
+	t.Run("normal text", func(t *testing.T) {
+		lines, err := readReaderAsContext(strings.NewReader("line one\nline two\n"))
+		require.NoError(t, err)
+		require.Len(t, lines, 2)
+		assert.Equal(t, DiffLine{OldNum: 1, NewNum: 1, Content: "line one", ChangeType: ChangeContext}, lines[0])
+		assert.Equal(t, DiffLine{OldNum: 2, NewNum: 2, Content: "line two", ChangeType: ChangeContext}, lines[1])
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		lines, err := readReaderAsContext(strings.NewReader(""))
+		require.NoError(t, err)
+		assert.Empty(t, lines)
+	})
+
+	t.Run("binary placeholder", func(t *testing.T) {
+		lines, err := readReaderAsContext(bytes.NewReader([]byte("abc\x00def")))
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, BinaryPlaceholder, lines[0].Content)
+		assert.True(t, lines[0].IsBinary)
+	})
+
+	t.Run("oversized line placeholder", func(t *testing.T) {
+		line := bytes.Repeat([]byte("x"), 1024*1024+1)
+		lines, err := readReaderAsContext(bytes.NewReader(line))
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(file has lines too long to display)", lines[0].Content)
+	})
+}
 
 func TestReadFileAsContext_NormalFile(t *testing.T) {
 	dir := t.TempDir()
@@ -664,6 +698,43 @@ func TestFileReader_FullPipeline(t *testing.T) {
 	}
 	assert.Equal(t, "# Plan", lines[0].Content)
 	assert.Equal(t, "- do another thing", lines[4].Content)
+}
+
+func TestStdinReader(t *testing.T) {
+	lines := []DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "# title", ChangeType: ChangeContext},
+		{OldNum: 2, NewNum: 2, Content: "", ChangeType: ChangeContext},
+	}
+
+	r := NewStdinReader("plan.md", lines)
+
+	files, err := r.ChangedFiles("", false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"plan.md"}, files)
+
+	got, err := r.FileDiff("", "plan.md", false)
+	require.NoError(t, err)
+	assert.Equal(t, lines, got)
+
+	// wrong filename returns nil
+	got, err = r.FileDiff("", "other.md", false)
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+func TestNewStdinReaderFromReader(t *testing.T) {
+	r, err := NewStdinReaderFromReader("test.md", strings.NewReader("line one\nline two\n"))
+	require.NoError(t, err)
+
+	files, err := r.ChangedFiles("", false)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test.md"}, files)
+
+	lines, err := r.FileDiff("", "test.md", false)
+	require.NoError(t, err)
+	require.Len(t, lines, 2)
+	assert.Equal(t, "line one", lines[0].Content)
+	assert.Equal(t, "line two", lines[1].Content)
 }
 
 // writeFileAt writes content to an absolute path, creating directories as needed.

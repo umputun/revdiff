@@ -60,6 +60,7 @@
         <h4>Modes</h4>
         <a href="#all-files">All-files mode</a>
         <a href="#context-only">Context-only review</a>
+        <a href="#scratch-buffer">Scratch-buffer review</a>
         <a href="#markdown-toc">Markdown TOC</a>
         <a href="#beyond-code-review">Beyond code review</a>
 
@@ -94,7 +95,7 @@
         <p>Complete reference for revdiff usage, configuration, themes, and keybindings.</p>
 
         <h2 id="requirements">Requirements</h2>
-        <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review.</p>
+        <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
 
         <h2 id="installation">Installation</h2>
         <h3>Homebrew (macOS/Linux)</h3>
@@ -151,7 +152,13 @@ revdiff main..feature
 revdiff --only=/tmp/plan.md
 
 <span class="code-comment"># review a file with no git changes (context-only)</span>
-revdiff --only=docs/notes.txt</code></div>
+revdiff --only=docs/notes.txt
+
+<span class="code-comment"># review piped text as a scratch buffer</span>
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
+
+<span class="code-comment"># capture annotations from generated output</span>
+some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="all-files">All-files mode</h2>
         <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all git-tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
@@ -167,11 +174,19 @@ revdiff --only=docs/notes.txt</code></div>
             <li><strong>Outside a git repo</strong> &mdash; <code>--only</code> is required; files are read directly from disk</li>
         </ul>
 
+        <h2 id="scratch-buffer">Scratch-buffer review</h2>
+        <p>Use <code>--stdin</code> to review arbitrary piped or redirected text as a single synthetic file. All lines are treated as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.</p>
+        <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, and <code>--exclude</code>.</p>
+        <p>Use <code>--stdin-name</code> to control the synthetic filename for annotation output and extension-based highlighting or markdown TOC activation.</p>
+        <div class="code-block"><code>echo "plain text" | revdiff --stdin
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
+git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
+
         <h2 id="markdown-toc">Markdown TOC navigation</h2>
-        <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
+        <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. This works for <code>--only</code> files and for <code>--stdin</code> when <code>--stdin-name</code> ends with <code>.md</code> or <code>.markdown</code>. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
 
         <h2 id="beyond-code-review">Beyond code review</h2>
-        <p>The <code>--only</code> flag enables use cases beyond git diffs. Any text file can be loaded for annotation, no git repo required.</p>
+        <p>The <code>--only</code> and <code>--stdin</code> flags enable use cases beyond git diffs. Files and ephemeral command output can both be loaded for annotation, no git repo required.</p>
         <p><strong>Reviewing AI-generated drafts</strong> — When an AI assistant drafts text to be posted publicly (PR comments, issue responses, release notes), write it to a temp file and review in revdiff. Annotate specific lines, the assistant rewrites, re-open to verify.</p>
         <p><strong>Reviewing documentation and specs</strong> — Markdown files, API specs, config files, and plan documents can all be reviewed with inline annotations.</p>
         <div class="code-block"><code>revdiff --only=docs/plans/feature.md
@@ -204,6 +219,8 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--list-themes</code></td><td>Print available theme names and exit</td><td></td></tr>
                 <tr><td><code>--init-themes</code></td><td>Write bundled theme files to themes dir and exit</td><td></td></tr>
                 <tr><td><code>-A, --all-files</code></td><td>Browse all git-tracked files</td><td><code>false</code></td></tr>
+                <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
+                <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
                 <tr><td><code>-o, --output</code></td><td>Write annotations to file</td><td></td></tr>

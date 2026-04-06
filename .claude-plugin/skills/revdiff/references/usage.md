@@ -21,6 +21,8 @@ revdiff --all-files --exclude vendor # browse all files, excluding vendor direct
 revdiff main --exclude vendor        # diff against main, excluding vendor
 revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md  # review piped text as markdown
+some-command | revdiff --stdin --output /tmp/annotations.txt      # annotate generated output
 ```
 
 ## Single-File Mode
@@ -54,6 +56,14 @@ When `--only` specifies a file that has no git changes (or when no git repo exis
 
 - **Inside a git repo**: `--only` files not in the diff are read from disk alongside changed files
 - **Outside a git repo**: `--only` is required; files are read directly from disk
+
+## Scratch-Buffer Review
+
+Use `--stdin` to review arbitrary piped or redirected text as one synthetic file. All lines are treated as context, so single-file mode, inline annotations, file-level notes, search, wrap, collapsed mode, and structured output all work unchanged.
+
+- `--stdin` is explicit and requires piped or redirected input
+- `--stdin-name` sets the synthetic filename used in annotations and syntax highlighting
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, and `--exclude`
 
 ## Key Bindings
 

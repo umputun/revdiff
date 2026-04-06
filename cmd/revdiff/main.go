@@ -39,6 +39,8 @@ type options struct {
 	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show git blame gutter on startup"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all git-tracked files, not just diffs"`
+	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
+	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
 	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
@@ -87,6 +89,8 @@ func (o options) ref() string {
 }
 
 var revision = "unknown"
+
+const defaultScratchBufferName = "scratch-buffer"
 
 func main() {
 	opts, err := parseArgs(os.Args[1:])
@@ -180,7 +184,36 @@ func parseArgs(args []string) (options, error) {
 		}
 	}
 
+	if err := validateStdinFlags(opts); err != nil {
+		return options{}, err
+	}
+
 	return opts, nil
+}
+
+func validateStdinFlags(opts options) error {
+	if opts.StdinName != "" && !opts.Stdin {
+		return errors.New("--stdin-name requires --stdin")
+	}
+	if !opts.Stdin {
+		return nil
+	}
+	if opts.Refs.Base != "" || opts.Refs.Against != "" {
+		return errors.New("--stdin cannot be used with refs")
+	}
+	if opts.Staged {
+		return errors.New("--stdin cannot be used with --staged")
+	}
+	if len(opts.Only) > 0 {
+		return errors.New("--stdin cannot be used with --only")
+	}
+	if opts.AllFiles {
+		return errors.New("--stdin cannot be used with --all-files")
+	}
+	if len(opts.Exclude) > 0 {
+		return errors.New("--stdin cannot be used with --exclude")
+	}
+	return nil
 }
 
 // dumpConfig writes the current config with defaults to the given writer.
@@ -267,12 +300,57 @@ func defaultKeysPath() string {
 	return filepath.Join(home, ".config", "revdiff", "keybindings")
 }
 
-func run(opts options) error {
-	gitRoot, gitErr := gitTopLevel()
-	renderer, workDir, err := makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
-	if err != nil {
-		return err
+type stdinStat interface {
+	Stat() (os.FileInfo, error)
+}
+
+func validateStdinInput(opts options, stdin stdinStat) error {
+	if !opts.Stdin {
+		return nil
 	}
+	info, err := stdin.Stat()
+	if err != nil {
+		return fmt.Errorf("stat stdin: %w", err)
+	}
+	if info.Mode()&os.ModeCharDevice != 0 {
+		return errors.New("--stdin requires piped or redirected input")
+	}
+	return nil
+}
+
+func stdinName(name string) string {
+	if name == "" {
+		return defaultScratchBufferName
+	}
+	return name
+}
+
+func openTTY() (*os.File, error) {
+	tty, err := os.Open("/dev/tty")
+	if err != nil {
+		return nil, fmt.Errorf("open /dev/tty: %w", err)
+	}
+	return tty, nil
+}
+
+func prepareStdinMode(opts options, stdin *os.File) (ui.Renderer, *os.File, error) {
+	if err := validateStdinInput(opts, stdin); err != nil {
+		return nil, nil, err
+	}
+
+	renderer, err := diff.NewStdinReaderFromReader(stdinName(opts.StdinName), stdin)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read stdin: %w", err)
+	}
+
+	tty, err := openTTY()
+	if err != nil {
+		return nil, nil, err
+	}
+	return renderer, tty, nil
+}
+
+func run(opts options) error {
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
 	keysPath := opts.Keys
@@ -281,10 +359,33 @@ func run(opts options) error {
 	}
 	km := keymap.LoadOrDefault(keysPath)
 
-	// blame is only available when git is present
-	var blamer ui.Blamer
-	if gitErr == nil {
-		blamer = diff.NewGit(gitRoot)
+	var (
+		renderer ui.Renderer
+		workDir  string
+		blamer   ui.Blamer
+		err      error
+	)
+
+	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
+	if opts.Stdin {
+		var tty *os.File
+		renderer, tty, err = prepareStdinMode(opts, os.Stdin)
+		if err != nil {
+			return err
+		}
+		defer tty.Close()
+		programOptions = append(programOptions, tea.WithInput(tty))
+	} else {
+		gitRoot, gitErr := gitTopLevel()
+		renderer, workDir, err = makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
+		if err != nil {
+			return err
+		}
+
+		// blame is only available when git is present
+		if gitErr == nil {
+			blamer = diff.NewGit(gitRoot)
+		}
 	}
 
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
@@ -328,7 +429,7 @@ func run(opts options) error {
 		},
 	})
 
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	p := tea.NewProgram(model, programOptions...)
 	finalModel, err := p.Run()
 	if err != nil {
 		return fmt.Errorf("TUI error: %w", err)

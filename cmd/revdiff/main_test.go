@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,6 +22,26 @@ import (
 func noConfigArgs(t *testing.T) []string {
 	t.Helper()
 	return []string{"--config", filepath.Join(t.TempDir(), "none")}
+}
+
+type fakeFileInfo struct {
+	mode os.FileMode
+}
+
+func (f fakeFileInfo) Name() string       { return "stdin" }
+func (f fakeFileInfo) Size() int64        { return 0 }
+func (f fakeFileInfo) Mode() os.FileMode  { return f.mode }
+func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeFileInfo) IsDir() bool        { return false }
+func (f fakeFileInfo) Sys() any           { return nil }
+
+type fakeStdin struct {
+	info os.FileInfo
+	err  error
+}
+
+func (f fakeStdin) Stat() (os.FileInfo, error) {
+	return f.info, f.err
 }
 
 func TestParseArgs_Defaults(t *testing.T) {
@@ -37,7 +58,9 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.Collapsed)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
+	assert.False(t, opts.Stdin)
 	assert.Empty(t, opts.Output)
+	assert.Empty(t, opts.StdinName)
 	assert.Empty(t, opts.Refs.Base)
 	assert.Empty(t, opts.Refs.Against)
 }
@@ -166,7 +189,6 @@ func TestParseArgs_Blame(t *testing.T) {
 		assert.True(t, opts.Blame)
 	})
 }
-
 
 func TestParseArgs_OutputFlag(t *testing.T) {
 	opts, err := parseArgs([]string{"-o", "/tmp/out.txt"})
@@ -529,6 +551,47 @@ func TestParseArgs_AllFilesConflictsWithOnly(t *testing.T) {
 	assert.Contains(t, err.Error(), "--all-files cannot be used with --only")
 }
 
+func TestParseArgs_StdinFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--stdin"))
+	require.NoError(t, err)
+	assert.True(t, opts.Stdin)
+}
+
+func TestParseArgs_StdinNameFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--stdin", "--stdin-name", "plan.md"))
+	require.NoError(t, err)
+	assert.True(t, opts.Stdin)
+	assert.Equal(t, "plan.md", opts.StdinName)
+}
+
+func TestParseArgs_StdinNameRequiresStdin(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--stdin-name", "plan.md"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--stdin-name requires --stdin")
+}
+
+func TestParseArgs_StdinConflicts(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "refs", args: []string{"--stdin", "HEAD~1"}, want: "--stdin cannot be used with refs"},
+		{name: "staged", args: []string{"--stdin", "--staged"}, want: "--stdin cannot be used with --staged"},
+		{name: "only", args: []string{"--stdin", "--only", "main.go"}, want: "--stdin cannot be used with --only"},
+		{name: "all files", args: []string{"--stdin", "--all-files"}, want: "--stdin cannot be used with --all-files"},
+		{name: "exclude", args: []string{"--stdin", "--exclude", "vendor"}, want: "--stdin cannot be used with --exclude"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseArgs(append(noConfigArgs(t), tt.args...))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
+}
+
 func TestMakeRenderer_AllFiles(t *testing.T) {
 	dir := t.TempDir()
 	renderer, workDir, err := makeRenderer(nil, nil, true, dir, nil)
@@ -562,6 +625,31 @@ func TestMakeRenderer_AllFilesWithExclude(t *testing.T) {
 	// should be ExcludeFilter wrapping DirectoryReader
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
 	assert.Equal(t, dir, workDir)
+}
+
+func TestStdinName(t *testing.T) {
+	assert.Equal(t, "scratch-buffer", stdinName(""), "empty name should use default")
+	assert.Equal(t, "plan.md", stdinName("plan.md"), "explicit name should pass through")
+}
+
+func TestValidateStdinInput(t *testing.T) {
+	t.Run("non tty stdin succeeds", func(t *testing.T) {
+		err := validateStdinInput(options{Stdin: true}, fakeStdin{info: fakeFileInfo{mode: 0}})
+		require.NoError(t, err)
+	})
+
+	t.Run("tty stdin errors", func(t *testing.T) {
+		err := validateStdinInput(options{Stdin: true}, fakeStdin{info: fakeFileInfo{mode: os.ModeCharDevice}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--stdin requires piped or redirected input")
+	})
+
+	t.Run("stat error propagates", func(t *testing.T) {
+		err := validateStdinInput(options{Stdin: true}, fakeStdin{err: errors.New("device gone")})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "stat stdin")
+		assert.Contains(t, err.Error(), "device gone")
+	})
 }
 
 func TestParseArgs_KeysFlag(t *testing.T) {
