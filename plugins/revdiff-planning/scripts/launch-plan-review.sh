@@ -78,6 +78,41 @@ if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
     exit 0
 fi
 
+# cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)
+if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
+    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    rm -f "$SENTINEL"
+
+    LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+$REVDIFF_CMD; touch '$SENTINEL'
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    CMUX_NEW=$(cmux new-split down 2>&1) || true
+    CMUX_SURF=$(echo "$CMUX_NEW" | grep -o 'surface:[0-9]*' | head -1)
+
+    # send exec command immediately — the pty input buffer holds the text
+    # until the new pane's shell finishes initializing and reads it
+    if [ -n "$CMUX_SURF" ]; then
+        cmux send --surface "$CMUX_SURF" "exec $LAUNCH_SCRIPT\n"
+    else
+        cmux send "exec $LAUNCH_SCRIPT\n"
+    fi
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    if [ -n "$CMUX_SURF" ]; then
+        cmux close-surface --surface "$CMUX_SURF" 2>/dev/null || true
+    fi
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
 # ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
 if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
 
@@ -257,5 +292,5 @@ LAUNCHER
     exit 0
 fi
 
-echo "error: no overlay terminal available (requires tmux, kitty, wezterm, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires tmux, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
