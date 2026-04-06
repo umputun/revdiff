@@ -1551,6 +1551,61 @@ func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
 	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
 }
 
+func TestModel_CollapsedRangeAnnotationsRender(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "new2", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "range note"})
+
+	rendered := ansi.Strip(m.renderDiff())
+	assert.Contains(t, rendered, "range note")
+	assert.Contains(t, rendered, "┌ ")
+	assert.Contains(t, rendered, "└ ")
+}
+
+func TestModel_CollapsedWrapCursorViewportYWithRangeGutter(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 44
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "this is a very long modified line that should wrap when the range gutter is visible", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 2, Type: "", Comment: "replacement"})
+
+	rendered := strings.Split(strings.TrimSuffix(ansi.Strip(m.renderDiff()), "\n"), "\n")
+	ctx2Row := -1
+	for i, line := range rendered {
+		if strings.Contains(line, "ctx2") {
+			ctx2Row = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, ctx2Row, 0, "ctx2 should be rendered")
+
+	m.diffCursor = 3
+	m.cursorOnAnnotation = false
+	assert.Equal(t, ctx2Row, m.cursorViewportY())
+}
+
 func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 	t.Run("wrapping", func(t *testing.T) {
 		m := testModel(nil, nil)

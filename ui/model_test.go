@@ -478,7 +478,6 @@ func TestModel_BlameFromConfig(t *testing.T) {
 	})
 }
 
-
 func TestModel_StatusModeIcons(t *testing.T) {
 	t.Run("all icons always present", func(t *testing.T) {
 		m := testModel(nil, nil)
@@ -2793,7 +2792,7 @@ func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
 	t.Run("long file annotation wraps to multiple rows", func(t *testing.T) {
 		longComment := strings.Repeat("word ", 20) // ~100 chars, wraps at ~34
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
-		defer m.store.Delete("a.go", 0, "")
+		defer m.store.Delete("a.go", 0, 0, "")
 
 		wrapCount := m.wrappedAnnotationLineCount("file")
 		assert.Greater(t, wrapCount, 1, "long file annotation should wrap to multiple rows")
@@ -2808,7 +2807,7 @@ func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
 	t.Run("long inline annotation wraps to multiple rows", func(t *testing.T) {
 		longComment := strings.Repeat("note ", 20) // ~100 chars
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: longComment})
-		defer m.store.Delete("a.go", 1, " ")
+		defer m.store.Delete("a.go", 1, 0, " ")
 
 		key := m.annotationKey(1, " ")
 		wrapCount := m.wrappedAnnotationLineCount(key)
@@ -2820,7 +2819,7 @@ func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
 
 	t.Run("short annotation stays one row", func(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "short"})
-		defer m.store.Delete("a.go", 0, "")
+		defer m.store.Delete("a.go", 0, 0, "")
 
 		assert.Equal(t, 1, m.wrappedAnnotationLineCount("file"))
 	})
@@ -2837,7 +2836,7 @@ func TestModel_RenderWrappedAnnotation(t *testing.T) {
 	t.Run("long file annotation wraps in rendered output", func(t *testing.T) {
 		longComment := strings.Repeat("wrap ", 20)
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
-		defer m.store.Delete("a.go", 0, "")
+		defer m.store.Delete("a.go", 0, 0, "")
 
 		wrapCount := m.wrappedAnnotationLineCount("file")
 		assert.Greater(t, wrapCount, 1, "annotation should wrap")
@@ -4128,7 +4127,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 	t.Run("short line no continuation", func(t *testing.T) {
 		var b strings.Builder
 		dl := diff.DiffLine{Content: "short", ChangeType: diff.ChangeAdd, NewNum: 1}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 		output := b.String()
 		assert.Contains(t, output, " + short")
 		assert.NotContains(t, output, "↪", "short line should not have continuation")
@@ -4139,7 +4138,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 		var b strings.Builder
 		longContent := "this is a very long line that should definitely be wrapped at word boundaries to fit the viewport"
 		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeAdd, NewNum: 1}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 		output := b.String()
 
 		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
@@ -4158,7 +4157,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 		var b strings.Builder
 		longContent := "this is a removed line that is very long and should be wrapped at word boundaries to fit the viewport width"
 		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeRemove, OldNum: 5}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 		output := b.String()
 
 		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
@@ -4173,7 +4172,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 		var b strings.Builder
 		longContent := "this is a context line that is very long and should be wrapped at word boundaries for readability"
 		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeContext, NewNum: 10}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 		output := b.String()
 
 		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
@@ -4186,7 +4185,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 	t.Run("divider lines are not wrapped", func(t *testing.T) {
 		var b strings.Builder
 		dl := diff.DiffLine{Content: "@@ -1,5 +1,7 @@", ChangeType: diff.ChangeDivider}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 		output := b.String()
 		assert.NotContains(t, output, "↪", "dividers should not be wrapped")
 		assert.Equal(t, 1, strings.Count(output, "\n"), "divider should be a single line")
@@ -4200,7 +4199,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 		var b strings.Builder
 		longContent := "this is a very long line that should definitely be wrapped at word boundaries to test cursor placement"
 		dl := diff.DiffLine{Content: longContent, ChangeType: diff.ChangeAdd, NewNum: 1}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 		output := b.String()
 
 		lines := strings.Split(strings.TrimSuffix(output, "\n"), "\n")
@@ -4217,7 +4216,7 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 
 		var b strings.Builder
 		dl := diff.DiffLine{Content: "@@ -1,3 +1,3 @@", ChangeType: diff.ChangeDivider}
-		m.renderDiffLine(&b, 0, dl)
+		m.renderDiffLine(&b, 0, dl, nil)
 
 		// divider falls through to non-wrap path but ansi.Cut should be skipped
 		output := b.String()
@@ -4353,7 +4352,7 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	t.Run("cursor on annotation after wrapped line", func(t *testing.T) {
 		// add annotation on line 2 (idx 1, the long wrapped add line)
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "note"})
-		defer func() { m.store.Delete("a.go", 2, "+") }()
+		defer func() { m.store.Delete("a.go", 2, 0, "+") }()
 
 		m.diffCursor = 2
 		m.cursorOnAnnotation = false
@@ -4363,7 +4362,7 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 
 	t.Run("cursor on annotation sub-line of wrapped line", func(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: " ", Comment: "note on ctx"})
-		defer func() { m.store.Delete("a.go", 3, " ") }()
+		defer func() { m.store.Delete("a.go", 3, 0, " ") }()
 
 		m.diffCursor = 2
 		m.cursorOnAnnotation = true
@@ -5760,7 +5759,7 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 	t.Run("with search match", func(t *testing.T) {
 		model.searchMatchSet = map[int]bool{1: true}
 		var b strings.Builder
-		model.renderDeletePlaceholder(&b, 1, 1)
+		model.renderDeletePlaceholder(&b, 1, 1, nil)
 		rendered := b.String()
 		assert.Contains(t, rendered, "2 lines deleted")
 		assert.Contains(t, rendered, "▶", "cursor indicator should be present")
@@ -5769,7 +5768,7 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 	t.Run("without search match", func(t *testing.T) {
 		model.searchMatchSet = nil
 		var b strings.Builder
-		model.renderDeletePlaceholder(&b, 1, 1)
+		model.renderDeletePlaceholder(&b, 1, 1, nil)
 		rendered := b.String()
 		assert.Contains(t, rendered, "2 lines deleted")
 		assert.Contains(t, rendered, "▶")
@@ -5781,7 +5780,7 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 		model.width = 120
 		model.treeWidth = 30
 		var b strings.Builder
-		model.renderDeletePlaceholder(&b, 1, 1)
+		model.renderDeletePlaceholder(&b, 1, 1, nil)
 		rendered := b.String()
 		assert.Contains(t, rendered, "2 lines deleted")
 		model.wrapMode = false
@@ -7228,4 +7227,478 @@ func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
 	result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := result.(Model)
 	assert.True(t, model.showHelp, "? should open help with default keymap")
+}
+
+func TestModel_SelectionMode(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+	}
+	m.diffCursor = 1
+
+	t.Run("start selection", func(t *testing.T) {
+		m.startSelection()
+		assert.True(t, m.selecting)
+		assert.Equal(t, 1, m.selectAnchor)
+		assert.False(t, m.cursorOnAnnotation)
+	})
+
+	t.Run("selection bounds", func(t *testing.T) {
+		m.selecting = true
+		m.selectAnchor = 0
+		m.diffCursor = 2
+		start, end := m.selectionBounds()
+		assert.Equal(t, 0, start)
+		assert.Equal(t, 2, end)
+
+		// reversed anchor/cursor
+		m.selectAnchor = 2
+		m.diffCursor = 0
+		start, end = m.selectionBounds()
+		assert.Equal(t, 0, start)
+		assert.Equal(t, 2, end)
+	})
+
+	t.Run("esc clears selection", func(t *testing.T) {
+		m.selecting = true
+		m.selectAnchor = 1
+		result, _ := m.handleEscKey()
+		m2 := result.(Model)
+		assert.False(t, m2.selecting)
+		assert.Equal(t, 0, m2.selectAnchor)
+	})
+
+	t.Run("selection guards", func(t *testing.T) {
+		m.selecting = false
+		m.focus = paneTree
+		m.startSelection()
+		assert.False(t, m.selecting, "should not start selection outside diff pane")
+
+		m.focus = paneDiff
+		m.annotating = true
+		m.startSelection()
+		assert.False(t, m.selecting, "should not start selection while annotating")
+		m.annotating = false
+
+		m.diffCursor = -1
+		m.startSelection()
+		assert.False(t, m.selecting, "should not start selection with invalid cursor")
+	})
+}
+
+func TestModel_RangeAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("single-line selection collapses to point", func(t *testing.T) {
+		m.selecting = true
+		m.selectAnchor = 1
+		m.diffCursor = 1
+		cmd := m.confirmSelection()
+		assert.False(t, m.selecting)
+		// should start a normal annotation (annotating=true, rangeStartLine=0)
+		assert.True(t, m.annotating)
+		assert.Equal(t, 0, m.rangeStartLine)
+		m.cancelAnnotation()
+		_ = cmd
+	})
+
+	t.Run("multi-line selection creates range annotation", func(t *testing.T) {
+		m.selecting = true
+		m.selectAnchor = 1
+		m.diffCursor = 2
+		cmd := m.confirmSelection()
+		assert.True(t, m.annotating)
+		assert.Equal(t, 2, m.rangeStartLine)
+		assert.Equal(t, 3, m.rangeEndLine)
+		assert.Equal(t, 1, m.rangeStartIdx)
+		assert.Equal(t, 2, m.rangeEndIdx)
+		_ = cmd
+
+		// simulate typing and saving
+		m.annotateInput.SetValue("range comment")
+		m.saveRangeAnnotation()
+		assert.False(t, m.annotating)
+		assert.False(t, m.selecting)
+
+		// verify the annotation was saved
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 2, anns[0].Line)
+		assert.Equal(t, 3, anns[0].EndLine)
+		assert.Empty(t, anns[0].Type)
+		assert.Equal(t, "range comment", anns[0].Comment)
+	})
+
+	t.Run("pre-fill existing range annotation", func(t *testing.T) {
+		// range from previous test already exists
+		m.selecting = true
+		m.selectAnchor = 1
+		m.diffCursor = 2
+		m.confirmSelection()
+		assert.Equal(t, "range comment", m.annotateInput.Value())
+		m.cancelAnnotation()
+	})
+}
+
+func TestModel_RangeAnnotationRendering(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeAdd},
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("buildRangeAnnotations maps to indices", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 4, Type: "", Comment: "range"})
+		defer m.store.Delete("a.go", 2, 4, "")
+
+		ranges := m.buildRangeAnnotations()
+		require.Len(t, ranges, 1)
+		assert.Equal(t, 1, ranges[0].startIdx) // idx 1 = NewNum 2
+		assert.Equal(t, 3, ranges[0].endIdx)   // idx 3 = NewNum 4
+		assert.Equal(t, "range", ranges[0].comment)
+	})
+
+	t.Run("buildRangeAnnotations keeps replacement hunks as ranges", func(t *testing.T) {
+		m2 := testModel(nil, nil)
+		m2.currFile = "a.go"
+		m2.focus = paneDiff
+		m2.diffLines = []diff.DiffLine{
+			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 10, Content: "old", ChangeType: diff.ChangeRemove},
+			{NewNum: 10, Content: "new", ChangeType: diff.ChangeAdd},
+			{NewNum: 11, Content: "ctx", ChangeType: diff.ChangeContext},
+		}
+		m2.store.Add(annotation.Annotation{File: "a.go", Line: 10, EndLine: 10, Type: "", Comment: "replacement"})
+		defer m2.store.Delete("a.go", 10, 10, "")
+
+		ranges := m2.buildRangeAnnotations()
+		require.Len(t, ranges, 1)
+		assert.Equal(t, 1, ranges[0].startIdx)
+		assert.Equal(t, 2, ranges[0].endIdx)
+		assert.Equal(t, 10, ranges[0].startLine)
+		assert.Equal(t, 10, ranges[0].endLine)
+
+		output := m2.renderDiff()
+		assert.Contains(t, output, "replacement")
+		assert.Contains(t, output, "[lines 10-10]", "replacement range should still render as a range")
+	})
+
+	t.Run("buildRangeAnnotations stops before a later hunk reuses the same line number", func(t *testing.T) {
+		m2 := testModel(nil, nil)
+		m2.currFile = "a.go"
+		m2.focus = paneDiff
+		m2.diffLines = []diff.DiffLine{
+			{NewNum: 17, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 18, Content: "old18", ChangeType: diff.ChangeRemove},
+			{NewNum: 18, Content: "new18", ChangeType: diff.ChangeAdd},
+			{NewNum: 19, Content: "new19", ChangeType: diff.ChangeAdd},
+			{NewNum: 20, Content: "new20", ChangeType: diff.ChangeAdd},
+			{NewNum: 21, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 20, Content: "old20-later", ChangeType: diff.ChangeRemove},
+			{NewNum: 22, Content: "new22", ChangeType: diff.ChangeAdd},
+		}
+		m2.store.Add(annotation.Annotation{File: "a.go", Line: 18, EndLine: 20, Type: "", Comment: "range"})
+		defer m2.store.Delete("a.go", 18, 20, "")
+
+		ranges := m2.buildRangeAnnotations()
+		require.Len(t, ranges, 1)
+		assert.Equal(t, 1, ranges[0].startIdx)
+		assert.Equal(t, 4, ranges[0].endIdx)
+	})
+
+	t.Run("rangeGutterFor returns correct indicators", func(t *testing.T) {
+		ranges := []rangeRenderInfo{{startIdx: 1, endIdx: 3, comment: "test"}}
+		assert.Empty(t, rangeGutterFor(0, ranges))
+		assert.Equal(t, "┌ ", rangeGutterFor(1, ranges))
+		assert.Equal(t, "│ ", rangeGutterFor(2, ranges))
+		assert.Equal(t, "└ ", rangeGutterFor(3, ranges))
+		assert.Empty(t, rangeGutterFor(4, ranges))
+	})
+
+	t.Run("rendered diff contains range gutter", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 4, Type: "", Comment: "range note"})
+		defer m.store.Delete("a.go", 2, 4, "")
+
+		output := m.renderDiff()
+		assert.Contains(t, output, "┌")
+		assert.Contains(t, output, "│")
+		assert.Contains(t, output, "└")
+		assert.Contains(t, output, "range note")
+	})
+
+	t.Run("cursorViewportY accounts for range annotation rows", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 4, Type: "", Comment: "range"})
+		defer m.store.Delete("a.go", 2, 4, "")
+
+		// cursor after range end should account for the range annotation row
+		m.diffCursor = 4 // idx 4 = NewNum 5 (after range)
+		m.cursorOnAnnotation = false
+		yWithRange := m.cursorViewportY()
+
+		m.store.Delete("a.go", 2, 4, "")
+		m.diffCursor = 4
+		yWithoutRange := m.cursorViewportY()
+
+		assert.Greater(t, yWithRange, yWithoutRange, "range annotation row should add to viewport Y offset")
+	})
+}
+
+func TestModel_AnnotateHunk(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added2", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "context", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("hunk annotation on changed line", func(t *testing.T) {
+		m.diffCursor = 2 // on an add line inside the hunk
+		cmd := m.annotateHunk()
+		assert.True(t, m.annotating)
+		assert.Equal(t, 2, m.rangeStartLine) // hunk starts at OldNum=2 (remove)
+		assert.Equal(t, 3, m.rangeEndLine)   // hunk ends at NewNum=3 (add)
+		assert.Equal(t, 1, m.rangeStartIdx)
+		assert.Equal(t, 3, m.rangeEndIdx)
+		m.cancelAnnotation()
+		_ = cmd
+	})
+
+	t.Run("no-op on context line", func(t *testing.T) {
+		m.diffCursor = 0 // on context line
+		cmd := m.annotateHunk()
+		assert.Nil(t, cmd)
+		assert.False(t, m.annotating)
+	})
+
+	t.Run("hunkEndFor finds correct end", func(t *testing.T) {
+		// hunk starts at idx 1 (remove), ends at idx 3 (add)
+		end := m.hunkEndFor(1)
+		assert.Equal(t, 3, end)
+
+		// single line
+		m2 := testModel(nil, nil)
+		m2.diffLines = []diff.DiffLine{
+			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "ctx", ChangeType: diff.ChangeContext},
+		}
+		end = m2.hunkEndFor(1)
+		assert.Equal(t, 1, end)
+	})
+}
+
+func TestModel_StatusBarSelection(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+	}
+	m.selecting = true
+	m.selectAnchor = 0
+	m.diffCursor = 2
+
+	text := m.statusBarText()
+	assert.Contains(t, text, "SEL: 3 lines")
+}
+
+func TestModel_DeleteRangeAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "range"})
+
+	m.diffCursor = 1 // on line NewNum=2, inside range
+	m.cursorOnAnnotation = true
+
+	m.deleteAnnotation()
+
+	// range should be deleted
+	assert.False(t, m.store.HasRangeCovering("a.go", 2))
+	assert.Equal(t, 0, m.store.Count())
+}
+
+func TestModel_DeletePointBeforeCoveringRange(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "range"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "point"})
+
+	m.diffCursor = 1
+	m.cursorOnAnnotation = true
+
+	m.deleteAnnotation()
+
+	assert.False(t, m.store.Has("a.go", 2, "+"))
+	assert.True(t, m.store.HasRangeCovering("a.go", 2))
+}
+
+func TestModel_LiveSelectionGutter(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("selection gutter shows during selection", func(t *testing.T) {
+		m.selecting = true
+		m.selectAnchor = 1
+		m.diffCursor = 2
+		output := m.renderDiff()
+		assert.Contains(t, output, "┌")
+		assert.Contains(t, output, "└")
+	})
+
+	t.Run("no gutter when not selecting", func(t *testing.T) {
+		m.selecting = false
+		output := m.renderDiff()
+		assert.NotContains(t, output, "┌")
+		assert.NotContains(t, output, "└")
+	})
+
+	t.Run("single-line selection has no gutter", func(t *testing.T) {
+		m.selecting = true
+		m.selectAnchor = 1
+		m.diffCursor = 1
+		output := m.renderDiff()
+		assert.NotContains(t, output, "┌")
+		assert.NotContains(t, output, "└")
+	})
+}
+
+func TestModel_CursorStopsOnRangeAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "range note"})
+
+	t.Run("moving down stops on range annotation below end line", func(t *testing.T) {
+		m.diffCursor = 1
+		m.cursorOnAnnotation = false
+
+		// move to range end line (idx=2, NewNum=3)
+		m.moveDiffCursorDown()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.False(t, m.cursorOnAnnotation)
+
+		// next down: stop on range annotation below end line
+		m.moveDiffCursorDown()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.True(t, m.cursorOnAnnotation)
+
+		// next down: move to next line
+		m.moveDiffCursorDown()
+		assert.Equal(t, 3, m.diffCursor)
+		assert.False(t, m.cursorOnAnnotation)
+	})
+
+	t.Run("moving up stops on range annotation below end line", func(t *testing.T) {
+		m.diffCursor = 3
+		m.cursorOnAnnotation = false
+
+		// up from line after range → land on annotation below range end
+		m.moveDiffCursorUp()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.True(t, m.cursorOnAnnotation)
+
+		// up again → land on the diff line itself
+		m.moveDiffCursorUp()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.False(t, m.cursorOnAnnotation)
+	})
+
+	t.Run("delete on range annotation", func(t *testing.T) {
+		m.diffCursor = 2 // range end line
+		m.cursorOnAnnotation = true
+		m.deleteAnnotation()
+		assert.Equal(t, 0, m.store.Count())
+		assert.False(t, m.cursorOnAnnotation)
+	})
+
+	t.Run("enter on range annotation opens edit", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "edit me"})
+		m.diffCursor = 2 // range end line
+		m.cursorOnAnnotation = true
+
+		result, _ := m.handleEnterKey()
+		m2 := result.(Model)
+		assert.True(t, m2.annotating)
+		assert.Equal(t, 2, m2.rangeStartLine)
+		assert.Equal(t, 3, m2.rangeEndLine)
+		assert.Equal(t, "edit me", m2.annotateInput.Value())
+		m2.cancelAnnotation()
+	})
+}
+
+func TestModel_AnnotateHunkKeepsLiveRangeToOriginalHunk(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 17, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 18, Content: "old18", ChangeType: diff.ChangeRemove},
+		{NewNum: 18, Content: "new18", ChangeType: diff.ChangeAdd},
+		{NewNum: 19, Content: "new19", ChangeType: diff.ChangeAdd},
+		{NewNum: 20, Content: "new20", ChangeType: diff.ChangeAdd},
+		{NewNum: 21, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 20, Content: "old20-later", ChangeType: diff.ChangeRemove},
+		{NewNum: 22, Content: "new22", ChangeType: diff.ChangeAdd},
+	}
+
+	m.diffCursor = 2
+	m.annotateHunk()
+
+	ranges := m.appendSelectionRange(nil)
+	require.Len(t, ranges, 1)
+	assert.Equal(t, 1, ranges[0].startIdx)
+	assert.Equal(t, 4, ranges[0].endIdx)
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "[lines 18-20]")
 }

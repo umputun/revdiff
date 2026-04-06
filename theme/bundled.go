@@ -28,6 +28,7 @@ color-status-fg = #282a36
 color-status-bg = #bd93f9
 color-search-fg = #282a36
 color-search-bg = #f1fa8c
+#44475a
 `
 
 const bundledNord = `# name: nord
@@ -55,6 +56,7 @@ color-status-fg = #2e3440
 color-status-bg = #88c0d0
 color-search-fg = #2e3440
 color-search-bg = #ebcb8b
+#3b4252
 `
 
 const bundledSolarizedDark = `# name: solarized-dark
@@ -82,6 +84,7 @@ color-status-fg = #002b36
 color-status-bg = #b58900
 color-search-fg = #002b36
 color-search-bg = #cb4b16
+#073642
 `
 
 const bundledCatppuccinMocha = `# name: catppuccin-mocha
@@ -109,6 +112,7 @@ color-status-fg = #1e1e2e
 color-status-bg = #89b4fa
 color-search-fg = #1e1e2e
 color-search-bg = #f9e2af
+#313244
 `
 
 const bundledGruvbox = `# name: gruvbox
@@ -136,6 +140,7 @@ color-status-fg = #282828
 color-status-bg = #fabd2f
 color-search-fg = #282828
 color-search-bg = #fe8019
+#3c3836
 `
 
 // bundledThemes maps theme name to its file content.

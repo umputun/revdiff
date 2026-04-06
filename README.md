@@ -403,9 +403,11 @@ revdiff --only=/tmp/draft-comment.md
 |-----|--------|
 | `a` or `Enter` (diff pane) | Annotate current diff line |
 | `A` | Add file-level annotation (stored at top of diff) |
+| `V` | Start visual range selection (navigate with `j`/`k`, then `a`/`Enter` to annotate) |
+| `H` | Annotate entire hunk under cursor |
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `d` | Delete annotation under cursor |
-| `Esc` | Cancel annotation input |
+| `Esc` | Cancel annotation input / cancel selection |
 
 **View:**
 
@@ -476,9 +478,14 @@ consider splitting this file into smaller modules
 ## handler.go:43 (+)
 use errors.Is() instead of direct comparison
 
+## handler.go:10-25
+review this block for error handling
+
 ## store.go:18 (-)
 don't remove this validation
 ```
+
+Range annotations (`V` selection or `H` hunk) use `file:start-end` format. Point annotations use `file:line (type)` format.
 
 ## Contributing
 

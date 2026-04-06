@@ -24,6 +24,8 @@ func (m Model) renderCollapsedDiff() string {
 	m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
+	ranges := m.buildRangeAnnotations()
+	ranges = m.appendSelectionRange(ranges)
 	hunks := m.findHunks()
 	modifiedSet := m.buildModifiedSet(hunks)
 
@@ -48,28 +50,30 @@ func (m Model) renderCollapsedDiff() string {
 		case diff.ChangeRemove:
 			switch {
 			case expanded:
-				m.renderDiffLine(&b, i, dl)
+				m.renderDiffLine(&b, i, dl, ranges)
 			case i == hunkStart && hunkStart >= 0 && m.isDeleteOnlyHunk(hunkStart):
-				m.renderDeletePlaceholder(&b, i, hunkStart)
+				m.renderDeletePlaceholder(&b, i, hunkStart, ranges)
 				hasVisibleContent = true
-				continue // placeholder is synthetic, skip annotation rendering
+				m.renderRangeAnnotation(&b, i, ranges)
+				continue // placeholder is synthetic, skip point annotation rendering
 			default:
 				continue // hide removed lines in collapsed mode
 			}
 
 		case diff.ChangeAdd:
 			if expanded {
-				m.renderDiffLine(&b, i, dl) // use standard add styling when hunk is expanded
+				m.renderDiffLine(&b, i, dl, ranges) // use standard add styling when hunk is expanded
 			} else {
-				m.renderCollapsedAddLine(&b, i, dl, modifiedSet[i])
+				m.renderCollapsedAddLine(&b, i, dl, modifiedSet[i], ranges)
 			}
 
 		default: // context and divider lines render normally
-			m.renderDiffLine(&b, i, dl)
+			m.renderDiffLine(&b, i, dl, ranges)
 		}
 		hasVisibleContent = true
 
 		m.renderAnnotationOrInput(&b, i, annotationMap)
+		m.renderRangeAnnotation(&b, i, ranges)
 	}
 
 	if !hasVisibleContent {
@@ -80,7 +84,7 @@ func (m Model) renderCollapsedDiff() string {
 
 // renderCollapsedAddLine renders an add line in collapsed mode with modify or add styling.
 // when search is active, matching lines use search highlight instead of add/modify styling.
-func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffLine, modified bool) {
+func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffLine, modified bool, ranges []rangeRenderInfo) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 	isSearchMatch := m.searchMatchSet[idx]
 
@@ -94,8 +98,8 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	}
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
-
 	numGutter, blGutter := m.lineGutters(dl)
+	rg := m.styledRangeGutter(idx, ranges)
 
 	bgColor := m.styles.colors.AddBg
 	if modified {
@@ -104,7 +108,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, blGutter, isCursor, hasHighlight, style, hlStyle, bgColor)
+		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, blGutter, isCursor, hasHighlight, style, hlStyle, bgColor, ranges, idx)
 		return
 	}
 
@@ -119,23 +123,31 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + numGutter + blGutter + content + "\n")
+	b.WriteString(cursor + rg + numGutter + blGutter + content + "\n")
 }
 
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
 func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter, blGutter string,
-	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style, bgColor string) {
+	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style, bgColor string, ranges []rangeRenderInfo, idx int) {
 	numBlank, blBlank := m.gutterBlanks()
+	rg := m.styledRangeGutter(idx, ranges)
+	rgBlank := ""
 	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	if len(ranges) > 0 {
+		rgBlank = strings.Repeat(" ", rangeGutterWidth)
+		wrapWidth -= rangeGutterWidth
+	}
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
 		bg := blBlank
+		rug := rgBlank
 		if i == 0 {
 			prefix = gutter
 			ng = numGutter
 			bg = blGutter
+			rug = rg
 		}
 
 		var styled string
@@ -150,7 +162,7 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutte
 		if i == 0 && isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		b.WriteString(cursor + ng + bg + styled + "\n")
+		b.WriteString(cursor + rug + ng + bg + styled + "\n")
 	}
 }
 
@@ -181,13 +193,16 @@ func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
 	}
 	text := m.deletePlaceholderText(hunkStart)
 	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	if m.hasRangeGutter() {
+		wrapWidth -= rangeGutterWidth
+	}
 	return len(m.wrapContent(text, wrapWidth))
 }
 
 // renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
 // shows "⋯ N lines deleted" with remove styling so users know deletions exist and can expand with '.'.
 // when search is active, matching placeholders use search highlight instead of remove styling.
-func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
+func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int, ranges []rangeRenderInfo) {
 	text := m.deletePlaceholderText(hunkStart)
 
 	style := m.styles.LineRemove
@@ -196,23 +211,30 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	}
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
-
 	divider := diff.DiffLine{ChangeType: diff.ChangeDivider}
 	numGutter, blGutter := m.lineGutters(divider)
+	rg := m.styledRangeGutter(idx, ranges)
 
 	// wrap mode: break long placeholder at word boundaries
 	if m.wrapMode {
 		numBlank, blBlank := m.gutterBlanks()
+		rgBlank := ""
 		wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+		if len(ranges) > 0 {
+			rgBlank = strings.Repeat(" ", rangeGutterWidth)
+			wrapWidth -= rangeGutterWidth
+		}
 		visualLines := m.wrapContent(text, wrapWidth)
 		for i, vl := range visualLines {
 			prefix := " ↪ "
 			ng := numBlank
 			bg := blBlank
+			rug := rgBlank
 			if i == 0 {
 				prefix = " - "
 				ng = numGutter
 				bg = blGutter
+				rug = rg
 			}
 			styled := style.Render(prefix + vl)
 			styled = m.extendLineBg(styled, m.styles.colors.RemoveBg)
@@ -221,7 +243,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 			if i == 0 && isCursor {
 				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
-			b.WriteString(cursor + ng + bg + styled + "\n")
+			b.WriteString(cursor + rug + ng + bg + styled + "\n")
 		}
 		return
 	}
@@ -234,7 +256,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + numGutter + blGutter + content + "\n")
+	b.WriteString(cursor + rg + numGutter + blGutter + content + "\n")
 }
 
 // hunkStartFor returns the findHunks() start index for the hunk containing diffLines[idx].

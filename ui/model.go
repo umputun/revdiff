@@ -81,7 +81,7 @@ type Model struct {
 	ready              bool              // true after first WindowSizeMsg
 	annotating         bool              // true when annotation text input is active
 	fileAnnotating     bool              // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
+	cursorOnAnnotation bool              // true when cursor is on an annotation sub-line (point or range)
 	annotateInput      textinput.Model   // text input for annotations
 
 	collapsed collapsedState // collapsed diff view state
@@ -119,6 +119,13 @@ type Model struct {
 	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
 
 	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
+
+	selecting      bool // true when visual range selection is active
+	selectAnchor   int  // diffLines index where selection started
+	rangeStartLine int  // start line number for in-progress range annotation
+	rangeEndLine   int  // end line number for in-progress range annotation
+	rangeStartIdx  int  // start diffLines index for in-progress range annotation
+	rangeEndIdx    int  // end diffLines index for in-progress range annotation
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -641,6 +648,13 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keymap.ActionSearch:
 		cmd := m.startSearch()
 		return m, cmd
+	case keymap.ActionSelectRange:
+		m.startSelection()
+		return m, nil
+	case keymap.ActionAnnotateHunk:
+		cmd := m.annotateHunk()
+		m.viewport.SetContent(m.renderDiff())
+		return m, cmd
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.syncTOCActiveSection()
@@ -761,6 +775,8 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		m.lineNumWidth = m.computeLineNumWidth()
 	}
 	m.cursorOnAnnotation = false
+	m.selecting = false
+	m.selectAnchor = 0
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
 
@@ -1011,6 +1027,13 @@ func (m Model) statusBarText() string {
 	// line number position
 	if ls := m.lineNumberSegment(); ls != "" {
 		segments = append(segments, ls)
+	}
+
+	// selection info
+	if m.selecting {
+		start, end := m.selectionBounds()
+		lines := end - start + 1
+		segments = append(segments, fmt.Sprintf("SEL: %d lines", lines))
 	}
 
 	// search match position
@@ -1464,6 +1487,12 @@ func (m Model) handleFileAnnotateKey() (tea.Model, tea.Cmd) {
 
 // handleEscKey clears active search results on esc.
 func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
+	if m.selecting {
+		m.selecting = false
+		m.selectAnchor = 0
+		m.viewport.SetContent(m.renderDiff())
+		return m, nil
+	}
 	if len(m.searchMatches) > 0 {
 		m.clearSearch()
 		m.viewport.SetContent(m.renderDiff())
@@ -1490,10 +1519,27 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case paneDiff:
+		if m.selecting {
+			cmd := m.confirmSelection()
+			m.viewport.SetContent(m.renderDiff())
+			return m, cmd
+		}
 		var cmd tea.Cmd
-		if m.cursorOnFileAnnotationLine() {
+		switch {
+		case m.cursorOnFileAnnotationLine():
 			cmd = m.startFileAnnotation()
-		} else {
+		case m.cursorOnAnnotation:
+			dl, ok := m.cursorDiffLine()
+			if ok && m.store.Has(m.currFile, m.diffLineNum(dl), string(dl.ChangeType)) {
+				cmd = m.startAnnotation()
+				break
+			}
+			if m.isRangeAnnotationEnd(m.diffCursor) {
+				cmd = m.editRangeAnnotation()
+				break
+			}
+			cmd = m.startAnnotation()
+		default:
 			cmd = m.startAnnotation()
 		}
 		m.viewport.SetContent(m.renderDiff())

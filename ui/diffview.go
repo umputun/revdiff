@@ -15,6 +15,23 @@ import (
 // matchRange represents a range of visible character positions for search match highlighting.
 type matchRange struct{ start, end int }
 
+// rangeRenderInfo maps a range annotation to its diffLines indices for rendering.
+type rangeRenderInfo struct {
+	startIdx  int    // first visible diffLines index in the range
+	endIdx    int    // last visible diffLines index in the range
+	startLine int    // annotation start line number
+	endLine   int    // annotation end line number
+	comment   string // annotation comment
+}
+
+// rangeGutterWidth is the character width of the range annotation gutter indicator.
+const rangeGutterWidth = 2
+
+// rangeAnnotationPrefix returns the formatted prefix for range annotation display.
+func rangeAnnotationPrefix(startLine, endLine int) string {
+	return fmt.Sprintf("\U0001f4ac [lines %d-%d] ", startLine, endLine)
+}
+
 // lineNumGutterWidth returns the total character width of the line number gutter.
 // layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
 func (m Model) lineNumGutterWidth() int {
@@ -153,12 +170,15 @@ func (m Model) renderDiff() string {
 	m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
+	ranges := m.buildRangeAnnotations()
+	ranges = m.appendSelectionRange(ranges)
 	var b strings.Builder
 	m.renderFileAnnotationHeader(&b, fileComment)
 
 	for i, dl := range m.diffLines {
-		m.renderDiffLine(&b, i, dl)
+		m.renderDiffLine(&b, i, dl, ranges)
 		m.renderAnnotationOrInput(&b, i, annotationMap)
+		m.renderRangeAnnotation(&b, i, ranges)
 	}
 	return b.String()
 }
@@ -198,19 +218,19 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 
 // renderDiffLine writes a single styled diff line (with cursor highlight) to the builder.
 // when wrap mode is active, long lines are broken at word boundaries with ↪ continuation markers.
-func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
+func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine, ranges []rangeRenderInfo) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 	isSearchMatch := m.searchMatchSet[idx]
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
-
 	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
 	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
-		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor, isSearchMatch)
+		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor, isSearchMatch, ranges, idx)
 		return
 	}
 
 	numGutter, blGutter := m.lineGutters(dl)
+	rg := m.styledRangeGutter(idx, ranges)
 
 	var content string
 	if dl.ChangeType == diff.ChangeDivider {
@@ -225,24 +245,111 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + numGutter + blGutter + content + "\n")
+	b.WriteString(cursor + rg + numGutter + blGutter + content + "\n")
+}
+
+// styledRangeGutter returns the styled range gutter indicator for a diffLines index.
+func (m Model) styledRangeGutter(idx int, ranges []rangeRenderInfo) string {
+	gutter := rangeGutterFor(idx, ranges)
+	if gutter == "" {
+		if len(ranges) > 0 {
+			return strings.Repeat(" ", rangeGutterWidth)
+		}
+		return ""
+	}
+	return m.styles.AnnotationLine.Render(gutter)
+}
+
+// renderRangeAnnotation writes the range annotation comment or input below the last line of a range.
+func (m Model) renderRangeAnnotation(b *strings.Builder, idx int, ranges []rangeRenderInfo) {
+	// render range annotation input below the end line
+	if m.annotating && m.rangeStartLine > 0 && idx == m.diffCursor {
+		prefix := rangeAnnotationPrefix(m.rangeStartLine, m.rangeEndLine)
+		b.WriteString(" " + m.styles.AnnotationLine.Render(prefix) + m.annotateInput.View() + "\n")
+		return
+	}
+
+	for _, r := range ranges {
+		if r.endIdx != idx || r.comment == "" {
+			continue
+		}
+		prefix := rangeAnnotationPrefix(r.startLine, r.endLine)
+		cursor := " "
+		if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
+			cursor = m.styles.DiffCursorLine.Render("▶")
+		}
+		m.renderWrappedAnnotation(b, cursor, prefix+r.comment)
+		return
+	}
+}
+
+// hasRangeGutter returns true if range gutter indicators are currently shown.
+func (m Model) hasRangeGutter() bool {
+	if m.selecting || (m.annotating && m.rangeStartLine > 0) {
+		return true
+	}
+	for _, a := range m.store.Get(m.currFile) {
+		if a.IsRange() {
+			return true
+		}
+	}
+	return false
+}
+
+// appendSelectionRange adds a live selection indicator to the ranges slice.
+// shown during active selection and while typing a range annotation input.
+func (m Model) appendSelectionRange(ranges []rangeRenderInfo) []rangeRenderInfo {
+	if m.selecting {
+		start, end := m.selectionBounds()
+		if start != end {
+			return append(ranges, rangeRenderInfo{
+				startIdx:  start,
+				endIdx:    end,
+				startLine: m.diffLineNum(m.diffLines[start]),
+				endLine:   m.diffLineNum(m.diffLines[end]),
+			})
+		}
+		return ranges
+	}
+	// keep gutter visible while editing range annotation (diffCursor is at range end)
+	if m.annotating && m.rangeStartLine > 0 {
+		if m.rangeStartIdx >= 0 && m.rangeEndIdx >= m.rangeStartIdx {
+			return append(ranges, rangeRenderInfo{
+				startIdx:  m.rangeStartIdx,
+				endIdx:    m.rangeEndIdx,
+				startLine: m.rangeStartLine,
+				endLine:   m.rangeEndLine,
+			})
+		}
+	}
+	return ranges
 }
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
-func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
+func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool, ranges []rangeRenderInfo, idx int) {
 	numGutter, blGutter := m.lineGutters(dl)
 	numBlank, blBlank := m.gutterBlanks()
+	rg := m.styledRangeGutter(idx, ranges)
+	rgBlank := ""
+	if len(ranges) > 0 {
+		rgBlank = strings.Repeat(" ", rangeGutterWidth)
+	}
 	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	if len(ranges) > 0 {
+		wrapWidth -= rangeGutterWidth
+	}
 
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
 		bg := blBlank
+		rug := rgBlank
 		if i == 0 {
 			prefix = m.linePrefix(dl.ChangeType)
 			ng = numGutter
 			bg = blGutter
+			rug = rg
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
@@ -251,7 +358,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		if i == 0 && isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		b.WriteString(cursor + ng + bg + styled + "\n")
+		b.WriteString(cursor + rug + ng + bg + styled + "\n")
 	}
 }
 
@@ -269,7 +376,42 @@ func (m Model) wrappedLineCount(idx int) int {
 
 	_, textContent, _ := m.prepareLineContent(idx, dl)
 	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	if m.hasRangeGutter() {
+		wrapWidth -= rangeGutterWidth
+	}
 	return len(m.wrapContent(textContent, wrapWidth))
+}
+
+// visibleRangeIndices maps an annotation line range to visible diff line indices.
+func (m Model) visibleRangeIndices(startLine, endLine int) (int, int) {
+	startIdx := -1
+	endIdx := -1
+	hunks := m.findHunks()
+	for i, dl := range m.diffLines {
+		if dl.ChangeType == diff.ChangeDivider {
+			continue
+		}
+		if m.collapsed.enabled && m.isCollapsedHidden(i, hunks) {
+			continue
+		}
+
+		lineNum := m.diffLineNum(dl)
+		inRange := lineNum >= startLine && lineNum <= endLine
+		if startIdx == -1 {
+			if !inRange {
+				continue
+			}
+			startIdx = i
+			endIdx = i
+			continue
+		}
+
+		if !inRange {
+			break
+		}
+		endIdx = i
+	}
+	return startIdx, endIdx
 }
 
 // wrapContent wraps text content at the given width using word boundaries.
@@ -425,6 +567,47 @@ func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content stri
 	}
 }
 
+// buildRangeAnnotations maps range annotations to their diffLines indices.
+func (m Model) buildRangeAnnotations() []rangeRenderInfo {
+	var ranges []rangeRenderInfo
+	for _, a := range m.store.Get(m.currFile) {
+		if !a.IsRange() {
+			continue
+		}
+		startIdx, endIdx := m.visibleRangeIndices(a.Line, a.EndLine)
+		if startIdx >= 0 && endIdx >= 0 {
+			ranges = append(ranges, rangeRenderInfo{
+				startIdx:  startIdx,
+				endIdx:    endIdx,
+				startLine: a.Line,
+				endLine:   a.EndLine,
+				comment:   a.Comment,
+			})
+		}
+	}
+	return ranges
+}
+
+// rangeGutterFor returns the gutter indicator for a diffLines index within range annotations.
+// returns "┌ ", "│ ", "└ ", or "" depending on position within the range.
+func rangeGutterFor(idx int, ranges []rangeRenderInfo) string {
+	for _, r := range ranges {
+		if r.startIdx == r.endIdx && idx == r.startIdx {
+			return "│ "
+		}
+		if idx == r.startIdx {
+			return "┌ "
+		}
+		if idx == r.endIdx {
+			return "└ "
+		}
+		if idx > r.startIdx && idx < r.endIdx {
+			return "│ "
+		}
+	}
+	return ""
+}
+
 // extendLineBg extends a styled line's background to the full diff content width
 // using raw ANSI sequences. this ensures add/remove/modify backgrounds fill the entire line.
 // subtracts line number gutter width when line numbers are enabled.
@@ -446,7 +629,7 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
-	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
+	if m.annotating && !m.fileAnnotating && m.rangeStartLine == 0 && idx == m.diffCursor {
 		b.WriteString(" " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
 		return
 	}
@@ -509,13 +692,13 @@ func (m *Model) moveDiffCursorDown() {
 		return
 	}
 
-	// if current line has an annotation, stop on it first.
+	// if current line has a point or range-end annotation, stop on it first (disabled during selection).
 	// skip for delete-only placeholders — their annotations are only visible when expanded.
-	if m.diffCursor >= 0 && m.diffCursor < len(m.diffLines) {
+	if !m.selecting && m.diffCursor >= 0 && m.diffCursor < len(m.diffLines) {
 		dl := m.diffLines[m.diffCursor]
 		if dl.ChangeType != diff.ChangeDivider && !m.isDeleteOnlyPlaceholder(m.diffCursor, hunks) {
 			lineNum := m.diffLineNum(dl)
-			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
+			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) || m.isRangeAnnotationEnd(m.diffCursor) {
 				m.cursorOnAnnotation = true
 				return
 			}
@@ -551,16 +734,19 @@ func (m *Model) moveDiffCursorUp() {
 			continue
 		}
 		m.diffCursor = i
-		// if this line has an annotation, land on it (skip for delete-only placeholders)
-		dl := m.diffLines[i]
-		lineNum := m.diffLineNum(dl)
-		if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) && !m.isDeleteOnlyPlaceholder(i, hunks) {
-			m.cursorOnAnnotation = true
+		// if this line has a point or range-end annotation, land on it (skip for delete-only placeholders; disabled during selection)
+		if !m.selecting {
+			dl := m.diffLines[i]
+			lineNum := m.diffLineNum(dl)
+			hasAnnot := m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) || m.isRangeAnnotationEnd(i)
+			if hasAnnot && !m.isDeleteOnlyPlaceholder(i, hunks) {
+				m.cursorOnAnnotation = true
+			}
 		}
 		return
 	}
-	// if we're at the first line and there's a file-level annotation, go to it
-	if m.diffCursor >= 0 && m.hasFileAnnotation() {
+	// if we're at the first line and there's a file-level annotation, go to it (disabled during selection)
+	if !m.selecting && m.diffCursor >= 0 && m.hasFileAnnotation() {
 		m.diffCursor = -1
 	}
 }

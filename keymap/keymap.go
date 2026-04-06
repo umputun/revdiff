@@ -50,6 +50,8 @@ const (
 	ActionDiscardQuit      Action = "discard_quit"
 	ActionHelp             Action = "help"
 	ActionDismiss          Action = "dismiss"
+	ActionSelectRange      Action = "select_range"
+	ActionAnnotateHunk     Action = "annotate_hunk"
 )
 
 // validActions contains all known action names for validation.
@@ -64,6 +66,7 @@ var validActions = map[Action]bool{
 	ActionToggleCollapsed: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionFilter: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true,
+	ActionSelectRange: true, ActionAnnotateHunk: true,
 }
 
 // IsValidAction returns true if the action name is recognized.
@@ -132,6 +135,8 @@ func defaultDescriptions() []HelpEntry {
 		{ActionAnnotateFile, "annotate file", "Annotations"},
 		{ActionDeleteAnnotation, "delete annotation", "Annotations"},
 		{ActionAnnotList, "annotation list", "Annotations"},
+		{ActionSelectRange, "select range", "Annotations"},
+		{ActionAnnotateHunk, "annotate hunk", "Annotations"},
 
 		// view toggles
 		{ActionToggleCollapsed, "toggle collapsed view", "View"},
@@ -190,6 +195,8 @@ func defaultBindings() map[string]Action {
 		"Q":      ActionDiscardQuit,
 		"?":      ActionHelp,
 		"esc":    ActionDismiss,
+		"V":      ActionSelectRange,
+		"H":      ActionAnnotateHunk,
 	}
 }
 

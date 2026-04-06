@@ -306,9 +306,11 @@ color-border = #6272a4
             <tbody>
                 <tr><td><code>a</code> or <code>Enter</code></td><td>Annotate current line</td></tr>
                 <tr><td><code>A</code></td><td>Add file-level annotation</td></tr>
+                <tr><td><code>V</code></td><td>Start visual range selection</td></tr>
+                <tr><td><code>H</code></td><td>Annotate entire hunk under cursor</td></tr>
                 <tr><td><code>@</code></td><td>Toggle annotation list popup</td></tr>
                 <tr><td><code>d</code></td><td>Delete annotation under cursor</td></tr>
-                <tr><td><code>Esc</code></td><td>Cancel annotation input</td></tr>
+                <tr><td><code>Esc</code></td><td>Cancel annotation input / cancel selection</td></tr>
             </tbody>
         </table>
 
@@ -414,9 +416,12 @@ consider splitting this file into smaller modules
 <span class="code-comment">## handler.go:43 (+)</span>
 use errors.Is() instead of direct comparison
 
+<span class="code-comment">## handler.go:10-25</span>
+review this block for error handling
+
 <span class="code-comment">## store.go:18 (-)</span>
 don't remove this validation</code></div>
-        <p>Each annotation block: <code>## filename:line (type)</code> where type is <code>(+)</code> added, <code>(-)</code> removed, or <code>(file-level)</code>.</p>
+        <p>Point annotations: <code>## filename:line (type)</code> where type is <code>(+)</code> added, <code>(-)</code> removed, or <code>(file-level)</code>. Range annotations (<code>V</code> selection or <code>H</code> hunk): <code>## filename:start-end</code>.</p>
 
         <h2 id="integration">Integration with other tools</h2>
         <p>The structured stdout output works with any tool that can read text:</p>

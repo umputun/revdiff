@@ -701,3 +701,21 @@ func TestModel_JumpToAnnotation_EmptyList(t *testing.T) {
 	model := result.(Model)
 	assert.False(t, model.showAnnotList)
 }
+
+func TestAnnotList_RangeFormat(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+
+	t.Run("range annotation in list", func(t *testing.T) {
+		a := annotation.Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "review block"}
+		formatted := m.formatAnnotListItem(a, 60, false)
+		assert.Contains(t, formatted, "handler.go:10-25")
+		assert.Contains(t, formatted, "review block")
+	})
+
+	t.Run("range annotation in list selected", func(t *testing.T) {
+		a := annotation.Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "review block"}
+		formatted := m.formatAnnotListItem(a, 60, true)
+		assert.Contains(t, formatted, "handler.go:10-25")
+	})
+}
