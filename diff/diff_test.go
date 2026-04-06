@@ -434,6 +434,8 @@ func TestGit_ChangedFiles_IncludesBinary(t *testing.T) {
 }
 
 func TestParseBinaryStat(t *testing.T) {
+	g := NewGit("")
+
 	tests := []struct {
 		name    string
 		input   string
@@ -482,7 +484,7 @@ func TestParseBinaryStat(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			oldSize, newSize, ok := parseBinaryStat(tt.input)
+			oldSize, newSize, ok := g.parseBinaryStat(tt.input)
 			assert.Equal(t, tt.wantOK, ok)
 			if ok {
 				assert.Equal(t, tt.wantOld, oldSize)
@@ -492,7 +494,50 @@ func TestParseBinaryStat(t *testing.T) {
 	}
 }
 
+func TestParseBinaryChangeKind(t *testing.T) {
+	g := NewGit("")
+
+	tests := []struct {
+		name  string
+		input string
+		want  binaryChangeKind
+	}{
+		{
+			name:  "modified binary",
+			input: " image.png | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			want:  binaryChangeModified,
+		},
+		{
+			name:  "new binary",
+			input: " new.bin | Bin 0 -> 512 bytes\n create mode 100644 new.bin\n",
+			want:  binaryChangeAdded,
+		},
+		{
+			name:  "deleted binary",
+			input: " old.bin | Bin 4096 -> 0 bytes\n delete mode 100644 old.bin\n",
+			want:  binaryChangeDeleted,
+		},
+		{
+			name:  "summary mixed with stat output",
+			input: " image.png | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n create mode 100644 image.png\n",
+			want:  binaryChangeAdded,
+		},
+		{
+			name:  "empty input defaults to modified",
+			input: "",
+			want:  binaryChangeModified,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, g.parseBinaryChangeKind(tt.input))
+		})
+	}
+}
+
 func TestFormatSize(t *testing.T) {
+	g := NewGit("")
+
 	tests := []struct {
 		bytes int64
 		want  string
@@ -508,12 +553,14 @@ func TestFormatSize(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {
-			assert.Equal(t, tt.want, formatSize(tt.bytes))
+			assert.Equal(t, tt.want, g.formatSize(tt.bytes))
 		})
 	}
 }
 
 func TestFormatBinaryDesc(t *testing.T) {
+	g := NewGit("")
+
 	tests := []struct {
 		name    string
 		kind    binaryChangeKind
@@ -528,7 +575,7 @@ func TestFormatBinaryDesc(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, formatBinaryDesc(tt.kind, tt.oldSize, tt.newSize))
+			assert.Equal(t, tt.want, g.formatBinaryDesc(tt.kind, tt.oldSize, tt.newSize))
 		})
 	}
 }

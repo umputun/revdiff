@@ -128,19 +128,19 @@ func (g *Git) runGit(args ...string) (string, error) {
 // Returns empty string if stat info is unavailable.
 func (g *Git) binarySizeDesc(ref, file string, staged bool) string {
 	args := g.diffArgs(ref, staged)
-	args = append(args, "--stat", "--", file)
+	args = append(args, "--stat", "--summary", "--", file)
 
 	out, err := g.runGit(args...)
 	if err != nil {
 		return ""
 	}
 
-	oldSize, newSize, ok := parseBinaryStat(out)
+	oldSize, newSize, ok := g.parseBinaryStat(out)
 	if !ok {
 		return ""
 	}
 
-	return formatBinaryDesc(g.binaryChangeKind(ref, file, staged), oldSize, newSize)
+	return g.formatBinaryDesc(g.parseBinaryChangeKind(out), oldSize, newSize)
 }
 
 type binaryChangeKind int
@@ -164,7 +164,7 @@ var (
 
 // parseBinaryStat extracts old and new sizes from git diff --stat output.
 // Returns (oldBytes, newBytes, ok).
-func parseBinaryStat(statOutput string) (int64, int64, bool) {
+func (g *Git) parseBinaryStat(statOutput string) (int64, int64, bool) {
 	scanner := bufio.NewScanner(strings.NewReader(statOutput))
 	for scanner.Scan() {
 		m := binaryStatRe.FindStringSubmatch(scanner.Text())
@@ -186,19 +186,7 @@ func parseBinaryStat(statOutput string) (int64, int64, bool) {
 	return 0, 0, false
 }
 
-func (g *Git) binaryChangeKind(ref, file string, staged bool) binaryChangeKind {
-	args := g.diffArgs(ref, staged)
-	args = append(args, "--summary", "--", file)
-
-	out, err := g.runGit(args...)
-	if err != nil {
-		return binaryChangeModified
-	}
-
-	return parseBinaryChangeKind(out)
-}
-
-func parseBinaryChangeKind(summaryOutput string) binaryChangeKind {
+func (g *Git) parseBinaryChangeKind(summaryOutput string) binaryChangeKind {
 	scanner := bufio.NewScanner(strings.NewReader(summaryOutput))
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -214,19 +202,19 @@ func parseBinaryChangeKind(summaryOutput string) binaryChangeKind {
 }
 
 // formatBinaryDesc builds a human-readable binary file description from old/new byte sizes.
-func formatBinaryDesc(kind binaryChangeKind, oldSize, newSize int64) string {
+func (g *Git) formatBinaryDesc(kind binaryChangeKind, oldSize, newSize int64) string {
 	switch kind {
 	case binaryChangeAdded:
-		return fmt.Sprintf("(new binary file, %s)", formatSize(newSize))
+		return fmt.Sprintf("(new binary file, %s)", g.formatSize(newSize))
 	case binaryChangeDeleted:
-		return fmt.Sprintf("(deleted binary file, %s)", formatSize(oldSize))
+		return fmt.Sprintf("(deleted binary file, %s)", g.formatSize(oldSize))
 	default:
-		return fmt.Sprintf("(binary file: %s → %s)", formatSize(oldSize), formatSize(newSize))
+		return fmt.Sprintf("(binary file: %s → %s)", g.formatSize(oldSize), g.formatSize(newSize))
 	}
 }
 
 // formatSize formats a byte count as a human-readable string.
-func formatSize(bytes int64) string {
+func (g *Git) formatSize(bytes int64) string {
 	const (
 		kb = 1024
 		mb = 1024 * kb
