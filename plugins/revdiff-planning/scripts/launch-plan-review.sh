@@ -200,5 +200,62 @@ APPLESCRIPT
     exit 0
 fi
 
-echo "error: no overlay terminal available (requires tmux, kitty, wezterm, ghostty, or iTerm2)" >&2
+# emacs vterm: open revdiff in a new vterm buffer via emacsclient
+if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; then
+    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    rm -f "$SENTINEL" && mkfifo "$SENTINEL"
+
+    LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+$REVDIFF_CMD; echo d > $(printf '%q' "$SENTINEL"); exit
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    EMACS_PID=$(emacsclient --eval '(emacs-pid)' 2>/dev/null | tr -d '"')
+    VTERM_PID=$$
+    if [ -z "$EMACS_PID" ] || ! [ "$EMACS_PID" -gt 0 ] 2>/dev/null; then
+        rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+        echo "error: emacs server not reachable" >&2
+        exit 1
+    fi
+    while P=$(ps -o ppid= -p "$VTERM_PID" 2>/dev/null | tr -d ' '); [ "$P" != "$EMACS_PID" ] && [ "$P" != "1" ] && [ -n "$P" ]; do VTERM_PID=$P; done
+
+    # escape backslashes then double quotes for elisp string embedding
+    elisp_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+    ESCAPED_TITLE=$(elisp_escape "$OVERLAY_TITLE")
+    ESCAPED_SCRIPT=$(elisp_escape "$LAUNCH_SCRIPT")
+
+    emacsclient --eval "(progn (require 'cl-lib)
+      (when-let* ((b (cl-find-if (lambda (b) (let ((p (get-buffer-process b))) (and p (= (process-id p) $VTERM_PID)))) (buffer-list)))
+                  (w (get-buffer-window b t)))
+        (set-frame-parameter (window-frame w) 'revdiff-caller t))
+      (let* ((buf (generate-new-buffer \"*revdiff*\"))
+             (win (display-buffer buf '((display-buffer-pop-up-frame)
+                     (pop-up-frame-parameters . ((name . \"$ESCAPED_TITLE\")))))))
+        (set-frame-parameter (window-frame win) 'revdiff-buf (buffer-name buf))))" >/dev/null 2>&1
+    emacsclient --no-wait --eval "(progn (require 'cl-lib)
+      (when-let* ((f (cl-find-if (lambda (f) (string= (frame-parameter f 'name) \"$ESCAPED_TITLE\")) (frame-list)))
+                  (bn (frame-parameter f 'revdiff-buf))
+                  (buf (get-buffer bn)))
+        (with-current-buffer buf
+          (let ((vterm-shell \"$ESCAPED_SCRIPT\"))
+            (vterm-mode)))))" >/dev/null 2>&1
+
+    read -r < "$SENTINEL"
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+    emacsclient --no-wait --eval "(progn (require 'cl-lib)
+      (when-let ((f (cl-find-if (lambda (f) (string= (frame-parameter f 'name) \"$ESCAPED_TITLE\")) (frame-list))))
+        (let ((bn (frame-parameter f 'revdiff-buf)))
+          (delete-frame f)
+          (when-let ((b (and bn (get-buffer bn)))) (kill-buffer b))))
+      (when-let ((f (cl-find-if (lambda (f) (frame-parameter f 'revdiff-caller)) (frame-list))))
+        (set-frame-parameter f 'revdiff-caller nil)
+        (select-frame-set-input-focus f)))" >/dev/null 2>&1
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
+echo "error: no overlay terminal available (requires tmux, kitty, wezterm, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
