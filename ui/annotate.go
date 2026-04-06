@@ -291,6 +291,9 @@ func (m Model) cursorViewportY() int {
 				if m.lineNumbers {
 					gutterExtra = m.lineNumGutterWidth()
 				}
+				if m.hasBlameGutter() {
+					gutterExtra += m.blameGutterWidth()
+				}
 				wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
 				y += len(m.wrapContent(text, wrapWidth))
 			} else {

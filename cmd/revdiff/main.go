@@ -280,8 +280,16 @@ func run(opts options) error {
 		keysPath = defaultKeysPath()
 	}
 	km := keymap.LoadOrDefault(keysPath)
+
+	// blame is only available when git is present
+	var blamer ui.Blamer
+	if gitErr == nil {
+		blamer = diff.NewGit(gitRoot)
+	}
+
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
 		Keymap:           km,
+		Blamer:           blamer,
 		NoColors:         opts.NoColors,
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,

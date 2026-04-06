@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -4375,6 +4376,73 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	assert.Equal(t, 2, y, "viewport Y should count placeholder as 1 row, not original line content")
 }
 
+func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.wrapMode = true
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.showBlame = true
+	m.blameData = map[int]diff.BlameLine{
+		1: {Author: "LongName", Time: time.Now()},
+	}
+	m.blameAuthorLen = m.computeBlameAuthorLen()
+	m.width = 25
+	m.treeHidden = true
+
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
+		{OldNum: 1, Content: strings.Repeat("x", 40), ChangeType: diff.ChangeRemove},
+		{OldNum: 2, Content: strings.Repeat("y", 40), ChangeType: diff.ChangeRemove},
+		{OldNum: 3, Content: strings.Repeat("z", 40), ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "after context", ChangeType: diff.ChangeContext},
+	}
+
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.blameGutterWidth()
+	placeholderRows := len(m.wrapContent(m.deletePlaceholderText(1), wrapWidth))
+	require.Greater(t, placeholderRows, 1, "blame gutter should force the placeholder to wrap")
+	contextRows := m.wrappedLineCount(0)
+
+	m.diffCursor = 4
+	m.cursorOnAnnotation = false
+
+	assert.Equal(t, contextRows+placeholderRows, m.cursorViewportY())
+}
+
+func TestModel_HandleBlameLoadedSyncsViewportForWrap(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "tail", ChangeType: diff.ChangeContext},
+	}
+	m.wrapMode = true
+	m.showBlame = true
+	m.focus = paneDiff
+	m.treeHidden = true
+	m.width = 40
+	m.viewport = viewport.New(37, 2)
+	m.diffCursor = 1
+
+	m.syncViewportToCursor()
+	before := m.viewport.YOffset
+
+	result, _ := m.handleBlameLoaded(blameLoadedMsg{
+		file: "a.go",
+		seq:  m.loadSeq,
+		data: map[int]diff.BlameLine{
+			1: {Author: "LongAuthor", Time: time.Now()},
+			2: {Author: "LongAuthor", Time: time.Now()},
+		},
+	})
+	model := result.(Model)
+
+	assert.Greater(t, model.viewport.YOffset, before, "viewport should be re-synced after blame narrows wrap width")
+	cursorY := model.cursorViewportY()
+	assert.GreaterOrEqual(t, cursorY, model.viewport.YOffset)
+	assert.Less(t, cursorY, model.viewport.YOffset+model.viewport.Height)
+}
+
 func TestModel_WrapToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
@@ -6858,9 +6926,11 @@ func TestModel_ToggleLineNumbers(t *testing.T) {
 	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
 
 	assert.False(t, m.lineNumbers)
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.True(t, m.lineNumbers)
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ = m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.False(t, m.lineNumbers)
 }
 
@@ -6945,7 +7015,8 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	m.diffLines = lines
 
 	// toggle on
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.True(t, m.lineNumbers)
 	assert.Equal(t, 2, m.lineNumWidth)
 
@@ -6956,7 +7027,8 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	assert.Contains(t, stripped, "   11")
 
 	// toggle off
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ = m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.False(t, m.lineNumbers)
 	rendered = m.renderDiff()
 	stripped = ansi.Strip(rendered)

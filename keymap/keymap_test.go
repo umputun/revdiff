@@ -36,7 +36,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList},
 		{"v", ActionToggleCollapsed}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
-		{"L", ActionToggleLineNums}, {".", ActionToggleHunk}, {"f", ActionFilter},
+		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {".", ActionToggleHunk}, {"f", ActionFilter},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"esc", ActionDismiss},
 	}
 	for _, tt := range tests {

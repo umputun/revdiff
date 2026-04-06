@@ -3,9 +3,11 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/diff"
 )
@@ -47,12 +49,102 @@ func (m Model) lineNumGutter(dl diff.DiffLine) string {
 	return m.styles.LineNumber.Render(gutter)
 }
 
+// blameGutterWidth returns the total character width of the blame gutter.
+// layout: " " + author(W) + " " + age(3) = W + 5
+func (m Model) blameGutterWidth() int {
+	return m.blameAuthorLen + 5
+}
+
+// blameGutter returns the formatted blame gutter string for a diff line.
+// shows author name (truncated) and relative age for lines with NewNum; blank for removed lines and dividers.
+func (m Model) blameGutter(dl diff.DiffLine) string {
+	w := m.blameAuthorLen
+	totalW := m.blameGutterWidth()
+	blank := strings.Repeat(" ", totalW)
+
+	lineNum := dl.NewNum
+	if lineNum == 0 || dl.ChangeType == diff.ChangeDivider {
+		return m.styles.LineNumber.Render(blank)
+	}
+
+	bl, ok := m.blameData[lineNum]
+	if !ok {
+		return m.styles.LineNumber.Render(blank)
+	}
+
+	author := runewidth.Truncate(bl.Author, w, "…")
+	pad := w - runewidth.StringWidth(author)
+	if pad > 0 {
+		author += strings.Repeat(" ", pad)
+	}
+
+	age := diff.RelativeAge(bl.Time, m.blameNow)
+	gutter := " " + author + " " + age
+	return m.styles.LineNumber.Render(gutter)
+}
+
+// hasBlameGutter returns true when the blame gutter should be rendered.
+func (m Model) hasBlameGutter() bool {
+	return m.showBlame && len(m.blameData) > 0
+}
+
+// lineGutters returns the formatted line number and blame gutter strings for a diff line.
+// returns empty strings for disabled gutters.
+func (m Model) lineGutters(dl diff.DiffLine) (numGutter, blameGutter string) {
+	if m.lineNumbers {
+		numGutter = m.lineNumGutter(dl)
+	}
+	if m.hasBlameGutter() {
+		blameGutter = m.blameGutter(dl)
+	}
+	return numGutter, blameGutter
+}
+
+// gutterExtra returns the total character width consumed by enabled gutters (line numbers + blame).
+func (m Model) gutterExtra() int {
+	w := 0
+	if m.lineNumbers {
+		w += m.lineNumGutterWidth()
+	}
+	if m.hasBlameGutter() {
+		w += m.blameGutterWidth()
+	}
+	return w
+}
+
+// gutterBlanks returns blank strings matching the widths of enabled gutters,
+// used as padding for wrap continuation lines.
+func (m Model) gutterBlanks() (numBlank, blameBlank string) {
+	if m.lineNumbers {
+		numBlank = strings.Repeat(" ", m.lineNumGutterWidth())
+	}
+	if m.hasBlameGutter() {
+		blameBlank = strings.Repeat(" ", m.blameGutterWidth())
+	}
+	return numBlank, blameBlank
+}
+
+// applyHorizontalScroll applies horizontal scroll offset to content, subtracting gutter widths.
+// no-op when scroll offset is zero.
+func (m Model) applyHorizontalScroll(content string) string {
+	if m.scrollX <= 0 {
+		return content
+	}
+	cutWidth := m.diffContentWidth() - m.gutterExtra()
+	if cutWidth > 0 {
+		return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+	}
+	return content
+}
+
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
 // and injected annotation lines.
 func (m Model) renderDiff() string {
 	if len(m.diffLines) == 0 {
 		return "  no changes"
 	}
+
+	m.blameNow = time.Now()
 
 	if m.collapsed.enabled {
 		return m.renderCollapsedDiff()
@@ -118,10 +210,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		return
 	}
 
-	numGutter := ""
-	if m.lineNumbers {
-		numGutter = m.lineNumGutter(dl)
-	}
+	numGutter, blGutter := m.lineGutters(dl)
 
 	var content string
 	if dl.ChangeType == diff.ChangeDivider {
@@ -130,44 +219,30 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight, isSearchMatch)
 	}
 
-	// apply horizontal scroll to content (bar stays fixed), disabled in wrap mode
-	if m.scrollX > 0 && !m.wrapMode {
-		cutWidth := m.diffContentWidth()
-		if m.lineNumbers {
-			cutWidth -= m.lineNumGutterWidth()
-		}
-		if cutWidth > 0 {
-			content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
-		}
-	}
+	content = m.applyHorizontalScroll(content)
 
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + numGutter + content + "\n")
+	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
 
 // renderWrappedDiffLine renders a diff line with word wrapping, producing continuation lines with ↪ markers.
 func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
-	gutterExtra := 0
-	numGutter := ""
-	numBlank := ""
-	if m.lineNumbers {
-		gutterExtra = m.lineNumGutterWidth()
-		numGutter = m.lineNumGutter(dl)
-		numBlank = strings.Repeat(" ", gutterExtra)
-	}
-
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+	numGutter, blGutter := m.lineGutters(dl)
+	numBlank, blBlank := m.gutterBlanks()
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
+		bg := blBlank
 		if i == 0 {
 			prefix = m.linePrefix(dl.ChangeType)
 			ng = numGutter
+			bg = blGutter
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
@@ -176,7 +251,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		if i == 0 && isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		b.WriteString(cursor + ng + styled + "\n")
+		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
 }
 
@@ -193,11 +268,7 @@ func (m Model) wrappedLineCount(idx int) int {
 	}
 
 	_, textContent, _ := m.prepareLineContent(idx, dl)
-	gutterExtra := 0
-	if m.lineNumbers {
-		gutterExtra = m.lineNumGutterWidth()
-	}
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 	return len(m.wrapContent(textContent, wrapWidth))
 }
 
@@ -361,12 +432,9 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 	if bgColor == "" {
 		return styled
 	}
-	// target = content area minus cursor bar (1) minus line number gutter (if on)
-	// diffContentWidth() already excludes cursor bar; subtract gutter if line numbers enabled
-	targetWidth := m.diffContentWidth()
-	if m.lineNumbers {
-		targetWidth -= m.lineNumGutterWidth()
-	}
+	// target = content area minus cursor bar (1) minus gutters (if on)
+	// diffContentWidth() already excludes cursor bar; subtract gutters if enabled
+	targetWidth := m.diffContentWidth() - m.gutterExtra()
 	// leave 1 char gap before right border
 	targetWidth--
 	currentWidth := lipgloss.Width(styled)
