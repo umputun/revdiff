@@ -32,11 +32,9 @@ Add `ActionSelectRange` (`V`) and `ActionAnnotateHunk` (`H`) to the keymap syste
 - [x] Handle `ActionSelectRange` in `handleKey()` — set `selecting=true`, `selectAnchor=diffCursor`; guard against overlays, annotation input, search, dividers, `diffCursor==-1`
 - [x] Handle `esc` during selection — clear `selecting` and `selectAnchor`
 - [x] Disable `cursorOnAnnotation` stops in `moveDiffCursorDown/Up` when `m.selecting`
-- [x] Add `SelectionBg` color key to `theme.go` colorKeys, options struct, `colorFieldPtrs()`, and all 5 bundled theme files
-- [x] Add `SelectionHighlight` style in `newStyles()` built from `SelectionBg`
-- [x] Render selection highlight in `renderDiffLine()` — when `m.selecting && selStart <= idx <= selEnd`, override line background with `SelectionBg`
-- [x] Apply selection highlight in `renderCollapsedDiff()` for collapsed mode
-- [x] Add tests: selection mode entry/exit, selection bounds calculation, selection highlight in render output
+- [x] Add `SelectedBg` color key to `theme.go` colorKeys, options struct, `colorFieldPtrs()` (wired as `color-selected-bg`; not yet added to bundled theme files)
+- [x] Selection range indicated by `┌│└` gutter (reuses range gutter via `appendSelectionRange`) — `SelectionHighlight` background style dropped in favor of always-visible gutter indicator
+- [x] Add tests: selection mode entry/exit, selection bounds calculation
 
 ### Task 3: Range Annotation Creation
 
@@ -70,8 +68,9 @@ Render saved range annotations in the diff view. Build `rangeRenderInfo` (start/
 
 Wire `ActionAnnotateHunk` (`H` key) to auto-select the current hunk and open annotation input. Uses existing `findHunks()` and `hunkStartFor()` to determine hunk boundaries, scans forward to find hunk end, then calls `startRangeAnnotation()`. No-op when cursor is on a context line (not in a hunk).
 
-- [x] Add `annotateHunk() tea.Cmd` in `ui/annotate.go` — find hunk start via `hunkStartFor()`, scan forward for hunk end, compute line numbers, call `startRangeAnnotation()`
+- [x] Add `annotateHunk() tea.Cmd` in `ui/annotate.go` — find hunk start via `hunkStartFor()`, scan forward for hunk end, compute line numbers, call `startRangeAnnotation()`. In collapsed mode, anchors to visible placeholder when hunk end is hidden
 - [x] Add `hunkEndFor(startIdx int) int` helper — returns last diffLines index of the hunk containing `startIdx`
+- [x] Single-line detection uses `hunkStart == hunkEnd` (diff index equality, not line number) to correctly handle replacement hunks where old/new line numbers match
 - [x] Handle `ActionAnnotateHunk` in `handleKey()` — guard same as `ActionSelectRange` (diff pane, no overlays), call `annotateHunk()`
 - [x] Add tests: hunk boundary detection, hunk annotation creates correct range, no-op on context line
 
@@ -86,7 +85,6 @@ Wire range annotations through all remaining UI surfaces. Annotation list (`@`) 
 - [x] Add `▋` selection mode icon in `statusModeIcons()` when `m.selecting`
 - [x] Show `SEL: N lines` in status bar left side during selection (count visible lines in selection range)
 - [x] Add `V select range` and `H annotate hunk` to help overlay annotations section via `HelpSections()`
-- [x] Update all 5 bundled theme TOML files with `SelectionBg` value (if not done in Task 2)
 - [x] Add tests: annotation list format for ranges, delete range annotation, status bar selection indicator
 
 ### Task 7: Documentation
@@ -96,4 +94,13 @@ Update all documentation surfaces to reflect range and hunk annotations: keybind
 - [x] Update README.md — add range/hunk annotation docs to keybindings table, output format section, and usage examples
 - [x] Update `site/docs.html` — mirror README changes
 - [x] Update plugin reference docs in `.claude-plugin/skills/revdiff/references/usage.md` — add `V`/`H` keybindings and range output format
-- [x] Update `.claude-plugin/skills/revdiff/references/config.md` — add `SelectionBg` color key
+- [x] Update `.claude-plugin/skills/revdiff/references/config.md` — add `SelectedBg` color key
+
+### Task 8: Bug Fixes (post-review)
+
+Fixes found during code review after initial implementation.
+
+- [x] `visibleRangeIndices` breaks at `ChangeDivider` once a range has started — prevents range mapping from leaking into adjacent hunks when line numbers alias across hunk boundaries
+- [x] Add `cursorOnRangeAnnotation` field to `Model` — enables independent cursor stops for point and range-end annotations on the same diff line. Cursor movement, Enter dispatch, delete, rendering cursor indicators, and `cursorViewportY` all respect the two sub-rows
+- [x] `saveRangeAnnotation` checks `store.Add()` return value — shows status flash `"overlaps existing range"` instead of silently dropping the annotation
+- [x] Add tests: divider boundary in `visibleRangeIndices`, dual sub-row cursor navigation, Enter/delete dispatch per sub-row
