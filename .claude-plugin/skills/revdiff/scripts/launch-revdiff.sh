@@ -45,7 +45,15 @@ POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -T " $OVERLAY_TITLE " -d "$CWD" -- sh -c "$REVDIFF_CMD"
+    # -T (title) requires tmux 3.3+; skip on older versions
+    TMUX_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
+    if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
+        if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
+            TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+        fi
+    fi
+    TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")
+    "${TMUX_ARGS[@]}"
     cat "$OUTPUT_FILE"
     exit 0
 fi
