@@ -23,6 +23,7 @@ func TestParseUnifiedDiff_SimpleAdd(t *testing.T) {
 	assert.Equal(t, "package main", lines[0].Content)
 	assert.Equal(t, 1, lines[0].OldNum)
 	assert.Equal(t, 1, lines[0].NewNum)
+	assert.False(t, lines[0].IsBinary, "text lines should not have IsBinary set")
 
 	// blank line (empty context)
 	assert.Equal(t, ChangeContext, lines[1].ChangeType)
@@ -137,6 +138,7 @@ func TestParseUnifiedDiff_Binary(t *testing.T) {
 	assert.Equal(t, ChangeContext, lines[0].ChangeType)
 	assert.Equal(t, 1, lines[0].OldNum)
 	assert.Equal(t, 1, lines[0].NewNum)
+	assert.True(t, lines[0].IsBinary, "binary placeholder should have IsBinary set")
 }
 
 func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
@@ -144,7 +146,8 @@ func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
 	lines, err := ParseUnifiedDiff(raw)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
-	assert.Equal(t, BinaryPlaceholder, lines[0].Content)
+	assert.Equal(t, "(new binary file)", lines[0].Content)
+	assert.True(t, lines[0].IsBinary)
 }
 
 func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
@@ -152,7 +155,8 @@ func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
 	lines, err := ParseUnifiedDiff(raw)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
-	assert.Equal(t, BinaryPlaceholder, lines[0].Content)
+	assert.Equal(t, "(deleted binary file)", lines[0].Content)
+	assert.True(t, lines[0].IsBinary)
 }
 
 func TestParseUnifiedDiff_LineNumbers(t *testing.T) {
@@ -356,6 +360,7 @@ func TestGit_FileDiff_BinaryFile(t *testing.T) {
 	assert.Contains(t, lines[0].Content, "binary file")
 	assert.Contains(t, lines[0].Content, "→")
 	assert.Contains(t, lines[0].Content, "KB")
+	assert.True(t, lines[0].IsBinary)
 }
 
 func TestGit_FileDiff_NewBinaryFile(t *testing.T) {
@@ -381,6 +386,28 @@ func TestGit_FileDiff_NewBinaryFile(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.Contains(t, lines[0].Content, "new binary file")
 	assert.Contains(t, lines[0].Content, "512 B")
+	assert.True(t, lines[0].IsBinary)
+}
+
+func TestGit_FileDiff_ModifiedEmptyBinaryFile(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, ".gitattributes", "*.bin binary\n")
+	gitCmd(t, dir, "add", ".gitattributes")
+
+	err := os.WriteFile(filepath.Join(dir, "empty.bin"), nil, 0o600)
+	require.NoError(t, err)
+	gitCmd(t, dir, "add", "empty.bin")
+	gitCmd(t, dir, "commit", "-m", "add empty binary")
+
+	err = os.WriteFile(filepath.Join(dir, "empty.bin"), []byte{0x00, 0x01, 0x02}, 0o600)
+	require.NoError(t, err)
+
+	lines, err := g.FileDiff("", "empty.bin", false)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(binary file: 0 B → 3 B)", lines[0].Content)
 }
 
 func TestGit_ChangedFiles_IncludesBinary(t *testing.T) {
@@ -436,6 +463,13 @@ func TestParseBinaryStat(t *testing.T) {
 			wantOK:  true,
 		},
 		{
+			name:    "filename cannot spoof stat",
+			input:   " Bin 1 -> 2 bytes.bin | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			wantOld: 1024,
+			wantNew: 2048,
+			wantOK:  true,
+		},
+		{
 			name:   "text file stat",
 			input:  " main.go | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)\n",
 			wantOK: false,
@@ -482,18 +516,19 @@ func TestFormatSize(t *testing.T) {
 func TestFormatBinaryDesc(t *testing.T) {
 	tests := []struct {
 		name    string
+		kind    binaryChangeKind
 		oldSize int64
 		newSize int64
 		want    string
 	}{
-		{"new file", 0, 2048, "(new binary file, 2.0 KB)"},
-		{"deleted file", 4096, 0, "(deleted binary file, 4.0 KB)"},
-		{"modified file", 1024, 2048, "(binary file: 1.0 KB → 2.0 KB)"},
-		{"new small file", 0, 100, "(new binary file, 100 B)"},
+		{"new file", binaryChangeAdded, 0, 2048, "(new binary file, 2.0 KB)"},
+		{"deleted file", binaryChangeDeleted, 4096, 0, "(deleted binary file, 4.0 KB)"},
+		{"modified file", binaryChangeModified, 1024, 2048, "(binary file: 1.0 KB → 2.0 KB)"},
+		{"modified empty to non-empty", binaryChangeModified, 0, 100, "(binary file: 0 B → 100 B)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, formatBinaryDesc(tt.oldSize, tt.newSize))
+			assert.Equal(t, tt.want, formatBinaryDesc(tt.kind, tt.oldSize, tt.newSize))
 		})
 	}
 }
