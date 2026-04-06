@@ -1,6 +1,6 @@
 # revdiff
 
-Terminal UI diff viewer with inline annotations, built with bubbletea.
+TUI for reviewing diffs, files, and documents with inline annotations, built with bubbletea.
 
 ## Commands
 - Build: `make build` (output: `.bin/revdiff`)

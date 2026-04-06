@@ -30,7 +30,7 @@ nfpms:
     vendor: umputun
     homepage: https://github.com/umputun/revdiff
     maintainer: umputun
-    description: TUI diff viewer with inline annotations
+    description: TUI for reviewing diffs, files, and documents with inline annotations
     license: MIT
     formats:
       - deb
@@ -42,5 +42,5 @@ brews:
       name: homebrew-apps
     directory: Formula
     homepage: https://github.com/umputun/revdiff
-    description: TUI diff viewer with inline annotations
+    description: TUI for reviewing diffs, files, and documents with inline annotations
     license: MIT
