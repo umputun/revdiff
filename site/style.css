@@ -1,17 +1,17 @@
 /* === revdiff site — terminal precision aesthetic === */
 
 :root {
-    --bg: #0d0f12;
-    --bg-surface: #141820;
-    --bg-card: #1a1f2a;
-    --bg-code: #111419;
-    --border: #2a2f3a;
-    --border-subtle: #1e2330;
-    --text: #d0d0d0;
-    --text-muted: #6b7280;
-    --text-faint: #3d4450;
+    --bg: #1a1d23;
+    --bg-surface: #22262e;
+    --bg-card: #282d37;
+    --bg-code: #1e2128;
+    --border: #3a404c;
+    --border-subtle: #2e333d;
+    --text: #e8e8e8;
+    --text-muted: #9ca3af;
+    --text-faint: #5c6370;
     --accent: #D5895F;
-    --accent-dim: #a06840;
+    --accent-dim: #b87a52;
     --add: #87d787;
     --remove: #ff8787;
     --annotation: #ffd700;
@@ -55,7 +55,7 @@ code {
     left: 0;
     right: 0;
     z-index: 100;
-    background: rgba(13, 15, 18, 0.85);
+    background: rgba(26, 29, 35, 0.88);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
