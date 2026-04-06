@@ -30,7 +30,7 @@ revdiff is a terminal-based UI tool for code review and document annotation. It 
 
 Install: `/plugin marketplace add umputun/revdiff && /plugin install revdiff@umputun-revdiff`
 
-Supports tmux, kitty, wezterm, ghostty, and iTerm2 terminal overlays.
+Supports tmux, kitty, wezterm, cmux, ghostty, and iTerm2 terminal overlays.
 
 Usage: `/revdiff HEAD~1` or natural language like "review diff against main"
 
