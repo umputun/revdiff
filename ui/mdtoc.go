@@ -28,7 +28,7 @@ type mdTOC struct {
 // fence tracking is CommonMark-compliant: closing fence must use the same character
 // with at least the same length as the opening fence.
 func parseTOC(lines []diff.DiffLine, filename string) *mdTOC {
-	var entries []tocEntry
+	entries := make([]tocEntry, 0, len(lines))
 	var fenceChar rune // 0 when outside code block, '`' or '~' when inside
 	var fenceLen int   // length of the opening fence sequence
 

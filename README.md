@@ -11,6 +11,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Line numbers: side-by-side old/new line number gutter, toggle with `L`
+- Git blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
@@ -164,6 +165,7 @@ Positional arguments support several forms:
 | `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
+| `--blame` | Show git blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
@@ -412,6 +414,7 @@ revdiff --only=/tmp/draft-comment.md
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
+| `B` | Toggle git blame gutter (author name + commit age per line) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |

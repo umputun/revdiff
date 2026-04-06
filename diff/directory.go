@@ -40,7 +40,7 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 
-	var files []string
+	files := make([]string, 0, strings.Count(string(out), "\x00"))
 	for entry := range strings.SplitSeq(string(out), "\x00") {
 		if entry == "" {
 			continue

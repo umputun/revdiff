@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -450,6 +451,33 @@ func TestModel_LineNumbersFromConfig(t *testing.T) {
 		assert.False(t, m.lineNumbers)
 	})
 }
+
+func TestModel_BlameFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+	blamer := &mocks.BlamerMock{
+		FileBlameFunc: func(string, string, bool) (map[int]diff.BlameLine, error) { return map[int]diff.BlameLine{}, nil },
+	}
+
+	t.Run("blame enabled via config when blamer is available", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, Blamer: blamer, TreeWidthRatio: 2})
+		assert.True(t, m.showBlame)
+	})
+
+	t.Run("blame disabled without blamer even if requested", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, TreeWidthRatio: 2})
+		assert.False(t, m.showBlame)
+	})
+
+	t.Run("blame disabled by default", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Blamer: blamer, TreeWidthRatio: 2})
+		assert.False(t, m.showBlame)
+	})
+}
+
 
 func TestModel_StatusModeIcons(t *testing.T) {
 	t.Run("all icons always present", func(t *testing.T) {
@@ -2024,7 +2052,7 @@ func TestModel_PgUpClampsAtStart(t *testing.T) {
 
 func TestModel_PgDownAccountsForDividers(t *testing.T) {
 	// create diff lines with dividers every 5 lines (simulating hunk boundaries)
-	var lines []diff.DiffLine
+	lines := make([]diff.DiffLine, 0, 71)
 	for i := range 60 {
 		if i > 0 && i%5 == 0 {
 			lines = append(lines, diff.DiffLine{Content: "@@ hunk @@", ChangeType: diff.ChangeDivider})
@@ -4373,6 +4401,73 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	y := m.cursorViewportY()
 	// expected: 1 (context) + 1 (placeholder = 1 visual row) = 2
 	assert.Equal(t, 2, y, "viewport Y should count placeholder as 1 row, not original line content")
+}
+
+func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.wrapMode = true
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.showBlame = true
+	m.blameData = map[int]diff.BlameLine{
+		1: {Author: "LongName", Time: time.Now()},
+	}
+	m.blameAuthorLen = m.computeBlameAuthorLen()
+	m.width = 25
+	m.treeHidden = true
+
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
+		{OldNum: 1, Content: strings.Repeat("x", 40), ChangeType: diff.ChangeRemove},
+		{OldNum: 2, Content: strings.Repeat("y", 40), ChangeType: diff.ChangeRemove},
+		{OldNum: 3, Content: strings.Repeat("z", 40), ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "after context", ChangeType: diff.ChangeContext},
+	}
+
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.blameGutterWidth()
+	placeholderRows := len(m.wrapContent(m.deletePlaceholderText(1), wrapWidth))
+	require.Greater(t, placeholderRows, 1, "blame gutter should force the placeholder to wrap")
+	contextRows := m.wrappedLineCount(0)
+
+	m.diffCursor = 4
+	m.cursorOnAnnotation = false
+
+	assert.Equal(t, contextRows+placeholderRows, m.cursorViewportY())
+}
+
+func TestModel_HandleBlameLoadedSyncsViewportForWrap(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "tail", ChangeType: diff.ChangeContext},
+	}
+	m.wrapMode = true
+	m.showBlame = true
+	m.focus = paneDiff
+	m.treeHidden = true
+	m.width = 40
+	m.viewport = viewport.New(37, 2)
+	m.diffCursor = 1
+
+	m.syncViewportToCursor()
+	before := m.viewport.YOffset
+
+	result, _ := m.handleBlameLoaded(blameLoadedMsg{
+		file: "a.go",
+		seq:  m.loadSeq,
+		data: map[int]diff.BlameLine{
+			1: {Author: "LongAuthor", Time: time.Now()},
+			2: {Author: "LongAuthor", Time: time.Now()},
+		},
+	})
+	model := result.(Model)
+
+	assert.Greater(t, model.viewport.YOffset, before, "viewport should be re-synced after blame narrows wrap width")
+	cursorY := model.cursorViewportY()
+	assert.GreaterOrEqual(t, cursorY, model.viewport.YOffset)
+	assert.Less(t, cursorY, model.viewport.YOffset+model.viewport.Height)
 }
 
 func TestModel_WrapToggle(t *testing.T) {
@@ -6858,9 +6953,11 @@ func TestModel_ToggleLineNumbers(t *testing.T) {
 	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
 
 	assert.False(t, m.lineNumbers)
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.True(t, m.lineNumbers)
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ = m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.False(t, m.lineNumbers)
 }
 
@@ -6898,6 +6995,14 @@ func TestModel_StatusModeIconsLineNumbers(t *testing.T) {
 	m.lineNumbers = true
 	icons := m.statusModeIcons()
 	assert.Contains(t, icons, "#")
+}
+
+func TestModel_StatusModeIconsBlame(t *testing.T) {
+	m := testModel(nil, nil)
+	m.showBlame = true
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "b")
+	assert.NotContains(t, icons, "@")
 }
 
 func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
@@ -6945,7 +7050,8 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	m.diffLines = lines
 
 	// toggle on
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.True(t, m.lineNumbers)
 	assert.Equal(t, 2, m.lineNumWidth)
 
@@ -6956,7 +7062,8 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	assert.Contains(t, stripped, "   11")
 
 	// toggle off
-	m = m.handleViewToggle(keymap.ActionToggleLineNums)
+	result, _ = m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
 	assert.False(t, m.lineNumbers)
 	rendered = m.renderDiff()
 	stripped = ansi.Strip(rendered)

@@ -2,12 +2,14 @@ package ui
 
 //go:generate moq -out mocks/renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
 //go:generate moq -out mocks/syntax_highlighter.go -pkg mocks -skip-ensure -fmt goimports . SyntaxHighlighter
+//go:generate moq -out mocks/blamer.go -pkg mocks -skip-ensure -fmt goimports . Blamer
 
 import (
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -30,6 +32,11 @@ type Renderer interface {
 // SyntaxHighlighter provides syntax highlighting for diff lines.
 type SyntaxHighlighter interface {
 	HighlightLines(filename string, lines []diff.DiffLine) []string
+}
+
+// Blamer provides git blame information for files.
+type Blamer interface {
+	FileBlame(ref, file string, staged bool) (map[int]diff.BlameLine, error)
 }
 
 // pane identifies which pane has focus.
@@ -87,6 +94,12 @@ type Model struct {
 	lineNumbers  bool // true when line numbers are shown in gutter
 	lineNumWidth int  // digit width for line number columns (max digits across old/new nums)
 
+	blamer         Blamer                 // optional blame provider (nil when git unavailable)
+	showBlame      bool                   // true when blame gutter is shown
+	blameData      map[int]diff.BlameLine // blame info keyed by 1-based new line number
+	blameAuthorLen int                    // max author display width for blame gutter
+	blameNow       time.Time              // snapshot of time.Now() set once per render pass for blame age
+
 	searching      bool            // true when search textinput is active (typing)
 	searchTerm     string          // last submitted search query
 	searchMatches  []int           // indices into diffLines that match
@@ -116,6 +129,14 @@ type fileLoadedMsg struct {
 	err   error
 }
 
+// blameLoadedMsg is sent when blame data for a file has been loaded.
+type blameLoadedMsg struct {
+	file string
+	seq  uint64
+	data map[int]diff.BlameLine
+	err  error
+}
+
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
 	files []string
@@ -134,9 +155,11 @@ type ModelConfig struct {
 	Wrap             bool           // enable line wrapping
 	Collapsed        bool           // start in collapsed diff mode
 	LineNumbers      bool           // show line numbers in diff gutter
+	ShowBlame        bool           // show blame gutter on startup when available
 	Only             []string       // show only these files (match by exact path or path suffix)
 	WorkDir          string         // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
+	Blamer           Blamer         // optional blame provider (nil when git unavailable)
 	Colors           Colors
 }
 
@@ -162,6 +185,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		store:            store,
 		renderer:         renderer,
 		highlighter:      highlighter,
+		blamer:           cfg.Blamer,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
 		only:             cfg.Only,
@@ -171,6 +195,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		wrapMode:         cfg.Wrap,
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
+		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
@@ -207,6 +232,19 @@ func (m Model) loadFileDiff(file string) tea.Cmd {
 	}
 }
 
+func (m Model) loadBlame(file string) tea.Cmd {
+	if m.blamer == nil {
+		return nil
+	}
+	seq := m.loadSeq
+	ref := m.ref
+	staged := m.staged
+	return func() tea.Msg {
+		data, err := m.blamer.FileBlame(ref, file, staged)
+		return blameLoadedMsg{file: file, seq: seq, data: data, err: err}
+	}
+}
+
 // Update handles messages and updates the model state.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -221,6 +259,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFilesLoaded(msg)
 	case fileLoadedMsg:
 		return m.handleFileLoaded(msg)
+	case blameLoadedMsg:
+		return m.handleBlameLoaded(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)
@@ -290,8 +330,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnterKey()
 	case keymap.ActionAnnotateFile:
 		return m.handleFileAnnotateKey()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums:
-		return m.handleViewToggle(action), nil
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
+		return m.handleViewToggle(action)
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
@@ -371,8 +411,25 @@ func (m Model) computeLineNumWidth() int {
 	return len(strconv.Itoa(maxNum))
 }
 
+// toggleBlame toggles the blame gutter on/off. returns a tea.Cmd to load blame data async.
+func (m *Model) toggleBlame() tea.Cmd {
+	if m.focus != paneDiff || m.currFile == "" || m.blamer == nil {
+		return nil
+	}
+	m.showBlame = !m.showBlame
+	if m.showBlame {
+		m.blameData = nil
+		m.blameAuthorLen = 0
+		return m.loadBlame(m.currFile)
+	}
+	m.blameData = nil
+	m.blameAuthorLen = 0
+	m.syncViewportToCursor()
+	return nil
+}
+
 // handleViewToggle dispatches view mode toggle actions.
-func (m Model) handleViewToggle(action keymap.Action) Model {
+func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action { //nolint:exhaustive // only toggle actions are dispatched here
 	case keymap.ActionToggleCollapsed:
 		m.toggleCollapsedMode()
@@ -382,8 +439,11 @@ func (m Model) handleViewToggle(action keymap.Action) Model {
 		m.toggleTreePane()
 	case keymap.ActionToggleLineNums:
 		m.toggleLineNumbers()
+	case keymap.ActionToggleBlame:
+		cmd := m.toggleBlame()
+		return m, cmd
 	}
-	return m
+	return m, nil
 }
 
 // handleSwitchToTree switches focus to tree pane from diff.
@@ -722,17 +782,61 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.skipInitialDividers()
 	m.syncTOCActiveSection()
 
+	// clear stale blame data; reload if blame is active
+	var blameCmd tea.Cmd
+	if m.showBlame {
+		m.blameData = nil
+		m.blameAuthorLen = 0
+		blameCmd = m.loadBlame(msg.file)
+	}
+
 	// handle pending annotation list jump
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
 		a := *m.pendingAnnotJump
 		m.pendingAnnotJump = nil
 		m.positionOnAnnotation(a)
-		return m, nil
+		return m, blameCmd
 	}
 
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
+	return m, blameCmd
+}
+
+// handleBlameLoaded processes asynchronously loaded blame data for a file.
+func (m Model) handleBlameLoaded(msg blameLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.seq != m.loadSeq || msg.file != m.currFile || !m.showBlame {
+		return m, nil
+	}
+	if msg.err != nil {
+		// blame unavailable for this file (e.g. new untracked file); silently ignore
+		return m, nil
+	}
+	m.blameData = msg.data
+	m.blameAuthorLen = m.computeBlameAuthorLen()
+	m.syncViewportToCursor()
 	return m, nil
+}
+
+// maxBlameAuthor is the maximum display width for author names in the blame gutter.
+const maxBlameAuthor = 8
+
+// computeBlameAuthorLen returns the display width of the longest author name in blame data.
+// caps at maxBlameAuthor characters to keep the gutter compact.
+func (m Model) computeBlameAuthorLen() int {
+	maxLen := 0
+	for _, bl := range m.blameData {
+		if l := runewidth.StringWidth(bl.Author); l > maxLen {
+			maxLen = l
+		}
+	}
+	if maxLen > maxBlameAuthor {
+		maxLen = maxBlameAuthor
+	}
+	if maxLen == 0 {
+		maxLen = 1
+	}
+	return maxLen
 }
 
 // computeFileStats counts added and removed lines in the current diffLines.
@@ -1134,6 +1238,7 @@ func (m Model) statusModeIcons() string {
 		{"≋", len(m.searchMatches) > 0},
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
+		{"b", m.showBlame},
 	}
 
 	statusFg := m.styles.colors.Muted

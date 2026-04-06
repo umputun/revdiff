@@ -325,7 +325,7 @@ func writeFile(t *testing.T, dir, name, content string) {
 
 func gitCmd(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...) //nolint:gosec // test helper
+	cmd := exec.Command("git", args...) //nolint:gosec // args constructed internally, not user input
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed: %s", args, string(out))

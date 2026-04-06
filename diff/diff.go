@@ -92,7 +92,7 @@ func (g *Git) diffArgs(ref string, staged bool) []string {
 
 // runGit executes a git command in the working directory and returns its output.
 func (g *Git) runGit(args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // git args are constructed internally
+	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // args constructed internally, not user input
 	cmd.Dir = g.workDir
 	out, err := cmd.Output()
 	if err != nil {

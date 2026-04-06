@@ -160,13 +160,19 @@ func NewFileReader(files []string, workDir string) *FileReader {
 
 // ChangedFiles returns the file list, resolved against workDir, filtered to only those that exist on disk.
 func (r *FileReader) ChangedFiles(_ string, _ bool) ([]string, error) {
-	var result []string
+	if len(r.files) == 0 {
+		return nil, nil
+	}
+	result := make([]string, 0, len(r.files))
 	for _, f := range r.files {
 		resolved := resolvePath(r.workDir, f)
 		if _, err := os.Stat(resolved); err != nil {
 			continue // skip files that don't exist
 		}
 		result = append(result, resolved)
+	}
+	if len(result) == 0 {
+		return nil, nil
 	}
 	return result, nil
 }

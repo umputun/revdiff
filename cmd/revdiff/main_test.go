@@ -35,6 +35,8 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoConfirmDiscard)
 	assert.False(t, opts.Wrap)
 	assert.False(t, opts.Collapsed)
+	assert.False(t, opts.LineNumbers)
+	assert.False(t, opts.Blame)
 	assert.Empty(t, opts.Output)
 	assert.Empty(t, opts.Refs.Base)
 	assert.Empty(t, opts.Refs.Against)
@@ -139,6 +141,32 @@ func TestParseArgs_LineNumbers(t *testing.T) {
 		assert.True(t, opts.LineNumbers)
 	})
 }
+
+func TestParseArgs_Blame(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--blame"))
+		require.NoError(t, err)
+		assert.True(t, opts.Blame)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_BLAME", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.Blame)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nblame = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.Blame)
+	})
+}
+
 
 func TestParseArgs_OutputFlag(t *testing.T) {
 	opts, err := parseArgs([]string{"-o", "/tmp/out.txt"})

@@ -36,6 +36,7 @@ type options struct {
 	Wrap             bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
 	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
 	LineNumbers      bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
+	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show git blame gutter on startup"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all git-tracked files, not just diffs"`
 	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
@@ -279,14 +280,23 @@ func run(opts options) error {
 		keysPath = defaultKeysPath()
 	}
 	km := keymap.LoadOrDefault(keysPath)
+
+	// blame is only available when git is present
+	var blamer ui.Blamer
+	if gitErr == nil {
+		blamer = diff.NewGit(gitRoot)
+	}
+
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
 		Keymap:           km,
+		Blamer:           blamer,
 		NoColors:         opts.NoColors,
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,
 		Wrap:             opts.Wrap,
 		Collapsed:        opts.Collapsed,
 		LineNumbers:      opts.LineNumbers,
+		ShowBlame:        opts.Blame,
 		TabWidth:         opts.TabWidth,
 		Ref:              opts.ref(),
 		Staged:           opts.Staged,

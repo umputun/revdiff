@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/umputun/revdiff/diff"
 )
@@ -96,10 +95,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
-	numGutter := ""
-	if m.lineNumbers {
-		numGutter = m.lineNumGutter(dl)
-	}
+	numGutter, blGutter := m.lineGutters(dl)
 
 	bgColor := m.styles.colors.AddBg
 	if modified {
@@ -108,7 +104,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, isCursor, hasHighlight, style, hlStyle, bgColor)
+		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, blGutter, isCursor, hasHighlight, style, hlStyle, bgColor)
 		return
 	}
 
@@ -117,42 +113,29 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		content = hlStyle.Render(gutter + textContent)
 	}
 	content = m.extendLineBg(content, bgColor)
-
-	// apply horizontal scroll
-	if m.scrollX > 0 {
-		cutWidth := m.diffContentWidth()
-		if m.lineNumbers {
-			cutWidth -= m.lineNumGutterWidth()
-		}
-		if cutWidth > 0 {
-			content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
-		}
-	}
+	content = m.applyHorizontalScroll(content)
 
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + numGutter + content + "\n")
+	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
 
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
-func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter string,
+func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter, blGutter string,
 	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style, bgColor string) {
-	gutterExtra := 0
-	numBlank := ""
-	if m.lineNumbers {
-		gutterExtra = m.lineNumGutterWidth()
-		numBlank = strings.Repeat(" ", gutterExtra)
-	}
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+	numBlank, blBlank := m.gutterBlanks()
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 	visualLines := m.wrapContent(textContent, wrapWidth)
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
+		bg := blBlank
 		if i == 0 {
 			prefix = gutter
 			ng = numGutter
+			bg = blGutter
 		}
 
 		var styled string
@@ -167,7 +150,7 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutte
 		if i == 0 && isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
-		b.WriteString(cursor + ng + styled + "\n")
+		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
 }
 
@@ -190,6 +173,17 @@ func (m Model) deletePlaceholderText(hunkStart int) string {
 	return fmt.Sprintf("⋯ %d lines deleted", count)
 }
 
+// deletePlaceholderVisualHeight returns the number of visual rows a delete-only placeholder
+// occupies, accounting for wrap mode and gutter widths.
+func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
+	if !m.wrapMode {
+		return 1
+	}
+	text := m.deletePlaceholderText(hunkStart)
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	return len(m.wrapContent(text, wrapWidth))
+}
+
 // renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
 // shows "⋯ N lines deleted" with remove styling so users know deletions exist and can expand with '.'.
 // when search is active, matching placeholders use search highlight instead of remove styling.
@@ -203,28 +197,22 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 
-	numGutter := ""
-	if m.lineNumbers {
-		// blank columns for placeholder
-		numGutter = m.lineNumGutter(diff.DiffLine{ChangeType: diff.ChangeDivider})
-	}
+	divider := diff.DiffLine{ChangeType: diff.ChangeDivider}
+	numGutter, blGutter := m.lineGutters(divider)
 
 	// wrap mode: break long placeholder at word boundaries
 	if m.wrapMode {
-		gutterExtra := 0
-		numBlank := ""
-		if m.lineNumbers {
-			gutterExtra = m.lineNumGutterWidth()
-			numBlank = strings.Repeat(" ", gutterExtra)
-		}
-		wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+		numBlank, blBlank := m.gutterBlanks()
+		wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 		visualLines := m.wrapContent(text, wrapWidth)
 		for i, vl := range visualLines {
 			prefix := " ↪ "
 			ng := numBlank
+			bg := blBlank
 			if i == 0 {
 				prefix = " - "
 				ng = numGutter
+				bg = blGutter
 			}
 			styled := style.Render(prefix + vl)
 			styled = m.extendLineBg(styled, m.styles.colors.RemoveBg)
@@ -233,30 +221,20 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 			if i == 0 && isCursor {
 				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
-			b.WriteString(cursor + ng + styled + "\n")
+			b.WriteString(cursor + ng + bg + styled + "\n")
 		}
 		return
 	}
 
 	content := style.Render(" - " + text)
 	content = m.extendLineBg(content, m.styles.colors.RemoveBg)
-
-	// apply horizontal scroll
-	if m.scrollX > 0 {
-		cutWidth := m.diffContentWidth()
-		if m.lineNumbers {
-			cutWidth -= m.lineNumGutterWidth()
-		}
-		if cutWidth > 0 {
-			content = ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
-		}
-	}
+	content = m.applyHorizontalScroll(content)
 
 	cursor := " "
 	if isCursor {
 		cursor = m.styles.DiffCursorLine.Render("▶")
 	}
-	b.WriteString(cursor + numGutter + content + "\n")
+	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
 
 // hunkStartFor returns the findHunks() start index for the hunk containing diffLines[idx].
