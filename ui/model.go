@@ -2,6 +2,7 @@ package ui
 
 //go:generate moq -out mocks/renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
 //go:generate moq -out mocks/syntax_highlighter.go -pkg mocks -skip-ensure -fmt goimports . SyntaxHighlighter
+//go:generate moq -out mocks/blamer.go -pkg mocks -skip-ensure -fmt goimports . Blamer
 
 import (
 	"fmt"
@@ -97,7 +98,7 @@ type Model struct {
 	showBlame      bool                   // true when blame gutter is shown
 	blameData      map[int]diff.BlameLine // blame info keyed by 1-based new line number
 	blameAuthorLen int                    // max author display width for blame gutter
-	blameNow       time.Time             // snapshot of time.Now() set once per render pass for blame age
+	blameNow       time.Time              // snapshot of time.Now() set once per render pass for blame age
 
 	searching      bool            // true when search textinput is active (typing)
 	searchTerm     string          // last submitted search query
@@ -154,6 +155,7 @@ type ModelConfig struct {
 	Wrap             bool           // enable line wrapping
 	Collapsed        bool           // start in collapsed diff mode
 	LineNumbers      bool           // show line numbers in diff gutter
+	ShowBlame        bool           // show blame gutter on startup when available
 	Only             []string       // show only these files (match by exact path or path suffix)
 	WorkDir          string         // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
@@ -193,6 +195,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		wrapMode:         cfg.Wrap,
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
+		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
@@ -1235,7 +1238,7 @@ func (m Model) statusModeIcons() string {
 		{"≋", len(m.searchMatches) > 0},
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
-		{"@", m.showBlame},
+		{"b", m.showBlame},
 	}
 
 	statusFg := m.styles.colors.Muted

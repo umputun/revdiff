@@ -26,7 +26,7 @@ func (g *Git) FileBlame(ref, file string, staged bool) (map[int]BlameLine, error
 		if err != nil {
 			return nil, err
 		}
-		defer os.Remove(tmpName) //nolint:errcheck // best-effort temp file cleanup
+		defer func() { _ = os.Remove(tmpName) }()
 		args = append(args, "--contents", tmpName)
 	} else if targetRef := blameTargetRef(ref); targetRef != "" {
 		args = append(args, targetRef)
@@ -51,7 +51,7 @@ func (g *Git) writeStagedBlameFile(file string) (string, error) {
 		return "", fmt.Errorf("create temp blame file for %s: %w", file, err)
 	}
 	if _, err := tmp.WriteString(indexContent); err != nil {
-		tmp.Close() //nolint:gosec // best-effort close in error path
+		_ = tmp.Close()
 		return "", fmt.Errorf("write temp blame file for %s: %w", file, err)
 	}
 	if err := tmp.Close(); err != nil {

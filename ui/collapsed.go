@@ -180,14 +180,7 @@ func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
 		return 1
 	}
 	text := m.deletePlaceholderText(hunkStart)
-	gutterExtra := 0
-	if m.lineNumbers {
-		gutterExtra = m.lineNumGutterWidth()
-	}
-	if m.hasBlameGutter() {
-		gutterExtra += m.blameGutterWidth()
-	}
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 	return len(m.wrapContent(text, wrapWidth))
 }
 

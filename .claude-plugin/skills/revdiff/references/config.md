@@ -26,6 +26,7 @@ Then uncomment and edit the values you want to change.
 | `--wrap` | `REVDIFF_WRAP` | Enable line wrapping in diff view | `false` |
 | `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
 | `--line-numbers` | `REVDIFF_LINE_NUMBERS` | Show line numbers in diff gutter | `false` |
+| `--blame` | `REVDIFF_BLAME` | Show git blame gutter on startup | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
 | `--chroma-style` | `REVDIFF_CHROMA_STYLE` | Chroma color theme for syntax highlighting | `catppuccin-macchiato` |
 | `--theme` | `REVDIFF_THEME` | Load color theme from `~/.config/revdiff/themes/` | |

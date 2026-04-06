@@ -165,6 +165,7 @@ Positional arguments support several forms:
 | `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
+| `--blame` | Show git blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |

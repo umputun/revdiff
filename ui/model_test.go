@@ -452,6 +452,33 @@ func TestModel_LineNumbersFromConfig(t *testing.T) {
 	})
 }
 
+func TestModel_BlameFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+	blamer := &mocks.BlamerMock{
+		FileBlameFunc: func(string, string, bool) (map[int]diff.BlameLine, error) { return map[int]diff.BlameLine{}, nil },
+	}
+
+	t.Run("blame enabled via config when blamer is available", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, Blamer: blamer, TreeWidthRatio: 2})
+		assert.True(t, m.showBlame)
+	})
+
+	t.Run("blame disabled without blamer even if requested", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, TreeWidthRatio: 2})
+		assert.False(t, m.showBlame)
+	})
+
+	t.Run("blame disabled by default", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Blamer: blamer, TreeWidthRatio: 2})
+		assert.False(t, m.showBlame)
+	})
+}
+
+
 func TestModel_StatusModeIcons(t *testing.T) {
 	t.Run("all icons always present", func(t *testing.T) {
 		m := testModel(nil, nil)
@@ -6968,6 +6995,14 @@ func TestModel_StatusModeIconsLineNumbers(t *testing.T) {
 	m.lineNumbers = true
 	icons := m.statusModeIcons()
 	assert.Contains(t, icons, "#")
+}
+
+func TestModel_StatusModeIconsBlame(t *testing.T) {
+	m := testModel(nil, nil)
+	m.showBlame = true
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "b")
+	assert.NotContains(t, icons, "@")
 }
 
 func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
