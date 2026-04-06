@@ -4,6 +4,7 @@ package theme
 
 import (
 	"bufio"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -41,6 +42,17 @@ func ColorKeys() []string {
 	result := make([]string, len(colorKeys))
 	copy(result, colorKeys)
 	return result
+}
+
+// validateHexColor checks that s is a valid 6-digit hex color (e.g. "#aabbcc").
+func validateHexColor(s string) error {
+	if len(s) != 7 || s[0] != '#' {
+		return fmt.Errorf("invalid hex color %q: must be #RRGGBB format", s)
+	}
+	if _, err := hex.DecodeString(s[1:]); err != nil {
+		return fmt.Errorf("invalid hex color %q: must be #RRGGBB format", s)
+	}
+	return nil
 }
 
 // Parse reads a theme file from r and returns the parsed Theme.
@@ -85,6 +97,9 @@ func Parse(r io.Reader) (Theme, error) {
 			continue
 		}
 		if strings.HasPrefix(key, "color-") {
+			if err := validateHexColor(val); err != nil {
+				return Theme{}, fmt.Errorf("key %q: %w", key, err)
+			}
 			t.Colors[key] = val
 		}
 	}

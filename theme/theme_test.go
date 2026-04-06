@@ -347,6 +347,62 @@ func TestBundledThemes_parseCorrectly(t *testing.T) {
 	}
 }
 
+func TestValidateHexColor(t *testing.T) {
+	tests := []struct {
+		name    string
+		color   string
+		wantErr bool
+	}{
+		{name: "valid lowercase", color: "#aabbcc", wantErr: false},
+		{name: "valid uppercase", color: "#AABBCC", wantErr: false},
+		{name: "valid mixed case", color: "#aAbBcC", wantErr: false},
+		{name: "valid digits", color: "#123456", wantErr: false},
+		{name: "valid black", color: "#000000", wantErr: false},
+		{name: "valid white", color: "#ffffff", wantErr: false},
+		{name: "missing hash", color: "aabbcc", wantErr: true},
+		{name: "too short", color: "#abc", wantErr: true},
+		{name: "too long", color: "#aabbccdd", wantErr: true},
+		{name: "non-hex chars", color: "#gghhii", wantErr: true},
+		{name: "empty string", color: "", wantErr: true},
+		{name: "hash only", color: "#", wantErr: true},
+		{name: "spaces", color: "# aabb", wantErr: true},
+		{name: "rgb notation", color: "rgb(0,0,0)", wantErr: true},
+		{name: "named color", color: "red", wantErr: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateHexColor(tc.color)
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid hex color")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestParse_invalidHexColor(t *testing.T) {
+	tests := []struct {
+		name  string
+		color string
+	}{
+		{name: "no hash prefix", color: "bd93f9"},
+		{name: "three digit shorthand", color: "#abc"},
+		{name: "non-hex characters", color: "#zzzzzz"},
+		{name: "empty value", color: ""},
+		{name: "named color word", color: "purple"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := "chroma-style = dracula\ncolor-accent = " + tc.color + "\n"
+			_, err := Parse(strings.NewReader(input))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid hex color")
+		})
+	}
+}
+
 func TestColorKeys(t *testing.T) {
 	keys := ColorKeys()
 	assert.Len(t, keys, 21)
