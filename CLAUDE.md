@@ -16,6 +16,7 @@ Terminal UI diff viewer with inline annotations, built with bubbletea.
 - `ui/` - bubbletea TUI model, views, styles, file tree, annotations
 - `highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
+- `theme/` - color theme system: Parse, Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
 - `annotation/` - in-memory annotation store, structured output formatting
 - `ui/mocks/` - moq-generated mocks (never edit manually)
 
@@ -57,7 +58,11 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Config file: `~/.config/revdiff/config` (INI format via go-flags built-in IniParser)
 - Precedence: CLI flags > env vars > config file > built-in defaults
 - `--dump-config` outputs current defaults, `--config` overrides path
-- `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --version)
+- `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --dump-theme, --list-themes, --init-themes, --version)
+- Themes dir: `~/.config/revdiff/themes/` with 3 bundled themes (dracula, nord, solarized-dark), auto-created on first run
+- `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
+- Theme precedence: `--theme` takes over completely — overwrites all 21 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
+- Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`
 - `ini-name` tags ensure config keys match CLI long flag names
 - Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)
 - `--keys` overrides keybindings path, `--dump-keys` prints effective bindings
