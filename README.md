@@ -70,8 +70,11 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
 | **ghostty** | AppleScript split + zoom (macOS only) | `$TERM_PROGRAM` + AppleScript probe |
+| **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 
-Priority: tmux → kitty → wezterm → ghostty (first detected wins). If none are available, the plugin exits with an error.
+Priority: tmux → kitty → wezterm → ghostty → iTerm2 (first detected wins). If none are available, the plugin exits with an error.
+
+> **Note:** iTerm2 uses a split pane (vertical or horizontal, auto-detected from terminal dimensions) rather than a full-screen overlay. The iTerm2 AppleScript API does not expose a zoom command, so the split view shares screen space with the invoking session.
 
 **Install:**
 
