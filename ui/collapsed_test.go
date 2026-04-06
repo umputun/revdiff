@@ -1551,6 +1551,61 @@ func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
 	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
 }
 
+func TestModel_CollapsedRangeAnnotationsRender(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "new2", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "range note"})
+
+	rendered := ansi.Strip(m.renderDiff())
+	assert.Contains(t, rendered, "range note")
+	assert.Contains(t, rendered, "┌ ")
+	assert.Contains(t, rendered, "└ ")
+}
+
+func TestModel_CollapsedWrapCursorViewportYWithRangeGutter(t *testing.T) {
+	m := testModel(nil, nil)
+	m.styles = plainStyles()
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 44
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "this is a very long modified line that should wrap when the range gutter is visible", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 2, Type: "", Comment: "replacement"})
+
+	rendered := strings.Split(strings.TrimSuffix(ansi.Strip(m.renderDiff()), "\n"), "\n")
+	ctx2Row := -1
+	for i, line := range rendered {
+		if strings.Contains(line, "ctx2") {
+			ctx2Row = i
+			break
+		}
+	}
+	require.GreaterOrEqual(t, ctx2Row, 0, "ctx2 should be rendered")
+
+	m.diffCursor = 3
+	m.cursorOnAnnotation = false
+	assert.Equal(t, ctx2Row, m.cursorViewportY())
+}
+
 func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 	t.Run("wrapping", func(t *testing.T) {
 		m := testModel(nil, nil)
@@ -1713,4 +1768,72 @@ func TestModel_CollapsedRenderWithLineNumbers(t *testing.T) {
 
 	assert.Contains(t, stripped, " 1  1")
 	assert.Contains(t, stripped, "    2")
+}
+
+func TestModel_CollapsedRangeDoesNotSpillIntoContext(t *testing.T) {
+	// P2: a range annotation on hidden removed lines should not spill into
+	// following context lines that happen to share the same display line numbers
+	// (OldNum of removes vs NewNum of context after the gap).
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 17, NewNum: 17, Content: "ctx before", ChangeType: diff.ChangeContext},
+		{OldNum: 18, Content: "removed18", ChangeType: diff.ChangeRemove},
+		{OldNum: 19, Content: "removed19", ChangeType: diff.ChangeRemove},
+		{OldNum: 20, Content: "removed20", ChangeType: diff.ChangeRemove},
+		{OldNum: 21, NewNum: 18, Content: "ctx after1", ChangeType: diff.ChangeContext},
+		{OldNum: 22, NewNum: 19, Content: "ctx after2", ChangeType: diff.ChangeContext},
+	}
+
+	// range covers the removed lines 18-20
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 18, EndLine: 20, Comment: "range on removes"})
+
+	// visibleRangeIndices should only include the visible placeholder (hunkStart)
+	// and must NOT extend into context lines at NewNum=18, 19
+	startIdx, endIdx := m.visibleRangeIndices(18, 20)
+
+	// in collapsed mode, the delete-only hunk placeholder is idx 1 (first remove line);
+	// endIdx should not be 4 or 5 (the context lines)
+	assert.Equal(t, 1, startIdx, "should start at the visible placeholder")
+	assert.Equal(t, 1, endIdx, "should stop at the placeholder, not spill into context")
+
+	// render should not show range gutter on context lines
+	rendered := m.renderDiff()
+	for line := range strings.SplitSeq(rendered, "\n") {
+		stripped := ansi.Strip(line)
+		if strings.Contains(stripped, "ctx after") {
+			assert.NotContains(t, stripped, "│", "range gutter should not appear on context lines after hidden hunk")
+			assert.NotContains(t, stripped, "┌", "range start gutter should not appear on context lines")
+			assert.NotContains(t, stripped, "└", "range end gutter should not appear on context lines")
+		}
+	}
+}
+
+func TestModel_CollapsedAnnotateHunkOnDeleteOnly(t *testing.T) {
+	// P2: pressing H on a collapsed delete-only placeholder should anchor the
+	// annotation input to the visible placeholder, not to a hidden row.
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 9, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 10, Content: "del1", ChangeType: diff.ChangeRemove},
+		{OldNum: 11, Content: "del2", ChangeType: diff.ChangeRemove},
+		{OldNum: 12, Content: "del3", ChangeType: diff.ChangeRemove},
+		{OldNum: 13, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+	}
+
+	m.diffCursor = 1 // on the visible placeholder for the delete-only hunk
+	cmd := m.annotateHunk()
+
+	assert.NotNil(t, cmd)
+	assert.True(t, m.annotating)
+	assert.Equal(t, 10, m.rangeStartLine)
+	assert.Equal(t, 12, m.rangeEndLine)
+	// cursor should be on the visible placeholder (hunkStart=1), not hunkEnd=3 (hidden)
+	assert.Equal(t, 1, m.diffCursor, "cursor should stay on visible placeholder")
+	assert.Equal(t, 1, m.rangeEndIdx, "endIdx should be the visible placeholder")
 }

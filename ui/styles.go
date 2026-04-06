@@ -23,8 +23,8 @@ type Colors struct {
 	DiffBg     string // diff pane background
 	StatusFg   string // status bar foreground
 	StatusBg   string // status bar background
-	SearchFg   string // search match foreground
-	SearchBg   string // search match background
+	SearchFg string // search match foreground
+	SearchBg string // search match background
 }
 
 // styles holds all lipgloss styles used in the TUI.

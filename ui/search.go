@@ -56,6 +56,7 @@ func (m *Model) submitSearch() {
 		m.searchCursor = i
 		m.diffCursor = idx
 		m.cursorOnAnnotation = false
+		m.cursorOnRangeAnnotation = false
 		m.syncTOCActiveSection()
 		m.centerViewportOnCursor()
 		return
@@ -69,6 +70,7 @@ func (m *Model) submitSearch() {
 		m.searchCursor = i
 		m.diffCursor = idx
 		m.cursorOnAnnotation = false
+		m.cursorOnRangeAnnotation = false
 		m.syncTOCActiveSection()
 		m.centerViewportOnCursor()
 		return
@@ -94,6 +96,7 @@ func (m *Model) nextSearchMatch() {
 	}
 	m.diffCursor = m.searchMatches[m.searchCursor]
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	m.centerViewportOnCursor()
 }
 
@@ -119,6 +122,7 @@ func (m *Model) prevSearchMatch() {
 	}
 	m.diffCursor = m.searchMatches[m.searchCursor]
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	m.centerViewportOnCursor()
 }
 

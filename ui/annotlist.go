@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/umputun/revdiff/annotation"
+	"github.com/umputun/revdiff/diff"
 	"github.com/umputun/revdiff/keymap"
 )
 
@@ -86,11 +87,14 @@ func (m Model) annotListEmptyOverlay(popupWidth int) string {
 
 // formatAnnotListItem formats a single annotation list item for display.
 func (m Model) formatAnnotListItem(a annotation.Annotation, width int, selected bool) string {
-	// build prefix: "filename:line (type)" or "filename (file-level)"
+	// build prefix: "filename:line (type)", "filename:N-M", or "filename (file-level)"
 	var prefix string
-	if a.Line == 0 {
+	switch {
+	case a.Line == 0:
 		prefix = filepath.Base(a.File) + " (file-level)"
-	} else {
+	case a.IsRange():
+		prefix = fmt.Sprintf("%s:%d-%d", filepath.Base(a.File), a.Line, a.EndLine)
+	default:
 		prefix = fmt.Sprintf("%s:%d (%s)", filepath.Base(a.File), a.Line, a.Type)
 	}
 
@@ -127,10 +131,12 @@ func (m Model) formatAnnotListItem(a annotation.Annotation, width int, selected 
 
 	// style the prefix with change type color
 	var styledPrefix string
-	switch a.Type {
-	case "+":
+	switch {
+	case a.IsRange():
+		styledPrefix = m.ansiFg(m.styles.colors.Annotation) + prefix + "\033[39m"
+	case a.Type == "+":
 		styledPrefix = m.ansiFg(m.styles.colors.AddFg) + prefix + "\033[39m"
-	case "-":
+	case a.Type == "-":
 		styledPrefix = m.ansiFg(m.styles.colors.RemoveFg) + prefix + "\033[39m"
 	default:
 		styledPrefix = m.ansiFg(m.styles.colors.Muted) + prefix + "\033[39m"
@@ -260,11 +266,17 @@ func (m Model) jumpToAnnotation() (tea.Model, tea.Cmd) {
 // positionOnAnnotation moves the cursor to the given annotation's line, re-renders, and centers the viewport.
 // in collapsed mode, expands the hunk containing the target line so removed lines are visible.
 func (m *Model) positionOnAnnotation(a annotation.Annotation) {
-	if a.Line == 0 {
+	switch {
+	case a.Line == 0:
 		m.diffCursor = -1
-	} else {
-		idx := m.findDiffLineIndex(a.Line, a.Type)
-		if idx >= 0 {
+	case a.IsRange():
+		// range annotations: find by line number only (Type="" doesn't match any diff line type)
+		if idx := m.findDiffLineByNum(a.Line); idx >= 0 {
+			m.diffCursor = idx
+			m.ensureHunkExpanded(idx)
+		}
+	default:
+		if idx := m.findDiffLineIndex(a.Line, a.Type); idx >= 0 {
 			m.diffCursor = idx
 			m.ensureHunkExpanded(idx)
 		}
@@ -273,6 +285,19 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 	m.syncTOCActiveSection()
 	m.viewport.SetContent(m.renderDiff())
 	m.centerViewportOnCursor()
+}
+
+// findDiffLineByNum finds the first diffLines index matching the given line number.
+func (m Model) findDiffLineByNum(lineNum int) int {
+	for i, dl := range m.diffLines {
+		if dl.ChangeType == diff.ChangeDivider {
+			continue
+		}
+		if m.diffLineNum(dl) == lineNum {
+			return i
+		}
+	}
+	return -1
 }
 
 // ensureHunkExpanded expands the hunk containing diffLines[idx] when collapsed mode is active.

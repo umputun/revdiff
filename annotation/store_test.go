@@ -52,7 +52,7 @@ func TestStore_Delete(t *testing.T) {
 	s := NewStore()
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "comment"})
 
-	ok := s.Delete("handler.go", 43, "+")
+	ok := s.Delete("handler.go", 43, 0, "+")
 	assert.True(t, ok)
 	assert.Empty(t, s.Get("handler.go"))
 }
@@ -60,7 +60,7 @@ func TestStore_Delete(t *testing.T) {
 func TestStore_DeleteCleansUpEmptyFile(t *testing.T) {
 	s := NewStore()
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "comment"})
-	s.Delete("handler.go", 43, "+")
+	s.Delete("handler.go", 43, 0, "+")
 
 	all := s.All()
 	_, exists := all["handler.go"]
@@ -69,7 +69,7 @@ func TestStore_DeleteCleansUpEmptyFile(t *testing.T) {
 
 func TestStore_DeleteNonExistent(t *testing.T) {
 	s := NewStore()
-	ok := s.Delete("handler.go", 43, "+")
+	ok := s.Delete("handler.go", 43, 0, "+")
 	assert.False(t, ok)
 }
 
@@ -78,7 +78,7 @@ func TestStore_DeletePreservesOthers(t *testing.T) {
 	s.Add(Annotation{File: "handler.go", Line: 10, Type: "+", Comment: "keep"})
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "-", Comment: "remove"})
 
-	s.Delete("handler.go", 43, "-")
+	s.Delete("handler.go", 43, 0, "-")
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
 	assert.Equal(t, 10, anns[0].Line)
@@ -90,7 +90,7 @@ func TestStore_DeleteMatchesByType(t *testing.T) {
 	s.Add(Annotation{File: "handler.go", Line: 5, Type: "-", Comment: "removed line"})
 
 	// deleting the add should leave the remove
-	ok := s.Delete("handler.go", 5, "+")
+	ok := s.Delete("handler.go", 5, 0, "+")
 	assert.True(t, ok)
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
@@ -226,7 +226,7 @@ func TestStore_DeleteFileLevelAnnotation(t *testing.T) {
 	s := NewStore()
 	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file comment"})
 
-	ok := s.Delete("handler.go", 0, "")
+	ok := s.Delete("handler.go", 0, 0, "")
 	assert.True(t, ok)
 	assert.Empty(t, s.Get("handler.go"))
 }
@@ -236,7 +236,7 @@ func TestStore_DeleteFileLevelPreservesLineAnnotations(t *testing.T) {
 	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file comment"})
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "line comment"})
 
-	s.Delete("handler.go", 0, "")
+	s.Delete("handler.go", 0, 0, "")
 	anns := s.Get("handler.go")
 	require.Len(t, anns, 1)
 	assert.Equal(t, 43, anns[0].Line)
@@ -335,7 +335,7 @@ func TestStore_ContextOnlyAnnotations(t *testing.T) {
 	assert.False(t, s.Has("plan.md", 3, "+"))
 
 	// verify Delete works
-	ok := s.Delete("plan.md", 3, " ")
+	ok := s.Delete("plan.md", 3, 0, " ")
 	assert.True(t, ok)
 	assert.Len(t, s.Get("plan.md"), 1)
 }
@@ -353,6 +353,185 @@ func TestStore_Count(t *testing.T) {
 	s.Add(Annotation{File: "b.go", Line: 1, Type: "+", Comment: "three"})
 	assert.Equal(t, 3, s.Count(), "should count across multiple files")
 
-	s.Delete("a.go", 1, "+")
+	s.Delete("a.go", 1, 0, "+")
 	assert.Equal(t, 2, s.Count(), "count should decrease after delete")
+}
+
+// --- Range annotation tests ---
+
+func TestAnnotation_IsRange(t *testing.T) {
+	tests := []struct {
+		name     string
+		ann      Annotation
+		expected bool
+	}{
+		{"point annotation", Annotation{Line: 10, EndLine: 0}, false},
+		{"file-level annotation", Annotation{Line: 0, EndLine: 0}, false},
+		{"range annotation", Annotation{Line: 10, EndLine: 25, Type: ""}, true},
+		{"replacement hunk range on same line number", Annotation{Line: 10, EndLine: 10, Type: ""}, true},
+		{"same line point annotation", Annotation{Line: 10, EndLine: 10, Type: "+"}, false},
+		{"endLine before line (not a range)", Annotation{Line: 10, EndLine: 5}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.ann.IsRange())
+		})
+	}
+}
+
+func TestStore_RangeAdd(t *testing.T) {
+	s := NewStore()
+	ok := s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "review this block"})
+	assert.True(t, ok)
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 10, anns[0].Line)
+	assert.Equal(t, 25, anns[0].EndLine)
+	assert.True(t, anns[0].IsRange())
+}
+
+func TestStore_RangeAddReplacesExisting(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "old"})
+	ok := s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "new"})
+	assert.True(t, ok)
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "new", anns[0].Comment)
+}
+
+func TestStore_RangeOverlapRejected(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "first"})
+
+	tests := []struct {
+		name    string
+		line    int
+		endLine int
+	}{
+		{"exact overlap", 10, 25},
+		{"overlap start", 5, 15},
+		{"overlap end", 20, 30},
+		{"contained within", 12, 20},
+		{"containing", 5, 30},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// exact overlap is a replace (same identity), so skip it in this loop
+			if tt.line == 10 && tt.endLine == 25 {
+				return
+			}
+			ok := s.Add(Annotation{File: "handler.go", Line: tt.line, EndLine: tt.endLine, Type: "", Comment: "overlap"})
+			assert.False(t, ok, "overlapping range should be rejected")
+		})
+	}
+
+	// non-overlapping range should succeed
+	ok := s.Add(Annotation{File: "handler.go", Line: 26, EndLine: 30, Type: "", Comment: "adjacent"})
+	assert.True(t, ok)
+	assert.Equal(t, 2, s.Count())
+}
+
+func TestStore_RangeAndPointCoexist(t *testing.T) {
+	s := NewStore()
+	// point annotation on line 10 with type "+"
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: "+", Comment: "point"})
+	// range annotation starting at line 10 with type ""
+	ok := s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "range"})
+	assert.True(t, ok, "range and point on same start line should coexist (different Type)")
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 2)
+}
+
+func TestStore_RangeDelete(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "range"})
+
+	ok := s.Delete("handler.go", 10, 25, "")
+	assert.True(t, ok)
+	assert.Empty(t, s.Get("handler.go"))
+}
+
+func TestStore_RangeDeleteDoesNotMatchPoint(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: "+", Comment: "point"})
+
+	// trying to delete as range should fail
+	ok := s.Delete("handler.go", 10, 25, "+")
+	assert.False(t, ok)
+	assert.Len(t, s.Get("handler.go"), 1)
+}
+
+func TestStore_HasRangeCovering(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "range"})
+
+	tests := []struct {
+		line     int
+		expected bool
+	}{
+		{9, false},  // before range
+		{10, true},  // start boundary
+		{15, true},  // middle
+		{25, true},  // end boundary
+		{26, false}, // after range
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.expected, s.HasRangeCovering("handler.go", tt.line), "line %d", tt.line)
+	}
+
+	// point annotations should not match
+	s.Add(Annotation{File: "other.go", Line: 5, Type: "+", Comment: "point"})
+	assert.False(t, s.HasRangeCovering("other.go", 5))
+}
+
+func TestStore_GetRangeCovering(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "range"})
+
+	a, ok := s.GetRangeCovering("handler.go", 15)
+	assert.True(t, ok)
+	assert.Equal(t, 10, a.Line)
+	assert.Equal(t, 25, a.EndLine)
+	assert.Equal(t, "range", a.Comment)
+
+	_, ok = s.GetRangeCovering("handler.go", 9)
+	assert.False(t, ok)
+}
+
+func TestStore_FormatOutputRange(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "review this block"})
+
+	expected := "## handler.go:10-25\nreview this block\n"
+	assert.Equal(t, expected, s.FormatOutput())
+}
+
+func TestStore_FormatOutputReplacementRange(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 10, Type: "", Comment: "review replacement"})
+
+	expected := "## handler.go:10-10\nreview replacement\n"
+	assert.Equal(t, expected, s.FormatOutput())
+}
+
+func TestStore_FormatOutputMixedPointRangeFileLevel(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "file note"})
+	s.Add(Annotation{File: "handler.go", Line: 5, Type: "+", Comment: "point"})
+	s.Add(Annotation{File: "handler.go", Line: 10, EndLine: 25, Type: "", Comment: "range"})
+
+	out := s.FormatOutput()
+	assert.Contains(t, out, "## handler.go (file-level)\nfile note\n")
+	assert.Contains(t, out, "## handler.go:5 (+)\npoint\n")
+	assert.Contains(t, out, "## handler.go:10-25\nrange\n")
+}
+
+func TestStore_SingleLineSelectionCollapsesToPoint(t *testing.T) {
+	// single-line selections remain point annotations because they keep a change type
+	a := Annotation{File: "handler.go", Line: 10, EndLine: 10, Type: "+", Comment: "single line"}
+	assert.False(t, a.IsRange(), "single-line selection should not be a range")
 }

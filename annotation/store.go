@@ -6,12 +6,20 @@ import (
 	"strings"
 )
 
-// Annotation represents a user comment on a specific diff line.
+// Annotation represents a user comment on a specific diff line or range.
 type Annotation struct {
 	File    string // file path relative to repo root
-	Line    int    // line number in the diff
-	Type    string // change type: "+", "-", or " "
+	Line    int    // line number in the diff (start line for ranges)
+	EndLine int    // end line for range annotations (0 = point annotation)
+	Type    string // change type: "+", "-", or " " (always "" for ranges)
 	Comment string // user comment text
+}
+
+// IsRange returns true if this annotation represents a range annotation.
+// Range annotations use Type == "" and may collapse to the same numeric line
+// for replacement hunks where old/new line numbers match.
+func (a Annotation) IsRange() bool {
+	return a.Type == "" && a.EndLine > 0 && a.EndLine >= a.Line
 }
 
 // Store holds annotations in memory, keyed by filename.
@@ -25,20 +33,32 @@ func NewStore() *Store {
 }
 
 // Add adds an annotation for the given file and line.
-// If an annotation already exists at the same file:line, it is replaced.
-func (s *Store) Add(a Annotation) {
+// If an annotation already exists at the same (file, line, endLine, type), it is replaced.
+// Range annotations that overlap existing ranges in the same file are rejected.
+func (s *Store) Add(a Annotation) bool {
 	existing := s.annotations[a.File]
-	if i, ok := s.find(a.File, a.Line, a.Type); ok {
+	if i, ok := s.find(a.File, a.Line, a.EndLine, a.Type); ok {
 		existing[i].Comment = a.Comment
-		return
+		return true
+	}
+	if a.IsRange() {
+		for _, other := range existing {
+			if !other.IsRange() {
+				continue
+			}
+			if a.Line <= other.EndLine && a.EndLine >= other.Line {
+				return false
+			}
+		}
 	}
 	s.annotations[a.File] = append(existing, a)
+	return true
 }
 
-// Delete removes the annotation at the given file, line and change type.
+// Delete removes the annotation at the given file, line, endLine and change type.
 // Returns true if an annotation was found and removed.
-func (s *Store) Delete(file string, line int, changeType string) bool {
-	i, ok := s.find(file, line, changeType)
+func (s *Store) Delete(file string, line, endLine int, changeType string) bool {
+	i, ok := s.find(file, line, endLine, changeType)
 	if !ok {
 		return false
 	}
@@ -52,14 +72,34 @@ func (s *Store) Delete(file string, line int, changeType string) bool {
 
 // Has checks if an annotation exists at the given file, line and change type.
 func (s *Store) Has(file string, line int, changeType string) bool {
-	_, ok := s.find(file, line, changeType)
+	_, ok := s.find(file, line, 0, changeType)
 	return ok
 }
 
-// find returns the index of an annotation matching file, line, and changeType.
-func (s *Store) find(file string, line int, changeType string) (int, bool) {
+// HasRangeCovering returns true if any range annotation in the file covers lineNum.
+func (s *Store) HasRangeCovering(file string, lineNum int) bool {
+	for _, a := range s.annotations[file] {
+		if a.IsRange() && lineNum >= a.Line && lineNum <= a.EndLine {
+			return true
+		}
+	}
+	return false
+}
+
+// GetRangeCovering returns the range annotation covering lineNum, if any.
+func (s *Store) GetRangeCovering(file string, lineNum int) (Annotation, bool) {
+	for _, a := range s.annotations[file] {
+		if a.IsRange() && lineNum >= a.Line && lineNum <= a.EndLine {
+			return a, true
+		}
+	}
+	return Annotation{}, false
+}
+
+// find returns the index of an annotation matching file, line, endLine, and changeType.
+func (s *Store) find(file string, line, endLine int, changeType string) (int, bool) {
 	for i, a := range s.annotations[file] {
-		if a.Line == line && a.Type == changeType {
+		if a.Line == line && a.EndLine == endLine && a.Type == changeType {
 			return i, true
 		}
 	}
@@ -124,9 +164,12 @@ func (s *Store) FormatOutput() string {
 				buf.WriteString("\n")
 			}
 			first = false
-			if a.Line == 0 {
+			switch {
+			case a.Line == 0:
 				fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, a.Comment)
-			} else {
+			case a.IsRange():
+				fmt.Fprintf(&buf, "## %s:%d-%d\n%s\n", a.File, a.Line, a.EndLine, a.Comment)
+			default:
 				fmt.Fprintf(&buf, "## %s:%d (%s)\n%s\n", a.File, a.Line, a.Type, a.Comment)
 			}
 		}
