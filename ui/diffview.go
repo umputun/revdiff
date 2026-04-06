@@ -797,12 +797,13 @@ func (m *Model) handleHorizontalScroll(direction int) {
 	m.viewport.SetContent(m.renderDiff())
 }
 
-// diffContentWidth returns the available width for diff line content (excluding cursor bar).
+// diffContentWidth returns the available width for diff line content.
+// accounts for borders, cursor bar, and 1 char right padding to prevent text from touching the pane border.
 func (m Model) diffContentWidth() int {
 	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
-		// tree hidden or single-file without TOC: diff pane borders (2) + cursor bar (1)
-		return max(10, m.width-3)
+		// tree hidden or single-file without TOC: diff pane borders (2) + cursor bar (1) + right padding (1)
+		return max(10, m.width-4)
 	}
-	// multi-file or single-file with TOC: diff pane width minus borders (4) minus tree width, minus bar (1)
-	return max(10, m.width-m.treeWidth-4-1)
+	// multi-file or single-file with TOC: diff pane width minus borders (4) minus tree width, minus bar (1), minus right padding (1)
+	return max(10, m.width-m.treeWidth-4-2)
 }
