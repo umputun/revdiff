@@ -94,23 +94,13 @@ LAUNCHER
     CMUX_NEW=$(cmux new-split down 2>&1) || true
     CMUX_SURF=$(echo "$CMUX_NEW" | grep -o 'surface:[0-9]*' | head -1)
 
-    # wait for the new pane's shell to initialize before sending the command.
-    # cmux has no "run command in new split" option, so we retry a compound
-    # signal-and-exec command until the shell processes it. wait-for blocks
-    # until the signal arrives, adapting to any shell startup time.
-    CMUX_TOKEN="rd-$$"
-    CMUX_SEND_CMD="cmux wait-for -S $CMUX_TOKEN 2>/dev/null && exec $LAUNCH_SCRIPT"
-    cmux wait-for "$CMUX_TOKEN" --timeout 10 &
-    CMUX_WAIT_PID=$!
-    while kill -0 $CMUX_WAIT_PID 2>/dev/null; do
-        if [ -n "$CMUX_SURF" ]; then
-            cmux send --surface "$CMUX_SURF" "$CMUX_SEND_CMD\n" 2>/dev/null
-        else
-            cmux send "$CMUX_SEND_CMD\n" 2>/dev/null
-        fi
-        sleep 0.1
-    done
-    wait $CMUX_WAIT_PID 2>/dev/null
+    # send exec command immediately — the pty input buffer holds the text
+    # until the new pane's shell finishes initializing and reads it
+    if [ -n "$CMUX_SURF" ]; then
+        cmux send --surface "$CMUX_SURF" "exec $LAUNCH_SCRIPT\n"
+    else
+        cmux send "exec $LAUNCH_SCRIPT\n"
+    fi
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
