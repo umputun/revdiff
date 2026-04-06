@@ -492,7 +492,7 @@ section h2 {
     background: none;
     border: none;
     padding: 0;
-    font-size: 0.8rem;
+    font-size: 0.875rem;
     color: var(--text);
     white-space: pre;
     line-height: 1.7;
@@ -712,7 +712,7 @@ section h2 {
 }
 
 .docs-content p {
-    font-size: 0.9rem;
+    font-size: 1rem;
     color: var(--text-muted);
     margin-bottom: 16px;
     line-height: 1.7;
@@ -726,7 +726,7 @@ section h2 {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 20px;
-    font-size: 0.825rem;
+    font-size: 0.925rem;
 }
 
 .docs-content th {
@@ -758,10 +758,10 @@ section h2 {
 }
 
 .docs-content li {
-    font-size: 0.875rem;
+    font-size: 1rem;
     color: var(--text-muted);
     margin-bottom: 6px;
-    line-height: 1.6;
+    line-height: 1.7;
 }
 
 @media (max-width: 768px) {
