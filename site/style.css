@@ -25,7 +25,14 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+html {
+    scroll-padding-top: 72px;
+    overflow-x: hidden;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+}
 
 body {
     font-family: var(--font-sans);
@@ -33,6 +40,7 @@ body {
     color: var(--text);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
 }
 
 a { color: var(--accent); text-decoration: none; transition: color 0.15s; }
@@ -59,6 +67,17 @@ code {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+/* backdrop-filter blur is expensive on iOS — disable on mobile */
+@media (max-width: 900px) {
+    .nav {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(26, 29, 35, 0.97);
+    }
 }
 
 .nav-inner {
@@ -638,6 +657,9 @@ section h2 {
     .terminal-grid { grid-template-columns: repeat(2, 1fr); }
     section h2 { font-size: 1.25rem; }
     .footer-inner { flex-direction: column; gap: 16px; }
+    /* prevent code blocks from overflowing viewport width */
+    .code-block { max-width: calc(100vw - 48px); }
+    .install-grid-2 { grid-template-columns: 1fr; }
 }
 
 /* === docs page === */
@@ -649,7 +671,10 @@ section h2 {
     display: grid;
     grid-template-columns: 220px 1fr;
     gap: 48px;
+    /* 100dvh = dynamic viewport height (excludes browser chrome on iOS Safari)
+       falls back to 100vh for older browsers */
     min-height: 100vh;
+    min-height: 100dvh;
 }
 
 .docs-sidebar {
