@@ -16,6 +16,7 @@ Terminal UI diff viewer with inline annotations, built with bubbletea.
 - `ui/` - bubbletea TUI model, views, styles, file tree, annotations
 - `highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
+- `theme/` - color theme system: Parse, Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
 - `annotation/` - in-memory annotation store, structured output formatting
 - `ui/mocks/` - moq-generated mocks (never edit manually)
 
@@ -57,7 +58,11 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Config file: `~/.config/revdiff/config` (INI format via go-flags built-in IniParser)
 - Precedence: CLI flags > env vars > config file > built-in defaults
 - `--dump-config` outputs current defaults, `--config` overrides path
-- `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --version)
+- `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --dump-theme, --list-themes, --init-themes, --version)
+- Themes dir: `~/.config/revdiff/themes/` with 5 bundled themes (catppuccin-mocha, dracula, gruvbox, nord, solarized-dark), auto-created on first run
+- `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
+- Theme precedence: `--theme` takes over completely — overwrites all 21 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
+- Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`
 - `ini-name` tags ensure config keys match CLI long flag names
 - Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)
 - `--keys` overrides keybindings path, `--dump-keys` prints effective bindings
@@ -86,6 +91,7 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - `--all-files` mode uses `DirectoryReader` (git ls-files) to list all tracked files; `--exclude` wraps any renderer with `ExcludeFilter` for prefix-based filtering. `--all-files` is mutually exclusive with refs, `--staged`, and `--only`
 - Help overlay uses `overlayCenter()` (ANSI-aware compositing via `charmbracelet/x/ansi.Cut`) to render on top of existing content; background (tree pane) remains visible at the edges
 - **ANSI nesting with lipgloss**: `lipgloss.Render()` emits `\033[0m` (full reset) which breaks outer style backgrounds. For styled substrings inside a lipgloss container (status bar separators, search highlights), use raw ANSI sequences via `ansiColor(hex, code)` — code 38 for fg, 48 for bg. Never use `lipgloss.NewStyle().Render()` for inline elements within a lipgloss-rendered parent.
+- **Background fill for themed panes**: lipgloss pane `Render()` and viewport internal padding emit plain spaces after `\033[0m` reset, causing pane background to show terminal default. Three workarounds: (1) `extendLineBg()` pads individual add/remove/modify lines to full content width with their specific bg color; (2) `padContentBg()` strips viewport trailing spaces and re-pads every line of pane content with DiffBg/TreeBg; (3) `BorderBackground()` is set on pane border styles to match pane bg. Context and line-number styles also set DiffBg explicitly via `contextStyle()`/`lineNumberStyle()`/`contextHighlightStyle()`.
 - Status bar mode icons (`▼ ◉ ↩ ≋ ⊟ #`) are always rendered on the right side via `statusModeIcons()`. `⊟` indicates tree/TOC pane hidden via `t` toggle. Active modes use `StatusFg`, inactive use `Muted` — both via raw ANSI fg sequences. Graceful degradation on narrow terminals drops left segments: search position first (`statusSegmentsNoSearch`), then line number and hunk info (`statusSegmentsMinimal`), then truncates filename.
 - Search and hunk navigation both use `centerViewportOnCursor()` to center the target in the middle of the viewport. Use `syncViewportToCursor()` only for cursor movements that should keep the cursor barely visible (j/k scrolling).
 - Single-file mode (`m.singleFile`): when diff has exactly one file, tree pane is hidden, `treeWidth = 0`, diff gets full width (`m.width - 2` for borders, content width `m.width - 3`). Pane-switching keys (tab, h, l) and file navigation (n/p, f) become no-ops. Search nav (n/N) still works. Detection happens in `handleFilesLoaded`. Exception: when the file is markdown and full-context (all `ChangeContext` lines), an `mdTOC` pane replaces the tree pane with header navigation — see `ui/mdtoc.go`.

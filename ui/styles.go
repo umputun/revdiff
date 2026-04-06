@@ -48,11 +48,12 @@ type styles struct {
 	// status bar
 	StatusBar lipgloss.Style
 
-	// syntax-highlighted add/remove/modify lines (background only, chroma owns foreground)
-	LineAddHighlight    lipgloss.Style
-	LineRemoveHighlight lipgloss.Style
-	LineModify          lipgloss.Style // modified line (collapsed mode, non-highlighted)
-	LineModifyHighlight lipgloss.Style // modified line (collapsed mode, syntax-highlighted)
+	// syntax-highlighted lines (background only, chroma owns foreground)
+	LineAddHighlight     lipgloss.Style
+	LineRemoveHighlight  lipgloss.Style
+	LineContextHighlight lipgloss.Style // context line with syntax highlighting (DiffBg only)
+	LineModify           lipgloss.Style // modified line (collapsed mode, non-highlighted)
+	LineModifyHighlight  lipgloss.Style // modified line (collapsed mode, syntax-highlighted)
 
 	// diff cursor
 	DiffCursorLine lipgloss.Style
@@ -110,8 +111,9 @@ func newStyles(c Colors) styles {
 		Border(border).
 		BorderForeground(lipgloss.Color(c.Accent))
 	if c.TreeBg != "" {
-		treePane = treePane.Background(lipgloss.Color(c.TreeBg))
-		treePaneActive = treePaneActive.Background(lipgloss.Color(c.TreeBg))
+		treeBg := lipgloss.Color(c.TreeBg)
+		treePane = treePane.Background(treeBg).BorderBackground(treeBg)
+		treePaneActive = treePaneActive.Background(treeBg).BorderBackground(treeBg)
 	}
 
 	diffPane := lipgloss.NewStyle().
@@ -121,8 +123,9 @@ func newStyles(c Colors) styles {
 		Border(border).
 		BorderForeground(lipgloss.Color(c.Accent))
 	if c.DiffBg != "" {
-		diffPane = diffPane.Background(lipgloss.Color(c.DiffBg))
-		diffPaneActive = diffPaneActive.Background(lipgloss.Color(c.DiffBg))
+		diffBg := lipgloss.Color(c.DiffBg)
+		diffPane = diffPane.Background(diffBg).BorderBackground(diffBg)
+		diffPaneActive = diffPaneActive.Background(diffBg).BorderBackground(diffBg)
 	}
 
 	statusFg := c.Muted
@@ -158,10 +161,8 @@ func newStyles(c Colors) styles {
 		LineRemove: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.RemoveBg)).
 			Foreground(lipgloss.Color(c.RemoveFg)),
-		LineContext: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Normal)),
-		LineNumber: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Muted)),
+		LineContext: contextStyle(c),
+		LineNumber:  lineNumberStyle(c),
 
 		StatusBar: statusBar,
 
@@ -169,6 +170,7 @@ func newStyles(c Colors) styles {
 			Background(lipgloss.Color(c.AddBg)),
 		LineRemoveHighlight: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.RemoveBg)),
+		LineContextHighlight: contextHighlightStyle(c),
 		LineModify: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.ModifyBg)).
 			Foreground(lipgloss.Color(c.ModifyFg)),
@@ -185,6 +187,33 @@ func newStyles(c Colors) styles {
 
 		colors: c,
 	}
+}
+
+// contextStyle builds the context line style, applying DiffBg as background when set.
+func contextStyle(c Colors) lipgloss.Style {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))
+	if c.DiffBg != "" {
+		s = s.Background(lipgloss.Color(c.DiffBg))
+	}
+	return s
+}
+
+// lineNumberStyle builds the line number style, applying DiffBg as background when set.
+func lineNumberStyle(c Colors) lipgloss.Style {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Muted))
+	if c.DiffBg != "" {
+		s = s.Background(lipgloss.Color(c.DiffBg))
+	}
+	return s
+}
+
+// contextHighlightStyle builds the syntax-highlighted context line style (DiffBg only).
+func contextHighlightStyle(c Colors) lipgloss.Style {
+	s := lipgloss.NewStyle()
+	if c.DiffBg != "" {
+		s = s.Background(lipgloss.Color(c.DiffBg))
+	}
+	return s
 }
 
 // cursorLineStyle builds the diff cursor style with optional foreground and background.
@@ -221,10 +250,11 @@ func plainStyles() styles {
 
 		StatusBar: lipgloss.NewStyle().Padding(0, 1),
 
-		LineAddHighlight:    lipgloss.NewStyle(),
-		LineRemoveHighlight: lipgloss.NewStyle(),
-		LineModify:          lipgloss.NewStyle(),
-		LineModifyHighlight: lipgloss.NewStyle(),
+		LineAddHighlight:     lipgloss.NewStyle(),
+		LineRemoveHighlight:  lipgloss.NewStyle(),
+		LineContextHighlight: lipgloss.NewStyle(),
+		LineModify:           lipgloss.NewStyle(),
+		LineModifyHighlight:  lipgloss.NewStyle(),
 
 		DiffCursorLine: lipgloss.NewStyle().Reverse(true),
 		AnnotationLine: lipgloss.NewStyle().Italic(true),

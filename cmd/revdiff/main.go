@@ -18,6 +18,7 @@ import (
 	"github.com/umputun/revdiff/diff"
 	"github.com/umputun/revdiff/highlight"
 	"github.com/umputun/revdiff/keymap"
+	"github.com/umputun/revdiff/theme"
 	"github.com/umputun/revdiff/ui"
 )
 
@@ -42,6 +43,10 @@ type options struct {
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Keys             string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
 	DumpKeys         bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
+	Theme            string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
+	DumpTheme        bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
+	ListThemes       bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
+	InitThemes       bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
 	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
@@ -95,6 +100,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// early-exit commands that don't need theme resolution
+	if opts.Version {
+		fmt.Printf("version: %s\ngo: %s\n", revision, runtime.Version())
+		os.Exit(0)
+	}
+
 	if opts.DumpConfig {
 		dumpConfig(os.Args[1:], os.Stdout)
 		os.Exit(0)
@@ -106,8 +117,14 @@ func main() {
 		os.Exit(0)
 	}
 
-	if opts.Version {
-		fmt.Printf("version: %s\ngo: %s\n", revision, runtime.Version())
+	handleThemes(&opts)
+
+	if opts.DumpTheme {
+		colors := collectColors(opts)
+		if err := theme.Dump(theme.Theme{Colors: colors, ChromaStyle: opts.ChromaStyle}, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -370,4 +387,141 @@ func gitTopLevel() (string, error) {
 		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// defaultThemesDir returns ~/.config/revdiff/themes.
+func defaultThemesDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "revdiff", "themes")
+}
+
+// handleThemes processes theme-related flags: auto-init on first run, --init-themes, --list-themes, and --theme.
+// exits the process for --init-themes and --list-themes commands.
+func handleThemes(opts *options) {
+	themesDir := defaultThemesDir()
+
+	// auto-init bundled themes on first run (silent, no error on failure)
+	if themesDir != "" {
+		if _, err := os.Stat(themesDir); os.IsNotExist(err) {
+			_ = theme.InitBundled(themesDir)
+		}
+	}
+
+	if opts.InitThemes {
+		if themesDir == "" {
+			fmt.Fprintln(os.Stderr, "error: cannot determine home directory for themes")
+			os.Exit(1)
+		}
+		if err := theme.InitBundled(themesDir); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("bundled themes written to %s\n", themesDir)
+		os.Exit(0)
+	}
+
+	if opts.ListThemes {
+		if themesDir == "" {
+			fmt.Fprintln(os.Stderr, "error: cannot determine home directory for themes")
+			os.Exit(1)
+		}
+		names, err := theme.List(themesDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		for _, name := range names {
+			fmt.Println(name)
+		}
+		os.Exit(0)
+	}
+
+	// apply theme if set — overwrites all color fields and chroma-style unconditionally.
+	// theme takes over completely, ignoring any --color-* flags or --no-colors.
+	if opts.Theme != "" {
+		if opts.NoColors {
+			fmt.Fprintln(os.Stderr, "warning: --no-colors ignored when --theme is set")
+		}
+		resolveThemeConflicts(opts)
+		if themesDir == "" {
+			fmt.Fprintln(os.Stderr, "error: cannot determine home directory for themes")
+			os.Exit(1)
+		}
+		th, err := theme.Load(opts.Theme, themesDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		applyTheme(opts, th)
+	}
+}
+
+// resolveThemeConflicts clears NoColors when a theme is set, since theme takes over completely.
+func resolveThemeConflicts(opts *options) {
+	if opts.Theme != "" && opts.NoColors {
+		opts.NoColors = false
+	}
+}
+
+// applyTheme applies theme colors and chroma-style to opts, overwriting all matching fields unconditionally.
+func applyTheme(opts *options, th theme.Theme) {
+	opts.ChromaStyle = th.ChromaStyle
+	fieldMap := map[string]*string{
+		"color-accent":      &opts.Colors.Accent,
+		"color-border":      &opts.Colors.Border,
+		"color-normal":      &opts.Colors.Normal,
+		"color-muted":       &opts.Colors.Muted,
+		"color-selected-fg": &opts.Colors.SelectedFg,
+		"color-selected-bg": &opts.Colors.SelectedBg,
+		"color-annotation":  &opts.Colors.Annotation,
+		"color-cursor-fg":   &opts.Colors.CursorFg,
+		"color-cursor-bg":   &opts.Colors.CursorBg,
+		"color-add-fg":      &opts.Colors.AddFg,
+		"color-add-bg":      &opts.Colors.AddBg,
+		"color-remove-fg":   &opts.Colors.RemoveFg,
+		"color-remove-bg":   &opts.Colors.RemoveBg,
+		"color-modify-fg":   &opts.Colors.ModifyFg,
+		"color-modify-bg":   &opts.Colors.ModifyBg,
+		"color-tree-bg":     &opts.Colors.TreeBg,
+		"color-diff-bg":     &opts.Colors.DiffBg,
+		"color-status-fg":   &opts.Colors.StatusFg,
+		"color-status-bg":   &opts.Colors.StatusBg,
+		"color-search-fg":   &opts.Colors.SearchFg,
+		"color-search-bg":   &opts.Colors.SearchBg,
+	}
+	for key, ptr := range fieldMap {
+		if v, ok := th.Colors[key]; ok {
+			*ptr = v
+		}
+	}
+}
+
+// collectColors gathers all resolved color values from opts into a map keyed by ini-name.
+func collectColors(opts options) map[string]string {
+	return map[string]string{
+		"color-accent":      opts.Colors.Accent,
+		"color-border":      opts.Colors.Border,
+		"color-normal":      opts.Colors.Normal,
+		"color-muted":       opts.Colors.Muted,
+		"color-selected-fg": opts.Colors.SelectedFg,
+		"color-selected-bg": opts.Colors.SelectedBg,
+		"color-annotation":  opts.Colors.Annotation,
+		"color-cursor-fg":   opts.Colors.CursorFg,
+		"color-cursor-bg":   opts.Colors.CursorBg,
+		"color-add-fg":      opts.Colors.AddFg,
+		"color-add-bg":      opts.Colors.AddBg,
+		"color-remove-fg":   opts.Colors.RemoveFg,
+		"color-remove-bg":   opts.Colors.RemoveBg,
+		"color-modify-fg":   opts.Colors.ModifyFg,
+		"color-modify-bg":   opts.Colors.ModifyBg,
+		"color-tree-bg":     opts.Colors.TreeBg,
+		"color-diff-bg":     opts.Colors.DiffBg,
+		"color-status-fg":   opts.Colors.StatusFg,
+		"color-status-bg":   opts.Colors.StatusBg,
+		"color-search-fg":   opts.Colors.SearchFg,
+		"color-search-bg":   opts.Colors.SearchBg,
+	}
 }

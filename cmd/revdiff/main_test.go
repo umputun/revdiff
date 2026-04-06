@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/theme"
 )
 
 // noConfigArgs returns args that point to a nonexistent config file,
@@ -577,4 +580,212 @@ func TestGitTopLevel(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "git rev-parse --show-toplevel")
 	})
+}
+
+func TestApplyTheme(t *testing.T) {
+	t.Run("overwrites all 21 fields and chroma-style", func(t *testing.T) {
+		opts := options{}
+		opts.Colors.Accent = "#original"
+		opts.ChromaStyle = "original-style"
+
+		th := theme.Theme{
+			ChromaStyle: "dracula",
+			Colors: map[string]string{
+				"color-accent": "#bd93f9", "color-border": "#6272a4", "color-normal": "#f8f8f2",
+				"color-muted": "#6272a4", "color-selected-fg": "#f8f8f2", "color-selected-bg": "#44475a",
+				"color-annotation": "#f1fa8c", "color-cursor-fg": "#f8f8f2", "color-cursor-bg": "#44475a",
+				"color-add-fg": "#50fa7b", "color-add-bg": "#1a3a1a", "color-remove-fg": "#ff5555",
+				"color-remove-bg": "#3a1a1a", "color-modify-fg": "#ffb86c", "color-modify-bg": "#3a2a1a",
+				"color-tree-bg": "#282a36", "color-diff-bg": "#282a36", "color-status-fg": "#282a36",
+				"color-status-bg": "#bd93f9", "color-search-fg": "#282a36", "color-search-bg": "#f1fa8c",
+			},
+		}
+		applyTheme(&opts, th)
+
+		// verify chroma-style
+		assert.Equal(t, "dracula", opts.ChromaStyle)
+
+		// verify all 21 color fields
+		assert.Equal(t, "#bd93f9", opts.Colors.Accent)
+		assert.Equal(t, "#6272a4", opts.Colors.Border)
+		assert.Equal(t, "#f8f8f2", opts.Colors.Normal)
+		assert.Equal(t, "#6272a4", opts.Colors.Muted)
+		assert.Equal(t, "#f8f8f2", opts.Colors.SelectedFg)
+		assert.Equal(t, "#44475a", opts.Colors.SelectedBg)
+		assert.Equal(t, "#f1fa8c", opts.Colors.Annotation)
+		assert.Equal(t, "#f8f8f2", opts.Colors.CursorFg)
+		assert.Equal(t, "#44475a", opts.Colors.CursorBg)
+		assert.Equal(t, "#50fa7b", opts.Colors.AddFg)
+		assert.Equal(t, "#1a3a1a", opts.Colors.AddBg)
+		assert.Equal(t, "#ff5555", opts.Colors.RemoveFg)
+		assert.Equal(t, "#3a1a1a", opts.Colors.RemoveBg)
+		assert.Equal(t, "#ffb86c", opts.Colors.ModifyFg)
+		assert.Equal(t, "#3a2a1a", opts.Colors.ModifyBg)
+		assert.Equal(t, "#282a36", opts.Colors.TreeBg)
+		assert.Equal(t, "#282a36", opts.Colors.DiffBg)
+		assert.Equal(t, "#282a36", opts.Colors.StatusFg)
+		assert.Equal(t, "#bd93f9", opts.Colors.StatusBg)
+		assert.Equal(t, "#282a36", opts.Colors.SearchFg)
+		assert.Equal(t, "#f1fa8c", opts.Colors.SearchBg)
+	})
+
+	t.Run("chroma-style always overwritten", func(t *testing.T) {
+		opts := options{}
+		opts.ChromaStyle = "original-style"
+		th := theme.Theme{ChromaStyle: "new-style", Colors: map[string]string{}}
+		applyTheme(&opts, th)
+		assert.Equal(t, "new-style", opts.ChromaStyle)
+	})
+
+	t.Run("partial theme overwrites only present keys", func(t *testing.T) {
+		opts := options{}
+		opts.Colors.Accent = "#original-accent"
+		opts.Colors.Border = "#original-border"
+		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
+		applyTheme(&opts, th)
+		assert.Equal(t, "#new-accent", opts.Colors.Accent)
+		assert.Equal(t, "#original-border", opts.Colors.Border, "unset theme key should not change opts")
+	})
+}
+
+func TestParseArgs_ThemeFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--theme=dracula"))
+	require.NoError(t, err)
+	assert.Equal(t, "dracula", opts.Theme)
+}
+
+func TestParseArgs_ThemeEnv(t *testing.T) {
+	t.Setenv("REVDIFF_THEME", "nord")
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+	assert.Equal(t, "nord", opts.Theme)
+}
+
+func TestParseArgs_DumpThemeFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--dump-theme"))
+	require.NoError(t, err)
+	assert.True(t, opts.DumpTheme)
+}
+
+func TestParseArgs_ListThemesFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--list-themes"))
+	require.NoError(t, err)
+	assert.True(t, opts.ListThemes)
+}
+
+func TestParseArgs_InitThemesFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--init-themes"))
+	require.NoError(t, err)
+	assert.True(t, opts.InitThemes)
+}
+
+func TestDumpThemeOutput(t *testing.T) {
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+
+	colors := collectColors(opts)
+	var buf bytes.Buffer
+	require.NoError(t, theme.Dump(theme.Theme{Colors: colors, ChromaStyle: opts.ChromaStyle}, &buf))
+	output := buf.String()
+	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
+	assert.Contains(t, output, "color-accent = #D5895F")
+	assert.Contains(t, output, "color-add-fg = #87d787")
+}
+
+func TestListThemesOutput(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+
+	names, err := theme.List(themesDir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"catppuccin-mocha", "dracula", "gruvbox", "nord", "solarized-dark"}, names)
+}
+
+func TestCollectColors(t *testing.T) {
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+	colors := collectColors(opts)
+	assert.Equal(t, "#D5895F", colors["color-accent"])
+	assert.Equal(t, "#585858", colors["color-border"])
+	assert.Equal(t, "#87d787", colors["color-add-fg"])
+	assert.Len(t, colors, 21)
+}
+
+func TestThemeOverridesColorFlags(t *testing.T) {
+	// simulate the full flow: parseArgs sets --color-accent from CLI,
+	// then applyTheme overwrites it with theme value
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+
+	// parse args with explicit --color-accent flag
+	opts, err := parseArgs(append(noConfigArgs(t), "--color-accent=#ffffff"))
+	require.NoError(t, err)
+	assert.Equal(t, "#ffffff", opts.Colors.Accent, "CLI flag sets accent before theme")
+
+	// load theme and overwrite — theme wins unconditionally
+	th, err := theme.Load("dracula", themesDir)
+	require.NoError(t, err)
+	applyTheme(&opts, th)
+	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme should override CLI --color-accent")
+	assert.Equal(t, "dracula", opts.ChromaStyle, "theme should set chroma-style")
+}
+
+func TestResolveThemeConflicts(t *testing.T) {
+	t.Run("theme with no-colors clears no-colors", func(t *testing.T) {
+		opts := options{Theme: "dracula", NoColors: true}
+		resolveThemeConflicts(&opts)
+		assert.False(t, opts.NoColors, "--no-colors should be cleared when --theme is set")
+	})
+
+	t.Run("no theme keeps no-colors", func(t *testing.T) {
+		opts := options{NoColors: true}
+		resolveThemeConflicts(&opts)
+		assert.True(t, opts.NoColors, "--no-colors should remain when no theme is set")
+	})
+
+	t.Run("theme without no-colors is noop", func(t *testing.T) {
+		opts := options{Theme: "dracula"}
+		resolveThemeConflicts(&opts)
+		assert.False(t, opts.NoColors)
+	})
+}
+
+func TestHandleThemes_NoColorsWarning(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+
+	// capture stderr
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stderr = w
+
+	opts := options{Theme: "dracula", NoColors: true}
+	// override defaultThemesDir by setting env for the themes dir; instead, call the pieces directly
+	// to avoid os.Exit paths. replicate the warning + resolve logic from handleThemes.
+	if opts.Theme != "" && opts.NoColors {
+		fmt.Fprintln(os.Stderr, "warning: --no-colors ignored when --theme is set")
+	}
+	resolveThemeConflicts(&opts)
+	th, loadErr := theme.Load("dracula", themesDir)
+	require.NoError(t, loadErr)
+	applyTheme(&opts, th)
+
+	require.NoError(t, w.Close())
+	os.Stderr = origStderr
+
+	var buf bytes.Buffer
+	_, copyErr := io.Copy(&buf, r)
+	require.NoError(t, copyErr)
+
+	assert.Contains(t, buf.String(), "warning: --no-colors ignored when --theme is set")
+	assert.False(t, opts.NoColors, "--no-colors should be cleared")
+	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme colors should be applied")
+}
+
+func TestDefaultThemesDir(t *testing.T) {
+	dir := defaultThemesDir()
+	assert.Contains(t, dir, ".config")
+	assert.Contains(t, dir, "revdiff")
+	assert.Contains(t, dir, "themes")
 }

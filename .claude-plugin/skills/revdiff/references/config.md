@@ -27,6 +27,10 @@ Then uncomment and edit the values you want to change.
 | `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
 | `--chroma-style` | `REVDIFF_CHROMA_STYLE` | Chroma color theme for syntax highlighting | `catppuccin-macchiato` |
+| `--theme` | `REVDIFF_THEME` | Load color theme from `~/.config/revdiff/themes/` | |
+| `--dump-theme` | | Print currently resolved colors as theme file and exit | |
+| `--list-themes` | | Print available theme names and exit | |
+| `--init-themes` | | Write bundled theme files to themes dir and exit | |
 | `-A`, `--all-files` | | Browse all git-tracked files, not just diffs (CLI-only, not saved in config) | `false` |
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
@@ -44,6 +48,23 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 |---------|-------------|---------|
 | `REVDIFF_POPUP_WIDTH` | Tmux popup width (e.g., `100%`, `80%`) | `90%` |
 | `REVDIFF_POPUP_HEIGHT` | Tmux popup height / wezterm split percent | `90%` |
+
+## Themes
+
+Five bundled themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.
+
+```bash
+revdiff --theme dracula          # apply a theme
+revdiff --list-themes            # list available themes
+revdiff --init-themes            # re-create bundled themes
+revdiff --dump-theme > ~/.config/revdiff/themes/my-custom  # export current colors
+```
+
+Set default theme in config: `theme = dracula`. Or env: `REVDIFF_THEME=dracula`.
+
+**Custom themes:** customize colors in config or via `--color-*` flags, then `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`. Or copy a bundled theme file and edit directly — each has all 21 color keys + `chroma-style`.
+
+Precedence: `--theme` takes over completely — overwrites all color fields, ignoring `--color-*` flags and env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints warning and applies theme.
 
 ## Color Customization
 

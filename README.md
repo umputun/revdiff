@@ -168,6 +168,10 @@ Positional arguments support several forms:
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
+| `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
+| `--dump-theme` | Print currently resolved colors as theme file to stdout and exit | |
+| `--list-themes` | Print available theme names to stdout and exit | |
+| `--init-themes` | Write bundled theme files to themes dir and exit | |
 | `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
@@ -190,6 +194,48 @@ revdiff --dump-config > ~/.config/revdiff/config
 ```
 
 Then uncomment and edit the values you want to change.
+
+### Themes
+
+revdiff ships with five bundled color themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
+
+```bash
+# apply a theme
+revdiff --theme dracula
+
+# list available themes
+revdiff --list-themes
+
+# re-create bundled theme files (overwrites bundled, keeps custom themes)
+revdiff --init-themes
+
+# export current colors as a custom theme
+revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
+```
+
+**Creating custom themes** — two approaches:
+
+1. **From current colors:** customize individual colors in your config file or via `--color-*` flags, then dump the resolved result as a theme: `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`
+2. **From scratch:** copy a bundled theme and edit it directly — each file defines all 21 color keys plus `chroma-style` in INI format:
+
+```ini
+# name: my-custom
+# description: custom color scheme
+chroma-style = dracula
+color-accent = #bd93f9
+color-border = #6272a4
+...all 21 color keys...
+```
+
+Set a default theme in the config file:
+
+```ini
+theme = dracula
+```
+
+Or via environment variable: `REVDIFF_THEME=dracula`.
+
+**Precedence:** When `--theme` is set, it takes over completely — all 21 color fields and chroma-style are overwritten by the theme, ignoring any `--color-*` flags or env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints a warning and applies the theme.
 
 <details>
 <summary>Color customization flags (click to expand)</summary>
