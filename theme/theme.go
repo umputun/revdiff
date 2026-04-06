@@ -223,7 +223,7 @@ func List(themesDir string) ([]string, error) {
 		return nil, fmt.Errorf("reading themes dir: %w", err)
 	}
 
-	var names []string
+	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.IsDir() {
 			continue

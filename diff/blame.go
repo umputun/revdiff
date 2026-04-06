@@ -19,28 +19,14 @@ type BlameLine struct {
 // For unstaged single-ref diffs this is the worktree; for two-ref diffs this is the target ref.
 // For staged diffs this is the index snapshot. The returned map is keyed by 1-based line
 // number (matching DiffLine.NewNum).
-func (g *Git) FileBlame(ref string, file string, staged bool) (map[int]BlameLine, error) {
+func (g *Git) FileBlame(ref, file string, staged bool) (map[int]BlameLine, error) {
 	args := []string{"blame", "--line-porcelain"}
 	if staged {
-		indexContent, err := g.runGit("show", ":"+file)
+		tmpName, err := g.writeStagedBlameFile(file)
 		if err != nil {
-			return nil, fmt.Errorf("read index contents for %s: %w", file, err)
+			return nil, err
 		}
-
-		tmp, err := os.CreateTemp("", "revdiff-blame-*")
-		if err != nil {
-			return nil, fmt.Errorf("create temp blame file for %s: %w", file, err)
-		}
-		tmpName := tmp.Name()
-		defer os.Remove(tmpName)
-		if _, err := tmp.WriteString(indexContent); err != nil {
-			tmp.Close()
-			return nil, fmt.Errorf("write temp blame file for %s: %w", file, err)
-		}
-		if err := tmp.Close(); err != nil {
-			return nil, fmt.Errorf("close temp blame file for %s: %w", file, err)
-		}
-
+		defer os.Remove(tmpName) //nolint:errcheck // best-effort temp file cleanup
 		args = append(args, "--contents", tmpName)
 	} else if targetRef := blameTargetRef(ref); targetRef != "" {
 		args = append(args, targetRef)
@@ -51,6 +37,27 @@ func (g *Git) FileBlame(ref string, file string, staged bool) (map[int]BlameLine
 		return nil, fmt.Errorf("blame %s: %w", file, err)
 	}
 	return parseBlame(out)
+}
+
+// writeStagedBlameFile writes the staged (index) contents of file to a temp file
+// and returns its path. The caller is responsible for removing the temp file.
+func (g *Git) writeStagedBlameFile(file string) (string, error) {
+	indexContent, err := g.runGit("show", ":"+file)
+	if err != nil {
+		return "", fmt.Errorf("read index contents for %s: %w", file, err)
+	}
+	tmp, err := os.CreateTemp("", "revdiff-blame-*")
+	if err != nil {
+		return "", fmt.Errorf("create temp blame file for %s: %w", file, err)
+	}
+	if _, err := tmp.WriteString(indexContent); err != nil {
+		tmp.Close() //nolint:gosec // best-effort close in error path
+		return "", fmt.Errorf("write temp blame file for %s: %w", file, err)
+	}
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("close temp blame file for %s: %w", file, err)
+	}
+	return tmp.Name(), nil
 }
 
 func blameTargetRef(ref string) string {

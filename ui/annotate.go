@@ -285,20 +285,7 @@ func (m Model) cursorViewportY() int {
 		// delete-only placeholders render synthetic text ("⋯ N lines deleted"), not original content.
 		// use placeholder text for wrapping to stay in sync with renderDeletePlaceholder.
 		if m.isDeleteOnlyPlaceholder(i, hunks) {
-			if m.wrapMode {
-				text := m.deletePlaceholderText(i)
-				gutterExtra := 0
-				if m.lineNumbers {
-					gutterExtra = m.lineNumGutterWidth()
-				}
-				if m.hasBlameGutter() {
-					gutterExtra += m.blameGutterWidth()
-				}
-				wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
-				y += len(m.wrapContent(text, wrapWidth))
-			} else {
-				y++ // placeholder is always 1 row when not wrapping
-			}
+			y += m.deletePlaceholderVisualHeight(i)
 			continue
 		}
 		y += m.wrappedLineCount(i) // the diff line (may occupy multiple visual rows when wrapping)

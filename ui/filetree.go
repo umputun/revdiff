@@ -57,7 +57,7 @@ func (ft *fileTree) buildEntries(files []string) []treeEntry {
 	}
 	sort.Strings(dirs)
 
-	var entries []treeEntry
+	entries := make([]treeEntry, 0, len(dirs)+len(files))
 	for _, dir := range dirs {
 		// add directory entry
 		dirName := dir

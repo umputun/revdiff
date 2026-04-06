@@ -2025,7 +2025,7 @@ func TestModel_PgUpClampsAtStart(t *testing.T) {
 
 func TestModel_PgDownAccountsForDividers(t *testing.T) {
 	// create diff lines with dividers every 5 lines (simulating hunk boundaries)
-	var lines []diff.DiffLine
+	lines := make([]diff.DiffLine, 0, 71)
 	for i := range 60 {
 		if i > 0 && i%5 == 0 {
 			lines = append(lines, diff.DiffLine{Content: "@@ hunk @@", ChangeType: diff.ChangeDivider})

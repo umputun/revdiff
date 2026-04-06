@@ -173,6 +173,24 @@ func (m Model) deletePlaceholderText(hunkStart int) string {
 	return fmt.Sprintf("⋯ %d lines deleted", count)
 }
 
+// deletePlaceholderVisualHeight returns the number of visual rows a delete-only placeholder
+// occupies, accounting for wrap mode and gutter widths.
+func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
+	if !m.wrapMode {
+		return 1
+	}
+	text := m.deletePlaceholderText(hunkStart)
+	gutterExtra := 0
+	if m.lineNumbers {
+		gutterExtra = m.lineNumGutterWidth()
+	}
+	if m.hasBlameGutter() {
+		gutterExtra += m.blameGutterWidth()
+	}
+	wrapWidth := m.diffContentWidth() - wrapGutterWidth - gutterExtra
+	return len(m.wrapContent(text, wrapWidth))
+}
+
 // renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
 // shows "⋯ N lines deleted" with remove styling so users know deletions exist and can expand with '.'.
 // when search is active, matching placeholders use search highlight instead of remove styling.
