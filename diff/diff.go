@@ -21,6 +21,10 @@ const (
 	ChangeDivider ChangeType = "~" // separates non-adjacent hunks
 
 	fullFileContext = "-U1000000" // request full file as diff context
+
+	// BinaryPlaceholder is the content used for binary file placeholders.
+	// ParseUnifiedDiff returns this when git reports "Binary files ... differ".
+	BinaryPlaceholder = "(binary file)"
 )
 
 // DiffLine holds parsed line info from a diff.
@@ -66,6 +70,7 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]string, error) {
 // FileDiff returns the full-file diff view for a single file.
 // The result is a sequence of DiffLine entries representing unchanged, added, and removed lines
 // interleaved at their correct positions.
+// For binary files, it returns a single placeholder line with size delta information.
 func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 	args := g.diffArgs(ref, staged)
 	args = append(args, fullFileContext, "--", file) // large context to get full file
@@ -75,7 +80,19 @@ func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
 	}
 
-	return ParseUnifiedDiff(out)
+	lines, err := ParseUnifiedDiff(out)
+	if err != nil {
+		return nil, err
+	}
+
+	// enrich binary placeholder with size delta from git diff --stat
+	if len(lines) == 1 && lines[0].Content == BinaryPlaceholder {
+		if desc := g.binarySizeDesc(ref, file, staged); desc != "" {
+			lines[0].Content = desc
+		}
+	}
+
+	return lines, nil
 }
 
 // diffArgs builds the base git diff arguments for the given ref and staged flag.
@@ -105,11 +122,90 @@ func (g *Git) runGit(args ...string) (string, error) {
 	return string(out), nil
 }
 
+// binarySizeDesc runs git diff --stat for a binary file and returns a human-readable
+// description like "(new binary file, 2.0 KB)" or "(binary file: 1.0 KB → 2.0 KB)".
+// Returns empty string if stat info is unavailable.
+func (g *Git) binarySizeDesc(ref, file string, staged bool) string {
+	args := g.diffArgs(ref, staged)
+	args = append(args, "--stat", "--", file)
+
+	out, err := g.runGit(args...)
+	if err != nil {
+		return ""
+	}
+
+	oldSize, newSize, ok := parseBinaryStat(out)
+	if !ok {
+		return ""
+	}
+
+	return formatBinaryDesc(oldSize, newSize)
+}
+
+// binaryStatRe matches "Bin 1234 -> 5678 bytes" in git diff --stat output.
+// Assumes English locale; non-English git may localize "bytes", causing a graceful
+// fallback to the plain BinaryPlaceholder.
+var binaryStatRe = regexp.MustCompile(`Bin (\d+) -> (\d+) bytes`)
+
+// parseBinaryStat extracts old and new sizes from git diff --stat output.
+// Returns (oldBytes, newBytes, ok).
+func parseBinaryStat(statOutput string) (int64, int64, bool) {
+	m := binaryStatRe.FindStringSubmatch(statOutput)
+	if m == nil {
+		return 0, 0, false
+	}
+	oldSize, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	newSize, err := strconv.ParseInt(m[2], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return oldSize, newSize, true
+}
+
+// formatBinaryDesc builds a human-readable binary file description from old/new byte sizes.
+func formatBinaryDesc(oldSize, newSize int64) string {
+	switch {
+	case oldSize == 0:
+		return fmt.Sprintf("(new binary file, %s)", formatSize(newSize))
+	case newSize == 0:
+		return fmt.Sprintf("(deleted binary file, %s)", formatSize(oldSize))
+	default:
+		return fmt.Sprintf("(binary file: %s → %s)", formatSize(oldSize), formatSize(newSize))
+	}
+}
+
+// formatSize formats a byte count as a human-readable string.
+func formatSize(bytes int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case bytes >= gb:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(gb))
+	case bytes >= mb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
 // hunkHeaderRe matches unified diff hunk headers like @@ -1,5 +1,7 @@
 var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
+// binaryFilesRe matches git's "Binary files ... differ" line for binary diffs.
+var binaryFilesRe = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
+
 // ParseUnifiedDiff parses unified diff output into a slice of DiffLine entries.
 // It handles the diff header, hunk headers, and content lines.
+// For binary diffs ("Binary files ... differ"), it returns a single placeholder DiffLine.
+// Intended for single-file diffs; multi-file diffs are not fully supported.
 func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
 	var lines []DiffLine
 	scanner := bufio.NewScanner(strings.NewReader(raw))
@@ -124,6 +220,10 @@ func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
 		line := scanner.Text()
 
 		if inHeader {
+			// detect git's binary file indicator before looking for hunk headers
+			if binaryFilesRe.MatchString(line) {
+				return []DiffLine{{OldNum: 1, NewNum: 1, Content: BinaryPlaceholder, ChangeType: ChangeContext}}, nil
+			}
 			if !hunkHeaderRe.MatchString(line) {
 				continue
 			}
