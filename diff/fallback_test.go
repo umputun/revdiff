@@ -87,6 +87,7 @@ func TestReadFileAsContext_BinaryFile(t *testing.T) {
 		assert.Equal(t, ChangeContext, lines[0].ChangeType)
 		assert.Equal(t, 1, lines[0].OldNum)
 		assert.Equal(t, 1, lines[0].NewNum)
+		assert.True(t, lines[0].IsBinary, "binary placeholder should have IsBinary set")
 	})
 
 	t.Run("text file without null bytes reads normally", func(t *testing.T) {

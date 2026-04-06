@@ -218,7 +218,7 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 		return nil, fmt.Errorf("read file %s: %w", path, readErr)
 	}
 	if slices.Contains(probe[:n], byte(0)) {
-		return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(binary file)", ChangeType: ChangeContext}}, nil
+		return []DiffLine{{OldNum: 1, NewNum: 1, Content: BinaryPlaceholder, ChangeType: ChangeContext, IsBinary: true}}, nil
 	}
 	// seek back to start for the full scan
 	if _, err = f.Seek(0, 0); err != nil {

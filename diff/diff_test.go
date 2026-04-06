@@ -23,6 +23,7 @@ func TestParseUnifiedDiff_SimpleAdd(t *testing.T) {
 	assert.Equal(t, "package main", lines[0].Content)
 	assert.Equal(t, 1, lines[0].OldNum)
 	assert.Equal(t, 1, lines[0].NewNum)
+	assert.False(t, lines[0].IsBinary, "text lines should not have IsBinary set")
 
 	// blank line (empty context)
 	assert.Equal(t, ChangeContext, lines[1].ChangeType)
@@ -126,6 +127,36 @@ func TestParseUnifiedDiff_Empty(t *testing.T) {
 	lines, err := ParseUnifiedDiff("")
 	require.NoError(t, err)
 	assert.Empty(t, lines)
+}
+
+func TestParseUnifiedDiff_Binary(t *testing.T) {
+	raw := readFixture(t, "binary.diff")
+	lines, err := ParseUnifiedDiff(raw)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, BinaryPlaceholder, lines[0].Content)
+	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+	assert.Equal(t, 1, lines[0].OldNum)
+	assert.Equal(t, 1, lines[0].NewNum)
+	assert.True(t, lines[0].IsBinary, "binary placeholder should have IsBinary set")
+}
+
+func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
+	raw := "diff --git a/new.bin b/new.bin\nnew file mode 100644\nindex 0000000..dd12d3a\nBinary files /dev/null and b/new.bin differ\n"
+	lines, err := ParseUnifiedDiff(raw)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(new binary file)", lines[0].Content)
+	assert.True(t, lines[0].IsBinary)
+}
+
+func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
+	raw := "diff --git a/old.bin b/old.bin\ndeleted file mode 100644\nindex 2dfe7e4..0000000\nBinary files a/old.bin and /dev/null differ\n"
+	lines, err := ParseUnifiedDiff(raw)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(deleted binary file)", lines[0].Content)
+	assert.True(t, lines[0].IsBinary)
 }
 
 func TestParseUnifiedDiff_LineNumbers(t *testing.T) {
@@ -297,6 +328,256 @@ func TestGit_FileDiff_NoChanges(t *testing.T) {
 	lines, err := g.FileDiff("", "x.go", false)
 	require.NoError(t, err)
 	assert.Empty(t, lines)
+}
+
+func TestGit_FileDiff_BinaryFile(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	// create and commit a binary file (1 KB of random-ish data with null bytes)
+	binData := make([]byte, 1024)
+	for i := range binData {
+		binData[i] = byte(i % 256)
+	}
+	err := os.WriteFile(filepath.Join(dir, "image.png"), binData, 0o600)
+	require.NoError(t, err)
+	gitCmd(t, dir, "add", "image.png")
+	gitCmd(t, dir, "commit", "-m", "add binary")
+
+	// modify the binary file (2 KB now)
+	binData2 := make([]byte, 2048)
+	for i := range binData2 {
+		binData2[i] = byte((i * 3) % 256)
+	}
+	err = os.WriteFile(filepath.Join(dir, "image.png"), binData2, 0o600)
+	require.NoError(t, err)
+
+	lines, err := g.FileDiff("", "image.png", false)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+	// should contain size info like "(binary file: 1.0 KB → 2.0 KB)"
+	assert.Contains(t, lines[0].Content, "binary file")
+	assert.Contains(t, lines[0].Content, "→")
+	assert.Contains(t, lines[0].Content, "KB")
+	assert.True(t, lines[0].IsBinary)
+}
+
+func TestGit_FileDiff_NewBinaryFile(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	// create initial commit so HEAD exists
+	writeFile(t, dir, "README", "init\n")
+	gitCmd(t, dir, "add", "README")
+	gitCmd(t, dir, "commit", "-m", "init")
+
+	// stage a new binary file
+	binData := make([]byte, 512)
+	for i := range binData {
+		binData[i] = byte(i % 256)
+	}
+	err := os.WriteFile(filepath.Join(dir, "new.bin"), binData, 0o600)
+	require.NoError(t, err)
+	gitCmd(t, dir, "add", "new.bin")
+
+	lines, err := g.FileDiff("", "new.bin", true)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Contains(t, lines[0].Content, "new binary file")
+	assert.Contains(t, lines[0].Content, "512 B")
+	assert.True(t, lines[0].IsBinary)
+}
+
+func TestGit_FileDiff_ModifiedEmptyBinaryFile(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, ".gitattributes", "*.bin binary\n")
+	gitCmd(t, dir, "add", ".gitattributes")
+
+	err := os.WriteFile(filepath.Join(dir, "empty.bin"), nil, 0o600)
+	require.NoError(t, err)
+	gitCmd(t, dir, "add", "empty.bin")
+	gitCmd(t, dir, "commit", "-m", "add empty binary")
+
+	err = os.WriteFile(filepath.Join(dir, "empty.bin"), []byte{0x00, 0x01, 0x02}, 0o600)
+	require.NoError(t, err)
+
+	lines, err := g.FileDiff("", "empty.bin", false)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(binary file: 0 B → 3 B)", lines[0].Content)
+}
+
+func TestGit_ChangedFiles_IncludesBinary(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	// commit a binary file, then modify it
+	binData := make([]byte, 256)
+	for i := range binData {
+		binData[i] = byte(i % 256)
+	}
+	err := os.WriteFile(filepath.Join(dir, "data.bin"), binData, 0o600)
+	require.NoError(t, err)
+	gitCmd(t, dir, "add", "data.bin")
+	gitCmd(t, dir, "commit", "-m", "add binary")
+
+	binData[0] = 0xFF
+	err = os.WriteFile(filepath.Join(dir, "data.bin"), binData, 0o600)
+	require.NoError(t, err)
+
+	files, err := g.ChangedFiles("", false)
+	require.NoError(t, err)
+	assert.Contains(t, files, "data.bin")
+}
+
+func TestParseBinaryStat(t *testing.T) {
+	g := NewGit("")
+
+	tests := []struct {
+		name    string
+		input   string
+		wantOld int64
+		wantNew int64
+		wantOK  bool
+	}{
+		{
+			name:    "modified binary",
+			input:   " image.png | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			wantOld: 1024,
+			wantNew: 2048,
+			wantOK:  true,
+		},
+		{
+			name:    "new binary",
+			input:   " new.bin | Bin 0 -> 512 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			wantOld: 0,
+			wantNew: 512,
+			wantOK:  true,
+		},
+		{
+			name:    "deleted binary",
+			input:   " old.bin | Bin 4096 -> 0 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			wantOld: 4096,
+			wantNew: 0,
+			wantOK:  true,
+		},
+		{
+			name:    "filename cannot spoof stat",
+			input:   " Bin 1 -> 2 bytes.bin | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			wantOld: 1024,
+			wantNew: 2048,
+			wantOK:  true,
+		},
+		{
+			name:   "text file stat",
+			input:  " main.go | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)\n",
+			wantOK: false,
+		},
+		{
+			name:   "empty input",
+			input:  "",
+			wantOK: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldSize, newSize, ok := g.parseBinaryStat(tt.input)
+			assert.Equal(t, tt.wantOK, ok)
+			if ok {
+				assert.Equal(t, tt.wantOld, oldSize)
+				assert.Equal(t, tt.wantNew, newSize)
+			}
+		})
+	}
+}
+
+func TestParseBinaryChangeKind(t *testing.T) {
+	g := NewGit("")
+
+	tests := []struct {
+		name  string
+		input string
+		want  binaryChangeKind
+	}{
+		{
+			name:  "modified binary",
+			input: " image.png | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n",
+			want:  binaryChangeModified,
+		},
+		{
+			name:  "new binary",
+			input: " new.bin | Bin 0 -> 512 bytes\n create mode 100644 new.bin\n",
+			want:  binaryChangeAdded,
+		},
+		{
+			name:  "deleted binary",
+			input: " old.bin | Bin 4096 -> 0 bytes\n delete mode 100644 old.bin\n",
+			want:  binaryChangeDeleted,
+		},
+		{
+			name:  "summary mixed with stat output",
+			input: " image.png | Bin 1024 -> 2048 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n create mode 100644 image.png\n",
+			want:  binaryChangeAdded,
+		},
+		{
+			name:  "empty input defaults to modified",
+			input: "",
+			want:  binaryChangeModified,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, g.parseBinaryChangeKind(tt.input))
+		})
+	}
+}
+
+func TestFormatSize(t *testing.T) {
+	g := NewGit("")
+
+	tests := []struct {
+		bytes int64
+		want  string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1023, "1023 B"},
+		{1024, "1.0 KB"},
+		{1536, "1.5 KB"},
+		{1048576, "1.0 MB"},
+		{1572864, "1.5 MB"},
+		{1073741824, "1.0 GB"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, g.formatSize(tt.bytes))
+		})
+	}
+}
+
+func TestFormatBinaryDesc(t *testing.T) {
+	g := NewGit("")
+
+	tests := []struct {
+		name    string
+		kind    binaryChangeKind
+		oldSize int64
+		newSize int64
+		want    string
+	}{
+		{"new file", binaryChangeAdded, 0, 2048, "(new binary file, 2.0 KB)"},
+		{"deleted file", binaryChangeDeleted, 4096, 0, "(deleted binary file, 4.0 KB)"},
+		{"modified file", binaryChangeModified, 1024, 2048, "(binary file: 1.0 KB → 2.0 KB)"},
+		{"modified empty to non-empty", binaryChangeModified, 0, 100, "(binary file: 0 B → 100 B)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, g.formatBinaryDesc(tt.kind, tt.oldSize, tt.newSize))
+		})
+	}
 }
 
 // helpers
