@@ -406,9 +406,10 @@ section h2 {
 }
 
 .terminal-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 12px;
+    justify-content: center;
     margin-bottom: 20px;
 }
 
@@ -422,6 +423,7 @@ section h2 {
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: calc(25% - 9px);
 }
 .terminal-card:hover { border-color: var(--border); }
 
@@ -646,7 +648,7 @@ section h2 {
     }
     .hero h1 { font-size: 1.75rem; }
     .features-grid { grid-template-columns: repeat(2, 1fr); }
-    .terminal-grid { grid-template-columns: repeat(3, 1fr); }
+    .terminal-card { width: calc(33.333% - 8px); }
     .install-grid { grid-template-columns: 1fr; }
 }
 
@@ -654,7 +656,7 @@ section h2 {
     .nav-links a:not(.nav-gh) { display: none; }
     .hero h1 { font-size: 1.4rem; }
     .features-grid { grid-template-columns: 1fr; }
-    .terminal-grid { grid-template-columns: repeat(2, 1fr); }
+    .terminal-card { width: calc(50% - 6px); }
     section h2 { font-size: 1.25rem; }
     .footer-inner { flex-direction: column; gap: 16px; }
     /* prevent code blocks from overflowing viewport width */
