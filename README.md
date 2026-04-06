@@ -332,7 +332,7 @@ This mode activates when all three conditions are met: single file, markdown ext
 |-----|--------|
 | `/` | Start search in diff pane |
 | `n` | Next search match (overrides next file when search active) |
-| `N` | Previous search match |
+| `N` | Previous file (previous search match when searching) |
 | `Esc` | Cancel search input / clear search results |
 
 **Annotations:**
@@ -383,7 +383,7 @@ mkdir -p ~/.config/revdiff
 revdiff --dump-keys > ~/.config/revdiff/keybindings
 ```
 
-Then edit to taste. Modal keys (annotation input, search input, help overlay, confirm discard) are not remappable.
+Then edit to taste. Modal keys (annotation input, search input, confirm discard) are not remappable.
 
 <details>
 <summary>Available actions (click to expand)</summary>

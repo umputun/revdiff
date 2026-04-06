@@ -62,7 +62,7 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)
 - `--keys` overrides keybindings path, `--dump-keys` prints effective bindings
 - `keymap.Keymap` passed to `Model` via `ModelConfig.Keymap`; handlers switch on `m.keymap.Resolve(msg.String())` instead of raw key strings
-- ~30 `Action` constants in `keymap/keymap.go` (e.g., `ActionDown`, `ActionQuit`); modal keys (annotation input, search input, help overlay) stay hardcoded
+- ~30 `Action` constants in `keymap/keymap.go` (e.g., `ActionDown`, `ActionQuit`); modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded; help toggle is routed through `ActionHelp`
 - Help overlay is dynamically rendered from `m.keymap.HelpSections()`
 
 ## Claude Code Plugin

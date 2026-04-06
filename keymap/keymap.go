@@ -360,7 +360,7 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 			key := normalizeKey(fields[1])
 			unmaps = append(unmaps, key)
 		default:
-			log.Printf("[WARN] keybindings:%d: unknown command %q, skipping", lineNum, line)
+			log.Printf("[WARN] keybindings:%d: unknown command %q in line %q, skipping", lineNum, cmd, line)
 		}
 	}
 	if err := scanner.Err(); err != nil {

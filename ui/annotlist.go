@@ -179,7 +179,7 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 }
 
 // handleAnnotListKey handles keys when the annotation list popup is visible.
-// j/k/arrows navigate, Enter jumps to annotation, Esc/@/action-key closes, all other keys consumed.
+// j/k/arrows navigate, Enter jumps to annotation, Esc/annot_list key closes, all other keys consumed.
 func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// resolve action to allow closing popup with the same key that opens it (remappable)
 	action := m.keymap.Resolve(msg.String())
