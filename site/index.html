@@ -197,6 +197,11 @@
                 <div class="terminal-detect"><code>$WEZTERM_PANE</code></div>
             </div>
             <div class="terminal-card">
+                <div class="terminal-name">cmux</div>
+                <div class="terminal-method"><code>cmux new-split</code> + <code>cmux send</code></div>
+                <div class="terminal-detect"><code>$CMUX_SURFACE_ID</code></div>
+            </div>
+            <div class="terminal-card">
                 <div class="terminal-name">ghostty</div>
                 <div class="terminal-method">AppleScript split + zoom</div>
                 <div class="terminal-detect"><code>$TERM_PROGRAM</code></div>
@@ -212,7 +217,7 @@
                 <div class="terminal-detect"><code>$INSIDE_EMACS</code></div>
             </div>
         </div>
-        <p class="terminal-priority">Priority: tmux &rarr; kitty &rarr; wezterm &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm</p>
+        <p class="terminal-priority">Priority: tmux &rarr; kitty &rarr; wezterm &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm</p>
     </div>
 </section>
 
