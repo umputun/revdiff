@@ -32,4 +32,7 @@ version:
 	@echo "branch: $(BRANCH), hash: $(HASH), timestamp: $(TIMESTAMP)"
 	@echo "revision: $(REV)"
 
-.PHONY: build test lint fmt race version
+site:
+	cp llms.txt site/
+
+.PHONY: build test lint fmt race version site

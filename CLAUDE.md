@@ -70,6 +70,12 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - ~30 `Action` constants in `keymap/keymap.go` (e.g., `ActionDown`, `ActionQuit`); modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded; help toggle is routed through `ActionHelp`
 - Help overlay is dynamically rendered from `m.keymap.HelpSections()`
 
+## Website
+- Static site in `site/` (index.html, docs.html, style.css), deployed to revdiff.com via Cloudflare Pages
+- `site/docs.html` must stay in sync with README.md - when adding features, flags, keybindings, or modes, update both
+- `site/index.html` landing page should reflect major new features in the features grid and plugin sections
+- **CRITICAL: After each release, update the version badge in `site/index.html`** (search for `hero-badge` div) and `softwareVersion` in JSON-LD
+
 ## Claude Code Plugin
 - Plugin lives at `.claude-plugin/` with `plugin.json`, `marketplace.json`, and `skills/`
 - Skills path in `plugin.json` is relative to repo root, not to `.claude-plugin/`

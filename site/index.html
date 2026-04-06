@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>revdiff — Code Review for AI Agents and Claude Code</title>
+    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Built as a Claude Code plugin for interactive code review and plan review.">
+    <meta name="keywords" content="code review for ai agents, code review for claude code, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, ai code review tool">
+    <meta name="author" content="umputun">
+    <link rel="canonical" href="https://revdiff.com/">
+
+    <meta property="og:title" content="revdiff — Code Review for AI Agents and Claude Code">
+    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://revdiff.com">
+    <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
+    <meta property="og:site_name" content="revdiff">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="revdiff — Code Review for AI Agents and Claude Code">
+    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations.">
+    <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
+
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "revdiff",
+        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents and Claude Code.",
+        "url": "https://revdiff.com",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux",
+        "license": "https://github.com/umputun/revdiff/blob/master/LICENSE",
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        },
+        "author": {
+            "@type": "Person",
+            "name": "umputun",
+            "url": "https://github.com/umputun"
+        },
+        "softwareVersion": "0.11.0",
+        "downloadUrl": "https://github.com/umputun/revdiff/releases",
+        "codeRepository": "https://github.com/umputun/revdiff"
+    }
+    </script>
+
+    <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="assets/favicon-96x96.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-inner">
+        <a href="/" class="nav-logo">
+            <img src="assets/icon.png" alt="revdiff" width="28" height="28">
+            <span>revdiff</span>
+        </a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#install">Install</a>
+            <a href="#plugin">Plugin</a>
+            <a href="docs.html">Docs</a>
+            <a href="https://github.com/umputun/revdiff" class="nav-gh" aria-label="GitHub">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            </a>
+        </div>
+    </div>
+</nav>
+
+<header class="hero">
+    <div class="hero-content">
+        <div class="hero-badge">v0.11.0 <span class="hero-badge-sep">/</span> open source</div>
+        <h1>Review diffs, files, and documents<br>right in your terminal</h1>
+        <p class="hero-sub">Code review for AI agents and Claude Code. Annotate diffs, plans, and documents in a TUI. Structured output on quit, ready for AI agents, scripts, or any tool.</p>
+        <div class="hero-actions">
+            <a href="#install" class="btn btn-primary">Install</a>
+            <a href="docs.html" class="btn btn-secondary">Documentation</a>
+        </div>
+        <div class="hero-install">
+            <code>brew install umputun/apps/revdiff</code>
+        </div>
+    </div>
+    <div class="hero-screenshot">
+        <div class="terminal-frame">
+            <div class="terminal-dots">
+                <span></span><span></span><span></span>
+            </div>
+            <img src="assets/screenshot.png" alt="revdiff TUI screenshot" loading="lazy">
+        </div>
+    </div>
+</header>
+
+<section id="features" class="features">
+    <div class="section-inner">
+        <h2>Built for one thing, done well</h2>
+        <p class="section-sub">Navigate diffs. Annotate lines. Quit. Your annotations go to the AI agent.</p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph add">+</span><span class="glyph remove">-</span></div>
+                <h3>Full-file diff view</h3>
+                <p>Syntax-highlighted diffs with added, removed, and context lines. Collapsed mode shows final text with change markers.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph annotation">#</span></div>
+                <h3>Inline annotations</h3>
+                <p>Annotate any line, added, removed, or context. File-level notes too. Annotation list popup to browse all notes across files.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">&gt;</span></div>
+                <h3>Structured output</h3>
+                <p>On quit, annotations go to stdout as structured text. Pipe into Claude, scripts, or any tool. Use <code>--output</code> to write to a file.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">/</span></div>
+                <h3>Search &amp; navigate</h3>
+                <p>Vim-style <code>/</code> search with <code>n</code>/<code>N</code> match navigation. Jump between hunks with <code>[</code>/<code>]</code>. Half-page scroll with Ctrl+d/u.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">A</span></div>
+                <h3>All-files mode</h3>
+                <p>Browse and annotate all git-tracked files with <code>--all-files</code>. Filter with <code>--exclude</code>. Review files outside git with <code>--only</code>.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">~</span></div>
+                <h3>Themes &amp; keybindings</h3>
+                <p>5 bundled color themes. 21 customizable color keys. Full keybinding remapping. Config file, env vars, or CLI flags.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="review-loop">
+    <div class="section-inner">
+        <h2>The review loop</h2>
+        <p class="section-sub">You annotate. Claude fixes. You verify. Repeat until done.</p>
+        <div class="loop-flow">
+            <div class="loop-step">
+                <div class="loop-icon"><code>/revdiff</code></div>
+                <div class="loop-label">Launch</div>
+                <div class="loop-desc">revdiff opens as a terminal overlay on top of your Claude Code session</div>
+            </div>
+            <div class="loop-arrow">&rarr;</div>
+            <div class="loop-step">
+                <div class="loop-icon"><span class="glyph annotation">#</span></div>
+                <div class="loop-label">Annotate</div>
+                <div class="loop-desc">Navigate the diff, add annotations on lines you want changed</div>
+            </div>
+            <div class="loop-arrow">&rarr;</div>
+            <div class="loop-step">
+                <div class="loop-icon"><span class="glyph accent">q</span></div>
+                <div class="loop-label">Quit</div>
+                <div class="loop-desc">Structured annotations are passed back to Claude automatically</div>
+            </div>
+            <div class="loop-arrow">&rarr;</div>
+            <div class="loop-step">
+                <div class="loop-icon"><span class="glyph add">&check;</span></div>
+                <div class="loop-label">Fix</div>
+                <div class="loop-desc">Claude reads each annotation, plans the changes, and applies fixes</div>
+            </div>
+            <div class="loop-arrow loop-arrow-back">&darr;</div>
+            <div class="loop-step loop-step-verify">
+                <div class="loop-icon"><span class="glyph accent">&circlearrowright;</span></div>
+                <div class="loop-label">Re-review</div>
+                <div class="loop-desc">revdiff re-launches with the same ref. Verify fixes, add more annotations, or quit clean to finish</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="terminals">
+    <div class="section-inner">
+        <h2>Works with your terminal</h2>
+        <p class="section-sub">As a Claude Code plugin, revdiff launches as an overlay on top of your session.</p>
+        <div class="terminal-grid">
+            <div class="terminal-card">
+                <div class="terminal-name">tmux</div>
+                <div class="terminal-method"><code>display-popup</code></div>
+                <div class="terminal-detect"><code>$TMUX</code></div>
+            </div>
+            <div class="terminal-card">
+                <div class="terminal-name">kitty</div>
+                <div class="terminal-method"><code>kitty @ launch --type=overlay</code></div>
+                <div class="terminal-detect"><code>$KITTY_LISTEN_ON</code></div>
+            </div>
+            <div class="terminal-card">
+                <div class="terminal-name">wezterm</div>
+                <div class="terminal-method"><code>wezterm cli split-pane</code></div>
+                <div class="terminal-detect"><code>$WEZTERM_PANE</code></div>
+            </div>
+            <div class="terminal-card">
+                <div class="terminal-name">ghostty</div>
+                <div class="terminal-method">AppleScript split + zoom</div>
+                <div class="terminal-detect"><code>$TERM_PROGRAM</code></div>
+            </div>
+            <div class="terminal-card">
+                <div class="terminal-name">iTerm2</div>
+                <div class="terminal-method">AppleScript split pane</div>
+                <div class="terminal-detect"><code>$ITERM_SESSION_ID</code></div>
+            </div>
+        </div>
+        <p class="terminal-priority">Priority: tmux &rarr; kitty &rarr; wezterm &rarr; ghostty &rarr; iTerm2</p>
+    </div>
+</section>
+
+<section id="install" class="install">
+    <div class="section-inner">
+        <h2>Installation</h2>
+        <div class="install-grid">
+            <div class="install-card">
+                <h3>Homebrew</h3>
+                <div class="code-block"><code>brew install umputun/apps/revdiff</code></div>
+            </div>
+            <div class="install-card">
+                <h3>Go install</h3>
+                <div class="code-block"><code>go install github.com/umputun/revdiff/cmd/revdiff@latest</code></div>
+            </div>
+            <div class="install-card">
+                <h3>Binary releases</h3>
+                <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section id="plugin" class="plugin">
+    <div class="section-inner">
+        <h2>Claude Code plugin</h2>
+        <p class="section-sub">Interactive code review directly from a Claude session. Annotate, fix, re-review in a loop.</p>
+        <div class="plugin-flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-text">
+                    <h3>Install</h3>
+                    <div class="code-block"><code>/plugin marketplace add umputun/revdiff<br>/plugin install revdiff@umputun-revdiff</code></div>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-text">
+                    <h3>Review</h3>
+                    <div class="code-block"><code>/revdiff master</code></div>
+                    <p>Opens revdiff in an overlay. Reviews current branch against master.</p>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-text">
+                    <h3>Annotate &amp; fix</h3>
+                    <p>Add annotations on lines you want changed. Quit. Claude reads them, plans fixes, applies them. Re-launch to verify.</p>
+                </div>
+            </div>
+        </div>
+        <div class="plugin-examples">
+            <h3>Slash commands</h3>
+            <div class="code-block"><code>/revdiff                  <span class="code-comment">-- smart detection: uncommitted, last commit, or branch diff</span>
+/revdiff HEAD~1           <span class="code-comment">-- review last commit</span>
+/revdiff main             <span class="code-comment">-- review current branch against main</span>
+/revdiff HEAD~3           <span class="code-comment">-- review last 3 commits</span>
+/revdiff --staged         <span class="code-comment">-- review staged changes only</span>
+/revdiff all files        <span class="code-comment">-- browse all tracked files in the project</span></code></div>
+        </div>
+        <div class="plugin-examples">
+            <h3>Natural language</h3>
+            <div class="code-block"><code>"review diff"                       <span class="code-comment">-- same as /revdiff, smart detection</span>
+"review diff HEAD~1"                <span class="code-comment">-- last commit</span>
+"review diff against main"          <span class="code-comment">-- branch diff</span>
+"review changes from last 2 days"   <span class="code-comment">-- Claude resolves the ref</span>
+"revdiff for staged changes"        <span class="code-comment">-- staged only</span>
+"review all files exclude vendor"   <span class="code-comment">-- browse project, skip vendor/</span>
+"what themes does revdiff support?" <span class="code-comment">-- ask about config without launching</span>
+"switch revdiff to dracula theme"   <span class="code-comment">-- modify config via conversation</span></code></div>
+        </div>
+    </div>
+</section>
+
+<section class="output-section">
+    <div class="section-inner">
+        <h2>Output format</h2>
+        <p class="section-sub">Structured, parseable, pipe-friendly.</p>
+        <div class="code-block output-example"><code><span class="code-comment">## handler.go (file-level)</span>
+consider splitting this file into smaller modules
+
+<span class="code-comment">## handler.go:43 (+)</span>
+use errors.Is() instead of direct comparison
+
+<span class="code-comment">## store.go:18 (-)</span>
+don't remove this validation</code></div>
+    </div>
+</section>
+
+<footer class="footer">
+    <div class="section-inner footer-inner">
+        <div class="footer-left">
+            <img src="assets/icon.png" alt="revdiff" width="24" height="24">
+            <span>revdiff by <a href="https://umputun.dev">umputun</a></span>
+        </div>
+        <div class="footer-links">
+            <a href="https://github.com/umputun/revdiff">GitHub</a>
+            <a href="https://github.com/umputun/revdiff/releases">Releases</a>
+            <a href="docs.html">Docs</a>
+            <a href="https://github.com/umputun/revdiff/blob/master/LICENSE">MIT License</a>
+        </div>
+    </div>
+</footer>
+
+</body>
+</html>
