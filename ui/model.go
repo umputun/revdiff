@@ -1239,6 +1239,7 @@ func (m Model) statusModeIcons() string {
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
+		{"▋", m.selecting},
 	}
 
 	statusFg := m.styles.colors.Muted
