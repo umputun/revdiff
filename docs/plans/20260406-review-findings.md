@@ -54,12 +54,12 @@ Fix 5 validated issues from external code review: theme color validation, annota
 - Modify: `cmd/revdiff/main.go` (caller)
 - Modify: `keymap/keymap_test.go`
 
-- [ ] change Dump() signature from `Dump(w io.Writer)` to `Dump(w io.Writer) error`
-- [ ] propagate fmt.Fprintln/Fprintf errors instead of discarding
-- [ ] update caller in main.go to handle returned error
-- [ ] update existing Dump tests to check returned error
-- [ ] add test with failing writer to verify error propagation
-- [ ] run `make test && make lint`
+- [x] change Dump() signature from `Dump(w io.Writer)` to `Dump(w io.Writer) error`
+- [x] propagate fmt.Fprintln/Fprintf errors instead of discarding
+- [x] update caller in main.go to handle returned error
+- [x] update existing Dump tests to check returned error
+- [x] add test with failing writer to verify error propagation
+- [x] run `make test && make lint`
 
 ### Task 4: Refactor handleThemes to return (bool, error) instead of os.Exit
 

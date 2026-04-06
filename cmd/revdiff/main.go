@@ -113,7 +113,10 @@ func main() {
 
 	if opts.DumpKeys {
 		km := keymap.LoadOrDefault(resolveKeysPath(os.Args[1:]))
-		km.Dump(os.Stdout)
+		if err := km.Dump(os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 

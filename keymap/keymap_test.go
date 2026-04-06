@@ -1,6 +1,7 @@
 package keymap
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -395,7 +396,7 @@ func TestLoad_unmapOfUnboundKey(t *testing.T) {
 func TestDump_format(t *testing.T) {
 	km := Default()
 	var buf strings.Builder
-	km.Dump(&buf)
+	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
 
 	// should contain section headers
@@ -419,7 +420,7 @@ func TestDump_format(t *testing.T) {
 func TestDump_roundTrip(t *testing.T) {
 	km := Default()
 	var buf strings.Builder
-	km.Dump(&buf)
+	require.NoError(t, km.Dump(&buf))
 
 	// parse the dumped output
 	maps, unmaps, err := parse(strings.NewReader(buf.String()))
@@ -449,7 +450,7 @@ func TestDump_customBindings(t *testing.T) {
 	km.Bind("x", ActionQuit)
 
 	var buf strings.Builder
-	km.Dump(&buf)
+	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
 
 	// x should appear as quit binding, q should not
@@ -462,7 +463,7 @@ func TestDump_spaceKeyRoundTrip(t *testing.T) {
 	km.Bind(" ", ActionPageDown) // bind space to an action
 
 	var buf strings.Builder
-	km.Dump(&buf)
+	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
 
 	// space key should be written as "space" alias, not literal " "
@@ -485,11 +486,41 @@ func TestDump_unmappedActionOmitted(t *testing.T) {
 	km.Unbind("/") // search only has one key
 
 	var buf strings.Builder
-	km.Dump(&buf)
+	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
 
 	// search action should not appear at all
 	assert.NotContains(t, output, "search")
+}
+
+func TestDump_failingWriter(t *testing.T) {
+	km := Default()
+	w := &failWriter{errAfter: 0}
+	err := km.Dump(w)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write error")
+}
+
+func TestDump_failingWriterAfterSomeOutput(t *testing.T) {
+	km := Default()
+	w := &failWriter{errAfter: 5} // fail after 5 successful writes
+	err := km.Dump(w)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write error")
+}
+
+// failWriter is an io.Writer that returns an error after errAfter successful writes.
+type failWriter struct {
+	errAfter int
+	count    int
+}
+
+func (w *failWriter) Write(p []byte) (int, error) {
+	if w.count >= w.errAfter {
+		return 0, errors.New("write error")
+	}
+	w.count++
+	return len(p), nil
 }
 
 // acceptance tests verifying end-to-end keybinding scenarios
@@ -529,7 +560,7 @@ func TestAcceptance_dumpKeysShowsEffective(t *testing.T) {
 	// --dump-keys prints all effective bindings in parseable format
 	km := Default()
 	var buf strings.Builder
-	km.Dump(&buf)
+	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
 	assert.Contains(t, output, "map j down")
 	assert.Contains(t, output, "map q quit")
