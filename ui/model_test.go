@@ -433,6 +433,24 @@ func TestModel_CollapsedModeFromConfig(t *testing.T) {
 	})
 }
 
+func TestModel_LineNumbersFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+
+	t.Run("line numbers enabled via config", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{LineNumbers: true, TreeWidthRatio: 2})
+		assert.True(t, m.lineNumbers)
+	})
+
+	t.Run("line numbers disabled by default", func(t *testing.T) {
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		assert.False(t, m.lineNumbers)
+	})
+}
+
 func TestModel_StatusModeIcons(t *testing.T) {
 	t.Run("all icons always present", func(t *testing.T) {
 		m := testModel(nil, nil)

@@ -133,6 +133,7 @@ type ModelConfig struct {
 	NoConfirmDiscard bool           // skip confirmation prompt when discarding annotations
 	Wrap             bool           // enable line wrapping
 	Collapsed        bool           // start in collapsed diff mode
+	LineNumbers      bool           // show line numbers in diff gutter
 	Only             []string       // show only these files (match by exact path or path suffix)
 	WorkDir          string         // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
@@ -168,6 +169,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
+		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,

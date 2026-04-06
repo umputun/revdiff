@@ -115,6 +115,31 @@ func TestParseArgs_Collapsed(t *testing.T) {
 	})
 }
 
+func TestParseArgs_LineNumbers(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--line-numbers"))
+		require.NoError(t, err)
+		assert.True(t, opts.LineNumbers)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_LINE_NUMBERS", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.LineNumbers)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nline-numbers = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.LineNumbers)
+	})
+}
+
 func TestParseArgs_OutputFlag(t *testing.T) {
 	opts, err := parseArgs([]string{"-o", "/tmp/out.txt"})
 	require.NoError(t, err)
