@@ -7656,6 +7656,7 @@ func TestModel_CursorStopsOnRangeAnnotation(t *testing.T) {
 	t.Run("delete on range annotation", func(t *testing.T) {
 		m.diffCursor = 2 // range end line
 		m.cursorOnAnnotation = true
+		m.cursorOnRangeAnnotation = true
 		m.deleteAnnotation()
 		assert.Equal(t, 0, m.store.Count())
 		assert.False(t, m.cursorOnAnnotation)
@@ -7665,6 +7666,7 @@ func TestModel_CursorStopsOnRangeAnnotation(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "edit me"})
 		m.diffCursor = 2 // range end line
 		m.cursorOnAnnotation = true
+		m.cursorOnRangeAnnotation = true
 
 		result, _ := m.handleEnterKey()
 		m2 := result.(Model)
@@ -7701,4 +7703,253 @@ func TestModel_AnnotateHunkKeepsLiveRangeToOriginalHunk(t *testing.T) {
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "[lines 18-20]")
+}
+
+func TestModel_AnnotateHunkSameLineReplacement(t *testing.T) {
+	// P1: replacement hunk where removed and added lines share the same line number
+	// should produce a range annotation, not fall back to a point annotation.
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 9, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 10, Content: "old10", ChangeType: diff.ChangeRemove},
+		{NewNum: 10, Content: "new10", ChangeType: diff.ChangeAdd},
+		{OldNum: 11, NewNum: 11, Content: "ctx", ChangeType: diff.ChangeContext},
+	}
+
+	m.diffCursor = 1 // on the remove line
+	cmd := m.annotateHunk()
+	assert.NotNil(t, cmd)
+	assert.True(t, m.annotating)
+	assert.Equal(t, 10, m.rangeStartLine)
+	assert.Equal(t, 10, m.rangeEndLine)
+	assert.Equal(t, 1, m.rangeStartIdx)
+	assert.Equal(t, 2, m.rangeEndIdx)
+}
+
+func TestModel_AnnotateHunkSingleDiffLine(t *testing.T) {
+	// single diff line hunk should still produce a point annotation (not range)
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+		{OldNum: 2, NewNum: 3, Content: "ctx", ChangeType: diff.ChangeContext},
+	}
+
+	m.diffCursor = 1
+	cmd := m.annotateHunk()
+	assert.NotNil(t, cmd)
+	assert.True(t, m.annotating)
+	// single diff line → point annotation, not range
+	assert.Equal(t, 0, m.rangeStartLine)
+	assert.Equal(t, 0, m.rangeEndLine)
+}
+
+func TestModel_SaveRangeAnnotationOverlapFeedback(t *testing.T) {
+	// P2: overlapping range annotation should keep input open and set statusFlash
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeAdd},
+	}
+
+	// save an existing range 1-2
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, EndLine: 2, Comment: "existing"})
+
+	// start a range annotation that overlaps (lines 2-3)
+	m.rangeStartLine = 2
+	m.rangeEndLine = 3
+	m.rangeStartIdx = 1
+	m.rangeEndIdx = 2
+	m.annotating = true
+	ti := textinput.New()
+	ti.SetValue("overlapping comment")
+	m.annotateInput = ti
+
+	m.saveRangeAnnotation()
+
+	// annotation mode should remain active — input not discarded
+	assert.True(t, m.annotating)
+	assert.NotEmpty(t, m.statusFlash)
+	assert.Contains(t, m.statusFlash, "overlap")
+
+	// store should still have only the original annotation
+	assert.Equal(t, 1, m.store.Count())
+
+	// status bar should show the flash message
+	status := m.statusBarText()
+	assert.Contains(t, status, "overlap")
+
+	// typing clears the flash
+	result, _ := m.handleAnnotateKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m2 := result.(Model)
+	assert.Empty(t, m2.statusFlash)
+}
+
+func TestModel_HandleFileLoadedResetsRangeState(t *testing.T) {
+	// handleFileLoaded should clear range annotation state from previous file
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.rangeStartLine = 5
+	m.rangeEndLine = 10
+	m.rangeStartIdx = 2
+	m.rangeEndIdx = 7
+	m.statusFlash = "old flash"
+	m.selecting = true
+	m.selectAnchor = 3
+
+	msg := fileLoadedMsg{
+		file:  "b.go",
+		seq:   m.loadSeq,
+		lines: []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}},
+	}
+	result, _ := m.handleFileLoaded(msg)
+	m2 := result.(Model)
+
+	assert.Equal(t, 0, m2.rangeStartLine)
+	assert.Equal(t, 0, m2.rangeEndLine)
+	assert.Equal(t, 0, m2.rangeStartIdx)
+	assert.Equal(t, 0, m2.rangeEndIdx)
+	assert.Empty(t, m2.statusFlash)
+	assert.False(t, m2.selecting)
+}
+
+func TestModel_VisibleRangeIndicesStopsAtHunkDivider(t *testing.T) {
+	// A range on removed lines in the first hunk should NOT extend into the
+	// next hunk even if that hunk's context lines have matching NewNum values.
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		// hunk 1: removes lines 100-101
+		{OldNum: 99, NewNum: 99, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 100, Content: "rm100", ChangeType: diff.ChangeRemove},
+		{OldNum: 101, Content: "rm101", ChangeType: diff.ChangeRemove},
+		// divider between hunks
+		{ChangeType: diff.ChangeDivider},
+		// hunk 2: context lines with NewNum 100, 101 (same numbers as the range)
+		{OldNum: 200, NewNum: 100, Content: "ctx100", ChangeType: diff.ChangeContext},
+		{OldNum: 201, NewNum: 101, Content: "ctx101", ChangeType: diff.ChangeContext},
+	}
+
+	startIdx, endIdx := m.visibleRangeIndices(100, 101)
+	// should map to hunk 1 removes only (indices 1-2), not leak into hunk 2 (indices 4-5)
+	assert.Equal(t, 1, startIdx)
+	assert.Equal(t, 2, endIdx)
+}
+
+func TestModel_CursorNavigatesPointAndRangeOnSameLine(t *testing.T) {
+	m := testModel(nil, nil)
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	// point annotation on line 3 (idx 2) AND range annotation ending on line 3
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: "+", Comment: "point note"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, EndLine: 3, Type: "", Comment: "range note"})
+
+	t.Run("down: stops on point then range sub-row", func(t *testing.T) {
+		m.diffCursor = 2 // on diff line at idx 2 (NewNum=3)
+		m.cursorOnAnnotation = false
+		m.cursorOnRangeAnnotation = false
+
+		// first down: land on point annotation sub-row
+		m.moveDiffCursorDown()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.True(t, m.cursorOnAnnotation)
+		assert.False(t, m.cursorOnRangeAnnotation, "first stop should be point annotation")
+
+		// second down: land on range annotation sub-row
+		m.moveDiffCursorDown()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.True(t, m.cursorOnAnnotation)
+		assert.True(t, m.cursorOnRangeAnnotation, "second stop should be range annotation")
+
+		// third down: move to next diff line
+		m.moveDiffCursorDown()
+		assert.Equal(t, 3, m.diffCursor)
+		assert.False(t, m.cursorOnAnnotation)
+		assert.False(t, m.cursorOnRangeAnnotation)
+	})
+
+	t.Run("up: stops on range then point sub-row", func(t *testing.T) {
+		m.diffCursor = 3 // on diff line at idx 3 (NewNum=4)
+		m.cursorOnAnnotation = false
+		m.cursorOnRangeAnnotation = false
+
+		// first up: land on range annotation (last sub-row when entering from below)
+		m.moveDiffCursorUp()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.True(t, m.cursorOnAnnotation)
+		assert.True(t, m.cursorOnRangeAnnotation, "entering from below should land on range sub-row first")
+
+		// second up: land on point annotation sub-row
+		m.moveDiffCursorUp()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.True(t, m.cursorOnAnnotation)
+		assert.False(t, m.cursorOnRangeAnnotation, "second stop should be point annotation")
+
+		// third up: land on diff line itself
+		m.moveDiffCursorUp()
+		assert.Equal(t, 2, m.diffCursor)
+		assert.False(t, m.cursorOnAnnotation)
+	})
+
+	t.Run("enter on point sub-row opens point annotation", func(t *testing.T) {
+		m.diffCursor = 2
+		m.cursorOnAnnotation = true
+		m.cursorOnRangeAnnotation = false
+
+		result, _ := m.handleEnterKey()
+		m2 := result.(Model)
+		assert.True(t, m2.annotating)
+		assert.Equal(t, 0, m2.rangeStartLine, "should open point, not range annotation")
+		assert.Equal(t, "point note", m2.annotateInput.Value())
+		m2.cancelAnnotation()
+	})
+
+	t.Run("enter on range sub-row opens range annotation", func(t *testing.T) {
+		m.diffCursor = 2
+		m.cursorOnAnnotation = true
+		m.cursorOnRangeAnnotation = true
+
+		result, _ := m.handleEnterKey()
+		m2 := result.(Model)
+		assert.True(t, m2.annotating)
+		assert.Equal(t, 2, m2.rangeStartLine, "should open range annotation")
+		assert.Equal(t, 3, m2.rangeEndLine)
+		assert.Equal(t, "range note", m2.annotateInput.Value())
+		m2.cancelAnnotation()
+	})
+
+	t.Run("delete on point sub-row removes point only", func(t *testing.T) {
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: "+", Comment: "point note"})
+		m.diffCursor = 2
+		m.cursorOnAnnotation = true
+		m.cursorOnRangeAnnotation = false
+
+		m.deleteAnnotation()
+		assert.False(t, m.store.Has("a.go", 3, "+"), "point should be deleted")
+		assert.True(t, m.store.HasRangeCovering("a.go", 3), "range should still exist")
+	})
+
+	t.Run("delete on range sub-row removes range only", func(t *testing.T) {
+		m.diffCursor = 2
+		m.cursorOnAnnotation = true
+		m.cursorOnRangeAnnotation = true
+
+		m.deleteAnnotation()
+		assert.False(t, m.store.HasRangeCovering("a.go", 3), "range should be deleted")
+	})
 }

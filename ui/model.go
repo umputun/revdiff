@@ -81,7 +81,8 @@ type Model struct {
 	ready              bool              // true after first WindowSizeMsg
 	annotating         bool              // true when annotation text input is active
 	fileAnnotating     bool              // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool              // true when cursor is on an annotation sub-line (point or range)
+	cursorOnAnnotation      bool // true when cursor is on an annotation sub-line (point or range)
+	cursorOnRangeAnnotation bool // true when cursor is specifically on a range-end annotation sub-row
 	annotateInput      textinput.Model   // text input for annotations
 
 	collapsed collapsedState // collapsed diff view state
@@ -106,6 +107,8 @@ type Model struct {
 	searchCursor   int             // current position in searchMatches (0-based)
 	searchInput    textinput.Model // dedicated textinput for search
 	searchMatchSet map[int]bool    // set of diffLines indices that match search, computed per render
+
+	statusFlash string // transient status bar message, cleared on next key event
 
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
@@ -490,6 +493,7 @@ func (m *Model) syncDiffToTOCCursor() {
 	}
 	m.diffCursor = m.mdTOC.entries[m.mdTOC.cursor].lineIdx
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	m.mdTOC.updateActiveSection(m.diffCursor)
 	m.topAlignViewportOnCursor()
 }
@@ -775,8 +779,14 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		m.lineNumWidth = m.computeLineNumWidth()
 	}
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	m.selecting = false
 	m.selectAnchor = 0
+	m.rangeStartLine = 0
+	m.rangeEndLine = 0
+	m.rangeStartIdx = 0
+	m.rangeEndIdx = 0
+	m.statusFlash = ""
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
 
@@ -1008,6 +1018,9 @@ func (m Model) statusBarText() string {
 	}
 
 	if m.annotating {
+		if m.statusFlash != "" {
+			return m.statusFlash
+		}
 		return "[enter] save  [esc] cancel"
 	}
 
@@ -1509,6 +1522,7 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 			entry := m.mdTOC.entries[m.mdTOC.cursor]
 			m.diffCursor = entry.lineIdx
 			m.cursorOnAnnotation = false
+			m.cursorOnRangeAnnotation = false
 			m.mdTOC.updateActiveSection(m.diffCursor)
 			m.focus = paneDiff
 			m.topAlignViewportOnCursor()
@@ -1529,16 +1543,11 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		case m.cursorOnFileAnnotationLine():
 			cmd = m.startFileAnnotation()
 		case m.cursorOnAnnotation:
-			dl, ok := m.cursorDiffLine()
-			if ok && m.store.Has(m.currFile, m.diffLineNum(dl), string(dl.ChangeType)) {
-				cmd = m.startAnnotation()
-				break
-			}
-			if m.isRangeAnnotationEnd(m.diffCursor) {
+			if m.cursorOnRangeAnnotation {
 				cmd = m.editRangeAnnotation()
-				break
+			} else {
+				cmd = m.startAnnotation()
 			}
-			cmd = m.startAnnotation()
 		default:
 			cmd = m.startAnnotation()
 		}

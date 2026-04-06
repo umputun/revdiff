@@ -339,7 +339,8 @@ func (m *Model) toggleCollapsedMode() {
 	}
 	m.collapsed.enabled = !m.collapsed.enabled
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.cursorOnAnnotation = false // visible lines change, reset annotation cursor state
+	m.cursorOnAnnotation = false      // visible lines change, reset annotation cursor state
+	m.cursorOnRangeAnnotation = false
 	m.adjustCursorIfHidden()
 	m.realignSearchCursor()
 	m.viewport.SetContent(m.renderDiff())
@@ -357,7 +358,8 @@ func (m *Model) toggleHunkExpansion() {
 	}
 	if m.collapsed.expandedHunks[hunkStart] {
 		delete(m.collapsed.expandedHunks, hunkStart)
-		m.cursorOnAnnotation = false // annotations on removed lines become invisible
+		m.cursorOnAnnotation = false      // annotations on removed lines become invisible
+		m.cursorOnRangeAnnotation = false
 		m.adjustCursorIfHidden()
 		m.realignSearchCursor()
 	} else {

@@ -35,6 +35,7 @@ func (m *Model) startSelection() {
 	m.selecting = true
 	m.selectAnchor = m.diffCursor
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	m.viewport.SetContent(m.renderDiff())
 }
 
@@ -68,15 +69,23 @@ func (m *Model) annotateHunk() tea.Cmd {
 	startLine := m.diffLineNum(m.diffLines[hunkStart])
 	endLine := m.diffLineNum(m.diffLines[hunkEnd])
 
-	if startLine == endLine {
-		// single-line hunk: use point annotation
+	if hunkStart == hunkEnd {
+		// single diff line in hunk: use point annotation.
+		// check diff index count, not line numbers — replacement hunks may have
+		// startLine == endLine (same old/new number) but span multiple diff lines.
 		m.diffCursor = hunkStart
 		return m.startAnnotation()
 	}
 
-	// position cursor at hunk end where annotation input renders
-	m.diffCursor = hunkEnd
-	return m.startRangeAnnotation(startLine, endLine, hunkStart, hunkEnd)
+	// position cursor at hunk end where annotation input renders.
+	// in collapsed mode, if hunk end is hidden (e.g., delete-only hunk),
+	// anchor to the visible placeholder at hunkStart instead.
+	visibleEnd := hunkEnd
+	if m.collapsed.enabled && m.isCollapsedHidden(hunkEnd, hunks) {
+		visibleEnd = hunkStart
+	}
+	m.diffCursor = visibleEnd
+	return m.startRangeAnnotation(startLine, endLine, hunkStart, visibleEnd)
 }
 
 // hunkEndFor returns the last diffLines index of the hunk starting at startIdx.
@@ -249,13 +258,16 @@ func (m *Model) saveRangeAnnotation() {
 		return
 	}
 
-	m.store.Add(annotation.Annotation{
+	if !m.store.Add(annotation.Annotation{
 		File:    m.currFile,
 		Line:    m.rangeStartLine,
 		EndLine: m.rangeEndLine,
 		Type:    "",
 		Comment: text,
-	})
+	}) {
+		m.statusFlash = "overlaps existing range — adjust or [esc] cancel"
+		return
+	}
 	m.annotating = false
 	m.selecting = false
 	m.selectAnchor = 0
@@ -277,6 +289,7 @@ func (m *Model) cancelAnnotation() {
 	m.rangeEndLine = 0
 	m.rangeStartIdx = 0
 	m.rangeEndIdx = 0
+	m.statusFlash = ""
 	m.viewport.SetContent(m.renderDiff())
 }
 
@@ -320,11 +333,21 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 
 	lineNum := m.diffLineNum(dl)
 
+	// when on range sub-row, delete the covering range directly
+	if m.cursorOnRangeAnnotation {
+		if rangeAnn, ok := m.store.GetRangeCovering(m.currFile, lineNum); ok {
+			m.store.Delete(m.currFile, rangeAnn.Line, rangeAnn.EndLine, rangeAnn.Type)
+			return m.afterAnnotationDelete()
+		}
+		return nil
+	}
+
+	// on point sub-row, delete the point annotation
 	if m.store.Delete(m.currFile, lineNum, 0, string(dl.ChangeType)) {
 		return m.afterAnnotationDelete()
 	}
 
-	// fall back to a covering range only after the focused point annotation is handled
+	// fall back to a covering range when no point annotation exists
 	if rangeAnn, ok := m.store.GetRangeCovering(m.currFile, lineNum); ok {
 		m.store.Delete(m.currFile, rangeAnn.Line, rangeAnn.EndLine, rangeAnn.Type)
 		return m.afterAnnotationDelete()
@@ -336,6 +359,7 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 func (m *Model) afterAnnotationDelete() tea.Cmd {
 	m.pendingAnnotJump = nil
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	m.tree.refreshFilter(m.annotatedFiles())
 
 	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
@@ -361,6 +385,7 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cancelAnnotation()
 		return m, nil
 	default:
+		m.statusFlash = ""
 		var cmd tea.Cmd
 		m.annotateInput, cmd = m.annotateInput.Update(msg)
 		m.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately
@@ -495,13 +520,19 @@ func (m Model) cursorViewportY() int {
 			y += m.wrappedRangeAnnotationLineCount(r)
 		}
 	}
-	// if cursor is on the point annotation sub-line below, offset by wrapped line count
-	// (annotation renders after all continuation lines of the diff line)
+	// if cursor is on an annotation sub-line, offset by wrapped line count of the diff line
+	// (annotations render after all continuation lines of the diff line)
 	if m.cursorOnAnnotation {
 		y += m.wrappedLineCount(m.diffCursor)
+		// on range sub-row: also add point annotation height between diff line and range annotation
+		if m.cursorOnRangeAnnotation && m.diffCursor >= 0 && m.diffCursor < len(m.diffLines) {
+			dl := m.diffLines[m.diffCursor]
+			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
+			if annotationSet[key] {
+				y += m.wrappedAnnotationLineCount(key)
+			}
+		}
 	}
-	// cursor on range annotation above doesn't add the diff line itself —
-	// the range annotation row at this index hasn't been counted yet (loop stops before diffCursor)
 	return y
 }
 

@@ -275,7 +275,7 @@ func (m Model) renderRangeAnnotation(b *strings.Builder, idx int, ranges []range
 		}
 		prefix := rangeAnnotationPrefix(r.startLine, r.endLine)
 		cursor := " "
-		if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
+		if idx == m.diffCursor && m.cursorOnAnnotation && m.cursorOnRangeAnnotation && m.focus == paneDiff {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
 		m.renderWrappedAnnotation(b, cursor, prefix+r.comment)
@@ -389,6 +389,9 @@ func (m Model) visibleRangeIndices(startLine, endLine int) (int, int) {
 	hunks := m.findHunks()
 	for i, dl := range m.diffLines {
 		if dl.ChangeType == diff.ChangeDivider {
+			if startIdx != -1 {
+				break // stop at hunk boundary once range has started
+			}
 			continue
 		}
 		if m.collapsed.enabled && m.isCollapsedHidden(i, hunks) {
@@ -409,6 +412,18 @@ func (m Model) visibleRangeIndices(startLine, endLine int) (int, int) {
 		if !inRange {
 			break
 		}
+
+		// in collapsed mode, stop if hidden lines exist between last match and current line.
+		// this prevents a range on hidden removed lines from spilling into context lines
+		// that happen to share the same display line numbers (OldNum vs NewNum aliasing).
+		if m.collapsed.enabled {
+			for j := endIdx + 1; j < i; j++ {
+				if m.isCollapsedHidden(j, hunks) {
+					return startIdx, endIdx
+				}
+			}
+		}
+
 		endIdx = i
 	}
 	return startIdx, endIdx
@@ -638,7 +653,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
-			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
+			if idx == m.diffCursor && m.cursorOnAnnotation && !m.cursorOnRangeAnnotation && m.focus == paneDiff {
 				cursor = m.styles.DiffCursorLine.Render("▶")
 			}
 			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
@@ -680,9 +695,20 @@ func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
 func (m *Model) moveDiffCursorDown() {
 	hunks := m.findHunks()
 
-	// if currently on annotation sub-line, move to the next diff line
+	// if currently on annotation sub-line, advance to the next sub-row or diff line
 	if m.cursorOnAnnotation {
+		// on point sub-row: if a range-end also exists here, advance to range sub-row
+		if !m.cursorOnRangeAnnotation && m.isRangeAnnotationEnd(m.diffCursor) {
+			dl := m.diffLines[m.diffCursor]
+			lineNum := m.diffLineNum(dl)
+			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
+				m.cursorOnRangeAnnotation = true
+				return
+			}
+		}
+		// otherwise move to the next diff line
 		m.cursorOnAnnotation = false
+		m.cursorOnRangeAnnotation = false
 		for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
 			if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
 				m.diffCursor = i
@@ -698,8 +724,11 @@ func (m *Model) moveDiffCursorDown() {
 		dl := m.diffLines[m.diffCursor]
 		if dl.ChangeType != diff.ChangeDivider && !m.isDeleteOnlyPlaceholder(m.diffCursor, hunks) {
 			lineNum := m.diffLineNum(dl)
-			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) || m.isRangeAnnotationEnd(m.diffCursor) {
+			hasPoint := m.store.Has(m.currFile, lineNum, string(dl.ChangeType))
+			hasRangeEnd := m.isRangeAnnotationEnd(m.diffCursor)
+			if hasPoint || hasRangeEnd {
 				m.cursorOnAnnotation = true
+				m.cursorOnRangeAnnotation = !hasPoint && hasRangeEnd
 				return
 			}
 		}
@@ -722,9 +751,19 @@ func (m *Model) moveDiffCursorDown() {
 // when moving up from a diff line, if the previous line has an annotation, lands on the annotation first.
 // in collapsed mode, also skips removed lines unless their hunk is expanded.
 func (m *Model) moveDiffCursorUp() {
-	// if currently on annotation sub-line, move up to the diff line itself
+	// if currently on annotation sub-line, move up to previous sub-row or diff line
 	if m.cursorOnAnnotation {
+		// on range sub-row: if a point annotation also exists, move up to point sub-row
+		if m.cursorOnRangeAnnotation {
+			dl := m.diffLines[m.diffCursor]
+			lineNum := m.diffLineNum(dl)
+			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
+				m.cursorOnRangeAnnotation = false
+				return
+			}
+		}
 		m.cursorOnAnnotation = false
+		m.cursorOnRangeAnnotation = false
 		return
 	}
 
@@ -734,13 +773,15 @@ func (m *Model) moveDiffCursorUp() {
 			continue
 		}
 		m.diffCursor = i
-		// if this line has a point or range-end annotation, land on it (skip for delete-only placeholders; disabled during selection)
-		if !m.selecting {
+		// if this line has annotations, land on the last sub-row (skip for delete-only placeholders; disabled during selection)
+		if !m.selecting && !m.isDeleteOnlyPlaceholder(i, hunks) {
 			dl := m.diffLines[i]
 			lineNum := m.diffLineNum(dl)
-			hasAnnot := m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) || m.isRangeAnnotationEnd(i)
-			if hasAnnot && !m.isDeleteOnlyPlaceholder(i, hunks) {
+			hasRangeEnd := m.isRangeAnnotationEnd(i)
+			hasPoint := m.store.Has(m.currFile, lineNum, string(dl.ChangeType))
+			if hasPoint || hasRangeEnd {
 				m.cursorOnAnnotation = true
+				m.cursorOnRangeAnnotation = hasRangeEnd
 			}
 		}
 		return
@@ -834,6 +875,7 @@ func (m *Model) moveDiffCursorHalfPageUp() {
 // if a file-level annotation exists, the cursor goes to -1 (file annotation line).
 func (m *Model) moveDiffCursorToStart() {
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	if m.hasFileAnnotation() {
 		m.diffCursor = -1
 		m.syncViewportToCursor()
@@ -848,6 +890,7 @@ func (m *Model) moveDiffCursorToStart() {
 // in collapsed mode, skips hidden removed lines.
 func (m *Model) moveDiffCursorToEnd() {
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	hunks := m.findHunks()
 	for i := len(m.diffLines) - 1; i >= 0; i-- {
 		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
@@ -917,6 +960,7 @@ func (m Model) currentHunk() (int, int) {
 // in collapsed mode, advances past hidden removed lines to the first visible line in the hunk.
 func (m *Model) moveToNextHunk() {
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	hunks := m.findHunks()
 	for _, start := range hunks {
 		if start <= m.diffCursor {
@@ -936,6 +980,7 @@ func (m *Model) moveToNextHunk() {
 // in collapsed mode, advances past hidden removed lines to the first visible line in the hunk.
 func (m *Model) moveToPrevHunk() {
 	m.cursorOnAnnotation = false
+	m.cursorOnRangeAnnotation = false
 	hunks := m.findHunks()
 	for i := len(hunks) - 1; i >= 0; i-- {
 		target := m.firstVisibleInHunk(hunks[i], hunks)
