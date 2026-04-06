@@ -19,6 +19,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
 - `annotation/` - in-memory annotation store, structured output formatting
 - `ui/mocks/` - moq-generated mocks (never edit manually)
+- `plugins/` - third-party AI tool integrations (`opencode/`, `revdiff-planning/`)
 
 ## Key Interfaces (consumer-side, in `ui/`)
 - `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`, `diff.FallbackRenderer`, `diff.FileReader`, `diff.DirectoryReader`, `diff.ExcludeFilter`
