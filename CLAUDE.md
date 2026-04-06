@@ -15,6 +15,7 @@ Terminal UI diff viewer with inline annotations, built with bubbletea.
 - `diff/` - git interaction, unified diff parsing (`ParseUnifiedDiff`, `DiffLine`)
 - `ui/` - bubbletea TUI model, views, styles, file tree, annotations
 - `highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
+- `keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
 - `annotation/` - in-memory annotation store, structured output formatting
 - `ui/mocks/` - moq-generated mocks (never edit manually)
 
@@ -58,6 +59,11 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - `--dump-config` outputs current defaults, `--config` overrides path
 - `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --version)
 - `ini-name` tags ensure config keys match CLI long flag names
+- Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)
+- `--keys` overrides keybindings path, `--dump-keys` prints effective bindings
+- `keymap.Keymap` passed to `Model` via `ModelConfig.Keymap`; handlers switch on `m.keymap.Resolve(msg.String())` instead of raw key strings
+- ~30 `Action` constants in `keymap/keymap.go` (e.g., `ActionDown`, `ActionQuit`); modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded; help toggle is routed through `ActionHelp`
+- Help overlay is dynamically rendered from `m.keymap.HelpSections()`
 
 ## Claude Code Plugin
 - Plugin lives at `.claude-plugin/` with `plugin.json`, `marketplace.json`, and `skills/`
