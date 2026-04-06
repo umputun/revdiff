@@ -353,6 +353,21 @@ When reviewing a single markdown file in context-only mode (e.g., `revdiff --onl
 
 This mode activates when all three conditions are met: single file, markdown extension (`.md`/`.markdown`), and all lines are context (no diff changes). Headers inside fenced code blocks are excluded from the TOC.
 
+### Beyond Code Review
+
+The `--only` flag enables use cases beyond git diffs. Any text file can be loaded for annotation — no git repo required.
+
+**Reviewing AI-generated drafts** — When an AI assistant drafts text to be posted publicly (PR comments, issue responses, release notes), write it to a temp file and review in revdiff. Annotate specific lines with changes, the assistant reads annotations and rewrites, re-open to verify. Same annotate-fix-verify loop as code review.
+
+**Reviewing documentation and specs** — Markdown files, API specs, config files, and plan documents can all be reviewed with inline annotations. Useful for reviewing RFCs, annotating configs before deployment, or marking up plans with questions.
+
+```bash
+revdiff --only=docs/plans/feature.md
+revdiff --only=/tmp/draft-comment.md
+```
+
+**Reviewing generated output** — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied. Load it into revdiff, annotate what needs fixing, feed annotations back to the generator.
+
 ### Key Bindings
 
 **Navigation:**

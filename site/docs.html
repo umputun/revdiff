@@ -61,6 +61,7 @@
         <a href="#all-files">All-files mode</a>
         <a href="#context-only">Context-only review</a>
         <a href="#markdown-toc">Markdown TOC</a>
+        <a href="#beyond-code-review">Beyond code review</a>
 
         <h4>Configuration</h4>
         <a href="#config-file">Config file</a>
@@ -168,6 +169,14 @@ revdiff --only=docs/notes.txt</code></div>
 
         <h2 id="markdown-toc">Markdown TOC navigation</h2>
         <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
+
+        <h2 id="beyond-code-review">Beyond code review</h2>
+        <p>The <code>--only</code> flag enables use cases beyond git diffs. Any text file can be loaded for annotation, no git repo required.</p>
+        <p><strong>Reviewing AI-generated drafts</strong> — When an AI assistant drafts text to be posted publicly (PR comments, issue responses, release notes), write it to a temp file and review in revdiff. Annotate specific lines, the assistant rewrites, re-open to verify.</p>
+        <p><strong>Reviewing documentation and specs</strong> — Markdown files, API specs, config files, and plan documents can all be reviewed with inline annotations.</p>
+        <div class="code-block"><code>revdiff --only=docs/plans/feature.md
+revdiff --only=/tmp/draft-comment.md</code></div>
+        <p><strong>Reviewing generated output</strong> — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied.</p>
 
         <!-- configuration -->
         <h2 id="config-file">Config file</h2>
