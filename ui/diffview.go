@@ -434,9 +434,8 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 	}
 	// target = content area minus cursor bar (1) minus gutters (if on)
 	// diffContentWidth() already excludes cursor bar; subtract gutters if enabled
+	// diffContentWidth() already includes right padding, just subtract gutters
 	targetWidth := m.diffContentWidth() - m.gutterExtra()
-	// leave 1 char gap before right border
-	targetWidth--
 	currentWidth := lipgloss.Width(styled)
 	if pad := targetWidth - currentWidth; pad > 0 {
 		return styled + m.ansiBg(bgColor) + strings.Repeat(" ", pad) + "\033[49m"
