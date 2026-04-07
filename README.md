@@ -132,12 +132,20 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 Drop-in configs for [OpenCode](https://opencode.ai) are available in [`plugins/opencode/`](plugins/opencode/). They add a `/revdiff` slash command and a tool that lets OpenCode launch revdiff directly from the chat.
 
 ```sh
+bash plugins/opencode/setup.sh
+```
+
+The script copies the tool and command files to `~/.config/opencode/` and also installs `launch-plan-review.sh` to `~/.config/opencode/tools/`. Or manually:
+
+```sh
 mkdir -p ~/.config/opencode/tools ~/.config/opencode/commands
 cp plugins/opencode/tools/revdiff.ts ~/.config/opencode/tools/
 cp plugins/opencode/commands/revdiff.md ~/.config/opencode/commands/
+cp plugins/revdiff-planning/scripts/launch-plan-review.sh ~/.config/opencode/tools/
+chmod +x ~/.config/opencode/tools/launch-plan-review.sh
 ```
 
-Restart OpenCode after copying — tools and commands are loaded at startup.
+Restart OpenCode after installing — tools and commands are loaded at startup.
 
 #### General
 
