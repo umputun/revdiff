@@ -860,6 +860,38 @@ func TestModel_EnterInDiffPaneStartsAnnotation(t *testing.T) {
 	assert.Equal(t, paneDiff, model.focus, "focus should remain on diff pane")
 }
 
+func TestModel_EnterInDiffPaneScrollsToShowAnnotationInputAtBottom(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 4
+	m.viewport = viewport.New(100, 3)
+	m.viewport.SetContent(m.renderDiff())
+	m.viewport.SetYOffset(2) // cursor line (y=4) is the last visible row (2,3,4)
+
+	require.Equal(t, m.viewport.YOffset+m.viewport.Height-1, m.cursorViewportY(),
+		"cursor should start on the last visible row")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	require.True(t, model.annotating, "enter should start annotation mode")
+	require.NotNil(t, cmd)
+
+	inputY := model.cursorViewportY() + model.wrappedLineCount(model.diffCursor)
+	assert.GreaterOrEqual(t, inputY, model.viewport.YOffset, "input row should be within visible viewport")
+	assert.Less(t, inputY, model.viewport.YOffset+model.viewport.Height, "input row should be within visible viewport")
+	assert.Equal(t, 3, model.viewport.YOffset, "viewport should scroll down by one row to reveal input")
+}
+
 func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
 	lines := []diff.DiffLine{
 		{Content: "--- a/file.go", ChangeType: diff.ChangeDivider},

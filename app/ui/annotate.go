@@ -56,7 +56,28 @@ func (m *Model) startAnnotation() tea.Cmd {
 	m.annotateInput = ti
 	m.annotating = true
 	m.fileAnnotating = false
+	m.ensureLineAnnotationInputVisible()
 	return cmd
+}
+
+// ensureLineAnnotationInputVisible scrolls the viewport so the line-annotation
+// input row is visible. the input is rendered below the diff line, so keeping
+// the cursor line visible is not always sufficient when cursor is on the last
+// visible row.
+func (m *Model) ensureLineAnnotationInputVisible() {
+	if !m.annotating || m.fileAnnotating || m.viewport.Height <= 0 {
+		return
+	}
+	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+		return
+	}
+
+	inputY := m.cursorViewportY() + m.wrappedLineCount(m.diffCursor)
+	if inputY < m.viewport.YOffset {
+		m.viewport.SetYOffset(inputY)
+	} else if inputY >= m.viewport.YOffset+m.viewport.Height {
+		m.viewport.SetYOffset(inputY - m.viewport.Height + 1)
+	}
 }
 
 // startFileAnnotation enters annotation input mode for a file-level annotation (Line=0).
