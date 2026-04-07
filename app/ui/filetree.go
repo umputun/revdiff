@@ -6,49 +6,38 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/umputun/revdiff/app/diff"
 )
 
 // fileTree manages the list of changed files grouped by directory.
 type fileTree struct {
-	entries      []treeEntry       // flat list of directories and files for display
-	cursor       int               // currently highlighted entry index
-	offset       int               // first visible entry index for viewport scrolling
-	allFiles     []string          // original full file paths
-	filter       bool              // when true, show only annotated files
-	reviewed     map[string]bool   // files marked as reviewed by the user
-	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
+	entries      []treeEntry // flat list of directories and files for display
+	cursor       int         // currently highlighted entry index
+	offset       int         // first visible entry index for viewport scrolling
+	allFiles     []string    // original full file paths
+	filter       bool        // when true, show only annotated files
+	untrackedSet map[string]bool // set of untracked file paths
+	stagedSet    map[string]bool // set of files staged via revdiff
 }
 
 // treeEntry represents a single line in the file tree display.
 type treeEntry struct {
-	name  string // display name (directory name or file basename)
-	path  string // full file path (empty for directory entries)
-	isDir bool
-	depth int // indentation level
+	name      string // display name (directory name or file basename)
+	path      string // full file path (empty for directory entries)
+	isDir     bool
+	depth     int    // indentation level
+	untracked bool   // true for untracked files
+	staged    bool   // true for files staged via revdiff
 }
 
 // newFileTree builds a file tree from a list of changed file paths.
-func newFileTree(files []string) fileTree {
-	ft := fileTree{allFiles: files, reviewed: make(map[string]bool), fileStatuses: make(map[string]diff.FileStatus)}
+func newFileTree(files []string, untrackedSet, stagedSet map[string]bool) fileTree {
+	ft := fileTree{allFiles: files, untrackedSet: untrackedSet, stagedSet: stagedSet}
 	ft.entries = ft.buildEntries(files)
 	// position cursor on first file entry
 	for i, e := range ft.entries {
 		if !e.isDir {
 			ft.cursor = i
 			break
-		}
-	}
-	return ft
-}
-
-// newFileTreeFromEntries builds a file tree from file entries, preserving git status metadata.
-func newFileTreeFromEntries(entries []diff.FileEntry) fileTree {
-	ft := newFileTree(diff.FileEntryPaths(entries))
-	for _, e := range entries {
-		if e.Status != "" {
-			ft.fileStatuses[e.Path] = e.Status
 		}
 	}
 	return ft
@@ -88,10 +77,12 @@ func (ft *fileTree) buildEntries(files []string) []treeEntry {
 		sort.Strings(dirFileList)
 		for _, f := range dirFileList {
 			entries = append(entries, treeEntry{
-				name:  filepath.Base(f),
-				path:  f,
-				isDir: false,
-				depth: 1,
+				name:      filepath.Base(f),
+				path:      f,
+				isDir:     false,
+				depth:     1,
+				untracked: ft.untrackedSet[f],
+				staged:    ft.stagedSet[f],
 			})
 		}
 	}
@@ -246,12 +237,13 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 	var b strings.Builder
 	for idx := ft.offset; idx < end; idx++ {
 		e := ft.entries[idx]
+		indent := strings.Repeat("  ", e.depth)
 		var line string
 
 		if e.isDir {
 			line = s.DirEntry.Render(" " + ft.truncateDirName(e.name, width-3))
 		} else {
-			line = ft.renderFileEntry(e, idx, width, annotatedFiles, s)
+			line = ft.renderFileEntry(e, idx, indent, width, annotatedFiles, s)
 		}
 
 		b.WriteString(line)
@@ -263,52 +255,30 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 }
 
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.
-func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles map[string]bool, s styles) string {
-	isSelected := idx == ft.cursor
-	hasStatuses := len(ft.fileStatuses) > 0
-
-	// plain ✓ when selected to avoid lipgloss reset breaking FileSelected background
-	reviewMark := "  "
-	if ft.reviewed[e.path] {
-		if isSelected {
-			reviewMark = "✓ "
-		} else {
-			reviewMark = s.ReviewedMark.Render("✓") + " "
-		}
-	}
-
-	statusMark := ""
-	if hasStatuses {
-		status := ft.fileStatuses[e.path]
-		switch {
-		case status == "":
-			statusMark = "  "
-		case isSelected:
-			statusMark = string(status) + " "
-		default:
-			statusMark = s.fileStatusStyle(status).Render(string(status)) + " "
-		}
-	}
-
+func (ft *fileTree) renderFileEntry(e treeEntry, idx int, indent string, width int, annotatedFiles map[string]bool, s styles) string {
 	marker := "  "
 	if annotatedFiles[e.path] {
 		marker = s.AnnotationMark.Render(" *")
 	}
-
-	prefix := reviewMark + statusMark
-	name := prefix + e.name + marker
+	prefix := " "
+	if e.staged {
+		prefix = "+"
+	} else if e.untracked {
+		prefix = "?"
+	}
+	name := indent + prefix + " " + e.name + marker
 	maxWidth := width - 2
 
 	// truncate from the left of the filename when it exceeds pane width
 	if lipgloss.Width(name) > maxWidth && maxWidth > 4 {
-		budget := maxWidth - lipgloss.Width(prefix) - lipgloss.Width(marker) - 1 // 1 for "…"
+		budget := maxWidth - lipgloss.Width(indent) - lipgloss.Width(marker) - 1 // 1 for "…"
 		if budget > 0 && lipgloss.Width(e.name) > budget {
 			runes := []rune(e.name)
-			name = prefix + "…" + string(runes[len(runes)-budget+1:]) + marker
+			name = indent + "…" + string(runes[len(runes)-budget+1:]) + marker
 		}
 	}
 
-	if isSelected {
+	if idx == ft.cursor {
 		return s.FileSelected.Width(maxWidth).Render(name)
 	}
 	return s.FileEntry.Render(name)
@@ -404,21 +374,4 @@ func (ft *fileTree) refreshFilter(annotatedFiles map[string]bool) {
 			return
 		}
 	}
-}
-
-// toggleReviewed toggles the reviewed state of the given file path.
-func (ft *fileTree) toggleReviewed(path string) {
-	if path == "" {
-		return
-	}
-	if ft.reviewed[path] {
-		delete(ft.reviewed, path)
-	} else {
-		ft.reviewed[path] = true
-	}
-}
-
-// reviewedCount returns the number of files marked as reviewed.
-func (ft *fileTree) reviewedCount() int {
-	return len(ft.reviewed)
 }

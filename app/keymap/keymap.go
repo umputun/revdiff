@@ -45,8 +45,9 @@ const (
 	ActionToggleLineNums   Action = "toggle_line_numbers"
 	ActionToggleBlame      Action = "toggle_blame"
 	ActionToggleHunk       Action = "toggle_hunk"
-	ActionMarkReviewed     Action = "mark_reviewed"
 	ActionFilter           Action = "filter"
+	ActionToggleUntracked  Action = "toggle_untracked"
+	ActionStage            Action = "stage"
 	ActionQuit             Action = "quit"
 	ActionDiscardQuit      Action = "discard_quit"
 	ActionHelp             Action = "help"
@@ -63,7 +64,7 @@ var validActions = map[Action]bool{
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionToggleCollapsed: true, ActionToggleWrap: true, ActionToggleTree: true,
-	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionMarkReviewed: true, ActionFilter: true,
+	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionFilter: true, ActionToggleUntracked: true, ActionStage: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true,
 }
 
@@ -141,8 +142,9 @@ func defaultDescriptions() []HelpEntry {
 		{ActionToggleLineNums, "toggle line numbers", "View"},
 		{ActionToggleBlame, "toggle blame gutter", "View"},
 		{ActionToggleHunk, "toggle hunk in collapsed", "View"},
-		{ActionMarkReviewed, "mark file as reviewed", "View"},
 		{ActionFilter, "filter files", "View"},
+		{ActionToggleUntracked, "show untracked files", "View"},
+		{ActionStage, "stage / unstage file", "View"},
 
 		// quit
 		{ActionQuit, "quit", "Quit"},
@@ -187,8 +189,9 @@ func defaultBindings() map[string]Action {
 		"L":      ActionToggleLineNums,
 		"B":      ActionToggleBlame,
 		".":      ActionToggleHunk,
-		" ":      ActionMarkReviewed,
 		"f":      ActionFilter,
+		"u":      ActionToggleUntracked,
+		"s":      ActionStage,
 		"q":      ActionQuit,
 		"Q":      ActionDiscardQuit,
 		"?":      ActionHelp,

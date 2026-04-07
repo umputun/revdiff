@@ -28,6 +28,11 @@ func (r *StdinReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 }
 
 // FileDiff returns the stored context lines for the synthetic file.
+// UntrackedFiles returns nil — untracked files are not applicable in stdin mode.
+func (r *StdinReader) UntrackedFiles() ([]string, error) {
+	return nil, nil
+}
+
 func (r *StdinReader) FileDiff(_, file string, _ bool) ([]DiffLine, error) {
 	if file != r.name {
 		return nil, nil

@@ -5,7 +5,9 @@ package ui
 //go:generate moq -out mocks/blamer.go -pkg mocks -skip-ensure -fmt goimports . Blamer
 
 import (
+	"context"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,6 +29,7 @@ import (
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]diff.FileEntry, error)
 	FileDiff(ref, file string, staged bool) ([]diff.DiffLine, error)
+	UntrackedFiles() ([]string, error)
 }
 
 // SyntaxHighlighter provides syntax highlighting for diff lines.
@@ -93,6 +96,11 @@ type Model struct {
 	wrapMode     bool // true when line wrapping is enabled
 	lineNumbers  bool // true when line numbers are shown in gutter
 	lineNumWidth int  // digit width for line number columns (max digits across old/new nums)
+	showUntracked bool // true when untracked files are shown in the tree
+	untrackedSet map[string]bool // set of untracked file paths (populated on load)
+	stagedSet    map[string]bool // set of files staged via revdiff (for unstage support)
+	changedFiles []string // cached result of ChangedFiles() (avoids re-fetch on toggle)
+	treeLoading  bool   // true while file list is being reloaded
 
 	blamer         Blamer                 // optional blame provider (nil when git unavailable)
 	showBlame      bool                   // true when blame gutter is shown
@@ -139,8 +147,19 @@ type blameLoadedMsg struct {
 
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
-	entries []diff.FileEntry
-	err     error
+	entries     []diff.FileEntry
+	files       []string
+	changed     []string // original changed files (without untracked/staged-only), cached for fast toggle
+	untracked   []string // untracked files merged into files (only when showUntracked is true)
+	stagedOnly  []string // staged-only files (in index but no unstaged changes)
+	err         error
+}
+
+// stagedMsg is sent after git add/restore completes for a file.
+type stagedMsg struct {
+	file     string
+	unstaged bool // true if the action was unstage (git restore --staged)
+	err      error
 }
 
 // ModelConfig holds configuration options for NewModel.
@@ -220,8 +239,97 @@ func (m Model) Init() tea.Cmd {
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
 		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
-		return filesLoadedMsg{entries: entries, err: err}
+		if err != nil {
+			return filesLoadedMsg{err: err}
+		}
+		files := make([]string, len(entries))
+		for i, e := range entries {
+			files[i] = e.Path
+		}
+		changed := make([]string, len(files))
+		copy(changed, files)
+		stagedOnly := m.fetchStagedOnly(files)
+		if len(stagedOnly) > 0 {
+			files = append(make([]string, 0, len(files)+len(stagedOnly)), files...)
+			files = append(files, stagedOnly...)
+		}
+		var untracked []string
+		if m.showUntracked {
+			untracked = m.fetchUntracked(files)
+			if len(untracked) > 0 {
+				files = append(make([]string, 0, len(files)+len(untracked)), files...)
+				files = append(files, untracked...)
+			}
+		}
+		return filesLoadedMsg{files: files, changed: changed, untracked: untracked, stagedOnly: stagedOnly}
 	}
+}
+
+// loadUntrackedFiles returns a tea.Cmd that only fetches untracked files and merges
+// with the cached changed files list. avoids re-running git diff on toggle.
+func (m Model) loadUntrackedFiles() tea.Cmd {
+	return func() tea.Msg {
+		files := make([]string, 0, len(m.changedFiles)+10)
+		files = append(files, m.changedFiles...)
+		changed := make([]string, len(files))
+		copy(changed, files)
+		stagedOnly := m.fetchStagedOnly(files)
+		if len(stagedOnly) > 0 {
+			files = append(files, stagedOnly...)
+		}
+		var untracked []string
+		if m.showUntracked {
+			untracked = m.fetchUntracked(files)
+			if len(untracked) > 0 {
+				files = append(files, untracked...)
+			}
+		}
+		return filesLoadedMsg{files: files, changed: changed, untracked: untracked, stagedOnly: stagedOnly}
+	}
+}
+
+// fetchUntracked queries the renderer for untracked files and returns only those
+// not already present in the changed files list.
+func (m Model) fetchUntracked(changed []string) []string {
+	utFiles, utErr := m.renderer.UntrackedFiles()
+	if utErr != nil {
+		return nil
+	}
+	changedSet := make(map[string]bool, len(changed))
+	for _, f := range changed {
+		changedSet[f] = true
+	}
+	var untracked []string
+	for _, f := range utFiles {
+		if !changedSet[f] {
+			untracked = append(untracked, f)
+		}
+	}
+	return untracked
+}
+
+// fetchStagedOnly returns files that are staged in the git index but not in the changed files list.
+// uses ChangedFiles("", true) (git diff --cached --name-only) and filters out already-changed files.
+// only meaningful when ref is empty and staged mode is off.
+func (m Model) fetchStagedOnly(changed []string) []string {
+	if m.ref != "" || m.staged {
+		return nil
+	}
+	cached, err := m.renderer.ChangedFiles("", true)
+	if err != nil {
+		return nil
+	}
+	changedSet := make(map[string]bool, len(changed))
+	for _, f := range changed {
+		changedSet[f] = true
+	}
+	var staged []string
+	for _, f := range cached {
+		if !changedSet[f.Path] {
+			staged = append(staged, f.Path)
+		}
+	}
+	return staged
 }
 
 func (m Model) loadFileDiff(file string) tea.Cmd {
@@ -261,6 +369,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
 		return m.handleBlameLoaded(msg)
+	case stagedMsg:
+		return m.handleStaged(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)
@@ -322,6 +432,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keymap.ActionFilter:
 		return m.handleFilterToggle()
+	case keymap.ActionStage:
+		return m.handleStage()
 	case keymap.ActionNextItem:
 		return m.handleFileOrSearchNav(true)
 	case keymap.ActionPrevItem:
@@ -330,9 +442,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnterKey()
 	case keymap.ActionAnnotateFile:
 		return m.handleFileAnnotateKey()
-	case keymap.ActionMarkReviewed:
-		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
@@ -395,6 +505,106 @@ func (m *Model) toggleLineNumbers() {
 	m.syncViewportToCursor()
 }
 
+// toggleUntracked toggles showing untracked files in the file tree.
+// uses cached changed files to avoid re-running git diff.
+func (m Model) toggleUntracked() (tea.Model, tea.Cmd) {
+	m.showUntracked = !m.showUntracked
+	m.treeLoading = true
+	return m, m.loadUntrackedFiles()
+}
+
+// handleStage runs git add (stage) or git restore --staged (unstage) on the selected file.
+// s on untracked → stage; s on staged-by-us → unstage; otherwise no-op.
+func (m Model) handleStage() (tea.Model, tea.Cmd) {
+	if m.singleFile || m.treeHidden {
+		return m, nil
+	}
+	file := m.tree.selectedFile()
+	if file == "" {
+		return m, nil
+	}
+	// determine action: unstage if we staged it, stage if untracked
+	var gitArgs []string
+	switch {
+	case m.stagedSet[file]:
+		gitArgs = []string{"restore", "--staged", "--", file}
+	case m.untrackedSet[file]:
+		gitArgs = []string{"add", "--", file}
+	default:
+		return m, nil
+	}
+	workDir := m.workDir
+	unstage := m.stagedSet[file]
+	return m, func() tea.Msg {
+		cmd := exec.CommandContext(context.Background(), "git", gitArgs...) //nolint:gosec // gitArgs is hardcoded per branch above
+		cmd.Dir = workDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return stagedMsg{file: file, err: fmt.Errorf("git %s: %s", strings.Join(gitArgs, " "), string(out))}
+		}
+		return stagedMsg{file: file, unstaged: unstage}
+	}
+}
+
+// handleStaged processes the result of git add/restore and updates the view.
+func (m Model) handleStaged(msg stagedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.viewport.SetContent(fmt.Sprintf("error: %v", msg.err))
+		return m, nil
+	}
+	if m.stagedSet == nil {
+		m.stagedSet = make(map[string]bool)
+	}
+	if msg.unstaged {
+		// unstage: move back to untracked
+		delete(m.stagedSet, msg.file)
+		m.untrackedSet[msg.file] = true
+		// remove from changedFiles
+		for i, f := range m.changedFiles {
+			if f == msg.file {
+				m.changedFiles = append(m.changedFiles[:i], m.changedFiles[i+1:]...)
+				break
+			}
+		}
+	} else {
+		// stage: move from untracked to staged
+		delete(m.untrackedSet, msg.file)
+		m.stagedSet[msg.file] = true
+	}
+	// rebuild tree preserving cursor
+	allFiles := make([]string, len(m.changedFiles))
+	copy(allFiles, m.changedFiles)
+	for f := range m.stagedSet {
+		allFiles = append(allFiles, f) //nolint:makezero // pre-allocated from changedFiles, appending set entries
+	}
+	for f := range m.untrackedSet {
+		allFiles = append(allFiles, f) //nolint:makezero // pre-allocated from changedFiles, appending set entries
+	}
+	m.tree = newFileTree(allFiles, m.untrackedSet, m.stagedSet)
+	m.tree.selectByPath(msg.file)
+	m.setDiffFromFile(msg.file)
+	return m, nil
+}
+
+// setDiffFromFile reads a file from disk as all-added lines and updates the diff view.
+func (m *Model) setDiffFromFile(file string) {
+	added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, file))
+	if err != nil {
+		m.viewport.SetContent(fmt.Sprintf("error reading file: %v", err))
+		return
+	}
+	m.diffLines = added
+	m.clearSearch()
+	m.computeFileStats()
+	m.highlightedLines = m.highlighter.HighlightLines(file, m.diffLines)
+	m.cursorOnAnnotation = false
+	m.scrollX = 0
+	m.collapsed.expandedHunks = make(map[int]bool)
+	if m.lineNumbers {
+		m.lineNumWidth = m.computeLineNumWidth()
+	}
+	m.viewport.SetContent(m.renderDiff())
+}
+
 // computeLineNumWidth returns the digit width needed for line number columns.
 // scans all diffLines to find the maximum old or new line number.
 func (m Model) computeLineNumWidth() int {
@@ -444,6 +654,8 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleBlame:
 		cmd := m.toggleBlame()
 		return m, cmd
+	case keymap.ActionToggleUntracked:
+		return m.toggleUntracked()
 	}
 	return m, nil
 }
@@ -693,22 +905,22 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 // matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
 // when a pattern is an absolute path, it is also resolved relative to workDir for matching
 // (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
-func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
+func (m Model) filterOnly(files []string) []string {
 	if len(m.only) == 0 {
-		return entries
+		return files
 	}
-	var filtered []diff.FileEntry
-	for _, e := range entries {
+	var filtered []string
+	for _, f := range files {
 		for _, pattern := range m.only {
-			if e.Path == pattern || strings.HasSuffix(e.Path, "/"+pattern) {
-				filtered = append(filtered, e)
+			if f == pattern || strings.HasSuffix(f, "/"+pattern) {
+				filtered = append(filtered, f)
 				break
 			}
 			// resolve absolute pattern relative to workDir for matching against repo-relative files
 			if m.workDir != "" && filepath.IsAbs(pattern) {
 				rel, err := filepath.Rel(m.workDir, pattern)
-				if err == nil && !strings.HasPrefix(rel, "..") && (e.Path == rel || strings.HasSuffix(e.Path, "/"+rel)) {
-					filtered = append(filtered, e)
+				if err == nil && !strings.HasPrefix(rel, "..") && (f == rel || strings.HasSuffix(f, "/"+rel)) {
+					filtered = append(filtered, f)
 					break
 				}
 			}
@@ -718,17 +930,52 @@ func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
 }
 
 func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
+	m.treeLoading = false
 	if msg.err != nil {
 		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
 	}
-	entries := m.filterOnly(msg.entries)
-	if len(entries) == 0 && len(m.only) > 0 {
+	// fallback for entry-based messages (e.g. from annotlist tests)
+	if len(msg.files) == 0 && len(msg.entries) > 0 {
+		m.tree = newFileTree(diff.FileEntryPaths(msg.entries), nil, nil)
+		m.singleFile = len(m.tree.allFiles) == 1
+		if m.singleFile {
+			m.focus = paneDiff
+			m.treeWidth = 0
+			if m.ready {
+				m.viewport.Width = m.width - 2
+			}
+		}
+		if f := m.tree.selectedFile(); f != "" {
+			m.loadSeq++
+			return m, m.loadFileDiff(f)
+		}
+		return m, nil
+	}
+	// cache changed files (without untracked) for fast toggle
+	m.changedFiles = msg.changed
+	files := m.filterOnly(msg.files)
+	if len(files) == 0 && len(m.only) > 0 {
 		m.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
-	m.tree = newFileTreeFromEntries(entries)
-	m.singleFile = len(m.tree.allFiles) == 1
+	untrackedSet := make(map[string]bool, len(msg.untracked))
+	for _, f := range msg.untracked {
+		untrackedSet[f] = true
+	}
+	m.untrackedSet = untrackedSet
+	if m.stagedSet == nil {
+		m.stagedSet = make(map[string]bool)
+	}
+	for _, f := range msg.stagedOnly {
+		m.stagedSet[f] = true
+	}
+	m.tree = newFileTree(files, untrackedSet, m.stagedSet)
+	// restore cursor to previously selected file after tree rebuild
+	if m.currFile != "" {
+		m.tree.selectByPath(m.currFile)
+	}
+	m.singleFile = len(files) == 1
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
@@ -756,9 +1003,15 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	// untracked files have no git diff — fall back to reading from disk as all-added lines
+	if len(m.diffLines) == 0 && (m.untrackedSet[msg.file] || m.stagedSet[msg.file]) {
+		if added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file)); err == nil {
+			m.diffLines = added
+		}
+	}
 	m.clearSearch()
 	m.computeFileStats()
-	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
+	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)
 	if m.lineNumbers {
 		m.lineNumWidth = m.computeLineNumWidth()
 	}
@@ -938,7 +1191,13 @@ func (m Model) View() string {
 
 	default:
 		annotated := m.annotatedFiles()
-		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
+		treeContent := "  loading untracked..."
+		if !m.treeLoading {
+			treeContent = m.tree.render(m.treeWidth, ph, annotated, m.styles)
+			if m.showUntracked && len(m.untrackedSet) == 0 {
+				treeContent += "\n" + lipgloss.NewStyle().Foreground(lipgloss.Color(m.styles.colors.Muted)).Render("  no untracked files")
+			}
+		}
 
 		// apply pane borders based on focus
 		treeStyle := m.styles.TreePane
@@ -1020,11 +1279,13 @@ func (m Model) statusBarText() string {
 		segments = append(segments, ss)
 	}
 
+	// stage/unstage hint
+	if sh := m.stageHint(); sh != "" {
+		segments = append(segments, sh)
+	}
+
 	// build right-side segments
 	var rightParts []string
-	if rc := m.tree.reviewedCount(); rc > 0 {
-		rightParts = append(rightParts, fmt.Sprintf("✓ %d/%d", rc, len(m.tree.allFiles)))
-	}
 	if cnt := m.store.Count(); cnt > 0 {
 		suffix := "annotations"
 		if cnt == 1 {
@@ -1180,6 +1441,21 @@ func (m Model) searchSegment() string {
 	return fmt.Sprintf("%d/%d", pos, len(m.searchMatches))
 }
 
+// stageHint returns a status bar hint for staging/unstaging the current file.
+// empty string if the file is not untracked or staged by revdiff.
+func (m Model) stageHint() string {
+	if m.currFile == "" {
+		return ""
+	}
+	if m.stagedSet[m.currFile] {
+		return "[s] unstage"
+	}
+	if m.untrackedSet[m.currFile] {
+		return "[s] stage"
+	}
+	return ""
+}
+
 // padContentBg pads every line in content to targetWidth using raw ANSI background.
 // strips trailing plain spaces first (left by viewport/lipgloss padding after \033[0m reset),
 // then re-pads with bg-colored spaces. this ensures the background fills the entire pane
@@ -1229,7 +1505,7 @@ func (m Model) ansiFg(hex string) string { return m.ansiColor(hex, 38) }
 // ansiBg returns an ANSI 24-bit background escape sequence for a hex color.
 func (m Model) ansiBg(hex string) string { return m.ansiColor(hex, 48) }
 
-// statusModeIcons returns combined mode indicator icons (▼ collapsed, ◉ filter, ↩ wrap, ≋ search).
+// statusModeIcons returns combined mode indicator icons (▼ collapsed, ◉ filter, ↩ wrap, ≋ search, ? untracked).
 // all icons are always shown; active modes use status foreground, inactive use muted color.
 func (m Model) statusModeIcons() string {
 	type indicator struct {
@@ -1244,7 +1520,7 @@ func (m Model) statusModeIcons() string {
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
-		{"✓", m.tree.reviewedCount() > 0},
+		{"?", m.showUntracked},
 	}
 
 	statusFg := m.styles.colors.Muted
@@ -1624,20 +1900,6 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 		m.tree.ensureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
 	}
-	return m, nil
-}
-
-// handleMarkReviewed toggles the reviewed state of the focused file.
-// tree focus uses the selected row; diff/TOC focus uses the displayed file.
-func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
-	file := m.currFile
-	if m.focus == paneTree && m.mdTOC == nil {
-		file = m.tree.selectedFile()
-	}
-	if file == "" {
-		file = m.tree.selectedFile()
-	}
-	m.tree.toggleReviewed(file)
 	return m, nil
 }
 

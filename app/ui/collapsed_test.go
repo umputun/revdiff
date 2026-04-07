@@ -135,7 +135,7 @@ func TestModel_FileSwitchResetsExpandedHunksPreservesCollapsed(t *testing.T) {
 	}
 	fileDiffs := map[string][]diff.DiffLine{"a.go": linesA, "b.go": linesB}
 	m := testModel([]string{"a.go", "b.go"}, fileDiffs)
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = newFileTree([]string{"a.go", "b.go"}, nil, nil)
 
 	// simulate loading first file
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: linesA})
@@ -648,7 +648,7 @@ func TestModel_CollapsedCursorDownSkipsRemovedLines(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -674,7 +674,7 @@ func TestModel_CollapsedCursorUpSkipsRemovedLines(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -699,7 +699,7 @@ func TestModel_CollapsedCursorMovementInExpandedHunk(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -738,7 +738,7 @@ func TestModel_ExpandedModeCursorMovementUnchanged(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -821,7 +821,7 @@ func TestModel_CollapsedCursorDownMultipleHunks(t *testing.T) {
 		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -1361,7 +1361,7 @@ func TestModel_ToggleCollapsedModeAdjustsCursor(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -1381,7 +1381,7 @@ func TestModel_ToggleHunkExpansionAdjustsCursor(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = newFileTree([]string{"a.go"}, nil, nil)
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines

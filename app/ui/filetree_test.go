@@ -11,7 +11,7 @@ import (
 
 func TestFileTree_BuildEntries(t *testing.T) {
 	files := []string{"internal/handler.go", "internal/store.go", "main.go"}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 
 	assert.Len(t, ft.entries, 5) // 2 dirs (./, internal/) + 3 files
 	assert.True(t, ft.entries[0].isDir)
@@ -26,12 +26,12 @@ func TestFileTree_BuildEntries(t *testing.T) {
 }
 
 func TestFileTree_BuildEntriesEmpty(t *testing.T) {
-	ft := newFileTree(nil)
+	ft := newFileTree(nil, nil, nil)
 	assert.Empty(t, ft.entries)
 }
 
 func TestFileTree_SelectedFile(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
+	ft := newFileTree([]string{"a.go", "b.go"}, nil, nil)
 
 	// cursor starts on first file
 	assert.Equal(t, "a.go", ft.selectedFile())
@@ -41,7 +41,7 @@ func TestFileTree_SelectedFile(t *testing.T) {
 }
 
 func TestFileTree_MoveDownUp(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"}, nil, nil)
 
 	// cursor starts on first file (a.go)
 	assert.Equal(t, "a.go", ft.selectedFile())
@@ -68,7 +68,7 @@ func TestFileTree_MoveDownUp(t *testing.T) {
 }
 
 func TestFileTree_NextPrevFile(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"}, nil, nil)
 	// cursor starts on first file (a.go)
 
 	ft.nextFile()
@@ -92,7 +92,7 @@ func TestFileTree_NextPrevFile(t *testing.T) {
 }
 
 func TestFileTree_ToggleFilter(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"}, nil, nil)
 	annotated := map[string]bool{"a.go": true, "c.go": true}
 
 	ft.toggleFilter(annotated)
@@ -122,7 +122,7 @@ func TestFileTree_ToggleFilter(t *testing.T) {
 }
 
 func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
+	ft := newFileTree([]string{"a.go", "b.go"}, nil, nil)
 	annotated := map[string]bool{}
 
 	ft.toggleFilter(annotated)
@@ -131,7 +131,7 @@ func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
 }
 
 func TestFileTree_Render(t *testing.T) {
-	ft := newFileTree([]string{"internal/handler.go", "main.go"})
+	ft := newFileTree([]string{"internal/handler.go", "main.go"}, nil, nil)
 	ft.cursor = 1 // select handler.go
 	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
@@ -142,27 +142,27 @@ func TestFileTree_Render(t *testing.T) {
 }
 
 func TestFileTree_RenderEmpty(t *testing.T) {
-	ft := newFileTree(nil)
+	ft := newFileTree(nil, nil, nil)
 	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 	result := ft.render(30, 100, nil, s)
 	assert.Contains(t, result, "no changed files")
 }
 
 func TestFileTree_SetFiles(t *testing.T) {
-	ft := newFileTree([]string{"b.go", "c.go", "d.go"})
+	ft := newFileTree([]string{"b.go", "c.go", "d.go"}, nil, nil)
 	// first file should be selected by default
 	assert.Equal(t, "b.go", ft.selectedFile())
 }
 
 func TestFileTree_SetFilesNewList(t *testing.T) {
-	ft := newFileTree([]string{"x.go", "y.go"})
+	ft := newFileTree([]string{"x.go", "y.go"}, nil, nil)
 	// should position on first file
 	assert.Equal(t, "x.go", ft.selectedFile())
 }
 
 func TestFileTree_DirectoryGrouping(t *testing.T) {
 	files := []string{"cmd/main.go", "internal/handler.go", "internal/store.go"}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 
 	// should have: cmd/ dir, main.go, internal/ dir, handler.go, store.go
 	assert.Len(t, ft.entries, 5)
@@ -176,14 +176,14 @@ func TestFileTree_DirectoryGrouping(t *testing.T) {
 }
 
 func TestFileTree_FileIndices(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
+	ft := newFileTree([]string{"a.go", "b.go"}, nil, nil)
 	indices := ft.fileIndices()
 	// dir at 0, files at 1 and 2
 	assert.Equal(t, []int{1, 2}, indices)
 }
 
 func TestFileTree_RefreshFilter(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"}, nil, nil)
 
 	// enable filter with a.go annotated
 	ft.toggleFilter(map[string]bool{"a.go": true})
@@ -209,7 +209,7 @@ func TestFileTree_RefreshFilter(t *testing.T) {
 }
 
 func TestFileTree_RefreshFilterNoAnnotations(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
+	ft := newFileTree([]string{"a.go", "b.go"}, nil, nil)
 	ft.toggleFilter(map[string]bool{"a.go": true})
 	assert.True(t, ft.filter)
 
@@ -227,7 +227,7 @@ func TestFileTree_RefreshFilterNoAnnotations(t *testing.T) {
 }
 
 func TestFileTree_RefreshFilterPreservesCursor(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"}, nil, nil)
 	ft.toggleFilter(map[string]bool{"a.go": true, "b.go": true})
 	assert.True(t, ft.filter)
 
@@ -241,7 +241,7 @@ func TestFileTree_RefreshFilterPreservesCursor(t *testing.T) {
 }
 
 func TestFileTree_RefreshFilterNotActive(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
+	ft := newFileTree([]string{"a.go", "b.go"}, nil, nil)
 	assert.False(t, ft.filter)
 
 	// refresh when filter is not active should be a no-op
@@ -264,7 +264,7 @@ func TestFileTree_PageDown(t *testing.T) {
 		"internal/a.go", "internal/b.go", "internal/c.go", "internal/d.go",
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
 	}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 	assert.Equal(t, "cmd/flags.go", ft.selectedFile(), "cursor should start on first file (flags.go)")
 
 	// page down by 3 should advance ~3 visual rows: flags->main->(dir header)->a
@@ -286,7 +286,7 @@ func TestFileTree_PageUp(t *testing.T) {
 		"internal/a.go", "internal/b.go", "internal/c.go", "internal/d.go",
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
 	}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 
 	// move to last file first
 	ft.moveToLast()
@@ -308,7 +308,7 @@ func TestFileTree_PageUp(t *testing.T) {
 func TestFileTree_PageDownAccountsForDirHeaders(t *testing.T) {
 	// 3 directories with 2 files each: entries include 3 dir headers
 	files := []string{"a/x.go", "a/y.go", "b/x.go", "b/y.go", "c/x.go", "c/y.go"}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 	// entries: a/ (dir,0), x.go(1), y.go(2), b/ (dir,3), x.go(4), y.go(5), c/ (dir,6), x.go(7), y.go(8)
 	assert.Equal(t, "a/x.go", ft.selectedFile())
 
@@ -323,7 +323,7 @@ func TestFileTree_PageDownAccountsForDirHeaders(t *testing.T) {
 
 func TestFileTree_MoveToFirstLast(t *testing.T) {
 	files := []string{"cmd/main.go", "internal/a.go", "internal/b.go", "internal/c.go"}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 
 	// starts on first file
 	assert.Equal(t, "cmd/main.go", ft.selectedFile())
@@ -347,7 +347,7 @@ func TestFileTree_MoveToFirstLast(t *testing.T) {
 }
 
 func TestFileTree_RenderIndentation(t *testing.T) {
-	ft := newFileTree([]string{"cmd/main.go", "internal/handler.go", "internal/store.go"})
+	ft := newFileTree([]string{"cmd/main.go", "internal/handler.go", "internal/store.go"}, nil, nil)
 	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	// verify entry depth: directories at depth 0, files at depth 1
@@ -379,7 +379,7 @@ func TestFileTree_EnsureVisible(t *testing.T) {
 	ft := newFileTree([]string{
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
 		"b/1.go", "b/2.go", "b/3.go", "b/4.go", "b/5.go",
-	})
+	}, nil, nil)
 	// entries: a/(0), 1.go(1), 2.go(2), 3.go(3), 4.go(4), 5.go(5), b/(6), 1.go(7)...
 
 	// visible height of 4, cursor at start
@@ -403,7 +403,7 @@ func TestFileTree_RenderViewport(t *testing.T) {
 	ft := newFileTree([]string{
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
 		"b/1.go", "b/2.go", "b/3.go",
-	})
+	}, nil, nil)
 	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	// render with height=3, cursor on first file
@@ -420,7 +420,7 @@ func TestFileTree_RenderViewport(t *testing.T) {
 }
 
 func TestFileTree_EnsureVisibleResetsOffsetWhenTreeFitsViewport(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"}, nil, nil)
 	// entries: ./(dir,0), a.go(1), b.go(2), c.go(3) — 4 entries total
 
 	// simulate a stale offset from when the tree had more entries or a smaller viewport
@@ -434,20 +434,20 @@ func TestFileTree_EnsureVisibleResetsOffsetWhenTreeFitsViewport(t *testing.T) {
 
 func TestFileTree_SelectByPath(t *testing.T) {
 	t.Run("selects existing file", func(t *testing.T) {
-		ft := newFileTree([]string{"internal/handler.go", "internal/store.go", "main.go"})
+		ft := newFileTree([]string{"internal/handler.go", "internal/store.go", "main.go"}, nil, nil)
 		ok := ft.selectByPath("internal/store.go")
 		assert.True(t, ok)
 		assert.Equal(t, "internal/store.go", ft.selectedFile())
 	})
 
 	t.Run("returns false for non-existent file", func(t *testing.T) {
-		ft := newFileTree([]string{"a.go", "b.go"})
+		ft := newFileTree([]string{"a.go", "b.go"}, nil, nil)
 		ok := ft.selectByPath("c.go")
 		assert.False(t, ok)
 	})
 
 	t.Run("does not select directory entries", func(t *testing.T) {
-		ft := newFileTree([]string{"internal/a.go"})
+		ft := newFileTree([]string{"internal/a.go"}, nil, nil)
 		ok := ft.selectByPath("internal/")
 		assert.False(t, ok)
 	})
@@ -455,7 +455,7 @@ func TestFileTree_SelectByPath(t *testing.T) {
 
 func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 	files := []string{".claude-plugin/skills/revdiff/references/config.md"}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	result := ft.render(30, 10, nil, s)
@@ -466,7 +466,7 @@ func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 
 func TestFileTree_RenderTruncatesLongFileNames(t *testing.T) {
 	files := []string{"docs/plans/completed/20260402-status-line-help-overlay.md"}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 	s := plainStyles()
 
 	// narrow tree pane should truncate long filename with ellipsis
@@ -492,7 +492,7 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 		"internal/a.go", "internal/b.go", "internal/c.go", "internal/d.go",
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
 	}
-	ft := newFileTree(files)
+	ft := newFileTree(files, nil, nil)
 	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 
 	// page down past visible area with small height
@@ -509,47 +509,4 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 	selected := ft.selectedFile()
 	assert.Contains(t, result, selected[strings.LastIndex(selected, "/")+1:],
 		"cursor file must be visible after page up")
-}
-
-func TestFileTree_ToggleReviewed(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
-
-	assert.Equal(t, 0, ft.reviewedCount())
-
-	ft.toggleReviewed("a.go")
-	assert.True(t, ft.reviewed["a.go"])
-	assert.Equal(t, 1, ft.reviewedCount())
-
-	ft.toggleReviewed("b.go")
-	assert.Equal(t, 2, ft.reviewedCount())
-
-	// toggle off
-	ft.toggleReviewed("a.go")
-	assert.False(t, ft.reviewed["a.go"])
-	assert.Equal(t, 1, ft.reviewedCount())
-
-	// no-op for empty path
-	ft.toggleReviewed("")
-	assert.Equal(t, 1, ft.reviewedCount())
-}
-
-func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
-	ft := newFileTree([]string{"a.go", "b.go"})
-	s := plainStyles()
-
-	// no checkmarks initially
-	result := ft.render(40, 10, nil, s)
-	assert.NotContains(t, result, "✓")
-
-	// mark a.go as reviewed
-	ft.toggleReviewed("a.go")
-	result = ft.render(40, 10, nil, s)
-	assert.Contains(t, result, "✓")
-
-	// both checkmark and annotation mark can coexist
-	ft.toggleReviewed("b.go")
-	annotated := map[string]bool{"b.go": true}
-	result = ft.render(40, 10, annotated, s)
-	assert.Contains(t, result, "✓")
-	assert.Contains(t, result, "*")
 }

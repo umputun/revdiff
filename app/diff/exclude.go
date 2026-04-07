@@ -7,6 +7,7 @@ import (
 
 // renderer is a local interface matching ui.Renderer to avoid import cycle.
 type renderer interface {
+	UntrackedFiles() ([]string, error)
 	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
 	FileDiff(ref, file string, staged bool) ([]DiffLine, error)
 }
@@ -35,6 +36,21 @@ func NewExcludeFilter(inner renderer, prefixes []string) *ExcludeFilter {
 }
 
 // ChangedFiles returns files from the inner renderer, excluding any that match a prefix.
+// UntrackedFiles returns untracked files from the inner renderer, excluding any that match a prefix.
+func (ef *ExcludeFilter) UntrackedFiles() ([]string, error) {
+	files, err := ef.inner.UntrackedFiles()
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]string, 0, len(files))
+	for _, f := range files {
+		if !ef.matchesExclude(f) {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered, nil
+}
+
 func (ef *ExcludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	entries, err := ef.inner.ChangedFiles(ref, staged)
 	if err != nil {

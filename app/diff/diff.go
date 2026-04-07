@@ -75,6 +75,21 @@ func NewGit(workDir string) *Git {
 	return &Git{workDir: workDir}
 }
 
+// UntrackedFiles returns a list of untracked files (not in .gitignore) using git ls-files --others --exclude-standard.
+func (g *Git) UntrackedFiles() ([]string, error) {
+	out, err := g.runGit("ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for entry := range strings.SplitSeq(out, "\x00") {
+		if entry != "" {
+			files = append(files, entry)
+		}
+	}
+	return files, nil
+}
+
 // ChangedFiles returns a list of files changed relative to the given ref with their change status.
 // If ref is empty, it shows uncommitted changes. If staged is true, shows only staged changes.
 // Uses -z for NUL-terminated output to handle filenames with special characters.

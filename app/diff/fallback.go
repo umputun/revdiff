@@ -54,6 +54,11 @@ func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, 
 // for in-repo files, it calls the inner renderer first; if the result is empty
 // (no error, no lines) and the file matches an --only pattern, it falls back to
 // reading the file from disk as all-context lines.
+// UntrackedFiles returns untracked files from the inner git renderer.
+func (fr *FallbackRenderer) UntrackedFiles() ([]string, error) {
+	return fr.inner.UntrackedFiles()
+}
+
 func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 	resolved := resolvePath(fr.workDir, file)
 
@@ -177,6 +182,11 @@ func (r *FileReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	return result, nil
 }
 
+// UntrackedFiles returns nil — FileReader is used outside git repos, untracked is not applicable.
+func (r *FileReader) UntrackedFiles() ([]string, error) {
+	return nil, nil
+}
+
 // FileDiff reads the file from disk and returns all lines as context DiffLines.
 func (r *FileReader) FileDiff(_, file string, _ bool) ([]DiffLine, error) {
 	resolved := resolvePath(r.workDir, file)
@@ -261,6 +271,52 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 			return nil, fmt.Errorf("%s file %s: %w", ctxErr.op, path, ctxErr.err)
 		}
 		return nil, fmt.Errorf("read file %s: %w", path, err)
+	}
+	return lines, nil
+}
+
+// ReadFileAsAdded reads a file and returns lines as ChangeAdd type.
+func ReadFileAsAdded(path string) ([]DiffLine, error) {
+	return readFileFromDisk(path, ChangeAdd)
+}
+
+// readFileFromDisk reads a file and returns lines with the given change type.
+// readReaderAsContext always returns ChangeContext, so we adjust afterwards.
+func readFileFromDisk(path string, changeType ChangeType) ([]DiffLine, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if linfo, lErr := os.Lstat(path); lErr == nil && linfo.Mode()&os.ModeSymlink != 0 {
+				return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(broken symlink)", ChangeType: ChangeContext}}, nil
+			}
+		}
+		return nil, fmt.Errorf("stat file %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(not a regular file)", ChangeType: ChangeContext}}, nil
+	}
+
+	f, err := os.Open(path) //nolint:gosec // path comes from user flags or git ls-files output
+	if err != nil {
+		return nil, fmt.Errorf("read file %s: %w", path, err)
+	}
+	defer f.Close()
+
+	lines, err := readReaderAsContext(f)
+	if err != nil {
+		var ctxErr readerContextError
+		if errors.As(err, &ctxErr) {
+			return nil, fmt.Errorf("%s file %s: %w", ctxErr.op, path, ctxErr.err)
+		}
+		return nil, fmt.Errorf("read file %s: %w", path, err)
+	}
+	if changeType != ChangeContext {
+		for i := range lines {
+			lines[i].ChangeType = changeType
+			if changeType == ChangeAdd {
+				lines[i].OldNum = 0
+			}
+		}
 	}
 	return lines, nil
 }

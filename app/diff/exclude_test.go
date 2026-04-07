@@ -16,6 +16,10 @@ type mockRenderer struct {
 	fileDiffErr  error
 }
 
+func (m *mockRenderer) UntrackedFiles() ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockRenderer) ChangedFiles(string, bool) ([]FileEntry, error) {
 	return m.changedFiles, m.changedErr
 }

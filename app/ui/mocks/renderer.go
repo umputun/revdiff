@@ -21,6 +21,9 @@ import (
 //			FileDiffFunc: func(ref string, file string, staged bool) ([]diff.DiffLine, error) {
 //				panic("mock out the FileDiff method")
 //			},
+//			UntrackedFilesFunc: func() ([]string, error) {
+//				panic("mock out the UntrackedFiles method")
+//			},
 //		}
 //
 //		// use mockedRenderer in code that requires ui.Renderer
@@ -33,6 +36,9 @@ type RendererMock struct {
 
 	// FileDiffFunc mocks the FileDiff method.
 	FileDiffFunc func(ref string, file string, staged bool) ([]diff.DiffLine, error)
+
+	// UntrackedFilesFunc mocks the UntrackedFiles method.
+	UntrackedFilesFunc func() ([]string, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -52,9 +58,12 @@ type RendererMock struct {
 			// Staged is the staged argument value.
 			Staged bool
 		}
+		// UntrackedFiles holds details about calls to the UntrackedFiles method.
+		UntrackedFiles []struct{}
 	}
-	lockChangedFiles sync.RWMutex
-	lockFileDiff     sync.RWMutex
+	lockChangedFiles  sync.RWMutex
+	lockFileDiff      sync.RWMutex
+	lockUntrackedFiles sync.RWMutex
 }
 
 // ChangedFiles calls ChangedFilesFunc.
@@ -130,5 +139,29 @@ func (mock *RendererMock) FileDiffCalls() []struct {
 	mock.lockFileDiff.RLock()
 	calls = mock.calls.FileDiff
 	mock.lockFileDiff.RUnlock()
+	return calls
+}
+
+// UntrackedFiles calls UntrackedFilesFunc.
+func (mock *RendererMock) UntrackedFiles() ([]string, error) {
+	if mock.UntrackedFilesFunc == nil {
+		panic("RendererMock.UntrackedFilesFunc: method is nil but Renderer.UntrackedFiles was just called")
+	}
+	callInfo := struct{}{}
+	mock.lockUntrackedFiles.Lock()
+	mock.calls.UntrackedFiles = append(mock.calls.UntrackedFiles, callInfo)
+	mock.lockUntrackedFiles.Unlock()
+	return mock.UntrackedFilesFunc()
+}
+
+// UntrackedFilesCalls gets all the calls that were made to UntrackedFiles.
+// Check the length with:
+//
+//	len(mockedRenderer.UntrackedFilesCalls())
+func (mock *RendererMock) UntrackedFilesCalls() []struct{} {
+	var calls []struct{}
+	mock.lockUntrackedFiles.RLock()
+	calls = mock.calls.UntrackedFiles
+	mock.lockUntrackedFiles.RUnlock()
 	return calls
 }

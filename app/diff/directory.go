@@ -24,6 +24,11 @@ func NewDirectoryReader(workDir string) *DirectoryReader {
 
 // ChangedFiles returns all git-tracked files as sorted relative paths.
 // ref and staged parameters are ignored since all tracked files are returned.
+// UntrackedFiles returns nil — DirectoryReader shows all tracked files.
+func (dr *DirectoryReader) UntrackedFiles() ([]string, error) {
+	return nil, nil
+}
+
 func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	// use -z for NUL-separated output to avoid C-quoting of paths with non-ASCII characters
 	cmd := exec.CommandContext(context.Background(), "git", "ls-files", "-z")
