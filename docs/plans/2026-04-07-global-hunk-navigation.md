@@ -31,11 +31,11 @@ Make `[` / `]` (prev/next hunk) work regardless of which pane has focus. When pr
 **Files:**
 - Modify: `app/ui/model.go`
 
-- [ ] Add `pendingHunkJump *bool` field to Model struct (true = land on first hunk, false = land on last hunk)
-- [ ] In `handleFileLoaded`, after `skipInitialDividers()`, check `pendingHunkJump`: if true, set `m.diffCursor = -1` then call `m.moveToNextHunk()`; if false, set `m.diffCursor = len(m.diffLines)` then call `m.moveToPrevHunk()`; clear the field in either branch then return
-- [ ] Clear `pendingHunkJump` in all places where `pendingAnnotJump` is cleared (tree nav, filter, file nav, annotate)
-- [ ] Write tests for `handleFileLoaded` with `pendingHunkJump` set: verify cursor lands on first/last hunk of the loaded file
-- [ ] Run `make test` — must pass before task 3
+- [x] Add `pendingHunkJump *bool` field to Model struct (true = land on first hunk, false = land on last hunk)
+- [x] In `handleFileLoaded`, after `skipInitialDividers()`, check `pendingHunkJump`: if true, set `m.diffCursor = -1` then call `m.moveToNextHunk()`; if false, set `m.diffCursor = len(m.diffLines)` then call `m.moveToPrevHunk()`; clear the field in either branch then return
+- [x] Clear `pendingHunkJump` in all places where `pendingAnnotJump` is cleared (tree nav, filter, file nav, annotate)
+- [x] Write tests for `handleFileLoaded` with `pendingHunkJump` set: verify cursor lands on first/last hunk of the loaded file
+- [x] Run `make test` — must pass before task 3
 
 ### Task 3: Implement `handleHunkNav` and wire global key dispatch
 

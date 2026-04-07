@@ -7584,3 +7584,88 @@ func TestModel_ReviewedModeIcon(t *testing.T) {
 	icons = m.statusModeIcons()
 	assert.Contains(t, icons, "✓", "reviewed icon should be present when files reviewed")
 }
+
+func TestModel_PendingHunkJump_FirstHunk(t *testing.T) {
+	// File b.go has two hunks: divider, context, add, context, add
+	bLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{ChangeType: diff.ChangeContext, Content: "ctx1", NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "add1", NewNum: 2},
+		{ChangeType: diff.ChangeContext, Content: "ctx2", NewNum: 3},
+		{ChangeType: diff.ChangeAdd, Content: "add2", NewNum: 4},
+	}
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 1}},
+		"b.go": bLines,
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// set pendingHunkJump = true (first hunk)
+	fwd := true
+	m.pendingHunkJump = &fwd
+	m.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: bLines}
+	result, _ = m.Update(loadMsg)
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after file load")
+	assert.Equal(t, 2, model.diffCursor, "cursor should land on first hunk (index 2, the add line)")
+}
+
+func TestModel_PendingHunkJump_LastHunk(t *testing.T) {
+	// File b.go has two hunks
+	bLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{ChangeType: diff.ChangeContext, Content: "ctx1", NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "add1", NewNum: 2},
+		{ChangeType: diff.ChangeContext, Content: "ctx2", NewNum: 3},
+		{ChangeType: diff.ChangeAdd, Content: "add2", NewNum: 4},
+	}
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 1}},
+		"b.go": bLines,
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// set pendingHunkJump = false (last hunk)
+	bwd := false
+	m.pendingHunkJump = &bwd
+	m.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: bLines}
+	result, _ = m.Update(loadMsg)
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after file load")
+	assert.Equal(t, 4, model.diffCursor, "cursor should land on last hunk (index 4, the second add line)")
+}
+
+func TestModel_PendingHunkJump_ClearedOnManualNav(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	// set pendingHunkJump then trigger manual tree navigation (j key from tree pane)
+	fwd := true
+	m.pendingHunkJump = &fwd
+	m.focus = paneTree
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model := result.(Model)
+	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared on manual tree navigation")
+}

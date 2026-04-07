@@ -117,6 +117,7 @@ type Model struct {
 	annotListOffset  int                     // scroll offset for the annotation list
 	annotListItems   []annotation.Annotation // flat sorted list of all annotations
 	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
+	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 }
@@ -543,6 +544,7 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
+	m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 	m.tree.ensureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
 }
@@ -797,6 +799,21 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		a := *m.pendingAnnotJump
 		m.pendingAnnotJump = nil
 		m.positionOnAnnotation(a)
+		return m, blameCmd
+	}
+
+	// handle pending hunk jump after cross-file hunk navigation
+	if m.pendingHunkJump != nil {
+		forward := *m.pendingHunkJump
+		m.pendingHunkJump = nil
+		if forward {
+			m.diffCursor = -1
+			m.moveToNextHunk()
+		} else {
+			m.diffCursor = len(m.diffLines)
+			m.moveToPrevHunk()
+		}
+		m.centerViewportOnCursor()
 		return m, blameCmd
 	}
 
@@ -1620,6 +1637,7 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
+		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 		m.tree.toggleFilter(annotated)
 		m.tree.ensureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
@@ -1663,6 +1681,7 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 	}
 	if !m.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
+		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 		if forward {
 			m.tree.nextFile()
 		} else {
