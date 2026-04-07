@@ -27,12 +27,12 @@ Add an `EndLine` field to `Annotation`. When creating an annotation, if the comm
 - Modify: `annotation/store.go`
 - Modify: `annotation/store_test.go`
 
-- [ ] add `EndLine int` field to `Annotation` struct (0 means no range)
-- [ ] update `FormatOutput()` to render `file:line-endline (type)` when `EndLine > 0`
-- [ ] write test: annotation with EndLine=0 produces `## file:43 (+)` (unchanged)
-- [ ] write test: annotation with EndLine=67 produces `## file:43-67 (+)`
-- [ ] write test: file-level annotations (Line=0) ignore EndLine
-- [ ] run `make test && make lint`
+- [x] add `EndLine int` field to `Annotation` struct (0 means no range)
+- [x] update `FormatOutput()` to render `file:line-endline (type)` when `EndLine > 0`
+- [x] write test: annotation with EndLine=0 produces `## file:43 (+)` (unchanged)
+- [x] write test: annotation with EndLine=67 produces `## file:43-67 (+)`
+- [x] write test: file-level annotations (Line=0) ignore EndLine
+- [x] run `make test && make lint`
 
 ### Task 2: Detect hunk keywords and populate EndLine
 

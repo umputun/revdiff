@@ -10,6 +10,7 @@ import (
 type Annotation struct {
 	File    string // file path relative to repo root
 	Line    int    // line number in the diff
+	EndLine int    // end line of hunk range, 0 means no range
 	Type    string // change type: "+", "-", or " "
 	Comment string // user comment text
 }
@@ -124,9 +125,12 @@ func (s *Store) FormatOutput() string {
 				buf.WriteString("\n")
 			}
 			first = false
-			if a.Line == 0 {
+			switch {
+			case a.Line == 0:
 				fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, a.Comment)
-			} else {
+			case a.EndLine > 0:
+				fmt.Fprintf(&buf, "## %s:%d-%d (%s)\n%s\n", a.File, a.Line, a.EndLine, a.Type, a.Comment)
+			default:
 				fmt.Fprintf(&buf, "## %s:%d (%s)\n%s\n", a.File, a.Line, a.Type, a.Comment)
 			}
 		}

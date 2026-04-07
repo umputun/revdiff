@@ -340,6 +340,30 @@ func TestStore_ContextOnlyAnnotations(t *testing.T) {
 	assert.Len(t, s.Get("plan.md"), 1)
 }
 
+func TestStore_FormatOutputEndLineZero(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "fix this"})
+
+	expected := "## handler.go:43 (+)\nfix this\n"
+	assert.Equal(t, expected, s.FormatOutput(), "EndLine=0 should produce single line number")
+}
+
+func TestStore_FormatOutputEndLineRange(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, EndLine: 67, Type: "+", Comment: "refactor this hunk"})
+
+	expected := "## handler.go:43-67 (+)\nrefactor this hunk\n"
+	assert.Equal(t, expected, s.FormatOutput(), "EndLine>0 should produce line range")
+}
+
+func TestStore_FormatOutputFileLevelIgnoresEndLine(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 0, EndLine: 50, Type: "", Comment: "file comment"})
+
+	expected := "## handler.go (file-level)\nfile comment\n"
+	assert.Equal(t, expected, s.FormatOutput(), "file-level annotations should ignore EndLine")
+}
+
 func TestStore_Count(t *testing.T) {
 	s := NewStore()
 	assert.Equal(t, 0, s.Count(), "empty store should return 0")
