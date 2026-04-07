@@ -50,8 +50,11 @@ export default function revdiffPostEditReminder(pi: ExtensionAPI): void {
 
 	function updateStatus(ctx: ExtensionContext): void {
 		rememberCtx(ctx);
-		if (!enabled || editCallsInRun === 0 || !ctx.hasUI) {
-			ctx.ui.setStatus(STATUS_KEY, undefined);
+		if (!enabled || editCallsInRun === 0) {
+			clearReminder();
+			return;
+		}
+		if (!ctx.hasUI) {
 			return;
 		}
 		const command = resolveSuggestedCommand(ctx);
@@ -67,7 +70,9 @@ export default function revdiffPostEditReminder(pi: ExtensionAPI): void {
 		if (!enabled) {
 			clearReminder();
 		}
-		ctx.ui.notify(`revdiff post-edit reminders ${enabled ? "enabled" : "disabled"}`, "info");
+		if (ctx.hasUI) {
+			ctx.ui.notify(`revdiff post-edit reminders ${enabled ? "enabled" : "disabled"}`, "info");
+		}
 	}
 
 	pi.registerFlag("revdiff-reminders", {
