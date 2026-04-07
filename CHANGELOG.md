@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.13.0 - 2026-04-06
+
+### New Features
+
+- --stdin scratch-buffer review mode for piped content (#46)
+- hunk keyword expansion in annotation output (#47)
+- binary file detection with size delta and IsBinary flag (#44)
+- two-column help overlay with colored section headers and keys
+
+### Bug Fixes
+
+- add right padding to prevent wrapped text from touching pane border (#45)
+- enable word wrap by default for plan review
+
 ## v0.12.0 - 2026-04-06
 
 ### New Features
