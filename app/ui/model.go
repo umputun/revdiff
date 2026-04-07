@@ -250,15 +250,17 @@ func (m Model) loadFiles() tea.Cmd {
 		copy(changed, files)
 		stagedOnly := m.fetchStagedOnly(files)
 		if len(stagedOnly) > 0 {
-			files = append(make([]string, 0, len(files)+len(stagedOnly)), files...)
-			files = append(files, stagedOnly...)
+			tmp := make([]string, 0, len(files)+len(stagedOnly))
+			tmp = append(tmp, files...)
+			files = append(tmp, stagedOnly...)
 		}
 		var untracked []string
 		if m.showUntracked {
 			untracked = m.fetchUntracked(files)
 			if len(untracked) > 0 {
-				files = append(make([]string, 0, len(files)+len(untracked)), files...)
-				files = append(files, untracked...)
+				tmp := make([]string, 0, len(files)+len(untracked))
+				tmp = append(tmp, files...)
+				files = append(tmp, untracked...)
 			}
 		}
 		return filesLoadedMsg{files: files, changed: changed, untracked: untracked, stagedOnly: stagedOnly}

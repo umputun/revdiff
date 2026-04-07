@@ -54,6 +54,7 @@ func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, 
 // for in-repo files, it calls the inner renderer first; if the result is empty
 // (no error, no lines) and the file matches an --only pattern, it falls back to
 // reading the file from disk as all-context lines.
+
 // UntrackedFiles returns untracked files from the inner git renderer.
 func (fr *FallbackRenderer) UntrackedFiles() ([]string, error) {
 	return fr.inner.UntrackedFiles()

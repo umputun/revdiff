@@ -35,12 +35,11 @@ func NewExcludeFilter(inner renderer, prefixes []string) *ExcludeFilter {
 	return &ExcludeFilter{inner: inner, prefixes: normalized}
 }
 
-// ChangedFiles returns files from the inner renderer, excluding any that match a prefix.
 // UntrackedFiles returns untracked files from the inner renderer, excluding any that match a prefix.
 func (ef *ExcludeFilter) UntrackedFiles() ([]string, error) {
 	files, err := ef.inner.UntrackedFiles()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("exclude filter, untracked files: %w", err)
 	}
 	filtered := make([]string, 0, len(files))
 	for _, f := range files {

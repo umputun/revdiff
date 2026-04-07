@@ -24,11 +24,6 @@ func NewDirectoryReader(workDir string) *DirectoryReader {
 
 // ChangedFiles returns all git-tracked files as sorted relative paths.
 // ref and staged parameters are ignored since all tracked files are returned.
-// UntrackedFiles returns nil — DirectoryReader shows all tracked files.
-func (dr *DirectoryReader) UntrackedFiles() ([]string, error) {
-	return nil, nil
-}
-
 func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	// use -z for NUL-separated output to avoid C-quoting of paths with non-ASCII characters
 	cmd := exec.CommandContext(context.Background(), "git", "ls-files", "-z")
@@ -60,6 +55,11 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	return entries, nil
+}
+
+// UntrackedFiles returns nil — DirectoryReader shows all tracked files.
+func (dr *DirectoryReader) UntrackedFiles() ([]string, error) {
+	return nil, nil
 }
 
 // FileDiff reads the file from disk and returns all lines as context DiffLines.

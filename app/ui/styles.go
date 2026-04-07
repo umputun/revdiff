@@ -2,8 +2,6 @@ package ui
 
 import (
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/umputun/revdiff/app/diff"
 )
 
 // Colors holds hex color values (#rrggbb) for TUI rendering.
@@ -71,18 +69,6 @@ type styles struct {
 	SearchMatch lipgloss.Style
 
 	colors Colors // original color values for dynamic style construction
-}
-
-// fileStatusStyle returns the pre-computed style for a git file status letter.
-func (s styles) fileStatusStyle(status diff.FileStatus) lipgloss.Style {
-	switch status {
-	case diff.FileAdded:
-		return s.StatusAdded
-	case diff.FileDeleted:
-		return s.StatusDeleted
-	default:
-		return s.StatusDefault
-	}
 }
 
 // normalizeColor ensures hex color values have a # prefix.
