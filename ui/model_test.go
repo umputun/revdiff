@@ -963,20 +963,20 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 		assert.Equal(t, 3, anns[0].EndLine, "EndLine should be last add line's NewNum")
 	})
 
-	t.Run("block keyword populates EndLine", func(t *testing.T) {
+	t.Run("block keyword on single remove in mixed hunk", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
 		m.tree = newFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
-		m.diffCursor = 1 // on "old line" (remove, OldNum=2)
+		m.diffCursor = 1 // on "old line" (remove, OldNum=2) — only one remove in this hunk
 		m.startAnnotation()
 		m.annotateInput.SetValue("review this BLOCK carefully")
 		m.saveAnnotation()
 		anns := m.store.Get("a.go")
 		require.Len(t, anns, 1)
 		assert.Equal(t, 2, anns[0].Line)
-		assert.Equal(t, 3, anns[0].EndLine, "EndLine should be last add line's NewNum")
+		assert.Equal(t, 0, anns[0].EndLine, "single remove line, no multi-line range")
 	})
 
 	t.Run("no keyword does not set EndLine", func(t *testing.T) {
@@ -1021,11 +1021,11 @@ func TestModel_HunkEndLine(t *testing.T) {
 	m := testModel(nil, nil)
 	m.diffLines = lines
 
-	t.Run("returns last line of hunk from first change", func(t *testing.T) {
-		assert.Equal(t, 3, m.hunkEndLine(1), "hunk ending at add NewNum=3")
+	t.Run("remove line stops at same type boundary", func(t *testing.T) {
+		assert.Equal(t, 2, m.hunkEndLine(1), "single remove stays in old-file number space")
 	})
-	t.Run("returns last line from middle of hunk", func(t *testing.T) {
-		assert.Equal(t, 3, m.hunkEndLine(2))
+	t.Run("add line walks through consecutive adds", func(t *testing.T) {
+		assert.Equal(t, 3, m.hunkEndLine(2), "two adds, last NewNum=3")
 	})
 	t.Run("returns last line from last change line", func(t *testing.T) {
 		assert.Equal(t, 3, m.hunkEndLine(3))
@@ -1037,6 +1037,142 @@ func TestModel_HunkEndLine(t *testing.T) {
 		assert.Equal(t, 0, m.hunkEndLine(-1))
 		assert.Equal(t, 0, m.hunkEndLine(99))
 	})
+
+	t.Run("mixed hunk removes followed by adds", func(t *testing.T) {
+		// simulates a real diff where 3 lines are removed and 2 added
+		mixedLines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, Content: "old line 1", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, Content: "old line 2", ChangeType: diff.ChangeRemove},
+			{OldNum: 13, Content: "old line 3", ChangeType: diff.ChangeRemove},
+			{NewNum: 11, Content: "new line 1", ChangeType: diff.ChangeAdd},
+			{NewNum: 12, Content: "new line 2", ChangeType: diff.ChangeAdd},
+			{OldNum: 14, NewNum: 13, Content: "ctx", ChangeType: diff.ChangeContext},
+		}
+		m.diffLines = mixedLines
+
+		// cursor on first remove: end should be last remove (OldNum=13), not any add line
+		assert.Equal(t, 13, m.hunkEndLine(1), "remove hunk end stays in old-file space")
+		// cursor on middle remove
+		assert.Equal(t, 13, m.hunkEndLine(2), "middle remove walks to last remove")
+		// cursor on last remove
+		assert.Equal(t, 13, m.hunkEndLine(3), "last remove returns own OldNum")
+
+		// cursor on first add: end should be last add (NewNum=12), not a remove
+		assert.Equal(t, 12, m.hunkEndLine(4), "add hunk end stays in new-file space")
+		// cursor on last add
+		assert.Equal(t, 12, m.hunkEndLine(5), "last add returns own NewNum")
+	})
+}
+
+func TestModel_AnnotateReAnnotateKeywordChange(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx before", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "new line", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added line", ChangeType: diff.ChangeAdd},
+		{OldNum: 2, NewNum: 4, Content: "ctx after", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("add keyword to existing annotation updates EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 1 // on "new line" (add, NewNum=2)
+		m.startAnnotation()
+		m.annotateInput.SetValue("this is fine")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 0, anns[0].EndLine, "initially no EndLine")
+
+		// re-annotate same line with hunk keyword
+		m.startAnnotation()
+		m.annotateInput.SetValue("refactor this hunk")
+		m.saveAnnotation()
+		anns = m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, "refactor this hunk", anns[0].Comment)
+		assert.Equal(t, 3, anns[0].EndLine, "EndLine should be set after adding keyword")
+	})
+
+	t.Run("remove keyword from existing annotation clears EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.startAnnotation()
+		m.annotateInput.SetValue("refactor this hunk")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 3, anns[0].EndLine, "initially has EndLine")
+
+		// re-annotate same line without keyword
+		m.startAnnotation()
+		m.annotateInput.SetValue("just a note")
+		m.saveAnnotation()
+		anns = m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, "just a note", anns[0].Comment)
+		assert.Equal(t, 0, anns[0].EndLine, "EndLine should be cleared after removing keyword")
+	})
+}
+
+func TestModel_AnnotateSingleLineHunkWithKeyword(t *testing.T) {
+	// single change line: hunkEndLine returns the same lineNum, so endLine > lineNum is false
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx before", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "single add", ChangeType: diff.ChangeAdd},
+		{OldNum: 2, NewNum: 3, Content: "ctx after", ChangeType: diff.ChangeContext},
+	}
+
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1 // on "single add" (add, NewNum=2)
+	m.startAnnotation()
+	m.annotateInput.SetValue("refactor this hunk")
+	m.saveAnnotation()
+
+	anns := m.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 2, anns[0].Line)
+	assert.Equal(t, 0, anns[0].EndLine, "single-line hunk should not set EndLine (avoids 2-2 range)")
+}
+
+func TestModel_AnnotateRemovedLineInMixedHunk(t *testing.T) {
+	// mixed hunk: 2 removes followed by 2 adds — annotating a remove line with hunk keyword
+	// should produce EndLine in the old-file number space, not crossing into the add lines
+	lines := []diff.DiffLine{
+		{OldNum: 10, NewNum: 10, Content: "ctx before", ChangeType: diff.ChangeContext},
+		{OldNum: 11, Content: "removed 1", ChangeType: diff.ChangeRemove},
+		{OldNum: 12, Content: "removed 2", ChangeType: diff.ChangeRemove},
+		{NewNum: 11, Content: "added 1", ChangeType: diff.ChangeAdd},
+		{NewNum: 12, Content: "added 2", ChangeType: diff.ChangeAdd},
+		{OldNum: 13, NewNum: 13, Content: "ctx after", ChangeType: diff.ChangeContext},
+	}
+
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.diffCursor = 1 // on first remove (OldNum=11)
+	m.startAnnotation()
+	m.annotateInput.SetValue("fix this hunk")
+	m.saveAnnotation()
+
+	anns := m.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 11, anns[0].Line, "start line is OldNum of first remove")
+	assert.Equal(t, 12, anns[0].EndLine, "end line is OldNum of last remove, not NewNum of an add")
+	assert.Equal(t, string(diff.ChangeRemove), anns[0].Type)
 }
 
 func TestModel_AnnotateEscCancels(t *testing.T) {

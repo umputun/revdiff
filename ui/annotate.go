@@ -232,7 +232,9 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 }
 
 // hunkEndLine returns the display line number of the last line in the change hunk
-// containing diffLines[idx]. returns 0 if idx is not inside a change hunk.
+// containing diffLines[idx]. only walks forward through lines of the same change type
+// as the starting line, so both start and end use the same number space (old or new).
+// returns 0 if idx is not inside a change hunk.
 func (m Model) hunkEndLine(idx int) int {
 	if idx < 0 || idx >= len(m.diffLines) {
 		return 0
@@ -242,11 +244,11 @@ func (m Model) hunkEndLine(idx int) int {
 		return 0
 	}
 
-	// walk forward from idx to find the last contiguous change line
+	// walk forward from idx to find the last contiguous line of the same change type
+	startType := dl.ChangeType
 	last := idx
 	for i := idx + 1; i < len(m.diffLines); i++ {
-		ct := m.diffLines[i].ChangeType
-		if ct != diff.ChangeAdd && ct != diff.ChangeRemove {
+		if m.diffLines[i].ChangeType != startType {
 			break
 		}
 		last = i

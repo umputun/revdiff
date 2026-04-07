@@ -31,6 +31,7 @@ func (s *Store) Add(a Annotation) {
 	existing := s.annotations[a.File]
 	if i, ok := s.find(a.File, a.Line, a.Type); ok {
 		existing[i].Comment = a.Comment
+		existing[i].EndLine = a.EndLine
 		return
 	}
 	s.annotations[a.File] = append(existing, a)

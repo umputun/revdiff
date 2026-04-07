@@ -27,6 +27,28 @@ func TestStore_AddReplacesExisting(t *testing.T) {
 	assert.Equal(t, "new comment", anns[0].Comment)
 }
 
+func TestStore_AddReplacesExistingPreservesEndLine(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "old comment", EndLine: 0})
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "refactor this hunk", EndLine: 67})
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "refactor this hunk", anns[0].Comment)
+	assert.Equal(t, 67, anns[0].EndLine, "EndLine should be updated on replacement")
+}
+
+func TestStore_AddReplacesExistingClearsEndLine(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "refactor this hunk", EndLine: 67})
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "just a note", EndLine: 0})
+
+	anns := s.Get("handler.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "just a note", anns[0].Comment)
+	assert.Equal(t, 0, anns[0].EndLine, "EndLine should be cleared when replacement has no range")
+}
+
 func TestStore_AddMultipleLines(t *testing.T) {
 	s := NewStore()
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "first"})
