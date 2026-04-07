@@ -12,8 +12,9 @@ import (
 	"github.com/umputun/revdiff/diff"
 )
 
-// hunkKeywordRe matches whole-word "hunk" or "block" (case-insensitive).
-var hunkKeywordRe = regexp.MustCompile(`(?i)\b(hunk|block)\b`)
+// hunkKeywordRe matches whole-word "hunk" (case-insensitive).
+// "block" was removed as it triggers false positives in casual usage (e.g., "this code block is fine").
+var hunkKeywordRe = regexp.MustCompile(`(?i)\bhunk\b`)
 
 // newAnnotationInput creates and focuses a text input for annotation editing.
 // prefixWidth accounts for the visible prefix characters (cursor col + emoji + label + margin).

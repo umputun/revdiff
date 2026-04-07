@@ -506,7 +506,7 @@ refactor this hunk to reduce nesting
 don't remove this validation
 ```
 
-When annotation text contains keywords "hunk" or "block" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
+When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
 ## Contributing
 
