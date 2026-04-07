@@ -8,7 +8,7 @@
 #   main_branch: detected main/master branch name
 #   is_main: true/false (whether current branch is main/master)
 #   has_uncommitted: true/false
-#   suggested_ref: the ref to use (empty = uncommitted, HEAD~1, or main branch name)
+#   suggested_ref: the ref to use (empty = uncommitted, HEAD~1, main branch name, or --all-files for no-commits repos)
 #   needs_ask: true/false (whether the skill should ask the user)
 
 set -euo pipefail
@@ -35,11 +35,19 @@ if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
     has_uncommitted="true"
 fi
 
+# detect no-commits state (fresh repo after git init)
+has_commits="true"
+if ! git rev-parse HEAD >/dev/null 2>&1; then
+    has_commits="false"
+fi
+
 # decision logic
 suggested_ref=""
 needs_ask="false"
 
-if [ "$is_main" = "true" ]; then
+if [ "$has_commits" = "false" ]; then
+    suggested_ref="--all-files" # no commits yet, browse staged files
+elif [ "$is_main" = "true" ]; then
     if [ "$has_uncommitted" = "true" ]; then
         suggested_ref="" # uncommitted changes on main
     else
