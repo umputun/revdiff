@@ -88,6 +88,8 @@ Run the launcher script:
 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
 ```
 
+**IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on some harnesses. If your bash tool supports a timeout parameter, set it to **1800000** (30 minutes) when invoking the launcher. If it does not, see the recovery fallback in Step 3.
+
 The script:
 - Detects available terminal (tmux → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
@@ -95,6 +97,18 @@ The script:
 - Prints captured annotations to stdout
 
 ### Step 3: Process Annotations
+
+**Recovery fallback (if the launcher timed out)**: If the bash tool killed the launcher with a timeout error, revdiff is likely still open in the overlay. Do not retry the launcher. Instead:
+
+1. Tell the user: "The bash tool timed out, but revdiff may still be open. Let me know when you're done reviewing."
+2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply confirms revdiff has exited.
+3. Read the most recent output file:
+   ```bash
+   cat "$(ls -t /tmp/revdiff-output-* 2>/dev/null | head -1)"
+   ```
+4. If it has content, process as annotations below. If empty or no file, the user quit without annotating.
+
+This is safe because revdiff writes the output file atomically on exit, and the user's reply proves the overlay has been dismissed.
 
 If the script produces output, the user made annotations. The output format is:
 
