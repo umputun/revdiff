@@ -13,11 +13,12 @@ FAIL=0
 # source the real sq() from the shared file
 source "$SCRIPT_DIR/shell-quote.sh"
 
-# verify both launcher scripts source shell-quote.sh instead of defining sq() inline
+# verify the main revdiff launcher still uses the shared helper; the planning
+# launcher is intentionally self-contained so it can ship as a standalone plugin.
 assert_no_inline_sq() {
     local file="$1"
     local label="$2"
-    if grep -q '^sq()' "$file"; then
+    if grep -Eq '^[[:space:]]*sq[[:space:]]*\(\)' "$file"; then
         FAIL=$((FAIL + 1))
         printf "FAIL: %s defines sq() inline instead of sourcing shell-quote.sh\n" "$label" >&2
     else
@@ -26,7 +27,6 @@ assert_no_inline_sq() {
 }
 
 assert_no_inline_sq "$SCRIPT_DIR/launch-revdiff.sh" "launch-revdiff.sh"
-assert_no_inline_sq "$REPO_ROOT/plugins/revdiff-planning/scripts/launch-plan-review.sh" "launch-plan-review.sh"
 
 assert_sq_roundtrip() {
     local input="$1"
@@ -48,7 +48,6 @@ assert_args_roundtrip() {
     local label="$1"
     shift
     local cmd=""
-    local i=1
     for arg in "$@"; do
         cmd="${cmd:+$cmd }$(sq "$arg")"
     done
@@ -85,6 +84,9 @@ assert_sq_roundtrip 'a	b' "tab character"
 assert_sq_roundtrip '*?.txt' "glob characters"
 assert_sq_roundtrip '$(echo pwned)' "command substitution attempt"
 assert_sq_roundtrip '/tmp/revdiff-output-AbC123' "typical mktemp path"
+assert_sq_roundtrip $'line1\nline2' "embedded newline"
+assert_sq_roundtrip "file'name'here" "consecutive single quotes"
+assert_sq_roundtrip '日本語.txt' "unicode filename"
 
 # --- multi-argument boundary tests ---
 
@@ -124,6 +126,78 @@ HEREDOC
 assert_heredoc_roundtrip "space in path" "/path/with spaces/file"
 assert_heredoc_roundtrip "single quote in path" "/path/it's/file"
 assert_heredoc_roundtrip "dollar sign" '/tmp/$HOME/file'
+
+# --- launcher path command-string tests ---
+# verify that shell command strings which invoke temp launcher scripts still
+# work when TMPDIR puts those scripts under paths with spaces or quotes.
+
+assert_launcher_exec_roundtrip() {
+    local label="$1"
+    local tmpname="$2"
+    local base_tmp
+    base_tmp=$(mktemp -d "${TMPDIR:-/tmp}/revdiff-quote-test-XXXXXX")
+    local tmpdir="$base_tmp/$tmpname"
+    mkdir -p "$tmpdir"
+    local launcher="$tmpdir/launcher script's test.sh"
+    cat > "$launcher" <<'SCRIPT'
+#!/bin/sh
+printf '%s' "launcher ok"
+SCRIPT
+    chmod +x "$launcher"
+
+    local result
+    result=$(sh -c "exec $(sq "$launcher")")
+    if [ "$result" = "launcher ok" ]; then
+        PASS=$((PASS + 1))
+    else
+        FAIL=$((FAIL + 1))
+        printf "FAIL: %s\n  launcher: %s\n  got:      %s\n" "$label" "$launcher" "$result" >&2
+    fi
+
+    rm -f "$launcher"
+    rmdir "$tmpdir"
+    rmdir "$base_tmp"
+}
+
+assert_launcher_args_roundtrip() {
+    local label="$1"
+    local tmpname="$2"
+    shift 2
+    local base_tmp
+    base_tmp=$(mktemp -d "${TMPDIR:-/tmp}/revdiff-quote-test-XXXXXX")
+    local tmpdir="$base_tmp/$tmpname"
+    mkdir -p "$tmpdir"
+    local launcher="$tmpdir/launcher script's test.sh"
+    cat > "$launcher" <<'SCRIPT'
+#!/bin/sh
+printf '%s\n' "$@"
+SCRIPT
+    chmod +x "$launcher"
+
+    local cmd
+    cmd="$(sq "$launcher")"
+    for arg in "$@"; do
+        cmd="$cmd $(sq "$arg")"
+    done
+
+    local result
+    result=$(sh -c "$cmd")
+    local expected
+    expected=$(printf '%s\n' "$@")
+    if [ "$result" = "$expected" ]; then
+        PASS=$((PASS + 1))
+    else
+        FAIL=$((FAIL + 1))
+        printf "FAIL: %s\n  launcher: %s\n  expected:\n%s\n  got:\n%s\n" "$label" "$launcher" "$expected" "$result" >&2
+    fi
+
+    rm -f "$launcher"
+    rmdir "$tmpdir"
+    rmdir "$base_tmp"
+}
+
+assert_launcher_exec_roundtrip "exec command with spaced launcher path" "revdiff launcher dir"
+assert_launcher_args_roundtrip "launcher path with args" "revdiff launcher dir 2" "/tmp/cwd with space" "/tmp/sentinel's file"
 
 # --- report ---
 

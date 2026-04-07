@@ -25,13 +25,17 @@ if [ -z "$REVDIFF_BIN" ]; then
 fi
 
 TMPBASE="${TMPDIR:-/tmp}"
+
+# Keep sq() local so this launcher works when revdiff-planning is packaged
+# as a standalone plugin without access to the repo's shared helper scripts.
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 # make plan path absolute for the overlay shell
 PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
 
-REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "--only=$PLAN_ABS") $(sq "--output=$OUTPUT_FILE") --wrap"
+REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "--only=$PLAN_ABS") $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
 # tmux: display-popup -E blocks until command exits
@@ -141,9 +145,9 @@ LAUNCHER
     # send exec command immediately — the pty input buffer holds the text
     # until the new pane's shell finishes initializing and reads it
     if [ -n "$CMUX_SURF" ]; then
-        cmux send --surface "$CMUX_SURF" "exec $LAUNCH_SCRIPT\n"
+        cmux send --surface "$CMUX_SURF" "exec $(sq "$LAUNCH_SCRIPT")\n"
     else
-        cmux send "exec $LAUNCH_SCRIPT\n"
+        cmux send "exec $(sq "$LAUNCH_SCRIPT")\n"
     fi
 
     while [ ! -f "$SENTINEL" ]; do
@@ -224,7 +228,7 @@ on run argv
     set targetId to item 1 of argv
     set launchScript to item 2 of argv
     set sentinel to item 3 of argv
-    set cmd to launchScript & " " & quoted form of sentinel
+    set cmd to quoted form of launchScript & " " & quoted form of sentinel
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
             repeat with t in tabs of w

@@ -162,9 +162,9 @@ LAUNCHER
     # send exec command immediately — the pty input buffer holds the text
     # until the new pane's shell finishes initializing and reads it
     if [ -n "$CMUX_SURF" ]; then
-        cmux send --surface "$CMUX_SURF" "exec $LAUNCH_SCRIPT\n"
+        cmux send --surface "$CMUX_SURF" "exec $(sq "$LAUNCH_SCRIPT")\n"
     else
-        cmux send "exec $LAUNCH_SCRIPT\n"
+        cmux send "exec $(sq "$LAUNCH_SCRIPT")\n"
     fi
 
     while [ ! -f "$SENTINEL" ]; do
@@ -253,7 +253,7 @@ on run argv
     set launchScript to item 2 of argv
     set cwd to item 3 of argv
     set sentinel to item 4 of argv
-    set cmd to launchScript & " " & quoted form of cwd & " " & quoted form of sentinel
+    set cmd to quoted form of launchScript & " " & quoted form of cwd & " " & quoted form of sentinel
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
             repeat with t in tabs of w
