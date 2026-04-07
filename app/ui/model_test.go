@@ -7669,3 +7669,225 @@ func TestModel_PendingHunkJump_ClearedOnManualNav(t *testing.T) {
 	model := result.(Model)
 	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared on manual tree navigation")
 }
+
+// loadFileIntoModel sets up a model with files loaded and a.go as the current file.
+func loadFileIntoModel(t *testing.T, files []string, diffs map[string][]diff.DiffLine) Model {
+	t.Helper()
+	m := testModel(files, diffs)
+	entries := make([]diff.FileEntry, len(files))
+	for i, f := range files {
+		entries[i] = diff.FileEntry{Path: f}
+	}
+	result, _ := m.Update(filesLoadedMsg{entries: entries})
+	m = result.(Model)
+	loadMsg := m.loadFileDiff(files[0])()
+	result, _ = m.Update(loadMsg)
+	m = result.(Model)
+	m.viewport.Height = 20
+	return m
+}
+
+func TestModel_HunkNav_FromTreePane_SwitchesFocusToDiff(t *testing.T) {
+	// pressing ] from tree pane should switch focus to diff and jump to first hunk
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {
+			{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 1},
+			{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 2},
+		},
+	}
+	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
+	m.focus = paneTree
+	m.diffCursor = 0 // on context line
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := result.(Model)
+
+	assert.Equal(t, paneDiff, model.focus, "] from tree pane should switch focus to diff")
+	assert.Equal(t, 1, model.diffCursor, "] should land on the add line (hunk start)")
+}
+
+func TestModel_HunkNav_PrevFromTreePane_SwitchesFocusToDiff(t *testing.T) {
+	// pressing [ from tree pane should switch focus to diff and jump to prev hunk
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {
+			{ChangeType: diff.ChangeAdd, Content: "add1", NewNum: 1},
+			{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 2},
+			{ChangeType: diff.ChangeAdd, Content: "add2", NewNum: 3},
+		},
+	}
+	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
+	m.focus = paneTree
+	m.diffCursor = 2 // on second add line
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	model := result.(Model)
+
+	assert.Equal(t, paneDiff, model.focus, "[ from tree pane should switch focus to diff")
+	assert.Equal(t, 0, model.diffCursor, "[ should land on first hunk start (index 0)")
+}
+
+func TestModel_HunkNav_NextCrossesFileForward(t *testing.T) {
+	// pressing ] at the last hunk of a.go should navigate to b.go and set pendingHunkJump=true
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.focus = paneDiff
+	m.diffCursor = 0 // at the only (last) hunk
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := result.(Model)
+
+	require.NotNil(t, model.pendingHunkJump, "pendingHunkJump should be set for cross-file forward jump")
+	assert.True(t, *model.pendingHunkJump, "pendingHunkJump should be true (land on first hunk)")
+	assert.Equal(t, "b.go", model.tree.selectedFile(), "tree should have advanced to b.go")
+	assert.NotNil(t, cmd, "a load command should be returned")
+}
+
+func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
+	// pressing [ at the first hunk of b.go should navigate to a.go and set pendingHunkJump=false
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	// tree: index 0 = dir entry, index 1 = a.go, index 2 = b.go
+	m.tree.cursor = 2
+	m.loadSeq++
+	bLoad := m.loadFileDiff("b.go")()
+	result, _ := m.Update(bLoad)
+	m = result.(Model)
+	m.viewport.Height = 20
+	m.focus = paneDiff
+	m.diffCursor = 0 // at the first (and only) hunk
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	model := result.(Model)
+
+	require.NotNil(t, model.pendingHunkJump, "pendingHunkJump should be set for cross-file backward jump")
+	assert.False(t, *model.pendingHunkJump, "pendingHunkJump should be false (land on last hunk)")
+	assert.Equal(t, "a.go", model.tree.selectedFile(), "tree should have moved back to a.go")
+	assert.NotNil(t, cmd, "a load command should be returned")
+}
+
+func TestModel_HunkNav_NextAtLastFileNoOp(t *testing.T) {
+	// pressing ] at the last hunk of the last file: no-op
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
+	m.focus = paneDiff
+	m.diffCursor = 0
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "no pendingHunkJump when no next file")
+	assert.Equal(t, 0, model.diffCursor, "cursor should stay at last hunk")
+	assert.Equal(t, "a.go", model.currFile, "should remain on a.go")
+}
+
+func TestModel_HunkNav_PrevAtFirstFileNoOp(t *testing.T) {
+	// pressing [ at the first hunk of the first file: no-op
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
+	m.focus = paneDiff
+	m.diffCursor = 0
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "no pendingHunkJump when no prev file")
+	assert.Equal(t, 0, model.diffCursor, "cursor should stay at first hunk")
+	assert.Equal(t, "a.go", model.currFile, "should remain on a.go")
+}
+
+func TestModel_HunkNav_SingleFileNoCrossFile(t *testing.T) {
+	// in single-file mode, ] at last hunk should not cross to other files
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
+	m.singleFile = true
+	m.treeWidth = 0
+	m.focus = paneDiff
+	m.diffCursor = 0
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "single-file mode should not set pendingHunkJump")
+	assert.Equal(t, 0, model.diffCursor, "cursor should not move in single-file mode at last hunk")
+}
+
+func TestModel_HunkNav_CrossFile_LandsOnFirstHunk(t *testing.T) {
+	// end-to-end: ] from last hunk of a.go loads b.go and lands on its first hunk
+	bLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "add1", NewNum: 2},
+		{ChangeType: diff.ChangeContext, Content: "ctx2", NewNum: 3},
+		{ChangeType: diff.ChangeAdd, Content: "add2", NewNum: 4},
+	}
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": bLines,
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.focus = paneDiff
+	m.diffCursor = 0 // at the only hunk of a.go
+
+	// press ] to trigger cross-file jump
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = result.(Model)
+	require.NotNil(t, cmd, "should have a load command")
+
+	// execute the load command and process the result
+	loadMsg := cmd()
+	result, _ = m.Update(loadMsg)
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
+	assert.Equal(t, "b.go", model.currFile, "should have navigated to b.go")
+	assert.Equal(t, 2, model.diffCursor, "should land on first hunk of b.go (index 2)")
+}
+
+func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
+	// end-to-end: [ from first hunk of b.go loads a.go and lands on its last hunk
+	aLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeAdd, Content: "add1", NewNum: 1},
+		{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 2},
+		{ChangeType: diff.ChangeAdd, Content: "add2", NewNum: 3},
+	}
+	diffs := map[string][]diff.DiffLine{
+		"a.go": aLines,
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	// tree: index 0 = dir entry, index 1 = a.go, index 2 = b.go; navigate to b.go
+	m.tree.cursor = 2
+	m.loadSeq++
+	loadMsg := m.loadFileDiff("b.go")()
+	result, _ := m.Update(loadMsg)
+	m = result.(Model)
+	m.viewport.Height = 20
+	m.focus = paneDiff
+	m.diffCursor = 0 // at first (only) hunk of b.go
+
+	// press [ to trigger cross-file backward jump
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	m = result.(Model)
+	require.NotNil(t, cmd, "should have a load command")
+
+	// execute the load command and process the result
+	loadMsg = cmd()
+	result, _ = m.Update(loadMsg)
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
+	assert.Equal(t, "a.go", model.currFile, "should have navigated to a.go")
+	assert.Equal(t, 2, model.diffCursor, "should land on last hunk of a.go (index 2)")
+}

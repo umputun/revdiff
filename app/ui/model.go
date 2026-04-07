@@ -335,6 +335,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleMarkReviewed()
 	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
 		return m.handleViewToggle(action)
+	case keymap.ActionNextHunk:
+		return m.handleHunkNav(true)
+	case keymap.ActionPrevHunk:
+		return m.handleHunkNav(false)
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
@@ -632,10 +636,6 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
-	case keymap.ActionNextHunk:
-		m.moveToNextHunk()
-	case keymap.ActionPrevHunk:
-		m.moveToPrevHunk()
 	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd

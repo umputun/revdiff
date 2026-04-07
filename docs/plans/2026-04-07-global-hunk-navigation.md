@@ -42,7 +42,7 @@ Make `[` / `]` (prev/next hunk) work regardless of which pane has focus. When pr
 **Files:**
 - Modify: `app/ui/diffview.go`, `app/ui/model.go`
 
-- [ ] In `diffview.go`, add `handleHunkNav(forward bool) (tea.Model, tea.Cmd)` method on Model:
+- [x] In `diffview.go`, add `handleHunkNav(forward bool) (tea.Model, tea.Cmd)` method on Model:
   - If `m.currFile == ""`: return no-op
   - Set `m.focus = paneDiff`
   - Record `prevCursor := m.diffCursor`
@@ -51,9 +51,9 @@ Make `[` / `]` (prev/next hunk) work regardless of which pane has focus. When pr
     - forward: if `m.tree.hasNextFile()`, set `pendingHunkJump = &true`, call `m.tree.nextFile()`, return `m.loadSelectedIfChanged()`
     - backward: if `m.tree.hasPrevFile()`, set `pendingHunkJump = &false`, call `m.tree.prevFile()`, return `m.loadSelectedIfChanged()`
   - Call `m.syncTOCActiveSection()` and return
-- [ ] In `model.go` `handleKey`, move `ActionNextHunk` and `ActionPrevHunk` cases from `handleDiffNav` to the global action switch (before pane-specific dispatch), delegating to `m.handleHunkNav(true/false)`
-- [ ] Remove `ActionNextHunk` / `ActionPrevHunk` from `handleDiffNav` switch
-- [ ] Write tests:
+- [x] In `model.go` `handleKey`, move `ActionNextHunk` and `ActionPrevHunk` cases from `handleDiffNav` to the global action switch (before pane-specific dispatch), delegating to `m.handleHunkNav(true/false)`
+- [x] Remove `ActionNextHunk` / `ActionPrevHunk` from `handleDiffNav` switch
+- [x] Write tests:
   - `]` from tree pane switches focus to diff and jumps to next hunk
   - `[` from tree pane switches focus to diff and jumps to prev hunk
   - `]` at last hunk navigates to next file and lands on its first hunk
@@ -61,7 +61,7 @@ Make `[` / `]` (prev/next hunk) work regardless of which pane has focus. When pr
   - `]` at last hunk with no next file: no-op
   - `[` at first hunk with no prev file: no-op
   - single-file mode: `]`/`[` do not cross to other files
-- [ ] Run `make test` — must pass before task 4
+- [x] Run `make test` — must pass before task 4
 
 ### Task 4: Verify acceptance criteria
 
