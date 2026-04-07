@@ -31,7 +31,7 @@ trap 'rm -f "$OUTPUT_FILE"' EXIT
 # make plan path absolute for the overlay shell
 PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
 
-REVDIFF_CMD="$REVDIFF_BIN --only=$PLAN_ABS --output=$OUTPUT_FILE --wrap"
+REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "--only=$PLAN_ABS") $(sq "--output=$OUTPUT_FILE") --wrap"
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
 # tmux: display-popup -E blocks until command exits
@@ -78,14 +78,14 @@ fi
 # kitty: overlay with sentinel file for blocking
 KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE")
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
         KITTY_ARGS+=(--match "id:${KITTY_WINDOW_ID}")
     fi
-    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch '$SENTINEL'")
+    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")")
 
     "${KITTY_ARGS[@]}" >/dev/null 2>&1
 
@@ -107,11 +107,11 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
     fi
 
     if [ ${#WEZTERM_CLI[@]} -gt 0 ]; then
-        SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+        SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
         rm -f "$SENTINEL"
 
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent 90 \
-            --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+            --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")" >/dev/null 2>&1
 
         while [ ! -f "$SENTINEL" ]; do
             sleep 0.3
@@ -124,14 +124,14 @@ fi
 
 # cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)
 if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
 
-    LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch '$SENTINEL'
+$REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -160,14 +160,14 @@ fi
 # ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
 if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
 
-    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
 
-    LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch '$SENTINEL'
+$REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -206,10 +206,10 @@ fi
 
 # iterm2: split pane via AppleScript (macOS only)
 if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
 
-    LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
@@ -281,14 +281,14 @@ fi
 
 # emacs vterm: open revdiff in a new vterm buffer via emacsclient
 if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL" && mkfifo "$SENTINEL"
 
-    LAUNCH_SCRIPT=$(mktemp /tmp/plan-review-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; echo d > $(printf '%q' "$SENTINEL"); exit
+$REVDIFF_CMD; echo d > $(sq "$SENTINEL"); exit
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 

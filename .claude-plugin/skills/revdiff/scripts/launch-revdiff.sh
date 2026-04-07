@@ -18,11 +18,17 @@ TMPBASE="${TMPDIR:-/tmp}"
 OUTPUT_FILE=$(mktemp "$TMPBASE/revdiff-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-CONFIG_FLAG=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/shell-quote.sh"
+
+REVDIFF_CMD="$(sq "$REVDIFF_BIN")"
 if [ -n "${REVDIFF_CONFIG:-}" ] && [ -f "$REVDIFF_CONFIG" ]; then
-    CONFIG_FLAG="--config=$REVDIFF_CONFIG"
+    REVDIFF_CMD="$REVDIFF_CMD $(sq "--config=$REVDIFF_CONFIG")"
 fi
-REVDIFF_CMD="$REVDIFF_BIN $CONFIG_FLAG --output=$OUTPUT_FILE $*"
+REVDIFF_CMD="$REVDIFF_CMD $(sq "--output=$OUTPUT_FILE")"
+for arg in "$@"; do
+    REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
+done
 CWD="$(pwd)"
 
 # build descriptive title: "rd: dirname [ref]"
@@ -97,7 +103,7 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
         KITTY_ARGS+=(--match "id:${KITTY_WINDOW_ID}")
     fi
-    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch '$SENTINEL'")
+    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")")
 
     "${KITTY_ARGS[@]}" >/dev/null 2>&1
 
@@ -125,7 +131,7 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
         WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
         WEZTERM_PCT="${WEZTERM_PCT%%%}"
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
-            --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+            --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")" >/dev/null 2>&1
 
         while [ ! -f "$SENTINEL" ]; do
             sleep 0.3
@@ -145,7 +151,7 @@ if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch '$SENTINEL'
+$REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -183,7 +189,7 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch '$SENTINEL'
+$REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -314,7 +320,7 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-cd $(printf '%q' "$CWD") && $REVDIFF_CMD; echo d > $(printf '%q' "$SENTINEL"); exit
+cd $(sq "$CWD") && $REVDIFF_CMD; echo d > $(sq "$SENTINEL"); exit
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 

@@ -18,6 +18,7 @@ test:
 	grep -v "_mock.go" coverage.out | grep -v mocks > coverage_no_mocks.out
 	go tool cover -func=coverage_no_mocks.out
 	rm coverage.out coverage_no_mocks.out
+	bash .claude-plugin/skills/revdiff/scripts/test-quoting.sh
 
 lint:
 	golangci-lint run
