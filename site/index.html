@@ -135,6 +135,16 @@
                 <p>Launch revdiff from <a href="https://github.com/badlogic/pi-mono">pi</a>, keep captured annotations visible in a widget and side panel, then rerun or apply them when you’re ready.</p>
             </div>
             <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">v</span></div>
+                <h3>Collapsed &amp; wrap modes</h3>
+                <p>Collapsed mode (<code>v</code>) shows final text with change markers. Word wrap (<code>w</code>) for long lines. Line numbers (<code>L</code>) and git blame (<code>B</code>) gutters.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">&para;</span></div>
+                <h3>Markdown TOC</h3>
+                <p>Single-file markdown review gets a sidebar with header navigation. Jump between sections, track your position as you scroll. Works with <code>--only</code> and <code>--stdin</code>.</p>
+            </div>
+            <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">~</span></div>
                 <h3>Themes &amp; keybindings</h3>
                 <p>5 bundled color themes. 21 customizable color keys. Full keybinding remapping. Config file, env vars, or CLI flags.</p>
@@ -306,6 +316,9 @@ consider splitting this file into smaller modules
 
 <span class="code-comment">## handler.go:43 (+)</span>
 use errors.Is() instead of direct comparison
+
+<span class="code-comment">## handler.go:43-67 (+)</span>
+refactor this hunk to reduce nesting
 
 <span class="code-comment">## store.go:18 (-)</span>
 don't remove this validation</code></div>

@@ -481,10 +481,10 @@ section h2 {
 }
 
 .install-grid-2 {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    display: flex;
+    flex-wrap: wrap;
     gap: 16px;
-    align-items: stretch;
+    justify-content: center;
 }
 
 .install-card {
@@ -494,6 +494,8 @@ section h2 {
     padding: 24px;
     display: flex;
     flex-direction: column;
+    flex: 0 1 calc(50% - 8px);
+    max-width: calc(50% - 8px);
 }
 
 .install-card h3 {
@@ -661,7 +663,7 @@ section h2 {
     .footer-inner { flex-direction: column; gap: 16px; }
     /* prevent code blocks from overflowing viewport width */
     .code-block { max-width: calc(100vw - 48px); }
-    .install-grid-2 { grid-template-columns: 1fr; }
+    .install-card { flex: 0 1 100%; max-width: 100%; }
 }
 
 /* === docs page === */
