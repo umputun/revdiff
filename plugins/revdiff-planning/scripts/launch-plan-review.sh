@@ -48,6 +48,24 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     exit 0
 fi
 
+# zellij: floating pane with sentinel file for blocking
+if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
+    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+    rm -f "$SENTINEL"
+
+    zellij run --floating --close-on-exit \
+        --width 90 --height 90 \
+        --name "$OVERLAY_TITLE" \
+        -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    rm -f "$SENTINEL"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
 # kitty: overlay with sentinel file for blocking
 KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
@@ -309,5 +327,5 @@ LAUNCHER
     exit 0
 fi
 
-echo "error: no overlay terminal available (requires tmux, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires tmux, zellij, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1

@@ -8,6 +8,7 @@
 - hunk keyword expansion in annotation output (#47)
 - binary file detection with size delta and IsBinary flag (#44)
 - two-column help overlay with colored section headers and keys
+- zellij terminal support for floating pane overlay launcher
 
 ### Bug Fixes
 
