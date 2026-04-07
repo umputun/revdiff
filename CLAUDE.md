@@ -92,6 +92,11 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
   - `config.md` — options, colors, chroma styles
   - `usage.md` — examples, key bindings, output format
 
+## Pi Plugin
+- Pi package defined in root `package.json`, extensions and skills in `plugins/pi/`
+- **CRITICAL: After any pi plugin file change, ask user if they want to bump the version in `package.json`**
+- Version in `package.json` is independently versioned (does not track the project's git tags)
+
 ## Gotchas
 - Project uses vendoring - run `go mod vendor` after adding/updating dependencies
 - Chroma API uses British spelling (`Colour`), suppress with `//nolint:misspell`

@@ -973,9 +973,23 @@ function detectSmartRefFallback(): SmartDetectResult | undefined {
 		return undefined;
 	}
 
+	// detect no-commits state (fresh repo after git init)
+	const hasCommits = gitOk(["rev-parse", "HEAD"]);
+	const hasUncommitted = gitStdout(["status", "--porcelain"]).trim().length > 0;
+
+	if (!hasCommits) {
+		return {
+			branch: "HEAD",
+			mainBranch: "",
+			isMain: false,
+			hasUncommitted,
+			suggestedRef: "--all-files",
+			needsAsk: false,
+		};
+	}
+
 	const branch = gitStdout(["rev-parse", "--abbrev-ref", "HEAD"]) || "HEAD";
 	const mainBranch = detectMainBranch();
-	const hasUncommitted = gitStdout(["status", "--porcelain"]).trim().length > 0;
 	const isMain = Boolean(mainBranch) && branch === mainBranch;
 	let suggestedRef = "";
 	let needsAsk = false;
