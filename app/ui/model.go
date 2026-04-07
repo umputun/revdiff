@@ -301,17 +301,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	action := m.keymap.Resolve(msg.String())
 
 	// help overlay: toggle with help action, dismiss with esc, block everything else
-	if action == keymap.ActionHelp || m.showHelp {
+	if m.helpActive(action) {
 		return m.handleHelpKey(msg)
 	}
 
 	switch action {
 	case keymap.ActionAnnotList:
-		m.annotListItems = m.buildAnnotListItems()
-		m.annotListCursor = 0
-		m.annotListOffset = 0
-		m.showAnnotList = true
-		return m, nil
+		return m.openAnnotList()
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -335,10 +331,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleMarkReviewed()
 	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
 		return m.handleViewToggle(action)
-	case keymap.ActionNextHunk:
-		return m.handleHunkNav(true)
-	case keymap.ActionPrevHunk:
-		return m.handleHunkNav(false)
+	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
+		return m.handleHunkNav(action == keymap.ActionNextHunk)
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
@@ -1599,6 +1593,11 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
+}
+
+// helpActive returns true when the help overlay should intercept a key.
+func (m *Model) helpActive(action keymap.Action) bool {
+	return action == keymap.ActionHelp || m.showHelp
 }
 
 // handleHelpKey handles help overlay keys.
