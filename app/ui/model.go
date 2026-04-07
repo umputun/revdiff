@@ -976,6 +976,18 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.tree.selectByPath(m.currFile)
 	}
 	m.singleFile = len(files) == 1
+	// no files left (e.g. all were untracked and toggle turned off)
+	if len(files) == 0 {
+		m.currFile = ""
+		m.diffLines = nil
+		m.highlightedLines = nil
+		m.viewport.SetContent("")
+		m.treeWidth = m.width * m.treeWidthRatio / 10
+		if m.ready {
+			m.viewport.Width = m.width - m.treeWidth - 4
+		}
+		return m, nil
+	}
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
