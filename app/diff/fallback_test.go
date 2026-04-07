@@ -244,7 +244,7 @@ func TestFallbackRenderer_ChangedFiles_FileInDiff(t *testing.T) {
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// hello.go is already in the diff, should not be duplicated
-	assert.Equal(t, []string{"hello.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "hello.go", Status: FileModified}}, files)
 }
 
 func TestFallbackRenderer_ChangedFiles_FileNotInDiffButOnDisk(t *testing.T) {
@@ -265,7 +265,7 @@ func TestFallbackRenderer_ChangedFiles_FileNotInDiffButOnDisk(t *testing.T) {
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// no files in diff, but readme.md exists on disk and is in --only
-	assert.Equal(t, []string{"readme.md"}, files)
+	assert.Equal(t, []FileEntry{{Path: "readme.md"}}, files)
 }
 
 func TestFallbackRenderer_ChangedFiles_FileNotOnDisk(t *testing.T) {
@@ -299,7 +299,7 @@ func TestFallbackRenderer_ChangedFiles_SuffixMatchDedup(t *testing.T) {
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// should not duplicate - plan.md suffix-matches docs/plans/plan.md
-	assert.Equal(t, []string{"docs/plans/plan.md"}, files)
+	assert.Equal(t, []FileEntry{{Path: "docs/plans/plan.md", Status: FileModified}}, files)
 }
 
 func TestFallbackRenderer_ChangedFiles_AbsolutePath(t *testing.T) {
@@ -319,7 +319,7 @@ func TestFallbackRenderer_ChangedFiles_AbsolutePath(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	// absolute path outside workDir should be preserved as-is so filterOnly can match it
-	assert.Equal(t, tmpFile, files[0])
+	assert.Equal(t, tmpFile, files[0].Path)
 }
 
 func TestFallbackRenderer_FileDiff_FileHasDiff(t *testing.T) {
@@ -454,7 +454,7 @@ func TestFallbackRenderer_ChangedFiles_AbsoluteInsideRepo(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	// should use original absolute pattern so filterOnly can match against it
-	assert.Equal(t, absPath, files[0])
+	assert.Equal(t, absPath, files[0].Path)
 }
 
 func TestFallbackRenderer_FileDiff_InnerErrorWithOnlyFile(t *testing.T) {
@@ -483,20 +483,20 @@ func TestFallbackRenderer_MatchesAny(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		files   []string
+		files   []FileEntry
 		pattern string
 		want    bool
 	}{
-		{name: "exact match", files: []string{"main.go", "util.go"}, pattern: "main.go", want: true},
-		{name: "suffix match", files: []string{"docs/plans/plan.md"}, pattern: "plan.md", want: true},
-		{name: "no match", files: []string{"main.go", "util.go"}, pattern: "other.go", want: false},
+		{name: "exact match", files: []FileEntry{{Path: "main.go"}, {Path: "util.go"}}, pattern: "main.go", want: true},
+		{name: "suffix match", files: []FileEntry{{Path: "docs/plans/plan.md"}}, pattern: "plan.md", want: true},
+		{name: "no match", files: []FileEntry{{Path: "main.go"}, {Path: "util.go"}}, pattern: "other.go", want: false},
 		{name: "empty files", files: nil, pattern: "any.go", want: false},
-		{name: "partial name no match", files: []string{"main.go"}, pattern: "ain.go", want: false},
-		{name: "exact path match", files: []string{"docs/readme.md"}, pattern: "docs/readme.md", want: true},
+		{name: "partial name no match", files: []FileEntry{{Path: "main.go"}}, pattern: "ain.go", want: false},
+		{name: "exact path match", files: []FileEntry{{Path: "docs/readme.md"}}, pattern: "docs/readme.md", want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, fr.matchesAny(tt.files, tt.pattern))
+			assert.Equal(t, tt.want, fr.matchesAnyEntry(tt.files, tt.pattern))
 		})
 	}
 }
@@ -531,12 +531,12 @@ func TestFileReader_ChangedFiles(t *testing.T) {
 	tests := []struct {
 		name  string
 		files []string
-		want  []string
+		want  []FileEntry
 	}{
 		{name: "all exist", files: []string{"exists.md", "also.txt"},
-			want: []string{filepath.Join(dir, "exists.md"), filepath.Join(dir, "also.txt")}},
+			want: []FileEntry{{Path: filepath.Join(dir, "exists.md")}, {Path: filepath.Join(dir, "also.txt")}}},
 		{name: "one missing", files: []string{"exists.md", "nope.go"},
-			want: []string{filepath.Join(dir, "exists.md")}},
+			want: []FileEntry{{Path: filepath.Join(dir, "exists.md")}}},
 		{name: "all missing", files: []string{"missing1.go", "missing2.go"}, want: nil},
 		{name: "empty list", files: nil, want: nil},
 	}
@@ -559,7 +559,7 @@ func TestFileReader_ChangedFiles_AbsolutePath(t *testing.T) {
 	got, err := r.ChangedFiles("", false)
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, absFile, got[0])
+	assert.Equal(t, absFile, got[0].Path)
 }
 
 func TestFileReader_FileDiff(t *testing.T) {
@@ -620,7 +620,7 @@ func TestFallbackRenderer_ContextOnlyView(t *testing.T) {
 	// ChangedFiles should include main.go even though it has no git changes
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"main.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "main.go"}}, files)
 
 	// FileDiff should return context-only lines (fallback to disk read)
 	lines, err := fr.FileDiff("", "main.go", false)
@@ -652,7 +652,7 @@ func TestFallbackRenderer_NormalDiffUnaffected(t *testing.T) {
 
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"main.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "main.go", Status: FileModified}}, files)
 
 	lines, err := fr.FileDiff("", "main.go", false)
 	require.NoError(t, err)
@@ -685,10 +685,10 @@ func TestFileReader_FullPipeline(t *testing.T) {
 	files, err := r.ChangedFiles("", false)
 	require.NoError(t, err)
 	require.Len(t, files, 1)
-	assert.Equal(t, filepath.Join(dir, "plan.md"), files[0])
+	assert.Equal(t, filepath.Join(dir, "plan.md"), files[0].Path)
 
 	// FileDiff should return all lines as context
-	lines, err := r.FileDiff("", files[0], false)
+	lines, err := r.FileDiff("", files[0].Path, false)
 	require.NoError(t, err)
 	require.Len(t, lines, 5)
 
@@ -710,7 +710,7 @@ func TestStdinReader(t *testing.T) {
 
 	files, err := r.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"plan.md"}, files)
+	assert.Equal(t, []FileEntry{{Path: "plan.md"}}, files)
 
 	got, err := r.FileDiff("", "plan.md", false)
 	require.NoError(t, err)
@@ -728,7 +728,7 @@ func TestNewStdinReaderFromReader(t *testing.T) {
 
 	files, err := r.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"test.md"}, files)
+	assert.Equal(t, []FileEntry{{Path: "test.md"}}, files)
 
 	lines, err := r.FileDiff("", "test.md", false)
 	require.NoError(t, err)

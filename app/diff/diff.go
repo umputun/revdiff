@@ -40,6 +40,31 @@ type DiffLine struct {
 	IsBinary   bool       // true when this line is a binary file placeholder
 }
 
+// FileStatus represents the change type of a file in a git diff.
+type FileStatus string
+
+const (
+	FileAdded    FileStatus = "A"
+	FileModified FileStatus = "M"
+	FileDeleted  FileStatus = "D"
+	FileRenamed  FileStatus = "R"
+)
+
+// FileEntry represents a file with its change status from git diff.
+type FileEntry struct {
+	Path   string     // file path relative to repo root
+	Status FileStatus // file change status, empty for non-git renderers
+}
+
+// FileEntryPaths extracts just the paths from a slice of FileEntry.
+func FileEntryPaths(entries []FileEntry) []string {
+	paths := make([]string, len(entries))
+	for i, e := range entries {
+		paths[i] = e.Path
+	}
+	return paths
+}
+
 // Git provides methods to extract changed files and build full-file diff views.
 type Git struct {
 	workDir string // working directory for git commands
@@ -50,26 +75,46 @@ func NewGit(workDir string) *Git {
 	return &Git{workDir: workDir}
 }
 
-// ChangedFiles returns a list of files changed relative to the given ref.
+// ChangedFiles returns a list of files changed relative to the given ref with their change status.
 // If ref is empty, it shows uncommitted changes. If staged is true, shows only staged changes.
-func (g *Git) ChangedFiles(ref string, staged bool) ([]string, error) {
+// Uses -z for NUL-terminated output to handle filenames with special characters.
+func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, "--name-only")
+	args = append(args, "--name-status", "-z")
 
 	out, err := g.runGit(args...)
 	if err != nil {
 		return nil, fmt.Errorf("get changed files: %w", err)
 	}
 
-	var files []string
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line != "" {
-			files = append(files, line)
+	var entries []FileEntry
+	fields := strings.Split(strings.TrimRight(out, "\x00"), "\x00")
+	for i := 0; i < len(fields); {
+		rawStatus := fields[i]
+		if rawStatus == "" {
+			i++
+			continue
 		}
+		i++
+		if i >= len(fields) {
+			break
+		}
+		path := fields[i]
+		i++
+		// for renames/copies (R100, C100), consume two paths, use the new name
+		if rawStatus[0] == 'R' || rawStatus[0] == 'C' {
+			if i < len(fields) {
+				path = fields[i]
+				i++
+			}
+		}
+		// normalize status to single letter (R100 -> R)
+		if len(rawStatus) > 1 {
+			rawStatus = rawStatus[:1]
+		}
+		entries = append(entries, FileEntry{Path: path, Status: FileStatus(rawStatus)})
 	}
-	return files, nil
+	return entries, nil
 }
 
 // FileDiff returns the full-file diff view for a single file.

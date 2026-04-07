@@ -15,7 +15,7 @@ import (
 //
 //		// make and configure a mocked ui.Renderer
 //		mockedRenderer := &RendererMock{
-//			ChangedFilesFunc: func(ref string, staged bool) ([]string, error) {
+//			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 //				panic("mock out the ChangedFiles method")
 //			},
 //			FileDiffFunc: func(ref string, file string, staged bool) ([]diff.DiffLine, error) {
@@ -29,7 +29,7 @@ import (
 //	}
 type RendererMock struct {
 	// ChangedFilesFunc mocks the ChangedFiles method.
-	ChangedFilesFunc func(ref string, staged bool) ([]string, error)
+	ChangedFilesFunc func(ref string, staged bool) ([]diff.FileEntry, error)
 
 	// FileDiffFunc mocks the FileDiff method.
 	FileDiffFunc func(ref string, file string, staged bool) ([]diff.DiffLine, error)
@@ -58,7 +58,7 @@ type RendererMock struct {
 }
 
 // ChangedFiles calls ChangedFilesFunc.
-func (mock *RendererMock) ChangedFiles(ref string, staged bool) ([]string, error) {
+func (mock *RendererMock) ChangedFiles(ref string, staged bool) ([]diff.FileEntry, error) {
 	if mock.ChangedFilesFunc == nil {
 		panic("RendererMock.ChangedFilesFunc: method is nil but Renderer.ChangedFiles was just called")
 	}

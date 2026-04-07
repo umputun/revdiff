@@ -28,14 +28,14 @@ func NewFallbackRenderer(inner *Git, only []string, workDir string) *FallbackRen
 
 // ChangedFiles returns changed files from the inner renderer, then appends any --only files
 // not already present in the result if they exist on disk.
-func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]string, error) {
-	files, err := fr.inner.ChangedFiles(ref, staged)
+func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
+	entries, err := fr.inner.ChangedFiles(ref, staged)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, pattern := range fr.only {
-		if fr.matchesAny(files, pattern) {
+		if fr.matchesAnyEntry(entries, pattern) {
 			continue // already in diff result, skip
 		}
 		resolved := resolvePath(fr.workDir, pattern)
@@ -44,9 +44,9 @@ func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]string, err
 		}
 		// use the original pattern so that filterOnly (which matches against
 		// the original --only values) can find the file in the result list.
-		files = append(files, pattern)
+		entries = append(entries, FileEntry{Path: pattern})
 	}
-	return files, nil
+	return entries, nil
 }
 
 // FileDiff returns the diff for a file. for files outside the repo (absolute paths
@@ -85,12 +85,12 @@ func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool) ([]DiffLine,
 	return lines, nil // file doesn't exist on disk, return empty result
 }
 
-// matchesAny returns true if any file in the list matches the given pattern.
+// matchesAnyEntry returns true if any entry in the list matches the given pattern.
 // checks exact match, suffix match (e.g. "plan.md" matches "docs/plans/plan.md"),
 // and resolved-relative match (e.g. absolute "/repo/README.md" matches relative "README.md").
-func (fr *FallbackRenderer) matchesAny(files []string, pattern string) bool {
-	for _, f := range files {
-		if fr.pathMatches(f, pattern) {
+func (fr *FallbackRenderer) matchesAnyEntry(entries []FileEntry, pattern string) bool {
+	for _, e := range entries {
+		if fr.pathMatches(e.Path, pattern) {
 			return true
 		}
 	}
@@ -159,17 +159,17 @@ func NewFileReader(files []string, workDir string) *FileReader {
 }
 
 // ChangedFiles returns the file list, resolved against workDir, filtered to only those that exist on disk.
-func (r *FileReader) ChangedFiles(_ string, _ bool) ([]string, error) {
+func (r *FileReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	if len(r.files) == 0 {
 		return nil, nil
 	}
-	result := make([]string, 0, len(r.files))
+	result := make([]FileEntry, 0, len(r.files))
 	for _, f := range r.files {
 		resolved := resolvePath(r.workDir, f)
 		if _, err := os.Stat(resolved); err != nil {
 			continue // skip files that don't exist
 		}
-		result = append(result, resolved)
+		result = append(result, FileEntry{Path: resolved})
 	}
 	if len(result) == 0 {
 		return nil, nil

@@ -25,7 +25,7 @@ import (
 
 // Renderer provides methods to extract changed files and build full-file diff views.
 type Renderer interface {
-	ChangedFiles(ref string, staged bool) ([]string, error)
+	ChangedFiles(ref string, staged bool) ([]diff.FileEntry, error)
 	FileDiff(ref, file string, staged bool) ([]diff.DiffLine, error)
 }
 
@@ -139,8 +139,8 @@ type blameLoadedMsg struct {
 
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
-	files []string
-	err   error
+	entries []diff.FileEntry
+	err     error
 }
 
 // ModelConfig holds configuration options for NewModel.
@@ -219,8 +219,8 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
-		files, err := m.renderer.ChangedFiles(m.ref, m.staged)
-		return filesLoadedMsg{files: files, err: err}
+		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
+		return filesLoadedMsg{entries: entries, err: err}
 	}
 }
 
@@ -330,6 +330,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleEnterKey()
 	case keymap.ActionAnnotateFile:
 		return m.handleFileAnnotateKey()
+	case keymap.ActionMarkReviewed:
+		return m.handleMarkReviewed()
 	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
 		return m.handleViewToggle(action)
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
@@ -691,22 +693,22 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 // matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
 // when a pattern is an absolute path, it is also resolved relative to workDir for matching
 // (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
-func (m Model) filterOnly(files []string) []string {
+func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
 	if len(m.only) == 0 {
-		return files
+		return entries
 	}
-	var filtered []string
-	for _, f := range files {
+	var filtered []diff.FileEntry
+	for _, e := range entries {
 		for _, pattern := range m.only {
-			if f == pattern || strings.HasSuffix(f, "/"+pattern) {
-				filtered = append(filtered, f)
+			if e.Path == pattern || strings.HasSuffix(e.Path, "/"+pattern) {
+				filtered = append(filtered, e)
 				break
 			}
 			// resolve absolute pattern relative to workDir for matching against repo-relative files
 			if m.workDir != "" && filepath.IsAbs(pattern) {
 				rel, err := filepath.Rel(m.workDir, pattern)
-				if err == nil && !strings.HasPrefix(rel, "..") && (f == rel || strings.HasSuffix(f, "/"+rel)) {
-					filtered = append(filtered, f)
+				if err == nil && !strings.HasPrefix(rel, "..") && (e.Path == rel || strings.HasSuffix(e.Path, "/"+rel)) {
+					filtered = append(filtered, e)
 					break
 				}
 			}
@@ -720,13 +722,13 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
 	}
-	files := m.filterOnly(msg.files)
-	if len(files) == 0 && len(m.only) > 0 {
+	entries := m.filterOnly(msg.entries)
+	if len(entries) == 0 && len(m.only) > 0 {
 		m.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
-	m.tree = newFileTree(files)
-	m.singleFile = len(files) == 1
+	m.tree = newFileTreeFromEntries(entries)
+	m.singleFile = len(m.tree.allFiles) == 1
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
@@ -1020,6 +1022,9 @@ func (m Model) statusBarText() string {
 
 	// build right-side segments
 	var rightParts []string
+	if rc := m.tree.reviewedCount(); rc > 0 {
+		rightParts = append(rightParts, fmt.Sprintf("✓ %d/%d", rc, len(m.tree.allFiles)))
+	}
 	if cnt := m.store.Count(); cnt > 0 {
 		suffix := "annotations"
 		if cnt == 1 {
@@ -1239,6 +1244,7 @@ func (m Model) statusModeIcons() string {
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
+		{"✓", m.tree.reviewedCount() > 0},
 	}
 
 	statusFg := m.styles.colors.Muted
@@ -1618,6 +1624,20 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 		m.tree.ensureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
 	}
+	return m, nil
+}
+
+// handleMarkReviewed toggles the reviewed state of the focused file.
+// tree focus uses the selected row; diff/TOC focus uses the displayed file.
+func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
+	file := m.currFile
+	if m.focus == paneTree && m.mdTOC == nil {
+		file = m.tree.selectedFile()
+	}
+	if file == "" {
+		file = m.tree.selectedFile()
+	}
+	m.tree.toggleReviewed(file)
 	return m, nil
 }
 

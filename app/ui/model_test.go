@@ -28,9 +28,13 @@ func noopHighlighter() *mocks.SyntaxHighlighterMock {
 }
 
 func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
+	entries := make([]diff.FileEntry, len(files))
+	for i, f := range files {
+		entries[i] = diff.FileEntry{Path: f}
+	}
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(ref string, staged bool) ([]string, error) {
-			return files, nil
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+			return entries, nil
 		},
 		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
 			return fileDiffs[file], nil
@@ -55,14 +59,14 @@ func TestModel_Init(t *testing.T) {
 	msg := cmd()
 	flm, ok := msg.(filesLoadedMsg)
 	require.True(t, ok)
-	assert.Equal(t, []string{"a.go", "b.go"}, flm.files)
+	assert.Equal(t, []string{"a.go", "b.go"}, diff.FileEntryPaths(flm.entries))
 	assert.NoError(t, flm.err)
 }
 
 func TestModel_FilesLoaded(t *testing.T) {
 	m := testModel(nil, nil)
 
-	result, cmd := m.Update(filesLoadedMsg{files: []string{"internal/handler.go", "internal/store.go", "main.go"}})
+	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "internal/handler.go"}, {Path: "internal/store.go"}, {Path: "main.go"}}})
 	model := result.(Model)
 
 	// tree should be populated
@@ -83,7 +87,7 @@ func TestModel_FilesLoadedError(t *testing.T) {
 
 func TestModel_FilesLoadedSingleFile(t *testing.T) {
 	m := testModel(nil, nil)
-	result, cmd := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
 	model := result.(Model)
 
 	assert.True(t, model.singleFile, "singleFile should be true for one file")
@@ -99,7 +103,7 @@ func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
 	assert.True(t, m.ready, "model should be ready after resize")
 
 	// now load single file — viewport width should be recalculated
-	result, _ := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
 	model := result.(Model)
 	assert.True(t, model.singleFile)
 	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in single-file mode")
@@ -111,7 +115,7 @@ func TestModel_ResizeInSingleFileMode(t *testing.T) {
 	// set up single-file mode via filesLoadedMsg
 	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = resized.(Model)
-	loaded, _ := m.Update(filesLoadedMsg{files: []string{"main.go"}})
+	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
 	m = loaded.(Model)
 	require.True(t, m.singleFile)
 
@@ -125,7 +129,7 @@ func TestModel_ResizeInSingleFileMode(t *testing.T) {
 
 func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
 	m := testModel(nil, nil)
-	result, _ := m.Update(filesLoadedMsg{files: []string{"a.go", "b.go", "c.go"}})
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}}})
 	model := result.(Model)
 
 	assert.False(t, model.singleFile, "singleFile should be false for multiple files")
@@ -400,7 +404,7 @@ func TestModel_StatusBarFilterIndicator(t *testing.T) {
 
 func TestModel_WrapModeFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
@@ -418,7 +422,7 @@ func TestModel_WrapModeFromConfig(t *testing.T) {
 
 func TestModel_CollapsedModeFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
@@ -436,7 +440,7 @@ func TestModel_CollapsedModeFromConfig(t *testing.T) {
 
 func TestModel_LineNumbersFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
@@ -454,7 +458,7 @@ func TestModel_LineNumbersFromConfig(t *testing.T) {
 
 func TestModel_BlameFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
@@ -705,7 +709,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			renderer := &mocks.RendererMock{
-				ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
+				ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
 				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 			}
 			m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: tc.ratio})
@@ -3877,7 +3881,7 @@ func TestModel_RenderDiffLineTabReplacement(t *testing.T) {
 
 func TestModel_PlainStyles(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return []string{"a.go"}, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{NoColors: true, TreeWidthRatio: 3})
@@ -3892,7 +3896,7 @@ func TestModel_PlainStyles(t *testing.T) {
 
 func TestModel_TabWidthDefault(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 0})
@@ -3990,7 +3994,7 @@ func TestModel_DiscardedAccessor(t *testing.T) {
 
 func TestModel_NoConfirmDiscardWired(t *testing.T) {
 	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]string, error) { return nil, nil },
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
@@ -6114,54 +6118,62 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 }
 
 func TestModel_FilterOnly(t *testing.T) {
+	toEntries := func(paths ...string) []diff.FileEntry {
+		entries := make([]diff.FileEntry, len(paths))
+		for i, p := range paths {
+			entries[i] = diff.FileEntry{Path: p}
+		}
+		return entries
+	}
+
 	t.Run("no filter returns all files", func(t *testing.T) {
 		m := testModel(nil, nil)
-		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
+		files := toEntries("ui/model.go", "diff/diff.go", "README.md")
 		assert.Equal(t, files, m.filterOnly(files))
 	})
 
 	t.Run("exact path match", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"ui/model.go"}
-		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
-		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+		files := toEntries("ui/model.go", "diff/diff.go", "README.md")
+		assert.Equal(t, []string{"ui/model.go"}, diff.FileEntryPaths(m.filterOnly(files)))
 	})
 
 	t.Run("suffix match", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"model.go"}
-		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
-		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+		files := toEntries("ui/model.go", "diff/diff.go", "README.md")
+		assert.Equal(t, []string{"ui/model.go"}, diff.FileEntryPaths(m.filterOnly(files)))
 	})
 
 	t.Run("multiple patterns", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"model.go", "README.md"}
-		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
-		assert.Equal(t, []string{"ui/model.go", "README.md"}, m.filterOnly(files))
+		files := toEntries("ui/model.go", "diff/diff.go", "README.md")
+		assert.Equal(t, []string{"ui/model.go", "README.md"}, diff.FileEntryPaths(m.filterOnly(files)))
 	})
 
 	t.Run("absolute path pattern resolved against workDir", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"/repo/README.md"}
 		m.workDir = "/repo"
-		files := []string{"ui/model.go", "README.md"}
-		assert.Equal(t, []string{"README.md"}, m.filterOnly(files))
+		files := toEntries("ui/model.go", "README.md")
+		assert.Equal(t, []string{"README.md"}, diff.FileEntryPaths(m.filterOnly(files)))
 	})
 
 	t.Run("absolute path pattern with subdirectory", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"/repo/ui/model.go"}
 		m.workDir = "/repo"
-		files := []string{"ui/model.go", "diff/diff.go", "README.md"}
-		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+		files := toEntries("ui/model.go", "diff/diff.go", "README.md")
+		assert.Equal(t, []string{"ui/model.go"}, diff.FileEntryPaths(m.filterOnly(files)))
 	})
 
 	t.Run("absolute path outside workDir does not match", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"/other/README.md"}
 		m.workDir = "/repo"
-		files := []string{"README.md", "ui/model.go"}
+		files := toEntries("README.md", "ui/model.go")
 		assert.Empty(t, m.filterOnly(files))
 	})
 
@@ -6169,14 +6181,14 @@ func TestModel_FilterOnly(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"/repo/model.go"}
 		m.workDir = "/repo"
-		files := []string{"ui/model.go", "diff/diff.go"}
-		assert.Equal(t, []string{"ui/model.go"}, m.filterOnly(files))
+		files := toEntries("ui/model.go", "diff/diff.go")
+		assert.Equal(t, []string{"ui/model.go"}, diff.FileEntryPaths(m.filterOnly(files)))
 	})
 
 	t.Run("no matches returns empty", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.only = []string{"nonexistent.go"}
-		files := []string{"ui/model.go", "diff/diff.go"}
+		files := toEntries("ui/model.go", "diff/diff.go")
 		assert.Empty(t, m.filterOnly(files))
 	})
 }
@@ -6189,7 +6201,7 @@ func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
 	m.height = 24
 	m.viewport = viewport.New(76, 20)
 
-	result, cmd := m.Update(filesLoadedMsg{files: []string{"ui/model.go", "diff/diff.go"}})
+	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "ui/model.go"}, {Path: "diff/diff.go"}}})
 	model := result.(Model)
 	assert.Nil(t, cmd, "should not trigger file load when no files match")
 	assert.Contains(t, model.viewport.View(), "no files match --only filter")
@@ -6379,7 +6391,7 @@ func TestModel_SingleFileMultiFileModeUnchanged(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := result.(Model)
-	result, _ = model.Update(filesLoadedMsg{files: []string{"a.go", "b.go"}})
+	result, _ = model.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
 	model = result.(Model)
 
 	assert.False(t, model.singleFile, "multi-file should not be in single-file mode")
@@ -6538,7 +6550,7 @@ func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
 	// simulate initial resize then single-file load
 	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = resized.(Model)
-	loaded, _ := m.Update(filesLoadedMsg{files: []string{"README.md"}})
+	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "README.md"}}})
 	m = loaded.(Model)
 	require.True(t, m.singleFile)
 	require.Equal(t, 0, m.treeWidth, "treeWidth starts at 0 in single-file mode")
@@ -7480,4 +7492,95 @@ func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
 	result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := result.(Model)
 	assert.True(t, model.showHelp, "? should open help with default keymap")
+}
+
+func TestModel_MarkReviewedFromTreePane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+
+	// space bar toggles reviewed
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["a.go"], "space should mark current file as reviewed")
+	assert.Equal(t, 1, model.tree.reviewedCount())
+
+	// space again toggles off
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model = result.(Model)
+	assert.False(t, model.tree.reviewed["a.go"], "space should unmark reviewed file")
+	assert.Equal(t, 0, model.tree.reviewedCount())
+}
+
+func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+	m.tree.moveDown() // cursor -> b.go while the diff pane still shows a.go
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["b.go"], "space in tree pane should mark selected file")
+	assert.False(t, model.tree.reviewed["a.go"], "space in tree pane should not mark stale currFile")
+}
+
+func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "b.go"
+	m.focus = paneDiff
+
+	// space from diff pane marks currFile
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["b.go"], "space in diff pane should mark currFile as reviewed")
+}
+
+func TestModel_ReviewedStatusBar(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go", "c.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines, "c.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go", "c.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.width = 200
+
+	// no reviewed count when nothing reviewed
+	status := m.statusBarText()
+	assert.NotContains(t, status, "✓ 0")
+
+	// mark one file as reviewed
+	m.tree.toggleReviewed("a.go")
+	status = m.statusBarText()
+	assert.Contains(t, status, "✓ 1/3", "status bar should show reviewed progress")
+
+	// mark another
+	m.tree.toggleReviewed("b.go")
+	status = m.statusBarText()
+	assert.Contains(t, status, "✓ 2/3")
+}
+
+func TestModel_ReviewedModeIcon(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tree = newFileTree([]string{"a.go"})
+
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "✓", "reviewed icon should always be present")
+
+	// when no files reviewed, icon should use muted color
+	m.tree.toggleReviewed("a.go")
+	icons = m.statusModeIcons()
+	assert.Contains(t, icons, "✓", "reviewed icon should be present when files reviewed")
 }

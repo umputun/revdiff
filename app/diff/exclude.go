@@ -7,7 +7,7 @@ import (
 
 // renderer is a local interface matching ui.Renderer to avoid import cycle.
 type renderer interface {
-	ChangedFiles(ref string, staged bool) ([]string, error)
+	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
 	FileDiff(ref, file string, staged bool) ([]DiffLine, error)
 }
 
@@ -35,16 +35,16 @@ func NewExcludeFilter(inner renderer, prefixes []string) *ExcludeFilter {
 }
 
 // ChangedFiles returns files from the inner renderer, excluding any that match a prefix.
-func (ef *ExcludeFilter) ChangedFiles(ref string, staged bool) ([]string, error) {
-	files, err := ef.inner.ChangedFiles(ref, staged)
+func (ef *ExcludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
+	entries, err := ef.inner.ChangedFiles(ref, staged)
 	if err != nil {
 		return nil, fmt.Errorf("exclude filter, changed files: %w", err)
 	}
 
-	filtered := make([]string, 0, len(files))
-	for _, f := range files {
-		if !ef.matchesExclude(f) {
-			filtered = append(filtered, f)
+	filtered := make([]FileEntry, 0, len(entries))
+	for _, e := range entries {
+		if !ef.matchesExclude(e.Path) {
+			filtered = append(filtered, e)
 		}
 	}
 	return filtered, nil

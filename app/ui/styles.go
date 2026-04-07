@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/umputun/revdiff/app/diff"
+)
 
 // Colors holds hex color values (#rrggbb) for TUI rendering.
 type Colors struct {
@@ -36,6 +40,10 @@ type styles struct {
 	FileEntry      lipgloss.Style
 	FileSelected   lipgloss.Style
 	AnnotationMark lipgloss.Style
+	ReviewedMark   lipgloss.Style
+	StatusAdded    lipgloss.Style
+	StatusDeleted  lipgloss.Style
+	StatusDefault  lipgloss.Style // M, R, and other statuses
 
 	// diff pane
 	DiffPane       lipgloss.Style
@@ -63,6 +71,18 @@ type styles struct {
 	SearchMatch lipgloss.Style
 
 	colors Colors // original color values for dynamic style construction
+}
+
+// fileStatusStyle returns the pre-computed style for a git file status letter.
+func (s styles) fileStatusStyle(status diff.FileStatus) lipgloss.Style {
+	switch status {
+	case diff.FileAdded:
+		return s.StatusAdded
+	case diff.FileDeleted:
+		return s.StatusDeleted
+	default:
+		return s.StatusDefault
+	}
 }
 
 // normalizeColor ensures hex color values have a # prefix.
@@ -152,6 +172,14 @@ func newStyles(c Colors) styles {
 			Background(lipgloss.Color(c.SelectedBg)),
 		AnnotationMark: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)),
+		ReviewedMark: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.AddFg)),
+		StatusAdded: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.AddFg)),
+		StatusDeleted: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.RemoveFg)),
+		StatusDefault: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.Muted)),
 
 		DiffPane:       diffPane,
 		DiffPaneActive: diffPaneActive,
@@ -240,6 +268,10 @@ func plainStyles() styles {
 		FileEntry:      lipgloss.NewStyle(),
 		FileSelected:   lipgloss.NewStyle().Reverse(true),
 		AnnotationMark: lipgloss.NewStyle(),
+		ReviewedMark:   lipgloss.NewStyle(),
+		StatusAdded:    lipgloss.NewStyle(),
+		StatusDeleted:  lipgloss.NewStyle(),
+		StatusDefault:  lipgloss.NewStyle(),
 
 		DiffPane:       lipgloss.NewStyle().Border(border),
 		DiffPaneActive: lipgloss.NewStyle().Border(border),
