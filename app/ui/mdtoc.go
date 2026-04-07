@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/app/diff"
 )
 
 // tocEntry represents a single markdown header in the table of contents.

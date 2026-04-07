@@ -18,9 +18,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
-	"github.com/umputun/revdiff/annotation"
-	"github.com/umputun/revdiff/diff"
-	"github.com/umputun/revdiff/keymap"
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 )
 
 // Renderer provides methods to extract changed files and build full-file diff views.

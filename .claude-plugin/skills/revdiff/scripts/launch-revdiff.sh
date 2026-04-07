@@ -10,7 +10,7 @@ set -euo pipefail
 REVDIFF_BIN=$(command -v revdiff 2>/dev/null || true)
 if [ -z "$REVDIFF_BIN" ]; then
     echo "error: revdiff not found in PATH" >&2
-    echo "install: go install github.com/umputun/revdiff/cmd/revdiff@latest" >&2
+    echo "install: brew install umputun/apps/revdiff (or download from https://github.com/umputun/revdiff/releases)" >&2
     exit 1
 fi
 

@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/umputun/revdiff/annotation"
-	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/diff"
 )
 
 // hunkKeywordRe matches whole-word "hunk" (case-insensitive).
