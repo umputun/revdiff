@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/app/diff"
 )
 
 // collapsedState holds the state for collapsed diff view mode.

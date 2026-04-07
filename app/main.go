@@ -13,12 +13,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jessevdk/go-flags"
 
-	"github.com/umputun/revdiff/annotation"
-	"github.com/umputun/revdiff/diff"
-	"github.com/umputun/revdiff/highlight"
-	"github.com/umputun/revdiff/keymap"
-	"github.com/umputun/revdiff/theme"
-	"github.com/umputun/revdiff/ui"
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/highlight"
+	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/theme"
+	"github.com/umputun/revdiff/app/ui"
 )
 
 type options struct {

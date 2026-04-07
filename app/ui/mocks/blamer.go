@@ -6,7 +6,7 @@ package mocks
 import (
 	"sync"
 
-	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/app/diff"
 )
 
 // BlamerMock is a mock implementation of ui.Blamer.

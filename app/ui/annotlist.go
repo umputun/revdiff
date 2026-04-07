@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/umputun/revdiff/annotation"
-	"github.com/umputun/revdiff/keymap"
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/keymap"
 )
 
 // buildAnnotListItems builds a flat list of all annotations across all files.

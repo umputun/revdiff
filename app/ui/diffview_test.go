@@ -6,7 +6,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/app/diff"
 )
 
 func TestModel_LineNumGutter(t *testing.T) {

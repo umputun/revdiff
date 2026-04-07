@@ -9,7 +9,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 
-	"github.com/umputun/revdiff/diff"
+	"github.com/umputun/revdiff/app/diff"
 )
 
 // Highlighter applies syntax highlighting to source code lines using Chroma.
