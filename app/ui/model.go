@@ -729,7 +729,6 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	files := diff.FileEntryPaths(entries)
 	m.tree = newFileTree(files)
-	// store file change statuses (A/M/D) for tree display
 	for _, e := range entries {
 		if e.Status != "" {
 			m.tree.fileStatuses[e.Path] = e.Status

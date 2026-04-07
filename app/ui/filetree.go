@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/umputun/revdiff/app/diff"
 )
 
 // fileTree manages the list of changed files grouped by directory.
@@ -16,7 +18,7 @@ type fileTree struct {
 	allFiles     []string          // original full file paths
 	filter       bool              // when true, show only annotated files
 	reviewed     map[string]bool   // files marked as reviewed by the user
-	fileStatuses map[string]string // file change status from git (A/M/D/R), empty for non-git
+	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
 }
 
 // treeEntry represents a single line in the file tree display.
@@ -29,7 +31,7 @@ type treeEntry struct {
 
 // newFileTree builds a file tree from a list of changed file paths.
 func newFileTree(files []string) fileTree {
-	ft := fileTree{allFiles: files, reviewed: make(map[string]bool), fileStatuses: make(map[string]string)}
+	ft := fileTree{allFiles: files, reviewed: make(map[string]bool), fileStatuses: make(map[string]diff.FileStatus)}
 	ft.entries = ft.buildEntries(files)
 	// position cursor on first file entry
 	for i, e := range ft.entries {
@@ -233,13 +235,12 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 	var b strings.Builder
 	for idx := ft.offset; idx < end; idx++ {
 		e := ft.entries[idx]
-		indent := strings.Repeat("  ", e.depth)
 		var line string
 
 		if e.isDir {
 			line = s.DirEntry.Render(" " + ft.truncateDirName(e.name, width-3))
 		} else {
-			line = ft.renderFileEntry(e, idx, indent, width, annotatedFiles, s)
+			line = ft.renderFileEntry(e, idx, width, annotatedFiles, s)
 		}
 
 		b.WriteString(line)
@@ -251,12 +252,11 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 }
 
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.
-func (ft *fileTree) renderFileEntry(e treeEntry, idx int, _ string, width int, annotatedFiles map[string]bool, s styles) string {
+func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles map[string]bool, s styles) string {
 	isSelected := idx == ft.cursor
 	hasStatuses := len(ft.fileStatuses) > 0
 
-	// reviewed checkmark: "✓ " or "  "
-	// plain ✓ when selected (lipgloss Render reset would break FileSelected background)
+	// plain ✓ when selected to avoid lipgloss reset breaking FileSelected background
 	reviewMark := "  "
 	if ft.reviewed[e.path] {
 		if isSelected {
@@ -266,7 +266,6 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx int, _ string, width int, a
 		}
 	}
 
-	// file change status indicator: "M " / "A " / "D " (only when statuses available)
 	statusMark := ""
 	if hasStatuses {
 		status := ft.fileStatuses[e.path]
@@ -274,9 +273,9 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx int, _ string, width int, a
 		case status == "":
 			statusMark = "  "
 		case isSelected:
-			statusMark = status + " "
+			statusMark = string(status) + " "
 		default:
-			statusMark = ft.styledStatus(status, s) + " "
+			statusMark = s.fileStatusStyle(status).Render(string(status)) + " "
 		}
 	}
 
@@ -302,21 +301,6 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx int, _ string, width int, a
 		return s.FileSelected.Width(maxWidth).Render(name)
 	}
 	return s.FileEntry.Render(name)
-}
-
-// styledStatus returns a lipgloss-styled status letter with semantic color.
-// A (added) = green, D (deleted) = red, M (modified) and others = muted.
-func (ft *fileTree) styledStatus(status string, s styles) string {
-	var color string
-	switch status {
-	case "A":
-		color = s.colors.AddFg
-	case "D":
-		color = s.colors.RemoveFg
-	default:
-		color = s.colors.Muted
-	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(status)
 }
 
 // filterFiles returns the subset of allFiles that have annotations.

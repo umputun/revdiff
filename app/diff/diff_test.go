@@ -207,7 +207,7 @@ func TestGit_ChangedFiles(t *testing.T) {
 
 	entries, err := g.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "hello.go", Status: "M"}}, entries)
+	assert.Equal(t, []FileEntry{{Path: "hello.go", Status: FileModified}}, entries)
 }
 
 func TestGit_ChangedFiles_Staged(t *testing.T) {
@@ -223,7 +223,7 @@ func TestGit_ChangedFiles_Staged(t *testing.T) {
 
 	entries, err := g.ChangedFiles("", true)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "a.go", Status: "M"}}, entries)
+	assert.Equal(t, []FileEntry{{Path: "a.go", Status: FileModified}}, entries)
 }
 
 func TestGit_ChangedFiles_WithRef(t *testing.T) {
@@ -240,7 +240,7 @@ func TestGit_ChangedFiles_WithRef(t *testing.T) {
 
 	entries, err := g.ChangedFiles("HEAD~1", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "b.go", Status: "M"}}, entries)
+	assert.Equal(t, []FileEntry{{Path: "b.go", Status: FileModified}}, entries)
 }
 
 func TestGit_ChangedFiles_NoChanges(t *testing.T) {
@@ -430,7 +430,7 @@ func TestGit_ChangedFiles_IncludesBinary(t *testing.T) {
 
 	entries, err := g.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "data.bin", Status: "M"}}, entries)
+	assert.Equal(t, []FileEntry{{Path: "data.bin", Status: FileModified}}, entries)
 }
 
 func TestParseBinaryStat(t *testing.T) {

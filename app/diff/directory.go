@@ -40,7 +40,7 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 
-	paths := make([]string, 0, strings.Count(string(out), "\x00"))
+	entries := make([]FileEntry, 0, strings.Count(string(out), "\x00"))
 	for entry := range strings.SplitSeq(string(out), "\x00") {
 		if entry == "" {
 			continue
@@ -51,14 +51,9 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 		if _, statErr := os.Lstat(resolved); statErr != nil && os.IsNotExist(statErr) {
 			continue
 		}
-		paths = append(paths, entry)
+		entries = append(entries, FileEntry{Path: entry})
 	}
-	sort.Strings(paths)
-
-	entries := make([]FileEntry, len(paths))
-	for i, p := range paths {
-		entries[i] = FileEntry{Path: p}
-	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	return entries, nil
 }
 

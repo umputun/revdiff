@@ -244,7 +244,7 @@ func TestFallbackRenderer_ChangedFiles_FileInDiff(t *testing.T) {
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// hello.go is already in the diff, should not be duplicated
-	assert.Equal(t, []FileEntry{{Path: "hello.go", Status: "M"}}, files)
+	assert.Equal(t, []FileEntry{{Path: "hello.go", Status: FileModified}}, files)
 }
 
 func TestFallbackRenderer_ChangedFiles_FileNotInDiffButOnDisk(t *testing.T) {
@@ -299,7 +299,7 @@ func TestFallbackRenderer_ChangedFiles_SuffixMatchDedup(t *testing.T) {
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// should not duplicate - plan.md suffix-matches docs/plans/plan.md
-	assert.Equal(t, []FileEntry{{Path: "docs/plans/plan.md", Status: "M"}}, files)
+	assert.Equal(t, []FileEntry{{Path: "docs/plans/plan.md", Status: FileModified}}, files)
 }
 
 func TestFallbackRenderer_ChangedFiles_AbsolutePath(t *testing.T) {
@@ -652,7 +652,7 @@ func TestFallbackRenderer_NormalDiffUnaffected(t *testing.T) {
 
 	files, err := fr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "main.go", Status: "M"}}, files)
+	assert.Equal(t, []FileEntry{{Path: "main.go", Status: FileModified}}, files)
 
 	lines, err := fr.FileDiff("", "main.go", false)
 	require.NoError(t, err)

@@ -40,10 +40,20 @@ type DiffLine struct {
 	IsBinary   bool       // true when this line is a binary file placeholder
 }
 
+// FileStatus represents the change type of a file in a git diff.
+type FileStatus string
+
+const (
+	FileAdded    FileStatus = "A"
+	FileModified FileStatus = "M"
+	FileDeleted  FileStatus = "D"
+	FileRenamed  FileStatus = "R"
+)
+
 // FileEntry represents a file with its change status from git diff.
 type FileEntry struct {
-	Path   string // file path relative to repo root
-	Status string // "A" (added), "M" (modified), "D" (deleted), "R" (renamed), "" (unknown)
+	Path   string     // file path relative to repo root
+	Status FileStatus // file change status, empty for non-git renderers
 }
 
 // FileEntryPaths extracts just the paths from a slice of FileEntry.
@@ -87,17 +97,17 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 		if len(fields) < 2 {
 			continue
 		}
-		status := fields[0]
+		rawStatus := fields[0]
 		path := fields[1]
 		// for renames/copies (R100, C100), use the new name
-		if len(fields) == 3 && status != "" && (status[0] == 'R' || status[0] == 'C') {
+		if len(fields) == 3 && rawStatus != "" && (rawStatus[0] == 'R' || rawStatus[0] == 'C') {
 			path = fields[2]
 		}
 		// normalize status to single letter (R100 -> R)
-		if len(status) > 1 {
-			status = status[:1]
+		if len(rawStatus) > 1 {
+			rawStatus = rawStatus[:1]
 		}
-		entries = append(entries, FileEntry{Path: path, Status: status})
+		entries = append(entries, FileEntry{Path: path, Status: FileStatus(rawStatus)})
 	}
 	return entries, nil
 }
