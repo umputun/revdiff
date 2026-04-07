@@ -41,7 +41,7 @@
             "name": "umputun",
             "url": "https://github.com/umputun"
         },
-        "softwareVersion": "0.11.0",
+        "softwareVersion": "0.13.0",
         "downloadUrl": "https://github.com/umputun/revdiff/releases",
         "codeRepository": "https://github.com/umputun/revdiff"
     }
@@ -78,7 +78,7 @@
 
 <header class="hero">
     <div class="hero-content">
-        <div class="hero-badge">v0.11.0 <span class="hero-badge-sep">/</span> open source</div>
+        <div class="hero-badge">v0.13.0 <span class="hero-badge-sep">/</span> open source</div>
         <h1>Review diffs, files, and documents<br>right in your terminal</h1>
         <p class="hero-sub">Code review for AI agents and Claude Code. Annotate diffs, plans, and documents in a TUI. Structured output on quit, ready for AI agents, scripts, or any tool.</p>
         <div class="hero-actions">
@@ -107,7 +107,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph add">+</span><span class="glyph remove">-</span></div>
                 <h3>Full-file diff view</h3>
-                <p>Syntax-highlighted diffs with added, removed, and context lines. Collapsed mode shows final text with change markers.</p>
+                <p>Syntax-highlighted diffs with added, removed, and context lines. Collapsed mode shows final text with change markers. Git blame gutter shows who wrote each line.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph annotation">#</span></div>
@@ -127,7 +127,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">A</span></div>
                 <h3>All-files mode</h3>
-                <p>Browse and annotate all git-tracked files with <code>--all-files</code>. Filter with <code>--exclude</code>. Review files outside git with <code>--only</code>.</p>
+                <p>Browse and annotate all git-tracked files with <code>--all-files</code>. Filter with <code>--exclude</code>. Review standalone files with <code>--only</code> or piped output with <code>--stdin</code>.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">~</span></div>
@@ -192,7 +192,7 @@
                 <div class="terminal-detect"><code>$KITTY_LISTEN_ON</code></div>
             </div>
             <div class="terminal-card">
-                <div class="terminal-name">wezterm</div>
+                <div class="terminal-name">wezterm / kaku</div>
                 <div class="terminal-method"><code>wezterm cli split-pane</code></div>
                 <div class="terminal-detect"><code>$WEZTERM_PANE</code></div>
             </div>
@@ -217,7 +217,7 @@
                 <div class="terminal-detect"><code>$INSIDE_EMACS</code></div>
             </div>
         </div>
-        <p class="terminal-priority">Priority: tmux &rarr; kitty &rarr; wezterm &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm</p>
+        <p class="terminal-priority">Priority: tmux &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm</p>
     </div>
 </section>
 

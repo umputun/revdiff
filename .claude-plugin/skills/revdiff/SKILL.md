@@ -26,7 +26,7 @@ If the user asks a question about revdiff (configuration, themes, keybindings, i
 
 ## How It Works
 
-1. Launch revdiff in a terminal overlay (tmux popup, kitty overlay, wezterm split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
+1. Launch revdiff in a terminal overlay (tmux popup, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
 2. User navigates the diff, adds annotations on specific lines
 3. On quit, annotations are captured from stdout
 4. Claude reads annotations and addresses each one
@@ -42,7 +42,8 @@ which revdiff
 ```
 
 If not found, guide installation:
-- `go install github.com/umputun/revdiff/cmd/revdiff@latest`
+- `brew install umputun/apps/revdiff`
+- Binary releases: https://github.com/umputun/revdiff/releases
 
 ### Step 1: Determine Review Mode
 
@@ -88,7 +89,7 @@ ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [b
 ```
 
 The script:
-- Detects available terminal (tmux → kitty → wezterm → cmux → ghostty → iTerm2 → Emacs vterm)
+- Detects available terminal (tmux → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout

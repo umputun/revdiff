@@ -5,11 +5,6 @@
 brew install umputun/apps/revdiff
 ```
 
-**Go install:**
-```bash
-go install github.com/umputun/revdiff/cmd/revdiff@latest
-```
-
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
 
 ## Claude Code Plugin

@@ -9,7 +9,7 @@ REV=$(if $(filter --,$(GIT_REV)),latest,$(GIT_REV))
 all: test build
 
 build:
-	cd cmd/revdiff && go build -ldflags "-X main.revision=$(REV) -s -w" -o ../../.bin/revdiff.$(BRANCH)
+	go build -ldflags "-X main.revision=$(REV) -s -w" -o .bin/revdiff.$(BRANCH) ./app
 	cp .bin/revdiff.$(BRANCH) .bin/revdiff
 
 test:
@@ -33,6 +33,6 @@ version:
 	@echo "revision: $(REV)"
 
 site:
-	cp llms.txt site/
+	@echo "site assets are in site/ directory"
 
 .PHONY: build test lint fmt race version site

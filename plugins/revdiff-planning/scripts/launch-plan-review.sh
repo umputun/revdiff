@@ -30,12 +30,20 @@ trap 'rm -f "$OUTPUT_FILE"' EXIT
 # make plan path absolute for the overlay shell
 PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
 
-REVDIFF_CMD="$REVDIFF_BIN --only=$PLAN_ABS --output=$OUTPUT_FILE"
+REVDIFF_CMD="$REVDIFF_BIN --only=$PLAN_ABS --output=$OUTPUT_FILE --wrap"
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w 90% -h 90% -T " $OVERLAY_TITLE " -- sh -c "$REVDIFF_CMD"
+    # -T (title) requires tmux 3.3+; skip on older versions
+    TMUX_ARGS=(tmux display-popup -E -w 90% -h 90%)
+    if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
+        if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
+            TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+        fi
+    fi
+    TMUX_ARGS+=(-- sh -c "$REVDIFF_CMD")
+    "${TMUX_ARGS[@]}"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -62,20 +70,29 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     exit 0
 fi
 
-# wezterm: split-pane with sentinel file for blocking
-if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
-    rm -f "$SENTINEL"
+# wezterm/kaku: split-pane with sentinel file for blocking
+if [ -n "${WEZTERM_PANE:-}" ]; then
+    WEZTERM_CLI=()
+    if command -v wezterm >/dev/null 2>&1; then
+        WEZTERM_CLI=(wezterm cli)
+    elif command -v kaku >/dev/null 2>&1; then
+        WEZTERM_CLI=(kaku cli)
+    fi
 
-    wezterm cli split-pane --bottom --percent 90 \
-        --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+    if [ ${#WEZTERM_CLI[@]} -gt 0 ]; then
+        SENTINEL=$(mktemp /tmp/plan-review-done-XXXXXX)
+        rm -f "$SENTINEL"
 
-    while [ ! -f "$SENTINEL" ]; do
-        sleep 0.3
-    done
-    rm -f "$SENTINEL"
-    cat "$OUTPUT_FILE"
-    exit 0
+        "${WEZTERM_CLI[@]}" split-pane --bottom --percent 90 \
+            --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+
+        while [ ! -f "$SENTINEL" ]; do
+            sleep 0.3
+        done
+        rm -f "$SENTINEL"
+        cat "$OUTPUT_FILE"
+        exit 0
+    fi
 fi
 
 # cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)

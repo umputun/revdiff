@@ -10,11 +10,12 @@ set -euo pipefail
 REVDIFF_BIN=$(command -v revdiff 2>/dev/null || true)
 if [ -z "$REVDIFF_BIN" ]; then
     echo "error: revdiff not found in PATH" >&2
-    echo "install: go install github.com/umputun/revdiff/cmd/revdiff@latest" >&2
+    echo "install: brew install umputun/apps/revdiff (or download from https://github.com/umputun/revdiff/releases)" >&2
     exit 1
 fi
 
-OUTPUT_FILE=$(mktemp /tmp/revdiff-output-XXXXXX)
+TMPBASE="${TMPDIR:-/tmp}"
+OUTPUT_FILE=$(mktemp "$TMPBASE/revdiff-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 CONFIG_FLAG=""
@@ -45,7 +46,15 @@ POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
-    tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H" -T " $OVERLAY_TITLE " -d "$CWD" -- sh -c "$REVDIFF_CMD"
+    # -T (title) requires tmux 3.3+; skip on older versions
+    TMUX_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
+    if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
+        if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
+            TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+        fi
+    fi
+    TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")
+    "${TMUX_ARGS[@]}"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -53,7 +62,7 @@ fi
 # kitty: overlay with sentinel file for blocking
 KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd="$CWD")
@@ -72,30 +81,39 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     exit 0
 fi
 
-# wezterm: split-pane with sentinel file for blocking
-if [ -n "${WEZTERM_PANE:-}" ] && command -v wezterm >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
-    rm -f "$SENTINEL"
+# wezterm/kaku: split-pane with sentinel file for blocking
+if [ -n "${WEZTERM_PANE:-}" ]; then
+    WEZTERM_CLI=()
+    if command -v wezterm >/dev/null 2>&1; then
+        WEZTERM_CLI=(wezterm cli)
+    elif command -v kaku >/dev/null 2>&1; then
+        WEZTERM_CLI=(kaku cli)
+    fi
 
-    WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
-    WEZTERM_PCT="${WEZTERM_PCT%%%}"
-    wezterm cli split-pane --bottom --percent "$WEZTERM_PCT" \
-        --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+    if [ ${#WEZTERM_CLI[@]} -gt 0 ]; then
+        SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
+        rm -f "$SENTINEL"
 
-    while [ ! -f "$SENTINEL" ]; do
-        sleep 0.3
-    done
-    rm -f "$SENTINEL"
-    cat "$OUTPUT_FILE"
-    exit 0
+        WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
+        WEZTERM_PCT="${WEZTERM_PCT%%%}"
+        "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
+            --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+
+        while [ ! -f "$SENTINEL" ]; do
+            sleep 0.3
+        done
+        rm -f "$SENTINEL"
+        cat "$OUTPUT_FILE"
+        exit 0
+    fi
 fi
 
 # cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)
 if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
 
-    LAUNCH_SCRIPT=$(mktemp /tmp/revdiff-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
@@ -130,10 +148,10 @@ fi
 # ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
 if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
 
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
 
-    LAUNCH_SCRIPT=$(mktemp /tmp/revdiff-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
@@ -179,11 +197,11 @@ fi
 
 # iterm2: split pane via AppleScript (macOS only)
 if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
 
     # use launcher script to avoid single-quote injection in paths
-    LAUNCH_SCRIPT=$(mktemp /tmp/revdiff-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
@@ -259,12 +277,12 @@ fi
 
 # emacs vterm: open revdiff in a new vterm buffer via emacsclient
 if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; then
-    SENTINEL=$(mktemp /tmp/revdiff-done-XXXXXX)
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL" && mkfifo "$SENTINEL"
 
     # use launcher script to avoid shell interpolation issues in elisp strings;
     # embed all paths directly so vterm-shell needs no arguments
-    LAUNCH_SCRIPT=$(mktemp /tmp/revdiff-launch-XXXXXX.sh)
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX.sh")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh

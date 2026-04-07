@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.13.0 - 2026-04-06
+
+### New Features
+
+- --stdin scratch-buffer review mode for piped content (#46)
+- hunk keyword expansion in annotation output (#47)
+- binary file detection with size delta and IsBinary flag (#44)
+- two-column help overlay with colored section headers and keys
+
+### Bug Fixes
+
+- add right padding to prevent wrapped text from touching pane border (#45)
+- enable word wrap by default for plan review
+
+## v0.12.0 - 2026-04-06
+
+### New Features
+
+- git blame gutter toggle (B key) (#38)
+- --line-numbers config option (#37)
+- kaku terminal support for wezterm-based terminals (#42)
+- cmux terminal support for overlay launcher (#35)
+- Emacs vterm support (#33)
+- project website and branding
+
+### Improvements
+
+- "beyond code review" section with use cases for --only flag
+
+### Bug Fixes
+
+- skip tmux -T title flag on versions older than 3.3 (#40)
+- Safari iOS mobile layout issues (#39)
+- improve site readability by lifting dark theme palette
+- increase docs page font sizes
+
+## v0.11.0 - 2026-04-05
+
+### New Features
+
+- custom keybindings via ~/.config/revdiff/keymap
+- color theme system with 5 bundled themes (dracula, nord, gruvbox, solarized-dark, catppuccin-mocha)
+- Ghostty terminal support
+- line numbers gutter toggle (L key)
+
 ## v0.10.0 - 2026-04-05
 
 ### New Features

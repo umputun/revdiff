@@ -60,7 +60,9 @@
         <h4>Modes</h4>
         <a href="#all-files">All-files mode</a>
         <a href="#context-only">Context-only review</a>
+        <a href="#scratch-buffer">Scratch-buffer review</a>
         <a href="#markdown-toc">Markdown TOC</a>
+        <a href="#beyond-code-review">Beyond code review</a>
 
         <h4>Configuration</h4>
         <a href="#config-file">Config file</a>
@@ -93,13 +95,11 @@
         <p>Complete reference for revdiff usage, configuration, themes, and keybindings.</p>
 
         <h2 id="requirements">Requirements</h2>
-        <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review.</p>
+        <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
 
         <h2 id="installation">Installation</h2>
         <h3>Homebrew (macOS/Linux)</h3>
         <div class="code-block"><code>brew install umputun/apps/revdiff</code></div>
-        <h3>Go install</h3>
-        <div class="code-block"><code>go install github.com/umputun/revdiff/cmd/revdiff@latest</code></div>
         <h3>Binary releases</h3>
         <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
 
@@ -150,7 +150,13 @@ revdiff main..feature
 revdiff --only=/tmp/plan.md
 
 <span class="code-comment"># review a file with no git changes (context-only)</span>
-revdiff --only=docs/notes.txt</code></div>
+revdiff --only=docs/notes.txt
+
+<span class="code-comment"># review piped text as a scratch buffer</span>
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
+
+<span class="code-comment"># capture annotations from generated output</span>
+some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="all-files">All-files mode</h2>
         <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all git-tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
@@ -166,8 +172,24 @@ revdiff --only=docs/notes.txt</code></div>
             <li><strong>Outside a git repo</strong> &mdash; <code>--only</code> is required; files are read directly from disk</li>
         </ul>
 
+        <h2 id="scratch-buffer">Scratch-buffer review</h2>
+        <p>Use <code>--stdin</code> to review arbitrary piped or redirected text as a single synthetic file. All lines are treated as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.</p>
+        <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, and <code>--exclude</code>.</p>
+        <p>Use <code>--stdin-name</code> to control the synthetic filename for annotation output and extension-based highlighting or markdown TOC activation.</p>
+        <div class="code-block"><code>echo "plain text" | revdiff --stdin
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
+git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
+
         <h2 id="markdown-toc">Markdown TOC navigation</h2>
-        <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
+        <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. This works for <code>--only</code> files and for <code>--stdin</code> when <code>--stdin-name</code> ends with <code>.md</code> or <code>.markdown</code>. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
+
+        <h2 id="beyond-code-review">Beyond code review</h2>
+        <p>The <code>--only</code> and <code>--stdin</code> flags enable use cases beyond git diffs. Files and ephemeral command output can both be loaded for annotation, no git repo required.</p>
+        <p><strong>Reviewing AI-generated drafts</strong> — When an AI assistant drafts text to be posted publicly (PR comments, issue responses, release notes), write it to a temp file and review in revdiff. Annotate specific lines, the assistant rewrites, re-open to verify.</p>
+        <p><strong>Reviewing documentation and specs</strong> — Markdown files, API specs, config files, and plan documents can all be reviewed with inline annotations.</p>
+        <div class="code-block"><code>revdiff --only=docs/plans/feature.md
+revdiff --only=/tmp/draft-comment.md</code></div>
+        <p><strong>Reviewing generated output</strong> — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied.</p>
 
         <!-- configuration -->
         <h2 id="config-file">Config file</h2>
@@ -195,6 +217,8 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--list-themes</code></td><td>Print available theme names and exit</td><td></td></tr>
                 <tr><td><code>--init-themes</code></td><td>Write bundled theme files to themes dir and exit</td><td></td></tr>
                 <tr><td><code>-A, --all-files</code></td><td>Browse all git-tracked files</td><td><code>false</code></td></tr>
+                <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
+                <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
                 <tr><td><code>-o, --output</code></td><td>Write annotations to file</td><td></td></tr>
@@ -311,6 +335,7 @@ color-border = #6272a4
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
+                <tr><td><code>B</code></td><td>Toggle git blame gutter (author + commit age)</td></tr>
                 <tr><td><code>.</code></td><td>Expand/collapse hunk (collapsed mode)</td></tr>
                 <tr><td><code>f</code></td><td>Filter: all files / annotated only</td></tr>
                 <tr><td><code>?</code></td><td>Help overlay</td></tr>
@@ -352,13 +377,14 @@ unmap q</code></div>
                 <tr><td><strong>tmux</strong></td><td><code>display-popup</code> (blocks until quit)</td><td><code>$TMUX</code></td></tr>
                 <tr><td><strong>kitty</strong></td><td><code>kitty @ launch --type=overlay</code></td><td><code>$KITTY_LISTEN_ON</code></td></tr>
                 <tr><td><strong>wezterm</strong></td><td><code>wezterm cli split-pane</code></td><td><code>$WEZTERM_PANE</code></td></tr>
+                <tr><td><strong>kaku</strong></td><td><code>kaku cli split-pane</code> (same API as wezterm)</td><td><code>$WEZTERM_PANE</code></td></tr>
                 <tr><td><strong>cmux</strong></td><td><code>cmux new-split</code> + <code>cmux send</code></td><td><code>$CMUX_SURFACE_ID</code></td></tr>
                 <tr><td><strong>ghostty</strong></td><td>AppleScript split + zoom (macOS only)</td><td><code>$TERM_PROGRAM</code></td></tr>
                 <tr><td><strong>iTerm2</strong></td><td>AppleScript split pane (macOS only)</td><td><code>$ITERM_SESSION_ID</code></td></tr>
                 <tr><td><strong>Emacs vterm</strong></td><td>New frame via <code>emacsclient</code></td><td><code>$INSIDE_EMACS</code></td></tr>
             </tbody>
         </table>
-        <p>Priority: tmux &rarr; kitty &rarr; wezterm &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty because it also sets <code>$TERM_PROGRAM=ghostty</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
+        <p>Priority: tmux &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty because it also sets <code>$TERM_PROGRAM=ghostty</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
 
         <h2 id="plugin-usage">Plugin usage</h2>
         <h3>Slash commands</h3>
@@ -403,9 +429,13 @@ consider splitting this file into smaller modules
 <span class="code-comment">## handler.go:43 (+)</span>
 use errors.Is() instead of direct comparison
 
+<span class="code-comment">## handler.go:43-67 (+)</span>
+refactor this hunk to reduce nesting
+
 <span class="code-comment">## store.go:18 (-)</span>
 don't remove this validation</code></div>
-        <p>Each annotation block: <code>## filename:line (type)</code> where type is <code>(+)</code> added, <code>(-)</code> removed, or <code>(file-level)</code>.</p>
+        <p>Each annotation block: <code>## filename:line[-end] (type)</code> where type is <code>(+)</code> added, <code>(-)</code> removed, or <code>(file-level)</code>; <code>-end</code> is included when the annotation covers a line range.</p>
+        <p>When annotation text contains the keyword &ldquo;hunk&rdquo; (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., <code>handler.go:43-67 (+)</code> instead of <code>handler.go:43 (+)</code>). This gives AI consumers the range context without any extra steps.</p>
 
         <h2 id="integration">Integration with other tools</h2>
         <p>The structured stdout output works with any tool that can read text:</p>
