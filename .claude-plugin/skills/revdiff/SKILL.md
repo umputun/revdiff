@@ -42,7 +42,8 @@ which revdiff
 ```
 
 If not found, guide installation:
-- `go install github.com/umputun/revdiff/cmd/revdiff@latest`
+- `brew install umputun/apps/revdiff`
+- Binary releases: https://github.com/umputun/revdiff/releases
 
 ### Step 1: Determine Review Mode
 

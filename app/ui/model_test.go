@@ -15,10 +15,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/umputun/revdiff/annotation"
-	"github.com/umputun/revdiff/diff"
-	"github.com/umputun/revdiff/keymap"
-	"github.com/umputun/revdiff/ui/mocks"
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/mocks"
 )
 
 func noopHighlighter() *mocks.SyntaxHighlighterMock {

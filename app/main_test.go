@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/umputun/revdiff/diff"
-	"github.com/umputun/revdiff/theme"
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/theme"
 )
 
 // noConfigArgs returns args that point to a nonexistent config file,

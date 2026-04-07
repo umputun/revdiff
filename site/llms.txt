@@ -39,7 +39,6 @@ The plugin supports a full review loop: annotate -> Claude plans fixes -> Claude
 ## Installation
 
 - Homebrew: `brew install umputun/apps/revdiff`
-- Go: `go install github.com/umputun/revdiff/cmd/revdiff@latest`
 - Binaries: https://github.com/umputun/revdiff/releases
 
 ## Links
