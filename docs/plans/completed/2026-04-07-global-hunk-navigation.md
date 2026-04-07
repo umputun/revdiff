@@ -71,5 +71,5 @@ Make `[` / `]` (prev/next hunk) work regardless of which pane has focus. When pr
 
 ### Task 5: Update documentation
 
-- [ ] Update `site/docs.html` and `README.md` to document the cross-file hunk navigation behavior for `[` and `]`
-- [ ] Move this plan to `docs/plans/completed/`
+- [x] Update `site/docs.html` and `README.md` to document the cross-file hunk navigation behavior for `[` and `]`
+- [x] Move this plan to `docs/plans/completed/`

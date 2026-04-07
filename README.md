@@ -403,7 +403,7 @@ revdiff --only=/tmp/draft-comment.md
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
-| `[` / `]` | Jump to previous/next change hunk in diff |
+| `[` / `]` | Jump to previous/next change hunk in diff; crosses to the previous/next file when at the first/last hunk (multi-file mode only) |
 
 **Search:**
 
