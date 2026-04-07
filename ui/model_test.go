@@ -478,7 +478,6 @@ func TestModel_BlameFromConfig(t *testing.T) {
 	})
 }
 
-
 func TestModel_StatusModeIcons(t *testing.T) {
 	t.Run("all icons always present", func(t *testing.T) {
 		m := testModel(nil, nil)
@@ -937,6 +936,107 @@ func TestModel_AnnotateEnterEmptyTextCancels(t *testing.T) {
 	model := result.(Model)
 	assert.False(t, model.annotating)
 	assert.Empty(t, model.store.Get("a.go"))
+}
+
+func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx before", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old line", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "new line", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added line", ChangeType: diff.ChangeAdd},
+		{OldNum: 3, NewNum: 4, Content: "ctx after", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("hunk keyword populates EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 2 // on "new line" (add, NewNum=2)
+		m.startAnnotation()
+		m.annotateInput.SetValue("refactor this hunk")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 2, anns[0].Line)
+		assert.Equal(t, 3, anns[0].EndLine, "EndLine should be last add line's NewNum")
+	})
+
+	t.Run("block keyword populates EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 1 // on "old line" (remove, OldNum=2)
+		m.startAnnotation()
+		m.annotateInput.SetValue("review this BLOCK carefully")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 2, anns[0].Line)
+		assert.Equal(t, 3, anns[0].EndLine, "EndLine should be last add line's NewNum")
+	})
+
+	t.Run("no keyword does not set EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 2
+		m.startAnnotation()
+		m.annotateInput.SetValue("this is fine")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 0, anns[0].EndLine, "EndLine should be 0 when no hunk keyword")
+	})
+
+	t.Run("context line with keyword does not set EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 0 // context line
+		m.startAnnotation()
+		m.annotateInput.SetValue("rewrite this hunk")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 0, anns[0].EndLine, "EndLine should be 0 for context line even with keyword")
+	})
+}
+
+func TestModel_HunkEndLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added2", ChangeType: diff.ChangeAdd},
+		{OldNum: 3, NewNum: 4, Content: "ctx", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.diffLines = lines
+
+	t.Run("returns last line of hunk from first change", func(t *testing.T) {
+		assert.Equal(t, 3, m.hunkEndLine(1), "hunk ending at add NewNum=3")
+	})
+	t.Run("returns last line from middle of hunk", func(t *testing.T) {
+		assert.Equal(t, 3, m.hunkEndLine(2))
+	})
+	t.Run("returns last line from last change line", func(t *testing.T) {
+		assert.Equal(t, 3, m.hunkEndLine(3))
+	})
+	t.Run("returns 0 for context line", func(t *testing.T) {
+		assert.Equal(t, 0, m.hunkEndLine(0))
+	})
+	t.Run("returns 0 for out of bounds", func(t *testing.T) {
+		assert.Equal(t, 0, m.hunkEndLine(-1))
+		assert.Equal(t, 0, m.hunkEndLine(99))
+	})
 }
 
 func TestModel_AnnotateEscCancels(t *testing.T) {

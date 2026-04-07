@@ -40,13 +40,13 @@ Add an `EndLine` field to `Annotation`. When creating an annotation, if the comm
 - Modify: `ui/annotate.go`
 - Modify: `ui/model_test.go`
 
-- [ ] add `hunkEndLine(idx int) int` method that finds the last line of the hunk containing diffLines[idx]
-- [ ] in the annotation creation path, after building the Annotation, check if comment contains hunk keywords (case-insensitive "hunk" or "block" as whole words)
-- [ ] if keyword found and line is in a change hunk, set `EndLine` to hunk end line number via `hunkEndLine`
-- [ ] write test: annotation with "refactor this hunk" gets EndLine populated
-- [ ] write test: annotation with "this is fine" does NOT get EndLine
-- [ ] write test: annotation on context line (not in hunk) does NOT get EndLine even with keyword
-- [ ] run `make test && make lint`
+- [x] add `hunkEndLine(idx int) int` method that finds the last line of the hunk containing diffLines[idx]
+- [x] in the annotation creation path, after building the Annotation, check if comment contains hunk keywords (case-insensitive "hunk" or "block" as whole words)
+- [x] if keyword found and line is in a change hunk, set `EndLine` to hunk end line number via `hunkEndLine`
+- [x] write test: annotation with "refactor this hunk" gets EndLine populated
+- [x] write test: annotation with "this is fine" does NOT get EndLine
+- [x] write test: annotation on context line (not in hunk) does NOT get EndLine even with keyword
+- [x] run `make test && make lint`
 
 ### Task 3: Verify and document
 
