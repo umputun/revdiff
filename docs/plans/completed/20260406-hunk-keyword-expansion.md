@@ -8,7 +8,7 @@ When annotation text contains keywords like "hunk" or "block", automatically exp
 - `ui/diffview.go` - findHunks() returns indices of hunk starts in diffLines
 - `ui/collapsed.go` - hunkStartFor() finds which hunk contains a given line index
 - `ui/annotate.go` - diffLineNum() maps DiffLine to display line number
-- Keywords to detect: "hunk", "block" (case-insensitive, whole word)
+- Keyword to detect: "hunk" (case-insensitive, whole word)
 
 ## Development Approach
 - **testing approach**: regular (code first, then tests)

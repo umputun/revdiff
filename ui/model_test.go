@@ -963,6 +963,22 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 		assert.Equal(t, 3, anns[0].EndLine, "EndLine should be last add line's NewNum")
 	})
 
+	t.Run("uppercase hunk keyword populates EndLine", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.focus = paneDiff
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.diffCursor = 2 // on "new line" (add, NewNum=2)
+		m.startAnnotation()
+		m.annotateInput.SetValue("refactor this HUNK")
+		m.saveAnnotation()
+		anns := m.store.Get("a.go")
+		require.Len(t, anns, 1)
+		assert.Equal(t, 2, anns[0].Line)
+		assert.Equal(t, 3, anns[0].EndLine, "case-insensitive match for HUNK")
+	})
+
 	t.Run("block is not a hunk keyword", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
 		m.tree = newFileTree([]string{"a.go"})
