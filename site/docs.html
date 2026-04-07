@@ -4,20 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Documentation — revdiff | Code Review for AI Agents</title>
-    <meta name="description" content="revdiff documentation: installation, usage, configuration, themes, keybindings, Claude Code plugin setup, and output format. Code review and plan review tool for AI coding sessions.">
+    <meta name="description" content="revdiff documentation: installation, pi package, Claude Code plugin setup, usage, configuration, themes, keybindings, and output format. Code review and plan review tool for AI coding sessions.">
     <meta name="keywords" content="code review for ai agents, code review for claude code, plan review for claude code, revdiff docs, tui diff viewer documentation">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/docs.html">
 
     <meta property="og:title" content="revdiff Documentation — Code Review for AI Agents">
-    <meta property="og:description" content="Complete reference for revdiff: usage, configuration, themes, keybindings, Claude Code plugin, and output format.">
+    <meta property="og:description" content="Complete reference for revdiff: usage, configuration, themes, keybindings, pi package, Claude Code plugin, and output format.">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://revdiff.com/docs.html">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="revdiff Documentation">
-    <meta name="twitter:description" content="Complete reference for revdiff usage, configuration, themes, keybindings, and Claude Code plugin.">
+    <meta name="twitter:description" content="Complete reference for revdiff usage, configuration, themes, keybindings, pi package, and Claude Code plugin.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
@@ -54,6 +54,7 @@
         <h4>Getting started</h4>
         <a href="#requirements">Requirements</a>
         <a href="#installation">Installation</a>
+        <a href="#pi-package">Pi package</a>
         <a href="#usage">Usage</a>
         <a href="#examples">Examples</a>
 
@@ -92,7 +93,7 @@
 
     <main class="docs-content">
         <h1>Documentation</h1>
-        <p>Complete reference for revdiff usage, configuration, themes, and keybindings.</p>
+        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, and the Claude Code plugin.</p>
 
         <h2 id="requirements">Requirements</h2>
         <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
@@ -102,6 +103,23 @@
         <div class="code-block"><code>brew install umputun/apps/revdiff</code></div>
         <h3>Binary releases</h3>
         <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
+
+        <h2 id="pi-package">Pi package</h2>
+        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The extension launches the existing <code>revdiff</code> binary, captures annotations on exit, and keeps them visible inside pi as a persistent widget plus a right-side results panel.</p>
+        <div class="code-block"><code>pi install https://github.com/umputun/revdiff</code></div>
+        <h3>Commands inside pi</h3>
+        <div class="code-block"><code>/revdiff                         <span class="code-comment">-- detect uncommitted, staged, or branch changes, then open revdiff</span>
+/revdiff HEAD~1                  <span class="code-comment">-- review last commit</span>
+/revdiff --all-files             <span class="code-comment">-- browse all tracked files</span>
+/revdiff --only README.md        <span class="code-comment">-- review a single file in context-only mode</span>
+/revdiff --pi-overlay            <span class="code-comment">-- use the existing overlay launcher script</span>
+/revdiff-rerun                   <span class="code-comment">-- rerun the last review with remembered args</span>
+/revdiff-rerun --pi-overlay      <span class="code-comment">-- rerun the last review in overlay mode</span>
+/revdiff-results                 <span class="code-comment">-- reopen the last results panel</span>
+/revdiff-apply                   <span class="code-comment">-- insert the last annotations into the pi chat context</span>
+/revdiff-clear                   <span class="code-comment">-- clear stored review state</span>
+/revdiff-reminders on            <span class="code-comment">-- enable post-edit review reminders</span></code></div>
+        <p>Requires the <code>revdiff</code> binary on <code>PATH</code>. Set <code>REVDIFF_BIN=/absolute/path/to/revdiff</code> if pi can’t find the binary. Same-terminal mode is the default. Optional overlay mode (<code>--pi-overlay</code> or <code>REVDIFF_PI_MODE=overlay</code>) reuses the existing <code>launch-revdiff.sh</code> script from the Claude plugin integration. Optional post-edit reminders (<code>/revdiff-reminders on</code>) suggest running <code>/revdiff</code> or <code>/revdiff-rerun</code> after agent edits.</p>
 
         <!-- usage -->
         <h2 id="usage">Usage</h2>
