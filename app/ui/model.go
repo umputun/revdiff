@@ -252,7 +252,8 @@ func (m Model) loadFiles() tea.Cmd {
 		if len(stagedOnly) > 0 {
 			tmp := make([]string, 0, len(files)+len(stagedOnly))
 			tmp = append(tmp, files...)
-			files = append(tmp, stagedOnly...)
+			tmp = append(tmp, stagedOnly...)
+			files = tmp
 		}
 		var untracked []string
 		if m.showUntracked {
@@ -260,7 +261,8 @@ func (m Model) loadFiles() tea.Cmd {
 			if len(untracked) > 0 {
 				tmp := make([]string, 0, len(files)+len(untracked))
 				tmp = append(tmp, files...)
-				files = append(tmp, untracked...)
+				tmp = append(tmp, untracked...)
+				files = tmp
 			}
 		}
 		return filesLoadedMsg{files: files, changed: changed, untracked: untracked, stagedOnly: stagedOnly}
