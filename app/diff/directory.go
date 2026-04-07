@@ -24,7 +24,7 @@ func NewDirectoryReader(workDir string) *DirectoryReader {
 
 // ChangedFiles returns all git-tracked files as sorted relative paths.
 // ref and staged parameters are ignored since all tracked files are returned.
-func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
+func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	// use -z for NUL-separated output to avoid C-quoting of paths with non-ASCII characters
 	cmd := exec.CommandContext(context.Background(), "git", "ls-files", "-z")
 	cmd.Dir = dr.workDir
@@ -40,7 +40,7 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 
-	files := make([]string, 0, strings.Count(string(out), "\x00"))
+	paths := make([]string, 0, strings.Count(string(out), "\x00"))
 	for entry := range strings.SplitSeq(string(out), "\x00") {
 		if entry == "" {
 			continue
@@ -51,10 +51,15 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]string, error) {
 		if _, statErr := os.Lstat(resolved); statErr != nil && os.IsNotExist(statErr) {
 			continue
 		}
-		files = append(files, entry)
+		paths = append(paths, entry)
 	}
-	sort.Strings(files)
-	return files, nil
+	sort.Strings(paths)
+
+	entries := make([]FileEntry, len(paths))
+	for i, p := range paths {
+		entries[i] = FileEntry{Path: p}
+	}
+	return entries, nil
 }
 
 // FileDiff reads the file from disk and returns all lines as context DiffLines.

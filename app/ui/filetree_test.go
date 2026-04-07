@@ -510,3 +510,46 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 	assert.Contains(t, result, selected[strings.LastIndex(selected, "/")+1:],
 		"cursor file must be visible after page up")
 }
+
+func TestFileTree_ToggleReviewed(t *testing.T) {
+	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+
+	assert.Equal(t, 0, ft.reviewedCount())
+
+	ft.toggleReviewed("a.go")
+	assert.True(t, ft.reviewed["a.go"])
+	assert.Equal(t, 1, ft.reviewedCount())
+
+	ft.toggleReviewed("b.go")
+	assert.Equal(t, 2, ft.reviewedCount())
+
+	// toggle off
+	ft.toggleReviewed("a.go")
+	assert.False(t, ft.reviewed["a.go"])
+	assert.Equal(t, 1, ft.reviewedCount())
+
+	// no-op for empty path
+	ft.toggleReviewed("")
+	assert.Equal(t, 1, ft.reviewedCount())
+}
+
+func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
+	ft := newFileTree([]string{"a.go", "b.go"})
+	s := plainStyles()
+
+	// no checkmarks initially
+	result := ft.render(40, 10, nil, s)
+	assert.NotContains(t, result, "✓")
+
+	// mark a.go as reviewed
+	ft.toggleReviewed("a.go")
+	result = ft.render(40, 10, nil, s)
+	assert.Contains(t, result, "✓")
+
+	// both checkmark and annotation mark can coexist
+	ft.toggleReviewed("b.go")
+	annotated := map[string]bool{"b.go": true}
+	result = ft.render(40, 10, annotated, s)
+	assert.Contains(t, result, "✓")
+	assert.Contains(t, result, "*")
+}

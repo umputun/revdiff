@@ -23,8 +23,8 @@ func NewStdinReaderFromReader(name string, r io.Reader) (*StdinReader, error) {
 }
 
 // ChangedFiles returns the single synthetic filename.
-func (r *StdinReader) ChangedFiles(_ string, _ bool) ([]string, error) {
-	return []string{r.name}, nil
+func (r *StdinReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
+	return []FileEntry{{Path: r.name}}, nil
 }
 
 // FileDiff returns the stored context lines for the synthetic file.

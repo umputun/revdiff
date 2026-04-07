@@ -23,7 +23,7 @@ func TestDirectoryReader_ChangedFiles(t *testing.T) {
 	dr := NewDirectoryReader(dir)
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"main.go", "pkg/lib.go", "readme.md"}, files)
+	assert.Equal(t, []FileEntry{{Path: "main.go"}, {Path: "pkg/lib.go"}, {Path: "readme.md"}}, files)
 }
 
 func TestDirectoryReader_ChangedFiles_sorted(t *testing.T) {
@@ -39,7 +39,7 @@ func TestDirectoryReader_ChangedFiles_sorted(t *testing.T) {
 	dr := NewDirectoryReader(dir)
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a.go", "m.go", "z.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "a.go"}, {Path: "m.go"}, {Path: "z.go"}}, files)
 }
 
 func TestDirectoryReader_ChangedFiles_emptyRepo(t *testing.T) {
@@ -72,7 +72,7 @@ func TestDirectoryReader_ChangedFiles_ignoresRefAndStaged(t *testing.T) {
 	// passing ref and staged=true should not affect the result
 	files, err := dr.ChangedFiles("HEAD~1", true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"file.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "file.go"}}, files)
 }
 
 func TestDirectoryReader_ChangedFiles_binaryFiles(t *testing.T) {
@@ -88,7 +88,7 @@ func TestDirectoryReader_ChangedFiles_binaryFiles(t *testing.T) {
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// binary files should be listed too — git ls-files lists all tracked files
-	assert.Equal(t, []string{"code.go", "image.png"}, files)
+	assert.Equal(t, []FileEntry{{Path: "code.go"}, {Path: "image.png"}}, files)
 }
 
 func TestDirectoryReader_ChangedFiles_deletedFile(t *testing.T) {
@@ -107,7 +107,7 @@ func TestDirectoryReader_ChangedFiles_deletedFile(t *testing.T) {
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// deleted file should not appear in the list
-	assert.Equal(t, []string{"keep.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "keep.go"}}, files)
 }
 
 func TestDirectoryReader_ChangedFiles_brokenSymlink(t *testing.T) {
@@ -123,7 +123,7 @@ func TestDirectoryReader_ChangedFiles_brokenSymlink(t *testing.T) {
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
 	// broken symlink should still appear — it's a valid tracked entry
-	assert.Equal(t, []string{"broken.link", "real.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "broken.link"}, {Path: "real.go"}}, files)
 }
 
 func TestDirectoryReader_FileDiff_brokenSymlink(t *testing.T) {
@@ -140,7 +140,7 @@ func TestDirectoryReader_FileDiff_brokenSymlink(t *testing.T) {
 	// broken symlink should be in the file list
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Contains(t, files, "broken.link")
+	assert.Contains(t, files, FileEntry{Path: "broken.link"})
 
 	// FileDiff should return a placeholder, not an error
 	lines, err := dr.FileDiff("", "broken.link", false)
@@ -256,15 +256,15 @@ func TestDirectoryReader_FullPipeline(t *testing.T) {
 	// list all files
 	files, err := dr.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"cmd/main.go", "go.mod", "lib.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "cmd/main.go"}, {Path: "go.mod"}, {Path: "lib.go"}}, files)
 
 	// read each file
 	for _, f := range files {
-		lines, readErr := dr.FileDiff("", f, false)
-		require.NoError(t, readErr, "failed to read %s", f)
-		require.NotEmpty(t, lines, "file %s should not be empty", f)
+		lines, readErr := dr.FileDiff("", f.Path, false)
+		require.NoError(t, readErr, "failed to read %s", f.Path)
+		require.NotEmpty(t, lines, "file %s should not be empty", f.Path)
 		for _, l := range lines {
-			assert.Equal(t, ChangeContext, l.ChangeType, "all lines in %s should be context", f)
+			assert.Equal(t, ChangeContext, l.ChangeType, "all lines in %s should be context", f.Path)
 		}
 	}
 }

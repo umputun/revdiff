@@ -10,11 +10,13 @@ import (
 
 // fileTree manages the list of changed files grouped by directory.
 type fileTree struct {
-	entries  []treeEntry // flat list of directories and files for display
-	cursor   int         // currently highlighted entry index
-	offset   int         // first visible entry index for viewport scrolling
-	allFiles []string    // original full file paths
-	filter   bool        // when true, show only annotated files
+	entries      []treeEntry       // flat list of directories and files for display
+	cursor       int               // currently highlighted entry index
+	offset       int               // first visible entry index for viewport scrolling
+	allFiles     []string          // original full file paths
+	filter       bool              // when true, show only annotated files
+	reviewed     map[string]bool   // files marked as reviewed by the user
+	fileStatuses map[string]string // file change status from git (A/M/D/R), empty for non-git
 }
 
 // treeEntry represents a single line in the file tree display.
@@ -27,7 +29,7 @@ type treeEntry struct {
 
 // newFileTree builds a file tree from a list of changed file paths.
 func newFileTree(files []string) fileTree {
-	ft := fileTree{allFiles: files}
+	ft := fileTree{allFiles: files, reviewed: make(map[string]bool), fileStatuses: make(map[string]string)}
 	ft.entries = ft.buildEntries(files)
 	// position cursor on first file entry
 	for i, e := range ft.entries {
@@ -249,27 +251,72 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 }
 
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.
-func (ft *fileTree) renderFileEntry(e treeEntry, idx int, indent string, width int, annotatedFiles map[string]bool, s styles) string {
+func (ft *fileTree) renderFileEntry(e treeEntry, idx int, _ string, width int, annotatedFiles map[string]bool, s styles) string {
+	isSelected := idx == ft.cursor
+	hasStatuses := len(ft.fileStatuses) > 0
+
+	// reviewed checkmark: "✓ " or "  "
+	// plain ✓ when selected (lipgloss Render reset would break FileSelected background)
+	reviewMark := "  "
+	if ft.reviewed[e.path] {
+		if isSelected {
+			reviewMark = "✓ "
+		} else {
+			reviewMark = s.ReviewedMark.Render("✓") + " "
+		}
+	}
+
+	// file change status indicator: "M " / "A " / "D " (only when statuses available)
+	statusMark := ""
+	if hasStatuses {
+		status := ft.fileStatuses[e.path]
+		switch {
+		case status == "":
+			statusMark = "  "
+		case isSelected:
+			statusMark = status + " "
+		default:
+			statusMark = ft.styledStatus(status, s) + " "
+		}
+	}
+
 	marker := "  "
 	if annotatedFiles[e.path] {
 		marker = s.AnnotationMark.Render(" *")
 	}
-	name := indent + e.name + marker
+
+	prefix := reviewMark + statusMark
+	name := prefix + e.name + marker
 	maxWidth := width - 2
 
 	// truncate from the left of the filename when it exceeds pane width
 	if lipgloss.Width(name) > maxWidth && maxWidth > 4 {
-		budget := maxWidth - lipgloss.Width(indent) - lipgloss.Width(marker) - 1 // 1 for "…"
+		budget := maxWidth - lipgloss.Width(prefix) - lipgloss.Width(marker) - 1 // 1 for "…"
 		if budget > 0 && lipgloss.Width(e.name) > budget {
 			runes := []rune(e.name)
-			name = indent + "…" + string(runes[len(runes)-budget+1:]) + marker
+			name = prefix + "…" + string(runes[len(runes)-budget+1:]) + marker
 		}
 	}
 
-	if idx == ft.cursor {
+	if isSelected {
 		return s.FileSelected.Width(maxWidth).Render(name)
 	}
 	return s.FileEntry.Render(name)
+}
+
+// styledStatus returns a lipgloss-styled status letter with semantic color.
+// A (added) = green, D (deleted) = red, M (modified) and others = muted.
+func (ft *fileTree) styledStatus(status string, s styles) string {
+	var color string
+	switch status {
+	case "A":
+		color = s.colors.AddFg
+	case "D":
+		color = s.colors.RemoveFg
+	default:
+		color = s.colors.Muted
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(status)
 }
 
 // filterFiles returns the subset of allFiles that have annotations.
@@ -362,4 +409,21 @@ func (ft *fileTree) refreshFilter(annotatedFiles map[string]bool) {
 			return
 		}
 	}
+}
+
+// toggleReviewed toggles the reviewed state of the given file path.
+func (ft *fileTree) toggleReviewed(path string) {
+	if path == "" {
+		return
+	}
+	if ft.reviewed[path] {
+		delete(ft.reviewed, path)
+	} else {
+		ft.reviewed[path] = true
+	}
+}
+
+// reviewedCount returns the number of files marked as reviewed.
+func (ft *fileTree) reviewedCount() int {
+	return len(ft.reviewed)
 }

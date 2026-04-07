@@ -36,6 +36,7 @@ type styles struct {
 	FileEntry      lipgloss.Style
 	FileSelected   lipgloss.Style
 	AnnotationMark lipgloss.Style
+	ReviewedMark   lipgloss.Style
 
 	// diff pane
 	DiffPane       lipgloss.Style
@@ -152,6 +153,8 @@ func newStyles(c Colors) styles {
 			Background(lipgloss.Color(c.SelectedBg)),
 		AnnotationMark: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Annotation)),
+		ReviewedMark: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.AddFg)),
 
 		DiffPane:       diffPane,
 		DiffPaneActive: diffPaneActive,
@@ -240,6 +243,7 @@ func plainStyles() styles {
 		FileEntry:      lipgloss.NewStyle(),
 		FileSelected:   lipgloss.NewStyle().Reverse(true),
 		AnnotationMark: lipgloss.NewStyle(),
+		ReviewedMark:   lipgloss.NewStyle(),
 
 		DiffPane:       lipgloss.NewStyle().Border(border),
 		DiffPaneActive: lipgloss.NewStyle().Border(border),

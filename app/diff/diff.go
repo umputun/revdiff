@@ -40,6 +40,21 @@ type DiffLine struct {
 	IsBinary   bool       // true when this line is a binary file placeholder
 }
 
+// FileEntry represents a file with its change status from git diff.
+type FileEntry struct {
+	Path   string // file path relative to repo root
+	Status string // "A" (added), "M" (modified), "D" (deleted), "R" (renamed), "" (unknown)
+}
+
+// FileEntryPaths extracts just the paths from a slice of FileEntry.
+func FileEntryPaths(entries []FileEntry) []string {
+	paths := make([]string, len(entries))
+	for i, e := range entries {
+		paths[i] = e.Path
+	}
+	return paths
+}
+
 // Git provides methods to extract changed files and build full-file diff views.
 type Git struct {
 	workDir string // working directory for git commands
@@ -50,26 +65,41 @@ func NewGit(workDir string) *Git {
 	return &Git{workDir: workDir}
 }
 
-// ChangedFiles returns a list of files changed relative to the given ref.
+// ChangedFiles returns a list of files changed relative to the given ref with their change status.
 // If ref is empty, it shows uncommitted changes. If staged is true, shows only staged changes.
-func (g *Git) ChangedFiles(ref string, staged bool) ([]string, error) {
+func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, "--name-only")
+	args = append(args, "--name-status")
 
 	out, err := g.runGit(args...)
 	if err != nil {
 		return nil, fmt.Errorf("get changed files: %w", err)
 	}
 
-	var files []string
+	var entries []FileEntry
 	scanner := bufio.NewScanner(strings.NewReader(out))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if line != "" {
-			files = append(files, line)
+		if line == "" {
+			continue
 		}
+		fields := strings.SplitN(line, "\t", 3)
+		if len(fields) < 2 {
+			continue
+		}
+		status := fields[0]
+		path := fields[1]
+		// for renames/copies (R100, C100), use the new name
+		if len(fields) == 3 && status != "" && (status[0] == 'R' || status[0] == 'C') {
+			path = fields[2]
+		}
+		// normalize status to single letter (R100 -> R)
+		if len(status) > 1 {
+			status = status[:1]
+		}
+		entries = append(entries, FileEntry{Path: path, Status: status})
 	}
-	return files, nil
+	return entries, nil
 }
 
 // FileDiff returns the full-file diff view for a single file.

@@ -205,9 +205,9 @@ func TestGit_ChangedFiles(t *testing.T) {
 
 	writeFile(t, dir, "hello.go", "package main\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n")
 
-	files, err := g.ChangedFiles("", false)
+	entries, err := g.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"hello.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "hello.go", Status: "M"}}, entries)
 }
 
 func TestGit_ChangedFiles_Staged(t *testing.T) {
@@ -221,9 +221,9 @@ func TestGit_ChangedFiles_Staged(t *testing.T) {
 	writeFile(t, dir, "a.go", "package a\n\nvar x = 1\n")
 	gitCmd(t, dir, "add", "a.go")
 
-	files, err := g.ChangedFiles("", true)
+	entries, err := g.ChangedFiles("", true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"a.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "a.go", Status: "M"}}, entries)
 }
 
 func TestGit_ChangedFiles_WithRef(t *testing.T) {
@@ -238,9 +238,9 @@ func TestGit_ChangedFiles_WithRef(t *testing.T) {
 	gitCmd(t, dir, "add", "b.go")
 	gitCmd(t, dir, "commit", "-m", "second")
 
-	files, err := g.ChangedFiles("HEAD~1", false)
+	entries, err := g.ChangedFiles("HEAD~1", false)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"b.go"}, files)
+	assert.Equal(t, []FileEntry{{Path: "b.go", Status: "M"}}, entries)
 }
 
 func TestGit_ChangedFiles_NoChanges(t *testing.T) {
@@ -251,9 +251,9 @@ func TestGit_ChangedFiles_NoChanges(t *testing.T) {
 	gitCmd(t, dir, "add", "c.go")
 	gitCmd(t, dir, "commit", "-m", "initial")
 
-	files, err := g.ChangedFiles("", false)
+	entries, err := g.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Empty(t, files)
+	assert.Empty(t, entries)
 }
 
 func TestGit_ChangedFiles_Error(t *testing.T) {
@@ -428,9 +428,9 @@ func TestGit_ChangedFiles_IncludesBinary(t *testing.T) {
 	err = os.WriteFile(filepath.Join(dir, "data.bin"), binData, 0o600)
 	require.NoError(t, err)
 
-	files, err := g.ChangedFiles("", false)
+	entries, err := g.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Contains(t, files, "data.bin")
+	assert.Equal(t, []FileEntry{{Path: "data.bin", Status: "M"}}, entries)
 }
 
 func TestParseBinaryStat(t *testing.T) {

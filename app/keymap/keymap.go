@@ -45,6 +45,7 @@ const (
 	ActionToggleLineNums   Action = "toggle_line_numbers"
 	ActionToggleBlame      Action = "toggle_blame"
 	ActionToggleHunk       Action = "toggle_hunk"
+	ActionMarkReviewed     Action = "mark_reviewed"
 	ActionFilter           Action = "filter"
 	ActionQuit             Action = "quit"
 	ActionDiscardQuit      Action = "discard_quit"
@@ -62,7 +63,7 @@ var validActions = map[Action]bool{
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionToggleCollapsed: true, ActionToggleWrap: true, ActionToggleTree: true,
-	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionFilter: true,
+	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionMarkReviewed: true, ActionFilter: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true,
 }
 
@@ -140,6 +141,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionToggleLineNums, "toggle line numbers", "View"},
 		{ActionToggleBlame, "toggle blame gutter", "View"},
 		{ActionToggleHunk, "toggle hunk in collapsed", "View"},
+		{ActionMarkReviewed, "mark file as reviewed", "View"},
 		{ActionFilter, "filter files", "View"},
 
 		// quit
@@ -185,6 +187,7 @@ func defaultBindings() map[string]Action {
 		"L":      ActionToggleLineNums,
 		"B":      ActionToggleBlame,
 		".":      ActionToggleHunk,
+		" ":      ActionMarkReviewed,
 		"f":      ActionFilter,
 		"q":      ActionQuit,
 		"Q":      ActionDiscardQuit,
