@@ -1320,20 +1320,25 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 	return strings.Join(display, " / ")
 }
 
-// helpOverlay returns a bordered help popup with keybinding sections.
+// helpOverlay returns a bordered help popup with keybinding sections arranged in two columns.
 // sections and key bindings are rendered dynamically from the keymap.
 func (m Model) helpOverlay() string {
 	sections := m.keymap.HelpSections()
 
-	var buf strings.Builder
-	for i, sec := range sections {
-		if i > 0 {
-			buf.WriteString("\n")
-		}
-		buf.WriteString(sec.Name)
-		buf.WriteString("\n")
+	// render each section into a block of lines
+	type sectionBlock struct {
+		lines []string
+	}
+	var blocks []sectionBlock
 
-		// compute max key width for column alignment
+	reset := "\033[0m"
+	headerColor := m.ansiFg(m.styles.colors.Accent)
+	keyColor := m.ansiFg(m.styles.colors.Annotation)
+
+	for _, sec := range sections {
+		var block sectionBlock
+		block.lines = append(block.lines, headerColor+sec.Name+reset)
+
 		type helpLine struct{ keys, desc string }
 		lines := make([]helpLine, 0, len(sec.Entries))
 		maxW := 0
@@ -1346,17 +1351,85 @@ func (m Model) helpOverlay() string {
 		}
 		for _, l := range lines {
 			pad := max(maxW-runewidth.StringWidth(l.keys), 0)
-			fmt.Fprintf(&buf, "  %s%s  %s\n", l.keys, strings.Repeat(" ", pad), l.desc)
+			block.lines = append(block.lines, fmt.Sprintf("  %s%s%s%s  %s",
+				keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc))
 		}
+		blocks = append(blocks, block)
 
-		// add Markdown TOC note after Pane section
+		// add Markdown TOC section after Pane
 		if sec.Name == "Pane" {
-			buf.WriteString("\n")
-			m.writeTOCHelpSection(&buf)
+			var tocBuf strings.Builder
+			m.writeTOCHelpSection(&tocBuf)
+			tocLines := strings.Split(strings.TrimRight(tocBuf.String(), "\n"), "\n")
+			blocks = append(blocks, sectionBlock{lines: tocLines})
 		}
 	}
 
-	help := strings.TrimRight(buf.String(), "\n")
+	// count total lines (with blank line separators between sections)
+	totalLines := 0
+	for _, b := range blocks {
+		totalLines += len(b.lines) + 1 // +1 for separator
+	}
+
+	// assign sections to left/right columns, keeping sections intact
+	var leftBlocks, rightBlocks []sectionBlock
+	leftLines := 0
+	half := totalLines / 2
+	for _, b := range blocks {
+		blockSize := len(b.lines) + 1
+		if leftLines < half {
+			leftBlocks = append(leftBlocks, b)
+			leftLines += blockSize
+		} else {
+			rightBlocks = append(rightBlocks, b)
+		}
+	}
+
+	// render column from blocks
+	renderColumn := func(colBlocks []sectionBlock) []string {
+		var result []string
+		for i, b := range colBlocks {
+			if i > 0 {
+				result = append(result, "")
+			}
+			result = append(result, b.lines...)
+		}
+		return result
+	}
+
+	left := renderColumn(leftBlocks)
+	right := renderColumn(rightBlocks)
+
+	// find max visible width of left column for padding (ANSI-aware)
+	leftWidth := 0
+	for _, line := range left {
+		if w := lipgloss.Width(line); w > leftWidth {
+			leftWidth = w
+		}
+	}
+
+	gap := 4
+	// join columns side by side
+	maxRows := max(len(left), len(right))
+	var buf strings.Builder
+	for i := range maxRows {
+		l := ""
+		if i < len(left) {
+			l = left[i]
+		}
+		// pad left column to fixed width (ANSI-aware width)
+		pad := max(leftWidth-lipgloss.Width(l), 0)
+		buf.WriteString(l)
+		buf.WriteString(strings.Repeat(" ", pad))
+
+		if i < len(right) {
+			buf.WriteString(strings.Repeat(" ", gap))
+			buf.WriteString(right[i])
+		}
+		if i < maxRows-1 {
+			buf.WriteString("\n")
+		}
+	}
 
 	border := lipgloss.NormalBorder()
 	boxStyle := lipgloss.NewStyle().
@@ -1364,7 +1437,7 @@ func (m Model) helpOverlay() string {
 		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
 		Padding(1, 2)
 
-	return boxStyle.Render(help)
+	return boxStyle.Render(buf.String())
 }
 
 // writeTOCHelpSection writes the Markdown TOC contextual help section.
@@ -1401,10 +1474,14 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		}
 	}
 
-	buf.WriteString("Markdown TOC (single-file full-context mode)\n")
+	reset := "\033[0m"
+	headerColor := m.ansiFg(m.styles.colors.Accent)
+	keyColor := m.ansiFg(m.styles.colors.Annotation)
+
+	buf.WriteString(headerColor + "Markdown TOC (single-file full-context mode)" + reset + "\n")
 	for _, l := range lines {
 		pad := max(maxW-runewidth.StringWidth(l.keys), 0)
-		fmt.Fprintf(buf, "  %s%s  %s\n", l.keys, strings.Repeat(" ", pad), l.desc)
+		fmt.Fprintf(buf, "  %s%s%s%s  %s\n", keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc)
 	}
 }
 
