@@ -6,6 +6,20 @@ const scriptPath = path.join(
   "launch-revdiff.sh",
 );
 
+const buildArgs = ({
+  ref,
+  staged,
+  only,
+}: {
+  ref?: string;
+  staged?: boolean;
+  only?: string[];
+}): string[] => [
+  ...(ref ? [ref] : []),
+  ...(staged ? ["--staged"] : []),
+  ...(only?.map((f) => `--only=${f}`) ?? []),
+];
+
 export default tool({
   description:
     "Launch revdiff in a terminal overlay to review git diffs and capture annotations. " +
@@ -27,15 +41,8 @@ export default tool({
       .optional()
       .describe("Limit the diff to these file paths."),
   },
-
-  async execute({ ref, staged, only }, context) {
-    const cmdArgs = [
-      ...(ref ? [ref] : []),
-      ...(staged ? ["--staged"] : []),
-      ...(only?.map((f) => `--only=${f}`) ?? []),
-    ];
-
-    const result = await Bun.$`bash ${scriptPath} ${cmdArgs}`
+  async execute(args, context) {
+    const result = await Bun.$`bash ${scriptPath} ${buildArgs(args)}`
       .cwd(context.directory)
       .text();
 
