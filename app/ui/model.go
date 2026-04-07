@@ -727,14 +727,8 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
-	files := diff.FileEntryPaths(entries)
-	m.tree = newFileTree(files)
-	for _, e := range entries {
-		if e.Status != "" {
-			m.tree.fileStatuses[e.Path] = e.Status
-		}
-	}
-	m.singleFile = len(files) == 1
+	m.tree = newFileTreeFromEntries(entries)
+	m.singleFile = len(m.tree.allFiles) == 1
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
@@ -1633,10 +1627,13 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleMarkReviewed toggles the reviewed state of the current file.
-// works from both tree and diff panes using the currently selected/displayed file.
+// handleMarkReviewed toggles the reviewed state of the focused file.
+// tree focus uses the selected row; diff/TOC focus uses the displayed file.
 func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 	file := m.currFile
+	if m.focus == paneTree && m.mdTOC == nil {
+		file = m.tree.selectedFile()
+	}
 	if file == "" {
 		file = m.tree.selectedFile()
 	}

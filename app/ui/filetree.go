@@ -43,6 +43,17 @@ func newFileTree(files []string) fileTree {
 	return ft
 }
 
+// newFileTreeFromEntries builds a file tree from file entries, preserving git status metadata.
+func newFileTreeFromEntries(entries []diff.FileEntry) fileTree {
+	ft := newFileTree(diff.FileEntryPaths(entries))
+	for _, e := range entries {
+		if e.Status != "" {
+			ft.fileStatuses[e.Path] = e.Status
+		}
+	}
+	return ft
+}
+
 // buildEntries groups files by directory and creates a flat entry list.
 func (ft *fileTree) buildEntries(files []string) []treeEntry {
 	if len(files) == 0 {

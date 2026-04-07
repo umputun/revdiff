@@ -77,9 +77,10 @@ func NewGit(workDir string) *Git {
 
 // ChangedFiles returns a list of files changed relative to the given ref with their change status.
 // If ref is empty, it shows uncommitted changes. If staged is true, shows only staged changes.
+// Uses -z for NUL-terminated output to handle filenames with special characters.
 func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, "--name-status")
+	args = append(args, "--name-status", "-z")
 
 	out, err := g.runGit(args...)
 	if err != nil {
@@ -87,21 +88,25 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	}
 
 	var entries []FileEntry
-	scanner := bufio.NewScanner(strings.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
+	fields := strings.Split(strings.TrimRight(out, "\x00"), "\x00")
+	for i := 0; i < len(fields); {
+		rawStatus := fields[i]
+		if rawStatus == "" {
+			i++
 			continue
 		}
-		fields := strings.SplitN(line, "\t", 3)
-		if len(fields) < 2 {
-			continue
+		i++
+		if i >= len(fields) {
+			break
 		}
-		rawStatus := fields[0]
-		path := fields[1]
-		// for renames/copies (R100, C100), use the new name
-		if len(fields) == 3 && rawStatus != "" && (rawStatus[0] == 'R' || rawStatus[0] == 'C') {
-			path = fields[2]
+		path := fields[i]
+		i++
+		// for renames/copies (R100, C100), consume two paths, use the new name
+		if rawStatus[0] == 'R' || rawStatus[0] == 'C' {
+			if i < len(fields) {
+				path = fields[i]
+				i++
+			}
 		}
 		// normalize status to single letter (R100 -> R)
 		if len(rawStatus) > 1 {

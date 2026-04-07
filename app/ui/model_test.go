@@ -7516,6 +7516,22 @@ func TestModel_MarkReviewedFromTreePane(t *testing.T) {
 	assert.Equal(t, 0, model.tree.reviewedCount())
 }
 
+func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+	m.tree.moveDown() // cursor -> b.go while the diff pane still shows a.go
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["b.go"], "space in tree pane should mark selected file")
+	assert.False(t, model.tree.reviewed["a.go"], "space in tree pane should not mark stale currFile")
+}
+
 func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
