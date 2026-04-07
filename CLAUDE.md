@@ -17,7 +17,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
 - `theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
-- `annotation/` - in-memory annotation store, structured output formatting
+- `annotation/` - in-memory annotation store, structured output formatting; `Annotation.EndLine` enables hunk range headers when comment contains "hunk" keyword
 - `ui/mocks/` - moq-generated mocks (never edit manually)
 
 ## Key Interfaces (consumer-side, in `ui/`)

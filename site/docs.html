@@ -431,9 +431,13 @@ consider splitting this file into smaller modules
 <span class="code-comment">## handler.go:43 (+)</span>
 use errors.Is() instead of direct comparison
 
+<span class="code-comment">## handler.go:43-67 (+)</span>
+refactor this hunk to reduce nesting
+
 <span class="code-comment">## store.go:18 (-)</span>
 don't remove this validation</code></div>
-        <p>Each annotation block: <code>## filename:line (type)</code> where type is <code>(+)</code> added, <code>(-)</code> removed, or <code>(file-level)</code>.</p>
+        <p>Each annotation block: <code>## filename:line[-end] (type)</code> where type is <code>(+)</code> added, <code>(-)</code> removed, or <code>(file-level)</code>; <code>-end</code> is included when the annotation covers a line range.</p>
+        <p>When annotation text contains the keyword &ldquo;hunk&rdquo; (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., <code>handler.go:43-67 (+)</code> instead of <code>handler.go:43 (+)</code>). This gives AI consumers the range context without any extra steps.</p>
 
         <h2 id="integration">Integration with other tools</h2>
         <p>The structured stdout output works with any tool that can read text:</p>

@@ -143,10 +143,15 @@ consider splitting this file into smaller modules
 ## handler.go:43 (+)
 use errors.Is() instead of direct comparison
 
+## handler.go:43-67 (+)
+refactor this hunk to reduce nesting
+
 ## store.go:18 (-)
 don't remove this validation
 ```
 
-Each annotation block: `## filename:line (type)` where type is `(+)` added, `(-)` removed, or `(file-level)`.
+Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added, `(-)` removed, or `(file-level)`. The `-end` suffix is included when the annotation covers a line range.
+
+When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.

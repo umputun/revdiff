@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,10 @@ import (
 	"github.com/umputun/revdiff/annotation"
 	"github.com/umputun/revdiff/diff"
 )
+
+// hunkKeywordRe matches whole-word "hunk" (case-insensitive).
+// "block" was removed as it triggers false positives in casual usage (e.g., "this code block is fine").
+var hunkKeywordRe = regexp.MustCompile(`(?i)\bhunk\b`)
 
 // newAnnotationInput creates and focuses a text input for annotation editing.
 // prefixWidth accounts for the visible prefix characters (cursor col + emoji + label + margin).
@@ -104,7 +109,13 @@ func (m *Model) saveAnnotation() {
 	}
 
 	lineNum := m.diffLineNum(dl)
-	m.store.Add(annotation.Annotation{File: m.currFile, Line: lineNum, Type: string(dl.ChangeType), Comment: text})
+	a := annotation.Annotation{File: m.currFile, Line: lineNum, Type: string(dl.ChangeType), Comment: text}
+	if hunkKeywordRe.MatchString(text) {
+		if endLine := m.hunkEndLine(m.diffCursor); endLine > lineNum {
+			a.EndLine = endLine
+		}
+	}
+	m.store.Add(a)
 	m.annotating = false
 	m.tree.refreshFilter(m.annotatedFiles())
 	m.viewport.SetContent(m.renderDiff())
@@ -219,6 +230,31 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 		return dl.OldNum
 	}
 	return dl.NewNum
+}
+
+// hunkEndLine returns the display line number of the last line in the change hunk
+// containing diffLines[idx]. only walks forward through lines of the same change type
+// as the starting line, so both start and end use the same number space (old or new).
+// returns 0 if idx is not inside a change hunk.
+func (m Model) hunkEndLine(idx int) int {
+	if idx < 0 || idx >= len(m.diffLines) {
+		return 0
+	}
+	dl := m.diffLines[idx]
+	if dl.ChangeType != diff.ChangeAdd && dl.ChangeType != diff.ChangeRemove {
+		return 0
+	}
+
+	// walk forward from idx to find the last contiguous line of the same change type
+	startType := dl.ChangeType
+	last := idx
+	for i := idx + 1; i < len(m.diffLines); i++ {
+		if m.diffLines[i].ChangeType != startType {
+			break
+		}
+		last = i
+	}
+	return m.diffLineNum(m.diffLines[last])
 }
 
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
