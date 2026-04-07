@@ -25,6 +25,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
+- Pi package: launch revdiff from pi, capture annotations, and keep them visible in a widget and right-side panel until you apply or clear them
 - Fully customizable colors via environment variables, CLI flags, or config file
 - Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
 
@@ -121,6 +122,41 @@ A separate `revdiff-planning` plugin automatically opens revdiff when Claude exi
 ```
 
 This plugin is independent from the main `revdiff` plugin and does not conflict with other planning plugins (e.g., `planning` from `cc-thingz`).
+
+## Pi Package
+
+revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The extension launches the existing `revdiff` binary, captures annotations on exit, and renders them inside pi as a persistent widget plus a right-side results panel.
+
+**Install:**
+
+```bash
+pi install https://github.com/umputun/revdiff
+```
+
+**Commands inside pi:**
+
+```text
+/revdiff                         -- detect uncommitted, staged, or branch changes, then open revdiff
+/revdiff HEAD~1                  -- review last commit
+/revdiff --all-files             -- browse all tracked files
+/revdiff --only README.md        -- review a single file in context-only mode
+/revdiff --pi-overlay            -- use the existing overlay launcher script instead of same-terminal mode
+/revdiff-rerun                   -- rerun the last review with remembered args
+/revdiff-rerun --pi-overlay      -- rerun the last review in overlay mode
+/revdiff-results                 -- reopen the last results panel
+/revdiff-apply                   -- insert the last annotations into the pi chat context
+/revdiff-clear                   -- clear stored review state
+/revdiff-reminders on            -- enable post-edit review reminders
+```
+
+**Notes:**
+
+- Requires the `revdiff` binary on `PATH`
+- Set `REVDIFF_BIN=/absolute/path/to/revdiff` if pi can't find the binary
+- Same-terminal mode is the default: pi temporarily suspends, revdiff takes over the terminal, and pi resumes on exit
+- Optional overlay mode (`--pi-overlay` or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration
+- Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
+- In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
 ### Integration with Other Tools
 

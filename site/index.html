@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>revdiff — Code Review for AI Agents and Claude Code</title>
-    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Built as a Claude Code plugin for interactive code review and plan review.">
-    <meta name="keywords" content="code review for ai agents, code review for claude code, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, ai code review tool">
+    <title>revdiff — Code Review for AI Agents, Claude Code, and pi</title>
+    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin and a pi package.">
+    <meta name="keywords" content="code review for ai agents, code review for claude code, code review for pi, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, pi package, ai code review tool">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/">
 
-    <meta property="og:title" content="revdiff — Code Review for AI Agents and Claude Code">
-    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin.">
+    <meta property="og:title" content="revdiff — Code Review for AI Agents, Claude Code, and pi">
+    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin and a pi package.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://revdiff.com">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
     <meta property="og:site_name" content="revdiff">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="revdiff — Code Review for AI Agents and Claude Code">
-    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations.">
+    <meta name="twitter:title" content="revdiff — Code Review for AI Agents, Claude Code, and pi">
+    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin and a pi package.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <script type="application/ld+json">
@@ -26,7 +26,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "revdiff",
-        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents and Claude Code.",
+        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents, Claude Code, and pi.",
         "url": "https://revdiff.com",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Linux",
@@ -80,7 +80,7 @@
     <div class="hero-content">
         <div class="hero-badge">v0.13.0 <span class="hero-badge-sep">/</span> open source</div>
         <h1>Review diffs, files, and documents<br>right in your terminal</h1>
-        <p class="hero-sub">Code review for AI agents and Claude Code. Annotate diffs, plans, and documents in a TUI. Structured output on quit, ready for AI agents, scripts, or any tool.</p>
+        <p class="hero-sub">Code review for AI agents, Claude Code, and pi. Annotate diffs, plans, and documents in a TUI. Structured output on quit, ready for AI agents, scripts, or any tool.</p>
         <div class="hero-actions">
             <a href="#install" class="btn btn-primary">Install</a>
             <a href="docs.html" class="btn btn-secondary">Documentation</a>
@@ -128,6 +128,11 @@
                 <div class="feature-icon"><span class="glyph accent">A</span></div>
                 <h3>All-files mode</h3>
                 <p>Browse and annotate all git-tracked files with <code>--all-files</code>. Filter with <code>--exclude</code>. Review standalone files with <code>--only</code> or piped output with <code>--stdin</code>.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent" aria-label="Pi integration">P</span></div>
+                <h3>Pi integration</h3>
+                <p>Launch revdiff from <a href="https://github.com/badlogic/pi-mono">pi</a>, keep captured annotations visible in a widget and side panel, then rerun or apply them when you’re ready.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">~</span></div>
@@ -228,6 +233,10 @@
             <div class="install-card">
                 <h3>Homebrew</h3>
                 <div class="code-block"><code>brew install umputun/apps/revdiff</code></div>
+            </div>
+            <div class="install-card">
+                <h3>Pi package</h3>
+                <div class="code-block"><code>pi install https://github.com/umputun/revdiff</code></div>
             </div>
             <div class="install-card">
                 <h3>Download</h3>

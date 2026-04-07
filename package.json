@@ -1,0 +1,29 @@
+{
+  "name": "revdiff-pi",
+  "version": "0.1.0",
+  "description": "Pi package for revdiff interactive diff review",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umputun/revdiff.git"
+  },
+  "keywords": [
+    "pi-package",
+    "code-review",
+    "diff",
+    "annotations",
+    "tui"
+  ],
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.60",
+    "@mariozechner/pi-tui": "^0.60"
+  },
+  "pi": {
+    "extensions": [
+      "./plugins/pi/extensions"
+    ],
+    "skills": [
+      "./plugins/pi/skills"
+    ]
+  }
+}
