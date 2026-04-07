@@ -222,6 +222,26 @@ func (ft *fileTree) prevFile() {
 	ft.cursor = files[len(files)-1] // wrap around
 }
 
+// hasNextFile returns true if there is a file entry with index > current cursor (no wrap).
+func (ft *fileTree) hasNextFile() bool {
+	for i := ft.cursor + 1; i < len(ft.entries); i++ {
+		if !ft.entries[i].isDir {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPrevFile returns true if there is a file entry with index < current cursor (no wrap).
+func (ft *fileTree) hasPrevFile() bool {
+	for i := ft.cursor - 1; i >= 0; i-- {
+		if !ft.entries[i].isDir {
+			return true
+		}
+	}
+	return false
+}
+
 // fileIndices returns indices of all file (non-directory) entries.
 func (ft *fileTree) fileIndices() []int {
 	var indices []int

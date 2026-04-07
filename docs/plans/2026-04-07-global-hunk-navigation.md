@@ -21,10 +21,10 @@ Make `[` / `]` (prev/next hunk) work regardless of which pane has focus. When pr
 **Files:**
 - Modify: `app/ui/filetree.go`
 
-- [ ] Add `hasNextFile() bool` that returns true if a file entry exists with index > current cursor (no wrap)
-- [ ] Add `hasPrevFile() bool` that returns true if a file entry exists with index < current cursor (no wrap)
-- [ ] Write unit tests for both helpers covering: first file, middle file, last file, single file
-- [ ] Run `make test` — must pass before task 2
+- [x] Add `hasNextFile() bool` that returns true if a file entry exists with index > current cursor (no wrap)
+- [x] Add `hasPrevFile() bool` that returns true if a file entry exists with index < current cursor (no wrap)
+- [x] Write unit tests for both helpers covering: first file, middle file, last file, single file
+- [x] Run `make test` — must pass before task 2
 
 ### Task 2: Add `pendingHunkJump` field and update Model
 
