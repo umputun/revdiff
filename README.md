@@ -1,4 +1,4 @@
-# <img src="assets/logo.png" alt="" width="28">&nbsp;revdiff &nbsp;<a href="https://github.com/umputun/revdiff/actions/workflows/ci.yml"><img src="https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg" alt="build"></a> <a href="https://coveralls.io/github/umputun/revdiff?branch=master"><img src="https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master" alt="Coverage Status"></a> <a href="https://goreportcard.com/report/github.com/umputun/revdiff"><img src="https://goreportcard.com/badge/github.com/umputun/revdiff" alt="Go Report Card"></a>
+# <img src="site/assets/logo.png" alt="" width="28">&nbsp;revdiff &nbsp;<a href="https://github.com/umputun/revdiff/actions/workflows/ci.yml"><img src="https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg" alt="build"></a> <a href="https://coveralls.io/github/umputun/revdiff?branch=master"><img src="https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master" alt="Coverage Status"></a> <a href="https://goreportcard.com/report/github.com/umputun/revdiff"><img src="https://goreportcard.com/badge/github.com/umputun/revdiff" alt="Go Report Card"></a>
 
 TUI for reviewing diffs, files, and documents with inline annotations. Outputs structured annotations to stdout on quit, making it easy to pipe results into AI agents, scripts, or other tools.
 
@@ -28,7 +28,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Fully customizable colors via environment variables, CLI flags, or config file
 - Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
 
-![revdiff screenshot](assets/screenshot.png)
+![revdiff screenshot](site/assets/screenshot.png)
 
 ## Requirements
 
