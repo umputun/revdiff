@@ -1815,3 +1815,45 @@ func TestModel_AnnotationsWithTOCActive(t *testing.T) {
 		assert.False(t, model.annotating, "annotation should not start from TOC pane")
 	})
 }
+
+func TestModel_ShiftAIgnoredWithoutFile(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = ""
+	m.focus = paneTree
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model := result.(Model)
+	assert.False(t, model.annotating, "A without currFile should not start annotation")
+	assert.Nil(t, cmd)
+}
+
+func TestModel_ShiftAOnlyWorksFromDiffPane(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+
+	// from tree pane — should be ignored to avoid annotating wrong file
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = newFileTree([]string{"a.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneTree
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model := result.(Model)
+	assert.False(t, model.annotating, "A from tree pane should not start annotation")
+	assert.False(t, model.fileAnnotating)
+	assert.Nil(t, cmd)
+
+	// from diff pane — should work
+	m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m2.tree = newFileTree([]string{"a.go"})
+	m2.currFile = "a.go"
+	m2.diffLines = lines
+	m2.focus = paneDiff
+	result, cmd = m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'A'}})
+	model = result.(Model)
+	assert.True(t, model.annotating, "A should work from diff pane")
+	assert.True(t, model.fileAnnotating)
+	assert.NotNil(t, cmd)
+}

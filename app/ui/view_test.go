@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -1553,4 +1554,461 @@ func TestModel_ReviewedModeIcon(t *testing.T) {
 	m.tree.toggleReviewed("a.go")
 	icons = m.statusModeIcons()
 	assert.Contains(t, icons, "✓", "reviewed icon should be present when files reviewed")
+}
+
+func TestModel_ViewOutput(t *testing.T) {
+	m := testModel([]string{"internal/a.go", "internal/b.go"}, nil)
+	m.tree = newFileTree([]string{"internal/a.go", "internal/b.go"})
+	m.ready = true
+
+	// tree pane focused - should show file tree and help hint
+	m.focus = paneTree
+	view := m.View()
+	assert.Contains(t, view, "a.go")
+	assert.Contains(t, view, "b.go")
+	assert.Contains(t, view, "? help")
+
+	// diff pane focused - should show help hint
+	m.focus = paneDiff
+	view = m.View()
+	assert.Contains(t, view, "? help")
+}
+
+func TestModel_ViewNotReady(t *testing.T) {
+	m := testModel(nil, nil)
+	m.ready = false
+
+	assert.Equal(t, "loading...", m.View())
+}
+
+func TestModel_LineNumberSegment(t *testing.T) {
+	t.Run("context line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneDiff
+		assert.Equal(t, "L:10/11", m.lineNumberSegment())
+	})
+
+	t.Run("add line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 0, NewNum: 6, Content: "new", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("remove line uses old max", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 6, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Equal(t, "L:6/6", m.lineNumberSegment())
+	})
+
+	t.Run("remove line denominator differs from new max", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		// on removed line: denominator = maxOld (12), not maxNew (9)
+		assert.Equal(t, "L:11/12", m.lineNumberSegment())
+	})
+
+	t.Run("context line uses new max not old", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 10, NewNum: 9, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 11, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneDiff
+		// on context line: denominator = maxNew (9), not maxOld (12)
+		assert.Equal(t, "L:9/9", m.lineNumberSegment())
+	})
+
+	t.Run("divider line returns empty", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{Content: "...", ChangeType: diff.ChangeDivider},
+			{OldNum: 50, NewNum: 50, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 1
+		m.focus = paneDiff
+		assert.Empty(t, m.lineNumberSegment())
+	})
+
+	t.Run("empty diffLines returns empty", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.diffLines = nil
+		m.diffCursor = 0
+		m.focus = paneDiff
+		assert.Empty(t, m.lineNumberSegment())
+	})
+
+	t.Run("tree focus returns empty", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		m.diffCursor = 0
+		m.focus = paneTree
+		assert.Empty(t, m.lineNumberSegment())
+	})
+}
+
+func TestModel_AnsiFg(t *testing.T) {
+	m := testModel(nil, nil)
+	assert.Equal(t, "\033[38;2;108;108;108m", m.ansiFg("#6c6c6c"))
+	assert.Equal(t, "\033[38;2;255;0;0m", m.ansiFg("#ff0000"))
+	assert.Equal(t, "\033[38;2;255;0;0m", m.ansiFg("ff0000"), "should work without # prefix")
+	assert.Empty(t, m.ansiFg("bad"), "should return empty for invalid hex")
+}
+
+func TestModel_AnsiBg(t *testing.T) {
+	m := testModel(nil, nil)
+	assert.Equal(t, "\033[48;2;108;108;108m", m.ansiBg("#6c6c6c"))
+	assert.Equal(t, "\033[48;2;255;0;0m", m.ansiBg("#ff0000"))
+	assert.Empty(t, m.ansiBg("bad"), "should return empty for invalid hex")
+}
+
+func TestModel_PadContentBg(t *testing.T) {
+	m := testModel(nil, nil)
+
+	t.Run("empty bgHex is no-op", func(t *testing.T) {
+		assert.Equal(t, "hello", m.padContentBg("hello", 20, ""))
+	})
+
+	t.Run("zero width is no-op", func(t *testing.T) {
+		assert.Equal(t, "hello", m.padContentBg("hello", 0, "#2e3440"))
+	})
+
+	t.Run("pads short line", func(t *testing.T) {
+		result := m.padContentBg("hi", 10, "#2e3440")
+		assert.Contains(t, result, "\033[48;2;46;52;64m")
+		assert.Contains(t, result, "\033[49m")
+		assert.Equal(t, 10, lipgloss.Width(result))
+	})
+
+	t.Run("strips trailing spaces before padding", func(t *testing.T) {
+		result := m.padContentBg("hi      ", 10, "#2e3440")
+		assert.Contains(t, result, "\033[48;2;46;52;64m")
+		assert.Equal(t, 10, lipgloss.Width(result))
+	})
+
+	t.Run("multi-line pads each line", func(t *testing.T) {
+		result := m.padContentBg("ab\ncd", 5, "#2e3440")
+		lines := strings.Split(result, "\n")
+		assert.Len(t, lines, 2)
+		assert.Equal(t, 5, lipgloss.Width(lines[0]))
+		assert.Equal(t, 5, lipgloss.Width(lines[1]))
+	})
+
+	t.Run("line at target width is no-op", func(t *testing.T) {
+		result := m.padContentBg("abcde", 5, "#2e3440")
+		assert.Equal(t, "abcde", result)
+	})
+}
+
+func TestModel_HelpToggle(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}}})
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	assert.False(t, m.showHelp)
+
+	// press ? to open help
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := result.(Model)
+	assert.True(t, model.showHelp)
+
+	// press ? again to close help
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model = result.(Model)
+	assert.False(t, model.showHelp)
+}
+
+func TestModel_HelpCloseWithEsc(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}}})
+	m.currFile = "a.go"
+	m.showHelp = true
+
+	// press esc to close help
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := result.(Model)
+	assert.False(t, model.showHelp)
+}
+
+func TestModel_HelpBlocksOtherKeys(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}},
+		"b.go": {{ChangeType: diff.ChangeContext, Content: "y"}},
+	})
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.showHelp = true
+
+	// navigation keys should be blocked
+	for _, key := range []rune{'n', 'p', 'v', 'f', 'q', 'Q', 'j', 'k'} {
+		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+		model := result.(Model)
+		assert.True(t, model.showHelp, "key %q should not close help", string(key))
+		assert.Nil(t, cmd, "key %q should produce no command", string(key))
+	}
+
+	// tab should also be blocked
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	model := result.(Model)
+	assert.True(t, model.showHelp, "tab should not close help")
+	assert.Nil(t, cmd, "tab should produce no command")
+
+	// enter should be blocked
+	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+	assert.True(t, model.showHelp, "enter should not close help")
+	assert.Nil(t, cmd, "enter should produce no command")
+}
+
+func TestModel_TreePaneToggle(t *testing.T) {
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.diffLines = lines
+	m.focus = paneTree
+	m.viewport = viewport.New(80, 30)
+	origTreeWidth := m.treeWidth
+
+	t.Run("t hides tree pane", func(t *testing.T) {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.True(t, model.treeHidden)
+		assert.Equal(t, 0, model.treeWidth)
+		assert.Equal(t, paneDiff, model.focus, "focus should move to diff when hiding tree")
+		assert.Equal(t, model.width-2, model.viewport.Width, "diff should use full width")
+	})
+
+	t.Run("t shows tree pane again", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.treeWidth = 0
+		m2.focus = paneDiff
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.False(t, model.treeHidden)
+		assert.Equal(t, origTreeWidth, model.treeWidth)
+	})
+
+	t.Run("tab is no-op when tree hidden", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.focus = paneDiff
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyTab})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "tab should not switch pane when tree hidden")
+	})
+
+	t.Run("h is no-op when tree hidden", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.focus = paneDiff
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+		model := result.(Model)
+		assert.Equal(t, paneDiff, model.focus, "h should not switch to tree when hidden")
+	})
+
+	t.Run("no-op in single-file mode without TOC", func(t *testing.T) {
+		m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m2.singleFile = true
+		m2.viewport = viewport.New(80, 30)
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.False(t, model.treeHidden, "t should be no-op in single-file mode without TOC")
+	})
+
+	t.Run("toggle works in single-file markdown with TOC", func(t *testing.T) {
+		m2 := testModel([]string{"readme.md"}, map[string][]diff.DiffLine{"readme.md": lines})
+		m2.singleFile = true
+		m2.mdTOC = &mdTOC{entries: []tocEntry{{title: "Header", level: 1, lineIdx: 0}}}
+		m2.treeWidth = max(minTreeWidth, m2.width*m2.treeWidthRatio/10)
+		m2.viewport = viewport.New(80, 30)
+		m2.focus = paneTree
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		model := result.(Model)
+		assert.True(t, model.treeHidden, "t should hide TOC pane in single-file markdown mode")
+		assert.Equal(t, 0, model.treeWidth)
+		assert.Equal(t, paneDiff, model.focus)
+	})
+
+	t.Run("resize preserves hidden state", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		m2.treeWidth = 0
+		result, _ := m2.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+		model := result.(Model)
+		assert.True(t, model.treeHidden)
+		assert.Equal(t, 0, model.treeWidth)
+	})
+
+	t.Run("status icon shows when hidden", func(t *testing.T) {
+		m2 := m
+		m2.treeHidden = true
+		icons := m2.statusModeIcons()
+		assert.Contains(t, icons, "⊟")
+	})
+}
+
+func TestModel_ToggleLineNumbers(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		},
+	})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+
+	assert.False(t, m.lineNumbers)
+	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
+	assert.True(t, m.lineNumbers)
+	result, _ = m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
+	assert.False(t, m.lineNumbers)
+}
+
+func TestModel_ComputeLineNumWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []diff.DiffLine
+		want  int
+	}{
+		{name: "single digit", lines: []diff.DiffLine{
+			{OldNum: 5, NewNum: 5, ChangeType: diff.ChangeContext},
+		}, want: 1},
+		{name: "two digits", lines: []diff.DiffLine{
+			{OldNum: 99, NewNum: 99, ChangeType: diff.ChangeContext},
+		}, want: 2},
+		{name: "mixed old larger", lines: []diff.DiffLine{
+			{OldNum: 100, NewNum: 5, ChangeType: diff.ChangeContext},
+		}, want: 3},
+		{name: "mixed new larger", lines: []diff.DiffLine{
+			{OldNum: 5, NewNum: 1000, ChangeType: diff.ChangeContext},
+		}, want: 4},
+		{name: "empty", lines: nil, want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tt.lines
+			assert.Equal(t, tt.want, m.computeLineNumWidth())
+		})
+	}
+}
+
+func TestModel_LineNumbersEndToEnd(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 10, NewNum: 10, Content: "context", ChangeType: diff.ChangeContext},
+		{OldNum: 11, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 11, Content: "new", ChangeType: diff.ChangeAdd},
+		{Content: "@@ -10,3 +10,3 @@", ChangeType: diff.ChangeDivider},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	// toggle on
+	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
+	assert.True(t, m.lineNumbers)
+	assert.Equal(t, 2, m.lineNumWidth)
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+	assert.Contains(t, stripped, "10 10")
+	assert.Contains(t, stripped, "11   ")
+	assert.Contains(t, stripped, "   11")
+
+	// toggle off
+	result, _ = m.handleViewToggle(keymap.ActionToggleLineNums)
+	m = result.(Model)
+	assert.False(t, m.lineNumbers)
+	rendered = m.renderDiff()
+	stripped = ansi.Strip(rendered)
+	assert.NotContains(t, stripped, "10 10")
+}
+
+func TestModel_MarkReviewedFromTreePane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+
+	// space bar toggles reviewed
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["a.go"], "space should mark current file as reviewed")
+	assert.Equal(t, 1, model.tree.reviewedCount())
+
+	// space again toggles off
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model = result.(Model)
+	assert.False(t, model.tree.reviewed["a.go"], "space should unmark reviewed file")
+	assert.Equal(t, 0, model.tree.reviewedCount())
+}
+
+func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+	m.tree.moveDown() // cursor -> b.go while the diff pane still shows a.go
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["b.go"], "space in tree pane should mark selected file")
+	assert.False(t, model.tree.reviewed["a.go"], "space in tree pane should not mark stale currFile")
+}
+
+func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.currFile = "b.go"
+	m.focus = paneDiff
+
+	// space from diff pane marks currFile
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.True(t, model.tree.reviewed["b.go"], "space in diff pane should mark currFile as reviewed")
 }

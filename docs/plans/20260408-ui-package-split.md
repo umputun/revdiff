@@ -163,15 +163,15 @@ Move cursor, scroll, hunk, and wrap navigation tests to dedicated file.
 - Create: `app/ui/diffnav_test.go`
 - Modify: `app/ui/model_test.go`
 
-- [ ] create `app/ui/diffnav_test.go` with package header, imports, and shared test helpers
-- [ ] move all `TestModel_DiffScroll*`, `TestModel_DiffCursor*` test functions
-- [ ] move all `TestModel_*Hunk*` navigation test functions (not collapsed hunk tests), including `TestModel_HunkNav_*`
-- [ ] move all `TestModel_PendingHunkJump_*` test functions
-- [ ] move all `TestModel_Wrap*` test functions (not collapsed wrap tests)
-- [ ] move `TestModel_NextPrev*`, `TestModel_PageDown*`, `TestModel_PageUp*` if present
-- [ ] verify remaining `model_test.go` is under 1000 lines
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/diffnav_test.go` with package header, imports, and shared test helpers
+- [x] move all `TestModel_DiffScroll*`, `TestModel_DiffCursor*` test functions
+- [x] move all `TestModel_*Hunk*` navigation test functions (not collapsed hunk tests), including `TestModel_HunkNav_*`
+- [x] move all `TestModel_PendingHunkJump_*` test functions
+- [x] move all `TestModel_Wrap*` test functions (not collapsed wrap tests)
+- [x] move `TestModel_NextPrev*`, `TestModel_PageDown*`, `TestModel_PageUp*` if present
+- [x] verify remaining `model_test.go` is under 1000 lines
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 8: Split collapsed_test.go
 
