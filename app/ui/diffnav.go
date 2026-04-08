@@ -482,8 +482,9 @@ func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleSwitchToTree switches focus to the tree/TOC pane.
-// no-op when tree is hidden. syncs TOC cursor to active section.
+// handleSwitchToTree switches focus to the tree/TOC pane when available.
+// no-op when tree is hidden, or in single-file mode without TOC.
+// syncs TOC cursor to active section when focus is switched.
 func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
 	if m.treeHidden {
 		return m, nil
