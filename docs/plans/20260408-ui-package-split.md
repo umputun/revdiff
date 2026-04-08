@@ -181,12 +181,12 @@ Split into logic tests and rendering/UI tests.
 - Create: `app/ui/collapsed_render_test.go`
 - Modify: `app/ui/collapsed_test.go`
 
-- [ ] create `app/ui/collapsed_render_test.go` with package header and imports
-- [ ] move rendering tests: `TestModel_CollapsedRender*`, `TestModel_CollapsedWrap*`, `TestModel_CollapsedRenderWithLineNumbers*`
-- [ ] keep logic tests in `collapsed_test.go`: toggle, cursor movement, hunk expansion, modified set, delete-only, etc.
-- [ ] verify both files are under 1000 lines
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/collapsed_render_test.go` with package header and imports
+- [x] move rendering tests: `TestModel_CollapsedRender*`, `TestModel_CollapsedWrap*`, `TestModel_CollapsedRenderWithLineNumbers*`
+- [x] keep logic tests in `collapsed_test.go`: toggle, cursor movement, hunk expansion, modified set, delete-only, etc.
+- [x] verify both files are under 1000 lines
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 9: Verify final state
 
