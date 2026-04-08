@@ -130,13 +130,13 @@ Named `model_annotate_test.go` (not `annotate_test.go`) to avoid collision with 
 - Create: `app/ui/model_annotate_test.go`
 - Modify: `app/ui/model_test.go`
 
-- [ ] create `app/ui/model_annotate_test.go` with package header, imports, and shared test helpers
-- [ ] move all `TestModel_Annotate*`, `TestModel_DeleteAnnotation*`, `TestModel_RenderDiffWithAnnot*` test functions
-- [ ] move all `TestModel_*Discard*`, `TestModel_Quit*` test functions
-- [ ] move annotation/discard-related test helpers if any exist
-- [ ] verify no duplicate imports or missing helpers
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/model_annotate_test.go` with package header, imports, and shared test helpers
+- [x] move all `TestModel_Annotate*`, `TestModel_DeleteAnnotation*`, `TestModel_RenderDiffWithAnnot*` test functions
+- [x] move all `TestModel_*Discard*`, `TestModel_Quit*` test functions
+- [x] move annotation/discard-related test helpers if any exist
+- [x] verify no duplicate imports or missing helpers
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 6: Split model_test.go — extract view_test.go
 
