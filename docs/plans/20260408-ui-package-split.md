@@ -80,15 +80,15 @@ Move View(), status bar, help overlay, ANSI helpers, and modal handlers out of `
 - Create: `app/ui/view.go`
 - Modify: `app/ui/model.go`
 
-- [ ] create `app/ui/view.go` with package header and imports
-- [ ] move `View()` method
-- [ ] move status bar methods: `statusBarText`, `hunkSegment`, `lineNumberSegment`, `searchSegment`, `searchBarText`, `joinStatusSections`, `statusModeIcons`, `statusSegmentsNoSearch`, `statusSegmentsMinimal`
-- [ ] move help overlay methods: `helpOverlay`, `writeTOCHelpSection`, `overlayCenter`, `formatKeysForHelp`, `displayKeyName`, `handleHelpKey`
-- [ ] move ANSI helpers: `padContentBg`, `ansiColor`, `ansiFg`, `ansiBg`
-- [ ] move modal handlers: `handleEnterKey`, `handleEscKey`, `handleConfirmDiscardKey`, `handleDiscardQuit`, `handleFileAnnotateKey`, `handleFilterToggle`, `handleMarkReviewed`, `handleFileOrSearchNav`, `annotatedFiles`
-- [ ] verify `view.go` is under 500 lines (if over, split modal handlers into separate `handlers.go`)
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/view.go` with package header and imports
+- [x] move `View()` method
+- [x] move status bar methods: `statusBarText`, `hunkSegment`, `lineNumberSegment`, `searchSegment`, `searchBarText`, `joinStatusSections`, `statusModeIcons`, `statusSegmentsNoSearch`, `statusSegmentsMinimal`
+- [x] move help overlay methods: `helpOverlay`, `writeTOCHelpSection`, `overlayCenter`, `formatKeysForHelp`, `displayKeyName`, `handleHelpKey`
+- [x] move ANSI helpers: `padContentBg`, `ansiColor`, `ansiFg`, `ansiBg`
+- [x] move modal handlers: `handleEnterKey`, `handleEscKey`, `handleConfirmDiscardKey`, `handleDiscardQuit`, `handleFileAnnotateKey`, `handleFilterToggle`, `handleMarkReviewed`, `handleFileOrSearchNav`, `annotatedFiles`
+- [x] verify `view.go` is under 500 lines (if over, split modal handlers into separate `handlers.go`)
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 3: Extract loaders.go from model.go
 
