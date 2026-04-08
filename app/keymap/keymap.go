@@ -47,6 +47,9 @@ const (
 	ActionToggleHunk       Action = "toggle_hunk"
 	ActionMarkReviewed     Action = "mark_reviewed"
 	ActionFilter           Action = "filter"
+	ActionScrollCenter     Action = "scroll_center"
+	ActionScrollTop        Action = "scroll_top"
+	ActionScrollBottom     Action = "scroll_bottom"
 	ActionQuit             Action = "quit"
 	ActionDiscardQuit      Action = "discard_quit"
 	ActionHelp             Action = "help"
@@ -64,6 +67,7 @@ var validActions = map[Action]bool{
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionToggleCollapsed: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionMarkReviewed: true, ActionFilter: true,
+	ActionScrollCenter: true, ActionScrollTop: true, ActionScrollBottom: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true,
 }
 
@@ -144,6 +148,11 @@ func defaultDescriptions() []HelpEntry {
 		{ActionMarkReviewed, "mark file as reviewed", "View"},
 		{ActionFilter, "filter files", "View"},
 
+		// viewport scroll
+		{ActionScrollCenter, "center cursor in viewport", "Navigation"},
+		{ActionScrollTop, "scroll cursor to top", "Navigation"},
+		{ActionScrollBottom, "scroll cursor to bottom", "Navigation"},
+
 		// quit
 		{ActionQuit, "quit", "Quit"},
 		{ActionDiscardQuit, "discard and quit", "Quit"},
@@ -189,8 +198,13 @@ func defaultBindings() map[string]Action {
 		".":      ActionToggleHunk,
 		" ":      ActionMarkReviewed,
 		"f":      ActionFilter,
+		"zz":     ActionScrollCenter,
+		"zt":     ActionScrollTop,
+		"zb":     ActionScrollBottom,
 		"q":      ActionQuit,
+		"ZZ":     ActionQuit,
 		"Q":      ActionDiscardQuit,
+		"ZQ":     ActionDiscardQuit,
 		"?":      ActionHelp,
 		"esc":    ActionDismiss,
 	}
@@ -219,6 +233,17 @@ func (km *Keymap) KeysFor(action Action) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// HasPrefix returns true if any binding starts with the given prefix but is longer.
+// This is used for multi-key sequence detection (e.g., "z" is a prefix for "zz", "zt", "zb").
+func (km *Keymap) HasPrefix(prefix string) bool {
+	for k := range km.bindings {
+		if len(k) > len(prefix) && strings.HasPrefix(k, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // Bind maps a key to an action, overriding any previous binding for that key.

@@ -439,6 +439,9 @@ revdiff --only=/tmp/draft-comment.md
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |
 | `Home/End` | Jump to first/last item |
+| `zz` | Scroll viewport to center cursor |
+| `zt` | Scroll viewport to place cursor at top |
+| `zb` | Scroll viewport to place cursor at bottom |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
 | `[` / `]` | Jump to previous/next change hunk in diff; add `--cross-file-hunks` to continue into the previous/next file at the boundary |
@@ -474,8 +477,8 @@ revdiff --only=/tmp/draft-comment.md
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
-| `q` | Quit, output annotations to stdout |
-| `Q` | Discard all annotations and quit (confirms if annotations exist) |
+| `q` / `ZZ` | Quit, output annotations to stdout |
+| `Q` / `ZQ` | Discard all annotations and quit (confirms if annotations exist) |
 
 ### Custom Keybindings
 

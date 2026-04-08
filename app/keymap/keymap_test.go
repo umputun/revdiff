@@ -37,7 +37,9 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList},
 		{"v", ActionToggleCollapsed}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
 		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
-		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"esc", ActionDismiss},
+		{"zz", ActionScrollCenter}, {"zt", ActionScrollTop}, {"zb", ActionScrollBottom},
+		{"q", ActionQuit}, {"ZZ", ActionQuit}, {"Q", ActionDiscardQuit}, {"ZQ", ActionDiscardQuit},
+		{"?", ActionHelp}, {"esc", ActionDismiss},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.action, km.Resolve(tt.key), "key %q should map to %q", tt.key, tt.action)
@@ -183,8 +185,9 @@ func TestHelpSections(t *testing.T) {
 
 func TestHelpSections_unmappedActionOmitted(t *testing.T) {
 	km := Default()
-	// unbind all keys for quit
+	// unbind all keys for quit (q and ZZ)
 	km.Unbind("q")
+	km.Unbind("ZZ")
 	sections := km.HelpSections()
 
 	for _, s := range sections {
@@ -609,6 +612,36 @@ func TestAcceptance_invalidActionWarnsNoCrash(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, maps, 1, "only valid action should be parsed")
 	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
+func TestHasPrefix(t *testing.T) {
+	km := Default()
+
+	t.Run("z is prefix for zz/zt/zb", func(t *testing.T) {
+		assert.True(t, km.HasPrefix("z"), "z should be a prefix (zz, zt, zb are bound)")
+	})
+
+	t.Run("Z is prefix for ZZ/ZQ", func(t *testing.T) {
+		assert.True(t, km.HasPrefix("Z"), "Z should be a prefix (ZZ, ZQ are bound)")
+	})
+
+	t.Run("q is not prefix", func(t *testing.T) {
+		assert.False(t, km.HasPrefix("q"), "q should not be a prefix")
+	})
+
+	t.Run("zz is not prefix", func(t *testing.T) {
+		assert.False(t, km.HasPrefix("zz"), "zz should not be a prefix (it is a complete binding)")
+	})
+}
+
+func TestMultiKeyBindings(t *testing.T) {
+	km := Default()
+
+	assert.Equal(t, ActionScrollCenter, km.Resolve("zz"))
+	assert.Equal(t, ActionScrollTop, km.Resolve("zt"))
+	assert.Equal(t, ActionScrollBottom, km.Resolve("zb"))
+	assert.Equal(t, ActionQuit, km.Resolve("ZZ"))
+	assert.Equal(t, ActionDiscardQuit, km.Resolve("ZQ"))
 }
 
 func TestParse_casePreservedForSingleChars(t *testing.T) {

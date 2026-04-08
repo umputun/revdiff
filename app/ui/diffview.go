@@ -819,6 +819,13 @@ func (m *Model) topAlignViewportOnCursor() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
+// bottomAlignViewportOnCursor scrolls the viewport to place the cursor at the bottom of the page.
+func (m *Model) bottomAlignViewportOnCursor() {
+	cursorY := m.cursorViewportY()
+	m.viewport.SetYOffset(max(0, cursorY-m.viewport.Height+1))
+	m.viewport.SetContent(m.renderDiff())
+}
+
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
 const scrollStep = 4      // horizontal scroll step in characters
 

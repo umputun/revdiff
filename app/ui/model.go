@@ -121,6 +121,8 @@ type Model struct {
 	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
+
+	pendingKey string // buffered first key of a multi-key sequence (e.g., "z" for zz/zt/zb)
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -290,7 +292,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return model, cmd
 	}
 
-	action := m.keymap.Resolve(msg.String())
+	key := msg.String()
+
+	// multi-key sequence handling: combine with pending prefix if present
+	if m.pendingKey != "" {
+		combined := m.pendingKey + key
+		m.pendingKey = ""
+		if action := m.keymap.Resolve(combined); action != "" {
+			key = combined
+		} else {
+			// combined key not bound — discard prefix, try current key alone
+		}
+	} else if m.keymap.Resolve(key) == "" && m.keymap.HasPrefix(key) {
+		// current key is unbound but is a prefix of a multi-key binding — buffer it
+		m.pendingKey = key
+		return m, nil
+	}
+
+	action := m.keymap.Resolve(key)
 
 	// help overlay: toggle with help action, dismiss with esc, block everything else
 	if action == keymap.ActionHelp || m.showHelp {
@@ -553,6 +572,16 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.tree.moveToFirst()
 	case keymap.ActionEnd:
 		m.tree.moveToLast()
+	case keymap.ActionScrollCenter:
+		height := m.treePageSize()
+		m.tree.offset = max(0, m.tree.cursor-height/2)
+		return m, nil
+	case keymap.ActionScrollTop:
+		m.tree.offset = max(0, m.tree.cursor)
+		return m, nil
+	case keymap.ActionScrollBottom:
+		m.tree.offset = max(0, m.tree.cursor-m.treePageSize()+1)
+		return m, nil
 	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
@@ -648,6 +677,15 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
+	case keymap.ActionScrollCenter:
+		m.centerViewportOnCursor()
+		return m, nil
+	case keymap.ActionScrollTop:
+		m.topAlignViewportOnCursor()
+		return m, nil
+	case keymap.ActionScrollBottom:
+		m.bottomAlignViewportOnCursor()
+		return m, nil
 	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
