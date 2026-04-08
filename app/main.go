@@ -51,6 +51,8 @@ type options struct {
 	DumpTheme        bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
 	ListThemes       bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
 	InitThemes       bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
+	InitAllThemes    bool     `long:"init-all-themes" no-ini:"true" description:"write all gallery themes (bundled + community) to themes dir and exit"`
+	InstallTheme     []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
 	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
@@ -411,6 +413,9 @@ func run(opts options) error {
 		Only:             opts.Only,
 		WorkDir:          workDir,
 		LoadUntracked:    untrackedFn,
+		ThemesDir:        defaultThemesDir(),
+		ConfigPath:       resolveConfigPath(os.Args[1:]),
+		ActiveThemeName:  theme.ActiveName(opts.Theme),
 		Colors: ui.Colors{
 			Accent:     opts.Colors.Accent,
 			Border:     opts.Colors.Border,
@@ -527,11 +532,12 @@ func defaultThemesDir() string {
 	return filepath.Join(home, ".config", "revdiff", "themes")
 }
 
-// handleThemes processes theme-related flags: auto-init on first run, --init-themes, --list-themes, and --theme.
+// handleThemes processes theme-related flags: auto-init on first run, --init-themes, --init-all-themes,
+// --install-theme, --list-themes, and --theme.
 // returns (true, nil) when the caller should exit successfully, (false, error) on failure, (false, nil) to continue.
 func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bool, error) {
 	// auto-init bundled themes on first run (silent, no error on failure)
-	if themesDir != "" {
+	if themesDir != "" && len(opts.InstallTheme) == 0 {
 		if _, err := os.Stat(themesDir); os.IsNotExist(err) {
 			_ = theme.InitBundled(themesDir)
 		}
@@ -548,16 +554,34 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 		return true, nil
 	}
 
+	if opts.InitAllThemes {
+		if themesDir == "" {
+			return false, errors.New("cannot determine home directory for themes")
+		}
+		if err := theme.InitAll(themesDir); err != nil {
+			return false, fmt.Errorf("init all themes: %w", err)
+		}
+		galleryNames, _ := theme.GalleryNames()
+		_, _ = fmt.Fprintf(stdout, "all themes written to %s (%d themes)\n", themesDir, len(galleryNames))
+		return true, nil
+	}
+
+	if len(opts.InstallTheme) > 0 {
+		if themesDir == "" {
+			return false, errors.New("cannot determine home directory for themes")
+		}
+		if err := theme.Install(opts.InstallTheme, themesDir, highlight.IsValidStyle, stdout); err != nil {
+			return false, fmt.Errorf("install theme: %w", err)
+		}
+		return true, nil
+	}
+
 	if opts.ListThemes {
 		if themesDir == "" {
 			return false, errors.New("cannot determine home directory for themes")
 		}
-		names, err := theme.List(themesDir)
-		if err != nil {
+		if err := theme.PrintList(themesDir, stdout); err != nil {
 			return false, fmt.Errorf("list themes: %w", err)
-		}
-		for _, name := range names {
-			_, _ = fmt.Fprintln(stdout, name)
 		}
 		return true, nil
 	}
