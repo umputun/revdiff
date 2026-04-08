@@ -264,3 +264,28 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 	}
 	return lines, nil
 }
+
+// ReadFileAsAdded reads a file from disk and returns all lines as ChangeAdd type.
+func ReadFileAsAdded(path string) ([]DiffLine, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, nil
+	}
+	f, err := os.Open(path) //nolint:gosec // path comes from git ls-files output
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	lines, err := readReaderAsContext(f)
+	if err != nil {
+		return nil, err
+	}
+	for i := range lines {
+		lines[i].ChangeType = ChangeAdd
+		lines[i].OldNum = 0
+	}
+	return lines, nil
+}

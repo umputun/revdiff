@@ -769,6 +769,13 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.tree = newFileTreeFromEntries(entries)
 	m.singleFile = len(m.tree.allFiles) == 1
+	if len(entries) == 0 {
+		m.currFile = ""
+		m.diffLines = nil
+		m.highlightedLines = nil
+		m.viewport.SetContent("")
+		return m, nil
+	}
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
@@ -796,6 +803,12 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	// untracked files have no git diff — fall back to reading from disk as all-added lines
+	if len(m.diffLines) == 0 && m.workDir != "" {
+		if added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file)); err == nil && len(added) > 0 {
+			m.diffLines = added
+		}
+	}
 	m.clearSearch()
 	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
