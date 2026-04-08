@@ -1443,7 +1443,7 @@ func TestModel_StatusBarFilenameTruncationWideChars(t *testing.T) {
 	m.fileAdds = 1
 	m.fileRemoves = 0
 	m.focus = paneDiff
-	m.width = 40
+	m.width = 42
 
 	status := m.statusBarText()
 	assert.Contains(t, status, "…", "should truncate wide-char filename with ellipsis")

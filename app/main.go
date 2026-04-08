@@ -361,10 +361,11 @@ func run(opts options) error {
 	km := keymap.LoadOrDefault(keysPath)
 
 	var (
-		renderer ui.Renderer
-		workDir  string
-		blamer   ui.Blamer
-		err      error
+		renderer      ui.Renderer
+		workDir       string
+		blamer        ui.Blamer
+		untrackedFn  func() ([]string, error)
+		err           error
 	)
 
 	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
@@ -383,9 +384,12 @@ func run(opts options) error {
 			return err
 		}
 
-		// blame is only available when git is present
+		// blame and untracked listing are only available when git is present
+		var g *diff.Git
 		if gitErr == nil {
-			blamer = diff.NewGit(gitRoot)
+			g = diff.NewGit(gitRoot)
+			blamer = g
+			untrackedFn = g.UntrackedFiles
 		}
 	}
 
@@ -406,6 +410,7 @@ func run(opts options) error {
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
 		WorkDir:          workDir,
+		LoadUntracked:   untrackedFn,
 		Colors: ui.Colors{
 			Accent:     opts.Colors.Accent,
 			Border:     opts.Colors.Border,

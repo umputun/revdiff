@@ -98,6 +98,8 @@ type Model struct {
 	blamer         Blamer                 // optional blame provider (nil when git unavailable)
 	showBlame      bool                   // true when blame gutter is shown
 	blameData      map[int]diff.BlameLine // blame info keyed by 1-based new line number
+	showUntracked bool                   // true when untracked files are shown in tree
+	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
 	blameAuthorLen int                    // max author display width for blame gutter
 	blameNow       time.Time              // snapshot of time.Now() set once per render pass for blame age
 
@@ -162,6 +164,7 @@ type ModelConfig struct {
 	Only             []string       // show only these files (match by exact path or path suffix)
 	WorkDir          string         // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
+	LoadUntracked   func() ([]string, error) // fetches untracked files; nil when unavailable
 	Blamer           Blamer         // optional blame provider (nil when git unavailable)
 	Colors           Colors
 }
@@ -200,6 +203,8 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
+		showUntracked:    false,
+		loadUntracked:   cfg.LoadUntracked,
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
@@ -224,7 +229,19 @@ func (m Model) Init() tea.Cmd {
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
 		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
-		return filesLoadedMsg{entries: entries, err: err}
+		if err != nil {
+			return filesLoadedMsg{entries: entries, err: err}
+		}
+		// append untracked files when toggle is on
+		if m.showUntracked && m.loadUntracked != nil {
+			ut, utErr := m.loadUntracked()
+			if utErr == nil {
+				for _, f := range ut {
+					entries = append(entries, diff.FileEntry{Path: f})
+				}
+			}
+		}
+		return filesLoadedMsg{entries: entries}
 	}
 }
 
@@ -325,7 +342,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -447,6 +464,12 @@ func (m *Model) toggleBlame() tea.Cmd {
 	return nil
 }
 
+// toggleUntracked toggles visibility of untracked files in the tree.
+func (m *Model) toggleUntracked() tea.Cmd {
+	m.showUntracked = !m.showUntracked
+	return m.loadFiles()
+}
+
 // handleViewToggle dispatches view mode toggle actions.
 func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action { //nolint:exhaustive // only toggle actions are dispatched here
@@ -460,6 +483,9 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.toggleLineNumbers()
 	case keymap.ActionToggleBlame:
 		cmd := m.toggleBlame()
+		return m, cmd
+	case keymap.ActionToggleUntracked:
+		cmd := m.toggleUntracked()
 		return m, cmd
 	}
 	return m, nil
@@ -1287,6 +1313,7 @@ func (m Model) statusModeIcons() string {
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
 		{"✓", m.tree.reviewedCount() > 0},
+		{"?", m.showUntracked},
 	}
 
 	statusFg := m.styles.colors.Muted
