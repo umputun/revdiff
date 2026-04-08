@@ -155,6 +155,7 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 		return nil
 	}
 	m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
+	m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 	m.skipInitialDividers()
 
 	m.tree.refreshFilter(m.annotatedFiles())
@@ -190,6 +191,7 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 	lineNum := m.diffLineNum(dl)
 	if m.store.Delete(m.currFile, lineNum, string(dl.ChangeType)) {
 		m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
+		m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 		m.cursorOnAnnotation = false
 		m.tree.refreshFilter(m.annotatedFiles())
 

@@ -56,6 +56,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoConfirmDiscard)
 	assert.False(t, opts.Wrap)
 	assert.False(t, opts.Collapsed)
+	assert.False(t, opts.CrossFileHunks)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
 	assert.False(t, opts.Stdin)
@@ -137,6 +138,31 @@ func TestParseArgs_Collapsed(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.Collapsed)
+	})
+}
+
+func TestParseArgs_CrossFileHunks(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--cross-file-hunks"))
+		require.NoError(t, err)
+		assert.True(t, opts.CrossFileHunks)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_CROSS_FILE_HUNKS", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.CrossFileHunks)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\ncross-file-hunks = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.CrossFileHunks)
 	})
 }
 
@@ -434,6 +460,7 @@ func TestDumpConfig(t *testing.T) {
 
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
+	assert.Contains(t, output, "cross-file-hunks = false")
 	assert.Contains(t, output, "[color options]")
 	assert.Contains(t, output, "color-accent = #D5895F")
 	assert.NotContains(t, output, "\ncolors =", "should not have spurious colors= line")

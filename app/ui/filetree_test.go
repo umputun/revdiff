@@ -91,6 +91,38 @@ func TestFileTree_NextPrevFile(t *testing.T) {
 	assert.Equal(t, "a.go", ft.selectedFile())
 }
 
+func TestFileTree_HasNextPrevFile(t *testing.T) {
+	t.Run("single file", func(t *testing.T) {
+		ft := newFileTree([]string{"a.go"})
+		assert.False(t, ft.hasNextFile())
+		assert.False(t, ft.hasPrevFile())
+	})
+
+	t.Run("first file", func(t *testing.T) {
+		ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+		// cursor starts on first file
+		assert.Equal(t, "a.go", ft.selectedFile())
+		assert.True(t, ft.hasNextFile())
+		assert.False(t, ft.hasPrevFile())
+	})
+
+	t.Run("middle file", func(t *testing.T) {
+		ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+		ft.moveDown()
+		assert.Equal(t, "b.go", ft.selectedFile())
+		assert.True(t, ft.hasNextFile())
+		assert.True(t, ft.hasPrevFile())
+	})
+
+	t.Run("last file", func(t *testing.T) {
+		ft := newFileTree([]string{"a.go", "b.go", "c.go"})
+		ft.moveToLast()
+		assert.Equal(t, "c.go", ft.selectedFile())
+		assert.False(t, ft.hasNextFile())
+		assert.True(t, ft.hasPrevFile())
+	})
+}
+
 func TestFileTree_ToggleFilter(t *testing.T) {
 	ft := newFileTree([]string{"a.go", "b.go", "c.go"})
 	annotated := map[string]bool{"a.go": true, "c.go": true}

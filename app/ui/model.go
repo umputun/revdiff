@@ -89,10 +89,11 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp     bool // true when help overlay is visible
-	wrapMode     bool // true when line wrapping is enabled
-	lineNumbers  bool // true when line numbers are shown in gutter
-	lineNumWidth int  // digit width for line number columns (max digits across old/new nums)
+	showHelp       bool // true when help overlay is visible
+	wrapMode       bool // true when line wrapping is enabled
+	crossFileHunks bool // allow [ and ] to jump across file boundaries
+	lineNumbers    bool // true when line numbers are shown in gutter
+	lineNumWidth   int  // digit width for line number columns (max digits across old/new nums)
 
 	blamer         Blamer                 // optional blame provider (nil when git unavailable)
 	showBlame      bool                   // true when blame gutter is shown
@@ -117,6 +118,7 @@ type Model struct {
 	annotListOffset  int                     // scroll offset for the annotation list
 	annotListItems   []annotation.Annotation // flat sorted list of all annotations
 	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
+	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 }
@@ -154,6 +156,7 @@ type ModelConfig struct {
 	NoConfirmDiscard bool           // skip confirmation prompt when discarding annotations
 	Wrap             bool           // enable line wrapping
 	Collapsed        bool           // start in collapsed diff mode
+	CrossFileHunks   bool           // allow [ and ] to jump across file boundaries
 	LineNumbers      bool           // show line numbers in diff gutter
 	ShowBlame        bool           // show blame gutter on startup when available
 	Only             []string       // show only these files (match by exact path or path suffix)
@@ -193,6 +196,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
+		crossFileHunks:   cfg.CrossFileHunks,
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
@@ -282,19 +286,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// annotation input mode takes priority
-	if m.annotating {
-		return m.handleAnnotateKey(msg)
-	}
-
-	// search input mode takes priority after annotation
-	if m.searching {
-		return m.handleSearchKey(msg)
-	}
-
-	// annotation list popup: handle keys when already open
-	if m.showAnnotList {
-		return m.handleAnnotListKey(msg)
+	if handled, model, cmd := m.handleModalKey(msg); handled {
+		return model, cmd
 	}
 
 	action := m.keymap.Resolve(msg.String())
@@ -334,6 +327,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleMarkReviewed()
 	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
 		return m.handleViewToggle(action)
+	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
+		return m.handleHunkNav(action == keymap.ActionNextHunk)
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
@@ -345,6 +340,28 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDiffNav(msg)
 	}
 	return m, nil
+}
+
+func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
+	// annotation input mode takes priority
+	if m.annotating {
+		model, cmd := m.handleAnnotateKey(msg)
+		return true, model, cmd
+	}
+
+	// search input mode takes priority after annotation
+	if m.searching {
+		model, cmd := m.handleSearchKey(msg)
+		return true, model, cmd
+	}
+
+	// annotation list popup: handle keys when already open
+	if m.showAnnotList {
+		model, cmd := m.handleAnnotListKey(msg)
+		return true, model, cmd
+	}
+
+	return false, m, nil
 }
 
 // togglePane switches focus between tree and diff panes.
@@ -543,6 +560,7 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
 	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
+	m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 	m.tree.ensureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
 }
@@ -630,10 +648,6 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
-	case keymap.ActionNextHunk:
-		m.moveToNextHunk()
-	case keymap.ActionPrevHunk:
-		m.moveToPrevHunk()
 	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
@@ -796,13 +810,41 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
 		a := *m.pendingAnnotJump
 		m.pendingAnnotJump = nil
+		m.pendingHunkJump = nil
 		m.positionOnAnnotation(a)
+		return m, blameCmd
+	}
+
+	// handle pending hunk jump after cross-file hunk navigation
+	if m.pendingHunkJump != nil {
+		m.applyPendingHunkJump()
+		m.centerViewportOnCursor()
 		return m, blameCmd
 	}
 
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, blameCmd
+}
+
+func (m *Model) applyPendingHunkJump() {
+	forward := *m.pendingHunkJump
+	m.pendingHunkJump = nil
+	if forward {
+		m.diffCursor = -1
+		m.moveToNextHunk()
+		if m.diffCursor != -1 {
+			return
+		}
+		m.skipInitialDividers()
+		return
+	}
+
+	m.diffCursor = len(m.diffLines)
+	m.moveToPrevHunk()
+	if m.diffCursor == len(m.diffLines) {
+		m.skipInitialDividers()
+	}
 }
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.
@@ -1620,6 +1662,7 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
+		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 		m.tree.toggleFilter(annotated)
 		m.tree.ensureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
@@ -1663,6 +1706,7 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 	}
 	if !m.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
+		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 		if forward {
 			m.tree.nextFile()
 		} else {

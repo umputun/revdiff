@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
@@ -761,6 +762,46 @@ func (m *Model) moveToPrevHunk() {
 			return
 		}
 	}
+}
+
+// handleHunkNav moves to the next or previous hunk, crossing file boundaries when needed.
+// when cross-file hunk navigation is enabled, forward at the last hunk navigates to the next file
+// and lands on its first hunk, and backward at the first hunk navigates to the previous file and
+// lands on its last hunk.
+// always shifts focus to the diff pane. no-op when no file is loaded.
+func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
+	if m.currFile == "" {
+		return m, nil
+	}
+	m.focus = paneDiff
+	prevCursor := m.diffCursor
+	if forward {
+		m.moveToNextHunk()
+	} else {
+		m.moveToPrevHunk()
+	}
+	if m.diffCursor != prevCursor || m.singleFile || !m.crossFileHunks {
+		m.syncTOCActiveSection()
+		return m, nil
+	}
+	// cursor did not move — we are at the boundary; try to cross to adjacent file
+	if forward {
+		if m.tree.hasNextFile() {
+			fwd := true
+			m.pendingHunkJump = &fwd
+			m.tree.nextFile()
+			return m.loadSelectedIfChanged()
+		}
+	} else {
+		if m.tree.hasPrevFile() {
+			bwd := false
+			m.pendingHunkJump = &bwd
+			m.tree.prevFile()
+			return m.loadSelectedIfChanged()
+		}
+	}
+	m.syncTOCActiveSection()
+	return m, nil
 }
 
 // centerViewportOnCursor scrolls the viewport to place the cursor in the middle of the page.
