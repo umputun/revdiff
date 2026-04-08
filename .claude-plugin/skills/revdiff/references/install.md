@@ -14,7 +14,7 @@ brew install umputun/apps/revdiff
 /plugin install revdiff@umputun-revdiff
 ```
 
-Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm).
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, Zellij, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm).
 
 ### Plan Review Plugin
 

@@ -54,6 +54,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | Terminal | Overlay method | Detection |
 |----------|---------------|-----------|
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
+| **Zellij** | `zellij run --floating` | `$ZELLIJ` env var |
 | **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
 | **Kaku** | `kaku cli split-pane` (same API as wezterm) | `$WEZTERM_PANE` env var |
@@ -62,7 +63,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: tmux → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
 
 > **Note:** cmux is detected before ghostty because cmux also sets `$TERM_PROGRAM=ghostty`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 

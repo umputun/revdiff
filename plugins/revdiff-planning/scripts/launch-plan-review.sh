@@ -24,7 +24,8 @@ if [ -z "$REVDIFF_BIN" ]; then
     exit 1
 fi
 
-OUTPUT_FILE=$(mktemp /tmp/plan-review-output-XXXXXX)
+TMPBASE="${TMPDIR:-/tmp}"
+OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 # make plan path absolute for the overlay shell
@@ -44,6 +45,32 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     fi
     TMUX_ARGS+=(-- sh -c "$REVDIFF_CMD")
     "${TMUX_ARGS[@]}"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
+# zellij: floating pane with sentinel file for blocking
+if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
+    rm -f "$SENTINEL"
+
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX.sh")
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+$REVDIFF_CMD; touch '$SENTINEL'
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    zellij run --floating --close-on-exit \
+        --width 90 --height 90 \
+        --name "$OVERLAY_TITLE" \
+        -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -309,5 +336,5 @@ LAUNCHER
     exit 0
 fi
 
-echo "error: no overlay terminal available (requires tmux, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires tmux, zellij, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
