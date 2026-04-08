@@ -217,6 +217,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	}
 
 	content = m.applyHorizontalScroll(content)
+	content = m.extendLineBg(content, m.changeBgColor(dl.ChangeType))
 
 	cursor := " "
 	if isCursor {
@@ -243,6 +244,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
+		styled = m.extendLineBg(styled, m.changeBgColor(dl.ChangeType))
 
 		cursor := " "
 		if i == 0 && isCursor {
@@ -396,8 +398,8 @@ func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOf
 }
 
 // styleDiffContent applies the appropriate line style based on change type.
-// for add/remove lines, extends the background to the full content width so padContentBg
-// at the View level doesn't replace it with DiffBg.
+// does NOT extend backgrounds — callers must apply extendLineBg after applyHorizontalScroll
+// (non-wrap paths) or directly after styling (wrap paths where scroll is not used).
 func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
 	if isSearchMatch && m.searchTerm != "" {
 		content = m.highlightSearchMatches(content)
@@ -406,19 +408,31 @@ func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content stri
 	switch changeType {
 	case diff.ChangeAdd:
 		if hasHighlight {
-			return m.extendLineBg(m.styles.LineAddHighlight.Render(prefix+content), m.styles.colors.AddBg)
+			return m.styles.LineAddHighlight.Render(prefix + content)
 		}
-		return m.extendLineBg(m.styles.LineAdd.Render(prefix+content), m.styles.colors.AddBg)
+		return m.styles.LineAdd.Render(prefix + content)
 	case diff.ChangeRemove:
 		if hasHighlight {
-			return m.extendLineBg(m.styles.LineRemoveHighlight.Render(prefix+content), m.styles.colors.RemoveBg)
+			return m.styles.LineRemoveHighlight.Render(prefix + content)
 		}
-		return m.extendLineBg(m.styles.LineRemove.Render(prefix+content), m.styles.colors.RemoveBg)
+		return m.styles.LineRemove.Render(prefix + content)
 	default:
 		if hasHighlight {
 			return m.styles.LineContextHighlight.Render(prefix + content)
 		}
 		return m.styles.LineContext.Render(prefix + content)
+	}
+}
+
+// changeBgColor returns the background color for a given change type.
+func (m Model) changeBgColor(changeType diff.ChangeType) string {
+	switch changeType {
+	case diff.ChangeAdd:
+		return m.styles.colors.AddBg
+	case diff.ChangeRemove:
+		return m.styles.colors.RemoveBg
+	default:
+		return ""
 	}
 }
 

@@ -230,6 +230,32 @@ func TestModel_ApplyHorizontalScrollTruncatesLongLines(t *testing.T) {
 	assert.LessOrEqual(t, resultWidth, maxWidth, "long line should be truncated to content width even with scrollX=0")
 }
 
+func TestModel_ExtendLineBgAfterScrollFillsWidth(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 10
+	m.styles = plainStyles()
+
+	// simulate a styled add line longer than content width
+	longContent := strings.Repeat("x", 200)
+	scrolled := m.applyHorizontalScroll(longContent)
+	extended := m.extendLineBg(scrolled, "#2e3440")
+
+	expectedWidth := m.diffContentWidth() - m.gutterExtra()
+	resultWidth := lipgloss.Width(extended)
+	assert.Equal(t, expectedWidth, resultWidth, "bg should fill to full content width after scroll")
+}
+
+func TestModel_ChangeBgColor(t *testing.T) {
+	m := testModel(nil, nil)
+	assert.Equal(t, m.styles.colors.AddBg, m.changeBgColor(diff.ChangeAdd))
+	assert.Equal(t, m.styles.colors.RemoveBg, m.changeBgColor(diff.ChangeRemove))
+	assert.Empty(t, m.changeBgColor(diff.ChangeContext))
+	assert.Empty(t, m.changeBgColor(diff.ChangeDivider))
+}
+
 func TestModel_PlainStyles(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
