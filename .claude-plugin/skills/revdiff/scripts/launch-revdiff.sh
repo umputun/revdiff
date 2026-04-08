@@ -18,8 +18,8 @@ TMPBASE="${TMPDIR:-/tmp}"
 OUTPUT_FILE=$(mktemp "$TMPBASE/revdiff-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/shell-quote.sh"
+# shell-quote a single argument for safe embedding in sh -c strings.
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 REVDIFF_CMD="$(sq "$REVDIFF_BIN")"
 if [ -n "${REVDIFF_CONFIG:-}" ] && [ -f "$REVDIFF_CONFIG" ]; then
