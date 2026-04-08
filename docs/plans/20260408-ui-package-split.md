@@ -146,14 +146,14 @@ Move status bar, help overlay, single-file, TOC, and mode icon tests to dedicate
 - Create: `app/ui/view_test.go`
 - Modify: `app/ui/model_test.go`
 
-- [ ] create `app/ui/view_test.go` with package header, imports, and shared test helpers
-- [ ] move all `TestModel_StatusBar*`, `TestModel_StatusMode*`, `TestModel_ReviewedStatus*`, `TestModel_ReviewedModeIcon*` test functions
-- [ ] move all `TestModel_HelpOverlay*` test functions
-- [ ] move all `TestModel_SingleFile*` test functions
-- [ ] move all `TestModel_*TOC*`, `TestModel_*Markdown*`, `TestModel_FileLoaded*TOC*` test functions
-- [ ] verify no duplicate imports or missing helpers
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/view_test.go` with package header, imports, and shared test helpers
+- [x] move all `TestModel_StatusBar*`, `TestModel_StatusMode*`, `TestModel_ReviewedStatus*`, `TestModel_ReviewedModeIcon*` test functions
+- [x] move all `TestModel_HelpOverlay*` test functions
+- [x] move all `TestModel_SingleFile*` test functions
+- [x] move all `TestModel_*TOC*`, `TestModel_*Markdown*`, `TestModel_FileLoaded*TOC*` test functions
+- [x] verify no duplicate imports or missing helpers
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 7: Split model_test.go — extract diffnav_test.go
 
