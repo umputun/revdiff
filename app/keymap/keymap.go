@@ -46,7 +46,7 @@ const (
 	ActionToggleLineNums   Action = "toggle_line_numbers"
 	ActionToggleBlame      Action = "toggle_blame"
 	ActionToggleHunk       Action = "toggle_hunk"
-	ActionToggleUntracked Action = "toggle_untracked"
+	ActionToggleUntracked  Action = "toggle_untracked"
 	ActionMarkReviewed     Action = "mark_reviewed"
 	ActionFilter           Action = "filter"
 	ActionQuit             Action = "quit"

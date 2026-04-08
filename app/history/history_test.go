@@ -23,9 +23,8 @@ func TestSave_WithAnnotationsAndGit(t *testing.T) {
 		Ref:            "HEAD~1",
 		GitRoot:        gitRoot,
 		AnnotatedFiles: []string{"hello.txt"},
-		HistoryDir:     histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	// find the created file
 	entries := readHistoryFiles(t, histDir)
@@ -47,9 +46,8 @@ func TestSave_WithoutGit(t *testing.T) {
 	p := Params{
 		Annotations: "## readme.md:10 (+)\nfix typo\n",
 		Path:        "/some/project",
-		HistoryDir:  histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -69,9 +67,8 @@ func TestSave_StdinMode(t *testing.T) {
 	p := Params{
 		Annotations: "## stdin:5 (+)\nnote\n",
 		Path:        "stdin",
-		HistoryDir:  histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	// verify subdir is "stdin"
 	entries, err := os.ReadDir(histDir)
@@ -82,8 +79,8 @@ func TestSave_StdinMode(t *testing.T) {
 
 func TestSave_EmptyAnnotations(t *testing.T) {
 	histDir := t.TempDir()
-	p := Params{Annotations: "", Path: "/some/project", HistoryDir: histDir}
-	Save(p)
+	p := Params{Annotations: "", Path: "/some/project"}
+	New(histDir).Save(p)
 
 	// no files should be created
 	entries, err := os.ReadDir(histDir)
@@ -96,10 +93,9 @@ func TestSave_UnwritableDirectory(t *testing.T) {
 	p := Params{
 		Annotations: "## file.go:1 (+)\ncomment\n",
 		Path:        "/some/project",
-		HistoryDir:  "/dev/null/impossible",
 	}
 	// should not panic
-	Save(p)
+	New("/dev/null/impossible").Save(p)
 }
 
 func TestSave_StagedFlag(t *testing.T) {
@@ -118,9 +114,8 @@ func TestSave_StagedFlag(t *testing.T) {
 		Staged:         true,
 		GitRoot:        gitRoot,
 		AnnotatedFiles: []string{"hello.txt"},
-		HistoryDir:     histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -132,40 +127,46 @@ func TestHistoryDir_Default(t *testing.T) {
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
 
+	svc := New("")
 	p := Params{Path: "/Users/joe/myrepo"}
-	got := historyDir(p)
+	got := svc.historyDir(p)
 	assert.Equal(t, filepath.Join(home, ".config", "revdiff", "history", "myrepo"), got)
 }
 
 func TestHistoryDir_CustomDir(t *testing.T) {
-	p := Params{Path: "/Users/joe/myrepo", HistoryDir: "/tmp/hist"}
-	got := historyDir(p)
+	svc := New("/tmp/hist")
+	p := Params{Path: "/Users/joe/myrepo"}
+	got := svc.historyDir(p)
 	assert.Equal(t, "/tmp/hist/myrepo", got)
 }
 
 func TestHistoryDir_StdinPath(t *testing.T) {
-	p := Params{Path: "stdin", HistoryDir: "/tmp/hist"}
-	got := historyDir(p)
+	svc := New("/tmp/hist")
+	p := Params{Path: "stdin"}
+	got := svc.historyDir(p)
 	assert.Equal(t, "/tmp/hist/stdin", got)
 }
 
 func TestHistoryDir_SubDirOverride(t *testing.T) {
 	// non-git single-file mode: Path is the full file path, SubDir overrides the directory name
-	p := Params{Path: "/tmp/note.md", SubDir: "tmp", HistoryDir: "/tmp/hist"}
-	got := historyDir(p)
+	svc := New("/tmp/hist")
+	p := Params{Path: "/tmp/note.md", SubDir: "tmp"}
+	got := svc.historyDir(p)
 	assert.Equal(t, "/tmp/hist/tmp", got)
 }
 
 func TestHistoryDir_SubDirTakesPrecedence(t *testing.T) {
 	// SubDir should take precedence over deriving from Path
-	p := Params{Path: "/home/user/docs/readme.md", SubDir: "docs", HistoryDir: "/tmp/hist"}
-	got := historyDir(p)
+	svc := New("/tmp/hist")
+	p := Params{Path: "/home/user/docs/readme.md", SubDir: "docs"}
+	got := svc.historyDir(p)
 	assert.Equal(t, "/tmp/hist/docs", got)
 }
 
 func TestHistoryDir_EmptyPath(t *testing.T) {
-	p := Params{Path: "", HistoryDir: "/tmp/hist"}
-	got := historyDir(p)
+	svc := New("/tmp/hist")
+	p := Params{Path: ""}
+	got := svc.historyDir(p)
 	assert.Equal(t, "/tmp/hist/unknown", got)
 }
 
@@ -177,9 +178,8 @@ func TestSave_NonGitSingleFile(t *testing.T) {
 		Annotations: "## note.md:10 (+)\nfix typo\n",
 		Path:        "/tmp/note.md",
 		SubDir:      "tmp",
-		HistoryDir:  histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -214,9 +214,9 @@ func TestSave_DiffOnlyAnnotatedFiles(t *testing.T) {
 		Path:           gitRoot,
 		GitRoot:        gitRoot,
 		AnnotatedFiles: []string{"hello.txt"}, // only hello.txt, not other.txt
-		HistoryDir:     histDir,
+
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -231,9 +231,8 @@ func TestSave_FileLocationAndFormat(t *testing.T) {
 	p := Params{
 		Annotations: "## file.go:1 (+)\nnote\n",
 		Path:        "/Users/joe/myproject",
-		HistoryDir:  histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	// verify subdir is repo basename
 	subdirs, err := os.ReadDir(histDir)
@@ -267,9 +266,8 @@ func TestSave_HeaderWithAllMetadata(t *testing.T) {
 		Ref:            "master..feature",
 		GitRoot:        gitRoot,
 		AnnotatedFiles: []string{"hello.txt"},
-		HistoryDir:     histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -291,8 +289,9 @@ func TestSave_HeaderWithAllMetadata(t *testing.T) {
 func TestSave_NoHistoryOnEmptyAnnotations(t *testing.T) {
 	histDir := t.TempDir()
 	// save with empty annotations, both calls pass empty string
-	Save(Params{Annotations: "", Path: "/some/project", HistoryDir: histDir})
-	Save(Params{Annotations: "", Path: "/other/project", HistoryDir: histDir})
+	svc := New(histDir)
+	svc.Save(Params{Annotations: "", Path: "/some/project"})
+	svc.Save(Params{Annotations: "", Path: "/other/project"})
 
 	entries, err := os.ReadDir(histDir)
 	require.NoError(t, err)
@@ -300,33 +299,39 @@ func TestSave_NoHistoryOnEmptyAnnotations(t *testing.T) {
 }
 
 func TestGitDiff_NoGitRoot(t *testing.T) {
+	svc := New("")
 	p := Params{AnnotatedFiles: []string{"file.go"}}
-	assert.Empty(t, gitDiff(p))
+	assert.Empty(t, svc.gitDiff(p))
 }
 
 func TestGitDiff_NoFiles(t *testing.T) {
+	svc := New("")
 	p := Params{GitRoot: "/tmp"}
-	assert.Empty(t, gitDiff(p))
+	assert.Empty(t, svc.gitDiff(p))
 }
 
 func TestGitCommitHash_NoGitRoot(t *testing.T) {
-	assert.Empty(t, gitCommitHash(""))
+	svc := New("")
+	assert.Empty(t, svc.gitCommitHash(""))
 }
 
 func TestGitCommitHash_InvalidDir(t *testing.T) {
-	assert.Empty(t, gitCommitHash("/nonexistent"))
+	svc := New("")
+	assert.Empty(t, svc.gitCommitHash("/nonexistent"))
 }
 
 func TestGitCommitHash_ValidRepo(t *testing.T) {
+	svc := New("")
 	gitRoot := t.TempDir()
 	setupGitRepo(t, gitRoot)
-	hash := gitCommitHash(gitRoot)
+	hash := svc.gitCommitHash(gitRoot)
 	assert.NotEmpty(t, hash)
 	assert.Regexp(t, `^[0-9a-f]+$`, hash) // valid hex short hash
 	assert.LessOrEqual(t, len(hash), 40)  // at most full SHA
 }
 
 func TestFilterRepoFiles(t *testing.T) {
+	svc := New("")
 	tests := []struct {
 		name     string
 		gitRoot  string
@@ -345,7 +350,7 @@ func TestFilterRepoFiles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := filterRepoFiles(tt.gitRoot, tt.files)
+			got := svc.filterRepoFiles(tt.gitRoot, tt.files)
 			if len(tt.expected) == 0 {
 				assert.Empty(t, got)
 			} else {
@@ -370,9 +375,9 @@ func TestSave_ExternalFilesFilteredFromDiff(t *testing.T) {
 		Path:           gitRoot,
 		GitRoot:        gitRoot,
 		AnnotatedFiles: []string{"hello.txt", "/tmp/ext.md"}, // /tmp/ext.md is outside repo
-		HistoryDir:     histDir,
+
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -392,9 +397,8 @@ func TestSave_AllExternalFilesNoDiff(t *testing.T) {
 		Path:           gitRoot,
 		GitRoot:        gitRoot,
 		AnnotatedFiles: []string{"/tmp/ext.md"},
-		HistoryDir:     histDir,
 	}
-	Save(p)
+	New(histDir).Save(p)
 
 	entries := readHistoryFiles(t, histDir)
 	require.Len(t, entries, 1)
@@ -404,8 +408,8 @@ func TestSave_AllExternalFilesNoDiff(t *testing.T) {
 
 func TestSave_FilenameHasMilliseconds(t *testing.T) {
 	histDir := t.TempDir()
-	p := Params{Annotations: "## file.go:1 (+)\nnote\n", Path: "/myrepo", HistoryDir: histDir}
-	Save(p)
+	p := Params{Annotations: "## file.go:1 (+)\nnote\n", Path: "/myrepo"}
+	New(histDir).Save(p)
 
 	files, err := os.ReadDir(filepath.Join(histDir, "myrepo"))
 	require.NoError(t, err)

@@ -19,18 +19,28 @@ type Params struct {
 	Staged         bool     // whether --staged was used
 	GitRoot        string   // git repo root, empty when git unavailable
 	AnnotatedFiles []string // files with annotations, from Store.Files()
-	HistoryDir     string   // base history directory override, empty = default
 	SubDir         string   // history subdirectory name override; when empty, derived from Path
+}
+
+// Service manages review history persistence.
+type Service struct {
+	baseDir string // base history directory, empty = default (~/.config/revdiff/history/)
+}
+
+// New creates a history service with the given base directory.
+// if baseDir is empty, defaults to ~/.config/revdiff/history/.
+func New(baseDir string) *Service {
+	return &Service{baseDir: baseDir}
 }
 
 // Save writes a review history entry to disk. Errors are logged to stderr, never returned.
 // This is a safety net for preserving annotations — it must never fail the process.
-func Save(p Params) {
+func (s *Service) Save(p Params) {
 	if p.Annotations == "" {
 		return
 	}
 
-	dir := historyDir(p)
+	dir := s.historyDir(p)
 	if dir == "" {
 		log.Printf("[WARN] history: cannot determine history directory")
 		return
@@ -50,14 +60,14 @@ func Save(p Params) {
 	if p.Ref != "" {
 		fmt.Fprintf(&buf, "refs: %s\n", p.Ref)
 	}
-	if hash := gitCommitHash(p.GitRoot); hash != "" {
+	if hash := s.gitCommitHash(p.GitRoot); hash != "" {
 		fmt.Fprintf(&buf, "commit: %s\n", hash)
 	}
 
 	buf.WriteString("\n## Annotations\n\n")
 	buf.WriteString(p.Annotations)
 
-	if diffOut := gitDiff(p); diffOut != "" {
+	if diffOut := s.gitDiff(p); diffOut != "" {
 		buf.WriteString("\n---\n\n## Diff\n\n")
 		buf.WriteString(diffOut)
 		if !strings.HasSuffix(diffOut, "\n") {
@@ -72,9 +82,9 @@ func Save(p Params) {
 }
 
 // historyDir returns the directory for saving history files.
-// uses p.HistoryDir if set, otherwise ~/.config/revdiff/history/, with repo basename appended.
-func historyDir(p Params) string {
-	base := p.HistoryDir
+// uses s.baseDir if set, otherwise ~/.config/revdiff/history/, with repo basename appended.
+func (s *Service) historyDir(p Params) string {
+	base := s.baseDir
 	if base == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -99,12 +109,12 @@ func historyDir(p Params) string {
 // returns empty string if git is unavailable or on error.
 // files outside the git repo are filtered out to prevent git from failing
 // with "is outside repository" error, which would lose the diff for all files.
-func gitDiff(p Params) string {
+func (s *Service) gitDiff(p Params) string {
 	if p.GitRoot == "" || len(p.AnnotatedFiles) == 0 {
 		return ""
 	}
 
-	repoFiles := filterRepoFiles(p.GitRoot, p.AnnotatedFiles)
+	repoFiles := s.filterRepoFiles(p.GitRoot, p.AnnotatedFiles)
 	if len(repoFiles) == 0 {
 		return ""
 	}
@@ -131,7 +141,7 @@ func gitDiff(p Params) string {
 
 // gitCommitHash returns the short commit hash from the git root.
 // returns empty string if git is unavailable or on error.
-func gitCommitHash(gitRoot string) string {
+func (s *Service) gitCommitHash(gitRoot string) string {
 	if gitRoot == "" {
 		return ""
 	}
@@ -147,7 +157,7 @@ func gitCommitHash(gitRoot string) string {
 // filterRepoFiles returns only files that are inside the git repo root,
 // canonicalized to repo-relative paths. This ensures git receives clean pathspecs
 // regardless of original path format (absolute, relative with .., etc).
-func filterRepoFiles(gitRoot string, files []string) []string {
+func (s *Service) filterRepoFiles(gitRoot string, files []string) []string {
 	result := make([]string, 0, len(files))
 	for _, f := range files {
 		absPath := f

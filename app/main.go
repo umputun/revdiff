@@ -459,33 +459,7 @@ func run(opts options) error {
 		return nil
 	}
 
-	// auto-save review history as a safety net for annotations.
-	// for non-git single-file --only mode, use the full file path for the header
-	// and the parent directory basename for the history subdirectory.
-	histPath := workDir
-	if histPath == "" {
-		histPath = gitRoot
-	}
-	var histSubDir string
-	if gitRoot == "" && len(opts.Only) == 1 {
-		if abs, err := filepath.Abs(opts.Only[0]); err == nil {
-			histPath = abs
-			histSubDir = filepath.Base(filepath.Dir(abs))
-		}
-	}
-	if opts.Stdin {
-		histPath = "stdin"
-	}
-	history.Save(history.Params{
-		Annotations:    output,
-		Path:           histPath,
-		Ref:            opts.ref(),
-		Staged:         opts.Staged,
-		GitRoot:        gitRoot,
-		AnnotatedFiles: m.Store().Files(),
-		HistoryDir:     opts.HistoryDir,
-		SubDir:         histSubDir,
-	})
+	saveHistory(histReq{opts: opts, annotations: output, gitRoot: gitRoot, workDir: workDir, files: m.Store().Files()})
 
 	if opts.Output != "" {
 		if err := os.WriteFile(opts.Output, []byte(output), 0o600); err != nil {
@@ -495,6 +469,43 @@ func run(opts options) error {
 	}
 	fmt.Print(output)
 	return nil
+}
+
+type histReq struct {
+	opts        options
+	annotations string
+	gitRoot     string
+	workDir     string
+	files       []string
+}
+
+// saveHistory auto-saves review annotations and relevant diffs as a safety net.
+// for non-git single-file --only mode, uses the full file path for the header
+// and the parent directory basename for the history subdirectory.
+func saveHistory(r histReq) {
+	histPath := r.workDir
+	if histPath == "" {
+		histPath = r.gitRoot
+	}
+	var histSubDir string
+	if r.gitRoot == "" && len(r.opts.Only) == 1 {
+		if abs, err := filepath.Abs(r.opts.Only[0]); err == nil {
+			histPath = abs
+			histSubDir = filepath.Base(filepath.Dir(abs))
+		}
+	}
+	if r.opts.Stdin {
+		histPath = "stdin"
+	}
+	history.New(r.opts.HistoryDir).Save(history.Params{
+		Annotations:    r.annotations,
+		Path:           histPath,
+		Ref:            r.opts.ref(),
+		Staged:         r.opts.Staged,
+		GitRoot:        r.gitRoot,
+		AnnotatedFiles: r.files,
+		SubDir:         histSubDir,
+	})
 }
 
 // makeRenderer selects the appropriate renderer based on git availability and flags.
