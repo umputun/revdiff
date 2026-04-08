@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -133,7 +134,12 @@ func (s *Service) gitDiff(p Params) string {
 	cmd.Dir = p.GitRoot
 	out, err := cmd.Output()
 	if err != nil {
-		log.Printf("[WARN] history: git diff: %v", err)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			log.Printf("[WARN] history: git diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
+		} else {
+			log.Printf("[WARN] history: git diff: %v", err)
+		}
 		return ""
 	}
 	return string(out)
