@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Action represents a named action that a key can trigger.
@@ -45,7 +46,7 @@ const (
 	ActionToggleLineNums   Action = "toggle_line_numbers"
 	ActionToggleBlame      Action = "toggle_blame"
 	ActionToggleHunk       Action = "toggle_hunk"
-	ActionToggleUntracked  Action = "toggle_untracked"
+	ActionToggleUntracked Action = "toggle_untracked"
 	ActionMarkReviewed     Action = "mark_reviewed"
 	ActionFilter           Action = "filter"
 	ActionQuit             Action = "quit"
@@ -208,8 +209,21 @@ func Default() *Keymap {
 }
 
 // Resolve returns the action bound to the given key, or empty Action if unbound.
+// For non-Latin keyboard layouts, if the key has no direct binding, it is
+// translated to its Latin QWERTY equivalent and looked up again.
 func (km *Keymap) Resolve(key string) Action {
-	return km.bindings[key]
+	if a, ok := km.bindings[key]; ok {
+		return a
+	}
+	// fallback: translate non-Latin character to Latin equivalent
+	if r, size := utf8.DecodeRuneInString(key); size == len(key) {
+		if alias, ok := layoutResolve(r); ok {
+			if a, ok := km.bindings[string(alias)]; ok {
+				return a
+			}
+		}
+	}
+	return ""
 }
 
 // KeysFor returns all keys bound to the given action, sorted alphabetically.
