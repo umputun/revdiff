@@ -235,6 +235,8 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--dump-theme</code></td><td>Print resolved colors as theme file and exit</td><td></td></tr>
                 <tr><td><code>--list-themes</code></td><td>Print available theme names and exit</td><td></td></tr>
                 <tr><td><code>--init-themes</code></td><td>Write bundled theme files to themes dir and exit</td><td></td></tr>
+                <tr><td><code>--init-all-themes</code></td><td>Write all gallery themes (bundled + community) to themes dir and exit</td><td></td></tr>
+                <tr><td><code>--install-theme</code></td><td>Install theme(s) from gallery or local file (repeatable)</td><td></td></tr>
                 <tr><td><code>-A, --all-files</code></td><td>Browse all git-tracked files</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
@@ -250,10 +252,13 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
         </table>
 
         <h2 id="themes">Themes</h2>
-        <p>Five bundled color themes: <strong>catppuccin-mocha</strong>, <strong>dracula</strong>, <strong>gruvbox</strong>, <strong>nord</strong>, and <strong>solarized-dark</strong>. Stored in <code>~/.config/revdiff/themes/</code>, auto-created on first run.</p>
+        <p>Seven bundled color themes: <strong>catppuccin-latte</strong>, <strong>catppuccin-mocha</strong>, <strong>dracula</strong>, <strong>gruvbox</strong>, <strong>nord</strong>, <strong>revdiff</strong>, and <strong>solarized-dark</strong>. Stored in <code>~/.config/revdiff/themes/</code>, auto-created on first run.</p>
+        <p>Press <code>T</code> inside revdiff to open the interactive theme selector with live preview &mdash; browse themes, see colors applied instantly, and persist your choice on confirm.</p>
         <div class="code-block"><code>revdiff --theme dracula          <span class="code-comment"># apply a theme</span>
 revdiff --list-themes            <span class="code-comment"># list available</span>
 revdiff --init-themes            <span class="code-comment"># re-create bundled themes</span>
+revdiff --install-theme nord     <span class="code-comment"># install a specific gallery theme</span>
+revdiff --init-all-themes        <span class="code-comment"># install all gallery themes</span>
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom</code></div>
         <p>Set default in config: <code>theme = dracula</code>. Or env: <code>REVDIFF_THEME=dracula</code>.</p>
         <h3>Creating custom themes</h3>
@@ -268,6 +273,8 @@ chroma-style = dracula
 color-accent = #bd93f9
 color-border = #6272a4
 <span class="code-comment">...all 21 color keys...</span></code></div>
+        <h3>Community themes</h3>
+        <p>Community-contributed themes live in the <code>themes/gallery/</code> directory of the repository. See the <a href="https://github.com/umputun/revdiff/blob/master/themes/README.md">theme contribution guide</a> for format requirements and validation instructions.</p>
         <h3>Precedence</h3>
         <p>Without <code>--theme</code>: built-in defaults &rarr; config file &rarr; env vars &rarr; CLI flags.</p>
         <p>When <code>--theme</code> is set, it takes over completely: all 21 color fields and chroma-style are overwritten, ignoring any <code>--color-*</code> flags or env vars. <code>--theme</code> + <code>--no-colors</code> prints a warning and applies the theme.</p>
@@ -356,6 +363,7 @@ color-border = #6272a4
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
                 <tr><td><code>B</code></td><td>Toggle git blame gutter (author + commit age)</td></tr>
                 <tr><td><code>.</code></td><td>Expand/collapse hunk (collapsed mode)</td></tr>
+                <tr><td><code>T</code></td><td>Theme selector with live preview</td></tr>
                 <tr><td><code>f</code></td><td>Filter: all files / annotated only</td></tr>
                 <tr><td><code>?</code></td><td>Help overlay</td></tr>
                 <tr><td><code>q</code></td><td>Quit, output annotations</td></tr>
@@ -378,7 +386,7 @@ unmap q</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_hunk</code>, <code>filter</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_hunk</code>, <code>theme_select</code>, <code>filter</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <!-- claude code plugin -->

@@ -206,6 +206,8 @@ Positional arguments support several forms:
 | `--dump-theme` | Print currently resolved colors as theme file to stdout and exit | |
 | `--list-themes` | Print available theme names to stdout and exit | |
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
+| `--init-all-themes` | Write all gallery themes (bundled + community) to themes dir and exit | |
+| `--install-theme` | Install theme(s) from gallery or local file path and exit (repeatable) | |
 | `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
@@ -233,7 +235,9 @@ Then uncomment and edit the values you want to change.
 
 ### Themes
 
-revdiff ships with five bundled color themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
+revdiff ships with seven bundled color themes: **catppuccin-latte**, **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **revdiff**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
+
+Press `T` inside revdiff to open the interactive theme selector with live preview — browse themes, see colors applied instantly, and persist your choice to the config file on confirm.
 
 ```bash
 # apply a theme
@@ -244,6 +248,12 @@ revdiff --list-themes
 
 # re-create bundled theme files (overwrites bundled, keeps custom themes)
 revdiff --init-themes
+
+# install a specific theme from the gallery
+revdiff --install-theme catppuccin-latte
+
+# install all gallery themes (bundled + community)
+revdiff --init-all-themes
 
 # export current colors as a custom theme
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
@@ -270,6 +280,8 @@ theme = dracula
 ```
 
 Or via environment variable: `REVDIFF_THEME=dracula`.
+
+**Contributing themes** — community themes live in the `themes/gallery/` directory. See [themes/README.md](themes/README.md) for the contribution guide, format requirements, and validation instructions.
 
 **Precedence:** When `--theme` is set, it takes over completely — all 21 color fields and chroma-style are overwritten by the theme, ignoring any `--color-*` flags or env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints a warning and applies the theme.
 
@@ -472,6 +484,7 @@ revdiff --only=/tmp/draft-comment.md
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
 | `B` | Toggle git blame gutter (author name + commit age per line) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
+| `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
 | `q` | Quit, output annotations to stdout |
@@ -516,7 +529,7 @@ Then edit to taste. Modal keys (annotation input, search input, confirm discard)
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
 
-**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `filter`
+**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `theme_select`, `filter`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 

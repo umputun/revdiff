@@ -33,6 +33,8 @@ Then uncomment and edit the values you want to change.
 | `--dump-theme` | | Print currently resolved colors as theme file and exit | |
 | `--list-themes` | | Print available theme names and exit | |
 | `--init-themes` | | Write bundled theme files to themes dir and exit | |
+| `--init-all-themes` | | Write all gallery themes (bundled + community) to themes dir and exit | |
+| `--install-theme` | | Install theme(s) from gallery or local file (repeatable) | |
 | `-A`, `--all-files` | | Browse all git-tracked files, not just diffs (CLI-only, not saved in config) | `false` |
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
@@ -53,12 +55,16 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 
 ## Themes
 
-Five bundled themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.
+Seven bundled themes: **catppuccin-latte**, **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **revdiff**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.
+
+Press `T` inside revdiff to open the interactive theme selector with live preview — browse themes, see colors applied instantly, and persist your choice on confirm.
 
 ```bash
 revdiff --theme dracula          # apply a theme
 revdiff --list-themes            # list available themes
 revdiff --init-themes            # re-create bundled themes
+revdiff --install-theme nord     # install a specific gallery theme
+revdiff --init-all-themes        # install all gallery themes
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom  # export current colors
 ```
 
@@ -121,6 +127,6 @@ unmap q
 map ctrl+d half_page_down
 ```
 
-Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `filter`, `quit`, `discard_quit`, `help`, `dismiss`
+Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `theme_select`, `filter`, `quit`, `discard_quit`, `help`, `dismiss`
 
 Modal keys (annotation input, search input, confirm discard) are not remappable.

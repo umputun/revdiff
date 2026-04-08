@@ -111,6 +111,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
 | `B` | Toggle git blame gutter (author name + commit age per line) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
+| `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only |
 | `?` | Toggle help overlay showing all keybindings |
 | `q` | Quit, output annotations to stdout |
