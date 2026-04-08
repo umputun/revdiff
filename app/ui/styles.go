@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/diff"
@@ -74,17 +76,62 @@ type styles struct {
 	colors Colors // original color values for dynamic style construction
 }
 
-// fileStatusStyle returns the pre-computed style for a git file status letter.
-func (s styles) fileStatusStyle(status diff.FileStatus) lipgloss.Style {
+// fileStatusFg returns the foreground hex color for a git file status letter.
+// Returns a raw hex string (not a lipgloss.Style) because status marks are rendered
+// inside a lipgloss parent container — using lipgloss.Render() would emit \033[0m
+// (full reset) and break the outer pane background.
+func (s styles) fileStatusFg(status diff.FileStatus) string {
 	switch status {
-	case diff.FileAdded:
-		return s.StatusAdded
+	case diff.FileAdded, diff.FileUntracked:
+		return s.colors.AddFg
 	case diff.FileDeleted:
-		return s.StatusDeleted
-	case diff.FileUntracked:
-		return s.StatusUntracked
+		return s.colors.RemoveFg
 	default:
-		return s.StatusDefault
+		return s.colors.Muted
+	}
+}
+
+// coloredText wraps text in ANSI fg-only escape sequences (no \033[0m reset).
+// safe to use inside a lipgloss-rendered parent without breaking outer backgrounds.
+func coloredText(hex, text string) string {
+	return coloredTextWithReset(hex, text, "")
+}
+
+// coloredTextWithReset wraps text in ANSI fg-only escape sequences and restores
+// the provided foreground color instead of resetting to the terminal default.
+func coloredTextWithReset(hex, text, resetHex string) string {
+	if hex == "" {
+		return text
+	}
+	reset := "\033[39m"
+	if resetHex != "" {
+		reset = fmt.Sprintf("\033[38;2;%sm", hexColorToRGB(resetHex))
+	}
+	return fmt.Sprintf("\033[38;2;%sm%s%s", hexColorToRGB(hex), text, reset)
+}
+
+// hexColorToRGB converts "#RRGGBB" to "R;G;B" for ANSI escape sequences.
+func hexColorToRGB(hex string) string {
+	if len(hex) != 7 || hex[0] != '#' {
+		return "255;255;255"
+	}
+	r := hexVal(hex[1])<<4 | hexVal(hex[2])
+	g := hexVal(hex[3])<<4 | hexVal(hex[4])
+	b := hexVal(hex[5])<<4 | hexVal(hex[6])
+	return fmt.Sprintf("%d;%d;%d", r, g, b)
+}
+
+// hexVal converts a single hex character to its value.
+func hexVal(c byte) byte {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10
+	default:
+		return 0
 	}
 }
 
@@ -165,26 +212,17 @@ func newStyles(c Colors) styles {
 	return styles{
 		TreePane:       treePane,
 		TreePaneActive: treePaneActive,
-		DirEntry: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Accent)).
-			Bold(true),
-		FileEntry: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Normal)),
+		DirEntry:       dirEntryStyle(c),
+		FileEntry:      fileEntryStyle(c),
 		FileSelected: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.SelectedFg)).
 			Background(lipgloss.Color(c.SelectedBg)),
-		AnnotationMark: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Annotation)),
-		ReviewedMark: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.AddFg)),
-		StatusAdded: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.AddFg)),
-		StatusDeleted: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.RemoveFg)),
-		StatusUntracked: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.AddFg)),
-		StatusDefault: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Muted)),
+		AnnotationMark:  treeItemStyle(c, c.Annotation),
+		ReviewedMark:    treeItemStyle(c, c.AddFg),
+		StatusAdded:     treeItemStyle(c, c.AddFg),
+		StatusDeleted:   treeItemStyle(c, c.RemoveFg),
+		StatusUntracked: treeItemStyle(c, c.AddFg),
+		StatusDefault:   treeItemStyle(c, c.Muted),
 
 		DiffPane:       diffPane,
 		DiffPaneActive: diffPaneActive,
@@ -227,6 +265,33 @@ func contextStyle(c Colors) lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))
 	if c.DiffBg != "" {
 		s = s.Background(lipgloss.Color(c.DiffBg))
+	}
+	return s
+}
+
+// dirEntryStyle builds the directory entry style, applying TreeBg as background when set.
+func dirEntryStyle(c Colors) lipgloss.Style {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Accent)).Bold(true)
+	if c.TreeBg != "" {
+		s = s.Background(lipgloss.Color(c.TreeBg))
+	}
+	return s
+}
+
+// fileEntryStyle builds the file entry style, applying TreeBg as background when set.
+func fileEntryStyle(c Colors) lipgloss.Style {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))
+	if c.TreeBg != "" {
+		s = s.Background(lipgloss.Color(c.TreeBg))
+	}
+	return s
+}
+
+// treeItemStyle builds a tree item style with the given foreground, applying TreeBg when set.
+func treeItemStyle(c Colors, fg string) lipgloss.Style {
+	s := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
+	if c.TreeBg != "" {
+		s = s.Background(lipgloss.Color(c.TreeBg))
 	}
 	return s
 }

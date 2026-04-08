@@ -27,6 +27,8 @@ type Renderer interface {
 // SyntaxHighlighter provides syntax highlighting for diff lines.
 type SyntaxHighlighter interface {
 	HighlightLines(filename string, lines []diff.DiffLine) []string
+	SetStyle(styleName string) bool
+	StyleName() string
 }
 
 // Blamer provides git blame information for files.
@@ -57,6 +59,7 @@ type Model struct {
 	staged         bool
 	only           []string // filter to show only matching files
 	workDir        string   // working directory for resolving absolute --only paths
+	noColors       bool     // keep monochrome output when previewing or applying themes
 	noStatusBar    bool
 	focus          pane
 	treeHidden     bool // user toggled tree/TOC pane off
@@ -118,6 +121,12 @@ type Model struct {
 	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
+
+	themesDir  string // path to themes directory for theme selector
+	configPath string // path to config file for persisting theme choice
+
+	themeSel        themeSelectState // theme selector overlay state
+	activeThemeName string           // name of currently applied theme (for cursor positioning)
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -163,6 +172,9 @@ type ModelConfig struct {
 	LoadUntracked    func() ([]string, error) // fetches untracked files; nil when unavailable
 	Blamer           Blamer                   // optional blame provider (nil when git unavailable)
 	Colors           Colors
+	ThemesDir        string // path to themes directory for theme selector
+	ConfigPath       string // path to config file for persisting theme choice
+	ActiveThemeName  string // name of theme currently applied (for theme selector cursor positioning)
 }
 
 // NewModel creates a new Model with the given renderer, store, highlighter and configuration.
@@ -192,6 +204,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		staged:           cfg.Staged,
 		only:             cfg.Only,
 		workDir:          cfg.WorkDir,
+		noColors:         cfg.NoColors,
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
@@ -204,6 +217,9 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
+		themesDir:        cfg.ThemesDir,
+		configPath:       cfg.ConfigPath,
+		activeThemeName:  cfg.ActiveThemeName,
 	}
 }
 
@@ -277,6 +293,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.annotListOffset = 0
 		m.showAnnotList = true
 		return m, nil
+	case keymap.ActionThemeSelect:
+		m.openThemeSelector()
+		return m, nil
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -331,6 +350,12 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	// annotation list popup: handle keys when already open
 	if m.showAnnotList {
 		model, cmd := m.handleAnnotListKey(msg)
+		return true, model, cmd
+	}
+
+	// theme selector: handle keys when already open
+	if m.themeSel.active {
+		model, cmd := m.handleThemeSelectKey(msg)
 		return true, model, cmd
 	}
 
@@ -492,3 +517,4 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+

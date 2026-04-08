@@ -12,6 +12,11 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 )
 
+// chromaFallbackStyle is the name of the Chroma style that doubles as styles.Fallback.
+// styles.Get returns Fallback for unknown names, but "swapoff" is a real built-in style
+// whose registry entry IS the Fallback sentinel, so we must special-case it.
+const chromaFallbackStyle = "swapoff"
+
 // Highlighter applies syntax highlighting to source code lines using Chroma.
 type Highlighter struct {
 	styleName string
@@ -24,11 +29,31 @@ func New(styleName string, enabled bool) *Highlighter {
 	if styleName == "" {
 		styleName = "monokai"
 	}
-	if styles.Get(styleName) == styles.Fallback && styleName != "swapoff" {
+	if styles.Get(styleName) == styles.Fallback && styleName != chromaFallbackStyle {
 		log.Printf("[WARN] unknown chroma style %q, using monokai", styleName)
 		styleName = "monokai"
 	}
 	return &Highlighter{styleName: styleName, enabled: enabled}
+}
+
+// SetStyle changes the Chroma style used for subsequent HighlightLines calls.
+// Returns false if the style name is unknown.
+func (h *Highlighter) SetStyle(styleName string) bool {
+	if styles.Get(styleName) == styles.Fallback && styleName != chromaFallbackStyle {
+		return false
+	}
+	h.styleName = styleName
+	return true
+}
+
+// StyleName returns the current Chroma style name.
+func (h *Highlighter) StyleName() string {
+	return h.styleName
+}
+
+// IsValidStyle reports whether styleName is a known Chroma style.
+func IsValidStyle(styleName string) bool {
+	return styles.Get(styleName) != styles.Fallback || styleName == chromaFallbackStyle
 }
 
 // HighlightLines takes a filename (for lexer detection) and a slice of diff.DiffLine,

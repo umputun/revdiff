@@ -16,6 +16,8 @@ import (
 func noopHighlighter() *mocks.SyntaxHighlighterMock {
 	return &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
+		SetStyleFunc:       func(string) bool { return true },
+		StyleNameFunc:      func() string { return "monokai" },
 	}
 }
 

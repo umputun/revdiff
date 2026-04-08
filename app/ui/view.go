@@ -98,6 +98,8 @@ func (m Model) View() string {
 	}
 
 	switch {
+	case m.themeSel.active:
+		mainView = m.overlayCenter(mainView, m.themeSelectOverlay())
 	case m.showAnnotList:
 		mainView = m.overlayCenter(mainView, m.annotListOverlay())
 	case m.showHelp:

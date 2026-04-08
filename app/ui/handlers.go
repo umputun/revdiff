@@ -58,9 +58,9 @@ func (m Model) helpOverlay() string {
 	type sectionBlock struct {
 		lines []string
 	}
-	var blocks []sectionBlock
+	blocks := make([]sectionBlock, 0, len(sections))
 
-	reset := "\033[0m"
+	reset := "\033[39m" // fg-only reset to preserve background
 	headerColor := m.ansiFg(m.styles.colors.Accent)
 	keyColor := m.ansiFg(m.styles.colors.Annotation)
 
@@ -165,6 +165,10 @@ func (m Model) helpOverlay() string {
 		Border(border).
 		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
 		Padding(1, 2)
+	if m.styles.colors.DiffBg != "" {
+		bg := lipgloss.Color(m.styles.colors.DiffBg)
+		boxStyle = boxStyle.Background(bg).BorderBackground(bg)
+	}
 
 	return boxStyle.Render(buf.String())
 }
@@ -203,7 +207,7 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		}
 	}
 
-	reset := "\033[0m"
+	reset := "\033[39m" // fg-only reset to preserve background
 	headerColor := m.ansiFg(m.styles.colors.Accent)
 	keyColor := m.ansiFg(m.styles.colors.Annotation)
 

@@ -53,6 +53,7 @@ const (
 	ActionDiscardQuit      Action = "discard_quit"
 	ActionHelp             Action = "help"
 	ActionDismiss          Action = "dismiss"
+	ActionThemeSelect      Action = "theme_select"
 )
 
 // validActions contains all known action names for validation.
@@ -66,7 +67,7 @@ var validActions = map[Action]bool{
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionToggleCollapsed: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
-	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true,
+	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
 }
 
 // IsValidAction returns true if the action name is recognized.
@@ -146,6 +147,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionToggleUntracked, "show/hide untracked files", "View"},
 		{ActionMarkReviewed, "mark file as reviewed", "View"},
 		{ActionFilter, "filter files", "View"},
+		{ActionThemeSelect, "theme selector", "View"},
 
 		// quit
 		{ActionQuit, "quit", "Quit"},
@@ -196,6 +198,7 @@ func defaultBindings() map[string]Action {
 		"q":      ActionQuit,
 		"Q":      ActionDiscardQuit,
 		"?":      ActionHelp,
+		"T":      ActionThemeSelect,
 		"esc":    ActionDismiss,
 	}
 }

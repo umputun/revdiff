@@ -18,6 +18,12 @@ import (
 //			HighlightLinesFunc: func(filename string, lines []diff.DiffLine) []string {
 //				panic("mock out the HighlightLines method")
 //			},
+//			SetStyleFunc: func(styleName string) bool {
+//				panic("mock out the SetStyle method")
+//			},
+//			StyleNameFunc: func() string {
+//				panic("mock out the StyleName method")
+//			},
 //		}
 //
 //		// use mockedSyntaxHighlighter in code that requires ui.SyntaxHighlighter
@@ -28,6 +34,12 @@ type SyntaxHighlighterMock struct {
 	// HighlightLinesFunc mocks the HighlightLines method.
 	HighlightLinesFunc func(filename string, lines []diff.DiffLine) []string
 
+	// SetStyleFunc mocks the SetStyle method.
+	SetStyleFunc func(styleName string) bool
+
+	// StyleNameFunc mocks the StyleName method.
+	StyleNameFunc func() string
+
 	// calls tracks calls to the methods.
 	calls struct {
 		// HighlightLines holds details about calls to the HighlightLines method.
@@ -37,8 +49,18 @@ type SyntaxHighlighterMock struct {
 			// Lines is the lines argument value.
 			Lines []diff.DiffLine
 		}
+		// SetStyle holds details about calls to the SetStyle method.
+		SetStyle []struct {
+			// StyleName is the styleName argument value.
+			StyleName string
+		}
+		// StyleName holds details about calls to the StyleName method.
+		StyleName []struct {
+		}
 	}
 	lockHighlightLines sync.RWMutex
+	lockSetStyle       sync.RWMutex
+	lockStyleName      sync.RWMutex
 }
 
 // HighlightLines calls HighlightLinesFunc.
@@ -74,5 +96,64 @@ func (mock *SyntaxHighlighterMock) HighlightLinesCalls() []struct {
 	mock.lockHighlightLines.RLock()
 	calls = mock.calls.HighlightLines
 	mock.lockHighlightLines.RUnlock()
+	return calls
+}
+
+// SetStyle calls SetStyleFunc.
+func (mock *SyntaxHighlighterMock) SetStyle(styleName string) bool {
+	if mock.SetStyleFunc == nil {
+		panic("SyntaxHighlighterMock.SetStyleFunc: method is nil but SyntaxHighlighter.SetStyle was just called")
+	}
+	callInfo := struct {
+		StyleName string
+	}{
+		StyleName: styleName,
+	}
+	mock.lockSetStyle.Lock()
+	mock.calls.SetStyle = append(mock.calls.SetStyle, callInfo)
+	mock.lockSetStyle.Unlock()
+	return mock.SetStyleFunc(styleName)
+}
+
+// SetStyleCalls gets all the calls that were made to SetStyle.
+// Check the length with:
+//
+//	len(mockedSyntaxHighlighter.SetStyleCalls())
+func (mock *SyntaxHighlighterMock) SetStyleCalls() []struct {
+	StyleName string
+} {
+	var calls []struct {
+		StyleName string
+	}
+	mock.lockSetStyle.RLock()
+	calls = mock.calls.SetStyle
+	mock.lockSetStyle.RUnlock()
+	return calls
+}
+
+// StyleName calls StyleNameFunc.
+func (mock *SyntaxHighlighterMock) StyleName() string {
+	if mock.StyleNameFunc == nil {
+		panic("SyntaxHighlighterMock.StyleNameFunc: method is nil but SyntaxHighlighter.StyleName was just called")
+	}
+	callInfo := struct {
+	}{}
+	mock.lockStyleName.Lock()
+	mock.calls.StyleName = append(mock.calls.StyleName, callInfo)
+	mock.lockStyleName.Unlock()
+	return mock.StyleNameFunc()
+}
+
+// StyleNameCalls gets all the calls that were made to StyleName.
+// Check the length with:
+//
+//	len(mockedSyntaxHighlighter.StyleNameCalls())
+func (mock *SyntaxHighlighterMock) StyleNameCalls() []struct {
+} {
+	var calls []struct {
+	}
+	mock.lockStyleName.RLock()
+	calls = mock.calls.StyleName
+	mock.lockStyleName.RUnlock()
 	return calls
 }

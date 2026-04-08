@@ -189,3 +189,19 @@ func TestWriteTokenANSI_WithAttributes(t *testing.T) {
 		}
 	})
 }
+
+func TestSetStyle(t *testing.T) {
+	h := New("monokai", true)
+	assert.Equal(t, "monokai", h.StyleName())
+
+	ok := h.SetStyle("dracula")
+	assert.True(t, ok)
+	assert.Equal(t, "dracula", h.StyleName())
+}
+
+func TestSetStyle_unknownStyle(t *testing.T) {
+	h := New("monokai", true)
+	ok := h.SetStyle("nonexistent-style-xyz")
+	assert.False(t, ok)
+	assert.Equal(t, "monokai", h.StyleName(), "style should not change on failure")
+}

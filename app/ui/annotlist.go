@@ -167,12 +167,21 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 	leftLen := titleStart - 1
 	rightLen := max(popupWidth-titleStart-titleWidth+1, 0)
 
-	newTop := lipgloss.NewStyle().Foreground(lipgloss.Color(borderColor)).Render(
+	// use raw ANSI sequences instead of lipgloss.Render() to avoid
+	// \033[0m full reset which would break the popup's background color
+	bgSeq := ""
+	bgReset := ""
+	if m.styles.colors.DiffBg != "" {
+		bgSeq = m.ansiBg(m.styles.colors.DiffBg)
+		bgReset = "\033[49m"
+	}
+	newTop := bgSeq + m.ansiFg(borderColor) +
 		border.TopLeft +
-			strings.Repeat(border.Top, leftLen) +
-			title +
-			strings.Repeat(border.Top, rightLen) +
-			border.TopRight)
+		strings.Repeat(border.Top, leftLen) +
+		title +
+		strings.Repeat(border.Top, rightLen) +
+		border.TopRight +
+		"\033[39m" + bgReset
 
 	boxLines[0] = newTop
 	return strings.Join(boxLines, "\n")

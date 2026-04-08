@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/app/diff"
 )
 
 func TestFileTree_BuildEntries(t *testing.T) {
@@ -584,4 +586,21 @@ func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
 	result = ft.render(40, 10, annotated, s)
 	assert.Contains(t, result, "✓")
 	assert.Contains(t, result, "*")
+}
+
+func TestFileTree_RenderFileEntryRestoresNormalForegroundAfterColoredPrefix(t *testing.T) {
+	ft := newFileTreeFromEntries([]diff.FileEntry{{Path: "a.go", Status: diff.FileAdded}})
+	ft.cursor = 0 // keep the file unselected so the inline ANSI path is used
+	ft.toggleReviewed("a.go")
+
+	s := newStyles(Colors{
+		Normal: "#d0d0d0",
+		AddFg:  "#87d787",
+		Muted:  "#6c6c6c",
+	})
+
+	line := ft.renderFileEntry(ft.entries[1], 1, 40, nil, s)
+
+	assert.Contains(t, line, "\033[38;2;135;215;135m✓\033[38;2;208;208;208m ")
+	assert.Contains(t, line, "\033[38;2;135;215;135mA\033[38;2;208;208;208m a.go")
 }

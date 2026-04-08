@@ -287,13 +287,14 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles 
 	isSelected := idx == ft.cursor
 	hasStatuses := len(ft.fileStatuses) > 0
 
-	// plain ✓ when selected to avoid lipgloss reset breaking FileSelected background
+	// use raw ANSI fg-only sequences for inline colored elements to avoid
+	// lipgloss \033[0m full reset that breaks outer TreeBg backgrounds.
 	reviewMark := "  "
 	if ft.reviewed[e.path] {
 		if isSelected {
 			reviewMark = "✓ "
 		} else {
-			reviewMark = s.ReviewedMark.Render("✓") + " "
+			reviewMark = coloredTextWithReset(s.colors.AddFg, "✓", s.colors.Normal) + " "
 		}
 	}
 
@@ -306,13 +307,13 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles 
 		case isSelected:
 			statusMark = string(status) + " "
 		default:
-			statusMark = s.fileStatusStyle(status).Render(string(status)) + " "
+			statusMark = coloredTextWithReset(s.fileStatusFg(status), string(status), s.colors.Normal) + " "
 		}
 	}
 
 	marker := "  "
 	if annotatedFiles[e.path] {
-		marker = s.AnnotationMark.Render(" *")
+		marker = coloredText(s.colors.Annotation, " *")
 	}
 
 	prefix := reviewMark + statusMark
