@@ -198,8 +198,8 @@ Split into logic tests and rendering/UI tests.
 
 ### Task 10: [Final] Update documentation
 
-- [ ] update CLAUDE.md project structure section to reflect new file layout
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update CLAUDE.md project structure section to reflect new file layout
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
