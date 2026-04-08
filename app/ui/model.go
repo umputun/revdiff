@@ -232,6 +232,21 @@ func (m Model) loadFiles() tea.Cmd {
 		if err != nil {
 			return filesLoadedMsg{entries: entries, err: err}
 		}
+		// include staged-only files (new files added to index but not yet committed)
+		if m.ref == "" && !m.staged {
+			stagedEntries, stagedErr := m.renderer.ChangedFiles("", true)
+			if stagedErr == nil {
+				stagedSet := make(map[string]bool, len(entries))
+				for _, e := range entries {
+					stagedSet[e.Path] = true
+				}
+				for _, se := range stagedEntries {
+					if !stagedSet[se.Path] {
+						entries = append(entries, se)
+					}
+				}
+			}
+		}
 		// append untracked files when toggle is on
 		if m.showUntracked && m.loadUntracked != nil {
 			ut, utErr := m.loadUntracked()
