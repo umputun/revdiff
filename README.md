@@ -1,4 +1,4 @@
-# <img src="assets/logo.png" alt="" width="28">&nbsp;revdiff &nbsp;<a href="https://github.com/umputun/revdiff/actions/workflows/ci.yml"><img src="https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg" alt="build"></a> <a href="https://coveralls.io/github/umputun/revdiff?branch=master"><img src="https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master" alt="Coverage Status"></a> <a href="https://goreportcard.com/report/github.com/umputun/revdiff"><img src="https://goreportcard.com/badge/github.com/umputun/revdiff" alt="Go Report Card"></a>
+# <img src="site/assets/logo.png" alt="" width="28">&nbsp;revdiff &nbsp;<a href="https://github.com/umputun/revdiff/actions/workflows/ci.yml"><img src="https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg" alt="build"></a> <a href="https://coveralls.io/github/umputun/revdiff?branch=master"><img src="https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master" alt="Coverage Status"></a> <a href="https://goreportcard.com/report/github.com/umputun/revdiff"><img src="https://goreportcard.com/badge/github.com/umputun/revdiff" alt="Go Report Card"></a>
 
 TUI for reviewing diffs, files, and documents with inline annotations. Outputs structured annotations to stdout on quit, making it easy to pipe results into AI agents, scripts, or other tools.
 
@@ -11,6 +11,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Line numbers: side-by-side old/new line number gutter, toggle with `L`
+- Git blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
@@ -23,14 +24,15 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
+- Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
 - Fully customizable colors via environment variables, CLI flags, or config file
 - Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
 
-![revdiff screenshot](assets/screenshot.png)
+![revdiff screenshot](site/assets/screenshot.png)
 
 ## Requirements
 
-- `git` (used to generate diffs; optional when using `--only` for standalone file review)
+- `git` (used to generate diffs; optional when using `--only` or `--stdin`)
 
 ## Installation
 
@@ -38,12 +40,6 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 ```bash
 brew install umputun/apps/revdiff
-```
-
-**Go install:**
-
-```bash
-go install github.com/umputun/revdiff/cmd/revdiff@latest
 ```
 
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
@@ -59,12 +55,13 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
 | **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
+| **Kaku** | `kaku cli split-pane` (same API as wezterm) | `$WEZTERM_PANE` env var |
 | **cmux** | `cmux new-split` + `cmux send` | `$CMUX_SURFACE_ID` env var |
 | **ghostty** | AppleScript split + zoom (macOS only) | `$TERM_PROGRAM` + AppleScript probe |
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: tmux → kitty → wezterm → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: tmux → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
 
 > **Note:** cmux is detected before ghostty because cmux also sets `$TERM_PROGRAM=ghostty`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 
@@ -129,23 +126,7 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 
 #### OpenCode
 
-Drop-in configs for [OpenCode](https://opencode.ai) are available in [`plugins/opencode/`](plugins/opencode/). They add a `/revdiff` slash command and a tool that lets OpenCode launch revdiff directly from the chat.
-
-```sh
-bash plugins/opencode/setup.sh
-```
-
-The script copies the tool and command files to `~/.config/opencode/` and also installs `launch-plan-review.sh` to `~/.config/opencode/tools/`. Or manually:
-
-```sh
-mkdir -p ~/.config/opencode/tools ~/.config/opencode/commands
-cp plugins/opencode/tools/revdiff.ts ~/.config/opencode/tools/
-cp plugins/opencode/commands/revdiff.md ~/.config/opencode/commands/
-cp plugins/revdiff-planning/scripts/launch-plan-review.sh ~/.config/opencode/tools/
-chmod +x ~/.config/opencode/tools/launch-plan-review.sh
-```
-
-Restart OpenCode after installing — tools and commands are loaded at startup.
+See 'plugins/opencode/README.md'
 
 #### General
 
@@ -186,6 +167,7 @@ Positional arguments support several forms:
 | `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
+| `--blame` | Show git blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
@@ -193,6 +175,8 @@ Positional arguments support several forms:
 | `--list-themes` | Print available theme names to stdout and exit | |
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
 | `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
+| `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
+| `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
@@ -337,6 +321,12 @@ revdiff --only=/tmp/plan.md
 
 # review a file that has no git changes (context-only view with annotations)
 revdiff --only=docs/notes.txt
+
+# review arbitrary piped text as a scratch buffer
+printf '# Plan\n\nShip it\n' | revdiff --stdin --stdin-name plan.md
+
+# capture annotations from generated output
+some-command | revdiff --stdin --output /tmp/annotations.txt
 ```
 
 ### All-Files Mode
@@ -369,11 +359,40 @@ Two scenarios trigger this mode:
 1. **Inside a git repo** - `--only` files not in the diff are read from disk and shown alongside any changed files
 2. **Outside a git repo** - `--only` is required; files are read directly from disk
 
+### Scratch-Buffer Review
+
+Use `--stdin` to review arbitrary piped or redirected text as a single synthetic file. All lines are shown as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.
+
+`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, and `--exclude`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
+
+Use `--stdin-name` to control the synthetic filename. This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
+
+```bash
+echo "plain text" | revdiff --stdin
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
+git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md
+```
+
 ### Markdown TOC Navigation
 
-When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
+When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md` or `printf '# title\n' | revdiff --stdin --stdin-name plan.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
 
 This mode activates when all three conditions are met: single file, markdown extension (`.md`/`.markdown`), and all lines are context (no diff changes). Headers inside fenced code blocks are excluded from the TOC.
+
+### Beyond Code Review
+
+The `--only` flag enables use cases beyond git diffs. Any text file can be loaded for annotation — no git repo required.
+
+**Reviewing AI-generated drafts** — When an AI assistant drafts text to be posted publicly (PR comments, issue responses, release notes), write it to a temp file and review in revdiff. Annotate specific lines with changes, the assistant reads annotations and rewrites, re-open to verify. Same annotate-fix-verify loop as code review.
+
+**Reviewing documentation and specs** — Markdown files, API specs, config files, and plan documents can all be reviewed with inline annotations. Useful for reviewing RFCs, annotating configs before deployment, or marking up plans with questions.
+
+```bash
+revdiff --only=docs/plans/feature.md
+revdiff --only=/tmp/draft-comment.md
+```
+
+**Reviewing generated output** — CI configs, Terraform plans, generated migrations, or command output. Load files with `--only` or stream ephemeral output with `--stdin`, annotate what needs fixing, feed annotations back to the generator.
 
 ### Key Bindings
 
@@ -419,6 +438,7 @@ This mode activates when all three conditions are met: single file, markdown ext
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
+| `B` | Toggle git blame gutter (author name + commit age per line) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
@@ -479,9 +499,14 @@ consider splitting this file into smaller modules
 ## handler.go:43 (+)
 use errors.Is() instead of direct comparison
 
+## handler.go:43-67 (+)
+refactor this hunk to reduce nesting
+
 ## store.go:18 (-)
 don't remove this validation
 ```
+
+When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
 ## Contributing
 

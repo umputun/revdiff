@@ -21,6 +21,8 @@ revdiff --all-files --exclude vendor # browse all files, excluding vendor direct
 revdiff main --exclude vendor        # diff against main, excluding vendor
 revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
+printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md  # review piped text as markdown
+some-command | revdiff --stdin --output /tmp/annotations.txt      # annotate generated output
 ```
 
 ## Single-File Mode
@@ -54,6 +56,14 @@ When `--only` specifies a file that has no git changes (or when no git repo exis
 
 - **Inside a git repo**: `--only` files not in the diff are read from disk alongside changed files
 - **Outside a git repo**: `--only` is required; files are read directly from disk
+
+## Scratch-Buffer Review
+
+Use `--stdin` to review arbitrary piped or redirected text as one synthetic file. All lines are treated as context, so single-file mode, inline annotations, file-level notes, search, wrap, collapsed mode, and structured output all work unchanged.
+
+- `--stdin` is explicit and requires piped or redirected input
+- `--stdin-name` sets the synthetic filename used in annotations and syntax highlighting
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, and `--exclude`
 
 ## Key Bindings
 
@@ -99,6 +109,7 @@ When `--only` specifies a file that has no git changes (or when no git repo exis
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
+| `B` | Toggle git blame gutter (author name + commit age per line) |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `f` | Toggle filter: all files / annotated only |
 | `?` | Toggle help overlay showing all keybindings |
@@ -132,10 +143,15 @@ consider splitting this file into smaller modules
 ## handler.go:43 (+)
 use errors.Is() instead of direct comparison
 
+## handler.go:43-67 (+)
+refactor this hunk to reduce nesting
+
 ## store.go:18 (-)
 don't remove this validation
 ```
 
-Each annotation block: `## filename:line (type)` where type is `(+)` added, `(-)` removed, or `(file-level)`.
+Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added, `(-)` removed, or `(file-level)`. The `-end` suffix is included when the annotation covers a line range.
+
+When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.

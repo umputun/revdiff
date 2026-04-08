@@ -2,7 +2,7 @@ version: 2
 
 builds:
   - id: revdiff
-    main: ./cmd/revdiff
+    main: ./app
     binary: revdiff
     env:
       - CGO_ENABLED=0
