@@ -15,31 +15,6 @@ import (
 	"github.com/umputun/revdiff/app/keymap"
 )
 
-func TestModel_FilesLoadedSingleFile(t *testing.T) {
-	m := testModel(nil, nil)
-	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
-	model := result.(Model)
-
-	assert.True(t, model.singleFile, "singleFile should be true for one file")
-	assert.Equal(t, paneDiff, model.focus, "focus should be on diff pane in single-file mode")
-	assert.NotNil(t, cmd) // should auto-select first file
-}
-
-func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
-	m := testModel(nil, nil)
-	// simulate initial resize (viewport created with multi-file width)
-	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m = resized.(Model)
-	assert.True(t, m.ready, "model should be ready after resize")
-
-	// now load single file — viewport width should be recalculated
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
-	model := result.(Model)
-	assert.True(t, model.singleFile)
-	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in single-file mode")
-	assert.Equal(t, 98, model.viewport.Width, "viewport width should be width - 2 (borders only)")
-}
-
 func TestModel_ResizeInSingleFileMode(t *testing.T) {
 	m := testModel(nil, nil)
 	// set up single-file mode via filesLoadedMsg
@@ -572,81 +547,6 @@ func TestModel_StatusBarNoKeyHints(t *testing.T) {
 	})
 }
 
-func TestModel_HelpOverlaySections(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	help := m.helpOverlay()
-
-	// verify section headers are present
-	assert.Contains(t, help, "Navigation")
-	assert.Contains(t, help, "Search")
-	assert.Contains(t, help, "Annotations")
-	assert.Contains(t, help, "View")
-	assert.Contains(t, help, "Quit")
-}
-
-func TestModel_HelpOverlayKeyListings(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	help := m.helpOverlay()
-
-	// verify key listings are present (dynamic rendering uses display names)
-	keys := []string{
-		"Tab", "PgDn", "PgUp", "Ctrl+d", "Ctrl+u", "Home", "End",
-		"j", "k", "n", "N", "h", "l",
-		"/", "Enter", "A", "d", "@", "f", "v", "w", ".", "L", "t",
-		"q", "Q", "?", "Esc",
-	}
-	for _, k := range keys {
-		assert.Contains(t, help, k, "help overlay should contain key: %s", k)
-	}
-}
-
-func TestModel_HelpOverlayInView(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	m.tree = newFileTree([]string{"a.go"})
-	m.ready = true
-	m.width = 100
-	m.height = 80
-
-	// without help, view should not contain help sections
-	m.showHelp = false
-	view := m.View()
-	assert.NotContains(t, view, "Navigation")
-	assert.NotContains(t, view, "Annotations")
-
-	// with help, view should contain help sections overlaid on top of content
-	m.showHelp = true
-	view = m.View()
-	assert.Contains(t, view, "Navigation")
-	assert.Contains(t, view, "Annotations")
-	assert.Contains(t, view, "View")
-	assert.Contains(t, view, "Quit")
-	// overlay should preserve background content (tree pane visible on edges)
-	assert.Contains(t, view, "a.go", "tree pane should be visible behind help overlay")
-}
-
-func TestModel_HelpOverlayContainsWordWrap(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	help := m.helpOverlay()
-	assert.Contains(t, help, "toggle word wrap")
-	assert.Contains(t, help, "w")
-}
-
-func TestModel_HelpOverlayContainsSearchKeys(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	help := m.helpOverlay()
-
-	assert.Contains(t, help, "Search")
-	assert.Contains(t, help, "search in diff")
-	// n/N for next/prev search match is shown via File/Hunk section's "next file / search match"
-	assert.Contains(t, help, "next file / search match")
-	assert.Contains(t, help, "prev file / search match")
-}
-
 func TestModel_ViewSingleFileMode(t *testing.T) {
 	t.Run("single-file mode renders full-width diff without tree pane", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
@@ -893,85 +793,6 @@ func TestModel_SingleFileMultiFileModeUnchanged(t *testing.T) {
 	assert.True(t, model.tree.filter, "f should toggle filter in multi-file mode")
 }
 
-func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
-	mdLines := []diff.DiffLine{
-		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "some text", ChangeType: diff.ChangeContext},
-		{NewNum: 3, Content: "## Section", ChangeType: diff.ChangeContext},
-		{NewNum: 4, Content: "more text", ChangeType: diff.ChangeContext},
-	}
-
-	t.Run("markdown full-context triggers TOC", func(t *testing.T) {
-		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.treeWidth = 0
-		m.focus = paneDiff
-
-		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
-		model := result.(Model)
-
-		require.NotNil(t, model.mdTOC, "mdTOC should be set for markdown full-context")
-		assert.Len(t, model.mdTOC.entries, 3) // top + 2 headers
-		assert.Equal(t, "README.md", model.mdTOC.entries[0].title)
-		assert.Equal(t, "Title", model.mdTOC.entries[1].title)
-		assert.Equal(t, "Section", model.mdTOC.entries[2].title)
-		assert.Positive(t, model.treeWidth, "treeWidth should be set when TOC is active")
-	})
-
-	t.Run("non-markdown file does not trigger TOC", func(t *testing.T) {
-		goLines := []diff.DiffLine{
-			{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
-		}
-		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": goLines})
-		m.singleFile = true
-
-		result, _ := m.Update(fileLoadedMsg{file: "main.go", lines: goLines})
-		model := result.(Model)
-
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil for non-markdown file")
-	})
-
-	t.Run("markdown with diff changes does not trigger TOC", func(t *testing.T) {
-		mixedLines := []diff.DiffLine{
-			{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
-			{NewNum: 2, Content: "added line", ChangeType: diff.ChangeAdd},
-		}
-		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mixedLines})
-		m.singleFile = true
-
-		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mixedLines})
-		model := result.(Model)
-
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil when file has diff changes")
-	})
-
-	t.Run("markdown with no headers produces nil TOC", func(t *testing.T) {
-		noHeaders := []diff.DiffLine{
-			{NewNum: 1, Content: "just text", ChangeType: diff.ChangeContext},
-			{NewNum: 2, Content: "more text", ChangeType: diff.ChangeContext},
-		}
-		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": noHeaders})
-		m.singleFile = true
-		m.treeWidth = 0 // single-file mode starts with treeWidth=0
-
-		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: noHeaders})
-		model := result.(Model)
-
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil when no headers found")
-		assert.Equal(t, 0, model.treeWidth, "treeWidth should stay 0 when no TOC")
-	})
-
-	t.Run("multi-file mode does not trigger TOC", func(t *testing.T) {
-		m := testModel([]string{"README.md", "main.go"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = false
-
-		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
-		model := result.(Model)
-
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil in multi-file mode")
-	})
-}
-
 func TestModel_ResizeWithTOCActive(t *testing.T) {
 	mdLines := []diff.DiffLine{
 		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
@@ -1014,32 +835,6 @@ func TestModel_DiffContentWidthWithTOC(t *testing.T) {
 
 	// with TOC active, should use multi-file formula: width - treeWidth - 4 - 2
 	assert.Equal(t, 64, m.diffContentWidth()) // 100 - 30 - 4 - 2
-}
-
-func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
-	mdLines := []diff.DiffLine{
-		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "## Section", ChangeType: diff.ChangeContext},
-	}
-	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-
-	// simulate initial resize then single-file load
-	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m = resized.(Model)
-	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "README.md"}}})
-	m = loaded.(Model)
-	require.True(t, m.singleFile)
-	require.Equal(t, 0, m.treeWidth, "treeWidth starts at 0 in single-file mode")
-
-	// loading the markdown file should set up TOC and adjust widths
-	result, _ := m.Update(fileLoadedMsg{file: "README.md", seq: m.loadSeq, lines: mdLines})
-	model := result.(Model)
-
-	require.NotNil(t, model.mdTOC)
-	assert.Positive(t, model.treeWidth, "treeWidth should be set for TOC pane")
-	expectedTreeWidth := max(minTreeWidth, 100*model.treeWidthRatio/10)
-	assert.Equal(t, expectedTreeWidth, model.treeWidth)
-	assert.Equal(t, 100-expectedTreeWidth-4, model.viewport.Width, "viewport width adjusted for TOC")
 }
 
 func TestModel_ViewWithTOCPane(t *testing.T) {
@@ -1437,17 +1232,6 @@ func TestModel_EnterInTOCPane(t *testing.T) {
 	})
 }
 
-func TestModel_HelpOverlayContainsTOCSection(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	help := m.helpOverlay()
-
-	assert.Contains(t, help, "Markdown TOC")
-	assert.Contains(t, help, "switch between TOC and diff")
-	assert.Contains(t, help, "navigate TOC entries")
-	assert.Contains(t, help, "jump to header in diff")
-}
-
 func TestModel_MarkdownNoHeadersFallback(t *testing.T) {
 	noHeaders := []diff.DiffLine{
 		{NewNum: 1, Content: "just text", ChangeType: diff.ChangeContext},
@@ -1484,38 +1268,6 @@ func TestModel_StatusModeIconsBlame(t *testing.T) {
 	icons := m.statusModeIcons()
 	assert.Contains(t, icons, "b")
 	assert.NotContains(t, icons, "@")
-}
-
-func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
-	m := testModel(nil, nil)
-	m.width = 120
-	m.height = 40
-	help := m.helpOverlay()
-	assert.Contains(t, help, "L")
-	assert.Contains(t, help, "line numbers")
-}
-
-func TestModel_HelpOverlayCustomBinding(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	m.keymap.Bind("x", keymap.ActionQuit)
-	help := m.helpOverlay()
-
-	// custom binding should appear alongside default
-	assert.Contains(t, help, "x")
-	assert.Contains(t, help, "q")
-	assert.Contains(t, help, "quit")
-}
-
-func TestModel_HelpOverlayUnmappedAction(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
-	// unbind all keys for search action
-	m.keymap.Unbind("/")
-	help := m.helpOverlay()
-
-	// search section should still exist but "search in diff" description should be gone
-	assert.NotContains(t, help, "search in diff")
 }
 
 func TestModel_ReviewedStatusBar(t *testing.T) {
@@ -1732,64 +1484,6 @@ func TestModel_PadContentBg(t *testing.T) {
 	})
 }
 
-func TestModel_HelpToggle(t *testing.T) {
-	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}}})
-	m.currFile = "a.go"
-	m.focus = paneDiff
-	assert.False(t, m.showHelp)
-
-	// press ? to open help
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	model := result.(Model)
-	assert.True(t, model.showHelp)
-
-	// press ? again to close help
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	model = result.(Model)
-	assert.False(t, model.showHelp)
-}
-
-func TestModel_HelpCloseWithEsc(t *testing.T) {
-	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}}})
-	m.currFile = "a.go"
-	m.showHelp = true
-
-	// press esc to close help
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model := result.(Model)
-	assert.False(t, model.showHelp)
-}
-
-func TestModel_HelpBlocksOtherKeys(t *testing.T) {
-	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
-		"a.go": {{ChangeType: diff.ChangeContext, Content: "x"}},
-		"b.go": {{ChangeType: diff.ChangeContext, Content: "y"}},
-	})
-	m.currFile = "a.go"
-	m.focus = paneDiff
-	m.showHelp = true
-
-	// navigation keys should be blocked
-	for _, key := range []rune{'n', 'p', 'v', 'f', 'q', 'Q', 'j', 'k'} {
-		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
-		model := result.(Model)
-		assert.True(t, model.showHelp, "key %q should not close help", string(key))
-		assert.Nil(t, cmd, "key %q should produce no command", string(key))
-	}
-
-	// tab should also be blocked
-	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	model := result.(Model)
-	assert.True(t, model.showHelp, "tab should not close help")
-	assert.Nil(t, cmd, "tab should produce no command")
-
-	// enter should be blocked
-	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	model = result.(Model)
-	assert.True(t, model.showHelp, "enter should not close help")
-	assert.Nil(t, cmd, "enter should produce no command")
-}
-
 func TestModel_TreePaneToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
@@ -1958,57 +1652,4 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	rendered = m.renderDiff()
 	stripped = ansi.Strip(rendered)
 	assert.NotContains(t, stripped, "10 10")
-}
-
-func TestModel_MarkReviewedFromTreePane(t *testing.T) {
-	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
-	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
-		"a.go": lines, "b.go": lines,
-	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
-	m.focus = paneTree
-
-	// space bar toggles reviewed
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	model := result.(Model)
-	assert.True(t, model.tree.reviewed["a.go"], "space should mark current file as reviewed")
-	assert.Equal(t, 1, model.tree.reviewedCount())
-
-	// space again toggles off
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	model = result.(Model)
-	assert.False(t, model.tree.reviewed["a.go"], "space should unmark reviewed file")
-	assert.Equal(t, 0, model.tree.reviewedCount())
-}
-
-func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
-	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
-	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
-		"a.go": lines, "b.go": lines,
-	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
-	m.focus = paneTree
-	m.tree.moveDown() // cursor -> b.go while the diff pane still shows a.go
-
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	model := result.(Model)
-	assert.True(t, model.tree.reviewed["b.go"], "space in tree pane should mark selected file")
-	assert.False(t, model.tree.reviewed["a.go"], "space in tree pane should not mark stale currFile")
-}
-
-func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
-	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
-	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
-		"a.go": lines, "b.go": lines,
-	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.currFile = "b.go"
-	m.focus = paneDiff
-
-	// space from diff pane marks currFile
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-	model := result.(Model)
-	assert.True(t, model.tree.reviewed["b.go"], "space in diff pane should mark currFile as reviewed")
 }

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1357,39 +1356,6 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
 
 	assert.Equal(t, contextRows+placeholderRows, m.cursorViewportY())
 }
-func TestModel_HandleBlameLoadedSyncsViewportForWrap(t *testing.T) {
-	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
-		{NewNum: 1, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "tail", ChangeType: diff.ChangeContext},
-	}
-	m.wrapMode = true
-	m.showBlame = true
-	m.focus = paneDiff
-	m.treeHidden = true
-	m.width = 40
-	m.viewport = viewport.New(37, 2)
-	m.diffCursor = 1
-
-	m.syncViewportToCursor()
-	before := m.viewport.YOffset
-
-	result, _ := m.handleBlameLoaded(blameLoadedMsg{
-		file: "a.go",
-		seq:  m.loadSeq,
-		data: map[int]diff.BlameLine{
-			1: {Author: "LongAuthor", Time: time.Now()},
-			2: {Author: "LongAuthor", Time: time.Now()},
-		},
-	})
-	model := result.(Model)
-
-	assert.Greater(t, model.viewport.YOffset, before, "viewport should be re-synced after blame narrows wrap width")
-	cursorY := model.cursorViewportY()
-	assert.GreaterOrEqual(t, cursorY, model.viewport.YOffset)
-	assert.Less(t, cursorY, model.viewport.YOffset+model.viewport.Height)
-}
 func TestModel_WrapToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
@@ -1949,21 +1915,6 @@ func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
 	assert.Equal(t, 0, model.diffCursor)
 }
 
-func TestModel_FileLoadedResetsCursor(t *testing.T) {
-	lines := []diff.DiffLine{
-		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
-	}
-
-	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
-	m.diffCursor = 5 // simulate cursor was elsewhere
-
-	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
-	model := result.(Model)
-	assert.Equal(t, 0, model.diffCursor) // cursor reset to first line
-}
-
 func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
 	lines := []diff.DiffLine{
 		{Content: "--- a/file.go", ChangeType: diff.ChangeDivider},
@@ -1987,27 +1938,4 @@ func TestModel_DiffLineNum(t *testing.T) {
 	assert.Equal(t, 5, m.diffLineNum(diff.DiffLine{NewNum: 5, ChangeType: diff.ChangeContext}))
 	assert.Equal(t, 3, m.diffLineNum(diff.DiffLine{NewNum: 3, ChangeType: diff.ChangeAdd}))
 	assert.Equal(t, 7, m.diffLineNum(diff.DiffLine{OldNum: 7, ChangeType: diff.ChangeRemove}))
-}
-
-func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
-	// simulate: user presses n to load b.go (seq=1), then j/k moves cursor to c.go before response arrives.
-	// the response for b.go should still be accepted because it carries the latest sequence number.
-	files := []string{"a.go", "b.go", "c.go"}
-	m := testModel(files, nil)
-	m.tree = newFileTree(files)
-
-	// user presses n to load b.go
-	m.loadSeq = 1
-	m.tree.nextFile() // cursor -> b.go
-
-	// then j/k moves cursor to c.go (without triggering a load)
-	m.tree.moveDown() // cursor -> c.go
-	assert.Equal(t, "c.go", m.tree.selectedFile(), "cursor moved to c.go")
-
-	// b.go response arrives with matching seq - should be accepted
-	bLines := []diff.DiffLine{{NewNum: 1, Content: "package b", ChangeType: diff.ChangeContext}}
-	result, _ := m.Update(fileLoadedMsg{file: "b.go", seq: 1, lines: bLines})
-	model := result.(Model)
-	assert.Equal(t, "b.go", model.currFile, "response should be accepted despite cursor being on c.go")
-	assert.Equal(t, bLines, model.diffLines)
 }

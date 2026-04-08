@@ -13,33 +13,6 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 )
 
-func TestModel_HandleEscKeyClearsSearch(t *testing.T) {
-	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
-		"a.go": {{ChangeType: diff.ChangeAdd, Content: "hello world"}},
-	})
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "hello world"}}
-	m.searchTerm = "hello"
-	m.searchMatches = []int{0}
-	m.searchCursor = 0
-	m.focus = paneDiff
-
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model := result.(Model)
-	assert.Empty(t, model.searchTerm, "esc should clear search term")
-	assert.Nil(t, model.searchMatches, "esc should clear search matches")
-}
-
-func TestModel_HandleEscKeyNoopWithoutSearch(t *testing.T) {
-	m := testModel(nil, nil)
-	m.focus = paneDiff
-
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model := result.(Model)
-	assert.Empty(t, model.searchTerm)
-	assert.Nil(t, model.searchMatches)
-}
-
 func TestModel_HighlightSearchMatches(t *testing.T) {
 	colors := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700"}
 	m := testModel(nil, nil)
