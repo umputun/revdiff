@@ -89,10 +89,11 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp     bool // true when help overlay is visible
-	wrapMode     bool // true when line wrapping is enabled
-	lineNumbers  bool // true when line numbers are shown in gutter
-	lineNumWidth int  // digit width for line number columns (max digits across old/new nums)
+	showHelp       bool // true when help overlay is visible
+	wrapMode       bool // true when line wrapping is enabled
+	crossFileHunks bool // allow [ and ] to jump across file boundaries
+	lineNumbers    bool // true when line numbers are shown in gutter
+	lineNumWidth   int  // digit width for line number columns (max digits across old/new nums)
 
 	blamer         Blamer                 // optional blame provider (nil when git unavailable)
 	showBlame      bool                   // true when blame gutter is shown
@@ -155,6 +156,7 @@ type ModelConfig struct {
 	NoConfirmDiscard bool           // skip confirmation prompt when discarding annotations
 	Wrap             bool           // enable line wrapping
 	Collapsed        bool           // start in collapsed diff mode
+	CrossFileHunks   bool           // allow [ and ] to jump across file boundaries
 	LineNumbers      bool           // show line numbers in diff gutter
 	ShowBlame        bool           // show blame gutter on startup when available
 	Only             []string       // show only these files (match by exact path or path suffix)
@@ -194,6 +196,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
+		crossFileHunks:   cfg.CrossFileHunks,
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
@@ -301,13 +304,17 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	action := m.keymap.Resolve(msg.String())
 
 	// help overlay: toggle with help action, dismiss with esc, block everything else
-	if m.helpActive(action) {
+	if action == keymap.ActionHelp || m.showHelp {
 		return m.handleHelpKey(msg)
 	}
 
 	switch action {
 	case keymap.ActionAnnotList:
-		return m.openAnnotList()
+		m.annotListItems = m.buildAnnotListItems()
+		m.annotListCursor = 0
+		m.annotListOffset = 0
+		m.showAnnotList = true
+		return m, nil
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -792,6 +799,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
 		a := *m.pendingAnnotJump
 		m.pendingAnnotJump = nil
+		m.pendingHunkJump = nil
 		m.positionOnAnnotation(a)
 		return m, blameCmd
 	}
@@ -803,9 +811,15 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		if forward {
 			m.diffCursor = -1
 			m.moveToNextHunk()
+			if m.diffCursor == -1 {
+				m.skipInitialDividers()
+			}
 		} else {
 			m.diffCursor = len(m.diffLines)
 			m.moveToPrevHunk()
+			if m.diffCursor == len(m.diffLines) {
+				m.skipInitialDividers()
+			}
 		}
 		m.centerViewportOnCursor()
 		return m, blameCmd
@@ -1593,11 +1607,6 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 	return m, nil
-}
-
-// helpActive returns true when the help overlay should intercept a key.
-func (m *Model) helpActive(action keymap.Action) bool {
-	return action == keymap.ActionHelp || m.showHelp
 }
 
 // handleHelpKey handles help overlay keys.

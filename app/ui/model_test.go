@@ -7733,6 +7733,7 @@ func TestModel_HunkNav_NextCrossesFileForward(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.crossFileHunks = true
 	m.focus = paneDiff
 	m.diffCursor = 0 // at the only (last) hunk
 
@@ -7752,6 +7753,7 @@ func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.crossFileHunks = true
 	// tree: index 0 = dir entry, index 1 = a.go, index 2 = b.go
 	m.tree.cursor = 2
 	m.loadSeq++
@@ -7811,6 +7813,7 @@ func TestModel_HunkNav_SingleFileNoCrossFile(t *testing.T) {
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
+	m.crossFileHunks = true
 	m.singleFile = true
 	m.treeWidth = 0
 	m.focus = paneDiff
@@ -7837,6 +7840,7 @@ func TestModel_HunkNav_CrossFile_LandsOnFirstHunk(t *testing.T) {
 		"b.go": bLines,
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.crossFileHunks = true
 	m.focus = paneDiff
 	m.diffCursor = 0 // at the only hunk of a.go
 
@@ -7867,6 +7871,7 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.crossFileHunks = true
 	// tree: index 0 = dir entry, index 1 = a.go, index 2 = b.go; navigate to b.go
 	m.tree.cursor = 2
 	m.loadSeq++
@@ -7890,4 +7895,76 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
 	assert.Equal(t, "a.go", model.currFile, "should have navigated to a.go")
 	assert.Equal(t, 2, model.diffCursor, "should land on last hunk of a.go (index 2)")
+}
+
+func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.focus = paneDiff
+	m.diffCursor = 0
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.Nil(t, model.pendingHunkJump)
+	assert.Equal(t, "a.go", model.currFile)
+	assert.Equal(t, "a.go", model.tree.selectedFile())
+	assert.Equal(t, 0, model.diffCursor)
+}
+
+func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{ChangeType: diff.ChangeContext, Content: "ctx1", NewNum: 1},
+		{ChangeType: diff.ChangeContext, Content: "ctx2", NewNum: 2},
+	}
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": lines,
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	fwd := true
+	m.pendingHunkJump = &fwd
+	m.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: lines}
+	result, _ = m.Update(loadMsg)
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingHunkJump)
+	assert.Equal(t, 1, model.diffCursor, "should fall back to first visible context line")
+}
+
+func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, diffs)
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	msg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(msg)
+	m = result.(Model)
+
+	fwd := true
+	m.pendingHunkJump = &fwd
+	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+", Comment: "note"}
+	m.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: diffs["b.go"]}
+	result, _ = m.Update(loadMsg)
+	model := result.(Model)
+
+	assert.Nil(t, model.pendingAnnotJump)
+	assert.Nil(t, model.pendingHunkJump)
+	assert.Equal(t, 0, model.diffCursor)
 }

@@ -178,15 +178,6 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 	return strings.Join(boxLines, "\n")
 }
 
-// openAnnotList opens the annotation list popup.
-func (m Model) openAnnotList() (tea.Model, tea.Cmd) {
-	m.annotListItems = m.buildAnnotListItems()
-	m.annotListCursor = 0
-	m.annotListOffset = 0
-	m.showAnnotList = true
-	return m, nil
-}
-
 // handleAnnotListKey handles keys when the annotation list popup is visible.
 // j/k/arrows navigate, Enter jumps to annotation, Esc/annot_list key closes, all other keys consumed.
 func (m Model) handleAnnotListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

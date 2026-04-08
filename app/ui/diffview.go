@@ -765,8 +765,9 @@ func (m *Model) moveToPrevHunk() {
 }
 
 // handleHunkNav moves to the next or previous hunk, crossing file boundaries when needed.
-// when forward and at the last hunk, navigates to the next file and lands on its first hunk.
-// when backward and at the first hunk, navigates to the previous file and lands on its last hunk.
+// when cross-file hunk navigation is enabled, forward at the last hunk navigates to the next file
+// and lands on its first hunk, and backward at the first hunk navigates to the previous file and
+// lands on its last hunk.
 // always shifts focus to the diff pane. no-op when no file is loaded.
 func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	if m.currFile == "" {
@@ -779,7 +780,7 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	} else {
 		m.moveToPrevHunk()
 	}
-	if m.diffCursor != prevCursor || m.singleFile {
+	if m.diffCursor != prevCursor || m.singleFile || !m.crossFileHunks {
 		m.syncTOCActiveSection()
 		return m, nil
 	}
