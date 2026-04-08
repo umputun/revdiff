@@ -88,7 +88,7 @@ Run the launcher script:
 ${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
 ```
 
-**IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on many harnesses. If your bash tool supports a timeout parameter, set it to the **maximum your harness allows** (e.g. 600000 on Claude Code, 1800000 or higher on OpenCode). If the review outlasts that cap, or your bash tool has no timeout parameter, the recovery paths in Step 3 handle it — pick the one that matches what your bash tool returned.
+**IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on many harnesses. **Preferred:** if your bash tool supports a `run_in_background` parameter (e.g. Claude Code), set it to `true` — the launcher then runs without any timeout cap, and you collect output via Case A in Step 3. Otherwise, set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher on OpenCode). If the review outlasts that cap, or your bash tool has neither option, the paths in Step 3 handle it — pick the one that matches what your bash tool returned.
 
 The script:
 - Detects available terminal (tmux → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
@@ -98,9 +98,9 @@ The script:
 
 ### Step 3: Process Annotations
 
-**Recovery paths (if the launcher did not return normally)**: Inspect what the bash tool returned and pick the matching case. Do NOT retry the launcher — revdiff is almost certainly still running in the overlay.
+**Collecting launcher output**: Inspect what the bash tool returned and pick the matching case. Do NOT retry the launcher if it didn't return synchronously — revdiff is almost certainly still running in the overlay.
 
-**Case A — background task handoff** (e.g. Claude Code): the bash result is not an error and contains a line like `Command running in background with ID: <id>. Output is being written to: <path>`.
+**Case A — background task handoff** (expected path when you used `run_in_background: true`, e.g. Claude Code): the bash result is not an error and contains a line like `Command running in background with ID: <id>. Output is being written to: <path>`.
 - The child process is still running — the output file **will be empty until revdiff exits**. Do NOT `Read` it immediately; you will get an empty content + "shorter than offset" warning and learn nothing.
 - Either poll the background task with your harness's dedicated background-output tool (e.g. `BashOutput` on Claude Code), or simply end your turn. Claude Code auto-resumes the session when a background task completes — you will be woken up automatically.
 - Once the task has completed, read its output file with `cat <path>` (the path from the original handoff message). Its contents will be the launcher's stdout — process as annotations below.
@@ -110,7 +110,10 @@ The script:
 2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply confirms revdiff has exited.
 3. Read the most recent output file (the launcher writes to `$TMPDIR` when set, falling back to `/tmp`):
    ```bash
-   cat "$(ls -t "${TMPDIR:-/tmp}"/revdiff-output-* 2>/dev/null | head -1)"
+   output_file="$(ls -t "${TMPDIR:-/tmp}"/revdiff-output-* 2>/dev/null | head -1)"
+   if [ -n "$output_file" ] && [ -f "$output_file" ]; then
+     cat "$output_file"
+   fi
    ```
 4. If it has content, process as annotations below. If empty or no file, the user quit without annotating.
 
