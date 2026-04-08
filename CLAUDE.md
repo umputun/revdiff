@@ -13,7 +13,20 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 ## Project Structure
 - `app/` - entry point (`main.go`), CLI flags, wiring
 - `app/diff/` - git interaction, unified diff parsing (`ParseUnifiedDiff`, `DiffLine`)
-- `app/ui/` - bubbletea TUI model, views, styles, file tree, annotations
+- `app/ui/` - bubbletea TUI package. All files share one `Model` struct — methods are split across files by concern to keep code files under ~500 lines and test files around ~1000 lines (soft target). Each source file has a matching `_test.go` file. See `app/ui/doc.go` for package-level documentation.
+  - `model.go` - Model struct, NewModel, Init, Update, handleKey, view toggles
+  - `view.go` - View(), status bar, ANSI helpers
+  - `handlers.go` - modal handlers (help overlay, enter/esc, discard, filter, mark reviewed)
+  - `loaders.go` - async file/blame loading, loaded-message handlers, data helpers
+  - `diffview.go` - diff rendering, gutters, line styling, search highlights
+  - `diffnav.go` - nav dispatchers, cursor movement, hunk nav, viewport sync
+  - `collapsed.go` - collapsed diff mode logic and rendering
+  - `filetree.go` - file tree component
+  - `annotate.go` - annotation input/CRUD
+  - `annotlist.go` - annotation list overlay
+  - `mdtoc.go` - markdown TOC component
+  - `search.go` - search input and navigation
+  - `styles.go` - lipgloss styles and theme integration
 - `app/highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `app/keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
 - `app/theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)

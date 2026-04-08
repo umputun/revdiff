@@ -34,17 +34,17 @@ type Colors struct {
 // styles holds all lipgloss styles used in the TUI.
 type styles struct {
 	// file tree pane
-	TreePane       lipgloss.Style
-	TreePaneActive lipgloss.Style
-	DirEntry       lipgloss.Style
-	FileEntry      lipgloss.Style
-	FileSelected   lipgloss.Style
-	AnnotationMark lipgloss.Style
-	ReviewedMark   lipgloss.Style
-	StatusAdded      lipgloss.Style
-	StatusDeleted    lipgloss.Style
-	StatusUntracked  lipgloss.Style
-	StatusDefault    lipgloss.Style // M, R, and other statuses
+	TreePane        lipgloss.Style
+	TreePaneActive  lipgloss.Style
+	DirEntry        lipgloss.Style
+	FileEntry       lipgloss.Style
+	FileSelected    lipgloss.Style
+	AnnotationMark  lipgloss.Style
+	ReviewedMark    lipgloss.Style
+	StatusAdded     lipgloss.Style
+	StatusDeleted   lipgloss.Style
+	StatusUntracked lipgloss.Style
+	StatusDefault   lipgloss.Style // M, R, and other statuses
 
 	// diff pane
 	DiffPane       lipgloss.Style
@@ -267,17 +267,17 @@ func plainStyles() styles {
 	border := lipgloss.NormalBorder()
 
 	return styles{
-		TreePane:       lipgloss.NewStyle().Border(border),
-		TreePaneActive: lipgloss.NewStyle().Border(border),
-		DirEntry:       lipgloss.NewStyle().Bold(true),
-		FileEntry:      lipgloss.NewStyle(),
-		FileSelected:   lipgloss.NewStyle().Reverse(true),
-		AnnotationMark: lipgloss.NewStyle(),
-		ReviewedMark:   lipgloss.NewStyle(),
-		StatusAdded:    lipgloss.NewStyle(),
-		StatusDeleted:  lipgloss.NewStyle(),
+		TreePane:        lipgloss.NewStyle().Border(border),
+		TreePaneActive:  lipgloss.NewStyle().Border(border),
+		DirEntry:        lipgloss.NewStyle().Bold(true),
+		FileEntry:       lipgloss.NewStyle(),
+		FileSelected:    lipgloss.NewStyle().Reverse(true),
+		AnnotationMark:  lipgloss.NewStyle(),
+		ReviewedMark:    lipgloss.NewStyle(),
+		StatusAdded:     lipgloss.NewStyle(),
+		StatusDeleted:   lipgloss.NewStyle(),
 		StatusUntracked: lipgloss.NewStyle(),
-		StatusDefault:  lipgloss.NewStyle(),
+		StatusDefault:   lipgloss.NewStyle(),
 
 		DiffPane:       lipgloss.NewStyle().Border(border),
 		DiffPaneActive: lipgloss.NewStyle().Border(border),
