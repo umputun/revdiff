@@ -6,6 +6,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -98,6 +99,8 @@ type Model struct {
 	blamer         Blamer                 // optional blame provider (nil when git unavailable)
 	showBlame      bool                   // true when blame gutter is shown
 	blameData      map[int]diff.BlameLine // blame info keyed by 1-based new line number
+	showUntracked bool                   // true when untracked files are shown in tree
+	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
 	blameAuthorLen int                    // max author display width for blame gutter
 	blameNow       time.Time              // snapshot of time.Now() set once per render pass for blame age
 
@@ -141,8 +144,9 @@ type blameLoadedMsg struct {
 
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
-	entries []diff.FileEntry
-	err     error
+	entries  []diff.FileEntry
+	err      error
+	warnings []string // non-fatal issues (staged/untracked fetch failures)
 }
 
 // ModelConfig holds configuration options for NewModel.
@@ -162,6 +166,7 @@ type ModelConfig struct {
 	Only             []string       // show only these files (match by exact path or path suffix)
 	WorkDir          string         // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
+	LoadUntracked   func() ([]string, error) // fetches untracked files; nil when unavailable
 	Blamer           Blamer         // optional blame provider (nil when git unavailable)
 	Colors           Colors
 }
@@ -200,6 +205,8 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
+		showUntracked:    false,
+		loadUntracked:   cfg.LoadUntracked,
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
@@ -223,8 +230,46 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
+		var warnings []string
 		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
-		return filesLoadedMsg{entries: entries, err: err}
+		if err != nil {
+			return filesLoadedMsg{entries: entries, err: err}
+		}
+		// include staged-only files (new files added to index but not yet committed)
+		if m.ref == "" && !m.staged {
+			stagedEntries, stagedErr := m.renderer.ChangedFiles("", true)
+			if stagedErr != nil {
+				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
+			} else {
+				stagedSet := make(map[string]bool, len(entries))
+				for _, e := range entries {
+					stagedSet[e.Path] = true
+				}
+				for _, se := range stagedEntries {
+					if !stagedSet[se.Path] && se.Status == diff.FileAdded {
+						entries = append(entries, se)
+					}
+				}
+			}
+		}
+		// append untracked files when toggle is on (skip files already in entries to avoid dupes)
+		if m.showUntracked && m.loadUntracked != nil {
+			ut, utErr := m.loadUntracked()
+			if utErr != nil {
+				warnings = append(warnings, fmt.Sprintf("untracked files: %v", utErr))
+			} else {
+				entrySet := make(map[string]bool, len(entries))
+				for _, e := range entries {
+					entrySet[e.Path] = true
+				}
+				for _, f := range ut {
+					if !entrySet[f] {
+						entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
+					}
+				}
+			}
+		}
+		return filesLoadedMsg{entries: entries, warnings: warnings}
 	}
 }
 
@@ -325,7 +370,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -447,6 +492,12 @@ func (m *Model) toggleBlame() tea.Cmd {
 	return nil
 }
 
+// toggleUntracked toggles visibility of untracked files in the tree.
+func (m *Model) toggleUntracked() tea.Cmd {
+	m.showUntracked = !m.showUntracked
+	return m.loadFiles()
+}
+
 // handleViewToggle dispatches view mode toggle actions.
 func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action { //nolint:exhaustive // only toggle actions are dispatched here
@@ -460,6 +511,9 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.toggleLineNumbers()
 	case keymap.ActionToggleBlame:
 		cmd := m.toggleBlame()
+		return m, cmd
+	case keymap.ActionToggleUntracked:
+		cmd := m.toggleUntracked()
 		return m, cmd
 	}
 	return m, nil
@@ -736,13 +790,29 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
 	}
+	for _, w := range msg.warnings {
+		log.Printf("[WARN] %s", w)
+	}
 	entries := m.filterOnly(msg.entries)
 	if len(entries) == 0 && len(m.only) > 0 {
 		m.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
+	oldReviewed := m.tree.reviewed
 	m.tree = newFileTreeFromEntries(entries)
+	// preserve reviewed marks and cursor across tree rebuilds (e.g. toggle untracked)
+	m.tree.restoreReviewed(oldReviewed)
+	if m.currFile != "" {
+		m.tree.selectByPath(m.currFile)
+	}
 	m.singleFile = len(m.tree.allFiles) == 1
+	if len(entries) == 0 {
+		m.currFile = ""
+		m.diffLines = nil
+		m.highlightedLines = nil
+		m.viewport.SetContent("")
+		return m, nil
+	}
 	if m.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
@@ -770,9 +840,20 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
+	// untracked files have no git diff — fall back to reading from disk as all-added lines
+	fileStatus := m.tree.fileStatuses[msg.file]
+	if len(m.diffLines) == 0 && m.workDir != "" && fileStatus == diff.FileUntracked {
+		added, readErr := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file))
+		if readErr != nil {
+			log.Printf("[WARN] read untracked file %s: %v", msg.file, readErr)
+		}
+		if len(added) > 0 {
+			m.diffLines = added
+		}
+	}
 	m.clearSearch()
 	m.computeFileStats()
-	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
+	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)
 	if m.lineNumbers {
 		m.lineNumWidth = m.computeLineNumWidth()
 	}
@@ -1287,6 +1368,7 @@ func (m Model) statusModeIcons() string {
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
 		{"✓", m.tree.reviewedCount() > 0},
+		{"?", m.showUntracked},
 	}
 
 	statusFg := m.styles.colors.Muted

@@ -611,3 +611,27 @@ func gitCmd(t *testing.T, dir string, args ...string) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed: %s", args, string(out))
 }
+
+func TestGit_UntrackedFiles(t *testing.T) {
+	dir := t.TempDir()
+	gitCmd(t, dir, "init")
+	gitCmd(t, dir, "config", "user.name", "test")
+	gitCmd(t, dir, "config", "user.email", "test@test.com")
+	gitCmd(t, dir, "commit", "--allow-empty", "-m", "initial")
+
+	// create tracked and untracked files
+	writeFile(t, dir, "tracked.go", "package main\n")
+	gitCmd(t, dir, "add", "tracked.go")
+	gitCmd(t, dir, "commit", "-m", "add tracked")
+	writeFile(t, dir, "untracked.go", "package main\n")
+	writeFile(t, dir, "ignored.go", "ignored\n")
+	writeFile(t, dir, ".gitignore", "ignored.go\n")
+
+	g := NewGit(dir)
+	files, err := g.UntrackedFiles()
+	require.NoError(t, err)
+	assert.Contains(t, files, "untracked.go")
+	assert.NotContains(t, files, "tracked.go")
+	assert.NotContains(t, files, "ignored.go")
+	// .gitignore itself is untracked since we just created it
+}

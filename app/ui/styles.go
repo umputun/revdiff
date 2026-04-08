@@ -41,9 +41,10 @@ type styles struct {
 	FileSelected   lipgloss.Style
 	AnnotationMark lipgloss.Style
 	ReviewedMark   lipgloss.Style
-	StatusAdded    lipgloss.Style
-	StatusDeleted  lipgloss.Style
-	StatusDefault  lipgloss.Style // M, R, and other statuses
+	StatusAdded      lipgloss.Style
+	StatusDeleted    lipgloss.Style
+	StatusUntracked  lipgloss.Style
+	StatusDefault    lipgloss.Style // M, R, and other statuses
 
 	// diff pane
 	DiffPane       lipgloss.Style
@@ -80,6 +81,8 @@ func (s styles) fileStatusStyle(status diff.FileStatus) lipgloss.Style {
 		return s.StatusAdded
 	case diff.FileDeleted:
 		return s.StatusDeleted
+	case diff.FileUntracked:
+		return s.StatusUntracked
 	default:
 		return s.StatusDefault
 	}
@@ -178,6 +181,8 @@ func newStyles(c Colors) styles {
 			Foreground(lipgloss.Color(c.AddFg)),
 		StatusDeleted: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.RemoveFg)),
+		StatusUntracked: lipgloss.NewStyle().
+			Foreground(lipgloss.Color(c.AddFg)),
 		StatusDefault: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.Muted)),
 
@@ -271,6 +276,7 @@ func plainStyles() styles {
 		ReviewedMark:   lipgloss.NewStyle(),
 		StatusAdded:    lipgloss.NewStyle(),
 		StatusDeleted:  lipgloss.NewStyle(),
+		StatusUntracked: lipgloss.NewStyle(),
 		StatusDefault:  lipgloss.NewStyle(),
 
 		DiffPane:       lipgloss.NewStyle().Border(border),

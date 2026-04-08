@@ -48,6 +48,7 @@ const (
 	FileModified FileStatus = "M"
 	FileDeleted  FileStatus = "D"
 	FileRenamed  FileStatus = "R"
+	FileUntracked FileStatus = "?"
 )
 
 // FileEntry represents a file with its change status from git diff.
@@ -73,6 +74,21 @@ type Git struct {
 // NewGit creates a new Git diff renderer rooted at the given working directory.
 func NewGit(workDir string) *Git {
 	return &Git{workDir: workDir}
+}
+
+// UntrackedFiles returns untracked files (not in .gitignore) using git ls-files --others --exclude-standard.
+func (g *Git) UntrackedFiles() ([]string, error) {
+	out, err := g.runGit("ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for entry := range strings.SplitSeq(out, "\x00") {
+		if entry != "" {
+			files = append(files, entry)
+		}
+	}
+	return files, nil
 }
 
 // ChangedFiles returns a list of files changed relative to the given ref with their change status.

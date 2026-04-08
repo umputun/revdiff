@@ -743,3 +743,66 @@ func writeFileAt(t *testing.T, absPath, content string) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(absPath), 0o750))
 	require.NoError(t, os.WriteFile(absPath, []byte(content), 0o600))
 }
+
+func TestReadFileAsAdded(t *testing.T) {
+	t.Run("regular file returned as ChangeAdd lines", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "test.txt")
+		require.NoError(t, os.WriteFile(f, []byte("line1\nline2\nline3\n"), 0o600))
+
+		lines, err := ReadFileAsAdded(f)
+		require.NoError(t, err)
+		require.Len(t, lines, 3)
+		for _, l := range lines {
+			assert.Equal(t, ChangeAdd, l.ChangeType)
+			assert.Equal(t, 0, l.OldNum)
+		}
+		assert.Equal(t, "line1", lines[0].Content)
+		assert.Equal(t, "line2", lines[1].Content)
+		assert.Equal(t, "line3", lines[2].Content)
+	})
+
+	t.Run("nonexistent file returns error", func(t *testing.T) {
+		_, err := ReadFileAsAdded("/nonexistent/path/file.txt")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "stat file")
+	})
+
+	t.Run("directory returns not-a-regular-file placeholder", func(t *testing.T) {
+		dir := t.TempDir()
+		lines, err := ReadFileAsAdded(dir)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(not a regular file)", lines[0].Content)
+		assert.Equal(t, ChangeContext, lines[0].ChangeType)
+	})
+
+	t.Run("binary file returns placeholder", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "bin.dat")
+		binary := make([]byte, 100)
+		for i := range binary {
+			binary[i] = byte(i)
+		}
+		require.NoError(t, os.WriteFile(f, binary, 0o600))
+
+		lines, err := ReadFileAsAdded(f)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, "(binary file)", lines[0].Content)
+	})
+}
+
+func TestReadFileAsAdded_BrokenSymlink(t *testing.T) {
+	dir := t.TempDir()
+	// create a file, then a symlink pointing to it, then remove the file
+	target := filepath.Join(dir, "target.txt")
+	require.NoError(t, os.WriteFile(target, []byte("content"), 0o600))
+	link := filepath.Join(dir, "link.txt")
+	require.NoError(t, os.Symlink(target, link))
+	require.NoError(t, os.Remove(target))
+
+	lines, err := ReadFileAsAdded(link)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(broken symlink)", lines[0].Content)
+	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+}
