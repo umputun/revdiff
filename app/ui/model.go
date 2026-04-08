@@ -843,7 +843,11 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	// untracked files have no git diff — fall back to reading from disk as all-added lines
 	fileStatus := m.tree.fileStatuses[msg.file]
 	if len(m.diffLines) == 0 && m.workDir != "" && fileStatus == diff.FileUntracked {
-		if added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file)); err == nil && len(added) > 0 {
+		added, readErr := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file))
+		if readErr != nil {
+			log.Printf("[WARN] read untracked file %s: %v", msg.file, readErr)
+		}
+		if len(added) > 0 {
 			m.diffLines = added
 		}
 	}

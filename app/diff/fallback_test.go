@@ -790,3 +790,19 @@ func TestReadFileAsAdded(t *testing.T) {
 		assert.Equal(t, "(binary file)", lines[0].Content)
 	})
 }
+
+func TestReadFileAsAdded_BrokenSymlink(t *testing.T) {
+	dir := t.TempDir()
+	// create a file, then a symlink pointing to it, then remove the file
+	target := filepath.Join(dir, "target.txt")
+	require.NoError(t, os.WriteFile(target, []byte("content"), 0o600))
+	link := filepath.Join(dir, "link.txt")
+	require.NoError(t, os.Symlink(target, link))
+	require.NoError(t, os.Remove(target))
+
+	lines, err := ReadFileAsAdded(link)
+	require.NoError(t, err)
+	require.Len(t, lines, 1)
+	assert.Equal(t, "(broken symlink)", lines[0].Content)
+	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+}
