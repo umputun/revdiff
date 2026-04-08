@@ -98,13 +98,13 @@ Move file/blame loading and data preparation methods into new `loaders.go`.
 - Create: `app/ui/loaders.go`
 - Modify: `app/ui/model.go`
 
-- [ ] create `app/ui/loaders.go` with package header and imports
-- [ ] move async loaders: `loadFiles`, `loadFileDiff`, `loadBlame`, `loadSelectedIfChanged`
-- [ ] move loaded-message handlers: `handleFilesLoaded`, `handleFileLoaded`, `handleBlameLoaded`
-- [ ] move data helpers: `computeBlameAuthorLen`, `filterOnly`, `computeFileStats`, `fileStatsText`, `skipInitialDividers`
-- [ ] verify `model.go` is under 500 lines and `loaders.go` is under 500 lines
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/loaders.go` with package header and imports
+- [x] move async loaders: `loadFiles`, `loadFileDiff`, `loadBlame`, `loadSelectedIfChanged`
+- [x] move loaded-message handlers: `handleFilesLoaded`, `handleFileLoaded`, `handleBlameLoaded`
+- [x] move data helpers: `computeBlameAuthorLen`, `filterOnly`, `computeFileStats`, `fileStatsText`, `skipInitialDividers`
+- [x] verify `model.go` is under 500 lines and `loaders.go` is under 500 lines
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 4: Split model_test.go — extract model_search_test.go
 
