@@ -68,16 +68,17 @@ type Model struct {
 	diffCursor     int    // index into diffLines for current cursor line
 	scrollX        int    // horizontal scroll offset for diff pane
 
-	highlighter        SyntaxHighlighter // syntax highlighter
-	highlightedLines   []string          // pre-computed highlighted content, parallel to diffLines
-	diffLines          []diff.DiffLine   // current file's parsed diff lines
-	currFile           string            // currently displayed file
-	loadSeq            uint64            // monotonic counter to identify the latest load request
-	ready              bool              // true after first WindowSizeMsg
-	annotating         bool              // true when annotation text input is active
-	fileAnnotating     bool              // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
-	annotateInput      textinput.Model   // text input for annotations
+	highlighter        SyntaxHighlighter    // syntax highlighter
+	highlightedLines   []string             // pre-computed highlighted content, parallel to diffLines
+	diffLines          []diff.DiffLine      // current file's parsed diff lines
+	intralineRanges    map[int][]matchRange // changed-token spans keyed by diff line index
+	currFile           string               // currently displayed file
+	loadSeq            uint64               // monotonic counter to identify the latest load request
+	ready              bool                 // true after first WindowSizeMsg
+	annotating         bool                 // true when annotation text input is active
+	fileAnnotating     bool                 // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool                 // true when cursor is on the annotation sub-line (not the diff line)
+	annotateInput      textinput.Model      // text input for annotations
 
 	collapsed collapsedState // collapsed diff view state
 

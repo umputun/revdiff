@@ -290,6 +290,10 @@ func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textC
 	if hasHighlight {
 		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
 	}
+	// only inject intraline markers when highlighted output still maps 1:1 to the raw text.
+	if !hasHighlight || ansi.Strip(textContent) == lineContent {
+		textContent = m.applyIntralineMarkers(idx, dl.ChangeType, textContent)
+	}
 	return lineContent, textContent, hasHighlight
 }
 
@@ -347,6 +351,36 @@ func (m Model) highlightSearchMatches(s string) string {
 	}
 
 	return m.insertHighlightMarkers(s, matches, hlOn, hlOff)
+}
+
+// applyIntralineMarkers emphasizes changed token ranges for paired add/remove lines.
+func (m Model) applyIntralineMarkers(idx int, changeType diff.ChangeType, content string) string {
+	if !isIntralineChange(changeType) || idx < 0 {
+		return content
+	}
+	ranges := m.intralineRanges[idx]
+	if len(ranges) == 0 {
+		return content
+	}
+	hlOn, hlOff := m.intralineMarkers(changeType)
+	return m.insertHighlightMarkers(content, ranges, hlOn, hlOff)
+}
+
+func (m Model) intralineMarkers(changeType diff.ChangeType) (on, off string) {
+	baseBg := m.changeBgColor(changeType)
+	if emphBg := m.ansiBg(m.styles.colors.SearchBg); emphBg != "" {
+		on = emphBg + "\033[1m"
+		off = "\033[22m"
+		if baseBg != "" {
+			off += m.ansiBg(baseBg)
+		} else {
+			off += "\033[49m"
+		}
+		return on, off
+	}
+
+	// no-color fallback: reverse video + bold keeps emphasis visible.
+	return "\033[7m\033[1m", "\033[22m\033[27m"
 }
 
 // insertHighlightMarkers walks the string inserting hlOn/hlOff ANSI sequences at match positions,

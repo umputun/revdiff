@@ -113,6 +113,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.currFile = ""
 		m.diffLines = nil
 		m.highlightedLines = nil
+		m.intralineRanges = nil
 		m.viewport.SetContent("")
 		return m, nil
 	}
@@ -154,6 +155,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 			m.diffLines = added
 		}
 	}
+	m.intralineRanges = computeIntralineRanges(m.diffLines, m.tabSpaces)
 	m.clearSearch()
 	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)

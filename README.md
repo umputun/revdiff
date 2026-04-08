@@ -8,6 +8,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
 - Full-file diff view with syntax highlighting
+- Intraline change emphasis on related remove/add lines (delta-style within-line hints in unified view)
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Line numbers: side-by-side old/new line number gutter, toggle with `L`
