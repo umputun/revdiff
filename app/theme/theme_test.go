@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,6 +62,47 @@ func TestParse_validTheme(t *testing.T) {
 	assert.Equal(t, "#6272a4", th.Colors["color-border"])
 	assert.Equal(t, "#f8f8f2", th.Colors["color-normal"])
 	assert.Len(t, th.Colors, 21)
+}
+
+func TestParse_authorAndBundled(t *testing.T) {
+	input := "# name: custom\n# description: test\n# author: Jane Doe\n# bundled: true\n\nchroma-style = dracula\n" + fullThemeColors()
+	th, err := Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	assert.Equal(t, "Jane Doe", th.Author)
+	assert.True(t, th.Bundled)
+}
+
+func TestParse_bundledFalse(t *testing.T) {
+	input := "# name: community\n# bundled: false\nchroma-style = dracula\n" + fullThemeColors()
+	th, err := Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	assert.False(t, th.Bundled)
+}
+
+func TestParse_noBundledField(t *testing.T) {
+	input := "# name: community\nchroma-style = dracula\n" + fullThemeColors()
+	th, err := Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	assert.False(t, th.Bundled, "absent bundled field should default to false")
+}
+
+func TestDump_authorAndBundled(t *testing.T) {
+	colors := map[string]string{"color-accent": "#bd93f9"}
+	var buf bytes.Buffer
+	err := Dump(Theme{Name: "test", Author: "Jane Doe", Bundled: true, Colors: colors}, &buf)
+	require.NoError(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "# author: Jane Doe")
+	assert.Contains(t, output, "# bundled: true")
+}
+
+func TestDump_noBundledWhenFalse(t *testing.T) {
+	colors := map[string]string{"color-accent": "#bd93f9"}
+	var buf bytes.Buffer
+	err := Dump(Theme{Name: "test", Colors: colors}, &buf)
+	require.NoError(t, err)
+	assert.NotContains(t, buf.String(), "bundled")
 }
 
 func TestParse_missingMetadata(t *testing.T) {
@@ -211,7 +253,34 @@ func TestLoad_missingFile(t *testing.T) {
 	dir := t.TempDir()
 	_, err := Load("nonexistent", dir)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "opening theme")
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestLoad_fallbackToGallery(t *testing.T) {
+	dir := t.TempDir() // empty dir, no local files
+	th, err := Load("dracula", dir)
+	require.NoError(t, err, "should fall back to embedded gallery")
+	assert.Equal(t, "dracula", th.Name)
+	assert.Equal(t, "dracula", th.ChromaStyle)
+	assert.GreaterOrEqual(t, len(th.Colors), 18)
+}
+
+func TestLoad_localOverridesGallery(t *testing.T) {
+	dir := t.TempDir()
+	// write a customized "dracula" with different accent
+	content := "# name: dracula\n# description: customized\nchroma-style = dracula\n" + fullThemeColors()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "dracula"), []byte(content), 0o600))
+
+	th, err := Load("dracula", dir)
+	require.NoError(t, err)
+	assert.Equal(t, "customized", th.Description, "local file should override gallery")
+}
+
+func TestLoad_emptyThemesDir(t *testing.T) {
+	// with empty themesDir, should still fall back to gallery
+	th, err := Load("nord", "")
+	require.NoError(t, err)
+	assert.Equal(t, "nord", th.Name)
 }
 
 func TestLoad_invalidContent(t *testing.T) {
@@ -277,7 +346,7 @@ func TestInitBundled_createsDirAndFiles(t *testing.T) {
 
 	names, err := List(dir)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"catppuccin-mocha", "dracula", "gruvbox", "nord", "solarized-dark"}, names)
+	assert.Equal(t, []string{"catppuccin-latte", "catppuccin-mocha", "dracula", "gruvbox", "nord", "revdiff", "solarized-dark"}, names)
 
 	// verify files are non-empty
 	for _, name := range names {
@@ -324,27 +393,230 @@ func TestInitBundled_overwritesBundledThemes(t *testing.T) {
 
 func TestBundledNames(t *testing.T) {
 	names := BundledNames()
-	assert.Equal(t, []string{"catppuccin-mocha", "dracula", "gruvbox", "nord", "solarized-dark"}, names)
+	assert.Equal(t, []string{"catppuccin-latte", "catppuccin-mocha", "dracula", "gruvbox", "nord", "revdiff", "solarized-dark"}, names)
 }
 
 func TestBundledThemes_parseCorrectly(t *testing.T) {
+	gallery, err := Gallery()
+	require.NoError(t, err)
+
 	for _, name := range BundledNames() {
 		t.Run(name, func(t *testing.T) {
-			content, ok := bundledThemes[name]
+			th, ok := gallery[name]
 			require.True(t, ok)
-
-			th, err := Parse(strings.NewReader(content))
-			require.NoError(t, err)
+			assert.True(t, th.Bundled, "bundled theme %q should have bundled: true", name)
 			assert.Equal(t, name, th.Name)
 			assert.NotEmpty(t, th.Description)
 			assert.NotEmpty(t, th.ChromaStyle)
 
-			// verify all 21 color keys are present
+			// verify all required color keys are present (optional keys may be omitted)
+			optional := OptionalColorKeys()
 			for _, key := range ColorKeys() {
-				assert.NotEmpty(t, th.Colors[key], "missing color key %s in theme %s", key, name)
+				if optional[key] {
+					continue
+				}
+				assert.NotEmpty(t, th.Colors[key], "missing required color key %s in theme %s", key, name)
 			}
 		})
 	}
+}
+
+func TestInstallFile(t *testing.T) {
+	// create a valid theme file
+	srcDir := t.TempDir()
+	content := "# name: my-custom\n# description: a custom theme\n# author: Test User\nchroma-style = monokai\n" + fullThemeColors()
+	srcPath := filepath.Join(srcDir, "my-custom")
+	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
+
+	destDir := filepath.Join(t.TempDir(), "themes")
+	name, err := InstallFile(destDir, srcPath, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "my-custom", name)
+
+	// verify file was written
+	names, err := List(destDir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"my-custom"}, names)
+
+	// verify it's a valid theme
+	th, err := Load("my-custom", destDir)
+	require.NoError(t, err)
+	assert.Equal(t, "my-custom", th.Name)
+	assert.Equal(t, "Test User", th.Author)
+}
+
+func TestInstallFile_invalidTheme(t *testing.T) {
+	srcPath := filepath.Join(t.TempDir(), "bad-theme")
+	require.NoError(t, os.WriteFile(srcPath, []byte("not valid\n"), 0o600))
+
+	destDir := filepath.Join(t.TempDir(), "themes")
+	_, err := InstallFile(destDir, srcPath, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing theme file")
+}
+
+func TestInstallFile_notFound(t *testing.T) {
+	destDir := filepath.Join(t.TempDir(), "themes")
+	_, err := InstallFile(destDir, "/nonexistent/path/theme", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "opening theme file")
+}
+
+func TestInstallFile_dotPaths(t *testing.T) {
+	destDir := filepath.Join(t.TempDir(), "themes")
+	for _, path := range []string{".", ".."} {
+		_, err := InstallFile(destDir, path, nil)
+		require.Error(t, err, "path=%q should be rejected", path)
+		assert.Contains(t, err.Error(), "invalid theme file name", "path=%q", path)
+	}
+}
+
+func TestInstallFile_invalidChromaStyle(t *testing.T) {
+	srcDir := t.TempDir()
+	content := "# name: bad-chroma\n# description: theme with bad chroma\nchroma-style = nonexistent-style\n" + fullThemeColors()
+	srcPath := filepath.Join(srcDir, "bad-chroma")
+	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
+
+	destDir := filepath.Join(t.TempDir(), "themes")
+
+	// with validator that rejects the style
+	rejectAll := func(string) bool { return false }
+	_, err := InstallFile(destDir, srcPath, rejectAll)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown chroma style")
+
+	// without validator (nil) — should succeed
+	name, err := InstallFile(destDir, srcPath, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "bad-chroma", name)
+}
+
+func TestInstallFile_setsNameFromFilenameWhenMissing(t *testing.T) {
+	srcDir := t.TempDir()
+	content := "# description: no explicit name\nchroma-style = monokai\n" + fullThemeColors()
+	srcPath := filepath.Join(srcDir, "my-custom")
+	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
+
+	destDir := filepath.Join(t.TempDir(), "themes")
+	name, err := InstallFile(destDir, srcPath, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "my-custom", name)
+
+	th, err := Load("my-custom", destDir)
+	require.NoError(t, err)
+	assert.Equal(t, "my-custom", th.Name)
+}
+
+func TestInstallFile_rejectsMetadataNameMismatch(t *testing.T) {
+	srcDir := t.TempDir()
+	content := "# name: other-name\n# description: mismatch\nchroma-style = monokai\n" + fullThemeColors()
+	srcPath := filepath.Join(srcDir, "my-custom")
+	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
+
+	destDir := filepath.Join(t.TempDir(), "themes")
+	_, err := InstallFile(destDir, srcPath, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `theme metadata name "other-name" does not match file name "my-custom"`)
+}
+
+func TestInstall_validatesGalleryNamesBeforeWriting(t *testing.T) {
+	srcDir := t.TempDir()
+	srcPath := filepath.Join(srcDir, "my-custom")
+	content := "# name: my-custom\n# description: a custom theme\nchroma-style = monokai\n" + fullThemeColors()
+	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
+
+	destDir := filepath.Join(t.TempDir(), "themes")
+	var out bytes.Buffer
+
+	err := Install([]string{srcPath, "nonexistent"}, destDir, nil, &out)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `theme "nonexistent" not found in gallery`)
+
+	names, listErr := List(destDir)
+	require.NoError(t, listErr)
+	assert.Empty(t, names, "validation failure should prevent partial installs")
+	assert.Empty(t, out.String())
+}
+
+func TestPrintList(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, InitBundled(themesDir))
+
+	localContent := "# name: my-local\n# description: local theme\nchroma-style = monokai\n" + fullThemeColors()
+	require.NoError(t, os.WriteFile(filepath.Join(themesDir, "my-local"), []byte(localContent), 0o600))
+
+	var out bytes.Buffer
+	err := PrintList(themesDir, &out)
+	require.NoError(t, err)
+
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	require.NotEmpty(t, lines)
+	assert.Equal(t, DefaultThemeName, lines[0])
+	assert.Contains(t, lines, "my-local")
+	assert.Contains(t, lines, "dracula")
+}
+
+func TestActiveName(t *testing.T) {
+	assert.Equal(t, DefaultThemeName, ActiveName(""))
+	assert.Equal(t, "dracula", ActiveName("dracula"))
+}
+
+func TestIsLocalPath(t *testing.T) {
+	assert.True(t, IsLocalPath("themes/custom"))
+	assert.True(t, IsLocalPath("./custom"))
+	assert.False(t, IsLocalPath("dracula"))
+}
+
+func TestListOrdered(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, InitBundled(themesDir))
+
+	// add a local-only theme
+	localContent := "# name: my-local\n# description: local theme\nchroma-style = monokai\n" + fullThemeColors()
+	require.NoError(t, os.WriteFile(filepath.Join(themesDir, "my-local"), []byte(localContent), 0o600))
+
+	infos, err := ListOrdered(themesDir)
+	require.NoError(t, err)
+	require.NotEmpty(t, infos)
+
+	// default theme must be first
+	assert.Equal(t, DefaultThemeName, infos[0].Name)
+	assert.True(t, infos[0].InGallery)
+
+	// local theme should appear before bundled themes
+	var localIdx, firstBundledIdx int
+	for i, info := range infos {
+		if info.Name == "my-local" {
+			localIdx = i
+			assert.True(t, info.Local)
+			assert.False(t, info.InGallery)
+		}
+		if info.Bundled && firstBundledIdx == 0 {
+			firstBundledIdx = i
+		}
+	}
+	assert.Positive(t, localIdx, "local theme should not be first (default is first)")
+	assert.Less(t, localIdx, firstBundledIdx, "local themes should appear before bundled")
+}
+
+func TestListOrdered_emptyDir(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	infos, err := ListOrdered(themesDir)
+	require.NoError(t, err)
+	// should still return gallery themes
+	require.NotEmpty(t, infos)
+	assert.Equal(t, DefaultThemeName, infos[0].Name)
+}
+
+func TestLoad_permissionError(t *testing.T) {
+	dir := t.TempDir()
+	fpath := filepath.Join(dir, "secret-theme")
+	require.NoError(t, os.WriteFile(fpath, []byte("chroma-style = dracula\n"), 0o000))
+	t.Cleanup(func() { _ = os.Chmod(fpath, 0o600) }) // restore so TempDir cleanup works
+
+	_, err := Load("secret-theme", dir)
+	require.Error(t, err, "should not silently fall back to gallery on permission error")
+	assert.Contains(t, err.Error(), "opening theme")
 }
 
 func TestValidateHexColor(t *testing.T) {
@@ -474,4 +746,156 @@ func TestOptionalColorKeys(t *testing.T) {
 	// verify it returns a copy
 	opt["color-accent"] = true
 	assert.False(t, OptionalColorKeys()["color-accent"])
+}
+
+func TestGallery(t *testing.T) {
+	gallery, err := Gallery()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(gallery), 5, "gallery should have at least 5 bundled themes")
+
+	// verify all bundled themes are present and marked
+	for _, name := range []string{"catppuccin-latte", "catppuccin-mocha", "dracula", "gruvbox", "nord", "revdiff", "solarized-dark"} {
+		th, ok := gallery[name]
+		require.True(t, ok, "gallery should contain %q", name)
+		assert.True(t, th.Bundled, "%q should be marked bundled", name)
+		assert.NotEmpty(t, th.ChromaStyle)
+		assert.GreaterOrEqual(t, len(th.Colors), 18, "should have at least 18 required color keys")
+	}
+}
+
+func TestGalleryNames(t *testing.T) {
+	names, err := GalleryNames()
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, len(names), 5)
+	// verify sorted
+	for i := 1; i < len(names); i++ {
+		assert.Less(t, names[i-1], names[i], "gallery names should be sorted")
+	}
+}
+
+func TestGalleryTheme(t *testing.T) {
+	th, err := GalleryTheme("dracula")
+	require.NoError(t, err)
+	assert.Equal(t, "dracula", th.Name)
+	assert.True(t, th.Bundled)
+	assert.Equal(t, "dracula", th.ChromaStyle)
+	assert.GreaterOrEqual(t, len(th.Colors), 18)
+}
+
+func TestGalleryTheme_notFound(t *testing.T) {
+	_, err := GalleryTheme("nonexistent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestGalleryTheme_returnsClone(t *testing.T) {
+	first, err := GalleryTheme("dracula")
+	require.NoError(t, err)
+	first.Colors["color-accent"] = "#010203"
+
+	second, err := GalleryTheme("dracula")
+	require.NoError(t, err)
+	assert.NotEqual(t, "#010203", second.Colors["color-accent"])
+}
+
+func TestGallery_returnsDeepCopy(t *testing.T) {
+	first, err := Gallery()
+	require.NoError(t, err)
+
+	th := first["dracula"]
+	th.Colors["color-accent"] = "#010203"
+	first["dracula"] = th
+	delete(first, "nord")
+
+	second, err := Gallery()
+	require.NoError(t, err)
+	assert.Contains(t, second, "nord")
+	assert.NotEqual(t, "#010203", second["dracula"].Colors["color-accent"])
+}
+
+func TestInitAll(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "themes")
+	err := InitAll(dir)
+	require.NoError(t, err)
+
+	names, err := List(dir)
+	require.NoError(t, err)
+
+	galleryNames, err := GalleryNames()
+	require.NoError(t, err)
+	assert.Equal(t, galleryNames, names, "InitAll should write all gallery themes")
+}
+
+func TestInitNames(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "themes")
+	err := InitNames(dir, []string{"dracula", "nord"})
+	require.NoError(t, err)
+
+	names, err := List(dir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"dracula", "nord"}, names)
+}
+
+func TestInitNames_notInGallery(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "themes")
+	err := InitNames(dir, []string{"nonexistent"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found in gallery")
+}
+
+func TestInitAll_preservesUserThemes(t *testing.T) {
+	dir := t.TempDir()
+	userTheme := filepath.Join(dir, "my-custom")
+	require.NoError(t, os.WriteFile(userTheme, []byte("user content\n"), 0o600))
+
+	err := InitAll(dir)
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(userTheme) //nolint:gosec // test uses temp dir
+	require.NoError(t, err)
+	assert.Equal(t, "user content\n", string(data))
+}
+
+func TestWriteThemeFile_atomic(t *testing.T) {
+	dir := t.TempDir()
+	th, err := GalleryTheme("dracula")
+	require.NoError(t, err)
+
+	require.NoError(t, writeThemeFile(dir, "dracula", th))
+
+	data, err := os.ReadFile(filepath.Join(dir, "dracula")) //nolint:gosec // test uses temp dir
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "# name: dracula")
+
+	matches, err := filepath.Glob(filepath.Join(dir, "dracula.tmp-*"))
+	require.NoError(t, err)
+	assert.Empty(t, matches)
+}
+
+// TestGalleryThemes_validate validates that all gallery themes are well-formed.
+// This serves as the CI validation test for community theme contributions.
+func TestGalleryThemes_validate(t *testing.T) {
+	gallery, err := Gallery()
+	require.NoError(t, err)
+
+	for name, th := range gallery {
+		t.Run(name, func(t *testing.T) {
+			assert.NotEmpty(t, th.Name, "theme must have a name")
+			assert.NotEmpty(t, th.Description, "theme must have a description")
+			assert.NotEmpty(t, th.ChromaStyle, "theme must have a chroma-style")
+			// verify chroma-style is a real chroma style, not the fallback for unknown names
+			assert.NotEqual(t, styles.Fallback, styles.Get(th.ChromaStyle),
+				"unknown chroma style %q in theme %s", th.ChromaStyle, name)
+			assert.Equal(t, name, th.Name, "theme name must match filename")
+
+			// all required color keys must be present (optional keys may be omitted)
+			optional := OptionalColorKeys()
+			for _, key := range ColorKeys() {
+				if optional[key] {
+					continue
+				}
+				assert.NotEmpty(t, th.Colors[key], "missing required color key %s", key)
+			}
+		})
+	}
 }

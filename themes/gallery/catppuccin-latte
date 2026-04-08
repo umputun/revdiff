@@ -1,0 +1,27 @@
+# name: catppuccin-latte
+# description: light pastel theme with mauve accent on warm cream background
+# author: melonamin
+# bundled: true
+
+chroma-style = catppuccin-latte
+color-accent = #8839ef
+color-border = #bcc0cc
+color-normal = #4c4f69
+color-muted = #9ca0b0
+color-selected-fg = #eff1f5
+color-selected-bg = #8839ef
+color-annotation = #df8e1d
+color-cursor-fg = #179299
+color-cursor-bg = #dce0e8
+color-add-fg = #40a02b
+color-add-bg = #d4edda
+color-remove-fg = #d20f39
+color-remove-bg = #f5d5d9
+color-modify-fg = #fe640b
+color-modify-bg = #fde5d0
+color-tree-bg = #e6e9ef
+color-diff-bg = #eff1f5
+color-status-fg = #eff1f5
+color-status-bg = #8839ef
+color-search-fg = #4c4f69
+color-search-bg = #ffeeba

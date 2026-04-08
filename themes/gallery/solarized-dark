@@ -1,0 +1,27 @@
+# name: solarized-dark
+# description: yellow accent, classic solarized palette on deep teal background
+# author: umputun
+# bundled: true
+
+chroma-style = solarized-dark
+color-accent = #b58900
+color-border = #586e75
+color-normal = #839496
+color-muted = #586e75
+color-selected-fg = #fdf6e3
+color-selected-bg = #b58900
+color-annotation = #cb4b16
+color-cursor-fg = #859900
+color-cursor-bg = #073642
+color-add-fg = #719e07
+color-add-bg = #0a2e0a
+color-remove-fg = #dc322f
+color-remove-bg = #2e0a0a
+color-modify-fg = #b58900
+color-modify-bg = #2e2a0a
+color-tree-bg = #002b36
+color-diff-bg = #002b36
+color-status-fg = #002b36
+color-status-bg = #b58900
+color-search-fg = #002b36
+color-search-bg = #cb4b16

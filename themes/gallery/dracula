@@ -1,0 +1,27 @@
+# name: dracula
+# description: purple accent, vibrant colors on dark background
+# author: umputun
+# bundled: true
+
+chroma-style = dracula
+color-accent = #bd93f9
+color-border = #6272a4
+color-normal = #f8f8f2
+color-muted = #6272a4
+color-selected-fg = #f8f8f2
+color-selected-bg = #bd93f9
+color-annotation = #f1fa8c
+color-cursor-fg = #50fa7b
+color-cursor-bg = #44475a
+color-add-fg = #50fa7b
+color-add-bg = #1a3a1a
+color-remove-fg = #ff5555
+color-remove-bg = #3a1a1a
+color-modify-fg = #ffb86c
+color-modify-bg = #3a2a1a
+color-tree-bg = #282a36
+color-diff-bg = #282a36
+color-status-fg = #282a36
+color-status-bg = #bd93f9
+color-search-fg = #282a36
+color-search-bg = #f1fa8c

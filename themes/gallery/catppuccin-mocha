@@ -1,0 +1,27 @@
+# name: catppuccin-mocha
+# description: pastel colors on dark base, warm and cozy
+# author: umputun
+# bundled: true
+
+chroma-style = catppuccin-mocha
+color-accent = #89b4fa
+color-border = #45475a
+color-normal = #cdd6f4
+color-muted = #7f849c
+color-selected-fg = #1e1e2e
+color-selected-bg = #89b4fa
+color-annotation = #f9e2af
+color-cursor-fg = #a6e3a1
+color-cursor-bg = #313244
+color-add-fg = #a6e3a1
+color-add-bg = #1a3a1a
+color-remove-fg = #f38ba8
+color-remove-bg = #4a1a1a
+color-modify-fg = #fab387
+color-modify-bg = #4a3a1a
+color-tree-bg = #1e1e2e
+color-diff-bg = #1e1e2e
+color-status-fg = #1e1e2e
+color-status-bg = #89b4fa
+color-search-fg = #1e1e2e
+color-search-bg = #f9e2af

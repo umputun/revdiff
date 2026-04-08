@@ -1,0 +1,24 @@
+# name: revdiff
+# description: warm amber accent on terminal background, the default palette
+# author: umputun
+# bundled: true
+
+chroma-style = catppuccin-macchiato
+color-accent = #D5895F
+color-border = #585858
+color-normal = #d0d0d0
+color-muted = #585858
+color-selected-fg = #ffffaf
+color-selected-bg = #D5895F
+color-annotation = #ffd700
+color-cursor-fg = #bbbb44
+color-add-fg = #87d787
+color-add-bg = #123800
+color-remove-fg = #ff8787
+color-remove-bg = #4D1100
+color-modify-fg = #f5c542
+color-modify-bg = #3D2E00
+color-status-fg = #202020
+color-status-bg = #C5794F
+color-search-fg = #1a1a1a
+color-search-bg = #4a4a00

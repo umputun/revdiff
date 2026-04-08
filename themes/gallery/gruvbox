@@ -1,0 +1,27 @@
+# name: gruvbox
+# description: warm retro colors on dark background
+# author: umputun
+# bundled: true
+
+chroma-style = gruvbox
+color-accent = #fabd2f
+color-border = #504945
+color-normal = #ebdbb2
+color-muted = #928374
+color-selected-fg = #282828
+color-selected-bg = #fabd2f
+color-annotation = #fe8019
+color-cursor-fg = #b8bb26
+color-cursor-bg = #3c3836
+color-add-fg = #b8bb26
+color-add-bg = #1d3a1a
+color-remove-fg = #fb4934
+color-remove-bg = #4a1a1a
+color-modify-fg = #fabd2f
+color-modify-bg = #4a3a1a
+color-tree-bg = #282828
+color-diff-bg = #282828
+color-status-fg = #282828
+color-status-bg = #fabd2f
+color-search-fg = #282828
+color-search-bg = #fe8019

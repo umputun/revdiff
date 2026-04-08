@@ -1,0 +1,27 @@
+# name: nord
+# description: frost blue accent, arctic palette on polar night background
+# author: umputun
+# bundled: true
+
+chroma-style = nord
+color-accent = #88c0d0
+color-border = #4c566a
+color-normal = #d8dee9
+color-muted = #4c566a
+color-selected-fg = #eceff4
+color-selected-bg = #88c0d0
+color-annotation = #ebcb8b
+color-cursor-fg = #a3be8c
+color-cursor-bg = #3b4252
+color-add-fg = #b4d09a
+color-add-bg = #1a3a1a
+color-remove-fg = #d06c75
+color-remove-bg = #4a1a1a
+color-modify-fg = #f0d399
+color-modify-bg = #4a3a1a
+color-tree-bg = #2e3440
+color-diff-bg = #2e3440
+color-status-fg = #2e3440
+color-status-bg = #88c0d0
+color-search-fg = #2e3440
+color-search-bg = #ebcb8b

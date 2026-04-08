@@ -35,4 +35,7 @@ version:
 site:
 	@echo "site assets are in site/ directory"
 
-.PHONY: build test lint fmt race version site
+validate-themes:
+	go test -run TestGalleryThemes_validate ./app/theme/
+
+.PHONY: build test lint fmt race version site validate-themes
