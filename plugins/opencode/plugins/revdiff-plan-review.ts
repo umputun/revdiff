@@ -9,7 +9,6 @@
  * on $PATH. Supports tmux, kitty, wezterm, cmux, ghostty, iTerm2, emacs.
  */
 import type { Plugin } from "@opencode-ai/plugin";
-import { $ } from "bun";
 import path from "path";
 import os from "os";
 import fs from "fs/promises";
@@ -29,7 +28,7 @@ async function isExecutable(filePath: string): Promise<boolean> {
 }
 
 async function isInstalled(bin: string): Promise<boolean> {
-  const p = await $`which ${bin}`.text().catch(() => "");
+  const p = await Bun.$`which ${bin}`.text().catch(() => "");
   return p.trim().length > 0;
 }
 
@@ -56,7 +55,7 @@ async function getLastPlanContent(
 
 async function launchReview(planFile: string): Promise<string> {
   try {
-    return await $`bash ${LAUNCHER} ${planFile}`.text().then((t) => t.trim());
+    return await Bun.$`bash ${LAUNCHER} ${planFile}`.text().then((t) => t.trim());
   } catch {
     return "";
   }
@@ -99,7 +98,7 @@ export const server: Plugin = async ({ client }) => ({
     if (!planContent?.trim()) return;
 
     const planFile = `/tmp/revdiff-plan-${sessionID}.md`;
-    await Bun.write(planFile, planContent);
+    await Bun.$.write(planFile, planContent);
 
     let annotations: string;
     try {
@@ -108,10 +107,10 @@ export const server: Plugin = async ({ client }) => ({
       await fs.unlink(planFile).catch(() => {});
     }
 
-    if (!annotations!) return;
+    if (!annotations) return;
 
     try {
-      await injectAnnotations(client, sessionID, annotations!);
+      await injectAnnotations(client, sessionID, annotations);
     } catch {
       // best-effort
     }

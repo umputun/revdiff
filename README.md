@@ -126,7 +126,7 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 
 #### OpenCode
 
-See 'plugins/opencode/README.md'
+See [OpenCode configs](plugins/opencode/README.md)
 
 #### General
 
