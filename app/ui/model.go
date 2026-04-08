@@ -783,6 +783,10 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.tree = newFileTreeFromEntries(entries)
+	// restore cursor to previously selected file
+	if m.currFile != "" {
+		m.tree.selectByPath(m.currFile)
+	}
 	m.singleFile = len(m.tree.allFiles) == 1
 	if len(entries) == 0 {
 		m.currFile = ""
