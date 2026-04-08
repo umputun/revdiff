@@ -60,17 +60,17 @@ Split cursor movement, navigation methods, and nav dispatchers into new `diffnav
 - Modify: `app/ui/diffview.go`
 - Modify: `app/ui/model.go`
 
-- [ ] create `app/ui/diffnav.go` with package header and imports
-- [ ] move from `diffview.go` — cursor movement: `moveDiffCursorDown`, `moveDiffCursorUp`, `moveDiffCursorPageDown`, `moveDiffCursorPageUp`, `moveDiffCursorHalfPageDown`, `moveDiffCursorHalfPageUp`, `moveDiffCursorToStart`, `moveDiffCursorToEnd`
-- [ ] move from `diffview.go` — viewport sync: `syncViewportToCursor`, `centerViewportOnCursor`, `topAlignViewportOnCursor`
-- [ ] move from `diffview.go` — hunk navigation: `findHunks`, `currentHunk`, `moveToNextHunk`, `moveToPrevHunk`, `handleHunkNav`
-- [ ] move from `diffview.go` — `handleHorizontalScroll`, `cursorDiffLine`
-- [ ] move from `model.go` — `applyPendingHunkJump`
-- [ ] move from `model.go` — nav dispatchers: `handleDiffNav`, `handleTreeNav`, `handleTOCNav`, `handleSwitchToTree`, `treePageSize`, `paneHeight`
-- [ ] move from `model.go` — TOC nav helpers: `jumpTOCEntry`, `syncTOCCursorToActive`, `syncDiffToTOCCursor`, `syncTOCActiveSection`
-- [ ] verify `diffview.go` is under 500 lines and `diffnav.go` is under 500 lines
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/diffnav.go` with package header and imports
+- [x] move from `diffview.go` — cursor movement: `moveDiffCursorDown`, `moveDiffCursorUp`, `moveDiffCursorPageDown`, `moveDiffCursorPageUp`, `moveDiffCursorHalfPageDown`, `moveDiffCursorHalfPageUp`, `moveDiffCursorToStart`, `moveDiffCursorToEnd`
+- [x] move from `diffview.go` — viewport sync: `syncViewportToCursor`, `centerViewportOnCursor`, `topAlignViewportOnCursor`
+- [x] move from `diffview.go` — hunk navigation: `findHunks`, `currentHunk`, `moveToNextHunk`, `moveToPrevHunk`, `handleHunkNav`
+- [x] move from `diffview.go` — `handleHorizontalScroll`, `cursorDiffLine`
+- [x] move from `model.go` — `applyPendingHunkJump`
+- [x] move from `model.go` — nav dispatchers: `handleDiffNav`, `handleTreeNav`, `handleTOCNav`, `handleSwitchToTree`, `treePageSize`, `paneHeight`
+- [x] move from `model.go` — TOC nav helpers: `jumpTOCEntry`, `syncTOCCursorToActive`, `syncDiffToTOCCursor`, `syncTOCActiveSection`
+- [x] verify `diffview.go` is under 500 lines and `diffnav.go` is under 500 lines
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 2: Extract view.go from model.go
 
