@@ -782,9 +782,9 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
+	oldReviewed := m.tree.reviewed
 	m.tree = newFileTreeFromEntries(entries)
 	// preserve reviewed marks and cursor across tree rebuilds (e.g. toggle untracked)
-	oldReviewed := m.tree.reviewed
 	m.tree.restoreReviewed(oldReviewed)
 	if m.currFile != "" {
 		m.tree.selectByPath(m.currFile)
