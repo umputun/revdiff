@@ -63,7 +63,7 @@ If not found, guide installation:
 **Auto-detect**: If no ref provided, run the smart detection script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/detect-ref.sh
+${CLAUDE_SKILL_DIR}/scripts/detect-ref.sh
 ```
 
 The script outputs structured fields:
@@ -85,7 +85,7 @@ The script outputs structured fields:
 Run the launcher script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
+${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
 ```
 
 The script:
