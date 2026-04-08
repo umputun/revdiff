@@ -252,7 +252,7 @@ func (m Model) loadFiles() tea.Cmd {
 			ut, utErr := m.loadUntracked()
 			if utErr == nil {
 				for _, f := range ut {
-					entries = append(entries, diff.FileEntry{Path: f})
+					entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
 				}
 			}
 		}

@@ -48,6 +48,7 @@ const (
 	FileModified FileStatus = "M"
 	FileDeleted  FileStatus = "D"
 	FileRenamed  FileStatus = "R"
+	FileUntracked FileStatus = "?"
 )
 
 // FileEntry represents a file with its change status from git diff.
