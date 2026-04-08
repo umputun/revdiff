@@ -155,3 +155,16 @@ Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added
 When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
+
+## Review History
+
+When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
+
+Each history file contains:
+- Header with path, git refs, and commit hash
+- Full annotation output (same format as stdout)
+- Raw git diff for annotated files only
+
+History auto-save is always on and silent — errors are logged to stderr, never fail the process. No history is saved on discard quit (`Q`) or when there are no annotations.
+
+Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env var, or `history-dir` in the config file.

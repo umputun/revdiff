@@ -16,6 +16,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/highlight"
+	"github.com/umputun/revdiff/app/history"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
 	"github.com/umputun/revdiff/app/ui"
@@ -44,6 +45,7 @@ type options struct {
 	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
 	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
+	HistoryDir       string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Keys             string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
 	DumpKeys         bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
@@ -363,6 +365,7 @@ func run(opts options) error {
 	var (
 		renderer    ui.Renderer
 		workDir     string
+		gitRoot     string
 		blamer      ui.Blamer
 		untrackedFn func() ([]string, error)
 		err         error
@@ -378,7 +381,8 @@ func run(opts options) error {
 		defer tty.Close()
 		programOptions = append(programOptions, tea.WithInput(tty))
 	} else {
-		gitRoot, gitErr := gitTopLevel()
+		var gitErr error
+		gitRoot, gitErr = gitTopLevel()
 		renderer, workDir, err = makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
 		if err != nil {
 			return err
@@ -454,6 +458,35 @@ func run(opts options) error {
 	if output == "" {
 		return nil
 	}
+
+	// auto-save review history as a safety net for annotations.
+	// for non-git single-file --only mode, use the full file path for the header
+	// and the parent directory basename for the history subdirectory.
+	histPath := workDir
+	if histPath == "" {
+		histPath = gitRoot
+	}
+	var histSubDir string
+	if gitRoot == "" && len(opts.Only) == 1 {
+		if abs, err := filepath.Abs(opts.Only[0]); err == nil {
+			histPath = abs
+			histSubDir = filepath.Base(filepath.Dir(abs))
+		}
+	}
+	if opts.Stdin {
+		histPath = "stdin"
+	}
+	history.Save(history.Params{
+		Annotations:    output,
+		Path:           histPath,
+		Ref:            opts.ref(),
+		Staged:         opts.Staged,
+		GitRoot:        gitRoot,
+		AnnotatedFiles: m.Store().Files(),
+		HistoryDir:     opts.HistoryDir,
+		SubDir:         histSubDir,
+	})
+
 	if opts.Output != "" {
 		if err := os.WriteFile(opts.Output, []byte(output), 0o600); err != nil {
 			return fmt.Errorf("write output: %w", err)

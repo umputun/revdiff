@@ -37,6 +37,7 @@ Then uncomment and edit the values you want to change.
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
+| `--history-dir` | `REVDIFF_HISTORY_DIR` | Directory for review history auto-saves | `~/.config/revdiff/history/` |
 | `--keys` | `REVDIFF_KEYS` | Path to keybindings file | `~/.config/revdiff/keybindings` |
 | `--dump-keys` | | Print effective keybindings to stdout and exit | |
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |

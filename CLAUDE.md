@@ -31,6 +31,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
 - `app/theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
 - `app/annotation/` - in-memory annotation store, structured output formatting; `Annotation.EndLine` enables hunk range headers when comment contains "hunk" keyword
+- `app/history/` - review session auto-save to `~/.config/revdiff/history/`; `Save(Params)` writes markdown with header, annotations, and git diff for annotated files
 - `app/ui/mocks/` - moq-generated mocks (never edit manually)
 
 ## Key Interfaces (consumer-side, in `app/ui/`)

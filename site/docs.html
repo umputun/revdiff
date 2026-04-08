@@ -64,6 +64,7 @@
         <a href="#scratch-buffer">Scratch-buffer review</a>
         <a href="#markdown-toc">Markdown TOC</a>
         <a href="#beyond-code-review">Beyond code review</a>
+        <a href="#review-history">Review history</a>
 
         <h4>Configuration</h4>
         <a href="#config-file">Config file</a>
@@ -209,6 +210,12 @@ git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
 revdiff --only=/tmp/draft-comment.md</code></div>
         <p><strong>Reviewing generated output</strong> — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied.</p>
 
+        <h2 id="review-history">Review history</h2>
+        <p>When you quit with annotations (<code>q</code>), revdiff automatically saves a copy of the review session to <code>~/.config/revdiff/history/&lt;repo-name&gt;/&lt;timestamp&gt;.md</code>. This is a safety net &mdash; if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.</p>
+        <p>Each history file contains a header with path, git refs, and commit hash, the full annotation output (same format as stdout), and the raw git diff for annotated files only.</p>
+        <p>History auto-save is always on and silent &mdash; errors are logged to stderr, never fail the process. No history is saved on discard quit (<code>Q</code>) or when there are no annotations.</p>
+        <p>Override the directory with <code>--history-dir</code>, <code>REVDIFF_HISTORY_DIR</code> env var, or <code>history-dir</code> in the config file.</p>
+
         <!-- configuration -->
         <h2 id="config-file">Config file</h2>
         <p>Location: <code>~/.config/revdiff/config</code> (INI format). Override with <code>--config</code> flag or <code>REVDIFF_CONFIG</code> env var.</p>
@@ -241,6 +248,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
                 <tr><td><code>-o, --output</code></td><td>Write annotations to file</td><td></td></tr>
+                <tr><td><code>--history-dir</code></td><td>Directory for review history auto-saves</td><td><code>~/.config/revdiff/history/</code></td></tr>
                 <tr><td><code>--keys</code></td><td>Path to keybindings file</td><td><code>~/.config/revdiff/keybindings</code></td></tr>
                 <tr><td><code>--dump-keys</code></td><td>Print effective keybindings and exit</td><td></td></tr>
                 <tr><td><code>--config</code></td><td>Path to config file</td><td><code>~/.config/revdiff/config</code></td></tr>
