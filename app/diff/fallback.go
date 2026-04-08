@@ -269,14 +269,14 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 func ReadFileAsAdded(path string) ([]DiffLine, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("stat file %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
 		return nil, nil
 	}
 	f, err := os.Open(path) //nolint:gosec // path comes from git ls-files output
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open file %s: %w", path, err)
 	}
 	defer f.Close()
 	lines, err := readReaderAsContext(f)

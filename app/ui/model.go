@@ -830,7 +830,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.clearSearch()
 	m.computeFileStats()
-	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
+	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)
 	if m.lineNumbers {
 		m.lineNumWidth = m.computeLineNumWidth()
 	}
