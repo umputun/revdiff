@@ -2,7 +2,6 @@ package ui
 
 import (
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
@@ -387,8 +386,12 @@ func (ft *fileTree) restoreReviewed(prev map[string]bool) {
 	if prev == nil {
 		return
 	}
+	fileSet := make(map[string]struct{}, len(ft.allFiles))
+	for _, f := range ft.allFiles {
+		fileSet[f] = struct{}{}
+	}
 	for path := range prev {
-		if slices.Contains(ft.allFiles, path) {
+		if _, ok := fileSet[path]; ok {
 			ft.reviewed[path] = true
 		}
 	}

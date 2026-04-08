@@ -246,7 +246,7 @@ func (m Model) loadFiles() tea.Cmd {
 					stagedSet[e.Path] = true
 				}
 				for _, se := range stagedEntries {
-					if !stagedSet[se.Path] {
+					if !stagedSet[se.Path] && se.Status == diff.FileAdded {
 						entries = append(entries, se)
 					}
 				}
