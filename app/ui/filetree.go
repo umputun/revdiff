@@ -381,6 +381,22 @@ func (ft *fileTree) selectByPath(path string) bool {
 	return false
 }
 
+// restoreReviewed copies reviewed marks from a previous tree into this tree.
+func (ft *fileTree) restoreReviewed(prev map[string]bool) {
+	if prev == nil {
+		return
+	}
+	fileSet := make(map[string]struct{}, len(ft.allFiles))
+	for _, f := range ft.allFiles {
+		fileSet[f] = struct{}{}
+	}
+	for path := range prev {
+		if _, ok := fileSet[path]; ok {
+			ft.reviewed[path] = true
+		}
+	}
+}
+
 // truncateDirName trims a directory name from the left to fit maxWidth,
 // prepending an ellipsis when truncated.
 func (ft *fileTree) truncateDirName(name string, maxWidth int) string {
