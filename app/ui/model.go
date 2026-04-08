@@ -783,7 +783,9 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.tree = newFileTreeFromEntries(entries)
-	// restore cursor to previously selected file
+	// preserve reviewed marks and cursor across tree rebuilds (e.g. toggle untracked)
+	oldReviewed := m.tree.reviewed
+	m.tree.restoreReviewed(oldReviewed)
 	if m.currFile != "" {
 		m.tree.selectByPath(m.currFile)
 	}

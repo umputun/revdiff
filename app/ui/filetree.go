@@ -2,6 +2,7 @@ package ui
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -379,6 +380,18 @@ func (ft *fileTree) selectByPath(path string) bool {
 		}
 	}
 	return false
+}
+
+// restoreReviewed copies reviewed marks from a previous tree into this tree.
+func (ft *fileTree) restoreReviewed(prev map[string]bool) {
+	if prev == nil {
+		return
+	}
+	for path := range prev {
+		if slices.Contains(ft.allFiles, path) {
+			ft.reviewed[path] = true
+		}
+	}
 }
 
 // truncateDirName trims a directory name from the left to fit maxWidth,
