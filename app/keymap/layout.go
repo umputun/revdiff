@@ -33,8 +33,8 @@ var layoutAlias = map[rune]rune{
 		'Ь': 'M', 'Б': '<', 'Ю': '>',
 
 		// ── Ukrainian extras (on top of Russian) ────────────────────────
-		'і': 'b', 'ї': ']', 'є': '\'',
-		'І': 'B', 'Ї': '}', 'Є': '"',
+		'і': 's', 'ї': ']', 'є': '\'',
+		'І': 'S', 'Ї': '}', 'Є': '"',
 
 		// ── Greek ───────────────────────────────────────────────────────
 		// Row 1 (skip ';' at q-position — ASCII, ambiguous)
@@ -67,5 +67,8 @@ var layoutAlias = map[rune]rune{
 // and true if a mapping exists. Returns the original rune and false otherwise.
 func layoutResolve(r rune) (rune, bool) {
 	alias, ok := layoutAlias[r]
-	return alias, ok
+	if ok {
+		return alias, true
+	}
+	return r, false
 }

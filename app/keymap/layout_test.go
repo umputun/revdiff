@@ -42,7 +42,7 @@ func TestLayoutResolve(t *testing.T) {
 	t.Run("ukrainian extras", func(t *testing.T) {
 		alias, ok := layoutResolve('і')
 		assert.True(t, ok)
-		assert.Equal(t, 'b', alias)
+		assert.Equal(t, 's', alias)
 
 		alias, ok = layoutResolve('ї')
 		assert.True(t, ok)
@@ -127,8 +127,8 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 		assert.Equal(t, ActionToggleUntracked, km.Resolve("г"))
 	})
 
-	t.Run("russian: ш triggers down (i)", func(t *testing.T) {
-		// ш→i but 'i' isn't bound; use о→j instead
+	t.Run("russian: о triggers down (j)", func(t *testing.T) {
+		// о→j and 'j' is bound to ActionDown
 		assert.Equal(t, ActionDown, km.Resolve("о"))
 	})
 
@@ -140,8 +140,8 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 		assert.Equal(t, ActionDown, km.Resolve("ξ"))
 	})
 
-	t.Run("greek: ψ triggers next_hunk (c)", func(t *testing.T) {
-		// ψ→c but 'c' isn't bound; use π→p instead
+	t.Run("greek: π triggers prev_item (p)", func(t *testing.T) {
+		// π→p and 'p' is bound to ActionPrevItem
 		assert.Equal(t, ActionPrevItem, km.Resolve("π"))
 	})
 
@@ -149,20 +149,20 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 		assert.Equal(t, ActionDown, km.Resolve("ח"))
 	})
 
-	t.Run("hebrew: ש triggers focus_tree (a)", func(t *testing.T) {
+	t.Run("hebrew: ש triggers confirm (a)", func(t *testing.T) {
+		// ש→a and 'a' is bound to ActionConfirm
 		assert.Equal(t, ActionConfirm, km.Resolve("ש"))
 	})
 
 	t.Run("direct binding takes precedence over alias", func(t *testing.T) {
-		km := Default()
+		customKm := Default()
 		// bind a Cyrillic character directly to a different action
-		km.Bind("г", ActionQuit)
+		customKm.Bind("г", ActionQuit)
 		// should use the direct binding, not the layout alias to ActionToggleUntracked
-		assert.Equal(t, ActionQuit, km.Resolve("г"))
+		assert.Equal(t, ActionQuit, customKm.Resolve("г"))
 	})
 
 	t.Run("multi-char keys not aliased", func(t *testing.T) {
-		km := Default()
 		assert.Equal(t, ActionHalfPageDown, km.Resolve("ctrl+d"))
 		assert.Equal(t, ActionHalfPageUp, km.Resolve("ctrl+u"))
 		assert.Equal(t, ActionPageDown, km.Resolve("pgdown"))
@@ -170,9 +170,8 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 		assert.Equal(t, ActionDismiss, km.Resolve("esc"))
 	})
 
-	t.Run("unbound key returns empty action", func(t *testing.T) {
-		km := Default()
-		// א maps to 't' which is bound to ActionToggleTree
+	t.Run("hebrew: א triggers toggle_tree (t)", func(t *testing.T) {
+		// א→t which is bound to ActionToggleTree
 		assert.Equal(t, ActionToggleTree, km.Resolve("א"))
 	})
 
