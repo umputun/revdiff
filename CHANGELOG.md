@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.14.0 - 2026-04-08
+
+### New Features
+
+- show untracked and staged-only files in file tree (u toggle) (#62)
+- reviewed file marks and A/M/D status indicators in file tree (#54)
+- global hunk navigation (#59)
+- zellij.dev support (#53)
+- pi package integration (#52)
+
+### Improvements
+
+- split large files by concern (#65)
+- move source packages into app/ directory (#49)
+- consolidate assets into site/assets, remove root assets/
+- bump revdiff plugin version to 0.5.0
+
+### Bug Fixes
+
+- annotation on last row of the view (#60)
+- lowercase zellij name to match other terminal entries
+- add missing feature cards and center install grid
+- restore correct two-color logo in site/assets
+- handle no-commits repo in detect-ref script
+- use TMPDIR for temp files in launch script to avoid macOS sandbox restriction
+
 ## v0.13.0 - 2026-04-06
 
 ### New Features
