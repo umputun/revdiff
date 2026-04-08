@@ -286,19 +286,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// annotation input mode takes priority
-	if m.annotating {
-		return m.handleAnnotateKey(msg)
-	}
-
-	// search input mode takes priority after annotation
-	if m.searching {
-		return m.handleSearchKey(msg)
-	}
-
-	// annotation list popup: handle keys when already open
-	if m.showAnnotList {
-		return m.handleAnnotListKey(msg)
+	if handled, model, cmd := m.handleModalKey(msg); handled {
+		return model, cmd
 	}
 
 	action := m.keymap.Resolve(msg.String())
@@ -351,6 +340,28 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDiffNav(msg)
 	}
 	return m, nil
+}
+
+func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
+	// annotation input mode takes priority
+	if m.annotating {
+		model, cmd := m.handleAnnotateKey(msg)
+		return true, model, cmd
+	}
+
+	// search input mode takes priority after annotation
+	if m.searching {
+		model, cmd := m.handleSearchKey(msg)
+		return true, model, cmd
+	}
+
+	// annotation list popup: handle keys when already open
+	if m.showAnnotList {
+		model, cmd := m.handleAnnotListKey(msg)
+		return true, model, cmd
+	}
+
+	return false, m, nil
 }
 
 // togglePane switches focus between tree and diff panes.
@@ -806,21 +817,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 
 	// handle pending hunk jump after cross-file hunk navigation
 	if m.pendingHunkJump != nil {
-		forward := *m.pendingHunkJump
-		m.pendingHunkJump = nil
-		if forward {
-			m.diffCursor = -1
-			m.moveToNextHunk()
-			if m.diffCursor == -1 {
-				m.skipInitialDividers()
-			}
-		} else {
-			m.diffCursor = len(m.diffLines)
-			m.moveToPrevHunk()
-			if m.diffCursor == len(m.diffLines) {
-				m.skipInitialDividers()
-			}
-		}
+		m.applyPendingHunkJump()
 		m.centerViewportOnCursor()
 		return m, blameCmd
 	}
@@ -828,6 +825,26 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, blameCmd
+}
+
+func (m *Model) applyPendingHunkJump() {
+	forward := *m.pendingHunkJump
+	m.pendingHunkJump = nil
+	if forward {
+		m.diffCursor = -1
+		m.moveToNextHunk()
+		if m.diffCursor != -1 {
+			return
+		}
+		m.skipInitialDividers()
+		return
+	}
+
+	m.diffCursor = len(m.diffLines)
+	m.moveToPrevHunk()
+	if m.diffCursor == len(m.diffLines) {
+		m.skipInitialDividers()
+	}
 }
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.
