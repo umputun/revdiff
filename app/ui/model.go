@@ -492,4 +492,3 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
-

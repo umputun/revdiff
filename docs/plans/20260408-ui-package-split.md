@@ -114,12 +114,12 @@ Move all search-related tests (~46 functions) to dedicated file.
 - Create: `app/ui/model_search_test.go`
 - Modify: `app/ui/model_test.go`
 
-- [ ] create `app/ui/model_search_test.go` with package header, imports, and shared test helpers if needed
-- [ ] move all `TestModel_Search*` and `TestModel_*Search*` test functions
-- [ ] move search-related test helpers if any exist
-- [ ] verify no duplicate imports or missing helpers
-- [ ] run `make test` — must pass
-- [ ] run `make lint` — must pass
+- [x] create `app/ui/model_search_test.go` with package header, imports, and shared test helpers if needed
+- [x] move all `TestModel_Search*` and `TestModel_*Search*` test functions
+- [x] move search-related test helpers if any exist
+- [x] verify no duplicate imports or missing helpers
+- [x] run `make test` — must pass
+- [x] run `make lint` — must pass
 
 ### Task 5: Split model_test.go — extract model_annotate_test.go
 

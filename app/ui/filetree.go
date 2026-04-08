@@ -12,12 +12,12 @@ import (
 
 // fileTree manages the list of changed files grouped by directory.
 type fileTree struct {
-	entries      []treeEntry       // flat list of directories and files for display
-	cursor       int               // currently highlighted entry index
-	offset       int               // first visible entry index for viewport scrolling
-	allFiles     []string          // original full file paths
-	filter       bool              // when true, show only annotated files
-	reviewed     map[string]bool   // files marked as reviewed by the user
+	entries      []treeEntry                // flat list of directories and files for display
+	cursor       int                        // currently highlighted entry index
+	offset       int                        // first visible entry index for viewport scrolling
+	allFiles     []string                   // original full file paths
+	filter       bool                       // when true, show only annotated files
+	reviewed     map[string]bool            // files marked as reviewed by the user
 	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
 }
 

@@ -44,10 +44,10 @@ type DiffLine struct {
 type FileStatus string
 
 const (
-	FileAdded    FileStatus = "A"
-	FileModified FileStatus = "M"
-	FileDeleted  FileStatus = "D"
-	FileRenamed  FileStatus = "R"
+	FileAdded     FileStatus = "A"
+	FileModified  FileStatus = "M"
+	FileDeleted   FileStatus = "D"
+	FileRenamed   FileStatus = "R"
 	FileUntracked FileStatus = "?"
 )
 
