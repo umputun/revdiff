@@ -13,10 +13,10 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 ## Project Structure
 - `app/` - entry point (`main.go`), CLI flags, wiring
 - `app/diff/` - git interaction, unified diff parsing (`ParseUnifiedDiff`, `DiffLine`)
-- `app/ui/` - bubbletea TUI package, split by concern:
+- `app/ui/` - bubbletea TUI package. All files share one `Model` struct — methods are split across files by concern to keep code files under ~500 lines and test files around ~1000 lines (soft target). Each source file has a matching `_test.go` file. See `app/ui/doc.go` for package-level documentation.
   - `model.go` - Model struct, NewModel, Init, Update, handleKey, view toggles
-  - `view.go` - View(), status bar, help overlay, ANSI helpers
-  - `handlers.go` - modal handlers (enter/esc, discard, annotate, filter, mark reviewed)
+  - `view.go` - View(), status bar, ANSI helpers
+  - `handlers.go` - modal handlers (help overlay, enter/esc, discard, filter, mark reviewed)
   - `loaders.go` - async file/blame loading, loaded-message handlers, data helpers
   - `diffview.go` - diff rendering, gutters, line styling, search highlights
   - `diffnav.go` - nav dispatchers, cursor movement, hunk nav, viewport sync
