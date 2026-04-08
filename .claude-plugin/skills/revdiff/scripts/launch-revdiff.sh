@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launch revdiff in a terminal overlay (tmux/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
+# launch revdiff in a terminal overlay (tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
 # usage: launch-revdiff.sh [ref] [--staged] [--only=file1 ...]
 # output: annotation text from revdiff stdout (empty if no annotations)
 
@@ -55,6 +55,34 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     fi
     TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")
     "${TMUX_ARGS[@]}"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
+# zellij: floating pane with sentinel file for blocking
+if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
+    rm -f "$SENTINEL"
+
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX.sh")
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+$REVDIFF_CMD; touch '$SENTINEL'
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    ZELLIJ_W="${POPUP_W%%%}"
+    ZELLIJ_H="${POPUP_H%%%}"
+    zellij run --floating --close-on-exit \
+        --width "$ZELLIJ_W" --height "$ZELLIJ_H" \
+        --name "$OVERLAY_TITLE" --cwd "$CWD" \
+        -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit 0
 fi
@@ -335,5 +363,5 @@ LAUNCHER
     exit 0
 fi
 
-echo "error: no overlay terminal available (requires tmux, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires tmux, zellij, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
