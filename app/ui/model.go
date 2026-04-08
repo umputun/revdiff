@@ -6,6 +6,7 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -143,8 +144,9 @@ type blameLoadedMsg struct {
 
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
-	entries []diff.FileEntry
-	err     error
+	entries  []diff.FileEntry
+	err      error
+	warnings []string // non-fatal issues (staged/untracked fetch failures)
 }
 
 // ModelConfig holds configuration options for NewModel.
@@ -228,6 +230,7 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
+		var warnings []string
 		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
 		if err != nil {
 			return filesLoadedMsg{entries: entries, err: err}
@@ -235,7 +238,9 @@ func (m Model) loadFiles() tea.Cmd {
 		// include staged-only files (new files added to index but not yet committed)
 		if m.ref == "" && !m.staged {
 			stagedEntries, stagedErr := m.renderer.ChangedFiles("", true)
-			if stagedErr == nil {
+			if stagedErr != nil {
+				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
+			} else {
 				stagedSet := make(map[string]bool, len(entries))
 				for _, e := range entries {
 					stagedSet[e.Path] = true
@@ -247,16 +252,24 @@ func (m Model) loadFiles() tea.Cmd {
 				}
 			}
 		}
-		// append untracked files when toggle is on
+		// append untracked files when toggle is on (skip files already in entries to avoid dupes)
 		if m.showUntracked && m.loadUntracked != nil {
 			ut, utErr := m.loadUntracked()
-			if utErr == nil {
+			if utErr != nil {
+				warnings = append(warnings, fmt.Sprintf("untracked files: %v", utErr))
+			} else {
+				entrySet := make(map[string]bool, len(entries))
+				for _, e := range entries {
+					entrySet[e.Path] = true
+				}
 				for _, f := range ut {
-					entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
+					if !entrySet[f] {
+						entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
+					}
 				}
 			}
 		}
-		return filesLoadedMsg{entries: entries}
+		return filesLoadedMsg{entries: entries, warnings: warnings}
 	}
 }
 
@@ -777,6 +790,9 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
 	}
+	for _, w := range msg.warnings {
+		log.Printf("[WARN] %s", w)
+	}
 	entries := m.filterOnly(msg.entries)
 	if len(entries) == 0 && len(m.only) > 0 {
 		m.viewport.SetContent("no files match --only filter")
@@ -825,7 +841,8 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.currFile = msg.file
 	m.diffLines = msg.lines
 	// untracked files have no git diff — fall back to reading from disk as all-added lines
-	if len(m.diffLines) == 0 && m.workDir != "" {
+	fileStatus := m.tree.fileStatuses[msg.file]
+	if len(m.diffLines) == 0 && m.workDir != "" && fileStatus == diff.FileUntracked {
 		if added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file)); err == nil && len(added) > 0 {
 			m.diffLines = added
 		}

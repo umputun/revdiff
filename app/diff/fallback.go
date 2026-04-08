@@ -269,19 +269,28 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 func ReadFileAsAdded(path string) ([]DiffLine, error) {
 	info, err := os.Stat(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			if linfo, lErr := os.Lstat(path); lErr == nil && linfo.Mode()&os.ModeSymlink != 0 {
+				return []DiffLine{{NewNum: 1, Content: "(broken symlink)", ChangeType: ChangeContext}}, nil
+			}
+		}
 		return nil, fmt.Errorf("stat file %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return nil, nil
+		return []DiffLine{{NewNum: 1, Content: "(not a regular file)", ChangeType: ChangeContext}}, nil
 	}
 	f, err := os.Open(path) //nolint:gosec // path comes from git ls-files output
 	if err != nil {
-		return nil, fmt.Errorf("open file %s: %w", path, err)
+		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
 	defer f.Close()
 	lines, err := readReaderAsContext(f)
 	if err != nil {
-		return nil, err
+		var ctxErr readerContextError
+		if errors.As(err, &ctxErr) {
+			return nil, fmt.Errorf("%s file %s: %w", ctxErr.op, path, ctxErr.err)
+		}
+		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
 	for i := range lines {
 		lines[i].ChangeType = ChangeAdd
