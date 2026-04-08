@@ -532,3 +532,26 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 		assert.Nil(t, cmd, "should return nil command")
 	})
 }
+
+func TestModel_HandleViewToggle_WordDiff(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 0, Content: "hello world", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 1, Content: "hello brave world", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.focus = paneDiff
+	m.currFile = "a.go"
+	m.diffLines = lines
+
+	assert.False(t, m.wordDiff)
+	result, _ := m.handleViewToggle(keymap.ActionToggleWordDiff)
+	m = result.(Model)
+	assert.True(t, m.wordDiff)
+	require.Len(t, m.intraRanges, len(lines))
+	assert.NotNil(t, m.intraRanges[1], "paired add line should have ranges")
+
+	result, _ = m.handleViewToggle(keymap.ActionToggleWordDiff)
+	m = result.(Model)
+	assert.False(t, m.wordDiff)
+	assert.Nil(t, m.intraRanges, "ranges cleared when toggled off")
+}

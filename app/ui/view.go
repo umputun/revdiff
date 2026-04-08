@@ -362,6 +362,7 @@ func (m Model) statusModeIcons() string {
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
+		{"⇄", m.wordDiff},
 		{"✓", m.tree.reviewedCount() > 0},
 		{"∅", m.showUntracked},
 	}

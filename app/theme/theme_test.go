@@ -156,6 +156,32 @@ func TestParse_missingChromaStyle(t *testing.T) {
 	assert.Contains(t, err.Error(), "theme missing required key: chroma-style")
 }
 
+func TestParse_wordDiffColors(t *testing.T) {
+	input := "chroma-style = dracula\n" + fullThemeColors() +
+		"color-word-add-bg = #4a7a1a\ncolor-word-remove-bg = #a03838\n"
+	th, err := Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	assert.Equal(t, "#4a7a1a", th.Colors["color-word-add-bg"])
+	assert.Equal(t, "#a03838", th.Colors["color-word-remove-bg"])
+}
+
+func TestParse_wordDiffColorsOptional(t *testing.T) {
+	// parsing succeeds without word-diff keys (they are optional)
+	input := "chroma-style = dracula\n" + fullThemeColors()
+	th, err := Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	_, addOK := th.Colors["color-word-add-bg"]
+	_, remOK := th.Colors["color-word-remove-bg"]
+	assert.False(t, addOK)
+	assert.False(t, remOK)
+}
+
+func TestColorKeys_includesWordDiff(t *testing.T) {
+	keys := ColorKeys()
+	assert.Contains(t, keys, "color-word-add-bg")
+	assert.Contains(t, keys, "color-word-remove-bg")
+}
+
 func TestParse_ignoresNonColorKeys(t *testing.T) {
 	input := "something-else = value\nchroma-style = monokai\n" + fullThemeColors()
 	th, err := Parse(strings.NewReader(input))
@@ -731,9 +757,9 @@ func TestDump_Parse_roundtrip_withoutOptionalKeys(t *testing.T) {
 
 func TestColorKeys(t *testing.T) {
 	keys := ColorKeys()
-	assert.Len(t, keys, 21)
+	assert.Len(t, keys, 23)
 	assert.Equal(t, "color-accent", keys[0])
-	assert.Equal(t, "color-search-bg", keys[len(keys)-1])
+	assert.Equal(t, "color-word-remove-bg", keys[len(keys)-1])
 
 	// verify it returns a copy
 	keys[0] = "modified"
@@ -742,7 +768,7 @@ func TestColorKeys(t *testing.T) {
 
 func TestOptionalColorKeys(t *testing.T) {
 	opt := OptionalColorKeys()
-	assert.Len(t, opt, 3)
+	assert.Len(t, opt, 5)
 	assert.True(t, opt["color-cursor-bg"])
 	assert.True(t, opt["color-tree-bg"])
 	assert.True(t, opt["color-diff-bg"])

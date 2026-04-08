@@ -88,6 +88,42 @@ func TestModel_RenderDiffLineWithoutLineNumbers(t *testing.T) {
 	assert.Contains(t, stripped, "hello")
 }
 
+func TestModel_RenderDiffLine_WordDiffOverlay(t *testing.T) {
+	m := testModel(nil, nil)
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, NewNum: 0, Content: "hello world", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 1, Content: "hello globe", ChangeType: diff.ChangeAdd},
+	}
+	m.highlightedLines = nil
+	m.wordDiff = true
+	// empty WordAddBg/WordRemoveBg → reverse-video fallback, easy to assert
+	m.recomputeIntraRanges()
+
+	rendered := m.renderDiff()
+	// reverse-video markers must appear on at least one line
+	assert.Contains(t, rendered, "\033[7m")
+	assert.Contains(t, rendered, "\033[27m")
+	// plain text is still present
+	stripped := ansi.Strip(rendered)
+	assert.Contains(t, stripped, "hello world")
+	assert.Contains(t, stripped, "hello globe")
+}
+
+func TestModel_RenderDiffLine_WordDiffDisabled(t *testing.T) {
+	m := testModel(nil, nil)
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, NewNum: 0, Content: "hello world", ChangeType: diff.ChangeRemove},
+		{OldNum: 0, NewNum: 1, Content: "hello globe", ChangeType: diff.ChangeAdd},
+	}
+	m.highlightedLines = nil
+	m.wordDiff = false
+
+	rendered := m.renderDiff()
+	assert.NotContains(t, rendered, "\033[7m")
+}
+
 func TestModel_RenderWrappedDiffLineWithLineNumbers(t *testing.T) {
 	m := testModel(nil, nil)
 	m.lineNumbers = true

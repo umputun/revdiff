@@ -24,6 +24,7 @@ Then uncomment and edit the values you want to change.
 | `--no-colors` | `REVDIFF_NO_COLORS` | Disable all colors including syntax highlighting | `false` |
 | `--no-status-bar` | `REVDIFF_NO_STATUS_BAR` | Hide the status bar | `false` |
 | `--wrap` | `REVDIFF_WRAP` | Enable line wrapping in diff view | `false` |
+| `--word-diff` | `REVDIFF_WORD_DIFF` | Highlight changed tokens within paired remove/add lines | `false` |
 | `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
 | `--line-numbers` | `REVDIFF_LINE_NUMBERS` | Show line numbers in diff gutter | `false` |
 | `--blame` | `REVDIFF_BLAME` | Show git blame gutter on startup | `false` |
@@ -102,6 +103,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-status-bg` | Status bar background | `#C5794F` |
 | `--color-search-fg` | Search match text | `#1a1a1a` |
 | `--color-search-bg` | Search match background | `#4a4a00` |
+| `--color-word-add-bg` | Intra-line word-diff add background | `#2d6a00` |
+| `--color-word-remove-bg` | Intra-line word-diff remove background | `#8a1f00` |
 
 ## Chroma Syntax Highlighting Styles
 
@@ -128,6 +131,6 @@ unmap q
 map ctrl+d half_page_down
 ```
 
-Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `theme_select`, `filter`, `quit`, `discard_quit`, `help`, `dismiss`
+Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_wrap`, `toggle_word_diff`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `theme_select`, `filter`, `quit`, `discard_quit`, `help`, `dismiss`
 
 Modal keys (annotation input, search input, confirm discard) are not remappable.

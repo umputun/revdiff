@@ -82,6 +82,9 @@ github.com/pmezard/go-difflib/difflib
 # github.com/rivo/uniseg v0.4.7
 ## explicit; go 1.18
 github.com/rivo/uniseg
+# github.com/sergi/go-diff v1.4.0
+## explicit; go 1.13
+github.com/sergi/go-diff/diffmatchpatch
 # github.com/stretchr/testify v1.11.1
 ## explicit; go 1.17
 github.com/stretchr/testify/assert

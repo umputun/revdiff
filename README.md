@@ -10,6 +10,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Full-file diff view with syntax highlighting
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
+- Word-diff highlighting: brighter background on changed tokens within paired remove/add lines, toggle with `W`
 - Line numbers: side-by-side old/new line number gutter, toggle with `L`
 - Git blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
@@ -197,6 +198,7 @@ Positional arguments support several forms:
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
 | `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
+| `--word-diff` | Highlight changed tokens within paired remove/add lines, env: `REVDIFF_WORD_DIFF` | `false` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
@@ -315,6 +317,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-status-bg` | Status bar background | `#C5794F` |
 | `--color-search-fg` | Search match text | `#1a1a1a` |
 | `--color-search-bg` | Search match background | `#4a4a00` |
+| `--color-word-add-bg` | Intra-line word-diff add background | `#2d6a00` |
+| `--color-word-remove-bg` | Intra-line word-diff remove background | `#8a1f00` |
 
 </details>
 
@@ -495,6 +499,7 @@ Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env v
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
+| `W` | Toggle word-diff highlighting (brighter background on changed tokens in paired remove/add lines) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
 | `B` | Toggle git blame gutter (author name + commit age per line) |
@@ -544,7 +549,7 @@ Then edit to taste. Modal keys (annotation input, search input, confirm discard)
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
 
-**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `theme_select`, `filter`
+**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_word_diff`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `theme_select`, `filter`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 

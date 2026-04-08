@@ -283,12 +283,17 @@ func (m Model) wrapContent(content string, width int) []string {
 // prepareLineContent returns the display-ready content for a diff line with tabs replaced.
 // returns the raw line content, the best available content (highlighted if available), and whether highlight was used.
 func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textContent string, hasHighlight bool) {
-	lineContent = strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
 	hasHighlight = idx < len(m.highlightedLines)
-	textContent = lineContent
+	textContent = dl.Content
 	if hasHighlight {
-		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
+		textContent = m.highlightedLines[idx]
 	}
+	// apply intra-line word-diff overlay on the pre-tab-replacement content so
+	// byte offsets in intraRanges (which index dl.Content) line up with the
+	// non-ANSI bytes of the styled string.
+	textContent = m.highlightIntraLineChanges(idx, textContent, dl.ChangeType == diff.ChangeAdd)
+	lineContent = strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+	textContent = strings.ReplaceAll(textContent, "\t", m.tabSpaces)
 	return lineContent, textContent, hasHighlight
 }
 
@@ -349,51 +354,13 @@ func (m Model) highlightSearchMatches(s string) string {
 }
 
 // insertHighlightMarkers walks the string inserting hlOn/hlOff ANSI sequences at match positions,
-// skipping over existing ANSI escape sequences to preserve them.
+// skipping over existing ANSI escape sequences to preserve them. Delegates to insertBgMarkers.
 func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOff string) string {
-	var b strings.Builder
-	visPos := 0   // current position in visible text
-	matchIdx := 0 // current match we're processing
-	i := 0
-
-	for i < len(s) {
-		// skip ANSI escape sequences (copy them as-is)
-		if s[i] == '\033' {
-			j := i + 1
-			for j < len(s) && s[j] != 'm' {
-				j++
-			}
-			if j < len(s) {
-				j++ // include the 'm'
-			}
-			b.WriteString(s[i:j])
-			i = j
-			continue
-		}
-
-		// insert highlight start/end at match boundaries
-		if matchIdx < len(matches) && visPos == matches[matchIdx].start {
-			b.WriteString(hlOn)
-		}
-		if matchIdx < len(matches) && visPos == matches[matchIdx].end {
-			b.WriteString(hlOff)
-			matchIdx++
-			if matchIdx < len(matches) && visPos == matches[matchIdx].start {
-				b.WriteString(hlOn)
-			}
-		}
-
-		b.WriteByte(s[i])
-		visPos++
-		i++
+	ranges := make([]byteRange, len(matches))
+	for i, mr := range matches {
+		ranges[i] = byteRange(mr)
 	}
-
-	// close any unclosed highlight
-	if matchIdx < len(matches) && visPos >= matches[matchIdx].start && visPos <= matches[matchIdx].end {
-		b.WriteString(hlOff)
-	}
-
-	return b.String()
+	return insertBgMarkers(s, ranges, hlOn, hlOff)
 }
 
 // styleDiffContent applies the appropriate line style based on change type.

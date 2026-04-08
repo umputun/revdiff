@@ -157,7 +157,7 @@ func TestModel_StatusBarFilenameTruncationWideChars(t *testing.T) {
 	m.fileAdds = 1
 	m.fileRemoves = 0
 	m.focus = paneDiff
-	m.width = 42
+	m.width = 45
 
 	status := m.statusBarText()
 	assert.Contains(t, status, "…", "should truncate wide-char filename with ellipsis")
@@ -1652,4 +1652,10 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	rendered = m.renderDiff()
 	stripped = ansi.Strip(rendered)
 	assert.NotContains(t, stripped, "10 10")
+}
+
+func TestModel_StatusModeIcons_WordDiff(t *testing.T) {
+	m := testModel(nil, nil)
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "⇄", "word-diff icon always present")
 }

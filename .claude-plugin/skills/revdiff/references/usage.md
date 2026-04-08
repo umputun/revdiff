@@ -107,6 +107,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
+| `W` | Toggle word-diff highlighting (brighter background on changed tokens in paired remove/add lines) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
 | `B` | Toggle git blame gutter (author name + commit age per line) |

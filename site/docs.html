@@ -233,6 +233,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--no-colors</code></td><td>Disable all colors</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-status-bar</code></td><td>Hide the status bar</td><td><code>false</code></td></tr>
                 <tr><td><code>--wrap</code></td><td>Enable line wrapping</td><td><code>false</code></td></tr>
+                <tr><td><code>--word-diff</code></td><td>Highlight changed tokens within paired remove/add lines</td><td><code>false</code></td></tr>
                 <tr><td><code>--collapsed</code></td><td>Start in collapsed diff mode</td><td><code>false</code></td></tr>
                 <tr><td><code>--cross-file-hunks</code></td><td>Allow <code>[</code> and <code>]</code> to continue into adjacent files</td><td><code>false</code></td></tr>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
@@ -306,6 +307,8 @@ color-border = #6272a4
                 <tr><td><code>--color-modify-fg/bg</code></td><td>Modified line (collapsed mode)</td><td><code>#f5c542</code> / <code>#3D2E00</code></td></tr>
                 <tr><td><code>--color-status-fg/bg</code></td><td>Status bar</td><td><code>#202020</code> / <code>#C5794F</code></td></tr>
                 <tr><td><code>--color-search-fg/bg</code></td><td>Search matches</td><td><code>#1a1a1a</code> / <code>#4a4a00</code></td></tr>
+                <tr><td><code>--color-word-add-bg</code></td><td>Intra-line word-diff add background</td><td><code>#2d6a00</code></td></tr>
+                <tr><td><code>--color-word-remove-bg</code></td><td>Intra-line word-diff remove background</td><td><code>#8a1f00</code></td></tr>
                 <tr><td><code>--color-tree-bg</code></td><td>File tree background</td><td>terminal default</td></tr>
                 <tr><td><code>--color-diff-bg</code></td><td>Diff pane background</td><td>terminal default</td></tr>
             </tbody>
@@ -367,6 +370,7 @@ color-border = #6272a4
             <tbody>
                 <tr><td><code>v</code></td><td>Toggle collapsed diff mode</td></tr>
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
+                <tr><td><code>W</code></td><td>Toggle word-diff highlighting</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
                 <tr><td><code>B</code></td><td>Toggle git blame gutter (author + commit age)</td></tr>
@@ -394,7 +398,7 @@ unmap q</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_hunk</code>, <code>theme_select</code>, <code>filter</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_word_diff</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_hunk</code>, <code>theme_select</code>, <code>filter</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <!-- claude code plugin -->

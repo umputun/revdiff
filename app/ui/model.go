@@ -127,6 +127,9 @@ type Model struct {
 
 	themeSel        themeSelectState // theme selector overlay state
 	activeThemeName string           // name of currently applied theme (for cursor positioning)
+
+	wordDiff    bool          // true when intra-line word-diff highlighting is enabled
+	intraRanges [][]byteRange // parallel to diffLines; nil entries for unpaired or non-change lines
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -166,6 +169,7 @@ type ModelConfig struct {
 	CrossFileHunks   bool                     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool                     // show line numbers in diff gutter
 	ShowBlame        bool                     // show blame gutter on startup when available
+	WordDiff         bool                     // enable intra-line word-diff highlighting on startup
 	Only             []string                 // show only these files (match by exact path or path suffix)
 	WorkDir          string                   // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap           // custom key bindings (nil uses defaults)
@@ -212,6 +216,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
+		wordDiff:         cfg.WordDiff,
 		showUntracked:    false,
 		loadUntracked:    cfg.LoadUntracked,
 		focus:            paneTree,
@@ -317,7 +322,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleUntracked:
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -476,6 +481,8 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleBlame:
 		cmd := m.toggleBlame()
 		return m, cmd
+	case keymap.ActionToggleWordDiff:
+		m.toggleWordDiff()
 	case keymap.ActionToggleUntracked:
 		cmd := m.toggleUntracked()
 		return m, cmd

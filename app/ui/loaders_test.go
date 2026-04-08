@@ -730,3 +730,43 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	assert.Equal(t, "b.go", model.currFile, "response should be accepted despite cursor being on c.go")
 	assert.Equal(t, bLines, model.diffLines)
 }
+
+func TestModel_FileLoaded_WordDiff(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, Content: "hello cruel world", ChangeType: diff.ChangeRemove},
+		{NewNum: 1, Content: "hello brave world", ChangeType: diff.ChangeAdd},
+		{OldNum: 2, NewNum: 2, Content: "unchanged", ChangeType: diff.ChangeContext},
+	}
+
+	t.Run("disabled leaves intraRanges nil", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model := result.(Model)
+		assert.Nil(t, model.intraRanges)
+	})
+
+	t.Run("enabled computes parallel ranges", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.wordDiff = true
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model := result.(Model)
+		require.Len(t, model.intraRanges, len(model.diffLines))
+		assert.NotEmpty(t, model.intraRanges[0], "remove line should have ranges")
+		assert.NotEmpty(t, model.intraRanges[1], "add line should have ranges")
+		assert.Nil(t, model.intraRanges[2], "context line has no ranges")
+	})
+
+	t.Run("recomputeIntraRanges off clears slice", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = newFileTree([]string{"a.go"})
+		m.wordDiff = true
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model := result.(Model)
+		require.NotNil(t, model.intraRanges)
+		model.wordDiff = false
+		model.recomputeIntraRanges()
+		assert.Nil(t, model.intraRanges)
+	})
+}

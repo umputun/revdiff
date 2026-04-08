@@ -265,44 +265,132 @@ func (m Model) hunkStartFor(idx int, hunks []int) int {
 	return best
 }
 
-// buildModifiedSet returns a set of diffLines indices for add lines that are "modified"
-// (paired with removes in the same hunk). pure-add lines (hunk has no removes) are not included.
-func (m Model) buildModifiedSet(hunks []int) map[int]bool {
-	result := make(map[int]bool)
+// linePair pairs a remove line index with a matching add line index.
+type linePair struct{ removeIdx, addIdx int }
+
+// pairHunkLines walks each hunk and pairs contiguous remove-runs with immediately
+// following contiguous add-runs. when the runs have equal length they are paired
+// in order; otherwise the smaller list is matched greedily against the larger
+// using 2*commonPrefix + 2*commonSuffix as a similarity score. unmatched lines
+// produce no entry.
+func (m Model) pairHunkLines(hunks []int) []linePair {
+	var pairs []linePair
 	n := len(m.diffLines)
 
 	for hi, start := range hunks {
-		// find the end of this hunk: next hunk start or first non-change line
 		end := n
 		if hi+1 < len(hunks) {
 			end = hunks[hi+1]
 		}
-		// scan only contiguous change lines from start
 		for end > start && (m.diffLines[end-1].ChangeType != diff.ChangeAdd &&
 			m.diffLines[end-1].ChangeType != diff.ChangeRemove) {
 			end--
 		}
 
-		// check if hunk has both removes and adds
-		hasRemove, hasAdd := false, false
-		var addIndices []int
-		for i := start; i < end; i++ {
-			switch m.diffLines[i].ChangeType {
-			case diff.ChangeRemove:
-				hasRemove = true
-			case diff.ChangeAdd:
-				hasAdd = true
-				addIndices = append(addIndices, i)
-			case diff.ChangeContext, diff.ChangeDivider:
-				// context and divider lines are not part of the hunk's change set
+		i := start
+		for i < end {
+			// skip non-change lines
+			if m.diffLines[i].ChangeType != diff.ChangeRemove && m.diffLines[i].ChangeType != diff.ChangeAdd {
+				i++
+				continue
 			}
+			// collect contiguous remove-run
+			var removes []int
+			for i < end && m.diffLines[i].ChangeType == diff.ChangeRemove {
+				removes = append(removes, i)
+				i++
+			}
+			// collect immediately following contiguous add-run
+			var adds []int
+			for i < end && m.diffLines[i].ChangeType == diff.ChangeAdd {
+				adds = append(adds, i)
+				i++
+			}
+			if len(removes) == 0 || len(adds) == 0 {
+				continue
+			}
+			pairs = append(pairs, m.matchRunPair(removes, adds)...)
 		}
+	}
+	return pairs
+}
 
-		if hasRemove && hasAdd {
-			for _, idx := range addIndices {
-				result[idx] = true
+// matchRunPair pairs a remove-run with an add-run. equal lengths pair 1:1 in order.
+// unequal lengths: walk the smaller list, greedily choosing the best-scoring unused
+// entry from the larger list (score = 2*commonPrefix + 2*commonSuffix).
+func (m Model) matchRunPair(removes, adds []int) []linePair {
+	if len(removes) == len(adds) {
+		out := make([]linePair, len(removes))
+		for k := range removes {
+			out[k] = linePair{removeIdx: removes[k], addIdx: adds[k]}
+		}
+		return out
+	}
+	small, large := removes, adds
+	smallIsRemove := true
+	if len(adds) < len(removes) {
+		small, large = adds, removes
+		smallIsRemove = false
+	}
+	used := make([]bool, len(large))
+	var out []linePair
+	for _, sIdx := range small {
+		sText := m.diffLines[sIdx].Content
+		best, bestScore := -1, -1
+		for k, lIdx := range large {
+			if used[k] {
+				continue
+			}
+			lText := m.diffLines[lIdx].Content
+			var score int
+			if sText == lText {
+				// prefer exact matches so reordered runs (e.g. removes=[A,B], adds=[B,A])
+				// pair A↔A, B↔B instead of crossing.
+				score = 1<<30 + len(sText)
+			} else {
+				score = 2*commonPrefixLen(sText, lText) + 2*commonSuffixLen(sText, lText)
+			}
+			if score > bestScore {
+				best, bestScore = k, score
 			}
 		}
+		if best < 0 {
+			continue
+		}
+		used[best] = true
+		if smallIsRemove {
+			out = append(out, linePair{removeIdx: sIdx, addIdx: large[best]})
+		} else {
+			out = append(out, linePair{removeIdx: large[best], addIdx: sIdx})
+		}
+	}
+	return out
+}
+
+func commonPrefixLen(a, b string) int {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[i] == b[i] {
+		i++
+	}
+	return i
+}
+
+func commonSuffixLen(a, b string) int {
+	n := min(len(a), len(b))
+	i := 0
+	for i < n && a[len(a)-1-i] == b[len(b)-1-i] {
+		i++
+	}
+	return i
+}
+
+// buildModifiedSet returns a set of diffLines indices for add lines that are "modified"
+// (paired with removes in the same hunk). pure-add lines (hunk has no removes) are not included.
+func (m Model) buildModifiedSet(hunks []int) map[int]bool {
+	result := make(map[int]bool)
+	for _, p := range m.pairHunkLines(hunks) {
+		result[p.addIdx] = true
 	}
 	return result
 }

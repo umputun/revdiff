@@ -39,6 +39,7 @@ type options struct {
 	CrossFileHunks   bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
 	LineNumbers      bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
 	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show git blame gutter on startup"`
+	WordDiff         bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"enable intra-line word-diff highlighting on startup"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all git-tracked files, not just diffs"`
 	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
@@ -60,27 +61,29 @@ type options struct {
 	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {
-		Accent     string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
-		Border     string `long:"color-border"      ini-name:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858" description:"inactive pane borders"`
-		Normal     string `long:"color-normal"      ini-name:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0" description:"file entries and context lines"`
-		Muted      string `long:"color-muted"       ini-name:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#585858" description:"line numbers and status bar"`
-		SelectedFg string `long:"color-selected-fg" ini-name:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf" description:"selected file text color"`
-		SelectedBg string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#D5895F" description:"selected file background color"`
-		Annotation string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
-		CursorFg   string `long:"color-cursor-fg"   ini-name:"color-cursor-fg"   env:"REVDIFF_COLOR_CURSOR_FG"   default:"#bbbb44" description:"diff cursor indicator color"`
-		CursorBg   string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   description:"diff cursor indicator background"`
-		AddFg      string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
-		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#123800" description:"added line background color"`
-		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
-		RemoveBg   string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#4D1100" description:"removed line background color"`
-		ModifyFg   string `long:"color-modify-fg"   ini-name:"color-modify-fg"   env:"REVDIFF_COLOR_MODIFY_FG"   default:"#f5c542" description:"modified line text color (collapsed mode)"`
-		ModifyBg   string `long:"color-modify-bg"   ini-name:"color-modify-bg"   env:"REVDIFF_COLOR_MODIFY_BG"   default:"#3D2E00" description:"modified line background color (collapsed mode)"`
-		TreeBg     string `long:"color-tree-bg"     ini-name:"color-tree-bg"     env:"REVDIFF_COLOR_TREE_BG"     description:"file tree pane background"`
-		DiffBg     string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
-		StatusFg   string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   default:"#202020" description:"status bar foreground"`
-		StatusBg   string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   default:"#C5794F" description:"status bar background"`
-		SearchFg   string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
-		SearchBg   string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#4a4a00" description:"search match background"`
+		Accent       string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
+		Border       string `long:"color-border"      ini-name:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858" description:"inactive pane borders"`
+		Normal       string `long:"color-normal"      ini-name:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0" description:"file entries and context lines"`
+		Muted        string `long:"color-muted"       ini-name:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#585858" description:"line numbers and status bar"`
+		SelectedFg   string `long:"color-selected-fg" ini-name:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf" description:"selected file text color"`
+		SelectedBg   string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#D5895F" description:"selected file background color"`
+		Annotation   string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
+		CursorFg     string `long:"color-cursor-fg"   ini-name:"color-cursor-fg"   env:"REVDIFF_COLOR_CURSOR_FG"   default:"#bbbb44" description:"diff cursor indicator color"`
+		CursorBg     string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   description:"diff cursor indicator background"`
+		AddFg        string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
+		AddBg        string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#123800" description:"added line background color"`
+		RemoveFg     string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
+		RemoveBg     string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#4D1100" description:"removed line background color"`
+		ModifyFg     string `long:"color-modify-fg"   ini-name:"color-modify-fg"   env:"REVDIFF_COLOR_MODIFY_FG"   default:"#f5c542" description:"modified line text color (collapsed mode)"`
+		ModifyBg     string `long:"color-modify-bg"   ini-name:"color-modify-bg"   env:"REVDIFF_COLOR_MODIFY_BG"   default:"#3D2E00" description:"modified line background color (collapsed mode)"`
+		TreeBg       string `long:"color-tree-bg"     ini-name:"color-tree-bg"     env:"REVDIFF_COLOR_TREE_BG"     description:"file tree pane background"`
+		DiffBg       string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
+		StatusFg     string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   default:"#202020" description:"status bar foreground"`
+		StatusBg     string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   default:"#C5794F" description:"status bar background"`
+		SearchFg     string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
+		SearchBg     string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#4a4a00" description:"search match background"`
+		WordAddBg    string `long:"color-word-add-bg"    ini-name:"color-word-add-bg"    env:"REVDIFF_COLOR_WORD_ADD_BG"    default:"#4a7a1a" description:"intra-line word-diff add background"`
+		WordRemoveBg string `long:"color-word-remove-bg" ini-name:"color-word-remove-bg" env:"REVDIFF_COLOR_WORD_REMOVE_BG" default:"#a03838" description:"intra-line word-diff remove background"`
 	} `group:"color options"`
 }
 
@@ -390,6 +393,7 @@ func run(opts options) error {
 		CrossFileHunks:   opts.CrossFileHunks,
 		LineNumbers:      opts.LineNumbers,
 		ShowBlame:        opts.Blame,
+		WordDiff:         opts.WordDiff,
 		TabWidth:         opts.TabWidth,
 		Ref:              opts.ref(),
 		Staged:           opts.Staged,
@@ -401,27 +405,29 @@ func run(opts options) error {
 		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
 		ActiveThemeName:  theme.ActiveName(opts.Theme),
 		Colors: ui.Colors{
-			Accent:     opts.Colors.Accent,
-			Border:     opts.Colors.Border,
-			Normal:     opts.Colors.Normal,
-			Muted:      opts.Colors.Muted,
-			SelectedFg: opts.Colors.SelectedFg,
-			SelectedBg: opts.Colors.SelectedBg,
-			Annotation: opts.Colors.Annotation,
-			CursorFg:   opts.Colors.CursorFg,
-			CursorBg:   opts.Colors.CursorBg,
-			AddFg:      opts.Colors.AddFg,
-			AddBg:      opts.Colors.AddBg,
-			RemoveFg:   opts.Colors.RemoveFg,
-			RemoveBg:   opts.Colors.RemoveBg,
-			ModifyFg:   opts.Colors.ModifyFg,
-			ModifyBg:   opts.Colors.ModifyBg,
-			TreeBg:     opts.Colors.TreeBg,
-			DiffBg:     opts.Colors.DiffBg,
-			StatusFg:   opts.Colors.StatusFg,
-			StatusBg:   opts.Colors.StatusBg,
-			SearchFg:   opts.Colors.SearchFg,
-			SearchBg:   opts.Colors.SearchBg,
+			Accent:       opts.Colors.Accent,
+			Border:       opts.Colors.Border,
+			Normal:       opts.Colors.Normal,
+			Muted:        opts.Colors.Muted,
+			SelectedFg:   opts.Colors.SelectedFg,
+			SelectedBg:   opts.Colors.SelectedBg,
+			Annotation:   opts.Colors.Annotation,
+			CursorFg:     opts.Colors.CursorFg,
+			CursorBg:     opts.Colors.CursorBg,
+			AddFg:        opts.Colors.AddFg,
+			AddBg:        opts.Colors.AddBg,
+			RemoveFg:     opts.Colors.RemoveFg,
+			RemoveBg:     opts.Colors.RemoveBg,
+			ModifyFg:     opts.Colors.ModifyFg,
+			ModifyBg:     opts.Colors.ModifyBg,
+			TreeBg:       opts.Colors.TreeBg,
+			DiffBg:       opts.Colors.DiffBg,
+			StatusFg:     opts.Colors.StatusFg,
+			StatusBg:     opts.Colors.StatusBg,
+			SearchFg:     opts.Colors.SearchFg,
+			SearchBg:     opts.Colors.SearchBg,
+			WordAddBg:    opts.Colors.WordAddBg,
+			WordRemoveBg: opts.Colors.WordRemoveBg,
 		},
 	})
 
@@ -643,27 +649,29 @@ func resolveThemeConflicts(opts *options) {
 // used by both applyTheme and collectColors to avoid duplicating the 21-key list.
 func colorFieldPtrs(opts *options) map[string]*string {
 	return map[string]*string{
-		"color-accent":      &opts.Colors.Accent,
-		"color-border":      &opts.Colors.Border,
-		"color-normal":      &opts.Colors.Normal,
-		"color-muted":       &opts.Colors.Muted,
-		"color-selected-fg": &opts.Colors.SelectedFg,
-		"color-selected-bg": &opts.Colors.SelectedBg,
-		"color-annotation":  &opts.Colors.Annotation,
-		"color-cursor-fg":   &opts.Colors.CursorFg,
-		"color-cursor-bg":   &opts.Colors.CursorBg,
-		"color-add-fg":      &opts.Colors.AddFg,
-		"color-add-bg":      &opts.Colors.AddBg,
-		"color-remove-fg":   &opts.Colors.RemoveFg,
-		"color-remove-bg":   &opts.Colors.RemoveBg,
-		"color-modify-fg":   &opts.Colors.ModifyFg,
-		"color-modify-bg":   &opts.Colors.ModifyBg,
-		"color-tree-bg":     &opts.Colors.TreeBg,
-		"color-diff-bg":     &opts.Colors.DiffBg,
-		"color-status-fg":   &opts.Colors.StatusFg,
-		"color-status-bg":   &opts.Colors.StatusBg,
-		"color-search-fg":   &opts.Colors.SearchFg,
-		"color-search-bg":   &opts.Colors.SearchBg,
+		"color-accent":         &opts.Colors.Accent,
+		"color-border":         &opts.Colors.Border,
+		"color-normal":         &opts.Colors.Normal,
+		"color-muted":          &opts.Colors.Muted,
+		"color-selected-fg":    &opts.Colors.SelectedFg,
+		"color-selected-bg":    &opts.Colors.SelectedBg,
+		"color-annotation":     &opts.Colors.Annotation,
+		"color-cursor-fg":      &opts.Colors.CursorFg,
+		"color-cursor-bg":      &opts.Colors.CursorBg,
+		"color-add-fg":         &opts.Colors.AddFg,
+		"color-add-bg":         &opts.Colors.AddBg,
+		"color-remove-fg":      &opts.Colors.RemoveFg,
+		"color-remove-bg":      &opts.Colors.RemoveBg,
+		"color-modify-fg":      &opts.Colors.ModifyFg,
+		"color-modify-bg":      &opts.Colors.ModifyBg,
+		"color-tree-bg":        &opts.Colors.TreeBg,
+		"color-diff-bg":        &opts.Colors.DiffBg,
+		"color-status-fg":      &opts.Colors.StatusFg,
+		"color-status-bg":      &opts.Colors.StatusBg,
+		"color-search-fg":      &opts.Colors.SearchFg,
+		"color-search-bg":      &opts.Colors.SearchBg,
+		"color-word-add-bg":    &opts.Colors.WordAddBg,
+		"color-word-remove-bg": &opts.Colors.WordRemoveBg,
 	}
 }
 

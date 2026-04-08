@@ -52,14 +52,17 @@ var colorKeys = []string{
 	"color-tree-bg", "color-diff-bg",
 	"color-status-fg", "color-status-bg",
 	"color-search-fg", "color-search-bg",
+	"color-word-add-bg", "color-word-remove-bg",
 }
 
 // optionalColorKeys lists color keys that may be omitted from theme files.
 // these correspond to CLI flags with no default value (terminal background is used instead).
 var optionalColorKeys = map[string]bool{
-	"color-cursor-bg": true,
-	"color-tree-bg":   true,
-	"color-diff-bg":   true,
+	"color-cursor-bg":      true,
+	"color-tree-bg":        true,
+	"color-diff-bg":        true,
+	"color-word-add-bg":    true,
+	"color-word-remove-bg": true,
 }
 
 // ColorKeys returns the ordered list of recognized color key names.

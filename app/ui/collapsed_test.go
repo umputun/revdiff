@@ -189,7 +189,7 @@ func TestModel_BuildModifiedSet(t *testing.T) {
 			{NewNum: 3, Content: "new2", ChangeType: diff.ChangeAdd},
 			{NewNum: 4, Content: "new3", ChangeType: diff.ChangeAdd},
 			{NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
-		}, expect: map[int]bool{3: true, 4: true, 5: true}},
+		}, expect: map[int]bool{3: true, 4: true}},
 		{name: "two hunks one mixed one pure add", lines: []diff.DiffLine{
 			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 			{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},  // 1
@@ -983,4 +983,92 @@ func TestModel_CollapsedDeleteAnnotationBlockedOnPlaceholder(t *testing.T) {
 	// attempt delete - should be no-op since cursorOnAnnotation is false
 	m.deleteAnnotation()
 	assert.True(t, m.store.Has("a.go", 2, "-"), "annotation should not be deleted from placeholder")
+}
+
+func TestModel_PairHunkLines(t *testing.T) {
+	mk := func(lines []diff.DiffLine) Model {
+		m := testModel(nil, nil)
+		m.diffLines = lines
+		return m
+	}
+
+	t.Run("equal run lengths", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "ctx", ChangeType: diff.ChangeContext},
+			{Content: "foo old", ChangeType: diff.ChangeRemove},
+			{Content: "bar old", ChangeType: diff.ChangeRemove},
+			{Content: "foo new", ChangeType: diff.ChangeAdd},
+			{Content: "bar new", ChangeType: diff.ChangeAdd},
+		})
+		pairs := m.pairHunkLines(m.findHunks())
+		require.Len(t, pairs, 2)
+		assert.Equal(t, linePair{removeIdx: 1, addIdx: 3}, pairs[0])
+		assert.Equal(t, linePair{removeIdx: 2, addIdx: 4}, pairs[1])
+	})
+
+	t.Run("more removes than adds", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "apple banana", ChangeType: diff.ChangeRemove},
+			{Content: "zzz nothing zzz", ChangeType: diff.ChangeRemove},
+			{Content: "cherry date", ChangeType: diff.ChangeRemove},
+			{Content: "apple BANANA", ChangeType: diff.ChangeAdd},
+		})
+		pairs := m.pairHunkLines(m.findHunks())
+		require.Len(t, pairs, 1)
+		assert.Equal(t, 0, pairs[0].removeIdx)
+		assert.Equal(t, 3, pairs[0].addIdx)
+	})
+
+	t.Run("more adds than removes", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "hello world", ChangeType: diff.ChangeRemove},
+			{Content: "hello earth", ChangeType: diff.ChangeAdd},
+			{Content: "unrelated stuff", ChangeType: diff.ChangeAdd},
+		})
+		pairs := m.pairHunkLines(m.findHunks())
+		require.Len(t, pairs, 1)
+		assert.Equal(t, 0, pairs[0].removeIdx)
+		assert.Equal(t, 1, pairs[0].addIdx)
+	})
+
+	t.Run("pure add block no pairs", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "new1", ChangeType: diff.ChangeAdd},
+			{Content: "new2", ChangeType: diff.ChangeAdd},
+		})
+		assert.Empty(t, m.pairHunkLines(m.findHunks()))
+	})
+
+	t.Run("pure remove block no pairs", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "gone1", ChangeType: diff.ChangeRemove},
+			{Content: "gone2", ChangeType: diff.ChangeRemove},
+		})
+		assert.Empty(t, m.pairHunkLines(m.findHunks()))
+	})
+
+	t.Run("interleaved runs", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "foo old", ChangeType: diff.ChangeRemove},
+			{Content: "foo new", ChangeType: diff.ChangeAdd},
+			{Content: "ctx", ChangeType: diff.ChangeContext},
+			{Content: "bar old", ChangeType: diff.ChangeRemove},
+			{Content: "bar new", ChangeType: diff.ChangeAdd},
+		})
+		pairs := m.pairHunkLines(m.findHunks())
+		require.Len(t, pairs, 2)
+		assert.Equal(t, linePair{removeIdx: 0, addIdx: 1}, pairs[0])
+		assert.Equal(t, linePair{removeIdx: 3, addIdx: 4}, pairs[1])
+	})
+
+	t.Run("buildModifiedSet reflects pairs", func(t *testing.T) {
+		m := mk([]diff.DiffLine{
+			{Content: "a", ChangeType: diff.ChangeRemove},
+			{Content: "b", ChangeType: diff.ChangeAdd},
+			{Content: "c", ChangeType: diff.ChangeAdd},
+		})
+		got := m.buildModifiedSet(m.findHunks())
+		// 1 pair: the add with higher similarity to "a" (both score 0, first picked)
+		assert.Len(t, got, 1)
+	})
 }
