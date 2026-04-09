@@ -440,6 +440,12 @@ revdiff --only=/tmp/draft-comment.md
 
 **Reviewing generated output** — CI configs, Terraform plans, generated migrations, or command output. Load files with `--only` or stream ephemeral output with `--stdin`, annotate what needs fixing, feed annotations back to the generator.
 
+### Zed Integration
+
+Zed's [custom tasks](https://zed.dev/docs/tasks) can launch revdiff directly in an editor terminal tab.
+
+See the [Zed integration guide](https://revdiff.com/docs.html#zed-integration) for ready-to-use task definitions, keybinding setup, and platform-specific clipboard notes.
+
 ### Review History
 
 When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.

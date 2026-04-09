@@ -22,40 +22,5 @@
     "label": "test",
     "command": "make test",
     "cwd": "$ZED_WORKTREE_ROOT"
-  },
-
-  {
-    // Review the current file with revdiff TUI.
-    // Annotations are written to a temp file via --output to avoid piping stdout
-    // (which would break the TUI), then copied to clipboard on quit.
-    // Keybinding: add to ~/.config/zed/keymap.json:
-    //   { "context": "Workspace", "bindings": { "cmd-shift-d": ["task::Spawn", { "task_name": "revdiff current file" }] } }
-    "label": "revdiff current file",
-    "command": "rm -f /tmp/revdiff-out.txt; revdiff --only=$ZED_FILE --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
-    "use_new_terminal": true,
-    "allow_concurrent_runs": false,
-    "reveal": "always",
-    "reveal_target": "center",
-    "hide": "on_success",
-  },
-  {
-    // Review full branch diff against main/master
-    "label": "revdiff vs master",
-    "command": "rm -f /tmp/revdiff-out.txt; MAIN=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo master); revdiff $MAIN --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
-    "use_new_terminal": true,
-    "allow_concurrent_runs": false,
-    "reveal": "always",
-    "reveal_target": "center",
-    "hide": "on_success",
-  },
-  {
-    // Review uncommitted changes (working tree + staged)
-    "label": "revdiff uncommitted",
-    "command": "rm -f /tmp/revdiff-out.txt; revdiff --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
-    "use_new_terminal": true,
-    "allow_concurrent_runs": false,
-    "reveal": "always",
-    "reveal_target": "center",
-    "hide": "on_success",
-  },
+  }
 ]

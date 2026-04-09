@@ -64,6 +64,7 @@
         <a href="#scratch-buffer">Scratch-buffer review</a>
         <a href="#markdown-toc">Markdown TOC</a>
         <a href="#beyond-code-review">Beyond code review</a>
+        <a href="#zed-integration">Zed integration</a>
         <a href="#review-history">Review history</a>
 
         <h4>Configuration</h4>
@@ -209,6 +210,73 @@ git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
         <div class="code-block"><code>revdiff --only=docs/plans/feature.md
 revdiff --only=/tmp/draft-comment.md</code></div>
         <p><strong>Reviewing generated output</strong> — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied.</p>
+
+        <h2 id="zed-integration">Zed integration</h2>
+        <p>Zed's custom tasks can launch revdiff directly in an editor terminal tab. Each task writes annotations to a temp file via <code>--output</code> and copies them to clipboard on quit &mdash; hit <code>cmd-v</code> to paste straight into an assistant panel, a commit message, or a PR comment. The examples below cover the most common workflows, but you can adapt them for any review scenario.</p>
+        <ul>
+            <li><strong>Review current file</strong> (<code>cmd-shift-d</code>) &mdash; open the file you're editing in revdiff for line-by-line annotation</li>
+            <li><strong>Branch diff</strong> &mdash; compare your feature branch against main/master before pushing</li>
+            <li><strong>Uncommitted changes</strong> &mdash; walk through working tree + staged changes before committing</li>
+        </ul>
+
+        <h3>Task definitions</h3>
+        <p>Add these to your <code>.zed/tasks.json</code> (create the file if it doesn't exist):</p>
+        <div class="code-block"><code>{
+  "label": "revdiff current file",
+  "command": "rm -f /tmp/revdiff-out.txt; revdiff --only=$ZED_FILE --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
+  "use_new_terminal": true,
+  "allow_concurrent_runs": false,
+  "reveal": "always",
+  "reveal_target": "center",
+  "hide": "on_success"
+}
+
+{
+  "label": "revdiff vs master",
+  "command": "rm -f /tmp/revdiff-out.txt; MAIN=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo master); revdiff $MAIN --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
+  "use_new_terminal": true,
+  "allow_concurrent_runs": false,
+  "reveal": "always",
+  "reveal_target": "center",
+  "hide": "on_success"
+}
+
+{
+  "label": "revdiff uncommitted",
+  "command": "rm -f /tmp/revdiff-out.txt; revdiff --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
+  "use_new_terminal": true,
+  "allow_concurrent_runs": false,
+  "reveal": "always",
+  "reveal_target": "center",
+  "hide": "on_success"
+}</code></div>
+        <p>These examples use <code>pbcopy</code> to copy annotations to clipboard, which is macOS-only. On Linux, replace <code>pbcopy</code> with <code>xclip -selection clipboard</code> or <code>wl-copy</code> (Wayland).</p>
+
+        <h3>Keybinding</h3>
+        <p>To bind <code>cmd-shift-d</code> to the current-file task, add this to <code>~/.config/zed/keymap.json</code>:</p>
+        <div class="code-block"><code>{
+  "context": "Workspace",
+  "bindings": {
+    "cmd-shift-d": ["task::Spawn", { "task_name": "revdiff current file" }]
+  }
+}</code></div>
+
+        <div class="zed-gallery">
+            <figure class="zed-gallery-item">
+                <div class="terminal-frame">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <img src="assets/zed-gitdiff.png" alt="Reviewing a README diff in Zed's integrated terminal">
+                </div>
+                <figcaption>Reviewing uncommitted changes — revdiff runs as a Zed terminal tab with full syntax highlighting and annotation support</figcaption>
+            </figure>
+            <figure class="zed-gallery-item">
+                <div class="terminal-frame">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <img src="assets/zed-planreview.png" alt="Reviewing an implementation plan in revdiff inside Zed">
+                </div>
+                <figcaption>Reviewing a plan file — file tree, line annotations, and structured output all work inside the editor tab</figcaption>
+            </figure>
+        </div>
 
         <h2 id="review-history">Review history</h2>
         <p>When you quit with annotations (<code>q</code>), revdiff automatically saves a copy of the review session to <code>~/.config/revdiff/history/&lt;repo-name&gt;/&lt;timestamp&gt;.md</code>. This is a safety net &mdash; if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.</p>

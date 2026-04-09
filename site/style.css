@@ -813,6 +813,36 @@ section h2 {
     margin-bottom: 20px;
 }
 
+/* === zed gallery === */
+
+.zed-gallery {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 24px 0 28px;
+}
+
+.zed-gallery-item {
+    margin: 0;
+}
+
+.zed-gallery-item .terminal-frame {
+    margin-bottom: 10px;
+}
+
+.zed-gallery-item figcaption {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    line-height: 1.5;
+    padding: 0 4px;
+}
+
+@media (max-width: 768px) {
+    .zed-gallery {
+        grid-template-columns: 1fr;
+    }
+}
+
 .docs-content table {
     width: 100%;
     border-collapse: collapse;
