@@ -219,6 +219,60 @@ func (m *Model) centerViewportOnCursor() {
 	m.viewport.SetContent(m.renderDiff())
 }
 
+// centerHunkInViewport centers the current hunk in the viewport.
+// For small hunks, the entire hunk is centered. For large hunks that exceed
+// the viewport height, the first line is placed near the top with a small context margin.
+func (m *Model) centerHunkInViewport() {
+	cursorY := m.cursorViewportY()
+
+	// find hunk end: scan forward from cursor while lines are changed
+	hunkEnd := m.diffCursor
+	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
+		ct := m.diffLines[i].ChangeType
+		if ct != diff.ChangeAdd && ct != diff.ChangeRemove {
+			break
+		}
+		hunkEnd = i
+	}
+
+	// calculate visual height of the hunk from cursor to hunk end
+	var hunks []int
+	if m.collapsed.enabled {
+		hunks = m.findHunks()
+	}
+	annotationSet := m.buildAnnotationSet()
+	hunkVisualHeight := 0
+	for i := m.diffCursor; i <= hunkEnd; i++ {
+		if m.collapsed.enabled && m.isCollapsedHidden(i, hunks) {
+			continue
+		}
+		if m.isDeleteOnlyPlaceholder(i, hunks) {
+			hunkVisualHeight += m.deletePlaceholderVisualHeight(i)
+			continue
+		}
+		hunkVisualHeight += m.wrappedLineCount(i)
+		dl := m.diffLines[i]
+		if dl.ChangeType != diff.ChangeDivider {
+			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
+			if annotationSet[key] {
+				hunkVisualHeight += m.wrappedAnnotationLineCount(key)
+			}
+		}
+	}
+
+	var offset int
+	if hunkVisualHeight >= m.viewport.Height {
+		// hunk taller than viewport: place first line near top with small context margin
+		offset = max(0, cursorY-2)
+	} else {
+		// center the entire hunk by centering its midpoint
+		hunkMidY := cursorY + hunkVisualHeight/2
+		offset = max(0, hunkMidY-m.viewport.Height/2)
+	}
+	m.viewport.SetYOffset(offset)
+	m.viewport.SetContent(m.renderDiff())
+}
+
 // topAlignViewportOnCursor scrolls the viewport to place the cursor at the top of the page.
 func (m *Model) topAlignViewportOnCursor() {
 	cursorY := m.cursorViewportY()
@@ -284,7 +338,7 @@ func (m *Model) moveToNextHunk() {
 			continue // skip delete-only hunks in collapsed mode
 		}
 		m.diffCursor = target
-		m.centerViewportOnCursor()
+		m.centerHunkInViewport()
 		return
 	}
 }
@@ -301,7 +355,7 @@ func (m *Model) moveToPrevHunk() {
 		}
 		if target < m.diffCursor {
 			m.diffCursor = target
-			m.centerViewportOnCursor()
+			m.centerHunkInViewport()
 			return
 		}
 	}
