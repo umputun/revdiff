@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.3 - 2026-04-09
+
+### Bug Fixes
+
+- suppress cmux send stdout to prevent output leak #81 @jimmyn
+- load staged diff content for staged-only files in default mode #80 @sanchesfree
+
 ## v0.15.2 - 2026-04-09
 
 ### New Features
