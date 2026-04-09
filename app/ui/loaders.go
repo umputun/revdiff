@@ -12,6 +12,8 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 )
 
+// loadFiles returns a command that fetches the list of changed files from the renderer.
+// it also appends staged-only and untracked files when applicable.
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
 		var warnings []string
@@ -27,7 +29,7 @@ func (m Model) loadFiles() tea.Cmd {
 			if stagedErr != nil {
 				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
 			} else {
-				stagedSet := make(map[string]bool, len(entries))
+				stagedSet := make(map[string]bool)
 				for _, e := range entries {
 					stagedSet[e.Path] = true
 				}
@@ -59,6 +61,7 @@ func (m Model) loadFiles() tea.Cmd {
 	}
 }
 
+// loadFileDiff returns a command that fetches the diff lines for the given file.
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.loadSeq
 	return func() tea.Msg {
@@ -67,6 +70,8 @@ func (m Model) loadFileDiff(file string) tea.Cmd {
 	}
 }
 
+// loadBlame returns a command that fetches blame data for the given file.
+// returns nil if no blamer is configured.
 func (m Model) loadBlame(file string) tea.Cmd {
 	if m.blamer == nil {
 		return nil
@@ -90,6 +95,8 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleFilesLoaded processes the result of loadFiles, populating the file tree
+// and triggering the initial file diff load.
 func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
@@ -167,10 +174,9 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.collapsed.expandedHunks = make(map[int]bool)
 
 	// detect markdown full-context mode and build TOC
+	m.mdTOC = nil
 	if m.singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines) {
 		m.mdTOC = parseTOC(msg.lines, msg.file)
-	} else {
-		m.mdTOC = nil
 	}
 	switch {
 	case m.mdTOC != nil && !m.treeHidden:

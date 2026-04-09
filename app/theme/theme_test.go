@@ -391,8 +391,9 @@ func TestInitBundled_overwritesBundledThemes(t *testing.T) {
 	assert.NotContains(t, string(data), "old content")
 }
 
-func TestBundledNames(t *testing.T) {
-	names := BundledNames()
+func Test_bundledNames(t *testing.T) {
+	names, err := bundledNames()
+	require.NoError(t, err)
 	assert.Equal(t, []string{"catppuccin-latte", "catppuccin-mocha", "dracula", "gruvbox", "nord", "revdiff", "solarized-dark"}, names)
 }
 
@@ -400,7 +401,10 @@ func TestBundledThemes_parseCorrectly(t *testing.T) {
 	gallery, err := Gallery()
 	require.NoError(t, err)
 
-	for _, name := range BundledNames() {
+	names, err := bundledNames()
+	require.NoError(t, err)
+
+	for _, name := range names {
 		t.Run(name, func(t *testing.T) {
 			th, ok := gallery[name]
 			require.True(t, ok)
@@ -421,7 +425,7 @@ func TestBundledThemes_parseCorrectly(t *testing.T) {
 	}
 }
 
-func TestInstallFile(t *testing.T) {
+func Test_installFile(t *testing.T) {
 	// create a valid theme file
 	srcDir := t.TempDir()
 	content := "# name: my-custom\n# description: a custom theme\n# author: Test User\nchroma-style = monokai\n" + fullThemeColors()
@@ -429,7 +433,7 @@ func TestInstallFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
 
 	destDir := filepath.Join(t.TempDir(), "themes")
-	name, err := InstallFile(destDir, srcPath, nil)
+	name, err := installFile(destDir, srcPath, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "my-custom", name)
 
@@ -445,33 +449,33 @@ func TestInstallFile(t *testing.T) {
 	assert.Equal(t, "Test User", th.Author)
 }
 
-func TestInstallFile_invalidTheme(t *testing.T) {
+func Test_installFile_invalidTheme(t *testing.T) {
 	srcPath := filepath.Join(t.TempDir(), "bad-theme")
 	require.NoError(t, os.WriteFile(srcPath, []byte("not valid\n"), 0o600))
 
 	destDir := filepath.Join(t.TempDir(), "themes")
-	_, err := InstallFile(destDir, srcPath, nil)
+	_, err := installFile(destDir, srcPath, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parsing theme file")
 }
 
-func TestInstallFile_notFound(t *testing.T) {
+func Test_installFile_notFound(t *testing.T) {
 	destDir := filepath.Join(t.TempDir(), "themes")
-	_, err := InstallFile(destDir, "/nonexistent/path/theme", nil)
+	_, err := installFile(destDir, "/nonexistent/path/theme", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "opening theme file")
 }
 
-func TestInstallFile_dotPaths(t *testing.T) {
+func Test_installFile_dotPaths(t *testing.T) {
 	destDir := filepath.Join(t.TempDir(), "themes")
 	for _, path := range []string{".", ".."} {
-		_, err := InstallFile(destDir, path, nil)
+		_, err := installFile(destDir, path, nil)
 		require.Error(t, err, "path=%q should be rejected", path)
 		assert.Contains(t, err.Error(), "invalid theme file name", "path=%q", path)
 	}
 }
 
-func TestInstallFile_invalidChromaStyle(t *testing.T) {
+func Test_installFile_invalidChromaStyle(t *testing.T) {
 	srcDir := t.TempDir()
 	content := "# name: bad-chroma\n# description: theme with bad chroma\nchroma-style = nonexistent-style\n" + fullThemeColors()
 	srcPath := filepath.Join(srcDir, "bad-chroma")
@@ -481,24 +485,24 @@ func TestInstallFile_invalidChromaStyle(t *testing.T) {
 
 	// with validator that rejects the style
 	rejectAll := func(string) bool { return false }
-	_, err := InstallFile(destDir, srcPath, rejectAll)
+	_, err := installFile(destDir, srcPath, rejectAll)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown chroma style")
 
 	// without validator (nil) — should succeed
-	name, err := InstallFile(destDir, srcPath, nil)
+	name, err := installFile(destDir, srcPath, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "bad-chroma", name)
 }
 
-func TestInstallFile_setsNameFromFilenameWhenMissing(t *testing.T) {
+func Test_installFile_setsNameFromFilenameWhenMissing(t *testing.T) {
 	srcDir := t.TempDir()
 	content := "# description: no explicit name\nchroma-style = monokai\n" + fullThemeColors()
 	srcPath := filepath.Join(srcDir, "my-custom")
 	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
 
 	destDir := filepath.Join(t.TempDir(), "themes")
-	name, err := InstallFile(destDir, srcPath, nil)
+	name, err := installFile(destDir, srcPath, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "my-custom", name)
 
@@ -507,14 +511,14 @@ func TestInstallFile_setsNameFromFilenameWhenMissing(t *testing.T) {
 	assert.Equal(t, "my-custom", th.Name)
 }
 
-func TestInstallFile_rejectsMetadataNameMismatch(t *testing.T) {
+func Test_installFile_rejectsMetadataNameMismatch(t *testing.T) {
 	srcDir := t.TempDir()
 	content := "# name: other-name\n# description: mismatch\nchroma-style = monokai\n" + fullThemeColors()
 	srcPath := filepath.Join(srcDir, "my-custom")
 	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
 
 	destDir := filepath.Join(t.TempDir(), "themes")
-	_, err := InstallFile(destDir, srcPath, nil)
+	_, err := installFile(destDir, srcPath, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `theme metadata name "other-name" does not match file name "my-custom"`)
 }
@@ -561,10 +565,10 @@ func TestActiveName(t *testing.T) {
 	assert.Equal(t, "dracula", ActiveName("dracula"))
 }
 
-func TestIsLocalPath(t *testing.T) {
-	assert.True(t, IsLocalPath("themes/custom"))
-	assert.True(t, IsLocalPath("./custom"))
-	assert.False(t, IsLocalPath("dracula"))
+func Test_isLocalPath(t *testing.T) {
+	assert.True(t, isLocalPath("themes/custom"))
+	assert.True(t, isLocalPath("./custom"))
+	assert.False(t, isLocalPath("dracula"))
 }
 
 func TestListOrdered(t *testing.T) {

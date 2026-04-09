@@ -57,7 +57,8 @@ func (m Model) blameGutterWidth() int {
 
 // blameGutter returns the formatted blame gutter string for a diff line.
 // shows author name (truncated) and relative age for lines with NewNum; blank for removed lines and dividers.
-func (m Model) blameGutter(dl diff.DiffLine) string {
+// now is the reference time for computing relative age, passed from the render entry point.
+func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 	w := m.blameAuthorLen
 	totalW := m.blameGutterWidth()
 	blank := strings.Repeat(" ", totalW)
@@ -78,7 +79,7 @@ func (m Model) blameGutter(dl diff.DiffLine) string {
 		author += strings.Repeat(" ", pad)
 	}
 
-	age := diff.RelativeAge(bl.Time, m.blameNow)
+	age := diff.RelativeAge(bl.Time, now)
 	gutter := " " + author + " " + age
 	return m.styles.LineNumber.Render(gutter)
 }
@@ -95,7 +96,7 @@ func (m Model) lineGutters(dl diff.DiffLine) (numGutter, blameGutter string) {
 		numGutter = m.lineNumGutter(dl)
 	}
 	if m.hasBlameGutter() {
-		blameGutter = m.blameGutter(dl)
+		blameGutter = m.blameGutter(dl, m.blameNow)
 	}
 	return numGutter, blameGutter
 }
@@ -147,7 +148,7 @@ func (m Model) renderDiff() string {
 		return m.renderCollapsedDiff()
 	}
 
-	m.buildSearchMatchSet()
+	m.searchMatchSet = m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
 	var b strings.Builder
@@ -199,7 +200,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 	isSearchMatch := m.searchMatchSet[idx]
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	isCursor := m.isCursorLine(idx)
 
 	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
 	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
@@ -230,9 +231,8 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
 	numGutter, blGutter := m.lineGutters(dl)
 	numBlank, blBlank := m.gutterBlanks()
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 
-	visualLines := m.wrapContent(textContent, wrapWidth)
+	visualLines := m.wrapContent(textContent, m.wrapWidth())
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
@@ -267,8 +267,7 @@ func (m Model) wrappedLineCount(idx int) int {
 	}
 
 	_, textContent, _ := m.prepareLineContent(idx, dl)
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-	return len(m.wrapContent(textContent, wrapWidth))
+	return len(m.wrapContent(textContent, m.wrapWidth()))
 }
 
 // wrapContent wraps text content at the given width using word boundaries.
@@ -495,10 +494,15 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) 
 
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
 
+// wrapWidth returns the available width for wrapped content (diff content minus gutter prefix and extra gutters).
+func (m Model) wrapWidth() int {
+	return m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+}
+
 // diffContentWidth returns the available width for diff line content.
 // accounts for borders, cursor bar, and 1 char right padding to prevent text from touching the pane border.
 func (m Model) diffContentWidth() int {
-	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+	if m.treePaneHidden() {
 		// tree hidden or single-file without TOC: diff pane borders (2) + cursor bar (1) + right padding (1)
 		return max(10, m.width-4)
 	}

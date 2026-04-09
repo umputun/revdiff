@@ -12,6 +12,9 @@ import (
 	"github.com/umputun/revdiff/app/keymap"
 )
 
+// helpLine holds a key-description pair for rendering help overlay sections.
+type helpLine struct{ keys, desc string }
+
 // helpKeyDisplay maps bubbletea key names to user-friendly display names.
 var helpKeyDisplay = map[string]string{
 	"pgdown": "PgDn",
@@ -29,7 +32,7 @@ var helpKeyDisplay = map[string]string{
 }
 
 // displayKeyName returns a user-friendly display name for a bubbletea key.
-func displayKeyName(key string) string {
+func (m Model) displayKeyName(key string) string {
 	if d, ok := helpKeyDisplay[key]; ok {
 		return d
 	}
@@ -44,9 +47,15 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 	keys := m.keymap.KeysFor(action)
 	display := make([]string, len(keys))
 	for i, k := range keys {
-		display[i] = displayKeyName(k)
+		display[i] = m.displayKeyName(k)
 	}
 	return strings.Join(display, " / ")
+}
+
+// helpColors returns the ANSI color sequences used in help overlay rendering.
+// reset is fg-only to preserve background, header and key are fg sequences.
+func (m Model) helpColors() (reset, header, key string) {
+	return "\033[39m", m.ansiFg(m.styles.colors.Accent), m.ansiFg(m.styles.colors.Annotation)
 }
 
 // helpOverlay returns a bordered help popup with keybinding sections arranged in two columns.
@@ -60,15 +69,12 @@ func (m Model) helpOverlay() string {
 	}
 	blocks := make([]sectionBlock, 0, len(sections))
 
-	reset := "\033[39m" // fg-only reset to preserve background
-	headerColor := m.ansiFg(m.styles.colors.Accent)
-	keyColor := m.ansiFg(m.styles.colors.Annotation)
+	reset, headerColor, keyColor := m.helpColors()
 
 	for _, sec := range sections {
 		var block sectionBlock
 		block.lines = append(block.lines, headerColor+sec.Name+reset)
 
-		type helpLine struct{ keys, desc string }
 		lines := make([]helpLine, 0, len(sec.Entries))
 		maxW := 0
 		for _, e := range sec.Entries {
@@ -86,7 +92,7 @@ func (m Model) helpOverlay() string {
 		blocks = append(blocks, block)
 
 		// add Markdown TOC section after Pane
-		if sec.Name == "Pane" {
+		if sec.Name == keymap.SectionPane {
 			var tocBuf strings.Builder
 			m.writeTOCHelpSection(&tocBuf)
 			tocLines := strings.Split(strings.TrimRight(tocBuf.String(), "\n"), "\n")
@@ -182,7 +188,7 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		seen := map[string]bool{}
 		for _, a := range actions {
 			for _, k := range m.keymap.KeysFor(a) {
-				dk := displayKeyName(k)
+				dk := m.displayKeyName(k)
 				if !seen[dk] {
 					all = append(all, dk)
 					seen[dk] = true
@@ -192,7 +198,6 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		return strings.Join(all, " / ")
 	}
 
-	type helpLine struct{ keys, desc string }
 	lines := []helpLine{
 		{mergedKeys(keymap.ActionTogglePane), "switch between TOC and diff"},
 		{mergedKeys(keymap.ActionDown, keymap.ActionUp), "navigate TOC entries"},
@@ -207,9 +212,7 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		}
 	}
 
-	reset := "\033[39m" // fg-only reset to preserve background
-	headerColor := m.ansiFg(m.styles.colors.Accent)
-	keyColor := m.ansiFg(m.styles.colors.Annotation)
+	reset, headerColor, keyColor := m.helpColors()
 
 	buf.WriteString(headerColor + "Markdown TOC (single-file full-context mode)" + reset + "\n")
 	for _, l := range lines {
@@ -263,12 +266,12 @@ func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
 
 // handleFileAnnotateKey starts file-level annotation from diff pane only.
 func (m Model) handleFileAnnotateKey() (tea.Model, tea.Cmd) {
-	if m.focus == paneDiff && m.currFile != "" {
-		cmd := m.startFileAnnotation()
-		m.viewport.SetContent(m.renderDiff())
-		return m, cmd
+	if m.focus != paneDiff || m.currFile == "" {
+		return m, nil
 	}
-	return m, nil
+	cmd := m.startFileAnnotation()
+	m.viewport.SetContent(m.renderDiff())
+	return m, cmd
 }
 
 // handleEscKey clears active search results on esc.
@@ -387,7 +390,7 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 		dir = -1
 	}
 	if m.singleFile && m.mdTOC != nil {
-		return m.jumpTOCEntry(dir), nil
+		return m.jumpTOCEntry(dir)
 	}
 	if !m.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation

@@ -151,7 +151,8 @@ func TestReconstructFiles(t *testing.T) {
 		{Content: "line2", ChangeType: diff.ChangeContext},
 	}
 
-	newFile, oldFile := reconstructFiles(lines)
+	h := New("monokai", true)
+	newFile, oldFile := h.reconstructFiles(lines)
 
 	assert.Equal(t, "line1\nadded\nline2\n", newFile)
 	assert.Equal(t, "line1\nremoved\nline2\n", oldFile)

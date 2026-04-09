@@ -423,14 +423,47 @@ color-remove-fg = #ff0000
 	assert.Equal(t, "#D5895F", opts.Colors.Accent)
 }
 
-func TestResolveConfigPath_FromArgs(t *testing.T) {
-	path := resolveConfigPath([]string{"--config", "/custom/path"})
-	assert.Equal(t, "/custom/path", path)
+func TestResolveFlagPath(t *testing.T) {
+	t.Run("from args space form", func(t *testing.T) {
+		path := resolveFlagPath([]string{"--myf", "/val"}, "myf", "MY_ENV", func() string { return "/default" })
+		assert.Equal(t, "/val", path)
+	})
+	t.Run("from args equals form", func(t *testing.T) {
+		path := resolveFlagPath([]string{"--myf=/val2"}, "myf", "MY_ENV", func() string { return "/default" })
+		assert.Equal(t, "/val2", path)
+	})
+	t.Run("from env", func(t *testing.T) {
+		t.Setenv("TEST_FLAG_ENV", "/env/val")
+		path := resolveFlagPath([]string{}, "myf", "TEST_FLAG_ENV", func() string { return "/default" })
+		assert.Equal(t, "/env/val", path)
+	})
+	t.Run("args override env", func(t *testing.T) {
+		t.Setenv("TEST_FLAG_ENV2", "/env/val")
+		path := resolveFlagPath([]string{"--myf", "/args/val"}, "myf", "TEST_FLAG_ENV2", func() string { return "/default" })
+		assert.Equal(t, "/args/val", path)
+	})
+	t.Run("falls back to default", func(t *testing.T) {
+		path := resolveFlagPath([]string{}, "myf", "NONEXISTENT_ENV_VAR_12345", func() string { return "/default" })
+		assert.Equal(t, "/default", path)
+	})
 }
 
-func TestResolveConfigPath_EqualsForm(t *testing.T) {
-	path := resolveConfigPath([]string{"--config=/custom/path"})
+func TestResolveFlagPath_configWiring(t *testing.T) {
+	path := resolveFlagPath([]string{"--config", "/custom/path"}, "config", "REVDIFF_CONFIG", defaultConfigPath)
 	assert.Equal(t, "/custom/path", path)
+
+	t.Setenv("REVDIFF_CONFIG", "/env/config")
+	path = resolveFlagPath([]string{}, "config", "REVDIFF_CONFIG", defaultConfigPath)
+	assert.Equal(t, "/env/config", path)
+}
+
+func TestResolveFlagPath_keysWiring(t *testing.T) {
+	path := resolveFlagPath([]string{"--keys", "/custom/keys"}, "keys", "REVDIFF_KEYS", defaultKeysPath)
+	assert.Equal(t, "/custom/keys", path)
+
+	t.Setenv("REVDIFF_KEYS", "/env/keys")
+	path = resolveFlagPath([]string{}, "keys", "REVDIFF_KEYS", defaultKeysPath)
+	assert.Equal(t, "/env/keys", path)
 }
 
 func TestParseArgs_ConfigEqualsForm(t *testing.T) {
@@ -442,26 +475,6 @@ func TestParseArgs_ConfigEqualsForm(t *testing.T) {
 	opts, err := parseArgs([]string{"--config=" + cfgPath})
 	require.NoError(t, err)
 	assert.Equal(t, 2, opts.TabWidth, "config with equals form should be loaded")
-}
-
-func TestResolveConfigPath_FromEnv(t *testing.T) {
-	t.Setenv("REVDIFF_CONFIG", "/env/config/path")
-	path := resolveConfigPath([]string{})
-	assert.Equal(t, "/env/config/path", path)
-}
-
-func TestResolveConfigPath_ArgsOverrideEnv(t *testing.T) {
-	t.Setenv("REVDIFF_CONFIG", "/env/path")
-	path := resolveConfigPath([]string{"--config", "/args/path"})
-	assert.Equal(t, "/args/path", path, "args should take precedence over env")
-}
-
-func TestResolveConfigPath_Default(t *testing.T) {
-	t.Setenv("REVDIFF_CONFIG", "") // clear env
-	path := resolveConfigPath([]string{})
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(home, ".config", "revdiff", "config"), path)
 }
 
 func TestDumpConfig(t *testing.T) {
@@ -706,36 +719,6 @@ func TestParseArgs_DumpKeysFlag(t *testing.T) {
 	opts, err := parseArgs(append(noConfigArgs(t), "--dump-keys"))
 	require.NoError(t, err)
 	assert.True(t, opts.DumpKeys)
-}
-
-func TestResolveKeysPath_FromArgs(t *testing.T) {
-	path := resolveKeysPath([]string{"--keys", "/custom/keybindings"})
-	assert.Equal(t, "/custom/keybindings", path)
-}
-
-func TestResolveKeysPath_EqualsForm(t *testing.T) {
-	path := resolveKeysPath([]string{"--keys=/custom/keybindings"})
-	assert.Equal(t, "/custom/keybindings", path)
-}
-
-func TestResolveKeysPath_FromEnv(t *testing.T) {
-	t.Setenv("REVDIFF_KEYS", "/env/keybindings")
-	path := resolveKeysPath([]string{})
-	assert.Equal(t, "/env/keybindings", path)
-}
-
-func TestResolveKeysPath_ArgsOverrideEnv(t *testing.T) {
-	t.Setenv("REVDIFF_KEYS", "/env/keybindings")
-	path := resolveKeysPath([]string{"--keys", "/args/keybindings"})
-	assert.Equal(t, "/args/keybindings", path)
-}
-
-func TestResolveKeysPath_Default(t *testing.T) {
-	t.Setenv("REVDIFF_KEYS", "") // clear env
-	path := resolveKeysPath([]string{})
-	home, err := os.UserHomeDir()
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(home, ".config", "revdiff", "keybindings"), path)
 }
 
 func TestDefaultKeysPath(t *testing.T) {

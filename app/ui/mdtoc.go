@@ -43,16 +43,15 @@ func parseTOC(lines []diff.DiffLine, filename string) *mdTOC {
 		// opening fence: 3+ consecutive backticks or tildes (after optional indent).
 		// closing fence: same char, at least same length, only whitespace after.
 		trimmed := strings.TrimSpace(content)
-		if fenceChar == 0 {
-			if ch, n := fencePrefix(trimmed); n >= 3 {
-				fenceChar = ch
-				fenceLen = n
-				continue
-			}
-		} else if ch, n := fencePrefix(trimmed); ch == fenceChar && n >= fenceLen {
+		ch, n := fencePrefix(trimmed)
+		switch {
+		case fenceChar == 0 && n >= 3:
+			fenceChar = ch
+			fenceLen = n
+			continue
+		case fenceChar != 0 && ch == fenceChar && n >= fenceLen:
 			// closing fence must have no non-whitespace after the fence chars
-			rest := strings.TrimSpace(trimmed[n:])
-			if rest == "" {
+			if rest := strings.TrimSpace(trimmed[n:]); rest == "" {
 				fenceChar = 0
 				fenceLen = 0
 				continue
@@ -116,20 +115,7 @@ func (toc *mdTOC) moveDown() {
 
 // ensureVisible adjusts offset so the cursor is within the visible range of given height.
 func (toc *mdTOC) ensureVisible(height int) {
-	if height <= 0 {
-		return
-	}
-	if toc.cursor < toc.offset {
-		toc.offset = toc.cursor
-	} else if toc.cursor >= toc.offset+height {
-		toc.offset = toc.cursor - height + 1
-	}
-	if toc.offset < 0 {
-		toc.offset = 0
-	}
-	if maxOff := max(len(toc.entries)-height, 0); toc.offset > maxOff {
-		toc.offset = maxOff
-	}
+	ensureVisibleInList(&toc.cursor, &toc.offset, len(toc.entries), height)
 }
 
 // updateActiveSection finds the nearest entry with lineIdx <= diffCursor and sets activeSection.

@@ -12,7 +12,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Project Structure
 - `app/` - entry point (`main.go`), CLI flags, wiring
-- `app/diff/` - git interaction, unified diff parsing (`ParseUnifiedDiff`, `DiffLine`)
+- `app/diff/` - git interaction, unified diff parsing (`parseUnifiedDiff`, `DiffLine`)
 - `app/ui/` - bubbletea TUI package. All files share one `Model` struct — methods are split across files by concern to keep code files under ~500 lines and test files around ~1000 lines (soft target). Each source file has a matching `_test.go` file. See `app/ui/doc.go` for package-level documentation.
   - `model.go` - Model struct, NewModel, Init, Update, handleKey, view toggles
   - `view.go` - View(), status bar, ANSI helpers
@@ -29,7 +29,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
   - `styles.go` - lipgloss styles and theme integration
 - `app/highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `app/keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
-- `app/theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, BundledNames, ColorKeys (bundled: dracula, nord, solarized-dark)
+- `app/theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, ColorKeys (bundled: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark)
 - `app/annotation/` - in-memory annotation store, structured output formatting; `Annotation.EndLine` enables hunk range headers when comment contains "hunk" keyword
 - `app/history/` - review session auto-save to `~/.config/revdiff/history/`; `Save(Params)` writes markdown with header, annotations, and git diff for annotated files
 - `app/ui/mocks/` - moq-generated mocks (never edit manually)
@@ -40,7 +40,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Data Flow
 ```
-git diff → diff.ParseUnifiedDiff() → []DiffLine
+git diff → diff.parseUnifiedDiff() → []DiffLine
   (or: disk file → diff.readFileAsContext() → []DiffLine, all ChangeContext)
   (or: stdin / arbitrary reader → diff.readReaderAsContext() → []DiffLine, all ChangeContext)
   → highlight.HighlightLines() → []string (ANSI foreground-only)
@@ -54,7 +54,7 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
     prepended in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
     lineNumWidth recomputed per file in handleFileLoaded; lineNumGutterWidth() = 2*W+2
   when blame gutter is on (`B` toggle, orthogonal to above):
-    blameGutter(dl) formats " author age" gutter via m.styles.LineNumber,
+    blameGutter(dl, now) formats " author age" gutter via m.styles.LineNumber,
     prepended after lineNumGutter in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
     blame data loaded async via loadBlame() → blameLoadedMsg; keyed by NewNum (blank for removed lines/dividers)
     blameAuthorLen capped at 8; blameGutterWidth() = W+5; Blamer interface (optional, nil when git unavailable)
@@ -79,7 +79,7 @@ git diff → diff.ParseUnifiedDiff() → []DiffLine
 - Precedence: CLI flags > env vars > config file > built-in defaults
 - `--dump-config` outputs current defaults, `--config` overrides path
 - `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --dump-theme, --list-themes, --init-themes, --version)
-- Themes dir: `~/.config/revdiff/themes/` with 5 bundled themes (catppuccin-mocha, dracula, gruvbox, nord, solarized-dark), auto-created on first run
+- Themes dir: `~/.config/revdiff/themes/` with 7 bundled themes (revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark), auto-created on first run
 - `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
 - Theme precedence: `--theme` takes over completely — overwrites all 21 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
 - Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`. `colorFieldPtrs(opts)` is the single source of truth for the color key → struct field mapping, used by both `applyTheme()` and `collectColors()` — adding a new color requires changes in `theme.go` colorKeys + options struct + `colorFieldPtrs()`

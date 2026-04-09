@@ -621,6 +621,18 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 
 		assert.Nil(t, model.mdTOC, "mdTOC should be nil in multi-file mode")
 	})
+
+	t.Run("switching to non-markdown clears existing TOC", func(t *testing.T) {
+		goLines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
+		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": goLines})
+		m.singleFile = true
+		m.mdTOC = &mdTOC{entries: []tocEntry{{title: "stale", lineIdx: 1}}} // pre-existing TOC from previous file
+
+		result, _ := m.Update(fileLoadedMsg{file: "main.go", lines: goLines})
+		model := result.(Model)
+
+		assert.Nil(t, model.mdTOC, "mdTOC should be cleared when switching to non-markdown file")
+	})
 }
 
 func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {

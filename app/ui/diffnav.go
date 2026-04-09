@@ -202,9 +202,10 @@ func (m *Model) moveDiffCursorToEnd() {
 // accounts for annotation lines injected between diff lines.
 func (m *Model) syncViewportToCursor() {
 	cursorY := m.cursorViewportY()
-	if cursorY < m.viewport.YOffset {
+	switch {
+	case cursorY < m.viewport.YOffset:
 		m.viewport.SetYOffset(cursorY)
-	} else if cursorY >= m.viewport.YOffset+m.viewport.Height {
+	case cursorY >= m.viewport.YOffset+m.viewport.Height:
 		m.viewport.SetYOffset(cursorY - m.viewport.Height + 1)
 	}
 	m.viewport.SetContent(m.renderDiff())
@@ -233,10 +234,11 @@ func (m Model) findHunks() []int {
 	inHunk := false
 	for i, dl := range m.diffLines {
 		isChange := dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove
-		if isChange && !inHunk {
+		switch {
+		case isChange && !inHunk:
 			hunks = append(hunks, i)
 			inHunk = true
-		} else if !isChange {
+		case !isChange:
 			inHunk = false
 		}
 	}
@@ -511,13 +513,13 @@ func (m Model) paneHeight() int {
 }
 
 // jumpTOCEntry moves the TOC cursor by delta (+1 next, -1 prev) and jumps the diff viewport.
-func (m Model) jumpTOCEntry(delta int) Model {
+func (m Model) jumpTOCEntry(delta int) (tea.Model, tea.Cmd) {
 	if m.mdTOC == nil {
-		return m
+		return m, nil
 	}
 	m.mdTOC.cursor = max(0, min(m.mdTOC.cursor+delta, len(m.mdTOC.entries)-1))
 	m.syncDiffToTOCCursor()
-	return m
+	return m, nil
 }
 
 // syncTOCCursorToActive sets the TOC cursor to the current active section.

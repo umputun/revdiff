@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
@@ -96,16 +97,18 @@ func (m *Model) buildThemeEntries() ([]themeEntry, error) {
 func (m *Model) applyThemeFilter() {
 	if m.themeSel.filter == "" {
 		m.themeSel.entries = m.themeSel.all
-	} else {
-		lower := strings.ToLower(m.themeSel.filter)
-		filtered := make([]themeEntry, 0, len(m.themeSel.all))
-		for _, e := range m.themeSel.all {
-			if strings.Contains(strings.ToLower(e.name), lower) {
-				filtered = append(filtered, e)
-			}
-		}
-		m.themeSel.entries = filtered
+		m.themeSel.cursor = 0
+		m.themeSel.offset = 0
+		return
 	}
+	lower := strings.ToLower(m.themeSel.filter)
+	filtered := make([]themeEntry, 0, len(m.themeSel.all))
+	for _, e := range m.themeSel.all {
+		if strings.Contains(strings.ToLower(e.name), lower) {
+			filtered = append(filtered, e)
+		}
+	}
+	m.themeSel.entries = filtered
 	m.themeSel.cursor = 0
 	m.themeSel.offset = 0
 }
@@ -137,11 +140,9 @@ func (m Model) themeSelectOverlay() string {
 
 	total := len(m.themeSel.all)
 	showing := len(m.themeSel.entries)
-	var title string
+	title := fmt.Sprintf(" themes (%d) ", total)
 	if m.themeSel.filter != "" {
 		title = fmt.Sprintf(" themes (%d/%d) ", showing, total)
-	} else {
-		title = fmt.Sprintf(" themes (%d) ", total)
 	}
 
 	border := lipgloss.NormalBorder()
@@ -193,8 +194,8 @@ func (m Model) formatThemeEntry(e themeEntry, width int, selected bool) string {
 	// "  ■ name" or "> ■ name" when selected
 	nameMaxWidth := width - 6 // "  " + swatch + " " + padding
 	name := e.name
-	if len(name) > nameMaxWidth {
-		name = name[:nameMaxWidth-3] + "..."
+	if runewidth.StringWidth(name) > nameMaxWidth {
+		name = runewidth.Truncate(name, nameMaxWidth, "…")
 	}
 
 	if selected {

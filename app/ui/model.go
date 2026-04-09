@@ -362,11 +362,22 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	return false, m, nil
 }
 
+// treePaneHidden returns true when the tree/TOC pane should be hidden.
+// true when user toggled it off, or in single-file mode without a markdown TOC.
+func (m Model) treePaneHidden() bool {
+	return m.treeHidden || (m.singleFile && m.mdTOC == nil)
+}
+
+// isCursorLine returns true when the diff line at idx is the active cursor line.
+func (m Model) isCursorLine(idx int) bool {
+	return idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+}
+
 // togglePane switches focus between tree and diff panes.
 // only switches to diff pane when a file is loaded.
 // no-op in single-file mode unless mdTOC is active (TOC uses paneTree slot).
 func (m *Model) togglePane() {
-	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+	if m.treePaneHidden() {
 		return
 	}
 	if m.focus != paneTree {
@@ -490,7 +501,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.height = msg.Height
 
 	var diffWidth int
-	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+	if m.treePaneHidden() {
 		m.treeWidth = 0
 		diffWidth = m.width - 2 // diff pane borders only
 	} else {
@@ -517,4 +528,3 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
-

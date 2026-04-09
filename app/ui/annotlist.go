@@ -24,6 +24,15 @@ func (m *Model) buildAnnotListItems() []annotation.Annotation {
 	return items
 }
 
+// annotListBoxStyle builds the bordered box style used by annotation list overlays.
+func (m Model) annotListBoxStyle(width int) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
+		Padding(1, 1).
+		Width(width)
+}
+
 // annotListOverlay renders the annotation list popup as a bordered box.
 func (m Model) annotListOverlay() string {
 	popupWidth := max(min(m.width-10, 70), 20)
@@ -48,14 +57,7 @@ func (m Model) annotListOverlay() string {
 	content := strings.Join(lines, "\n")
 	title := fmt.Sprintf(" annotations (%d) ", len(m.annotListItems))
 
-	border := lipgloss.NormalBorder()
-	boxStyle := lipgloss.NewStyle().
-		Border(border).
-		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
-		Padding(1, 1).
-		Width(popupWidth)
-
-	box := boxStyle.Render(content)
+	box := m.annotListBoxStyle(popupWidth).Render(content)
 
 	// inject title into top border
 	box = m.injectBorderTitle(box, title, popupWidth)
@@ -65,20 +67,13 @@ func (m Model) annotListOverlay() string {
 
 // annotListEmptyOverlay renders the empty-state annotation list popup.
 func (m Model) annotListEmptyOverlay(popupWidth int) string {
-	border := lipgloss.NormalBorder()
-	boxStyle := lipgloss.NewStyle().
-		Border(border).
-		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
-		Padding(1, 1).
-		Width(popupWidth)
-
 	// center "no annotations" text
 	text := "no annotations"
 	innerWidth := popupWidth - 4 // border + padding
 	pad := max((innerWidth-len(text))/2, 0)
 	centered := strings.Repeat(" ", pad) + text
 
-	box := boxStyle.Render(centered)
+	box := m.annotListBoxStyle(popupWidth).Render(centered)
 	title := " annotations (0) "
 	box = m.injectBorderTitle(box, title, popupWidth)
 	return box
@@ -106,11 +101,9 @@ func (m Model) formatAnnotListItem(a annotation.Annotation, width int, selected 
 		}
 	}
 
-	var line string
+	line := prefix
 	if comment != "" {
 		line = prefix + "  " + comment
-	} else {
-		line = prefix
 	}
 
 	// apply styling

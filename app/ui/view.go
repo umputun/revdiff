@@ -29,7 +29,7 @@ func (m Model) View() string {
 
 	var mainView string
 	switch {
-	case m.treeHidden || (m.singleFile && m.mdTOC == nil):
+	case m.treePaneHidden():
 		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
 		paneW := m.width - 2
 		diffContent = m.padContentBg(diffContent, paneW, m.styles.colors.DiffBg)
@@ -42,59 +42,12 @@ func (m Model) View() string {
 	case m.singleFile && m.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
 		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.styles)
-
-		treeStyle := m.styles.TreePane
-		diffStyle := m.styles.DiffPane
-		if m.focus == paneTree {
-			treeStyle = m.styles.TreePaneActive
-		} else {
-			diffStyle = m.styles.DiffPaneActive
-		}
-
-		diffW := m.width - m.treeWidth - 4
-		tocContent = m.padContentBg(tocContent, m.treeWidth, m.styles.colors.TreeBg)
-		diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
-
-		tocPane := treeStyle.
-			Width(m.treeWidth).
-			Height(ph).
-			Render(tocContent)
-
-		diffPane := diffStyle.
-			Width(diffW).
-			Height(ph).
-			Render(diffContent)
-
-		mainView = lipgloss.JoinHorizontal(lipgloss.Top, tocPane, diffPane)
+		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph)
 
 	default:
 		annotated := m.annotatedFiles()
 		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
-
-		// apply pane borders based on focus
-		treeStyle := m.styles.TreePane
-		diffStyle := m.styles.DiffPane
-		if m.focus == paneTree {
-			treeStyle = m.styles.TreePaneActive
-		} else {
-			diffStyle = m.styles.DiffPaneActive
-		}
-
-		diffW := m.width - m.treeWidth - 4
-		treeContent = m.padContentBg(treeContent, m.treeWidth, m.styles.colors.TreeBg)
-		diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
-
-		treePane := treeStyle.
-			Width(m.treeWidth).
-			Height(ph).
-			Render(treeContent)
-
-		diffPane := diffStyle.
-			Width(diffW).
-			Height(ph).
-			Render(diffContent)
-
-		mainView = lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
+		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph)
 	}
 
 	switch {
@@ -112,6 +65,34 @@ func (m Model) View() string {
 
 	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText())
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
+}
+
+// renderTwoPaneLayout renders a two-pane layout with left (tree/TOC) and right (diff) content.
+// applies focus-based pane styles, background padding, and joins horizontally.
+func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) string {
+	treeStyle := m.styles.TreePane
+	diffStyle := m.styles.DiffPane
+	if m.focus == paneTree {
+		treeStyle = m.styles.TreePaneActive
+	} else {
+		diffStyle = m.styles.DiffPaneActive
+	}
+
+	diffW := m.width - m.treeWidth - 4
+	leftContent = m.padContentBg(leftContent, m.treeWidth, m.styles.colors.TreeBg)
+	diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
+
+	leftPane := treeStyle.
+		Width(m.treeWidth).
+		Height(ph).
+		Render(leftContent)
+
+	diffPane := diffStyle.
+		Width(diffW).
+		Height(ph).
+		Render(diffContent)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
 }
 
 // statusBarText returns context-sensitive status line content.
@@ -169,11 +150,7 @@ func (m Model) statusBarText() string {
 
 	// build separator with muted foreground using raw ANSI (not lipgloss.Render)
 	// to avoid full reset that would break the status bar background
-	statusFg := m.styles.colors.Muted
-	if m.styles.colors.StatusFg != "" {
-		statusFg = m.styles.colors.StatusFg
-	}
-	sep := " " + m.ansiFg(m.styles.colors.Muted) + "|" + m.ansiFg(statusFg) + " "
+	sep := " " + m.ansiFg(m.styles.colors.Muted) + "|" + m.ansiFg(m.effectiveStatusFg()) + " "
 	left := strings.Join(segments, sep)
 	right := strings.Join(rightParts, sep)
 
@@ -362,6 +339,14 @@ func (m Model) ansiFg(hex string) string { return m.ansiColor(hex, 38) }
 // ansiBg returns an ANSI 24-bit background escape sequence for a hex color.
 func (m Model) ansiBg(hex string) string { return m.ansiColor(hex, 48) }
 
+// effectiveStatusFg returns the status bar foreground color, falling back to Muted when StatusFg is unset.
+func (m Model) effectiveStatusFg() string {
+	if m.styles.colors.StatusFg != "" {
+		return m.styles.colors.StatusFg
+	}
+	return m.styles.colors.Muted
+}
+
 // statusModeIcons returns combined mode indicator icons (▼ collapsed, ◉ filter, ↩ wrap, ≋ search).
 // all icons are always shown; active modes use status foreground, inactive use muted color.
 func (m Model) statusModeIcons() string {
@@ -381,12 +366,8 @@ func (m Model) statusModeIcons() string {
 		{"?", m.showUntracked},
 	}
 
-	statusFg := m.styles.colors.Muted
-	if m.styles.colors.StatusFg != "" {
-		statusFg = m.styles.colors.StatusFg
-	}
 	mutedSeq := m.ansiFg(m.styles.colors.Muted)
-	activeSeq := m.ansiFg(statusFg)
+	activeSeq := m.ansiFg(m.effectiveStatusFg())
 
 	var icons []string
 	for _, ind := range indicators {

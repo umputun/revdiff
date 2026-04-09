@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
 )
@@ -106,22 +107,29 @@ func (ft *fileTree) selectedFile() string {
 	return ft.entries[ft.cursor].path
 }
 
-// ensureVisible adjusts offset so the cursor is within the visible range of given height.
-func (ft *fileTree) ensureVisible(height int) {
+// ensureVisibleInList adjusts offset so cursor is within the visible range of given height.
+// count is the total number of entries in the list.
+func ensureVisibleInList(cursor, offset *int, count, height int) {
 	if height <= 0 {
 		return
 	}
-	if ft.cursor < ft.offset {
-		ft.offset = ft.cursor
-	} else if ft.cursor >= ft.offset+height {
-		ft.offset = ft.cursor - height + 1
+	switch {
+	case *cursor < *offset:
+		*offset = *cursor
+	case *cursor >= *offset+height:
+		*offset = *cursor - height + 1
 	}
-	if ft.offset < 0 {
-		ft.offset = 0
+	if *offset < 0 {
+		*offset = 0
 	}
-	if maxOff := max(len(ft.entries)-height, 0); ft.offset > maxOff {
-		ft.offset = maxOff
+	if maxOff := max(count-height, 0); *offset > maxOff {
+		*offset = maxOff
 	}
+}
+
+// ensureVisible adjusts offset so the cursor is within the visible range of given height.
+func (ft *fileTree) ensureVisible(height int) {
+	ensureVisibleInList(&ft.cursor, &ft.offset, len(ft.entries), height)
 }
 
 // moveDown moves cursor to the next file entry (skips directories).
@@ -263,6 +271,7 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 	ft.ensureVisible(height)
 	end := min(ft.offset+height, len(ft.entries))
 
+	rc := renderCtx{annotatedFiles: annotatedFiles, s: s}
 	var b strings.Builder
 	for idx := ft.offset; idx < end; idx++ {
 		e := ft.entries[idx]
@@ -271,7 +280,7 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 		if e.isDir {
 			line = s.DirEntry.Render(" " + ft.truncateDirName(e.name, width-3))
 		} else {
-			line = ft.renderFileEntry(e, idx, width, annotatedFiles, s)
+			line = ft.renderFileEntry(e, idx, width, rc)
 		}
 
 		b.WriteString(line)
@@ -282,8 +291,15 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 	return b.String()
 }
 
+// renderCtx holds rendering context for a file tree entry,
+// reducing the parameter count of renderFileEntry.
+type renderCtx struct {
+	annotatedFiles map[string]bool
+	s              styles
+}
+
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.
-func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles map[string]bool, s styles) string {
+func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) string {
 	isSelected := idx == ft.cursor
 	hasStatuses := len(ft.fileStatuses) > 0
 
@@ -294,7 +310,7 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles 
 		if isSelected {
 			reviewMark = "✓ "
 		} else {
-			reviewMark = coloredTextWithReset(s.colors.AddFg, "✓", s.colors.Normal) + " "
+			reviewMark = coloredTextWithReset(rc.s.colors.AddFg, "✓", rc.s.colors.Normal) + " "
 		}
 	}
 
@@ -307,13 +323,13 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles 
 		case isSelected:
 			statusMark = string(status) + " "
 		default:
-			statusMark = coloredTextWithReset(s.fileStatusFg(status), string(status), s.colors.Normal) + " "
+			statusMark = coloredTextWithReset(rc.s.fileStatusFg(status), string(status), rc.s.colors.Normal) + " "
 		}
 	}
 
 	marker := "  "
-	if annotatedFiles[e.path] {
-		marker = coloredText(s.colors.Annotation, " *")
+	if rc.annotatedFiles[e.path] {
+		marker = coloredText(rc.s.colors.Annotation, " *")
 	}
 
 	prefix := reviewMark + statusMark
@@ -323,16 +339,26 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, annotatedFiles 
 	// truncate from the left of the filename when it exceeds pane width
 	if lipgloss.Width(name) > maxWidth && maxWidth > 4 {
 		budget := maxWidth - lipgloss.Width(prefix) - lipgloss.Width(marker) - 1 // 1 for "…"
-		if budget > 0 && lipgloss.Width(e.name) > budget {
+		if budget > 0 && runewidth.StringWidth(e.name) > budget {
 			runes := []rune(e.name)
-			name = prefix + "…" + string(runes[len(runes)-budget+1:]) + marker
+			w := 0
+			start := len(runes)
+			for i := len(runes) - 1; i >= 0; i-- {
+				rw := runewidth.RuneWidth(runes[i])
+				if w+rw > budget {
+					break
+				}
+				w += rw
+				start = i
+			}
+			name = prefix + "…" + string(runes[start:]) + marker
 		}
 	}
 
 	if isSelected {
-		return s.FileSelected.Width(maxWidth).Render(name)
+		return rc.s.FileSelected.Width(maxWidth).Render(name)
 	}
-	return s.FileEntry.Render(name)
+	return rc.s.FileEntry.Render(name)
 }
 
 // filterFiles returns the subset of allFiles that have annotations.
@@ -398,13 +424,24 @@ func (ft *fileTree) restoreReviewed(prev map[string]bool) {
 	}
 }
 
-// truncateDirName trims a directory name from the left to fit maxWidth,
+// truncateDirName trims a directory name from the left to fit maxWidth display cells,
 // prepending an ellipsis when truncated.
 func (ft *fileTree) truncateDirName(name string, maxWidth int) string {
-	if maxWidth <= 0 || len(name) <= maxWidth {
+	if maxWidth <= 0 || runewidth.StringWidth(name) <= maxWidth {
 		return name
 	}
-	return "…" + name[len(name)-maxWidth+1:]
+	runes := []rune(name)
+	w := 0
+	start := len(runes)
+	for i := len(runes) - 1; i >= 0; i-- {
+		rw := runewidth.RuneWidth(runes[i])
+		if w+rw > maxWidth-1 { // reserve 1 cell for "…"
+			break
+		}
+		w += rw
+		start = i
+	}
+	return "…" + string(runes[start:])
 }
 
 // refreshFilter rebuilds the filtered tree if the filter is active, preserving cursor position.

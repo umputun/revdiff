@@ -409,6 +409,33 @@ func TestFileTree_RenderIndentation(t *testing.T) {
 	}
 }
 
+func TestEnsureVisibleInList(t *testing.T) {
+	tests := []struct {
+		name       string
+		cursor     int
+		offset     int
+		count      int
+		height     int
+		wantCursor int
+		wantOffset int
+	}{
+		{name: "cursor visible no change", cursor: 2, offset: 0, count: 10, height: 5, wantCursor: 2, wantOffset: 0},
+		{name: "cursor above viewport", cursor: 1, offset: 3, count: 10, height: 5, wantCursor: 1, wantOffset: 1},
+		{name: "cursor below viewport", cursor: 8, offset: 0, count: 10, height: 5, wantCursor: 8, wantOffset: 4},
+		{name: "zero height no-op", cursor: 5, offset: 3, count: 10, height: 0, wantCursor: 5, wantOffset: 3},
+		{name: "offset clamped to max", cursor: 2, offset: 10, count: 5, height: 3, wantCursor: 2, wantOffset: 2},
+		{name: "negative offset clamped", cursor: 0, offset: -1, count: 5, height: 3, wantCursor: 0, wantOffset: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cursor, offset := tt.cursor, tt.offset
+			ensureVisibleInList(&cursor, &offset, tt.count, tt.height)
+			assert.Equal(t, tt.wantCursor, cursor)
+			assert.Equal(t, tt.wantOffset, offset)
+		})
+	}
+}
+
 func TestFileTree_EnsureVisible(t *testing.T) {
 	ft := newFileTree([]string{
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
@@ -599,8 +626,29 @@ func TestFileTree_RenderFileEntryRestoresNormalForegroundAfterColoredPrefix(t *t
 		Muted:  "#6c6c6c",
 	})
 
-	line := ft.renderFileEntry(ft.entries[1], 1, 40, nil, s)
+	line := ft.renderFileEntry(ft.entries[1], 1, 40, renderCtx{annotatedFiles: nil, s: s})
 
 	assert.Contains(t, line, "\033[38;2;135;215;135m✓\033[38;2;208;208;208m ")
 	assert.Contains(t, line, "\033[38;2;135;215;135mA\033[38;2;208;208;208m a.go")
+}
+
+func TestFileTree_TruncateDirName(t *testing.T) {
+	ft := &fileTree{}
+	tests := []struct {
+		name, input, expected string
+		maxWidth              int
+	}{
+		{name: "no truncation needed", input: "short", maxWidth: 10, expected: "short"},
+		{name: "exact fit", input: "exact", maxWidth: 5, expected: "exact"},
+		{name: "zero width", input: "anything", maxWidth: 0, expected: "anything"},
+		{name: "ascii truncation", input: "very/long/path/name", maxWidth: 10, expected: "…path/name"},
+		{name: "cjk truncation", input: "目录/很长的路径/名称", maxWidth: 6, expected: "…/名称"},
+		{name: "emoji truncation", input: "📁folder/📂sub/file", maxWidth: 10, expected: "…sub/file"},
+		{name: "mixed ascii and cjk", input: "abc/目录/xyz", maxWidth: 7, expected: "…录/xyz"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, ft.truncateDirName(tt.input, tt.maxWidth))
+		})
+	}
 }

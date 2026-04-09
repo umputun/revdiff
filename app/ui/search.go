@@ -46,33 +46,15 @@ func (m *Model) submitSearch() {
 		return
 	}
 
-	hunks := m.findHunks()
-
-	// find first visible match at or after current cursor position
-	for i, idx := range m.searchMatches {
-		if idx < m.diffCursor || m.isCollapsedHidden(idx, hunks) {
-			continue
-		}
-		m.searchCursor = i
-		m.diffCursor = idx
-		m.cursorOnAnnotation = false
-		m.syncTOCActiveSection()
-		m.centerViewportOnCursor()
+	idx := m.findFirstVisibleMatch(m.diffCursor)
+	if idx < 0 {
 		return
 	}
-
-	// wrap: find first visible match from the beginning
-	for i, idx := range m.searchMatches {
-		if m.isCollapsedHidden(idx, hunks) {
-			continue
-		}
-		m.searchCursor = i
-		m.diffCursor = idx
-		m.cursorOnAnnotation = false
-		m.syncTOCActiveSection()
-		m.centerViewportOnCursor()
-		return
-	}
+	m.searchCursor = idx
+	m.diffCursor = m.searchMatches[idx]
+	m.cursorOnAnnotation = false
+	m.syncTOCActiveSection()
+	m.centerViewportOnCursor()
 }
 
 // nextSearchMatch advances to the next search match with wrap-around.
@@ -134,21 +116,28 @@ func (m *Model) realignSearchCursor() {
 	if len(m.searchMatches) == 0 {
 		return
 	}
+	if idx := m.findFirstVisibleMatch(m.diffCursor); idx >= 0 {
+		m.searchCursor = idx
+	}
+}
+
+// findFirstVisibleMatch returns the searchMatches index of the first visible match
+// at or after startIdx, with wrap-around. returns -1 if no visible match exists.
+func (m *Model) findFirstVisibleMatch(startIdx int) int {
 	hunks := m.findHunks()
-	// find first visible match at or after current cursor
+	// scan forward from startIdx
 	for i, idx := range m.searchMatches {
-		if idx >= m.diffCursor && !m.isCollapsedHidden(idx, hunks) {
-			m.searchCursor = i
-			return
+		if idx >= startIdx && !m.isCollapsedHidden(idx, hunks) {
+			return i
 		}
 	}
-	// wrap: find first visible match from the beginning
+	// wrap: scan from beginning
 	for i, idx := range m.searchMatches {
 		if !m.isCollapsedHidden(idx, hunks) {
-			m.searchCursor = i
-			return
+			return i
 		}
 	}
+	return -1
 }
 
 // clearSearch resets all search state.
@@ -160,15 +149,18 @@ func (m *Model) clearSearch() {
 }
 
 // buildSearchMatchSet converts searchMatches slice into a map for O(1) lookup during rendering.
-func (m *Model) buildSearchMatchSet() {
+// returns nil when there are no matches. callers assign the result to m.searchMatchSet,
+// which is read by render sub-methods (renderDiffLine, renderCollapsedAddLine, renderDeletePlaceholder)
+// on the same value-receiver copy — the field acts as a render-pass local shared via the copy.
+func (m Model) buildSearchMatchSet() map[int]bool {
 	if len(m.searchMatches) == 0 {
-		m.searchMatchSet = nil
-		return
+		return nil
 	}
-	m.searchMatchSet = make(map[int]bool, len(m.searchMatches))
+	result := make(map[int]bool, len(m.searchMatches))
 	for _, idx := range m.searchMatches {
-		m.searchMatchSet[idx] = true
+		result[idx] = true
 	}
+	return result
 }
 
 // handleSearchKey handles key messages during search input mode.

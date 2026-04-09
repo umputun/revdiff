@@ -122,7 +122,7 @@ func main() {
 	}
 
 	if opts.DumpKeys {
-		km := keymap.LoadOrDefault(resolveKeysPath(os.Args[1:]))
+		km := keymap.LoadOrDefault(resolveFlagPath(os.Args[1:], "keys", "REVDIFF_KEYS", defaultKeysPath))
 		if err := km.Dump(os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -163,7 +163,7 @@ func parseArgs(args []string) (options, error) {
 	p.Usage = "[OPTIONS] [base] [against]"
 
 	// determine config path from args before full parsing
-	configPath := resolveConfigPath(args)
+	configPath := resolveFlagPath(args, "config", "REVDIFF_CONFIG", defaultConfigPath)
 
 	// load config file before parsing CLI args (CLI overrides config)
 	iniParser := flags.NewIniParser(p)
@@ -226,7 +226,7 @@ func dumpConfig(args []string, w io.Writer) {
 	var opts options
 	p := flags.NewParser(&opts, flags.Default)
 	iniParser := flags.NewIniParser(p)
-	configPath := resolveConfigPath(args)
+	configPath := resolveFlagPath(args, "config", "REVDIFF_CONFIG", defaultConfigPath)
 	loadConfigFile(iniParser, configPath)
 	_, _ = p.ParseArgs(args)
 	iniParser.Write(w, flags.IniIncludeDefaults|flags.IniCommentDefaults|flags.IniIncludeComments)
@@ -249,23 +249,22 @@ func loadConfigFile(iniParser *flags.IniParser, configPath string) {
 	fmt.Fprintf(os.Stderr, "warning: config %s: %v\n", configPath, err)
 }
 
-// resolveConfigPath determines the config file path from args, env, or default location.
-func resolveConfigPath(args []string) string {
-	// check if --config was passed in args (supports both --config value and --config=value)
+// resolveFlagPath determines a file path from CLI args, env var, or default location.
+// it checks args for --flag value and --flag=value forms, falls back to envVar, then defaultFn.
+func resolveFlagPath(args []string, flag, envVar string, defaultFn func() string) string {
+	longFlag := "--" + flag
 	for i, arg := range args {
-		if arg == "--config" && i+1 < len(args) {
+		if arg == longFlag && i+1 < len(args) {
 			return args[i+1]
 		}
-		if after, ok := strings.CutPrefix(arg, "--config="); ok {
+		if after, ok := strings.CutPrefix(arg, longFlag+"="); ok {
 			return after
 		}
 	}
-	// check env
-	if p := os.Getenv("REVDIFF_CONFIG"); p != "" {
+	if p := os.Getenv(envVar); p != "" {
 		return p
 	}
-	// default location
-	return defaultConfigPath()
+	return defaultFn()
 }
 
 // defaultConfigPath returns ~/.config/revdiff/config.
@@ -275,25 +274,6 @@ func defaultConfigPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".config", "revdiff", "config")
-}
-
-// resolveKeysPath determines the keybindings file path from args, env, or default location.
-func resolveKeysPath(args []string) string {
-	// check if --keys was passed in args (supports both --keys value and --keys=value)
-	for i, arg := range args {
-		if arg == "--keys" && i+1 < len(args) {
-			return args[i+1]
-		}
-		if after, ok := strings.CutPrefix(arg, "--keys="); ok {
-			return after
-		}
-	}
-	// check env
-	if p := os.Getenv("REVDIFF_KEYS"); p != "" {
-		return p
-	}
-	// default location
-	return defaultKeysPath()
 }
 
 // defaultKeysPath returns ~/.config/revdiff/keybindings.
@@ -418,7 +398,7 @@ func run(opts options) error {
 		WorkDir:          workDir,
 		LoadUntracked:    untrackedFn,
 		ThemesDir:        defaultThemesDir(),
-		ConfigPath:       resolveConfigPath(os.Args[1:]),
+		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
 		ActiveThemeName:  theme.ActiveName(opts.Theme),
 		Colors: ui.Colors{
 			Accent:     opts.Colors.Accent,

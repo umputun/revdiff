@@ -355,3 +355,23 @@ func TestApplyTheme_invalidChromaStyleKeepsPreviousHighlightingStyle(t *testing.
 	assert.Equal(t, 0, highlightCalls, "invalid chroma style should not trigger re-highlighting")
 	assert.Equal(t, []string{"existing"}, m.highlightedLines)
 }
+
+func TestFormatThemeEntry_unicodeTruncation(t *testing.T) {
+	m := testModel(nil, nil)
+	tests := []struct {
+		name, themeName string
+		width           int
+		wantContain     string
+	}{
+		{name: "short name not truncated", themeName: "nord", width: 20, wantContain: "nord"},
+		{name: "cjk name truncated", themeName: "很长的主题名称超过限制", width: 14, wantContain: "…"},
+		{name: "emoji name truncated", themeName: "🌙dark-theme-very-long-name", width: 16, wantContain: "…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := themeEntry{name: tt.themeName, theme: theme.Theme{Colors: map[string]string{"color-accent": "#ff0000"}}}
+			line := m.formatThemeEntry(e, tt.width, false)
+			assert.Contains(t, line, tt.wantContain)
+		})
+	}
+}
