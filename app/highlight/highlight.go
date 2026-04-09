@@ -26,6 +26,7 @@ type Highlighter struct {
 // New creates a Highlighter with the given Chroma style name and enabled state.
 // if styleName is empty, defaults to "monokai". Logs a warning if the style name is unknown.
 func New(styleName string, enabled bool) *Highlighter {
+	registerCustomStyles()
 	if styleName == "" {
 		styleName = "monokai"
 	}
