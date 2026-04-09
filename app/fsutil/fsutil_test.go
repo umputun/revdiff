@@ -84,7 +84,7 @@ func TestAtomicWriteFile(t *testing.T) {
 		path := filepath.Join(sub, "target.txt")
 		require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
 		// make directory read-only so CreateTemp fails
-		require.NoError(t, os.Chmod(sub, 0o555)) //nolint:gosec // intentional read-only for test
+		require.NoError(t, os.Chmod(sub, 0o555))       //nolint:gosec // intentional read-only for test
 		t.Cleanup(func() { _ = os.Chmod(sub, 0o750) }) //nolint:gosec // restore perms for cleanup
 		err := AtomicWriteFile(path, []byte("new"))
 		require.Error(t, err)

@@ -493,3 +493,42 @@ func TestModel_HandleEscKeyNoopWithoutSearch(t *testing.T) {
 	assert.Empty(t, model.searchTerm)
 	assert.Nil(t, model.searchMatches)
 }
+
+func TestModel_HandleFileAnnotateKey(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+
+	t.Run("starts annotation when focus is diff and file is set", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.focus = paneDiff
+
+		result, cmd := m.handleFileAnnotateKey()
+		model := result.(Model)
+		assert.True(t, model.annotating, "should start annotation mode")
+		assert.NotNil(t, cmd, "should return a command")
+	})
+
+	t.Run("no-op when focus is tree pane", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.focus = paneTree
+
+		result, cmd := m.handleFileAnnotateKey()
+		model := result.(Model)
+		assert.False(t, model.annotating, "should not start annotation")
+		assert.Nil(t, cmd, "should return nil command")
+	})
+
+	t.Run("no-op when currFile is empty", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.currFile = ""
+		m.focus = paneDiff
+
+		result, cmd := m.handleFileAnnotateKey()
+		model := result.(Model)
+		assert.False(t, model.annotating, "should not start annotation")
+		assert.Nil(t, cmd, "should return nil command")
+	})
+}

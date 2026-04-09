@@ -1349,7 +1349,7 @@ func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
 		defer m.store.Delete("a.go", 0, "")
 
-		wrapCount := m.wrappedAnnotationLineCount("file")
+		wrapCount := m.wrappedAnnotationLineCount(annotKeyFile)
 		assert.Greater(t, wrapCount, 1, "long file annotation should wrap to multiple rows")
 
 		m.diffCursor = 0
@@ -1376,7 +1376,7 @@ func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "short"})
 		defer m.store.Delete("a.go", 0, "")
 
-		assert.Equal(t, 1, m.wrappedAnnotationLineCount("file"))
+		assert.Equal(t, 1, m.wrappedAnnotationLineCount(annotKeyFile))
 	})
 }
 
@@ -1393,7 +1393,7 @@ func TestModel_RenderWrappedAnnotation(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
 		defer m.store.Delete("a.go", 0, "")
 
-		wrapCount := m.wrappedAnnotationLineCount("file")
+		wrapCount := m.wrappedAnnotationLineCount(annotKeyFile)
 		assert.Greater(t, wrapCount, 1, "annotation should wrap")
 		// cursor chevron appears exactly once (first line only)
 		m.diffCursor = -1

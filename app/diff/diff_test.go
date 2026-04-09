@@ -13,7 +13,7 @@ import (
 
 func TestParseUnifiedDiff_SimpleAdd(t *testing.T) {
 	raw := readFixture(t, "simple_add.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 
 	// expected: context, blank, context, add, add, add, context, context
@@ -55,7 +55,7 @@ func TestParseUnifiedDiff_SimpleAdd(t *testing.T) {
 
 func TestParseUnifiedDiff_SimpleRemove(t *testing.T) {
 	raw := readFixture(t, "simple_remove.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines, "expected non-empty result")
 
@@ -76,7 +76,7 @@ func TestParseUnifiedDiff_SimpleRemove(t *testing.T) {
 
 func TestParseUnifiedDiff_MultiHunk(t *testing.T) {
 	raw := readFixture(t, "multi_hunk.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 
 	// verify divider exists between hunks
@@ -100,7 +100,7 @@ func TestParseUnifiedDiff_MultiHunk(t *testing.T) {
 
 func TestParseUnifiedDiff_MixedChanges(t *testing.T) {
 	raw := readFixture(t, "mixed_changes.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 
 	types := make([]ChangeType, 0, len(lines))
@@ -124,14 +124,14 @@ func TestParseUnifiedDiff_MixedChanges(t *testing.T) {
 }
 
 func TestParseUnifiedDiff_Empty(t *testing.T) {
-	lines, err := ParseUnifiedDiff("")
+	lines, err := parseUnifiedDiff("")
 	require.NoError(t, err)
 	assert.Empty(t, lines)
 }
 
 func TestParseUnifiedDiff_Binary(t *testing.T) {
 	raw := readFixture(t, "binary.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, BinaryPlaceholder, lines[0].Content)
@@ -143,7 +143,7 @@ func TestParseUnifiedDiff_Binary(t *testing.T) {
 
 func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
 	raw := "diff --git a/new.bin b/new.bin\nnew file mode 100644\nindex 0000000..dd12d3a\nBinary files /dev/null and b/new.bin differ\n"
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(new binary file)", lines[0].Content)
@@ -152,7 +152,7 @@ func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
 
 func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
 	raw := "diff --git a/old.bin b/old.bin\ndeleted file mode 100644\nindex 2dfe7e4..0000000\nBinary files a/old.bin and /dev/null differ\n"
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(deleted binary file)", lines[0].Content)
@@ -161,7 +161,7 @@ func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
 
 func TestParseUnifiedDiff_LineNumbers(t *testing.T) {
 	raw := readFixture(t, "simple_add.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 
 	// additions should have OldNum=0
@@ -183,7 +183,7 @@ func TestParseUnifiedDiff_LineNumbers(t *testing.T) {
 
 func TestParseUnifiedDiff_RemoveLineNumbers(t *testing.T) {
 	raw := readFixture(t, "simple_remove.diff")
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 
 	for _, l := range lines {
@@ -304,7 +304,7 @@ func TestParseUnifiedDiff_LongLine(t *testing.T) {
 	longContent := strings.Repeat("x", 100_000)
 	raw := "diff --git a/big.js b/big.js\n--- a/big.js\n+++ b/big.js\n@@ -1,1 +1,2 @@\n context\n+" + longContent + "\n"
 
-	lines, err := ParseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err, "should handle lines up to 1MB without error")
 
 	var hasAdd bool

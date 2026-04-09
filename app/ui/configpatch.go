@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/umputun/revdiff/app/fsutil"
@@ -55,7 +56,7 @@ func patchConfigTheme(configPath, themeName string) error {
 		for insertIdx > 0 && strings.TrimSpace(lines[insertIdx-1]) == "" {
 			insertIdx--
 		}
-		lines = append(lines[:insertIdx], append([]string{"theme = " + themeName}, lines[insertIdx:]...)...)
+		lines = slices.Insert(lines, insertIdx, "theme = "+themeName)
 	}
 
 	if err := fsutil.AtomicWriteFile(configPath, []byte(strings.Join(lines, "\n"))); err != nil {

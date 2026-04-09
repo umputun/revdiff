@@ -21,7 +21,7 @@ type collapsedState struct {
 // removed lines are hidden unless their hunk is expanded. added lines are styled
 // as "modified" (amber ~) when paired with removes, or "pure add" (green +) otherwise.
 func (m Model) renderCollapsedDiff() string {
-	m.buildSearchMatchSet()
+	m.searchMatchSet = m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
 	hunks := m.findHunks()
@@ -93,7 +93,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		hlStyle = m.styles.SearchMatch.UnsetForeground()
 	}
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	isCursor := m.isCursorLine(idx)
 
 	numGutter, blGutter := m.lineGutters(dl)
 
@@ -104,7 +104,11 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, blGutter, isCursor, hasHighlight, style, hlStyle, bgColor)
+		m.renderWrappedCollapsedLine(b, textContent, wrappedLineCtx{
+			gutter: gutter, numGutter: numGutter, blGutter: blGutter,
+			isCursor: isCursor, hasHighlight: hasHighlight,
+			style: style, hlStyle: hlStyle, bgColor: bgColor,
+		})
 		return
 	}
 
@@ -122,32 +126,39 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
 
+// wrappedLineCtx holds rendering context for a wrapped collapsed line,
+// reducing the parameter count of renderWrappedCollapsedLine.
+type wrappedLineCtx struct {
+	gutter, numGutter, blGutter string
+	isCursor, hasHighlight      bool
+	style, hlStyle              lipgloss.Style
+	bgColor                     string
+}
+
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
-func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter, blGutter string,
-	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style, bgColor string) {
+func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string, ctx wrappedLineCtx) {
 	numBlank, blBlank := m.gutterBlanks()
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-	visualLines := m.wrapContent(textContent, wrapWidth)
+	visualLines := m.wrapContent(textContent, m.wrapWidth())
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
 		bg := blBlank
 		if i == 0 {
-			prefix = gutter
-			ng = numGutter
-			bg = blGutter
+			prefix = ctx.gutter
+			ng = ctx.numGutter
+			bg = ctx.blGutter
 		}
 
 		var styled string
-		if hasHighlight {
-			styled = hlStyle.Render(prefix + vl)
+		if ctx.hasHighlight {
+			styled = ctx.hlStyle.Render(prefix + vl)
 		} else {
-			styled = style.Render(prefix + vl)
+			styled = ctx.style.Render(prefix + vl)
 		}
-		styled = m.extendLineBg(styled, bgColor)
+		styled = m.extendLineBg(styled, ctx.bgColor)
 
 		cursor := " "
-		if i == 0 && isCursor {
+		if i == 0 && ctx.isCursor {
 			cursor = m.styles.DiffCursorLine.Render("▶")
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
@@ -180,8 +191,7 @@ func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
 		return 1
 	}
 	text := m.deletePlaceholderText(hunkStart)
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-	return len(m.wrapContent(text, wrapWidth))
+	return len(m.wrapContent(text, m.wrapWidth()))
 }
 
 // renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
@@ -195,7 +205,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 		style = m.styles.SearchMatch
 	}
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	isCursor := m.isCursorLine(idx)
 
 	divider := diff.DiffLine{ChangeType: diff.ChangeDivider}
 	numGutter, blGutter := m.lineGutters(divider)
@@ -203,8 +213,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	// wrap mode: break long placeholder at word boundaries
 	if m.wrapMode {
 		numBlank, blBlank := m.gutterBlanks()
-		wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-		visualLines := m.wrapContent(text, wrapWidth)
+		visualLines := m.wrapContent(text, m.wrapWidth())
 		for i, vl := range visualLines {
 			prefix := " ↪ "
 			ng := numBlank

@@ -776,6 +776,16 @@ func TestReadFileAsAdded(t *testing.T) {
 		assert.Equal(t, ChangeContext, lines[0].ChangeType)
 	})
 
+	t.Run("single line starting with paren is not treated as placeholder", func(t *testing.T) {
+		f := filepath.Join(t.TempDir(), "iife.js")
+		require.NoError(t, os.WriteFile(f, []byte("(function() { console.log('hi') })()\n"), 0o600))
+
+		lines, err := ReadFileAsAdded(f)
+		require.NoError(t, err)
+		require.Len(t, lines, 1)
+		assert.Equal(t, ChangeAdd, lines[0].ChangeType, "regular file content starting with ( must be ChangeAdd")
+	})
+
 	t.Run("binary file returns placeholder", func(t *testing.T) {
 		f := filepath.Join(t.TempDir(), "bin.dat")
 		binary := make([]byte, 100)

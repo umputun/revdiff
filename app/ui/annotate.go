@@ -12,6 +12,9 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 )
 
+// annotKeyFile is the lookup key for file-level annotations in wrappedAnnotationLineCount.
+const annotKeyFile = "file"
+
 // hunkKeywordRe matches whole-word "hunk" (case-insensitive).
 // "block" was removed as it triggers false positives in casual usage (e.g., "this code block is fine").
 var hunkKeywordRe = regexp.MustCompile(`(?i)\bhunk\b`)
@@ -73,9 +76,10 @@ func (m *Model) ensureLineAnnotationInputVisible() {
 	}
 
 	inputY := m.cursorViewportY() + m.wrappedLineCount(m.diffCursor)
-	if inputY < m.viewport.YOffset {
+	switch {
+	case inputY < m.viewport.YOffset:
 		m.viewport.SetYOffset(inputY)
-	} else if inputY >= m.viewport.YOffset+m.viewport.Height {
+	case inputY >= m.viewport.YOffset+m.viewport.Height:
 		m.viewport.SetYOffset(inputY - m.viewport.Height + 1)
 	}
 }
@@ -171,7 +175,6 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 
 // deleteAnnotation removes the annotation on the current cursor line if one exists.
 // handles both file-level annotations (cursor at -1) and regular line annotations.
-// if the current line has no annotation, checks the previous line (since annotations
 // only works when cursor is on the annotation sub-line (cursorOnAnnotation=true) or file annotation line.
 // returns a command to load the new file if the tree selection changed after filter refresh.
 func (m *Model) deleteAnnotation() tea.Cmd {
@@ -226,10 +229,7 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // cursorLineHasAnnotation checks if the cursor is on a deletable annotation line.
 // returns true only when cursor is on the file annotation line or on an annotation sub-line.
 func (m Model) cursorLineHasAnnotation() bool {
-	if m.cursorOnFileAnnotationLine() {
-		return true
-	}
-	return m.cursorOnAnnotation
+	return m.cursorOnFileAnnotationLine() || m.cursorOnAnnotation
 }
 
 // hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
@@ -283,21 +283,15 @@ func (m Model) hunkEndLine(idx int) int {
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
 // annotations always wrap at the pane width regardless of wrapMode.
 func (m Model) wrappedAnnotationLineCount(key string) int {
-	comment := ""
-	if key == "file" {
-		for _, a := range m.store.Get(m.currFile) {
-			if a.Line == 0 {
-				comment = "\U0001f4ac file: " + a.Comment
-				break
-			}
+	var comment string
+	for _, a := range m.store.Get(m.currFile) {
+		if key == annotKeyFile && a.Line == 0 {
+			comment = "\U0001f4ac file: " + a.Comment
+			break
 		}
-	} else {
-		for _, a := range m.store.Get(m.currFile) {
-			aKey := m.annotationKey(a.Line, a.Type)
-			if aKey == key {
-				comment = "\U0001f4ac " + a.Comment
-				break
-			}
+		if key != annotKeyFile && m.annotationKey(a.Line, a.Type) == key {
+			comment = "\U0001f4ac " + a.Comment
+			break
 		}
 	}
 	if comment == "" {
@@ -321,7 +315,7 @@ func (m Model) cursorViewportY() int {
 	// file-level annotation line at the top (may wrap to multiple rows)
 	fileAnnotationOffset := 0
 	if m.hasFileAnnotation() {
-		fileAnnotationOffset = m.wrappedAnnotationLineCount("file")
+		fileAnnotationOffset = m.wrappedAnnotationLineCount(annotKeyFile)
 	}
 
 	// cursor is on the file annotation line

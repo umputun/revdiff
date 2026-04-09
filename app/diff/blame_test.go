@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseBlame(t *testing.T) {
+	g := Git{}
 	// simulated git blame --line-porcelain output for a 3-line file
 	raw := "abc1234567890123456789012345678901234567 1 1 2\n" +
 		"author Alice\n" +
@@ -48,7 +49,7 @@ func TestParseBlame(t *testing.T) {
 		"filename main.go\n" +
 		"\tfunc main() {}\n"
 
-	result, err := parseBlame(raw)
+	result, err := g.parseBlame(raw)
 	require.NoError(t, err)
 	assert.Len(t, result, 3)
 
@@ -63,16 +64,18 @@ func TestParseBlame(t *testing.T) {
 }
 
 func TestParseBlame_empty(t *testing.T) {
-	result, err := parseBlame("")
+	g := Git{}
+	result, err := g.parseBlame("")
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }
 
 func TestIsHexString(t *testing.T) {
-	assert.True(t, isHexString("abcdef0123456789"))
-	assert.True(t, isHexString("ABCDEF"))
-	assert.False(t, isHexString("xyz"))
-	assert.False(t, isHexString(""))
+	g := Git{}
+	assert.True(t, g.isHexString("abcdef0123456789"))
+	assert.True(t, g.isHexString("ABCDEF"))
+	assert.False(t, g.isHexString("xyz"))
+	assert.False(t, g.isHexString(""))
 }
 
 func TestRelativeAge(t *testing.T) {
@@ -109,6 +112,7 @@ func TestRelativeAge(t *testing.T) {
 }
 
 func TestBlameTargetRef(t *testing.T) {
+	g := Git{}
 	tests := []struct {
 		name string
 		ref  string
@@ -125,7 +129,7 @@ func TestBlameTargetRef(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, blameTargetRef(tt.ref))
+			assert.Equal(t, tt.want, g.blameTargetRef(tt.ref))
 		})
 	}
 }

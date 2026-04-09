@@ -56,6 +56,9 @@ const (
 	ActionThemeSelect      Action = "theme_select"
 )
 
+// SectionPane is the help section name for pane-related keybindings.
+const SectionPane = "Pane"
+
 // validActions contains all known action names for validation.
 var validActions = map[Action]bool{
 	ActionDown: true, ActionUp: true, ActionPageDown: true, ActionPageUp: true,
@@ -124,9 +127,9 @@ func defaultDescriptions() []HelpEntry {
 		{ActionPrevHunk, "prev hunk", "File/Hunk"},
 
 		// pane
-		{ActionTogglePane, "toggle pane focus", "Pane"},
-		{ActionFocusTree, "focus tree pane", "Pane"},
-		{ActionFocusDiff, "focus diff pane", "Pane"},
+		{ActionTogglePane, "toggle pane focus", SectionPane},
+		{ActionFocusTree, "focus tree pane", SectionPane},
+		{ActionFocusDiff, "focus diff pane", SectionPane},
 
 		// search
 		{ActionSearch, "search in diff", "Search"},

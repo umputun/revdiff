@@ -8,12 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/umputun/revdiff/app/fsutil"
@@ -208,7 +206,7 @@ func Dump(t Theme, w io.Writer) error {
 			extra = append(extra, key)
 		}
 	}
-	sort.Strings(extra)
+	slices.Sort(extra)
 	for _, key := range extra {
 		fmt.Fprintf(&b, "%s = %s\n", key, t.Colors[key])
 	}
@@ -231,16 +229,16 @@ func Load(name, themesDir string) (Theme, error) {
 	if themesDir != "" {
 		fpath := filepath.Join(themesDir, name)
 		f, err := os.Open(fpath) //nolint:gosec // theme path is validated above and constructed from config dir + name
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return Theme{}, fmt.Errorf("opening theme %q: %w", name, err)
-		}
-		if err == nil {
+		switch {
+		case err == nil:
 			defer f.Close()
 			th, parseErr := Parse(f)
 			if parseErr != nil {
 				return Theme{}, fmt.Errorf("parsing theme %q: %w", name, parseErr)
 			}
 			return th, nil
+		case !errors.Is(err, os.ErrNotExist):
+			return Theme{}, fmt.Errorf("opening theme %q: %w", name, err)
 		}
 	}
 
@@ -270,51 +268,20 @@ func List(themesDir string) ([]string, error) {
 		}
 		names = append(names, e.Name())
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names, nil
 }
 
 // InitBundled writes bundled theme files (marked bundled: true in gallery) to the given directory,
 // creating it if needed. Always overwrites files matching bundled theme names; does not touch user-added files.
 func InitBundled(themesDir string) error {
-	gallery, err := Gallery()
-	if err != nil {
-		return fmt.Errorf("loading gallery: %w", err)
-	}
-
-	if err := os.MkdirAll(themesDir, 0o750); err != nil {
-		return fmt.Errorf("creating themes dir: %w", err)
-	}
-
-	for name, th := range gallery {
-		if !th.Bundled {
-			continue
-		}
-		if err := writeThemeFile(themesDir, name, th); err != nil {
-			return err
-		}
-	}
-	return nil
+	return initThemes(themesDir, nil, func(_ string, th Theme) bool { return th.Bundled })
 }
 
 // InitAll writes all gallery themes to the given directory, creating it if needed.
 // Always overwrites files matching gallery theme names; does not touch user-added files.
 func InitAll(themesDir string) error {
-	gallery, err := Gallery()
-	if err != nil {
-		return fmt.Errorf("loading gallery: %w", err)
-	}
-
-	if err := os.MkdirAll(themesDir, 0o750); err != nil {
-		return fmt.Errorf("creating themes dir: %w", err)
-	}
-
-	for name, th := range gallery {
-		if err := writeThemeFile(themesDir, name, th); err != nil {
-			return err
-		}
-	}
-	return nil
+	return initThemes(themesDir, nil, nil)
 }
 
 // InitNames writes specific named themes from the gallery to the given directory.
@@ -325,14 +292,35 @@ func InitNames(themesDir string, names []string) error {
 		return fmt.Errorf("loading gallery: %w", err)
 	}
 
+	// validate all names upfront before writing anything
+	for _, name := range names {
+		if _, ok := gallery[name]; !ok {
+			return fmt.Errorf("theme %q not found in gallery", name)
+		}
+	}
+
+	return initThemes(themesDir, gallery, func(name string, _ Theme) bool {
+		return slices.Contains(names, name)
+	})
+}
+
+// initThemes creates themesDir and writes gallery themes matching the filter.
+// when filter is nil, all themes are written. if gallery is nil, it is loaded from embedded assets.
+func initThemes(themesDir string, gallery map[string]Theme, filter func(string, Theme) bool) error {
+	if gallery == nil {
+		var err error
+		if gallery, err = Gallery(); err != nil {
+			return fmt.Errorf("loading gallery: %w", err)
+		}
+	}
+
 	if err := os.MkdirAll(themesDir, 0o750); err != nil {
 		return fmt.Errorf("creating themes dir: %w", err)
 	}
 
-	for _, name := range names {
-		th, ok := gallery[name]
-		if !ok {
-			return fmt.Errorf("theme %q not found in gallery", name)
+	for name, th := range gallery {
+		if filter != nil && !filter(name, th) {
+			continue
 		}
 		if err := writeThemeFile(themesDir, name, th); err != nil {
 			return err
@@ -341,15 +329,11 @@ func InitNames(themesDir string, names []string) error {
 	return nil
 }
 
-// ChromaValidator checks whether a chroma style name is valid.
-// Returns true if the style is known.
-type ChromaValidator func(styleName string) bool
-
-// InstallFile reads a theme from a local file path, validates it, and writes it
-// to the themes directory using the file's base name. Returns the installed name.
-// If validateChroma is non-nil, it is called to verify the theme's chroma-style
+// installFile reads a theme from a local file path, validates it, and writes it
+// to the themes directory using the file's base name. returns the installed name.
+// if validateChroma is non-nil, it is called to verify the theme's chroma-style
 // refers to a known Chroma style.
-func InstallFile(themesDir, filePath string, validateChroma ChromaValidator) (string, error) {
+func installFile(themesDir, filePath string, validateChroma func(string) bool) (string, error) {
 	name := filepath.Base(filePath)
 	if name == "." || name == ".." {
 		return "", fmt.Errorf("invalid theme file name %q", name)
@@ -365,9 +349,10 @@ func InstallFile(themesDir, filePath string, validateChroma ChromaValidator) (st
 	if err != nil {
 		return "", fmt.Errorf("parsing theme file %q: %w", filePath, err)
 	}
-	if th.Name == "" {
+	switch {
+	case th.Name == "":
 		th.Name = name
-	} else if th.Name != name {
+	case th.Name != name:
 		return "", fmt.Errorf("theme metadata name %q does not match file name %q", th.Name, name)
 	}
 
@@ -386,7 +371,7 @@ func InstallFile(themesDir, filePath string, validateChroma ChromaValidator) (st
 
 // Install installs themes from gallery names or local file paths.
 // Validates all gallery names upfront before performing any installs to prevent partial state.
-func Install(args []string, themesDir string, validateChroma ChromaValidator, stdout io.Writer) error {
+func Install(args []string, themesDir string, validateChroma func(string) bool, stdout io.Writer) error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
@@ -395,7 +380,7 @@ func Install(args []string, themesDir string, validateChroma ChromaValidator, st
 	var localPaths []string
 
 	for _, arg := range args {
-		if IsLocalPath(arg) {
+		if isLocalPath(arg) {
 			localPaths = append(localPaths, arg)
 			continue
 		}
@@ -410,7 +395,7 @@ func Install(args []string, themesDir string, validateChroma ChromaValidator, st
 
 	var installed int
 	for _, path := range localPaths {
-		name, err := InstallFile(themesDir, path, validateChroma)
+		name, err := installFile(themesDir, path, validateChroma)
 		if err != nil {
 			return fmt.Errorf("installing from file: %w", err)
 		}
@@ -432,8 +417,8 @@ func Install(args []string, themesDir string, validateChroma ChromaValidator, st
 	return nil
 }
 
-// IsLocalPath returns true if the argument looks like a file path.
-func IsLocalPath(s string) bool {
+// isLocalPath returns true if the argument looks like a file path.
+func isLocalPath(s string) bool {
 	return strings.ContainsRune(s, '/') || strings.ContainsRune(s, filepath.Separator)
 }
 
@@ -472,13 +457,11 @@ func writeThemeFile(themesDir, name string, th Theme) error {
 	return nil
 }
 
-
-// BundledNames returns the sorted list of bundled theme names (those marked bundled: true in gallery).
-func BundledNames() []string {
+// bundledNames returns the sorted list of bundled theme names (those marked bundled: true in gallery).
+func bundledNames() ([]string, error) {
 	gallery, err := Gallery()
 	if err != nil {
-		log.Printf("[ERROR] failed to load theme gallery: %v", err)
-		return nil
+		return nil, fmt.Errorf("loading gallery: %w", err)
 	}
 	names := make([]string, 0, len(gallery))
 	for name, th := range gallery {
@@ -486,8 +469,8 @@ func BundledNames() []string {
 			names = append(names, name)
 		}
 	}
-	sort.Strings(names)
-	return names
+	slices.Sort(names)
+	return names, nil
 }
 
 // ThemeInfo holds classification metadata for a theme in an ordered listing.
@@ -527,17 +510,16 @@ func ListOrdered(themesDir string) ([]ThemeInfo, error) {
 
 	for name := range allNames {
 		gth, inGallery := gallery[name]
-		local := !inGallery
 		info := ThemeInfo{
 			Name:      name,
 			InGallery: inGallery,
 			Bundled:   inGallery && gth.Bundled,
-			Local:     local,
+			Local:     !inGallery,
 		}
 		switch {
 		case name == DefaultThemeName:
 			defaultInfo = &info
-		case local:
+		case !inGallery:
 			locals = append(locals, info)
 		case gth.Bundled:
 			bundled = append(bundled, info)
@@ -547,7 +529,7 @@ func ListOrdered(themesDir string) ([]ThemeInfo, error) {
 	}
 
 	sortInfos := func(s []ThemeInfo) {
-		sort.Slice(s, func(i, j int) bool { return s[i].Name < s[j].Name })
+		slices.SortFunc(s, func(a, b ThemeInfo) int { return strings.Compare(a.Name, b.Name) })
 	}
 	sortInfos(locals)
 	sortInfos(bundled)

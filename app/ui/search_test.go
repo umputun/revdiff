@@ -769,18 +769,18 @@ func TestModel_BuildSearchMatchSet(t *testing.T) {
 
 	t.Run("empty matches produces nil set", func(t *testing.T) {
 		m.searchMatches = nil
-		m.buildSearchMatchSet()
-		assert.Nil(t, m.searchMatchSet)
+		result := m.buildSearchMatchSet()
+		assert.Nil(t, result)
 	})
 
 	t.Run("matches produce correct set", func(t *testing.T) {
 		m.searchMatches = []int{1, 5, 10}
-		m.buildSearchMatchSet()
-		assert.True(t, m.searchMatchSet[1])
-		assert.True(t, m.searchMatchSet[5])
-		assert.True(t, m.searchMatchSet[10])
-		assert.False(t, m.searchMatchSet[0])
-		assert.False(t, m.searchMatchSet[3])
+		result := m.buildSearchMatchSet()
+		assert.True(t, result[1])
+		assert.True(t, result[5])
+		assert.True(t, result[10])
+		assert.False(t, result[0])
+		assert.False(t, result[3])
 	})
 }
 

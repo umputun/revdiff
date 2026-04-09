@@ -23,21 +23,22 @@ const (
 	fullFileContext = "-U1000000" // request full file as diff context
 
 	// MaxLineLength is the maximum line length (in bytes) that scanners will accept.
-	// Used by ParseUnifiedDiff, readReaderAsContext, and parseBlame.
+	// used by parseUnifiedDiff, readReaderAsContext, and parseBlame.
 	MaxLineLength = 1024 * 1024
 
 	// BinaryPlaceholder is the content used for binary file placeholders.
-	// ParseUnifiedDiff returns this when git reports "Binary files ... differ".
+	// parseUnifiedDiff returns this when git reports "Binary files ... differ".
 	BinaryPlaceholder = "(binary file)"
 )
 
 // DiffLine holds parsed line info from a diff.
 type DiffLine struct {
-	OldNum     int        // line number in old version (0 for additions)
-	NewNum     int        // line number in new version (0 for removals)
-	Content    string     // line content without the +/- prefix
-	ChangeType ChangeType // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
-	IsBinary   bool       // true when this line is a binary file placeholder
+	OldNum        int        // line number in old version (0 for additions)
+	NewNum        int        // line number in new version (0 for removals)
+	Content       string     // line content without the +/- prefix
+	ChangeType    ChangeType // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
+	IsBinary      bool       // true when this line is a binary file placeholder
+	IsPlaceholder bool       // true for non-content placeholders (broken symlink, non-regular file, too-long lines)
 }
 
 // FileStatus represents the change type of a file in a git diff.
@@ -146,7 +147,7 @@ func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
 	}
 
-	lines, err := ParseUnifiedDiff(out)
+	lines, err := parseUnifiedDiff(out)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +220,7 @@ const (
 // binaryStatRe matches a git diff --stat line ending with "Bin 1234 -> 5678 bytes".
 // The entire pattern ("Bin", "->", "bytes") assumes English locale; non-English git
 // may localize any of these tokens, causing a graceful fallback to the header-based
-// placeholder from ParseUnifiedDiff (e.g. "(new binary file)" without size info).
+// placeholder from parseUnifiedDiff (e.g. "(new binary file)" without size info).
 var binaryStatRe = regexp.MustCompile(`^\s*.*\|\s+Bin (\d+) -> (\d+) bytes$`)
 
 var (
@@ -304,11 +305,11 @@ var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 // Assumes English locale; non-English git may localize this message.
 var binaryFilesRe = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
 
-// ParseUnifiedDiff parses unified diff output into a slice of DiffLine entries.
-// It handles the diff header, hunk headers, and content lines.
-// For binary diffs ("Binary files ... differ"), it returns a single placeholder DiffLine.
-// Intended for single-file diffs; multi-file diffs are not fully supported.
-func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
+// parseUnifiedDiff parses unified diff output into a slice of DiffLine entries.
+// it handles the diff header, hunk headers, and content lines.
+// for binary diffs ("Binary files ... differ"), it returns a single placeholder DiffLine.
+// intended for single-file diffs; multi-file diffs are not fully supported.
+func parseUnifiedDiff(raw string) ([]DiffLine, error) {
 	var lines []DiffLine
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)

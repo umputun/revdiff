@@ -121,10 +121,7 @@ func (fr *FallbackRenderer) pathMatches(file, pattern string) bool {
 // isInsideWorkDir returns true if the resolved absolute path is within workDir.
 func (fr *FallbackRenderer) isInsideWorkDir(absPath string) bool {
 	rel, err := filepath.Rel(fr.workDir, absPath)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return false
-	}
-	return true
+	return err == nil && !strings.HasPrefix(rel, "..")
 }
 
 // resolvePath resolves a path against a base directory. absolute paths are returned as-is.
@@ -219,7 +216,7 @@ func readReaderAsContext(r io.Reader) ([]DiffLine, error) {
 	}
 	if err := scanner.Err(); err != nil {
 		if errors.Is(err, bufio.ErrTooLong) {
-			return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(file has lines too long to display)", ChangeType: ChangeContext}}, nil
+			return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(file has lines too long to display)", ChangeType: ChangeContext, IsPlaceholder: true}}, nil
 		}
 		return nil, readerContextError{op: "scan", err: err}
 	}
@@ -229,9 +226,8 @@ func readReaderAsContext(r io.Reader) ([]DiffLine, error) {
 // readFileAsContext reads a file from disk and returns all lines as context DiffLines.
 // each line gets ChangeContext type with both OldNum and NewNum set to the 1-based line number.
 // binary files (detected by null bytes in the first 8KB) return a single placeholder line.
+// handles broken symlinks, non-regular files, binary detection, and error unwrapping.
 func readFileAsContext(path string) ([]DiffLine, error) {
-	// stat follows symlinks — reject non-regular files (FIFOs, sockets, devices)
-	// to avoid blocking reads that could hang the TUI
 	info, err := os.Stat(path)
 	if err != nil {
 		// broken symlink: lstat succeeds (symlink entry exists) but stat fails because target is gone.
@@ -239,16 +235,16 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 		// like permission denied or I/O errors — those should propagate as real errors.
 		if os.IsNotExist(err) {
 			if linfo, lErr := os.Lstat(path); lErr == nil && linfo.Mode()&os.ModeSymlink != 0 {
-				return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(broken symlink)", ChangeType: ChangeContext}}, nil
+				return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(broken symlink)", ChangeType: ChangeContext, IsPlaceholder: true}}, nil
 			}
 		}
 		return nil, fmt.Errorf("stat file %s: %w", path, err)
 	}
 	if !info.Mode().IsRegular() {
-		return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(not a regular file)", ChangeType: ChangeContext}}, nil
+		return []DiffLine{{OldNum: 1, NewNum: 1, Content: "(not a regular file)", ChangeType: ChangeContext, IsPlaceholder: true}}, nil
 	}
 
-	f, err := os.Open(path) //nolint:gosec // path comes from user-provided --only flag
+	f, err := os.Open(path) //nolint:gosec // path comes from user-provided --only flag or git ls-files
 	if err != nil {
 		return nil, fmt.Errorf("read file %s: %w", path, err)
 	}
@@ -266,31 +262,17 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 }
 
 // ReadFileAsAdded reads a file from disk and returns all lines as ChangeAdd type.
+// single-line placeholder results (broken symlinks, non-regular files, binary, too-long lines) keep ChangeContext.
 func ReadFileAsAdded(path string) ([]DiffLine, error) {
-	info, err := os.Stat(path)
+	lines, err := readFileAsContext(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			if linfo, lErr := os.Lstat(path); lErr == nil && linfo.Mode()&os.ModeSymlink != 0 {
-				return []DiffLine{{NewNum: 1, Content: "(broken symlink)", ChangeType: ChangeContext}}, nil
-			}
-		}
-		return nil, fmt.Errorf("stat file %s: %w", path, err)
+		return nil, err
 	}
-	if !info.Mode().IsRegular() {
-		return []DiffLine{{NewNum: 1, Content: "(not a regular file)", ChangeType: ChangeContext}}, nil
-	}
-	f, err := os.Open(path) //nolint:gosec // path comes from git ls-files output
-	if err != nil {
-		return nil, fmt.Errorf("read file %s: %w", path, err)
-	}
-	defer f.Close()
-	lines, err := readReaderAsContext(f)
-	if err != nil {
-		var ctxErr readerContextError
-		if errors.As(err, &ctxErr) {
-			return nil, fmt.Errorf("%s file %s: %w", ctxErr.op, path, ctxErr.err)
-		}
-		return nil, fmt.Errorf("read file %s: %w", path, err)
+	// single-line placeholders (broken symlink, non-regular, binary, too-long lines) are returned as-is
+	// but with OldNum zeroed because "added" file placeholders should not show old line numbers
+	if len(lines) == 1 && (lines[0].IsBinary || lines[0].IsPlaceholder) {
+		lines[0].OldNum = 0
+		return lines, nil
 	}
 	for i := range lines {
 		lines[i].ChangeType = ChangeAdd
