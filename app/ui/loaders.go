@@ -152,8 +152,15 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
-	// untracked files have no git diff — fall back to reading from disk as all-added lines
+	// staged-only files (new files added to index) get an empty diff with "git diff" (unstaged).
+	// fall back to "git diff --cached" to show their content.
 	fileStatus := m.tree.fileStatuses[msg.file]
+	if len(m.diffLines) == 0 && !m.staged && fileStatus == diff.FileAdded && m.renderer != nil {
+		if cachedLines, cachedErr := m.renderer.FileDiff(m.ref, msg.file, true); cachedErr == nil && len(cachedLines) > 0 {
+			m.diffLines = cachedLines
+		}
+	}
+	// untracked files have no git diff — fall back to reading from disk as all-added lines
 	if len(m.diffLines) == 0 && m.workDir != "" && fileStatus == diff.FileUntracked {
 		added, readErr := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file))
 		if readErr != nil {
