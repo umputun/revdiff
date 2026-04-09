@@ -162,9 +162,9 @@ LAUNCHER
     # send exec command immediately — the pty input buffer holds the text
     # until the new pane's shell finishes initializing and reads it
     if [ -n "$CMUX_SURF" ]; then
-        cmux send --surface "$CMUX_SURF" "exec $(sq "$LAUNCH_SCRIPT")\n"
+        cmux send --surface "$CMUX_SURF" "exec $(sq "$LAUNCH_SCRIPT")\n" >/dev/null 2>&1
     else
-        cmux send "exec $(sq "$LAUNCH_SCRIPT")\n"
+        cmux send "exec $(sq "$LAUNCH_SCRIPT")\n" >/dev/null 2>&1
     fi
 
     while [ ! -f "$SENTINEL" ]; do
