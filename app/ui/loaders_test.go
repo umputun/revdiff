@@ -407,13 +407,13 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 		assert.Len(t, flMsg.entries, 1, "main.go should not be duplicated")
 	})
 
-	t.Run("staged fetch failure logged as warning", func(t *testing.T) {
+	t.Run("staged-only new files are not merged when unstaged changes exist", func(t *testing.T) {
 		renderer := &mocks.RendererMock{
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				if staged {
-					return nil, errors.New("git error")
+					return []diff.FileEntry{{Path: "newfile.go", Status: diff.FileAdded}}, nil
 				}
-				return []diff.FileEntry{{Path: "main.go"}}, nil
+				return []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, nil
 			},
 			FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
 				return nil, nil
@@ -428,7 +428,31 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 		cmd := m.Init()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Len(t, flMsg.entries, 1, "original files should still be present")
+		assert.Equal(t, []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, flMsg.entries)
+	})
+
+	t.Run("staged fetch failure logged as warning", func(t *testing.T) {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				if staged {
+					return nil, errors.New("git error")
+				}
+				return nil, nil
+			},
+			FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+				return nil, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+		m.width = 120
+		m.height = 40
+		m.ready = true
+
+		cmd := m.Init()
+		msg := cmd()
+		flMsg := msg.(filesLoadedMsg)
+		assert.Empty(t, flMsg.entries)
 		assert.Len(t, flMsg.warnings, 1, "staged fetch error should be in warnings")
 		assert.Contains(t, flMsg.warnings[0], "git error")
 	})

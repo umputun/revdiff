@@ -20,7 +20,9 @@ func (m Model) loadFiles() tea.Cmd {
 			return filesLoadedMsg{entries: entries, err: err}
 		}
 		// include staged-only files (new files added to index but not yet committed)
-		if m.ref == "" && !m.staged {
+		// only when there are no unstaged entries; otherwise unstaged review should stay focused
+		// on actual unstaged changes.
+		if m.ref == "" && !m.staged && len(entries) == 0 {
 			stagedEntries, stagedErr := m.renderer.ChangedFiles("", true)
 			if stagedErr != nil {
 				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
