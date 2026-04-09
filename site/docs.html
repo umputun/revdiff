@@ -87,6 +87,11 @@
         <a href="#plugin-autodetect">Auto-detection</a>
         <a href="#plugin-planning">Plan review plugin</a>
 
+        <h4>Codex plugin</h4>
+        <a href="#codex-install">Installation</a>
+        <a href="#codex-skills">Skills</a>
+        <a href="#codex-differences">Differences</a>
+
         <h4>Output</h4>
         <a href="#output-format">Output format</a>
         <a href="#integration">Integration</a>
@@ -94,7 +99,7 @@
 
     <main class="docs-content">
         <h1>Documentation</h1>
-        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, and the Claude Code plugin.</p>
+        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, the Claude Code plugin, and the Codex plugin.</p>
 
         <h2 id="requirements">Requirements</h2>
         <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
@@ -455,6 +460,33 @@ unmap q</code></div>
         <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again, looping until you're satisfied.</p>
         <div class="code-block"><code>/plugin install revdiff-planning@umputun-revdiff</code></div>
         <p>This plugin is independent from the main <code>revdiff</code> plugin and does not conflict with other planning plugins.</p>
+
+        <!-- codex plugin -->
+        <h2 id="codex-install">Codex plugin</h2>
+        <p>revdiff ships with a <a href="https://github.com/openai/codex">Codex CLI</a> plugin for interactive diff review and plan annotation directly from a Codex session.</p>
+        <div class="code-block"><code><span class="code-comment"># copy plugin to Codex plugins directory</span>
+cp -r plugins/codex ~/.codex/plugins/revdiff
+
+<span class="code-comment"># or, if working from a cloned repo, Codex discovers the plugin</span>
+<span class="code-comment"># automatically via .agents/plugins/marketplace.json</span></code></div>
+        <p>Requirements: <code>revdiff</code> binary on PATH, <code>jq</code> (for <code>/revdiff-plan</code>), and a supported terminal multiplexer.</p>
+
+        <h2 id="codex-skills">Skills</h2>
+        <p>The plugin provides two skills:</p>
+        <ul>
+            <li><code>/revdiff</code> &mdash; same diff review workflow as the Claude Code plugin (detect ref, launch overlay, capture annotations, feedback loop)</li>
+            <li><code>/revdiff-plan</code> &mdash; extracts the last Codex assistant message from session rollout files, opens it in revdiff for annotation, and feeds feedback back</li>
+        </ul>
+        <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
+/revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
+/revdiff-plan         <span class="code-comment"># review last Codex response</span></code></div>
+
+        <h2 id="codex-differences">Differences from Claude Code plugin</h2>
+        <ul>
+            <li>No hook-based automatic plan review &mdash; Codex lacks hook support, so plan review is manual via <code>/revdiff-plan</code></li>
+            <li>Uses Codex rollout files (<code>~/.codex/sessions/</code>) instead of Claude session logs for message extraction</li>
+            <li>Scripts are portable copies from the Claude Code plugin, not symlinks</li>
+        </ul>
 
         <!-- output -->
         <h2 id="output-format">Output format</h2>

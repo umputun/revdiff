@@ -110,6 +110,15 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
   - `config.md` — options, colors, chroma styles
   - `usage.md` — examples, key bindings, output format
 
+## Codex Plugin
+- Plugin lives at `plugins/codex/` with `.codex-plugin/plugin.json` manifest and `skills/`
+- Codex marketplace entry at `.agents/plugins/marketplace.json` (separate from Claude marketplace)
+- Two skills: `revdiff` (diff review) and `revdiff-plan` (plan review via last Codex assistant message)
+- Scripts are copies from `.claude-plugin/skills/revdiff/scripts/`, not symlinks — each has a source comment at top
+- Codex has no hook system — plan review is manual via `/revdiff-plan`
+- **CRITICAL: After any codex plugin file change, ask user if they want to bump the plugin version**
+- When bumping, update version in both `plugins/codex/.codex-plugin/plugin.json` and `.agents/plugins/marketplace.json`
+
 ## Pi Plugin
 - Pi package defined in root `package.json`, extensions and skills in `plugins/pi/`
 - **CRITICAL: After any pi plugin file change, ask user if they want to bump the version in `package.json`**

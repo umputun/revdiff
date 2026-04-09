@@ -1,0 +1,18 @@
+{
+  "name": "revdiff",
+  "owner": {
+    "name": "umputun",
+    "email": "umputun@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "revdiff",
+      "source": "./plugins/codex",
+      "description": "Review diffs, files, and documents with inline annotations in a TUI overlay",
+      "version": "0.1.0",
+      "author": {
+        "name": "umputun"
+      }
+    }
+  ]
+}

@@ -160,6 +160,37 @@ pi install https://github.com/umputun/revdiff
 - Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
+## Codex Plugin
+
+revdiff ships with a [Codex CLI](https://github.com/openai/codex) plugin for interactive diff review and plan annotation directly from a Codex session. The plugin provides two skills:
+
+- `/revdiff` — same diff review workflow as the Claude Code plugin (detect ref, launch overlay, capture annotations, feedback loop)
+- `/revdiff-plan` — extracts the last Codex assistant message from session rollout files, opens it in revdiff for annotation, and feeds feedback back
+
+The plugin uses the same terminal overlay mechanism (tmux, Zellij, kitty, wezterm, etc.) as the Claude Code plugin.
+
+**Install:**
+
+```bash
+# copy plugin to Codex plugins directory
+cp -r plugins/codex ~/.codex/plugins/revdiff
+
+# or, if working from a cloned repo, Codex discovers the plugin
+# automatically via .agents/plugins/marketplace.json
+```
+
+**Requirements:**
+
+- `revdiff` binary on `PATH`
+- `jq` (required for `/revdiff-plan` session extraction)
+- One of the supported terminal multiplexers for overlay mode
+
+**Notes:**
+
+- Codex has no hook system — plan review requires manually invoking `/revdiff-plan` after Codex generates a plan
+- Scripts are portable copies from the Claude Code plugin, not symlinks
+- Plugin source lives under `plugins/codex/` in the repository
+
 ### Integration with Other Tools
 
 The structured stdout output works with any tool that can read text:
