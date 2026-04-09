@@ -180,15 +180,17 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annotating && m.fileAnnotating {
-		line := " " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
-		b.WriteString(line + "\n")
+		line := " " + m.annotationInline("\U0001f4ac file: ") + m.annotateInput.View()
+		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
+		line = strings.TrimRight(line, " ")
+		b.WriteString(m.extendLineBg(line, m.styles.colors.DiffBg) + "\n")
 		return
 	}
 
 	if fileComment != "" {
 		cursor := " "
 		if m.diffCursor == -1 && m.focus == paneDiff {
-			cursor = m.styles.DiffCursorLine.Render("▶")
+			cursor = m.diffCursorCell()
 		}
 		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
 	}
@@ -222,7 +224,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▶")
+		cursor = m.diffCursorCell()
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -248,7 +250,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 
 		cursor := " "
 		if i == 0 && isCursor {
-			cursor = m.styles.DiffCursorLine.Render("▶")
+			cursor = m.diffCursorCell()
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -456,7 +458,10 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
-		b.WriteString(" " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
+		line := " " + m.annotationInline("\U0001f4ac ") + m.annotateInput.View()
+		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
+		line = strings.TrimRight(line, " ")
+		b.WriteString(m.extendLineBg(line, m.styles.colors.DiffBg) + "\n")
 		return
 	}
 	dl := m.diffLines[idx]
@@ -465,7 +470,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
-				cursor = m.styles.DiffCursorLine.Render("▶")
+				cursor = m.diffCursorCell()
 			}
 			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
 		}
@@ -484,12 +489,64 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) 
 			if i == 0 {
 				c = cursor
 			}
-			b.WriteString(c + m.styles.AnnotationLine.Render(line) + "\n")
+			b.WriteString(c + m.annotationInline(line) + "\n")
 		}
 		return
 	}
 
-	b.WriteString(cursor + m.styles.AnnotationLine.Render(text) + "\n")
+	b.WriteString(cursor + m.annotationInline(text) + "\n")
+}
+
+// annotationInline renders annotation text using raw ANSI sequences instead of lipgloss.Render()
+// to avoid \033[0m full reset that kills the outer DiffBg background.
+func (m Model) annotationInline(text string) string {
+	fg := m.styles.colors.Annotation
+	bg := m.styles.colors.DiffBg
+	var b strings.Builder
+	if fg != "" {
+		b.WriteString(m.ansiFg(fg))
+	}
+	if bg != "" {
+		b.WriteString(m.ansiBg(bg))
+	}
+	b.WriteString("\033[3m") // italic on
+	b.WriteString(text)
+	b.WriteString("\033[23m") // italic off
+	if fg != "" {
+		b.WriteString("\033[39m")
+	}
+	if bg != "" {
+		b.WriteString("\033[49m")
+	}
+	return b.String()
+}
+
+// diffCursorCell renders the ▶ cursor using raw ANSI sequences instead of lipgloss.Render()
+// to avoid \033[0m full reset that kills the outer DiffBg background.
+func (m Model) diffCursorCell() string {
+	if m.noColors {
+		return "\033[7m▶\033[27m" // reverse video
+	}
+	fg := m.styles.colors.CursorFg
+	bg := m.styles.colors.CursorBg
+	if bg == "" {
+		bg = m.styles.colors.DiffBg
+	}
+	var b strings.Builder
+	if fg != "" {
+		b.WriteString(m.ansiFg(fg))
+	}
+	if bg != "" {
+		b.WriteString(m.ansiBg(bg))
+	}
+	b.WriteString("▶")
+	if fg != "" {
+		b.WriteString("\033[39m")
+	}
+	if bg != "" {
+		b.WriteString("\033[49m")
+	}
+	return b.String()
 }
 
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "

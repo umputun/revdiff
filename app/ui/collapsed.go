@@ -121,7 +121,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▶")
+		cursor = m.diffCursorCell()
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -159,7 +159,7 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string
 
 		cursor := " "
 		if i == 0 && ctx.isCursor {
-			cursor = m.styles.DiffCursorLine.Render("▶")
+			cursor = m.diffCursorCell()
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -228,7 +228,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 			cursor := " "
 			if i == 0 && isCursor {
-				cursor = m.styles.DiffCursorLine.Render("▶")
+				cursor = m.diffCursorCell()
 			}
 			b.WriteString(cursor + ng + bg + styled + "\n")
 		}
@@ -241,7 +241,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▶")
+		cursor = m.diffCursorCell()
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }

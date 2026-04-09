@@ -27,6 +27,29 @@ func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinp
 	cmd := ti.Focus()
 	ti.CharLimit = 500
 	ti.Width = max(10, m.diffContentWidth()-prefixWidth)
+
+	// set DiffBg on all textinput sub-styles so View() output inherits the pane background.
+	// wrapping View() externally doesn't work because lipgloss Render emits \033[0m resets.
+	// text uses Normal fg (context line color) so active input is readable on any theme
+	// and visually distinct from saved annotations (which use Annotation color + italic).
+	inputStyle := lipgloss.NewStyle()
+	if fg := m.styles.colors.Normal; fg != "" {
+		inputStyle = inputStyle.Foreground(lipgloss.Color(fg))
+	}
+	if bg := m.styles.colors.DiffBg; bg != "" {
+		inputStyle = inputStyle.Background(lipgloss.Color(bg))
+	}
+	ti.PromptStyle = inputStyle
+	ti.TextStyle = inputStyle
+	ti.Cursor.TextStyle = inputStyle
+	ti.Cursor.Style = inputStyle
+
+	muted := inputStyle
+	if fg := m.styles.colors.Muted; fg != "" {
+		muted = muted.Foreground(lipgloss.Color(fg))
+	}
+	ti.PlaceholderStyle = muted
+
 	return ti, cmd
 }
 

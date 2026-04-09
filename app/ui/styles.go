@@ -66,10 +66,6 @@ type styles struct {
 	LineModify           lipgloss.Style // modified line (collapsed mode, non-highlighted)
 	LineModifyHighlight  lipgloss.Style // modified line (collapsed mode, syntax-highlighted)
 
-	// diff cursor
-	DiffCursorLine lipgloss.Style
-	// annotation
-	AnnotationLine lipgloss.Style
 	// search
 	SearchMatch lipgloss.Style
 
@@ -248,10 +244,6 @@ func newStyles(c Colors) styles {
 		LineModifyHighlight: lipgloss.NewStyle().
 			Background(lipgloss.Color(c.ModifyBg)),
 
-		DiffCursorLine: cursorLineStyle(c),
-		AnnotationLine: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(c.Annotation)).
-			Italic(true),
 		SearchMatch: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(c.SearchFg)).
 			Background(lipgloss.Color(c.SearchBg)),
@@ -314,18 +306,6 @@ func contextHighlightStyle(c Colors) lipgloss.Style {
 	return s
 }
 
-// cursorLineStyle builds the diff cursor style with optional foreground and background.
-func cursorLineStyle(c Colors) lipgloss.Style {
-	s := lipgloss.NewStyle()
-	if c.CursorFg != "" {
-		s = s.Foreground(lipgloss.Color(c.CursorFg))
-	}
-	if c.CursorBg != "" {
-		s = s.Background(lipgloss.Color(c.CursorBg))
-	}
-	return s
-}
-
 // plainStyles returns styles with no colors for --no-colors mode.
 // borders are preserved for layout but all color styling is removed.
 func plainStyles() styles {
@@ -359,8 +339,6 @@ func plainStyles() styles {
 		LineModify:           lipgloss.NewStyle(),
 		LineModifyHighlight:  lipgloss.NewStyle(),
 
-		DiffCursorLine: lipgloss.NewStyle().Reverse(true),
-		AnnotationLine: lipgloss.NewStyle().Italic(true),
-		SearchMatch:    lipgloss.NewStyle().Reverse(true),
+		SearchMatch: lipgloss.NewStyle().Reverse(true),
 	}
 }
