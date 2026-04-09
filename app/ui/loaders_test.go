@@ -517,6 +517,98 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 	})
 }
 
+func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
+	t.Run("staged-only FileAdded with empty diff retries with --cached", func(t *testing.T) {
+		entries := []diff.FileEntry{{Path: "newfile.go", Status: diff.FileAdded}}
+		cachedLines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return entries, nil
+			},
+			FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+				if staged {
+					return cachedLines, nil
+				}
+				return nil, nil // empty unstaged diff for staged-only file
+			},
+		}
+		store := annotation.NewStore()
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m.width = 120
+		m.height = 40
+		m.ready = true
+
+		// load files then handle auto-selected first file
+		cmd := m.Init()
+		msg := cmd()
+		result, cmd := m.Update(msg)
+		m = result.(Model)
+		msg2 := cmd()
+		result, _ = m.Update(msg2)
+		m = result.(Model)
+
+		assert.Equal(t, cachedLines, m.diffLines, "staged-only file should show --cached diff content")
+	})
+
+	t.Run("staged mode does not retry --cached", func(t *testing.T) {
+		entries := []diff.FileEntry{{Path: "newfile.go", Status: diff.FileAdded}}
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return entries, nil
+			},
+			FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+				return nil, nil // empty diff even with --cached
+			},
+		}
+		store := annotation.NewStore()
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m.width = 120
+		m.height = 40
+		m.ready = true
+		m.staged = true
+
+		cmd := m.Init()
+		msg := cmd()
+		result, cmd := m.Update(msg)
+		m = result.(Model)
+		msg2 := cmd()
+		result, _ = m.Update(msg2)
+		m = result.(Model)
+
+		assert.Nil(t, m.diffLines, "staged mode should not retry with --cached")
+	})
+
+	t.Run("FileModified with empty diff does not trigger staged retry", func(t *testing.T) {
+		entries := []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return entries, nil
+			},
+			FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+				if staged {
+					return []diff.DiffLine{{NewNum: 1, Content: "staged", ChangeType: diff.ChangeContext}}, nil
+				}
+				return nil, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m.width = 120
+		m.height = 40
+		m.ready = true
+
+		cmd := m.Init()
+		msg := cmd()
+		result, cmd := m.Update(msg)
+		m = result.(Model)
+		msg2 := cmd()
+		result, _ = m.Update(msg2)
+		m = result.(Model)
+
+		assert.Nil(t, m.diffLines, "FileModified should not trigger staged retry even with empty diff")
+	})
+}
+
 func TestModel_FilesLoadedSingleFile(t *testing.T) {
 	m := testModel(nil, nil)
 	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
