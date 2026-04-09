@@ -152,24 +152,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
-	// staged-only files (new files added to index) get an empty diff with "git diff" (unstaged).
-	// fall back to "git diff --cached" to show their content.
-	fileStatus := m.tree.fileStatuses[msg.file]
-	if len(m.diffLines) == 0 && !m.staged && fileStatus == diff.FileAdded && m.renderer != nil {
-		if cachedLines, cachedErr := m.renderer.FileDiff(m.ref, msg.file, true); cachedErr == nil && len(cachedLines) > 0 {
-			m.diffLines = cachedLines
-		}
-	}
-	// untracked files have no git diff — fall back to reading from disk as all-added lines
-	if len(m.diffLines) == 0 && m.workDir != "" && fileStatus == diff.FileUntracked {
-		added, readErr := diff.ReadFileAsAdded(filepath.Join(m.workDir, msg.file))
-		if readErr != nil {
-			log.Printf("[WARN] read untracked file %s: %v", msg.file, readErr)
-		}
-		if len(added) > 0 {
-			m.diffLines = added
-		}
-	}
+	m.resolveEmptyDiff(msg.file, m.tree.fileStatuses[msg.file])
 	m.clearSearch()
 	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)
@@ -224,6 +207,32 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.viewport.SetContent(m.renderDiff())
 	m.viewport.GotoTop()
 	return m, blameCmd
+}
+
+// resolveEmptyDiff populates m.diffLines when git diff returns empty.
+// For staged-only FileAdded files (new files in the index), retries with --cached.
+// For untracked files, reads from disk as all-added lines.
+func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
+	if len(m.diffLines) > 0 {
+		return
+	}
+	// staged-only files: retry with git diff --cached
+	if !m.staged && fileStatus == diff.FileAdded && m.renderer != nil {
+		if cachedLines, err := m.renderer.FileDiff(m.ref, file, true); err == nil && len(cachedLines) > 0 {
+			m.diffLines = cachedLines
+			return
+		}
+	}
+	// untracked files: read from disk as all-added lines
+	if m.workDir != "" && fileStatus == diff.FileUntracked {
+		added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, file))
+		if err != nil {
+			log.Printf("[WARN] read untracked file %s: %v", file, err)
+		}
+		if len(added) > 0 {
+			m.diffLines = added
+		}
+	}
 }
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.
