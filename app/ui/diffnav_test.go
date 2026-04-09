@@ -928,6 +928,145 @@ func TestModel_MoveToPrevHunk(t *testing.T) {
 	m.moveToPrevHunk()
 	assert.Equal(t, 1, m.diffCursor, "should stay at first chunk")
 }
+func TestModel_CenterHunkInViewport_SmallHunk(t *testing.T) {
+	// build a file with context, a small 3-line hunk, and more context
+	// total: 50 lines, hunk at indices 20-22
+	var lines []diff.DiffLine
+	for i := 1; i <= 20; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	lines = append(lines, diff.DiffLine{NewNum: 21, Content: "add1", ChangeType: diff.ChangeAdd}) // idx 20
+	lines = append(lines, diff.DiffLine{NewNum: 22, Content: "add2", ChangeType: diff.ChangeAdd}) // idx 21
+	lines = append(lines, diff.DiffLine{NewNum: 23, Content: "add3", ChangeType: diff.ChangeAdd}) // idx 22
+	for i := 24; i <= 50; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	vpHeight := m.viewport.Height
+	require.Positive(t, vpHeight)
+
+	m.diffCursor = 0
+	m.moveToNextHunk()
+	assert.Equal(t, 20, m.diffCursor, "cursor should land on first line of hunk")
+
+	// hunk midpoint: cursorY + hunkHeight/2 = 20 + 1 = 21
+	// offset: midY - vpHeight/2
+	expectedOffset := 21 - vpHeight/2
+	assert.Equal(t, expectedOffset, m.viewport.YOffset, "small hunk should be centered by its midpoint")
+}
+
+func TestModel_CenterHunkInViewport_LargeHunk(t *testing.T) {
+	// hunk larger than viewport
+	var lines []diff.DiffLine
+	for i := 1; i <= 10; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	for i := 11; i <= 110; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "add", ChangeType: diff.ChangeAdd})
+	}
+	lines = append(lines, diff.DiffLine{NewNum: 111, Content: "ctx", ChangeType: diff.ChangeContext})
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+
+	m.diffCursor = 0
+	m.moveToNextHunk()
+	assert.Equal(t, 10, m.diffCursor, "cursor should land on first line of hunk")
+
+	// hunk is 100 lines >> viewport, so offset = cursorY - 2 = 10 - 2 = 8
+	assert.Equal(t, 8, m.viewport.YOffset, "large hunk should place first line near top with context margin")
+}
+
+func TestModel_CenterHunkInViewport_HunkAtStart(t *testing.T) {
+	// hunk starts at line 0 — offset should be clamped to 0
+	var lines []diff.DiffLine
+	lines = append(lines, diff.DiffLine{NewNum: 1, Content: "add1", ChangeType: diff.ChangeAdd})
+	lines = append(lines, diff.DiffLine{NewNum: 2, Content: "add2", ChangeType: diff.ChangeAdd})
+	for i := 3; i <= 50; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+
+	m.diffCursor = 10
+	m.moveToPrevHunk()
+	assert.Equal(t, 0, m.diffCursor, "cursor should land on first line")
+	assert.Equal(t, 0, m.viewport.YOffset, "offset should be clamped to 0 when hunk is near top")
+}
+
+func TestModel_CenterHunkInViewport_PrevHunkCenters(t *testing.T) {
+	// verify moveToPrevHunk also centers the hunk
+	var lines []diff.DiffLine
+	for i := 1; i <= 25; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	lines = append(lines, diff.DiffLine{NewNum: 26, Content: "add1", ChangeType: diff.ChangeAdd}) // idx 25
+	lines = append(lines, diff.DiffLine{NewNum: 27, Content: "add2", ChangeType: diff.ChangeAdd}) // idx 26
+	for i := 28; i <= 60; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	vpHeight := m.viewport.Height
+
+	m.diffCursor = 40
+	m.syncViewportToCursor()
+	m.moveToPrevHunk()
+	assert.Equal(t, 25, m.diffCursor, "cursor should land on first line of hunk")
+
+	// hunk midpoint: 25 + 2/2 = 26, offset: 26 - vpHeight/2
+	expectedOffset := 26 - vpHeight/2
+	assert.Equal(t, expectedOffset, m.viewport.YOffset, "prevHunk should center the hunk by its midpoint")
+}
+
+func TestModel_CenterHunkInViewport_SingleLineHunk(t *testing.T) {
+	// single-line hunk should still be centered
+	var lines []diff.DiffLine
+	for i := 1; i <= 25; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	lines = append(lines, diff.DiffLine{NewNum: 26, Content: "add", ChangeType: diff.ChangeAdd}) // idx 25
+	for i := 27; i <= 60; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	vpHeight := m.viewport.Height
+
+	m.diffCursor = 0
+	m.moveToNextHunk()
+	assert.Equal(t, 25, m.diffCursor)
+
+	// single-line hunk: midY = 25 + 0 = 25, offset = 25 - vpHeight/2
+	expectedOffset := 25 - vpHeight/2
+	assert.Equal(t, expectedOffset, m.viewport.YOffset, "single-line hunk midpoint centered in viewport")
+}
+
 func TestModel_HunkNavigationViaKeys(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
