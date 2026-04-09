@@ -82,8 +82,8 @@ type options struct {
 		StatusBg     string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   default:"#C5794F" description:"status bar background"`
 		SearchFg     string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
 		SearchBg     string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#4a4a00" description:"search match background"`
-		WordAddBg    string `long:"color-word-add-bg"    ini-name:"color-word-add-bg"    env:"REVDIFF_COLOR_WORD_ADD_BG"    default:"#4a7a1a" description:"intra-line word-diff add background"`
-		WordRemoveBg string `long:"color-word-remove-bg" ini-name:"color-word-remove-bg" env:"REVDIFF_COLOR_WORD_REMOVE_BG" default:"#a03838" description:"intra-line word-diff remove background"`
+		WordAddBg    string `long:"color-word-add-bg"    ini-name:"color-word-add-bg"    env:"REVDIFF_COLOR_WORD_ADD_BG"    description:"intra-line word-diff add background (auto-derived from add-bg if empty)"`
+		WordRemoveBg string `long:"color-word-remove-bg" ini-name:"color-word-remove-bg" env:"REVDIFF_COLOR_WORD_REMOVE_BG" description:"intra-line word-diff remove background (auto-derived from remove-bg if empty)"`
 	} `group:"color options"`
 }
 
@@ -382,6 +382,8 @@ func run(opts options) error {
 		}
 	}
 
+	deriveWordDiffColors(&opts)
+
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
 		Keymap:           km,
 		Blamer:           blamer,
@@ -672,6 +674,20 @@ func colorFieldPtrs(opts *options) map[string]*string {
 		"color-search-bg":      &opts.Colors.SearchBg,
 		"color-word-add-bg":    &opts.Colors.WordAddBg,
 		"color-word-remove-bg": &opts.Colors.WordRemoveBg,
+	}
+}
+
+// deriveWordDiffColors fills in word-diff background colors when they are empty by
+// shifting the lightness of the corresponding add/remove bg. dark backgrounds get
+// lighter, light backgrounds get darker — this produces a visible highlight in both
+// dark and light themes without requiring explicit color-word-*-bg keys. explicit
+// values in config/CLI/theme are preserved.
+func deriveWordDiffColors(opts *options) {
+	if opts.Colors.WordAddBg == "" && opts.Colors.AddBg != "" {
+		opts.Colors.WordAddBg = ui.ShiftLightness(opts.Colors.AddBg, 0.15)
+	}
+	if opts.Colors.WordRemoveBg == "" && opts.Colors.RemoveBg != "" {
+		opts.Colors.WordRemoveBg = ui.ShiftLightness(opts.Colors.RemoveBg, 0.15)
 	}
 }
 

@@ -25,5 +25,5 @@ color-status-fg = #002b36
 color-status-bg = #b58900
 color-search-fg = #002b36
 color-search-bg = #cb4b16
-color-word-add-bg = #4a7a1a
-color-word-remove-bg = #a03838
+color-word-add-bg = #186d18
+color-word-remove-bg = #6d1818

@@ -22,5 +22,5 @@ color-status-fg = #202020
 color-status-bg = #C5794F
 color-search-fg = #1a1a1a
 color-search-bg = #4a4a00
-color-word-add-bg = #4a7a1a
-color-word-remove-bg = #a03838
+color-word-add-bg = #2b8400
+color-word-remove-bg = #9a2200

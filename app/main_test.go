@@ -903,11 +903,13 @@ func TestCollectColors(t *testing.T) {
 	assert.Equal(t, "#D5895F", colors["color-accent"])
 	assert.Equal(t, "#585858", colors["color-border"])
 	assert.Equal(t, "#87d787", colors["color-add-fg"])
-	// 3 optional keys (cursor-bg, tree-bg, diff-bg) have no default and are omitted
-	assert.Len(t, colors, 20)
+	// 5 optional keys (cursor-bg, tree-bg, diff-bg, word-add-bg, word-remove-bg) have no default and are omitted
+	assert.Len(t, colors, 18)
 	assert.Empty(t, colors["color-cursor-bg"])
 	assert.Empty(t, colors["color-tree-bg"])
 	assert.Empty(t, colors["color-diff-bg"])
+	assert.Empty(t, colors["color-word-add-bg"])
+	assert.Empty(t, colors["color-word-remove-bg"])
 }
 
 func TestColorFieldPtrs(t *testing.T) {
