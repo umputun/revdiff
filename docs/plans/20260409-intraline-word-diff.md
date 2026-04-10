@@ -175,10 +175,10 @@ Ranges are computed on tab-replaced content (Task 3), so byte offsets already al
 
 Note: current `buildModifiedSet` already strips trailing non-change lines (lines 281-284). No bug fix needed — verify during refactoring that behavior is preserved.
 
-- [ ] refactor `buildModifiedSet` to call `m.pairHunkLines` for pairing logic instead of inline loop
-- [ ] verify `buildModifiedSet` produces identical results (same `map[int]bool` output) — run existing collapsed tests
-- [ ] add test case verifying trailing context lines are excluded from modified set
-- [ ] run tests — must pass before task 6
+- [x] refactor `buildModifiedSet` to call `m.pairHunkLines` for pairing logic instead of inline loop
+- [x] verify `buildModifiedSet` produces identical results (same `map[int]bool` output) — run existing collapsed tests
+- [x] add test case verifying trailing context lines are excluded from modified set
+- [x] run tests — must pass before task 6
 
 ### Task 6: Update bundled themes
 
@@ -193,23 +193,23 @@ Note: current `buildModifiedSet` already strips trailing non-change lines (lines
 
 Auto-derivation via `shiftLightness` may produce acceptable results for all themes. Only add explicit values where the auto-derived color doesn't look right for the theme's palette.
 
-- [ ] test each bundled theme without explicit word-diff keys — verify auto-derived colors are visually acceptable
-- [ ] for themes where auto-derivation looks wrong, add explicit `color-word-add-bg`/`color-word-remove-bg`
-- [ ] verify all themes load without errors
-- [ ] run tests — must pass before task 7
+- [x] test each bundled theme without explicit word-diff keys — verify auto-derived colors are visually acceptable
+- [x] for themes where auto-derivation looks wrong, add explicit `color-word-add-bg`/`color-word-remove-bg`
+- [x] verify all themes load without errors
+- [x] run tests — must pass before task 7
 
 ### Task 7: Verify acceptance criteria
 
-- [ ] verify intra-line highlighting works on expanded diff mode
-- [ ] verify intra-line highlighting works with wrap mode enabled (continuation lines preserve bg)
-- [ ] verify intra-line highlighting works with search active (no visual collision — different bg colors)
-- [ ] verify intra-line highlighting works with line numbers and blame gutter
-- [ ] verify collapsed mode still works correctly with shared pairing (no intra-line in collapsed — intentional)
-- [ ] verify no-color mode fallback (reverse-video)
-- [ ] verify custom themes without word-diff keys auto-derive colors
-- [ ] verify horizontal scroll doesn't break intra-line markers
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
+- [x] verify intra-line highlighting works on expanded diff mode
+- [x] verify intra-line highlighting works with wrap mode enabled (continuation lines preserve bg)
+- [x] verify intra-line highlighting works with search active (no visual collision — different bg colors)
+- [x] verify intra-line highlighting works with line numbers and blame gutter
+- [x] verify collapsed mode still works correctly with shared pairing (no intra-line in collapsed — intentional)
+- [x] verify no-color mode fallback (reverse-video)
+- [x] verify custom themes without word-diff keys auto-derive colors
+- [x] verify horizontal scroll doesn't break intra-line markers
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
 
 ### Task 8: [Final] Update documentation
 
@@ -218,11 +218,11 @@ Auto-derivation via `shiftLightness` may produce acceptable results for all them
 - Modify: `site/docs.html`
 - Modify: `CLAUDE.md`
 
-- [ ] add intra-line highlighting to README.md features section
-- [ ] add `color-word-add-bg`/`color-word-remove-bg` to README color configuration table
-- [ ] update site/docs.html with feature description and color keys
-- [ ] update CLAUDE.md data flow documentation to include intra-line highlighting
-- [ ] update CLAUDE.md with worddiff.go and colorutil.go in project structure
+- [x] add intra-line highlighting to README.md features section
+- [x] add `color-word-add-bg`/`color-word-remove-bg` to README color configuration table
+- [x] update site/docs.html with feature description and color keys
+- [x] update CLAUDE.md data flow documentation to include intra-line highlighting
+- [x] update CLAUDE.md with worddiff.go and colorutil.go in project structure
 
 ## Post-Completion
 

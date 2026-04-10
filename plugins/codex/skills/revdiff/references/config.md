@@ -71,7 +71,7 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom  # export current colo
 
 Set default theme in config: `theme = dracula`. Or env: `REVDIFF_THEME=dracula`.
 
-**Custom themes:** customize colors in config or via `--color-*` flags, then `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`. Or copy a bundled theme file and edit directly — each has all 21 color keys + `chroma-style`.
+**Custom themes:** customize colors in config or via `--color-*` flags, then `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`. Or copy a bundled theme file and edit directly — each has all 23 color keys + `chroma-style`.
 
 Precedence: `--theme` takes over completely — overwrites all color fields, ignoring `--color-*` flags and env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints warning and applies theme.
 
@@ -94,6 +94,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-add-bg` | Added line background | `#123800` |
 | `--color-remove-fg` | Removed line text | `#ff8787` |
 | `--color-remove-bg` | Removed line background | `#4D1100` |
+| `--color-word-add-bg` | Intra-line word-diff add background | auto-derived from add-bg |
+| `--color-word-remove-bg` | Intra-line word-diff remove background | auto-derived from remove-bg |
 | `--color-modify-fg` | Modified line text (collapsed mode) | `#f5c542` |
 | `--color-modify-bg` | Modified line background (collapsed mode) | `#3D2E00` |
 | `--color-tree-bg` | File tree pane background | terminal default |

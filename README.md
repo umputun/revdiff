@@ -8,6 +8,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
 - Full-file diff view with syntax highlighting
+- Intra-line word-diff: highlights the specific changed words within paired add/remove lines using a brighter background overlay, always on
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Line numbers: side-by-side old/new line number gutter, toggle with `L`
@@ -295,7 +296,7 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
 **Creating custom themes** — two approaches:
 
 1. **From current colors:** customize individual colors in your config file or via `--color-*` flags, then dump the resolved result as a theme: `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`
-2. **From scratch:** copy a bundled theme and edit it directly — each file defines all 21 color keys plus `chroma-style` in INI format:
+2. **From scratch:** copy a bundled theme and edit it directly — each file defines all 23 color keys plus `chroma-style` in INI format:
 
 ```ini
 # name: my-custom
@@ -303,7 +304,7 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
 chroma-style = dracula
 color-accent = #bd93f9
 color-border = #6272a4
-...all 21 color keys...
+...all 23 color keys...
 ```
 
 Set a default theme in the config file:
@@ -316,7 +317,7 @@ Or via environment variable: `REVDIFF_THEME=dracula`.
 
 **Contributing themes** — community themes live in the `themes/gallery/` directory. See [themes/README.md](themes/README.md) for the contribution guide, format requirements, and validation instructions.
 
-**Precedence:** When `--theme` is set, it takes over completely — all 21 color fields and chroma-style are overwritten by the theme, ignoring any `--color-*` flags or env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints a warning and applies the theme.
+**Precedence:** When `--theme` is set, it takes over completely — all 23 color fields and chroma-style are overwritten by the theme, ignoring any `--color-*` flags or env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints a warning and applies the theme.
 
 <details>
 <summary>Color customization flags (click to expand)</summary>
@@ -338,6 +339,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-add-bg` | Added line background | `#123800` |
 | `--color-remove-fg` | Removed line text | `#ff8787` |
 | `--color-remove-bg` | Removed line background | `#4D1100` |
+| `--color-word-add-bg` | Intra-line word-diff add background | auto-derived from add-bg |
+| `--color-word-remove-bg` | Intra-line word-diff remove background | auto-derived from remove-bg |
 | `--color-modify-fg` | Modified line text (collapsed mode) | `#f5c542` |
 | `--color-modify-bg` | Modified line background (collapsed mode) | `#3D2E00` |
 | `--color-tree-bg` | File tree pane background | terminal default |

@@ -289,26 +289,26 @@ func (m Model) wrapContent(content string, width int) []string {
 	return m.reemitANSIState(lines)
 }
 
-// reemitANSIState scans each line for active SGR attributes (foreground color, background color, bold, italic)
-// and prepends the accumulated state to the next line. this fixes the issue where ansi.Wrap
-// splits a line mid-token, causing continuation lines to lose their styling.
+// reemitANSIState scans each line for active SGR attributes (foreground color, background color,
+// bold, italic, reverse video) and prepends the accumulated state to the next line. this fixes
+// the issue where ansi.Wrap splits a line mid-token, causing continuation lines to lose their styling.
 func (m Model) reemitANSIState(lines []string) []string {
 	var activeFg, activeBg string // e.g. "\033[38;2;100;200;50m" or "\033[48;2;...]m"
-	var bold, italic bool
+	var bold, italic, reverse bool
 
 	for i, line := range lines {
 		if i > 0 {
-			if prefix := m.buildSGRPrefix(activeFg, activeBg, bold, italic); prefix != "" {
+			if prefix := m.buildSGRPrefix(activeFg, activeBg, bold, italic, reverse); prefix != "" {
 				lines[i] = prefix + line
 			}
 		}
-		activeFg, activeBg, bold, italic = m.scanANSIState(lines[i], activeFg, activeBg, bold, italic)
+		activeFg, activeBg, bold, italic, reverse = m.scanANSIState(lines[i], activeFg, activeBg, bold, italic, reverse)
 	}
 	return lines
 }
 
 // buildSGRPrefix assembles an ANSI prefix string from the accumulated SGR state.
-func (m Model) buildSGRPrefix(fg, bg string, bold, italic bool) string {
+func (m Model) buildSGRPrefix(fg, bg string, bold, italic, reverse bool) string {
 	var b strings.Builder
 	if fg != "" {
 		b.WriteString(fg)
@@ -322,12 +322,16 @@ func (m Model) buildSGRPrefix(fg, bg string, bold, italic bool) string {
 	if italic {
 		b.WriteString("\033[3m")
 	}
+	if reverse {
+		b.WriteString("\033[7m")
+	}
 	return b.String()
 }
 
 // scanANSIState scans a string for SGR sequences and returns the updated state.
-// tracks foreground color (38;2;r;g;b or 3x), background color (48;2;r;g;b or 4x), bold (1), italic (3) and their resets.
-func (m Model) scanANSIState(s, fg, bg string, bold, italic bool) (string, string, bool, bool) {
+// tracks foreground color (38;2;r;g;b or 3x), background color (48;2;r;g;b or 4x),
+// bold (1), italic (3), reverse video (7) and their resets.
+func (m Model) scanANSIState(s, fg, bg string, bold, italic, reverse bool) (string, string, bool, bool, bool) {
 	for i := 0; i < len(s); i++ {
 		if s[i] != '\033' || i+1 >= len(s) || s[i+1] != '[' {
 			continue
@@ -340,9 +344,9 @@ func (m Model) scanANSIState(s, fg, bg string, bold, italic bool) (string, strin
 		if seq == "" { // not an SGR sequence
 			continue
 		}
-		fg, bg, bold, italic = m.applySGR(params, seq, fg, bg, bold, italic)
+		fg, bg, bold, italic, reverse = m.applySGR(params, seq, fg, bg, bold, italic, reverse)
 	}
-	return fg, bg, bold, italic
+	return fg, bg, bold, italic, reverse
 }
 
 // parseSGR extracts an SGR sequence starting at position i in s.
@@ -364,30 +368,34 @@ func (m Model) parseSGR(s string, i int) (seq, params string, end int) {
 }
 
 // applySGR updates the active SGR state based on a parameter string.
-func (m Model) applySGR(params, seq, fg, bg string, bold, italic bool) (string, string, bool, bool) {
+func (m Model) applySGR(params, seq, fg, bg string, bold, italic, reverse bool) (string, string, bool, bool, bool) {
 	switch params {
 	case "", "0": // full reset (\033[m and \033[0m)
-		return "", "", false, false
+		return "", "", false, false, false
 	case "1": // bold on
-		return fg, bg, true, italic
+		return fg, bg, true, italic, reverse
 	case "3": // italic on
-		return fg, bg, bold, true
+		return fg, bg, bold, true, reverse
+	case "7": // reverse video on
+		return fg, bg, bold, italic, true
 	case "22": // bold off
-		return fg, bg, false, italic
+		return fg, bg, false, italic, reverse
 	case "23": // italic off
-		return fg, bg, bold, false
+		return fg, bg, bold, false, reverse
+	case "27": // reverse video off
+		return fg, bg, bold, italic, false
 	case "39": // fg reset
-		return "", bg, bold, italic
+		return "", bg, bold, italic, reverse
 	case "49": // bg reset
-		return fg, "", bold, italic
+		return fg, "", bold, italic, reverse
 	}
 	if m.isFgColor(params) {
-		return seq, bg, bold, italic
+		return seq, bg, bold, italic, reverse
 	}
 	if m.isBgColor(params) {
-		return fg, seq, bold, italic
+		return fg, seq, bold, italic, reverse
 	}
-	return fg, bg, bold, italic
+	return fg, bg, bold, italic, reverse
 }
 
 // isFgColor returns true if the SGR params represent a foreground color (24-bit or basic).
@@ -467,7 +475,9 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 // highlightSearchMatches wraps each occurrence of the search term in the visible text
 // with ANSI background color sequence (preserving syntax foreground within matches).
 // works with both plain text and ANSI-coded content by stripping ANSI to find match positions.
-func (m Model) highlightSearchMatches(s string) string {
+// changeType is used to restore the correct line background after each match (add/remove bg)
+// instead of resetting to terminal default, which would break word-diff and line bg overlays.
+func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) string {
 	if m.searchTerm == "" {
 		return s
 	}
@@ -496,13 +506,17 @@ func (m Model) highlightSearchMatches(s string) string {
 		return s
 	}
 
-	// background-only highlight preserves syntax foreground colors within matches
+	// background-only highlight preserves syntax foreground colors within matches.
+	// restore to line bg (add/remove) after each match instead of terminal default (\033[49m]),
+	// so word-diff and line bg overlays are not broken by search highlights.
 	hlOn := m.ansiBg(m.styles.colors.SearchBg)
 	hlOff := "\033[49m"
 	if hlOn == "" {
 		// no-colors mode: fall back to reverse video so matches remain visible
 		hlOn = "\033[7m"
 		hlOff = "\033[27m"
+	} else if bg := m.ansiBg(m.changeBgColor(changeType)); bg != "" {
+		hlOff = bg
 	}
 
 	return m.insertHighlightMarkers(s, matches, hlOn, hlOff)
@@ -510,14 +524,19 @@ func (m Model) highlightSearchMatches(s string) string {
 
 // insertHighlightMarkers walks the string inserting hlOn/hlOff ANSI sequences at match positions,
 // skipping over existing ANSI escape sequences to preserve them.
+// tracks background ANSI state so that match-end restores to the correct bg (e.g. word-diff bg)
+// rather than always using the static hlOff (line bg). when the input has no bg sequences
+// (word-diff caller), restoreBg stays at hlOff and behavior is unchanged.
 func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOff string) string {
 	var b strings.Builder
 	visPos := 0   // current position in visible text
 	matchIdx := 0 // current match we're processing
 	i := 0
+	restoreBg := hlOff // tracks the active bg to restore after each match
+	inMatch := false   // whether we're inside an active highlight span
 
 	for i < len(s) {
-		// skip ANSI escape sequences (copy them as-is)
+		// skip ANSI escape sequences (copy them as-is, track bg state)
 		if s[i] == '\033' {
 			j := i + 1
 			for j < len(s) && s[j] != 'm' {
@@ -526,7 +545,15 @@ func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOf
 			if j < len(s) {
 				j++ // include the 'm'
 			}
-			b.WriteString(s[i:j])
+			seq := s[i:j]
+			b.WriteString(seq)
+			prev := restoreBg
+			restoreBg = m.updateRestoreBg(seq, restoreBg, hlOff)
+			// if a bg-changing sequence appeared inside a match, re-emit hlOn
+			// so the terminal doesn't switch away from the highlight
+			if inMatch && restoreBg != prev {
+				b.WriteString(hlOn)
+			}
 			i = j
 			continue
 		}
@@ -534,12 +561,15 @@ func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOf
 		// insert highlight start/end at match boundaries
 		if matchIdx < len(matches) && visPos == matches[matchIdx].start {
 			b.WriteString(hlOn)
+			inMatch = true
 		}
 		if matchIdx < len(matches) && visPos == matches[matchIdx].end {
-			b.WriteString(hlOff)
+			b.WriteString(restoreBg)
+			inMatch = false
 			matchIdx++
 			if matchIdx < len(matches) && visPos == matches[matchIdx].start {
 				b.WriteString(hlOn)
+				inMatch = true
 			}
 		}
 
@@ -550,10 +580,30 @@ func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOf
 
 	// close any unclosed highlight
 	if matchIdx < len(matches) && visPos >= matches[matchIdx].start && visPos <= matches[matchIdx].end {
-		b.WriteString(hlOff)
+		b.WriteString(restoreBg)
 	}
 
 	return b.String()
+}
+
+// updateRestoreBg checks if an ANSI escape sequence changes the background or reverse-video state,
+// returning the updated restore sequence. resets to hlOff on bg-reset, reverse-off, or full-reset.
+func (m Model) updateRestoreBg(seq, current, hlOff string) string {
+	if len(seq) < 3 || seq[0] != '\033' || seq[1] != '[' || seq[len(seq)-1] != 'm' {
+		return current
+	}
+	params := seq[2 : len(seq)-1]
+	switch {
+	case strings.HasPrefix(params, "48;2;"): // 24-bit bg
+		return seq
+	case len(params) == 2 && params[0] == '4' && params[1] >= '0' && params[1] <= '7': // basic bg
+		return seq
+	case params == "7": // reverse video on
+		return seq
+	case params == "49" || params == "27" || params == "0" || params == "": // bg/reverse/full reset
+		return hlOff
+	}
+	return current
 }
 
 // styleDiffContent applies the appropriate line style based on change type.
@@ -561,7 +611,7 @@ func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOf
 // (non-wrap paths) or directly after styling (wrap paths where scroll is not used).
 func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
 	if isSearchMatch && m.searchTerm != "" {
-		content = m.highlightSearchMatches(content)
+		content = m.highlightSearchMatches(content, changeType)
 	}
 
 	switch changeType {

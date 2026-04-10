@@ -212,6 +212,16 @@ func TestModel_BuildModifiedSet(t *testing.T) {
 			{Content: "...", ChangeType: diff.ChangeDivider},           // 2
 			{NewNum: 10, Content: "added", ChangeType: diff.ChangeAdd}, // 3 - pure add (hunk 2)
 		}, expect: map[int]bool{1: true}},
+		{name: "trailing context lines excluded from modified set", lines: []diff.DiffLine{
+			{OldNum: 1, Content: "old1", ChangeType: diff.ChangeRemove},  // 0
+			{NewNum: 1, Content: "new1", ChangeType: diff.ChangeAdd},     // 1 - modified
+			{NewNum: 2, Content: "ctx1", ChangeType: diff.ChangeContext}, // 2 - trailing context
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // 3 - trailing context
+			{NewNum: 4, Content: "ctx3", ChangeType: diff.ChangeContext}, // 4 - trailing context
+			{OldNum: 5, Content: "old2", ChangeType: diff.ChangeRemove},  // 5
+			{NewNum: 5, Content: "new2", ChangeType: diff.ChangeAdd},     // 6 - modified
+			{NewNum: 6, Content: "ctx4", ChangeType: diff.ChangeContext}, // 7 - trailing context
+		}, expect: map[int]bool{1: true, 6: true}},
 	}
 
 	for _, tc := range tests {

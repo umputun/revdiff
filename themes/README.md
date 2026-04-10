@@ -44,7 +44,7 @@ color-search-bg = #f1fa8c
 
 ### Color Keys
 
-Gallery themes must include all required color keys. Optional keys are `color-cursor-bg`, `color-tree-bg`, and `color-diff-bg`. Colors must be 6-digit hex (`#RRGGBB`).
+Gallery themes must include all required color keys. Optional keys are `color-cursor-bg`, `color-tree-bg`, `color-diff-bg`, `color-word-add-bg`, and `color-word-remove-bg`. Colors must be 6-digit hex (`#RRGGBB`).
 
 | Key | Controls |
 |-----|----------|
@@ -69,6 +69,8 @@ Gallery themes must include all required color keys. Optional keys are `color-cu
 | `color-status-bg` | Status bar background |
 | `color-search-fg` | Search match foreground |
 | `color-search-bg` | Search match background |
+| `color-word-add-bg` | Intra-line word-diff add background (optional, auto-derived) |
+| `color-word-remove-bg` | Intra-line word-diff remove background (optional, auto-derived) |
 
 ### Chroma Style
 
@@ -108,7 +110,7 @@ revdiff --theme my-theme
 - [ ] Filename matches `# name:` in the file
 - [ ] `# author:` is set
 - [ ] `# bundled: true` is NOT set
-- [ ] All 18 required color keys present with valid `#RRGGBB` values (3 optional: `color-cursor-bg`, `color-tree-bg`, `color-diff-bg`)
+- [ ] All 18 required color keys present with valid `#RRGGBB` values (5 optional: `color-cursor-bg`, `color-tree-bg`, `color-diff-bg`, `color-word-add-bg`, `color-word-remove-bg`)
 - [ ] `chroma-style` is set to a valid chroma style name
 - [ ] `make validate-themes` passes
 

@@ -159,10 +159,10 @@ func normalizeColors(c Colors) Colors {
 	c.RemoveBg = normalizeColor(c.RemoveBg)
 	// auto-derive word-diff backgrounds from add/remove bg when not explicitly set
 	if c.WordAddBg == "" && c.AddBg != "" {
-		c.WordAddBg = shiftLightness(normalizeColor(c.AddBg), 0.15)
+		c.WordAddBg = shiftLightness(c.AddBg, 0.15)
 	}
 	if c.WordRemoveBg == "" && c.RemoveBg != "" {
-		c.WordRemoveBg = shiftLightness(normalizeColor(c.RemoveBg), 0.15)
+		c.WordRemoveBg = shiftLightness(c.RemoveBg, 0.15)
 	}
 	c.WordAddBg = normalizeColor(c.WordAddBg)
 	c.WordRemoveBg = normalizeColor(c.WordRemoveBg)

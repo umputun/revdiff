@@ -418,6 +418,32 @@ func TestModel_WrapContent_ANSIStatePreservation(t *testing.T) {
 		assert.NotContains(t, last, "\033[48;2;80;40;40m", "bg should not carry after full reset")
 		assert.NotContains(t, last, "\033[38;2;100;200;50m", "fg should not carry after full reset")
 	})
+
+	t.Run("reverse video carries across wrap boundary", func(t *testing.T) {
+		content := "\033[7mthis is reverse video text that should wrap at boundary\033[27m"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		for i := 1; i < len(lines); i++ {
+			assert.Contains(t, lines[i], "\033[7m", "continuation line %d should have reverse video re-emitted", i)
+		}
+	})
+
+	t.Run("reverse video off clears state before wrap", func(t *testing.T) {
+		content := "\033[7mhighlighted\033[27m and then plain text that is long enough to wrap"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		last := lines[len(lines)-1]
+		assert.NotContains(t, last, "\033[7m", "reverse video should not carry after reset")
+	})
+
+	t.Run("full reset clears reverse video", func(t *testing.T) {
+		content := "\033[7m\033[1mreverse bold\033[0m plain text that is long enough to wrap here"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		last := lines[len(lines)-1]
+		assert.NotContains(t, last, "\033[7m", "reverse should not carry after full reset")
+		assert.NotContains(t, last, "\033[1m", "bold should not carry after full reset")
+	})
 }
 
 func TestModel_ApplyIntraLineHighlight(t *testing.T) {
@@ -565,4 +591,30 @@ func TestModel_WrapModeWithIntraLine(t *testing.T) {
 	output := m.renderDiff()
 	// verify word-diff markers are present in wrapped output
 	assert.Contains(t, output, "\033[48;2;", "wrapped output should contain word-diff bg markers")
+}
+
+func TestModel_UpdateRestoreBg(t *testing.T) {
+	m := testModel(nil, nil)
+	hlOff := "\033[48;2;0;34;0m" // line bg (AddBg)
+
+	tests := []struct {
+		name, seq, current, want string
+	}{
+		{name: "24-bit bg sets restore", seq: "\033[48;2;45;90;58m", current: hlOff, want: "\033[48;2;45;90;58m"},
+		{name: "basic bg sets restore", seq: "\033[42m", current: hlOff, want: "\033[42m"},
+		{name: "reverse on sets restore", seq: "\033[7m", current: hlOff, want: "\033[7m"},
+		{name: "bg reset returns hlOff", seq: "\033[49m", current: "\033[48;2;45;90;58m", want: hlOff},
+		{name: "reverse off returns hlOff", seq: "\033[27m", current: "\033[7m", want: hlOff},
+		{name: "full reset returns hlOff", seq: "\033[0m", current: "\033[48;2;45;90;58m", want: hlOff},
+		{name: "bare reset returns hlOff", seq: "\033[m", current: "\033[7m", want: hlOff},
+		{name: "fg color unchanged", seq: "\033[38;2;255;0;0m", current: "\033[48;2;45;90;58m", want: "\033[48;2;45;90;58m"},
+		{name: "bold unchanged", seq: "\033[1m", current: hlOff, want: hlOff},
+		{name: "too short unchanged", seq: "\033[", current: hlOff, want: hlOff},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.updateRestoreBg(tt.seq, tt.current, hlOff)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

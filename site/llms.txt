@@ -22,7 +22,7 @@ revdiff is a terminal-based UI tool for code review and document annotation. It 
 - All-files mode for browsing entire codebases
 - Context-only file review (no git required)
 - Markdown TOC navigation for document review
-- 5 bundled color themes, 21 customizable color keys
+- 7 bundled color themes, 23 customizable color keys
 - Full keybinding remapping
 - Config file, env vars, or CLI flags
 

@@ -26,6 +26,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
   - `annotlist.go` - annotation list overlay
   - `mdtoc.go` - markdown TOC component
   - `search.go` - search input and navigation
+  - `worddiff.go` - intra-line word-diff: tokenizer, LCS, line pairing, range computation
+  - `colorutil.go` - color utility: HSL conversion, shiftLightness for auto-deriving word-diff bg
   - `styles.go` - lipgloss styles and theme integration
 - `app/highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `app/keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
@@ -44,8 +46,14 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
   (or: disk file → diff.readFileAsContext() → []DiffLine, all ChangeContext)
   (or: stdin / arbitrary reader → diff.readReaderAsContext() → []DiffLine, all ChangeContext)
   → highlight.HighlightLines() → []string (ANSI foreground-only)
+  → recomputeIntraRanges(): pairs add/remove lines within hunks via pairHunkLines(),
+    runs token-level LCS diff (changedTokenRanges) on each pair, stores [][]matchRange
+    parallel to diffLines. 30% similarity gate discards ranges for dissimilar pairs.
+    Ranges are byte offsets on tab-replaced content, aligning with prepareLineContent output.
   → ui.renderDiff() dispatches:
     expanded (default): renderDiffLine() for each line
+      intra-line word-diff: when intraRanges[idx] is non-nil, insertHighlightMarkers()
+      adds WordAddBg/WordRemoveBg ANSI bg markers around changed spans (reverse-video in no-color mode)
     collapsed (`v` toggle): renderCollapsedDiff() → skips removed lines,
       uses buildModifiedSet() to style adds as modify (amber ~) or pure add (green +)
       expanded hunks (`.` toggle) show all lines inline
@@ -62,9 +70,9 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
     wrapContent() splits long lines via ansi.Wrap,
     continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts.
     ansi.Wrap does not preserve SGR state across inserted newlines, so reemitANSIState()
-    re-prepends active fg color, bold, and italic at the start of each continuation line.
+    re-prepends active fg color, bold, italic, and bg at the start of each continuation line.
     State tracking via scanANSIState()/parseSGR()/applySGR(); handles chroma's fg (24-bit/basic),
-    bold (1/22), italic (3/23), fg reset (39), and full reset (0/bare)
+    bold (1/22), italic (3/23), bg (48;2;r;g;b/49), fg reset (39), and full reset (0/bare)
   when search is active (`/` to search, `n`/`N` to navigate, `esc` to clear):
     buildSearchMatchSet() converts match indices to O(1) map per render,
     highlightSearchMatches() inserts ANSI bg-only sequence around matched substrings
@@ -85,7 +93,7 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
 - `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --dump-theme, --list-themes, --init-themes, --version)
 - Themes dir: `~/.config/revdiff/themes/` with 7 bundled themes (revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark), auto-created on first run
 - `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
-- Theme precedence: `--theme` takes over completely — overwrites all 21 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
+- Theme precedence: `--theme` takes over completely — overwrites all 23 color fields + chroma-style, ignoring any `--color-*` flags or env vars. `--theme` + `--no-colors` prints warning and applies theme.
 - Theme values applied via `applyTheme()` in `main.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`. `colorFieldPtrs(opts)` is the single source of truth for the color key → struct field mapping, used by both `applyTheme()` and `collectColors()` — adding a new color requires changes in `theme.go` colorKeys + options struct + `colorFieldPtrs()`
 - `ini-name` tags ensure config keys match CLI long flag names
 - Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)

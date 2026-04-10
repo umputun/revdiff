@@ -262,13 +262,22 @@ func (m *Model) recomputeIntraRanges() {
 			minusContent := strings.ReplaceAll(m.diffLines[p.removeIdx].Content, "\t", m.tabSpaces)
 			plusContent := strings.ReplaceAll(m.diffLines[p.addIdx].Content, "\t", m.tabSpaces)
 
-			minusRanges, plusRanges := changedTokenRanges(minusContent, plusContent)
+			// tokenize and run LCS once, then use results for both range building and similarity gate
+			minusToks := tokenizeLineWithOffsets(minusContent)
+			plusToks := tokenizeLineWithOffsets(plusContent)
+			if len(minusToks) == 0 || len(plusToks) == 0 {
+				continue
+			}
+
+			keepMinus, keepPlus := lcsKeptTokens(minusToks, plusToks)
+			minusRanges := buildChangedRanges(minusToks, keepMinus)
+			plusRanges := buildChangedRanges(plusToks, keepPlus)
 			if len(minusRanges) == 0 && len(plusRanges) == 0 {
 				continue // identical lines after tokenization
 			}
 
-			// similarity gate: count kept vs total tokens
-			if !m.passesSimilarityGate(minusContent, plusContent) {
+			// similarity gate: check kept vs total non-whitespace tokens
+			if !passesSimilarityGateFromKeep(minusToks, plusToks, keepMinus) {
 				continue
 			}
 
@@ -278,17 +287,10 @@ func (m *Model) recomputeIntraRanges() {
 	}
 }
 
-// passesSimilarityGate returns true if the pair has at least 30% common non-whitespace tokens.
-// uses the shorter line's non-whitespace token count as the denominator.
+// passesSimilarityGateFromKeep returns true if the pair has at least 30% common non-whitespace tokens.
+// uses pre-computed tokens and keep flags from lcsKeptTokens to avoid redundant tokenization/LCS.
 // whitespace tokens are excluded from the calculation to avoid inflating similarity.
-func (m Model) passesSimilarityGate(minusContent, plusContent string) bool {
-	minusToks := tokenizeLineWithOffsets(minusContent)
-	plusToks := tokenizeLineWithOffsets(plusContent)
-	if len(minusToks) == 0 || len(plusToks) == 0 {
-		return false
-	}
-
-	keepMinus, _ := lcsKeptTokens(minusToks, plusToks)
+func passesSimilarityGateFromKeep(minusToks, plusToks []intralineToken, keepMinus []bool) bool {
 	equalNonWS := 0
 	for i, k := range keepMinus {
 		if k && !isWhitespaceToken(minusToks[i]) {

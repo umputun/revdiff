@@ -20,51 +20,114 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 
 	t.Run("plain text single match", func(t *testing.T) {
 		m.searchTerm = "hello"
-		result := m.highlightSearchMatches("say hello world")
+		result := m.highlightSearchMatches("say hello world", diff.ChangeContext)
 		assert.NotContains(t, result, "\033[38;2;", "should not set foreground (bg-only highlight)")
 		assert.Contains(t, result, "\033[48;2;215;215;0m") // search bg
 		assert.Contains(t, result, "hello")
-		assert.Contains(t, result, "\033[49m") // bg reset
+		assert.Contains(t, result, "\033[49m") // bg reset for context lines
 	})
 
 	t.Run("multiple matches", func(t *testing.T) {
 		m.searchTerm = "ab"
-		result := m.highlightSearchMatches("ab cd ab")
+		result := m.highlightSearchMatches("ab cd ab", diff.ChangeContext)
 		assert.Equal(t, 2, strings.Count(result, "\033[48;2;215;215;0m"), "should highlight both occurrences")
 	})
 
 	t.Run("no match", func(t *testing.T) {
 		m.searchTerm = "xyz"
-		result := m.highlightSearchMatches("hello world")
+		result := m.highlightSearchMatches("hello world", diff.ChangeContext)
 		assert.Equal(t, "hello world", result)
 	})
 
 	t.Run("empty search term", func(t *testing.T) {
 		m.searchTerm = ""
-		result := m.highlightSearchMatches("hello world")
+		result := m.highlightSearchMatches("hello world", diff.ChangeContext)
 		assert.Equal(t, "hello world", result)
 	})
 
 	t.Run("case insensitive", func(t *testing.T) {
 		m.searchTerm = "hello"
-		result := m.highlightSearchMatches("say HELLO world")
+		result := m.highlightSearchMatches("say HELLO world", diff.ChangeContext)
 		assert.Contains(t, result, "\033[48;2;215;215;0m")
 	})
 
 	t.Run("with ansi codes", func(t *testing.T) {
 		m.searchTerm = "world"
-		result := m.highlightSearchMatches("\033[32mhello world\033[0m")
+		result := m.highlightSearchMatches("\033[32mhello world\033[0m", diff.ChangeContext)
 		assert.Contains(t, result, "\033[48;2;215;215;0m") // search bg on
-		assert.Contains(t, result, "\033[49m")             // search bg reset
+		assert.Contains(t, result, "\033[49m")             // search bg reset for context
 		assert.Contains(t, result, "\033[32m")             // original ansi preserved
 	})
 
 	t.Run("no-colors fallback", func(t *testing.T) {
 		noColorModel := testModel(nil, nil)
 		noColorModel.searchTerm = "hello"
-		result := noColorModel.highlightSearchMatches("say hello world")
+		result := noColorModel.highlightSearchMatches("say hello world", diff.ChangeContext)
 		assert.Contains(t, result, "\033[7m", "should use reverse video in no-colors mode")
 		assert.Contains(t, result, "\033[27m", "should reset reverse video")
+	})
+
+	t.Run("add line restores add bg instead of terminal default", func(t *testing.T) {
+		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200"}
+		am := testModel(nil, nil)
+		am.styles = newStyles(c)
+		am.searchTerm = "hello"
+		result := am.highlightSearchMatches("say hello world", diff.ChangeAdd)
+		assert.Contains(t, result, "\033[48;2;215;215;0m", "should have search bg on")
+		assert.NotContains(t, result, "\033[49m", "should not reset to terminal default")
+		assert.Contains(t, result, am.ansiBg(c.AddBg), "should restore to add bg")
+	})
+
+	t.Run("remove line restores remove bg instead of terminal default", func(t *testing.T) {
+		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", RemoveFg: "#ff0000", RemoveBg: "#220000"}
+		rm := testModel(nil, nil)
+		rm.styles = newStyles(c)
+		rm.searchTerm = "hello"
+		result := rm.highlightSearchMatches("say hello world", diff.ChangeRemove)
+		assert.Contains(t, result, "\033[48;2;215;215;0m", "should have search bg on")
+		assert.NotContains(t, result, "\033[49m", "should not reset to terminal default")
+		assert.Contains(t, result, rm.ansiBg(c.RemoveBg), "should restore to remove bg")
+	})
+
+	t.Run("search inside word-diff span restores word-diff bg", func(t *testing.T) {
+		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
+		am := testModel(nil, nil)
+		am.styles = newStyles(c)
+		am.searchTerm = "foo"
+		// simulate input with word-diff markers: [WordAddBg]foobar[AddBg]rest
+		wordBg := am.ansiBg(c.WordAddBg)
+		lineBg := am.ansiBg(c.AddBg)
+		input := wordBg + "foobar" + lineBg + "rest"
+		result := am.highlightSearchMatches(input, diff.ChangeAdd)
+		// after search match ends at "foo", should restore to word-diff bg, not line bg
+		searchBg := am.ansiBg(c.SearchBg)
+		assert.Contains(t, result, searchBg, "should have search bg on")
+		assert.Contains(t, result, wordBg+"bar", "bar should keep word-diff bg after search match")
+	})
+
+	t.Run("search match spanning word-diff boundary preserves search bg", func(t *testing.T) {
+		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
+		am := testModel(nil, nil)
+		am.styles = newStyles(c)
+		am.searchTerm = "foobar rest"
+		// simulate input with word-diff markers: [WordAddBg]foobar[AddBg] rest
+		wordBg := am.ansiBg(c.WordAddBg)
+		lineBg := am.ansiBg(c.AddBg)
+		searchBg := am.ansiBg(c.SearchBg)
+		input := wordBg + "foobar" + lineBg + " rest"
+		result := am.highlightSearchMatches(input, diff.ChangeAdd)
+		// search bg must persist across word-diff boundary so " rest" stays highlighted
+		assert.Contains(t, result, searchBg+" rest", "search bg should be re-emitted after word-diff boundary")
+	})
+
+	t.Run("no-colors search inside word-diff reverse restores reverse", func(t *testing.T) {
+		am := testModel(nil, nil) // no colors → noColors=true
+		am.searchTerm = "foo"
+		// simulate input with word-diff reverse: \033[7mfoobar\033[27mrest
+		input := "\033[7m" + "foobar" + "\033[27m" + "rest"
+		result := am.highlightSearchMatches(input, diff.ChangeAdd)
+		// after search match ends at "foo", should restore reverse-video for "bar"
+		assert.Contains(t, result, "\033[7m"+"bar", "bar should stay reverse-video after search")
 	})
 }
 

@@ -382,9 +382,7 @@ func TestModel_PairHunkLines_BestMatchScoring(t *testing.T) {
 	assert.Equal(t, 2, pairs[0].addIdx)
 }
 
-func TestModel_PassesSimilarityGate(t *testing.T) {
-	m := testModel(nil, nil)
-
+func TestPassesSimilarityGateFromKeep(t *testing.T) {
 	tests := []struct {
 		name  string
 		minus string
@@ -403,10 +401,26 @@ func TestModel_PassesSimilarityGate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := m.passesSimilarityGate(tc.minus, tc.plus)
+			minusToks := tokenizeLineWithOffsets(tc.minus)
+			plusToks := tokenizeLineWithOffsets(tc.plus)
+			if len(minusToks) == 0 || len(plusToks) == 0 {
+				assert.False(t, tc.want)
+				return
+			}
+			keepMinus, _ := lcsKeptTokens(minusToks, plusToks)
+			got := passesSimilarityGateFromKeep(minusToks, plusToks, keepMinus)
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestPassesSimilarityGateFromKeep_WhitespaceOnly(t *testing.T) {
+	// whitespace-only tokens produce shorter==0, should return false
+	minusToks := tokenizeLineWithOffsets("   ")
+	plusToks := tokenizeLineWithOffsets("   ")
+	require.NotEmpty(t, minusToks, "whitespace should tokenize")
+	keepMinus, _ := lcsKeptTokens(minusToks, plusToks)
+	assert.False(t, passesSimilarityGateFromKeep(minusToks, plusToks, keepMinus))
 }
 
 func TestModel_RecomputeIntraRanges(t *testing.T) {
@@ -432,6 +446,21 @@ func TestModel_RecomputeIntraRanges(t *testing.T) {
 	assert.Equal(t, matchRange{start: 11, end: 14}, m.intraRanges[1][0])
 	require.Len(t, m.intraRanges[2], 1)
 	assert.Equal(t, matchRange{start: 11, end: 14}, m.intraRanges[2][0])
+}
+
+func TestModel_RecomputeIntraRanges_IdenticalPair(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "same line content", ChangeType: diff.ChangeRemove},
+		{Content: "same line content", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// identical lines produce no changed ranges, so intra-line ranges remain nil
+	assert.Nil(t, m.intraRanges[0], "identical remove should have no ranges")
+	assert.Nil(t, m.intraRanges[1], "identical add should have no ranges")
 }
 
 func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {

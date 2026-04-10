@@ -21,6 +21,8 @@
 //   - annotlist.go — annotation list overlay for cross-file annotation browsing
 //   - mdtoc.go — markdown table-of-contents sidebar for single-file markdown review
 //   - search.go — incremental search: input handling, match computation, navigation
+//   - worddiff.go — intra-line word-diff: tokenizer, LCS, line pairing, range computation
+//   - colorutil.go — HSL color utilities for auto-deriving word-diff background colors
 //   - styles.go — lipgloss style definitions, theme color integration
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),

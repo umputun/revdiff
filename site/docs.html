@@ -278,19 +278,19 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom</code></div>
         <p>Two approaches:</p>
         <ol>
             <li><strong>From current colors:</strong> customize individual colors via config or <code>--color-*</code> flags, then dump: <code>revdiff --dump-theme > ~/.config/revdiff/themes/my-custom</code></li>
-            <li><strong>From scratch:</strong> copy a bundled theme and edit directly. Each file defines all 21 color keys plus <code>chroma-style</code> in INI format:</li>
+            <li><strong>From scratch:</strong> copy a bundled theme and edit directly. Each file defines all 23 color keys plus <code>chroma-style</code> in INI format:</li>
         </ol>
         <div class="code-block"><code><span class="code-comment"># name: my-custom</span>
 <span class="code-comment"># description: custom color scheme</span>
 chroma-style = dracula
 color-accent = #bd93f9
 color-border = #6272a4
-<span class="code-comment">...all 21 color keys...</span></code></div>
+<span class="code-comment">...all 23 color keys...</span></code></div>
         <h3>Community themes</h3>
         <p>Community-contributed themes live in the <code>themes/gallery/</code> directory of the repository. See the <a href="https://github.com/umputun/revdiff/blob/master/themes/README.md">theme contribution guide</a> for format requirements and validation instructions.</p>
         <h3>Precedence</h3>
         <p>Without <code>--theme</code>: built-in defaults &rarr; config file &rarr; env vars &rarr; CLI flags.</p>
-        <p>When <code>--theme</code> is set, it takes over completely: all 21 color fields and chroma-style are overwritten, ignoring any <code>--color-*</code> flags or env vars. <code>--theme</code> + <code>--no-colors</code> prints a warning and applies the theme.</p>
+        <p>When <code>--theme</code> is set, it takes over completely: all 23 color fields and chroma-style are overwritten, ignoring any <code>--color-*</code> flags or env vars. <code>--theme</code> + <code>--no-colors</code> prints a warning and applies the theme.</p>
 
         <h2 id="colors">Color customization</h2>
         <p>All color options accept hex values (<code>#rrggbb</code>) and have <code>REVDIFF_COLOR_*</code> env vars.</p>
@@ -308,6 +308,8 @@ color-border = #6272a4
                 <tr><td><code>--color-cursor-bg</code></td><td>Cursor indicator background</td><td>terminal default</td></tr>
                 <tr><td><code>--color-add-fg/bg</code></td><td>Added line text / background</td><td><code>#87d787</code> / <code>#123800</code></td></tr>
                 <tr><td><code>--color-remove-fg/bg</code></td><td>Removed line text / background</td><td><code>#ff8787</code> / <code>#4D1100</code></td></tr>
+                <tr><td><code>--color-word-add-bg</code></td><td>Intra-line word-diff add background</td><td>auto-derived from add-bg</td></tr>
+                <tr><td><code>--color-word-remove-bg</code></td><td>Intra-line word-diff remove background</td><td>auto-derived from remove-bg</td></tr>
                 <tr><td><code>--color-modify-fg/bg</code></td><td>Modified line (collapsed mode)</td><td><code>#f5c542</code> / <code>#3D2E00</code></td></tr>
                 <tr><td><code>--color-status-fg/bg</code></td><td>Status bar</td><td><code>#202020</code> / <code>#C5794F</code></td></tr>
                 <tr><td><code>--color-search-fg/bg</code></td><td>Search matches</td><td><code>#1a1a1a</code> / <code>#4a4a00</code></td></tr>

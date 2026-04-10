@@ -283,24 +283,14 @@ func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 			end--
 		}
 
-		// check if hunk has both removes and adds
-		hasRemove, hasAdd := false, false
-		var addIndices []int
-		for i := start; i < end; i++ {
-			switch m.diffLines[i].ChangeType {
-			case diff.ChangeRemove:
-				hasRemove = true
-			case diff.ChangeAdd:
-				hasAdd = true
-				addIndices = append(addIndices, i)
-			case diff.ChangeContext, diff.ChangeDivider:
-				// context and divider lines are not part of the hunk's change set
-			}
-		}
-
-		if hasRemove && hasAdd {
-			for _, idx := range addIndices {
-				result[idx] = true
+		// use pairHunkLines to detect mixed hunks (both removes and adds).
+		// if pairs exist, mark all add lines in the block as modified.
+		pairs := m.pairHunkLines(start, end)
+		if len(pairs) > 0 {
+			for i := start; i < end; i++ {
+				if m.diffLines[i].ChangeType == diff.ChangeAdd {
+					result[i] = true
+				}
 			}
 		}
 	}

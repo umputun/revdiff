@@ -72,7 +72,7 @@ type options struct {
 		AddFg        string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
 		AddBg        string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#123800" description:"added line background color"`
 		RemoveFg     string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
-		RemoveBg     string `long:"color-remove-bg"      ini-name:"color-remove-bg"      env:"REVDIFF_COLOR_REMOVE_BG"      default:"#4D1100" description:"removed line background color"`
+		RemoveBg     string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#4D1100" description:"removed line background color"`
 		WordAddBg    string `long:"color-word-add-bg"    ini-name:"color-word-add-bg"    env:"REVDIFF_COLOR_WORD_ADD_BG"    description:"intra-line word-diff add background (auto-derived if empty)"`
 		WordRemoveBg string `long:"color-word-remove-bg" ini-name:"color-word-remove-bg" env:"REVDIFF_COLOR_WORD_REMOVE_BG" description:"intra-line word-diff remove background (auto-derived if empty)"`
 		ModifyFg     string `long:"color-modify-fg"      ini-name:"color-modify-fg"      env:"REVDIFF_COLOR_MODIFY_FG"      default:"#f5c542" description:"modified line text color (collapsed mode)"`
@@ -644,7 +644,7 @@ func resolveThemeConflicts(opts *options) {
 
 // colorFieldPtrs maps color key names (matching ini-name tags) to pointers into opts.Colors fields.
 // this is the single source of truth for the color key → struct field mapping,
-// used by both applyTheme and collectColors to avoid duplicating the 21-key list.
+// used by both applyTheme and collectColors to avoid duplicating the 23-key list.
 func colorFieldPtrs(opts *options) map[string]*string {
 	return map[string]*string{
 		"color-accent":         &opts.Colors.Accent,
