@@ -391,4 +391,178 @@ func TestModel_WrapContent_ANSIStatePreservation(t *testing.T) {
 			assert.NotContains(t, line, "\033[", "plain text should have no ANSI injected")
 		}
 	})
+
+	t.Run("bg color carries across wrap boundary", func(t *testing.T) {
+		content := "\033[48;2;80;40;40mthis is text with a background color that must wrap\033[49m"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1, "should wrap into multiple lines")
+		for i := 1; i < len(lines); i++ {
+			assert.Contains(t, lines[i], "\033[48;2;80;40;40m",
+				"continuation line %d should have bg color re-emitted", i)
+		}
+	})
+
+	t.Run("bg reset clears bg state before wrap", func(t *testing.T) {
+		content := "\033[48;2;80;40;40mhighlighted\033[49m and then plain text that is long enough to wrap"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		last := lines[len(lines)-1]
+		assert.NotContains(t, last, "\033[48;2;80;40;40m", "bg should not carry after bg reset")
+	})
+
+	t.Run("full reset clears bg state", func(t *testing.T) {
+		content := "\033[48;2;80;40;40m\033[38;2;100;200;50mstyled\033[0m plain text long enough to wrap here"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		last := lines[len(lines)-1]
+		assert.NotContains(t, last, "\033[48;2;80;40;40m", "bg should not carry after full reset")
+		assert.NotContains(t, last, "\033[38;2;100;200;50m", "fg should not carry after full reset")
+	})
+}
+
+func TestModel_ApplyIntraLineHighlight(t *testing.T) {
+	t.Run("paired add/remove lines get bg markers", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.styles = newStyles(Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"})
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
+			{NewNum: 1, Content: "hello earth", ChangeType: diff.ChangeAdd},
+		}
+		m.tabSpaces = "    "
+		m.recomputeIntraRanges()
+
+		// remove line should have word-diff ranges for "world"
+		require.NotNil(t, m.intraRanges[0], "remove line should have intra-line ranges")
+		result := m.applyIntraLineHighlight(0, diff.ChangeRemove, "hello world")
+		assert.Contains(t, result, "\033[48;2;", "should contain bg ANSI sequence")
+
+		// add line should have word-diff ranges for "earth"
+		require.NotNil(t, m.intraRanges[1], "add line should have intra-line ranges")
+		result = m.applyIntraLineHighlight(1, diff.ChangeAdd, "hello earth")
+		assert.Contains(t, result, "\033[48;2;", "should contain bg ANSI sequence")
+	})
+
+	t.Run("pure add block produces no markers", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.styles = newStyles(Colors{AddBg: "#1a3320", WordAddBg: "#2d5a3a"})
+		m.diffLines = []diff.DiffLine{
+			{NewNum: 1, Content: "new line one", ChangeType: diff.ChangeAdd},
+			{NewNum: 2, Content: "new line two", ChangeType: diff.ChangeAdd},
+		}
+		m.tabSpaces = "    "
+		m.recomputeIntraRanges()
+
+		assert.Nil(t, m.intraRanges[0], "pure add should have no intra-line ranges")
+		assert.Nil(t, m.intraRanges[1], "pure add should have no intra-line ranges")
+
+		result := m.applyIntraLineHighlight(0, diff.ChangeAdd, "new line one")
+		assert.Equal(t, "new line one", result, "should return unchanged content")
+	})
+
+	t.Run("no-color mode uses reverse-video", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.noColors = true
+		m.styles = plainStyles()
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
+			{NewNum: 1, Content: "hello earth", ChangeType: diff.ChangeAdd},
+		}
+		m.tabSpaces = "    "
+		m.recomputeIntraRanges()
+
+		require.NotNil(t, m.intraRanges[0])
+		result := m.applyIntraLineHighlight(0, diff.ChangeRemove, "hello world")
+		assert.Contains(t, result, "\033[7m", "no-color should use reverse video on")
+		assert.Contains(t, result, "\033[27m", "no-color should use reverse video off")
+	})
+
+	t.Run("context lines are not highlighted", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
+		}
+		m.intraRanges = [][]matchRange{{matchRange{0, 3}}} // fake ranges
+
+		result := m.applyIntraLineHighlight(0, diff.ChangeContext, "context")
+		assert.Equal(t, "context", result, "context lines should not get intra-line markers")
+	})
+
+	t.Run("out of range idx returns unchanged", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.intraRanges = nil
+		result := m.applyIntraLineHighlight(5, diff.ChangeAdd, "text")
+		assert.Equal(t, "text", result)
+	})
+}
+
+func TestModel_RenderDiffWithIntraLine(t *testing.T) {
+	t.Run("render hunk with paired lines includes bg markers", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old value", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new value", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.styles = newStyles(Colors{
+			AddBg: "#1a3320", RemoveBg: "#331a1a",
+			WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
+			DiffBg: "#1e1e1e",
+		})
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+
+		// intraRanges should be computed by handleFileLoaded
+		require.NotNil(t, m.intraRanges, "intra-line ranges should be computed")
+
+		output := m.renderDiff()
+		// "old" vs "new" are the changed words — the bg markers should appear
+		assert.Contains(t, output, "\033[48;2;", "rendered output should contain bg color sequences")
+	})
+
+	t.Run("tab-containing lines have correct highlights", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{OldNum: 1, Content: "\treturn old", ChangeType: diff.ChangeRemove},
+			{NewNum: 1, Content: "\treturn new", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.styles = newStyles(Colors{
+			AddBg: "#1a3320", RemoveBg: "#331a1a",
+			WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
+		})
+		m.tabSpaces = "    "
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+
+		require.NotNil(t, m.intraRanges)
+		output := m.renderDiff()
+		stripped := ansi.Strip(output)
+		// tab should be replaced, and content should be present
+		assert.Contains(t, stripped, "    return", "tabs should be replaced with spaces")
+		// the word "old"/"new" should be highlighted differently
+		assert.Contains(t, output, "\033[48;2;", "tab lines should have word-diff bg markers")
+	})
+}
+
+func TestModel_WrapModeWithIntraLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, Content: "this is a long line with old word in it that needs to wrap because it is very long", ChangeType: diff.ChangeRemove},
+		{NewNum: 1, Content: "this is a long line with new word in it that needs to wrap because it is very long", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.styles = newStyles(Colors{
+		AddBg: "#1a3320", RemoveBg: "#331a1a",
+		WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
+	})
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.singleFile = true
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+
+	require.NotNil(t, m.intraRanges)
+	output := m.renderDiff()
+	// verify word-diff markers are present in wrapped output
+	assert.Contains(t, output, "\033[48;2;", "wrapped output should contain word-diff bg markers")
 }

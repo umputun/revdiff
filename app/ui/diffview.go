@@ -200,6 +200,7 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 // when wrap mode is active, long lines are broken at word boundaries with ↪ continuation markers.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
+	textContent = m.applyIntraLineHighlight(idx, dl.ChangeType, textContent)
 	isSearchMatch := m.searchMatchSet[idx]
 
 	isCursor := m.isCursorLine(idx)
@@ -288,40 +289,45 @@ func (m Model) wrapContent(content string, width int) []string {
 	return m.reemitANSIState(lines)
 }
 
-// reemitANSIState scans each line for active SGR attributes (foreground color, bold, italic)
+// reemitANSIState scans each line for active SGR attributes (foreground color, background color, bold, italic)
 // and prepends the accumulated state to the next line. this fixes the issue where ansi.Wrap
-// splits a line mid-token, causing continuation lines to lose their foreground color.
+// splits a line mid-token, causing continuation lines to lose their styling.
 func (m Model) reemitANSIState(lines []string) []string {
-	var activeFg string // e.g. "\033[38;2;100;200;50m" or "\033[32m"
+	var activeFg, activeBg string // e.g. "\033[38;2;100;200;50m" or "\033[48;2;...]m"
 	var bold, italic bool
 
 	for i, line := range lines {
 		if i > 0 {
-			// prepend accumulated state from previous lines
-			var prefix strings.Builder
-			if activeFg != "" {
-				prefix.WriteString(activeFg)
-			}
-			if bold {
-				prefix.WriteString("\033[1m")
-			}
-			if italic {
-				prefix.WriteString("\033[3m")
-			}
-			if prefix.Len() > 0 {
-				lines[i] = prefix.String() + line
+			if prefix := m.buildSGRPrefix(activeFg, activeBg, bold, italic); prefix != "" {
+				lines[i] = prefix + line
 			}
 		}
-
-		// scan this line to update active state
-		activeFg, bold, italic = m.scanANSIState(lines[i], activeFg, bold, italic)
+		activeFg, activeBg, bold, italic = m.scanANSIState(lines[i], activeFg, activeBg, bold, italic)
 	}
 	return lines
 }
 
+// buildSGRPrefix assembles an ANSI prefix string from the accumulated SGR state.
+func (m Model) buildSGRPrefix(fg, bg string, bold, italic bool) string {
+	var b strings.Builder
+	if fg != "" {
+		b.WriteString(fg)
+	}
+	if bg != "" {
+		b.WriteString(bg)
+	}
+	if bold {
+		b.WriteString("\033[1m")
+	}
+	if italic {
+		b.WriteString("\033[3m")
+	}
+	return b.String()
+}
+
 // scanANSIState scans a string for SGR sequences and returns the updated state.
-// tracks foreground color (38;2;r;g;b or 3x), bold (1), italic (3) and their resets.
-func (m Model) scanANSIState(s, fg string, bold, italic bool) (string, bool, bool) {
+// tracks foreground color (38;2;r;g;b or 3x), background color (48;2;r;g;b or 4x), bold (1), italic (3) and their resets.
+func (m Model) scanANSIState(s, fg, bg string, bold, italic bool) (string, string, bool, bool) {
 	for i := 0; i < len(s); i++ {
 		if s[i] != '\033' || i+1 >= len(s) || s[i+1] != '[' {
 			continue
@@ -334,9 +340,9 @@ func (m Model) scanANSIState(s, fg string, bold, italic bool) (string, bool, boo
 		if seq == "" { // not an SGR sequence
 			continue
 		}
-		fg, bold, italic = m.applySGR(params, seq, fg, bold, italic)
+		fg, bg, bold, italic = m.applySGR(params, seq, fg, bg, bold, italic)
 	}
-	return fg, bold, italic
+	return fg, bg, bold, italic
 }
 
 // parseSGR extracts an SGR sequence starting at position i in s.
@@ -358,31 +364,42 @@ func (m Model) parseSGR(s string, i int) (seq, params string, end int) {
 }
 
 // applySGR updates the active SGR state based on a parameter string.
-func (m Model) applySGR(params, seq, fg string, bold, italic bool) (string, bool, bool) {
+func (m Model) applySGR(params, seq, fg, bg string, bold, italic bool) (string, string, bool, bool) {
 	switch params {
 	case "", "0": // full reset (\033[m and \033[0m)
-		return "", false, false
+		return "", "", false, false
 	case "1": // bold on
-		return fg, true, italic
+		return fg, bg, true, italic
 	case "3": // italic on
-		return fg, bold, true
+		return fg, bg, bold, true
 	case "22": // bold off
-		return fg, false, italic
+		return fg, bg, false, italic
 	case "23": // italic off
-		return fg, bold, false
+		return fg, bg, bold, false
 	case "39": // fg reset
-		return "", bold, italic
+		return "", bg, bold, italic
+	case "49": // bg reset
+		return fg, "", bold, italic
 	}
 	if m.isFgColor(params) {
-		return seq, bold, italic
+		return seq, bg, bold, italic
 	}
-	return fg, bold, italic
+	if m.isBgColor(params) {
+		return fg, seq, bold, italic
+	}
+	return fg, bg, bold, italic
 }
 
 // isFgColor returns true if the SGR params represent a foreground color (24-bit or basic).
 func (m Model) isFgColor(params string) bool {
 	return strings.HasPrefix(params, "38;2;") ||
 		(len(params) == 2 && params[0] == '3' && params[1] >= '0' && params[1] <= '7')
+}
+
+// isBgColor returns true if the SGR params represent a background color (24-bit or basic).
+func (m Model) isBgColor(params string) bool {
+	return strings.HasPrefix(params, "48;2;") ||
+		(len(params) == 2 && params[0] == '4' && params[1] >= '0' && params[1] <= '7')
 }
 
 // prepareLineContent returns the display-ready content for a diff line with tabs replaced.
@@ -395,6 +412,44 @@ func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textC
 		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
 	}
 	return lineContent, textContent, hasHighlight
+}
+
+// applyIntraLineHighlight inserts ANSI background markers for intra-line word-diff ranges.
+// returns textContent unchanged when no intra-line ranges are available for the given line.
+// uses WordAddBg/WordRemoveBg for color mode and reverse-video for no-color mode.
+func (m Model) applyIntraLineHighlight(idx int, changeType diff.ChangeType, textContent string) string {
+	if idx >= len(m.intraRanges) || m.intraRanges[idx] == nil {
+		return textContent
+	}
+	if changeType != diff.ChangeAdd && changeType != diff.ChangeRemove {
+		return textContent
+	}
+
+	ranges := m.intraRanges[idx]
+	if len(ranges) == 0 {
+		return textContent
+	}
+
+	var hlOn, hlOff string
+	if m.noColors {
+		hlOn = "\033[7m"   // reverse video
+		hlOff = "\033[27m" // reverse video off
+	} else {
+		switch changeType { //nolint:exhaustive // only add/remove relevant
+		case diff.ChangeAdd:
+			hlOn = m.ansiBg(m.styles.colors.WordAddBg)
+			hlOff = m.ansiBg(m.styles.colors.AddBg) // restore line bg
+		case diff.ChangeRemove:
+			hlOn = m.ansiBg(m.styles.colors.WordRemoveBg)
+			hlOff = m.ansiBg(m.styles.colors.RemoveBg) // restore line bg
+		}
+	}
+
+	if hlOn == "" {
+		return textContent
+	}
+
+	return m.insertHighlightMarkers(textContent, ranges, hlOn, hlOff)
 }
 
 // linePrefix returns the 3-character gutter prefix for a given change type.

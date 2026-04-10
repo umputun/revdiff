@@ -154,18 +154,18 @@ All functions below are standalone package-level utilities (pure algorithm, no M
 
 Ranges are computed on tab-replaced content (Task 3), so byte offsets already align with `prepareLineContent` output — no render pipeline restructuring needed.
 
-- [ ] call `m.recomputeIntraRanges()` in `handleFileLoaded` after `m.highlightedLines` is set (after line 158)
-- [ ] in `renderDiffLine`, after `prepareLineContent`: when `m.intraRanges[idx]` is non-nil and line is add/remove, call `m.insertHighlightMarkers(textContent, ranges, hlOn, hlOff)` with `WordAddBg`/`WordRemoveBg` ANSI sequences
-- [ ] handle no-color mode fallback: use reverse-video markers matching search highlight fallback pattern
-- [ ] wire same logic into `renderWrappedDiffLine` for wrap mode compatibility
-- [ ] add background state tracking to `reemitANSIState` — track `\033[48;2;r;g;bm` and `\033[49m` alongside existing fg/bold/italic, so word-diff bg survives across wrapped continuation lines
-- [ ] update `scanANSIState`/`applySGR` to handle bg codes (48;2;r;g;b set, 49 reset, 0 full reset)
-- [ ] write integration test: render a hunk with paired add/remove, verify ANSI bg markers appear in output
-- [ ] write test: unpaired lines (pure add block) produce no intra-line markers
-- [ ] write test: no-color mode uses reverse-video
-- [ ] write test: wrapped lines preserve word-diff bg on continuation lines
-- [ ] write test: tab-containing lines have correctly positioned highlights
-- [ ] run tests — must pass before task 5
+- [x] call `m.recomputeIntraRanges()` in `handleFileLoaded` after `m.highlightedLines` is set (after line 158)
+- [x] in `renderDiffLine`, after `prepareLineContent`: when `m.intraRanges[idx]` is non-nil and line is add/remove, call `m.insertHighlightMarkers(textContent, ranges, hlOn, hlOff)` with `WordAddBg`/`WordRemoveBg` ANSI sequences
+- [x] handle no-color mode fallback: use reverse-video markers matching search highlight fallback pattern
+- [x] wire same logic into `renderWrappedDiffLine` for wrap mode compatibility
+- [x] add background state tracking to `reemitANSIState` — track `\033[48;2;r;g;bm` and `\033[49m` alongside existing fg/bold/italic, so word-diff bg survives across wrapped continuation lines
+- [x] update `scanANSIState`/`applySGR` to handle bg codes (48;2;r;g;b set, 49 reset, 0 full reset)
+- [x] write integration test: render a hunk with paired add/remove, verify ANSI bg markers appear in output
+- [x] write test: unpaired lines (pure add block) produce no intra-line markers
+- [x] write test: no-color mode uses reverse-video
+- [x] write test: wrapped lines preserve word-diff bg on continuation lines
+- [x] write test: tab-containing lines have correctly positioned highlights
+- [x] run tests — must pass before task 5
 
 ### Task 5: Refactor collapsed mode to share pairHunkLines
 
