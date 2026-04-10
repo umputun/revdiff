@@ -246,7 +246,13 @@ const similarityThreshold = 30
 // recomputeIntraRanges walks m.diffLines, finds contiguous change blocks,
 // pairs remove/add lines, runs word-diff, and stores results in m.intraRanges.
 // applies a 30% similarity gate: pairs with <30% common tokens get no ranges.
+// no-op when m.wordDiff is off: clears m.intraRanges to nil so callers don't
+// need to duplicate the guard at each call site.
 func (m *Model) recomputeIntraRanges() {
+	if !m.wordDiff {
+		m.intraRanges = nil
+		return
+	}
 	n := len(m.diffLines)
 	m.intraRanges = make([][]matchRange, n)
 

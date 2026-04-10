@@ -449,6 +449,7 @@ func TestPassesSimilarityGateFromKeep_WhitespaceOnly(t *testing.T) {
 
 func TestModel_RecomputeIntraRanges(t *testing.T) {
 	m := testModel(nil, nil)
+	m.wordDiff = true
 	m.tabSpaces = "    "
 	m.diffLines = []diff.DiffLine{
 		{Content: "context before", ChangeType: diff.ChangeContext},
@@ -474,6 +475,7 @@ func TestModel_RecomputeIntraRanges(t *testing.T) {
 
 func TestModel_RecomputeIntraRanges_IdenticalPair(t *testing.T) {
 	m := testModel(nil, nil)
+	m.wordDiff = true
 	m.tabSpaces = "    "
 	m.diffLines = []diff.DiffLine{
 		{Content: "same line content", ChangeType: diff.ChangeRemove},
@@ -489,6 +491,7 @@ func TestModel_RecomputeIntraRanges_IdenticalPair(t *testing.T) {
 
 func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {
 	m := testModel(nil, nil)
+	m.wordDiff = true
 	m.tabSpaces = "    "
 	m.diffLines = []diff.DiffLine{
 		{Content: "context", ChangeType: diff.ChangeContext},
@@ -506,6 +509,7 @@ func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {
 
 func TestModel_RecomputeIntraRanges_DissimilarPair(t *testing.T) {
 	m := testModel(nil, nil)
+	m.wordDiff = true
 	m.tabSpaces = "    "
 	m.diffLines = []diff.DiffLine{
 		{Content: "alpha bravo charlie delta echo foxtrot golf hotel india juliet", ChangeType: diff.ChangeRemove},
@@ -521,6 +525,7 @@ func TestModel_RecomputeIntraRanges_DissimilarPair(t *testing.T) {
 
 func TestModel_RecomputeIntraRanges_TabContent(t *testing.T) {
 	m := testModel(nil, nil)
+	m.wordDiff = true
 	m.tabSpaces = "    "
 	m.diffLines = []diff.DiffLine{
 		{Content: "\treturn foo(bar)", ChangeType: diff.ChangeRemove},
@@ -542,6 +547,7 @@ func TestModel_RecomputeIntraRanges_TabContent(t *testing.T) {
 
 func TestModel_RecomputeIntraRanges_MultipleBlocks(t *testing.T) {
 	m := testModel(nil, nil)
+	m.wordDiff = true
 	m.tabSpaces = "    "
 	m.diffLines = []diff.DiffLine{
 		{Content: "old first", ChangeType: diff.ChangeRemove},
