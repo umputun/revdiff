@@ -73,7 +73,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 |-----|--------|
 | `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
 | `h/l` | Switch between file tree and diff pane |
-| left/right | Horizontal scroll in diff pane |
+| left/right | Horizontal scroll in diff pane (truncated lines show `«` / `»` overflow indicators at the edges) |
 | `Tab` | Switch between file tree and diff pane |
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |

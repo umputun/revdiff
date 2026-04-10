@@ -116,7 +116,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	if hasHighlight {
 		content = hlStyle.Render(gutter + textContent)
 	}
-	content = m.applyHorizontalScroll(content)
+	content = m.applyHorizontalScroll(content, bgColor)
 	content = m.extendLineBg(content, bgColor)
 
 	cursor := " "
@@ -236,7 +236,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	}
 
 	content := style.Render(" - " + text)
-	content = m.applyHorizontalScroll(content)
+	content = m.applyHorizontalScroll(content, m.styles.colors.RemoveBg)
 	content = m.extendLineBg(content, m.styles.colors.RemoveBg)
 
 	cursor := " "

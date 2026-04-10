@@ -126,13 +126,108 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 }
 
 // applyHorizontalScroll truncates content to the diff content width and applies horizontal scroll offset.
+// when content overflows the viewport, shows double-angle overflow indicators («/») at the edges so
+// the user can see more content exists in that direction. the left indicator replaces the first
+// visible column; the right indicator reserves the last content column for a space separator and
+// extends one column beyond cutWidth into the pane's right padding so the glyph sits flush against
+// the right border. when the viewport is too narrow to fit both indicators plus inner content
+// (cutWidth ≤ 3 with dual overflow), falls back to a plain cut without indicators. indicatorBg is
+// the line background used so the indicator blends with the line (add/remove/modify bg, or DiffBg
+// for context/divider). the returned width may equal cutWidth+1 when right overflow is present,
+// which extendLineBg treats as a no-op (current > target).
 // always truncates even when scroll offset is zero to prevent long lines from overflowing the right padding.
-func (m Model) applyHorizontalScroll(content string) string {
+func (m Model) applyHorizontalScroll(content, indicatorBg string) string {
 	cutWidth := m.diffContentWidth() - m.gutterExtra()
-	if cutWidth > 0 {
-		return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+	if cutWidth <= 0 {
+		return content
 	}
-	return content
+	origWidth := lipgloss.Width(content)
+	start := m.scrollX
+	end := m.scrollX + cutWidth
+
+	hasLeftOverflow := start > 0 && origWidth > start
+	hasRightOverflow := origWidth > end
+
+	if !hasLeftOverflow && !hasRightOverflow {
+		return ansi.Cut(content, start, end)
+	}
+
+	// reserve columns for indicators: left takes 1 visible col (replaces first col),
+	// right reserves 1 col for a space separator and then extends 1 col beyond cutWidth
+	// into the pane's right padding so the arrow sits flush against the border.
+	innerStart := start
+	innerEnd := end
+	if hasLeftOverflow {
+		innerStart++
+	}
+	if hasRightOverflow {
+		innerEnd--
+	}
+	if innerEnd <= innerStart {
+		// viewport too narrow to fit inner content plus indicators; fall back to plain cut
+		return ansi.Cut(content, start, end)
+	}
+
+	var b strings.Builder
+	if hasLeftOverflow {
+		b.WriteString(m.leftScrollIndicator(indicatorBg))
+	}
+	b.WriteString(ansi.Cut(content, innerStart, innerEnd))
+	if hasRightOverflow {
+		b.WriteString(m.rightScrollIndicator(indicatorBg))
+	}
+	return b.String()
+}
+
+// plainHorizontalCut truncates content to the diff content width and applies horizontal scroll
+// offset without emitting any overflow indicators. used for wrap-mode divider lines where
+// indicators would contradict the "unwrapped mode only" design intent.
+func (m Model) plainHorizontalCut(content string) string {
+	cutWidth := m.diffContentWidth() - m.gutterExtra()
+	if cutWidth <= 0 {
+		return content
+	}
+	return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+}
+
+// leftScrollIndicator renders the left-side scroll overflow glyph («) using raw ANSI sequences
+// so it doesn't break outer lipgloss backgrounds. lineBg is the line background the glyph should
+// blend with; empty string emits foreground only. in no-colors mode, falls back to reverse video.
+func (m Model) leftScrollIndicator(lineBg string) string {
+	return m.scrollIndicatorANSI("«", lineBg, false)
+}
+
+// rightScrollIndicator renders the right-side scroll overflow glyph (») prefixed with a space
+// separator so the glyph doesn't touch the last content character. uses raw ANSI sequences so it
+// doesn't break outer lipgloss backgrounds. lineBg is the line background the glyph should blend
+// with; empty string emits foreground only. in no-colors mode, falls back to reverse video.
+func (m Model) rightScrollIndicator(lineBg string) string {
+	return m.scrollIndicatorANSI("»", lineBg, true)
+}
+
+// scrollIndicatorANSI builds the ANSI-encoded indicator string shared by left and right variants.
+// leadingSpace controls whether a separator space is emitted before the glyph (carrying lineBg).
+func (m Model) scrollIndicatorANSI(glyph, lineBg string, leadingSpace bool) string {
+	if m.noColors {
+		prefix := ""
+		if leadingSpace {
+			prefix = " "
+		}
+		return prefix + "\033[7m" + glyph + "\033[27m"
+	}
+	var b strings.Builder
+	if bg := m.ansiBg(lineBg); bg != "" {
+		b.WriteString(bg)
+	}
+	if leadingSpace {
+		b.WriteString(" ")
+	}
+	if fg := m.ansiFg(m.styles.colors.Muted); fg != "" {
+		b.WriteString(fg)
+	}
+	b.WriteString(glyph)
+	b.WriteString("\033[39m\033[49m")
+	return b.String()
 }
 
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
@@ -220,8 +315,15 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight, isSearchMatch)
 	}
 
-	content = m.applyHorizontalScroll(content)
-	content = m.extendLineBg(content, m.changeBgColor(dl.ChangeType))
+	lineBg := m.changeBgColor(dl.ChangeType)
+	// wrap mode divider fallthrough: dividers are unwrapped even in wrap mode, but indicators
+	// only belong in unwrapped mode globally, so skip them for this edge case.
+	if m.wrapMode && dl.ChangeType == diff.ChangeDivider {
+		content = m.plainHorizontalCut(content)
+	} else {
+		content = m.applyHorizontalScroll(content, m.indicatorBg(lineBg))
+	}
+	content = m.extendLineBg(content, lineBg)
 
 	cursor := " "
 	if isCursor {
@@ -643,6 +745,16 @@ func (m Model) changeBgColor(changeType diff.ChangeType) string {
 	default:
 		return ""
 	}
+}
+
+// indicatorBg returns the background color to use for a horizontal scroll indicator,
+// falling back to the diff pane background when the line has no explicit bg (context/divider).
+// this keeps the indicator visible and consistent with the surrounding line.
+func (m Model) indicatorBg(lineBg string) string {
+	if lineBg != "" {
+		return lineBg
+	}
+	return m.styles.colors.DiffBg
 }
 
 // extendLineBg extends a styled line's background to the full diff content width

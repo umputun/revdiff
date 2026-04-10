@@ -226,10 +226,12 @@ func TestModel_ApplyHorizontalScrollTruncatesLongLines(t *testing.T) {
 
 	// content wider than diffContentWidth should be truncated
 	longContent := strings.Repeat("x", 200)
-	result := m.applyHorizontalScroll(longContent)
-	maxWidth := m.diffContentWidth() - m.gutterExtra()
+	result := m.applyHorizontalScroll(longContent, "")
+	// when right overflow is present, output extends 1 col beyond cutWidth into the pane's right
+	// padding column so the indicator sits flush against the border
+	maxWidth := m.diffContentWidth() - m.gutterExtra() + 1
 	resultWidth := lipgloss.Width(result)
-	assert.LessOrEqual(t, resultWidth, maxWidth, "long line should be truncated to content width even with scrollX=0")
+	assert.LessOrEqual(t, resultWidth, maxWidth, "long line should be truncated to content width (+1 for flush indicator)")
 }
 
 func TestModel_ExtendLineBgAfterScrollFillsWidth(t *testing.T) {
@@ -242,12 +244,174 @@ func TestModel_ExtendLineBgAfterScrollFillsWidth(t *testing.T) {
 
 	// simulate a styled add line longer than content width
 	longContent := strings.Repeat("x", 200)
-	scrolled := m.applyHorizontalScroll(longContent)
+	scrolled := m.applyHorizontalScroll(longContent, "#2e3440")
+	extended := m.extendLineBg(scrolled, "#2e3440")
+
+	// scrollX > 0 and overflow on both sides: right indicator extends by 1 col into pane padding
+	expectedWidth := m.diffContentWidth() - m.gutterExtra() + 1
+	resultWidth := lipgloss.Width(extended)
+	assert.Equal(t, expectedWidth, resultWidth, "scroll output should fill content width plus the flush right indicator col")
+}
+
+func TestModel_ExtendLineBgWithoutOverflowFillsWidth(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+	m.styles = plainStyles()
+
+	// short content with no overflow gets padded by extendLineBg to full cut width (no indicator extension)
+	shortContent := "hello"
+	scrolled := m.applyHorizontalScroll(shortContent, "#2e3440")
 	extended := m.extendLineBg(scrolled, "#2e3440")
 
 	expectedWidth := m.diffContentWidth() - m.gutterExtra()
 	resultWidth := lipgloss.Width(extended)
-	assert.Equal(t, expectedWidth, resultWidth, "bg should fill to full content width after scroll")
+	assert.Equal(t, expectedWidth, resultWidth, "without overflow, bg should fill exactly to cut width")
+}
+
+func TestModel_ApplyHorizontalScrollShowsRightIndicator(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+
+	// content wider than viewport should get a right-pointing indicator with a leading space
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	plain := ansi.Strip(result)
+	assert.Contains(t, plain, "»", "right indicator should appear when content overflows right")
+	assert.NotContains(t, plain, "«", "left indicator should not appear when scrollX is 0")
+	assert.True(t, strings.HasSuffix(plain, " »"), "right indicator should have a leading space separator from content")
+
+	// result extends exactly 1 col beyond cut width to place the arrow flush against the right border
+	expectedWidth := m.diffContentWidth() - m.gutterExtra() + 1
+	resultWidth := lipgloss.Width(result)
+	assert.Equal(t, expectedWidth, resultWidth, "result width should equal cutWidth+1 when right overflow is present")
+}
+
+func TestModel_ApplyHorizontalScrollShowsBothIndicators(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 50
+
+	// scrolling right with content longer than scrollX+cutWidth triggers both overflows
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	plain := ansi.Strip(result)
+	assert.Contains(t, plain, "«", "left indicator should appear when scrolled right with hidden content on the left")
+	assert.Contains(t, plain, "»", "right indicator should still appear when content also overflows right")
+}
+
+func TestModel_ApplyHorizontalScrollLeftOnlyOverflow(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 50
+
+	// content of exactly scrollX+cutWidth (126 chars) at scrollX=50: end=126, origWidth=126
+	// hasLeftOverflow: 126 > 50 = true; hasRightOverflow: 126 > 126 = false
+	// left-only path: total visible width should equal cutWidth (no +1 extension)
+	cutWidth := m.diffContentWidth() - m.gutterExtra()
+	content := strings.Repeat("x", m.scrollX+cutWidth)
+	result := m.applyHorizontalScroll(content, "#2e3440")
+	plain := ansi.Strip(result)
+	assert.Contains(t, plain, "«", "left indicator should appear when scrolled past hidden content on the left")
+	assert.NotContains(t, plain, "»", "right indicator should not appear when content fits within viewport end")
+	assert.True(t, strings.HasPrefix(plain, "«"), "left indicator should be the first visible char")
+
+	// total width should equal cutWidth exactly (no +1 extension since no right overflow)
+	assert.Equal(t, cutWidth, lipgloss.Width(result), "left-only overflow should not trigger the +1 right padding extension")
+}
+
+func TestModel_ApplyHorizontalScrollWithLineNumberGutter(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+	m.lineNumbers = true
+	m.lineNumWidth = 3 // gutter width = 2*3 + 2 = 8
+
+	// with gutters enabled, cutWidth = diffContentWidth - gutterExtra = 76 - 8 = 68
+	// right-overflow extends by 1 col into pane padding: total = cutWidth + 1 = 69
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	plain := ansi.Strip(result)
+	assert.Contains(t, plain, "»", "right indicator should appear with gutters enabled")
+
+	expectedWidth := m.diffContentWidth() - m.gutterExtra() + 1
+	assert.Equal(t, expectedWidth, lipgloss.Width(result), "gutter-adjusted cut width + 1 for flush right indicator")
+	assert.Equal(t, 8, m.gutterExtra(), "sanity check: gutterExtra computed from lineNumWidth")
+}
+
+func TestModel_ApplyHorizontalScrollNarrowViewportFallback(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 14
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 10
+	m.lineNumbers = true
+	m.lineNumWidth = 3 // gutter width = 8, cutWidth = max(10, 14-4) - 8 = 2
+
+	// cutWidth=2 with both overflows: innerStart = start+1 = 11, innerEnd = end-1 = 11
+	// innerEnd <= innerStart -> fallback to plain cut (no indicators)
+	require.Equal(t, 2, m.diffContentWidth()-m.gutterExtra(), "test precondition: cutWidth=2")
+	longContent := strings.Repeat("x", 200)
+	assert.NotPanics(t, func() {
+		result := m.applyHorizontalScroll(longContent, "#2e3440")
+		plain := ansi.Strip(result)
+		// fallback path returns plain cut; no indicators present
+		assert.NotContains(t, plain, "«", "narrow viewport fallback should drop indicators")
+		assert.NotContains(t, plain, "»", "narrow viewport fallback should drop indicators")
+	})
+}
+
+func TestModel_ApplyHorizontalScrollNoIndicatorForShortLines(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+
+	// short content that fits entirely within the viewport should have no indicators
+	result := m.applyHorizontalScroll("short", "#2e3440")
+	plain := ansi.Strip(result)
+	assert.NotContains(t, plain, "»", "no right indicator for short lines")
+	assert.NotContains(t, plain, "«", "no left indicator for short lines")
+}
+
+func TestModel_ApplyHorizontalScrollNoLeftIndicatorWhenScrolledPastContent(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 100
+
+	// content shorter than scrollX should not show a left indicator (nothing to the left is visible)
+	result := m.applyHorizontalScroll("short", "#2e3440")
+	plain := ansi.Strip(result)
+	assert.NotContains(t, plain, "«", "left indicator should not appear when content ends before viewport start")
+	assert.NotContains(t, plain, "»", "right indicator should not appear when content ends before viewport")
+}
+
+func TestModel_ApplyHorizontalScrollIndicatorInNoColorsMode(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+	m.noColors = true
+
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	assert.Contains(t, result, "\033[7m", "no-colors mode should use reverse video for indicator")
+	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still be visible in no-colors mode")
 }
 
 func TestModel_ChangeBgColor(t *testing.T) {
