@@ -400,6 +400,23 @@ func TestModel_ApplyHorizontalScrollNoLeftIndicatorWhenScrolledPastContent(t *te
 	assert.NotContains(t, plain, "»", "right indicator should not appear when content ends before viewport")
 }
 
+func TestModel_ApplyHorizontalScrollIndicatorEmptyLineBgSkipsBgReset(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+
+	// empty indicatorBg: scrollIndicatorANSI should not emit \033[49m because no bg was set,
+	// so the caller's inherited bg is preserved
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent, "")
+	// verify no bg reset sequence is emitted when we didn't set a bg
+	assert.NotContains(t, result, "\033[49m", "empty lineBg should not emit \\033[49m bg reset")
+	// glyph must still be present
+	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still render with empty lineBg")
+}
+
 func TestModel_ApplyHorizontalScrollIndicatorInNoColorsMode(t *testing.T) {
 	m := testModel(nil, nil)
 	m.width = 80

@@ -131,11 +131,13 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 // visible column; the right indicator reserves the last content column for a space separator and
 // extends one column beyond cutWidth into the pane's right padding so the glyph sits flush against
 // the right border. when the viewport is too narrow to fit both indicators plus inner content
-// (cutWidth ≤ 3 with dual overflow), falls back to a plain cut without indicators. indicatorBg is
-// the line background used so the indicator blends with the line (add/remove/modify bg, or DiffBg
-// for context/divider). the returned width may equal cutWidth+1 when right overflow is present,
-// which extendLineBg treats as a no-op (current > target).
-// always truncates even when scroll offset is zero to prevent long lines from overflowing the right padding.
+// (cutWidth ≤ 2 with dual overflow, cutWidth ≤ 1 with single-side overflow), falls back to a plain
+// cut without indicators. indicatorBg is the line background used so the indicator blends with the
+// line (add/remove/modify bg, or DiffBg for context/divider). the returned width may equal cutWidth+1
+// when right overflow is present, which extendLineBg treats as a no-op (current > target).
+// truncates whenever the viewport has room (cutWidth > 0), even when scroll offset is zero, to
+// prevent long lines from overflowing the right padding. when cutWidth ≤ 0 (pathologically narrow
+// terminal with wide gutters), returns the content unchanged.
 func (m Model) applyHorizontalScroll(content, indicatorBg string) string {
 	cutWidth := m.diffContentWidth() - m.gutterExtra()
 	if cutWidth <= 0 {
@@ -207,6 +209,8 @@ func (m Model) rightScrollIndicator(lineBg string) string {
 
 // scrollIndicatorANSI builds the ANSI-encoded indicator string shared by left and right variants.
 // leadingSpace controls whether a separator space is emitted before the glyph (carrying lineBg).
+// only emits the fg/bg reset sequences we actually set, so callers that pass an empty lineBg (or
+// a theme with empty Muted) don't accidentally trash inherited pane background or foreground.
 func (m Model) scrollIndicatorANSI(glyph, lineBg string, leadingSpace bool) string {
 	if m.noColors {
 		prefix := ""
@@ -216,17 +220,24 @@ func (m Model) scrollIndicatorANSI(glyph, lineBg string, leadingSpace bool) stri
 		return prefix + "\033[7m" + glyph + "\033[27m"
 	}
 	var b strings.Builder
-	if bg := m.ansiBg(lineBg); bg != "" {
+	bg := m.ansiBg(lineBg)
+	if bg != "" {
 		b.WriteString(bg)
 	}
 	if leadingSpace {
 		b.WriteString(" ")
 	}
-	if fg := m.ansiFg(m.styles.colors.Muted); fg != "" {
+	fg := m.ansiFg(m.styles.colors.Muted)
+	if fg != "" {
 		b.WriteString(fg)
 	}
 	b.WriteString(glyph)
-	b.WriteString("\033[39m\033[49m")
+	if fg != "" {
+		b.WriteString("\033[39m")
+	}
+	if bg != "" {
+		b.WriteString("\033[49m")
+	}
 	return b.String()
 }
 
