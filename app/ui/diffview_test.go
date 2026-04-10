@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
@@ -306,5 +307,88 @@ func TestModel_StyleDiffContent(t *testing.T) {
 		result := m.styleDiffContent(diff.ChangeAdd, " + ", "\033[32mgreen\033[0m", true, false)
 		assert.Contains(t, result, " + ")
 		assert.Contains(t, result, "\033[32m")
+	})
+}
+
+func TestModel_WrapContent_ANSIStatePreservation(t *testing.T) {
+	m := testModel(nil, nil)
+
+	t.Run("fg color carries across wrap boundary", func(t *testing.T) {
+		// simulate chroma-highlighted long token: fg set, long text, fg reset
+		content := "\033[38;2;100;200;50mthis is a very long green token that must wrap\033[39m"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1, "should wrap into multiple lines")
+		// continuation lines must start with the active fg sequence
+		for i := 1; i < len(lines); i++ {
+			assert.Contains(t, lines[i], "\033[38;2;100;200;50m",
+				"continuation line %d should have fg color re-emitted", i)
+		}
+	})
+
+	t.Run("bold carries across wrap boundary", func(t *testing.T) {
+		content := "\033[1mthis is a bold token that should wrap at boundary\033[22m"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		for i := 1; i < len(lines); i++ {
+			assert.Contains(t, lines[i], "\033[1m", "continuation line %d should have bold re-emitted", i)
+		}
+	})
+
+	t.Run("italic carries across wrap boundary", func(t *testing.T) {
+		content := "\033[3mthis is italic text that should wrap properly\033[23m"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		for i := 1; i < len(lines); i++ {
+			assert.Contains(t, lines[i], "\033[3m", "continuation line %d should have italic re-emitted", i)
+		}
+	})
+
+	t.Run("fg reset before wrap means no carry", func(t *testing.T) {
+		// fg is set and reset on the first segment, second segment should have no fg
+		content := "\033[32mshort\033[39m and then some more plain text that wraps here"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		// first line has the color, continuation should NOT re-emit it (already reset)
+		assert.NotContains(t, lines[len(lines)-1], "\033[32m", "reset fg should not carry")
+	})
+
+	t.Run("multiple fg changes across wrap", func(t *testing.T) {
+		// first token green, then red token that wraps
+		content := "\033[32mhi\033[39m \033[31mthis red token is long enough to wrap over\033[39m"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		// the last line should carry the red fg, not green
+		assert.Contains(t, lines[len(lines)-1], "\033[31m", "should carry the last active fg color")
+		assert.NotContains(t, lines[len(lines)-1], "\033[32m", "should not carry the first fg color")
+	})
+
+	t.Run("full reset clears all state before wrap", func(t *testing.T) {
+		content := "\033[38;2;100;200;50m\033[1m\033[3mstyled text\033[0m and then plain text long enough to wrap here"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		// after \033[0m, no state should carry to continuation lines
+		last := lines[len(lines)-1]
+		assert.NotContains(t, last, "\033[38;2;100;200;50m", "fg should not carry after full reset")
+		assert.NotContains(t, last, "\033[1m", "bold should not carry after full reset")
+		assert.NotContains(t, last, "\033[3m", "italic should not carry after full reset")
+	})
+
+	t.Run("bare reset ESC[m clears all state", func(t *testing.T) {
+		content := "\033[38;2;100;200;50m\033[1mstyled text\033[m and then plain wrapping text here"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		last := lines[len(lines)-1]
+		assert.NotContains(t, last, "\033[38;2;100;200;50m", "fg should not carry after bare reset")
+		assert.NotContains(t, last, "\033[1m", "bold should not carry after bare reset")
+	})
+
+	t.Run("no ANSI content unchanged", func(t *testing.T) {
+		content := "plain text that is long enough to wrap at the boundary"
+		lines := m.wrapContent(content, 20)
+		require.Greater(t, len(lines), 1)
+		// no ANSI codes should appear
+		for _, line := range lines {
+			assert.NotContains(t, line, "\033[", "plain text should have no ANSI injected")
+		}
 	})
 }

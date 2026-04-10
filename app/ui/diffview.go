@@ -274,12 +274,115 @@ func (m Model) wrappedLineCount(idx int) int {
 
 // wrapContent wraps text content at the given width using word boundaries.
 // returns a slice of visual lines (at least one). handles ANSI escape sequences.
+// re-emits active SGR state (foreground, bold, italic) at the start of each continuation line
+// because ansi.Wrap does not preserve ANSI state across inserted newlines.
 func (m Model) wrapContent(content string, width int) []string {
 	if width <= 0 {
 		return []string{content}
 	}
 	wrapped := ansi.Wrap(content, width, "")
-	return strings.Split(wrapped, "\n")
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) <= 1 {
+		return lines
+	}
+	return m.reemitANSIState(lines)
+}
+
+// reemitANSIState scans each line for active SGR attributes (foreground color, bold, italic)
+// and prepends the accumulated state to the next line. this fixes the issue where ansi.Wrap
+// splits a line mid-token, causing continuation lines to lose their foreground color.
+func (m Model) reemitANSIState(lines []string) []string {
+	var activeFg string // e.g. "\033[38;2;100;200;50m" or "\033[32m"
+	var bold, italic bool
+
+	for i, line := range lines {
+		if i > 0 {
+			// prepend accumulated state from previous lines
+			var prefix strings.Builder
+			if activeFg != "" {
+				prefix.WriteString(activeFg)
+			}
+			if bold {
+				prefix.WriteString("\033[1m")
+			}
+			if italic {
+				prefix.WriteString("\033[3m")
+			}
+			if prefix.Len() > 0 {
+				lines[i] = prefix.String() + line
+			}
+		}
+
+		// scan this line to update active state
+		activeFg, bold, italic = m.scanANSIState(lines[i], activeFg, bold, italic)
+	}
+	return lines
+}
+
+// scanANSIState scans a string for SGR sequences and returns the updated state.
+// tracks foreground color (38;2;r;g;b or 3x), bold (1), italic (3) and their resets.
+func (m Model) scanANSIState(s, fg string, bold, italic bool) (string, bool, bool) {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\033' || i+1 >= len(s) || s[i+1] != '[' {
+			continue
+		}
+		seq, params, end := m.parseSGR(s, i)
+		if end < 0 {
+			break
+		}
+		i = end
+		if seq == "" { // not an SGR sequence
+			continue
+		}
+		fg, bold, italic = m.applySGR(params, seq, fg, bold, italic)
+	}
+	return fg, bold, italic
+}
+
+// parseSGR extracts an SGR sequence starting at position i in s.
+// returns the full sequence, the parameter string, and the end index.
+// returns end=-1 if the sequence is unterminated.
+// returns seq="" if the CSI sequence is not SGR (not terminated by 'm').
+func (m Model) parseSGR(s string, i int) (seq, params string, end int) {
+	j := i + 2
+	for j < len(s) && s[j] >= 0x20 && s[j] <= 0x3F {
+		j++
+	}
+	if j >= len(s) {
+		return "", "", -1
+	}
+	if s[j] != 'm' {
+		return "", "", j
+	}
+	return s[i : j+1], s[i+2 : j], j
+}
+
+// applySGR updates the active SGR state based on a parameter string.
+func (m Model) applySGR(params, seq, fg string, bold, italic bool) (string, bool, bool) {
+	switch params {
+	case "", "0": // full reset (\033[m and \033[0m)
+		return "", false, false
+	case "1": // bold on
+		return fg, true, italic
+	case "3": // italic on
+		return fg, bold, true
+	case "22": // bold off
+		return fg, false, italic
+	case "23": // italic off
+		return fg, bold, false
+	case "39": // fg reset
+		return "", bold, italic
+	}
+	if m.isFgColor(params) {
+		return seq, bold, italic
+	}
+	return fg, bold, italic
+}
+
+// isFgColor returns true if the SGR params represent a foreground color (24-bit or basic).
+func (m Model) isFgColor(params string) bool {
+	return strings.HasPrefix(params, "38;2;") ||
+		(len(params) == 2 && params[0] == '3' && params[1] >= '0' && params[1] <= '7')
 }
 
 // prepareLineContent returns the display-ready content for a diff line with tabs replaced.

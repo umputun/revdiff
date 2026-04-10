@@ -60,7 +60,11 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
     blameAuthorLen capped at 8; blameGutterWidth() = W+5; Blamer interface (optional, nil when git unavailable)
   when wrap mode is on (`w` toggle, orthogonal to above):
     wrapContent() splits long lines via ansi.Wrap,
-    continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts
+    continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts.
+    ansi.Wrap does not preserve SGR state across inserted newlines, so reemitANSIState()
+    re-prepends active fg color, bold, and italic at the start of each continuation line.
+    State tracking via scanANSIState()/parseSGR()/applySGR(); handles chroma's fg (24-bit/basic),
+    bold (1/22), italic (3/23), fg reset (39), and full reset (0/bare)
   when search is active (`/` to search, `n`/`N` to navigate, `esc` to clear):
     buildSearchMatchSet() converts match indices to O(1) map per render,
     highlightSearchMatches() inserts ANSI bg-only sequence around matched substrings
