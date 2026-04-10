@@ -327,54 +327,58 @@ func (m Model) wrappedAnnotationLineCount(key string) int {
 	return 1
 }
 
+// hunkLineHeight returns the visual row count for a single diff line,
+// including collapsed visibility, wrap, and inline annotation.
+func (m Model) hunkLineHeight(idx int, hunks []int, annotationSet map[string]bool) int {
+	if m.isCollapsedHidden(idx, hunks) {
+		return 0
+	}
+	if m.isDeleteOnlyPlaceholder(idx, hunks) {
+		return m.deletePlaceholderVisualHeight(idx)
+	}
+	h := m.wrappedLineCount(idx)
+	dl := m.diffLines[idx]
+	if dl.ChangeType != diff.ChangeDivider {
+		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
+		if annotationSet[key] {
+			h += m.wrappedAnnotationLineCount(key)
+		}
+	}
+	return h
+}
+
 // cursorViewportY computes the actual viewport Y position of the cursor,
 // accounting for injected annotation lines and the file-level annotation line.
 // in collapsed mode, hidden removed lines (those in non-expanded hunks) are not counted.
 func (m Model) cursorViewportY() int {
+	var hunks []int
+	if m.collapsed.enabled {
+		hunks = m.findHunks()
+	}
+	return m.cursorViewportYUsing(hunks, m.buildAnnotationSet())
+}
+
+// cursorViewportYUsing is the same as cursorViewportY but accepts pre-built
+// hunks and annotationSet to avoid redundant computation when the caller
+// already has them (e.g. centerHunkInViewport).
+func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) int {
 	if m.currFile == "" || len(m.diffLines) == 0 {
 		return max(0, m.diffCursor)
 	}
 
-	// file-level annotation line at the top (may wrap to multiple rows)
 	fileAnnotationOffset := 0
 	if m.hasFileAnnotation() {
 		fileAnnotationOffset = m.wrappedAnnotationLineCount(annotKeyFile)
 	}
 
-	// cursor is on the file annotation line
 	if m.diffCursor == -1 {
 		return 0
 	}
 
-	annotationSet := m.buildAnnotationSet()
-	var hunks []int
-	if m.collapsed.enabled {
-		hunks = m.findHunks()
-	}
-
 	y := fileAnnotationOffset
 	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
-		// skip hidden removed lines in collapsed mode
-		if m.isCollapsedHidden(i, hunks) {
-			continue
-		}
-		// delete-only placeholders render synthetic text ("⋯ N lines deleted"), not original content.
-		// use placeholder text for wrapping to stay in sync with renderDeletePlaceholder.
-		if m.isDeleteOnlyPlaceholder(i, hunks) {
-			y += m.deletePlaceholderVisualHeight(i)
-			continue
-		}
-		y += m.wrappedLineCount(i) // the diff line (may occupy multiple visual rows when wrapping)
-		dl := m.diffLines[i]
-		if dl.ChangeType != diff.ChangeDivider {
-			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
-			if annotationSet[key] {
-				y += m.wrappedAnnotationLineCount(key)
-			}
-		}
+		y += m.hunkLineHeight(i, hunks, annotationSet)
 	}
-	// if cursor is on the annotation sub-line, offset by wrapped line count
-	// (annotation renders after all continuation lines of the diff line)
 	if m.cursorOnAnnotation {
 		y += m.wrappedLineCount(m.diffCursor)
 	}

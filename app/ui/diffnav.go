@@ -232,7 +232,14 @@ func (m *Model) centerHunkInViewport() {
 		return
 	}
 
-	cursorY := m.cursorViewportY()
+	// build shared context once for both cursor Y and hunk height
+	var hunks []int
+	if m.collapsed.enabled {
+		hunks = m.findHunks()
+	}
+	annotationSet := m.buildAnnotationSet()
+
+	cursorY := m.cursorViewportYUsing(hunks, annotationSet)
 
 	// find hunk end: scan forward from cursor while lines are changed
 	hunkEnd := m.diffCursor
@@ -244,29 +251,10 @@ func (m *Model) centerHunkInViewport() {
 		hunkEnd = i
 	}
 
-	// calculate visual height of the hunk from cursor to hunk end
-	var hunks []int
-	if m.collapsed.enabled {
-		hunks = m.findHunks()
-	}
-	annotationSet := m.buildAnnotationSet() // note: also built inside cursorViewportY; acceptable duplication for now
+	// calculate visual height of the hunk
 	hunkVisualHeight := 0
 	for i := m.diffCursor; i <= hunkEnd; i++ {
-		if m.collapsed.enabled && m.isCollapsedHidden(i, hunks) {
-			continue
-		}
-		if m.isDeleteOnlyPlaceholder(i, hunks) {
-			hunkVisualHeight += m.deletePlaceholderVisualHeight(i)
-			continue
-		}
-		hunkVisualHeight += m.wrappedLineCount(i)
-		dl := m.diffLines[i]
-		if dl.ChangeType != diff.ChangeDivider {
-			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
-			if annotationSet[key] {
-				hunkVisualHeight += m.wrappedAnnotationLineCount(key)
-			}
-		}
+		hunkVisualHeight += m.hunkLineHeight(i, hunks, annotationSet)
 	}
 
 	var offset int
