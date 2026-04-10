@@ -116,15 +116,15 @@ Both `shiftLightness` and `normalizeColors` live in package `ui` — no cross-pa
 
 All functions below are standalone package-level utilities (pure algorithm, no Model dependency). All offsets and `matchRange` values are byte positions (not rune), matching `insertHighlightMarkers` semantics.
 
-- [ ] create `worddiff.go` with `tokenizeLineWithOffsets(line string) []intralineToken` — regex tokenizer (`[\pL\pN_]+|\s+|[^\pL\pN_\s]+`), returns byte-offset tokens
-- [ ] implement `lcsKeptTokens(minusTokens, plusTokens []intralineToken) ([]bool, []bool)` — O(m×n) LCS DP + backtrace
-- [ ] implement `buildChangedRanges(tokens []intralineToken, keep []bool) []matchRange` — merge adjacent changed non-whitespace tokens into byte-offset ranges
-- [ ] implement `changedTokenRanges(minusLine, plusLine string) ([]matchRange, []matchRange)` — orchestrator calling tokenize → LCS → build ranges
-- [ ] write table-driven tests for tokenizer: words, punctuation, whitespace, unicode/multibyte, empty string
-- [ ] write table-driven tests for LCS: identical lines (no ranges), single rename, multiple changes, fully different
-- [ ] write tests for buildChangedRanges: adjacent merging, whitespace exclusion
-- [ ] write tests for changedTokenRanges: end-to-end with exact byte positions, including multibyte characters
-- [ ] run tests — must pass before task 3
+- [x] create `worddiff.go` with `tokenizeLineWithOffsets(line string) []intralineToken` — regex tokenizer (`[\pL\pN_]+|\s+|[^\pL\pN_\s]+`), returns byte-offset tokens
+- [x] implement `lcsKeptTokens(minusTokens, plusTokens []intralineToken) ([]bool, []bool)` — O(m×n) LCS DP + backtrace
+- [x] implement `buildChangedRanges(tokens []intralineToken, keep []bool) []matchRange` — merge adjacent changed non-whitespace tokens into byte-offset ranges
+- [x] implement `changedTokenRanges(minusLine, plusLine string) ([]matchRange, []matchRange)` — orchestrator calling tokenize → LCS → build ranges
+- [x] write table-driven tests for tokenizer: words, punctuation, whitespace, unicode/multibyte, empty string
+- [x] write table-driven tests for LCS: identical lines (no ranges), single rename, multiple changes, fully different
+- [x] write tests for buildChangedRanges: adjacent merging, whitespace exclusion
+- [x] write tests for changedTokenRanges: end-to-end with exact byte positions, including multibyte characters
+- [x] run tests — must pass before task 3
 
 ### Task 3: Line pairing and intra-range computation
 
