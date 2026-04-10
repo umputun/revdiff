@@ -132,9 +132,11 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 // extends one column beyond cutWidth into the pane's right padding so the glyph sits flush against
 // the right border. when the viewport is too narrow to fit both indicators plus inner content
 // (cutWidth ≤ 2 with dual overflow, cutWidth ≤ 1 with single-side overflow), falls back to a plain
-// cut without indicators. indicatorBg is the line background used so the indicator blends with the
-// line (add/remove/modify bg, or DiffBg for context/divider). the returned width may equal cutWidth+1
-// when right overflow is present, which extendLineBg treats as a no-op (current > target).
+// cut without indicators. indicatorBg is the line background used for the left glyph and for the
+// right indicator's leading space separator (so the colored line extends naturally through the
+// content area); the right glyph itself is always drawn on DiffBg by rightScrollIndicator so it
+// reads as pane chrome, not as part of the line. the returned width may equal cutWidth+1 when
+// right overflow is present, which extendLineBg treats as a no-op (current > target).
 // truncates whenever the viewport has room (cutWidth > 0), even when scroll offset is zero, to
 // prevent long lines from overflowing the right padding. when cutWidth ≤ 0 (pathologically narrow
 // terminal with wide gutters), returns the content unchanged.
@@ -193,25 +195,31 @@ func (m Model) plainHorizontalCut(content string) string {
 }
 
 // leftScrollIndicator renders the left-side scroll overflow glyph («) using raw ANSI sequences
-// so it doesn't break outer lipgloss backgrounds. lineBg is the line background the glyph should
-// blend with; empty string emits foreground only. in no-colors mode, falls back to reverse video.
+// so it doesn't break outer lipgloss backgrounds. the « replaces the first visible content column,
+// so it belongs to the line and uses lineBg for its background; empty string emits foreground only.
+// in no-colors mode, falls back to reverse video.
 func (m Model) leftScrollIndicator(lineBg string) string {
-	return m.scrollIndicatorANSI("«", lineBg, false)
+	return m.scrollIndicatorANSI("«", lineBg, lineBg, false)
 }
 
 // rightScrollIndicator renders the right-side scroll overflow glyph (») prefixed with a space
 // separator so the glyph doesn't touch the last content character. uses raw ANSI sequences so it
-// doesn't break outer lipgloss backgrounds. lineBg is the line background the glyph should blend
-// with; empty string emits foreground only. in no-colors mode, falls back to reverse video.
+// doesn't break outer lipgloss backgrounds. the leading space carries lineBg so the colored line
+// extends contiguously through the content area, while the » glyph itself is drawn on DiffBg so it
+// visually sits on pane chrome (matching the surrounding right-padding column) rather than on the
+// line's colored bg. in no-colors mode, falls back to reverse video.
 func (m Model) rightScrollIndicator(lineBg string) string {
-	return m.scrollIndicatorANSI("»", lineBg, true)
+	return m.scrollIndicatorANSI("»", lineBg, m.styles.colors.DiffBg, true)
 }
 
 // scrollIndicatorANSI builds the ANSI-encoded indicator string shared by left and right variants.
-// leadingSpace controls whether a separator space is emitted before the glyph (carrying lineBg).
-// only emits the fg/bg reset sequences we actually set, so callers that pass an empty lineBg (or
-// a theme with empty Muted) don't accidentally trash inherited pane background or foreground.
-func (m Model) scrollIndicatorANSI(glyph, lineBg string, leadingSpace bool) string {
+// leadingSpace controls whether a separator space is emitted before the glyph (drawn on spaceBg);
+// glyphBg is the background for the glyph itself. the two can differ so the right indicator can
+// keep its separator on the line bg (letting the colored content area extend naturally) while
+// drawing its glyph on DiffBg to read as pane chrome. only emits the fg/bg reset sequences we
+// actually set, so callers that pass an empty bg (or a theme with empty Muted) don't accidentally
+// trash inherited pane background or foreground.
+func (m Model) scrollIndicatorANSI(glyph, spaceBg, glyphBg string, leadingSpace bool) string {
 	if m.noColors {
 		prefix := ""
 		if leadingSpace {
@@ -220,12 +228,19 @@ func (m Model) scrollIndicatorANSI(glyph, lineBg string, leadingSpace bool) stri
 		return prefix + "\033[7m" + glyph + "\033[27m"
 	}
 	var b strings.Builder
-	bg := m.ansiBg(lineBg)
-	if bg != "" {
-		b.WriteString(bg)
-	}
 	if leadingSpace {
+		sbg := m.ansiBg(spaceBg)
+		if sbg != "" {
+			b.WriteString(sbg)
+		}
 		b.WriteString(" ")
+		if sbg != "" {
+			b.WriteString("\033[49m")
+		}
+	}
+	gbg := m.ansiBg(glyphBg)
+	if gbg != "" {
+		b.WriteString(gbg)
 	}
 	fg := m.ansiFg(m.styles.colors.Muted)
 	if fg != "" {
@@ -235,7 +250,7 @@ func (m Model) scrollIndicatorANSI(glyph, lineBg string, leadingSpace bool) stri
 	if fg != "" {
 		b.WriteString("\033[39m")
 	}
-	if bg != "" {
+	if gbg != "" {
 		b.WriteString("\033[49m")
 	}
 	return b.String()

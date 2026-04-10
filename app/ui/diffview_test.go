@@ -400,21 +400,46 @@ func TestModel_ApplyHorizontalScrollNoLeftIndicatorWhenScrolledPastContent(t *te
 	assert.NotContains(t, plain, "»", "right indicator should not appear when content ends before viewport")
 }
 
-func TestModel_ApplyHorizontalScrollIndicatorEmptyLineBgSkipsBgReset(t *testing.T) {
+func TestModel_ApplyHorizontalScrollRightGlyphAlwaysOnDiffBg(t *testing.T) {
 	m := testModel(nil, nil)
 	m.width = 80
 	m.singleFile = true
 	m.treeWidth = 0
 	m.scrollX = 0
+	m.styles.colors.DiffBg = "#112233"
+	m.styles.colors.Muted = "#999999"
 
-	// empty indicatorBg: scrollIndicatorANSI should not emit \033[49m because no bg was set,
-	// so the caller's inherited bg is preserved
+	// right indicator: leading space carries the line bg so the colored content area extends
+	// naturally, but the » glyph itself is always drawn on DiffBg so it reads as pane chrome.
+	// passing a non-empty line bg should produce both the line bg (for the separator space) and
+	// a DiffBg ANSI sequence (for the glyph) in the output, and these must differ.
+	longContent := strings.Repeat("x", 200)
+	result := m.applyHorizontalScroll(longContent, "#aabbcc")
+	assert.Contains(t, ansi.Strip(result), "»", "right indicator glyph should be present")
+	assert.Contains(t, result, m.ansiBg("#aabbcc"), "leading space should carry the passed line bg")
+	assert.Contains(t, result, m.ansiBg("#112233"), "right glyph should be drawn on DiffBg regardless of line bg")
+
+	// exactly two \033[49m bg resets: one after the space, one after the glyph
+	assert.Equal(t, 2, strings.Count(result, "\033[49m"), "one bg reset after the space and one after the glyph")
+}
+
+func TestModel_ApplyHorizontalScrollEmptyLineBgSkipsSpaceBg(t *testing.T) {
+	m := testModel(nil, nil)
+	m.width = 80
+	m.singleFile = true
+	m.treeWidth = 0
+	m.scrollX = 0
+	m.styles.colors.DiffBg = "#112233"
+	m.styles.colors.Muted = "#999999"
+
+	// empty line bg (defensive test; production callers never pass ""): the leading space must
+	// not emit a bg setter so the caller's inherited bg is preserved for that cell. the glyph
+	// itself still uses DiffBg, so exactly one bg reset is expected (after the glyph only).
 	longContent := strings.Repeat("x", 200)
 	result := m.applyHorizontalScroll(longContent, "")
-	// verify no bg reset sequence is emitted when we didn't set a bg
-	assert.NotContains(t, result, "\033[49m", "empty lineBg should not emit \\033[49m bg reset")
-	// glyph must still be present
-	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still render with empty lineBg")
+	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still render with empty line bg")
+	assert.Contains(t, result, m.ansiBg("#112233"), "glyph should still be drawn on DiffBg")
+	assert.Equal(t, 1, strings.Count(result, "\033[49m"), "empty line bg should skip the space-bg reset but keep the glyph-bg reset")
 }
 
 func TestModel_ApplyHorizontalScrollIndicatorInNoColorsMode(t *testing.T) {
