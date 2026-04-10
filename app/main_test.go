@@ -745,7 +745,7 @@ func TestGitTopLevel(t *testing.T) {
 }
 
 func TestApplyTheme(t *testing.T) {
-	t.Run("overwrites all 21 fields and chroma-style", func(t *testing.T) {
+	t.Run("overwrites all 23 fields and chroma-style", func(t *testing.T) {
 		opts := options{}
 		opts.Colors.Accent = "#original"
 		opts.ChromaStyle = "original-style"
@@ -757,7 +757,8 @@ func TestApplyTheme(t *testing.T) {
 				"color-muted": "#6272a4", "color-selected-fg": "#f8f8f2", "color-selected-bg": "#44475a",
 				"color-annotation": "#f1fa8c", "color-cursor-fg": "#f8f8f2", "color-cursor-bg": "#44475a",
 				"color-add-fg": "#50fa7b", "color-add-bg": "#1a3a1a", "color-remove-fg": "#ff5555",
-				"color-remove-bg": "#3a1a1a", "color-modify-fg": "#ffb86c", "color-modify-bg": "#3a2a1a",
+				"color-remove-bg": "#3a1a1a", "color-word-add-bg": "#2a4a2a", "color-word-remove-bg": "#4a2a2a",
+				"color-modify-fg": "#ffb86c", "color-modify-bg": "#3a2a1a",
 				"color-tree-bg": "#282a36", "color-diff-bg": "#282a36", "color-status-fg": "#282a36",
 				"color-status-bg": "#bd93f9", "color-search-fg": "#282a36", "color-search-bg": "#f1fa8c",
 			},
@@ -767,7 +768,7 @@ func TestApplyTheme(t *testing.T) {
 		// verify chroma-style
 		assert.Equal(t, "dracula", opts.ChromaStyle)
 
-		// verify all 21 color fields
+		// verify all 23 color fields
 		assert.Equal(t, "#bd93f9", opts.Colors.Accent)
 		assert.Equal(t, "#6272a4", opts.Colors.Border)
 		assert.Equal(t, "#f8f8f2", opts.Colors.Normal)
@@ -781,6 +782,8 @@ func TestApplyTheme(t *testing.T) {
 		assert.Equal(t, "#1a3a1a", opts.Colors.AddBg)
 		assert.Equal(t, "#ff5555", opts.Colors.RemoveFg)
 		assert.Equal(t, "#3a1a1a", opts.Colors.RemoveBg)
+		assert.Equal(t, "#2a4a2a", opts.Colors.WordAddBg)
+		assert.Equal(t, "#4a2a2a", opts.Colors.WordRemoveBg)
 		assert.Equal(t, "#ffb86c", opts.Colors.ModifyFg)
 		assert.Equal(t, "#3a2a1a", opts.Colors.ModifyBg)
 		assert.Equal(t, "#282a36", opts.Colors.TreeBg)
@@ -814,6 +817,8 @@ func TestApplyTheme(t *testing.T) {
 		opts.Colors.CursorBg = "#111111"
 		opts.Colors.TreeBg = "#222222"
 		opts.Colors.DiffBg = "#333333"
+		opts.Colors.WordAddBg = "#444444"
+		opts.Colors.WordRemoveBg = "#555555"
 		opts.Colors.Accent = "#original-accent"
 
 		// theme has accent but omits all optional keys
@@ -824,6 +829,8 @@ func TestApplyTheme(t *testing.T) {
 		assert.Empty(t, opts.Colors.CursorBg, "optional cursor-bg should be cleared when theme omits it")
 		assert.Empty(t, opts.Colors.TreeBg, "optional tree-bg should be cleared when theme omits it")
 		assert.Empty(t, opts.Colors.DiffBg, "optional diff-bg should be cleared when theme omits it")
+		assert.Empty(t, opts.Colors.WordAddBg, "optional word-add-bg should be cleared when theme omits it")
+		assert.Empty(t, opts.Colors.WordRemoveBg, "optional word-remove-bg should be cleared when theme omits it")
 	})
 
 	t.Run("optional keys preserved when present in theme", func(t *testing.T) {
@@ -903,7 +910,7 @@ func TestCollectColors(t *testing.T) {
 	assert.Equal(t, "#D5895F", colors["color-accent"])
 	assert.Equal(t, "#585858", colors["color-border"])
 	assert.Equal(t, "#87d787", colors["color-add-fg"])
-	// 3 optional keys (cursor-bg, tree-bg, diff-bg) have no default and are omitted
+	// 5 optional keys (cursor-bg, tree-bg, diff-bg, word-add-bg, word-remove-bg) have no default and are omitted
 	assert.Len(t, colors, 18)
 	assert.Empty(t, colors["color-cursor-bg"])
 	assert.Empty(t, colors["color-tree-bg"])
@@ -911,10 +918,10 @@ func TestCollectColors(t *testing.T) {
 }
 
 func TestColorFieldPtrs(t *testing.T) {
-	t.Run("returns 21 entries matching theme.ColorKeys", func(t *testing.T) {
+	t.Run("returns 23 entries matching theme.ColorKeys", func(t *testing.T) {
 		opts := options{}
 		ptrs := colorFieldPtrs(&opts)
-		assert.Len(t, ptrs, 21)
+		assert.Len(t, ptrs, 23)
 		for _, key := range theme.ColorKeys() {
 			_, ok := ptrs[key]
 			assert.True(t, ok, "missing key %q in colorFieldPtrs", key)

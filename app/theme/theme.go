@@ -40,7 +40,7 @@ func (t Theme) Clone() Theme {
 	return clone
 }
 
-// colorKeys is the ordered list of all 21 recognized color keys matching ini-name tags.
+// colorKeys is the ordered list of all 23 recognized color keys matching ini-name tags.
 var colorKeys = []string{
 	"color-accent", "color-border", "color-normal", "color-muted",
 	"color-selected-fg", "color-selected-bg",
@@ -48,6 +48,7 @@ var colorKeys = []string{
 	"color-cursor-fg", "color-cursor-bg",
 	"color-add-fg", "color-add-bg",
 	"color-remove-fg", "color-remove-bg",
+	"color-word-add-bg", "color-word-remove-bg",
 	"color-modify-fg", "color-modify-bg",
 	"color-tree-bg", "color-diff-bg",
 	"color-status-fg", "color-status-bg",
@@ -57,9 +58,11 @@ var colorKeys = []string{
 // optionalColorKeys lists color keys that may be omitted from theme files.
 // these correspond to CLI flags with no default value (terminal background is used instead).
 var optionalColorKeys = map[string]bool{
-	"color-cursor-bg": true,
-	"color-tree-bg":   true,
-	"color-diff-bg":   true,
+	"color-cursor-bg":      true,
+	"color-tree-bg":        true,
+	"color-diff-bg":        true,
+	"color-word-add-bg":    true,
+	"color-word-remove-bg": true,
 }
 
 // ColorKeys returns the ordered list of recognized color key names.

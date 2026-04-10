@@ -10,27 +10,29 @@ import (
 
 // Colors holds hex color values (#rrggbb) for TUI rendering.
 type Colors struct {
-	Accent     string // active pane borders, dir names
-	Border     string // inactive pane borders
-	Normal     string // file entries, context lines
-	Muted      string // divider lines, status bar
-	SelectedFg string // selected file text
-	SelectedBg string // selected file background
-	Annotation string // annotation text and markers
-	CursorFg   string // diff cursor indicator foreground
-	CursorBg   string // diff cursor line background
-	AddFg      string // added line foreground
-	AddBg      string // added line background
-	RemoveFg   string // removed line foreground
-	RemoveBg   string // removed line background
-	ModifyFg   string // modified line foreground (collapsed mode)
-	ModifyBg   string // modified line background (collapsed mode)
-	TreeBg     string // file tree pane background
-	DiffBg     string // diff pane background
-	StatusFg   string // status bar foreground
-	StatusBg   string // status bar background
-	SearchFg   string // search match foreground
-	SearchBg   string // search match background
+	Accent       string // active pane borders, dir names
+	Border       string // inactive pane borders
+	Normal       string // file entries, context lines
+	Muted        string // divider lines, status bar
+	SelectedFg   string // selected file text
+	SelectedBg   string // selected file background
+	Annotation   string // annotation text and markers
+	CursorFg     string // diff cursor indicator foreground
+	CursorBg     string // diff cursor line background
+	AddFg        string // added line foreground
+	AddBg        string // added line background
+	RemoveFg     string // removed line foreground
+	RemoveBg     string // removed line background
+	WordAddBg    string // intra-line word-diff add background (auto-derived if empty)
+	WordRemoveBg string // intra-line word-diff remove background (auto-derived if empty)
+	ModifyFg     string // modified line foreground (collapsed mode)
+	ModifyBg     string // modified line background (collapsed mode)
+	TreeBg       string // file tree pane background
+	DiffBg       string // diff pane background
+	StatusFg     string // status bar foreground
+	StatusBg     string // status bar background
+	SearchFg     string // search match foreground
+	SearchBg     string // search match background
 }
 
 // styles holds all lipgloss styles used in the TUI.
@@ -155,6 +157,15 @@ func normalizeColors(c Colors) Colors {
 	c.AddBg = normalizeColor(c.AddBg)
 	c.RemoveFg = normalizeColor(c.RemoveFg)
 	c.RemoveBg = normalizeColor(c.RemoveBg)
+	// auto-derive word-diff backgrounds from add/remove bg when not explicitly set
+	if c.WordAddBg == "" && c.AddBg != "" {
+		c.WordAddBg = shiftLightness(normalizeColor(c.AddBg), 0.15)
+	}
+	if c.WordRemoveBg == "" && c.RemoveBg != "" {
+		c.WordRemoveBg = shiftLightness(normalizeColor(c.RemoveBg), 0.15)
+	}
+	c.WordAddBg = normalizeColor(c.WordAddBg)
+	c.WordRemoveBg = normalizeColor(c.WordRemoveBg)
 	c.ModifyFg = normalizeColor(c.ModifyFg)
 	c.ModifyBg = normalizeColor(c.ModifyBg)
 	c.TreeBg = normalizeColor(c.TreeBg)

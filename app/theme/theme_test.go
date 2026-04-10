@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fullThemeColors returns all 21 color key=value lines for use in test theme strings.
+// fullThemeColors returns all 23 color key=value lines for use in test theme strings.
 func fullThemeColors() string {
 	return `color-accent = #bd93f9
 color-border = #6272a4
@@ -27,6 +27,8 @@ color-add-fg = #50fa7b
 color-add-bg = #2a4a2a
 color-remove-fg = #ff5555
 color-remove-bg = #4a2a2a
+color-word-add-bg = #3a5a3a
+color-word-remove-bg = #5a3a3a
 color-modify-fg = #ffb86c
 color-modify-bg = #3a3a2a
 color-tree-bg = #21222c
@@ -38,14 +40,15 @@ color-search-bg = #f1fa8c
 `
 }
 
-// fullThemeColorsMap returns all 21 color key-value pairs as a map.
+// fullThemeColorsMap returns all 23 color key-value pairs as a map.
 func fullThemeColorsMap() map[string]string {
 	return map[string]string{
 		"color-accent": "#bd93f9", "color-border": "#6272a4", "color-normal": "#f8f8f2",
 		"color-muted": "#6272a4", "color-selected-fg": "#f8f8f2", "color-selected-bg": "#44475a",
 		"color-annotation": "#f1fa8c", "color-cursor-fg": "#282a36", "color-cursor-bg": "#f8f8f2",
 		"color-add-fg": "#50fa7b", "color-add-bg": "#2a4a2a", "color-remove-fg": "#ff5555",
-		"color-remove-bg": "#4a2a2a", "color-modify-fg": "#ffb86c", "color-modify-bg": "#3a3a2a",
+		"color-remove-bg": "#4a2a2a", "color-word-add-bg": "#3a5a3a", "color-word-remove-bg": "#5a3a3a",
+		"color-modify-fg": "#ffb86c", "color-modify-bg": "#3a3a2a",
 		"color-tree-bg": "#21222c", "color-diff-bg": "#282a36", "color-status-fg": "#f8f8f2",
 		"color-status-bg": "#44475a", "color-search-fg": "#282a36", "color-search-bg": "#f1fa8c",
 	}
@@ -61,7 +64,7 @@ func TestParse_validTheme(t *testing.T) {
 	assert.Equal(t, "#bd93f9", th.Colors["color-accent"])
 	assert.Equal(t, "#6272a4", th.Colors["color-border"])
 	assert.Equal(t, "#f8f8f2", th.Colors["color-normal"])
-	assert.Len(t, th.Colors, 21)
+	assert.Len(t, th.Colors, 23)
 }
 
 func TestParse_authorAndBundled(t *testing.T) {
@@ -238,7 +241,7 @@ func TestLoad_validFile(t *testing.T) {
 	assert.Equal(t, "a test", th.Description)
 	assert.Equal(t, "monokai", th.ChromaStyle)
 	assert.Equal(t, "#bd93f9", th.Colors["color-accent"])
-	assert.Len(t, th.Colors, 21)
+	assert.Len(t, th.Colors, 23)
 }
 
 func TestParse_missingColorKeys(t *testing.T) {
@@ -704,10 +707,12 @@ color-search-bg = #f1fa8c
 	th, err := Parse(strings.NewReader(input))
 	require.NoError(t, err)
 	assert.Equal(t, "dracula", th.ChromaStyle)
-	assert.Len(t, th.Colors, 18) // 21 - 3 optional
+	assert.Len(t, th.Colors, 18) // 23 - 5 optional
 	assert.Empty(t, th.Colors["color-cursor-bg"])
 	assert.Empty(t, th.Colors["color-tree-bg"])
 	assert.Empty(t, th.Colors["color-diff-bg"])
+	assert.Empty(t, th.Colors["color-word-add-bg"])
+	assert.Empty(t, th.Colors["color-word-remove-bg"])
 }
 
 func TestDump_Parse_roundtrip_withoutOptionalKeys(t *testing.T) {
@@ -716,6 +721,8 @@ func TestDump_Parse_roundtrip_withoutOptionalKeys(t *testing.T) {
 	delete(colors, "color-cursor-bg")
 	delete(colors, "color-tree-bg")
 	delete(colors, "color-diff-bg")
+	delete(colors, "color-word-add-bg")
+	delete(colors, "color-word-remove-bg")
 
 	var buf bytes.Buffer
 	err := Dump(Theme{Name: "minimal", ChromaStyle: "dracula", Colors: colors}, &buf)
@@ -731,7 +738,7 @@ func TestDump_Parse_roundtrip_withoutOptionalKeys(t *testing.T) {
 
 func TestColorKeys(t *testing.T) {
 	keys := ColorKeys()
-	assert.Len(t, keys, 21)
+	assert.Len(t, keys, 23)
 	assert.Equal(t, "color-accent", keys[0])
 	assert.Equal(t, "color-search-bg", keys[len(keys)-1])
 
@@ -742,10 +749,12 @@ func TestColorKeys(t *testing.T) {
 
 func TestOptionalColorKeys(t *testing.T) {
 	opt := OptionalColorKeys()
-	assert.Len(t, opt, 3)
+	assert.Len(t, opt, 5)
 	assert.True(t, opt["color-cursor-bg"])
 	assert.True(t, opt["color-tree-bg"])
 	assert.True(t, opt["color-diff-bg"])
+	assert.True(t, opt["color-word-add-bg"])
+	assert.True(t, opt["color-word-remove-bg"])
 
 	// verify it returns a copy
 	opt["color-accent"] = true
