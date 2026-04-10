@@ -528,18 +528,20 @@ func TestDefaultConfigPath(t *testing.T) {
 	assert.Contains(t, path, "config")
 }
 
-func TestMakeRenderer_GitWithOnly(t *testing.T) {
+func TestMakeGitRenderer_WithOnly(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer([]string{"file.md"}, nil, false, dir, nil)
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, []string{"file.md"}, nil, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
 	assert.Equal(t, dir, workDir)
 }
 
-func TestMakeRenderer_GitWithoutOnly(t *testing.T) {
+func TestMakeGitRenderer_WithoutOnly(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer(nil, nil, false, dir, nil)
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, nil, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// with no --only, returns *diff.Git directly without FallbackRenderer wrapper
@@ -547,25 +549,22 @@ func TestMakeRenderer_GitWithoutOnly(t *testing.T) {
 	assert.Equal(t, dir, workDir)
 }
 
-func TestMakeRenderer_NoGitWithOnly(t *testing.T) {
+func TestMakeNoVCSRenderer_WithOnly(t *testing.T) {
 	tmpDir := t.TempDir()
-	t.Chdir(tmpDir) // set cwd for FileReader
-	gitErr := errors.New("not a git repository")
 
-	renderer, workDir, err := makeRenderer([]string{"file.md"}, nil, false, "", gitErr)
+	renderer, workDir, err := makeNoVCSRenderer([]string{"file.md"}, nil, tmpDir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FileReader{}, renderer)
 	assert.Equal(t, tmpDir, workDir)
 }
 
-func TestMakeRenderer_NoGitNoOnly(t *testing.T) {
-	gitErr := errors.New("not a git repository")
-	renderer, workDir, err := makeRenderer(nil, nil, false, "", gitErr)
+func TestMakeNoVCSRenderer_NoOnly(t *testing.T) {
+	renderer, workDir, err := makeNoVCSRenderer(nil, nil, "/tmp")
 	require.Error(t, err)
 	assert.Nil(t, renderer)
 	assert.Empty(t, workDir)
-	assert.Contains(t, err.Error(), "find git root")
+	assert.Contains(t, err.Error(), "no git or mercurial repository found")
 }
 
 func TestParseArgs_AllFilesFlag(t *testing.T) {
@@ -674,34 +673,66 @@ func TestParseArgs_StdinConflicts(t *testing.T) {
 	}
 }
 
-func TestMakeRenderer_AllFiles(t *testing.T) {
+func TestMakeGitRenderer_AllFiles(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer(nil, nil, true, dir, nil)
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, nil, true, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.DirectoryReader{}, renderer)
 	assert.Equal(t, dir, workDir)
 }
 
-func TestMakeRenderer_AllFilesNoGit(t *testing.T) {
-	gitErr := errors.New("not a git repository")
-	_, _, err := makeRenderer(nil, nil, true, "", gitErr)
+func TestMakeHgRenderer_AllFilesUnsupported(t *testing.T) {
+	_, _, err := makeHgRenderer(diff.NewHg(""), nil, nil, true, "")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "--all-files requires a git repository")
+	assert.Contains(t, err.Error(), "--all-files is not supported in mercurial")
 }
 
-func TestMakeRenderer_WithExclude(t *testing.T) {
+func TestMakeHgRenderer_Default(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer(nil, []string{"vendor"}, false, dir, nil)
+	h := diff.NewHg(dir)
+	renderer, workDir, err := makeHgRenderer(h, nil, nil, false, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.Hg{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeHgRenderer_WithOnly(t *testing.T) {
+	dir := t.TempDir()
+	h := diff.NewHg(dir)
+	renderer, workDir, err := makeHgRenderer(h, []string{"file.go"}, nil, false, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.FileReader{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeHgRenderer_WithExclude(t *testing.T) {
+	dir := t.TempDir()
+	h := diff.NewHg(dir)
+	renderer, workDir, err := makeHgRenderer(h, nil, []string{"vendor"}, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
 	assert.Equal(t, dir, workDir)
 }
 
-func TestMakeRenderer_AllFilesWithExclude(t *testing.T) {
+func TestMakeGitRenderer_WithExclude(t *testing.T) {
 	dir := t.TempDir()
-	renderer, workDir, err := makeRenderer(nil, []string{"vendor", "mocks"}, true, dir, nil)
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, []string{"vendor"}, false, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeGitRenderer_AllFilesWithExclude(t *testing.T) {
+	dir := t.TempDir()
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, []string{"vendor", "mocks"}, true, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// should be ExcludeFilter wrapping DirectoryReader
@@ -759,20 +790,19 @@ func TestDefaultKeysPath(t *testing.T) {
 	assert.Contains(t, path, "keybindings")
 }
 
-func TestGitTopLevel(t *testing.T) {
-	t.Run("inside repo", func(t *testing.T) {
-		root, err := gitTopLevel()
-		require.NoError(t, err)
-		assert.DirExists(t, root)
-		assert.NotEmpty(t, root)
-	})
+func TestDetectVCS_Git(t *testing.T) {
+	// this test runs from inside the revdiff repo (which is a git repo)
+	vcsType, root := diff.DetectVCS(".")
+	assert.Equal(t, diff.VCSGit, vcsType)
+	assert.DirExists(t, root)
+	assert.NotEmpty(t, root)
+}
 
-	t.Run("outside repo", func(t *testing.T) {
-		t.Chdir(t.TempDir())
-		_, err := gitTopLevel()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "git rev-parse --show-toplevel")
-	})
+func TestDetectVCS_None(t *testing.T) {
+	t.Chdir(t.TempDir())
+	vcsType, root := diff.DetectVCS(".")
+	assert.Equal(t, diff.VCSNone, vcsType)
+	assert.Empty(t, root)
 }
 
 func TestApplyTheme(t *testing.T) {

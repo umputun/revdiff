@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -38,10 +36,10 @@ type options struct {
 	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
 	CrossFileHunks   bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
 	LineNumbers      bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
-	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show git blame gutter on startup"`
+	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter on startup"`
 	WordDiff         bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
-	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all git-tracked files, not just diffs"`
+	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git only)"`
 	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
 	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
 	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
@@ -366,20 +364,16 @@ func run(opts options) error {
 		defer tty.Close()
 		programOptions = append(programOptions, tea.WithInput(tty))
 	} else {
-		var gitErr error
-		gitRoot, gitErr = gitTopLevel()
-		renderer, workDir, err = makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
+		var setup vcsSetup
+		setup, err = setupVCSRenderer(opts)
 		if err != nil {
 			return err
 		}
-
-		// blame and untracked listing are only available when git is present
-		var g *diff.Git
-		if gitErr == nil {
-			g = diff.NewGit(gitRoot)
-			blamer = g
-			untrackedFn = g.UntrackedFiles
-		}
+		renderer = setup.renderer
+		gitRoot = setup.gitRoot
+		workDir = setup.workDir
+		blamer = setup.blamer
+		untrackedFn = setup.untrackedFn
 	}
 
 	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
@@ -499,58 +493,95 @@ func saveHistory(r histReq) {
 	})
 }
 
-// makeRenderer selects the appropriate renderer based on git availability and flags.
-// if --all-files is set, returns DirectoryReader (requires git repo).
-// if git is available with --only, it wraps diff.Git with FallbackRenderer.
-// if git is available without --only, it returns diff.Git directly.
-// if git is unavailable and --only is set, it uses FileReader to read files directly from disk.
-// if git is unavailable and --only is not set, it returns an error.
-// when --exclude prefixes are present, wraps the result with ExcludeFilter.
-func makeRenderer(only, exclude []string, allFiles bool, gitRoot string, gitErr error) (ui.Renderer, string, error) {
-	var r ui.Renderer
-	var workDir string
+type vcsSetup struct {
+	renderer    ui.Renderer
+	gitRoot     string // set only when VCS is git; used by history module to run git commands
+	workDir     string
+	blamer      ui.Blamer
+	untrackedFn func() ([]string, error)
+}
 
-	switch {
-	case allFiles && gitErr == nil:
-		r = diff.NewDirectoryReader(gitRoot)
-		workDir = gitRoot
-	case allFiles:
-		return nil, "", errors.New("--all-files requires a git repository")
-	case gitErr == nil && len(only) > 0:
-		r = diff.NewFallbackRenderer(diff.NewGit(gitRoot), only, gitRoot)
-		workDir = gitRoot
-	case gitErr == nil:
-		r = diff.NewGit(gitRoot)
-		workDir = gitRoot
-	case len(only) > 0:
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, "", fmt.Errorf("get working directory: %w", err)
-		}
-		r = diff.NewFileReader(only, cwd)
-		workDir = cwd
-	default:
-		return nil, "", fmt.Errorf("find git root: %w", gitErr)
+// setupVCSRenderer detects the VCS and creates the appropriate renderer, blamer, and untracked function.
+func setupVCSRenderer(opts options) (vcsSetup, error) {
+	cwd, cwdErr := os.Getwd()
+	if cwdErr != nil {
+		cwd = "."
 	}
+	vcsType, vcsRoot := diff.DetectVCS(cwd)
 
+	switch vcsType {
+	case diff.VCSGit:
+		g := diff.NewGit(vcsRoot)
+		r, workDir, err := makeGitRenderer(g, opts.Only, opts.Exclude, opts.AllFiles, vcsRoot)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles}, nil
+	case diff.VCSHg:
+		if opts.Staged {
+			fmt.Fprintln(os.Stderr, "warning: --staged ignored in mercurial repository (no staging area)")
+		}
+		h := diff.NewHg(vcsRoot)
+		r, workDir, err := makeHgRenderer(h, opts.Only, opts.Exclude, opts.AllFiles, vcsRoot)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles}, nil
+	default:
+		r, workDir, err := makeNoVCSRenderer(opts.Only, opts.Exclude, cwd)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, workDir: workDir}, nil
+	}
+}
+
+// makeGitRenderer selects the appropriate git renderer based on flags.
+// reuses the provided *Git instance as the default renderer to avoid double allocation.
+func makeGitRenderer(g *diff.Git, only, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) { //nolint:unparam // error kept for consistency with makeHgRenderer/makeNoVCSRenderer
+	var r ui.Renderer
+	switch {
+	case allFiles:
+		r = diff.NewDirectoryReader(repoRoot)
+	case len(only) > 0:
+		r = diff.NewFallbackRenderer(g, only, repoRoot)
+	default:
+		r = g
+	}
 	if len(exclude) > 0 {
 		r = diff.NewExcludeFilter(r, exclude)
 	}
-	return r, workDir, nil
+	return r, repoRoot, nil
 }
 
-// gitTopLevel returns the root directory of the current git repository.
-func gitTopLevel() (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("git rev-parse --show-toplevel: %s", strings.TrimSpace(string(exitErr.Stderr)))
-		}
-		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
+// makeHgRenderer selects the appropriate mercurial renderer based on flags.
+// reuses the provided *Hg instance as the default renderer to avoid double allocation.
+func makeHgRenderer(h *diff.Hg, only, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) {
+	var r ui.Renderer
+	switch {
+	case allFiles:
+		return nil, "", errors.New("--all-files is not supported in mercurial repositories")
+	case len(only) > 0:
+		r = diff.NewFileReader(only, repoRoot)
+	default:
+		r = h
 	}
-	return strings.TrimSpace(string(out)), nil
+	if len(exclude) > 0 {
+		r = diff.NewExcludeFilter(r, exclude)
+	}
+	return r, repoRoot, nil
+}
+
+// makeNoVCSRenderer creates a renderer when no VCS is detected.
+func makeNoVCSRenderer(only, exclude []string, cwd string) (ui.Renderer, string, error) {
+	if len(only) == 0 {
+		return nil, "", errors.New("no git or mercurial repository found (use --only to review standalone files)")
+	}
+	var r ui.Renderer = diff.NewFileReader(only, cwd)
+	if len(exclude) > 0 {
+		r = diff.NewExcludeFilter(r, exclude)
+	}
+	return r, cwd, nil
 }
 
 // defaultThemesDir returns ~/.config/revdiff/themes.

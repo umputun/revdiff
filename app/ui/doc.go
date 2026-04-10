@@ -26,6 +26,6 @@
 //   - styles.go — lipgloss style definitions, theme color integration
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
-// [SyntaxHighlighter] (provides ANSI-highlighted lines), and [Blamer] (provides git blame data).
+// [SyntaxHighlighter] (provides ANSI-highlighted lines), and [Blamer] (provides blame data).
 // All three are defined in this package and implemented externally.
 package ui

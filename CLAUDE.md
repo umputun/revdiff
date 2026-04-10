@@ -12,7 +12,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Project Structure
 - `app/` - entry point (`main.go`), CLI flags, wiring
-- `app/diff/` - git interaction, unified diff parsing (`parseUnifiedDiff`, `DiffLine`)
+- `app/diff/` - VCS interaction (git + hg), unified diff parsing (`parseUnifiedDiff`, `DiffLine`), VCS detection (`vcs.go`), Mercurial support (`hg.go`, `hgblame.go`)
 - `app/ui/` - bubbletea TUI package. All files share one `Model` struct — methods are split across files by concern to keep code files under ~500 lines and test files around ~1000 lines (soft target). Each source file has a matching `_test.go` file. See `app/ui/doc.go` for package-level documentation.
   - `model.go` - Model struct, NewModel, Init, Update, handleKey, view toggles
   - `view.go` - View(), status bar, ANSI helpers
@@ -37,12 +37,13 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/ui/mocks/` - moq-generated mocks (never edit manually)
 
 ## Key Interfaces (consumer-side, in `app/ui/`)
-- `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`, `diff.FallbackRenderer`, `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.ExcludeFilter`
+- `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`, `diff.Hg`, `diff.FallbackRenderer`, `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.ExcludeFilter`
 - `SyntaxHighlighter` - `HighlightLines()` - implemented by `highlight.Highlighter`
 
 ## Data Flow
 ```
-git diff → diff.parseUnifiedDiff() → []DiffLine
+DetectVCS() → VCSGit | VCSHg | VCSNone
+  git diff / hg diff --git → diff.parseUnifiedDiff() → []DiffLine
   (or: disk file → diff.readFileAsContext() → []DiffLine, all ChangeContext)
   (or: stdin / arbitrary reader → diff.readReaderAsContext() → []DiffLine, all ChangeContext)
   → highlight.HighlightLines() → []string (ANSI foreground-only)
@@ -67,7 +68,7 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
     blameGutter(dl, now) formats " author age" gutter via m.styles.LineNumber,
     prepended after lineNumGutter in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
     blame data loaded async via loadBlame() → blameLoadedMsg; keyed by NewNum (blank for removed lines/dividers)
-    blameAuthorLen capped at 8; blameGutterWidth() = W+5; Blamer interface (optional, nil when git unavailable)
+    blameAuthorLen capped at 8; blameGutterWidth() = W+5; Blamer interface (optional, nil when no VCS available)
   when wrap mode is on (`w` toggle, orthogonal to above):
     wrapContent() splits long lines via ansi.Wrap,
     continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts.
@@ -140,7 +141,7 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
 - Highlighted lines are pre-computed once per file load, stored parallel to `diffLines`
 - `DiffLine.Content` has no `+`/`-` prefix - prefix is re-added at render time
 - Tab replacement happens at render time in `renderDiffLine`, not in diff parsing
-- `run()` resolves git repo root via `git rev-parse --show-toplevel`; if git is unavailable and `--only` is set, uses `FileReader` for standalone file review. `--stdin` skips git lookup entirely, validates non-TTY stdin, reads payload before starting Bubble Tea, and reopens `/dev/tty` for interactive key input.
+- `run()` detects VCS via `diff.DetectVCS()` (walks up looking for `.git`/`.hg`); if no VCS is found and `--only` is set, uses `FileReader` for standalone file review. `--stdin` skips VCS lookup entirely, validates non-TTY stdin, reads payload before starting Bubble Tea, and reopens `/dev/tty` for interactive key input. `--all-files` is git-only (not supported in hg repos).
 - `--all-files` mode uses `DirectoryReader` (git ls-files) to list all tracked files; `--exclude` wraps any renderer with `ExcludeFilter` for prefix-based filtering. `--all-files` is mutually exclusive with refs, `--staged`, and `--only`. `--stdin` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, and `--exclude`.
 - `diff.readReaderAsContext()` is the shared parser for file-backed and stdin-backed context-only views. Preserve its behavior if you change binary detection, line-length handling, or line numbering.
 - Help overlay uses `overlayCenter()` (ANSI-aware compositing via `charmbracelet/x/ansi.Cut`) to render on top of existing content; background (tree pane) remains visible at the edges

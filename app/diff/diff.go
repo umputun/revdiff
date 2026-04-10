@@ -41,7 +41,7 @@ type DiffLine struct {
 	IsPlaceholder bool       // true for non-content placeholders (broken symlink, non-regular file, too-long lines)
 }
 
-// FileStatus represents the change type of a file in a git diff.
+// FileStatus represents the change type of a file in a VCS diff.
 type FileStatus string
 
 const (
@@ -52,7 +52,7 @@ const (
 	FileUntracked FileStatus = "?"
 )
 
-// FileEntry represents a file with its change status from git diff.
+// FileEntry represents a file with its change status from a VCS diff.
 type FileEntry struct {
 	Path   string     // file path relative to repo root
 	Status FileStatus // file change status, empty for non-git renderers
@@ -176,15 +176,20 @@ func (g *Git) diffArgs(ref string, staged bool) []string {
 
 // runGit executes a git command in the working directory and returns its output.
 func (g *Git) runGit(args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // args constructed internally, not user input
-	cmd.Dir = g.workDir
+	return runVCS(g.workDir, "git", args...)
+}
+
+// runVCS executes a VCS command in the given directory and returns its output.
+func runVCS(workDir, binary string, args ...string) (string, error) {
+	cmd := exec.CommandContext(context.Background(), binary, args...) //nolint:gosec // args constructed internally, not user input
+	cmd.Dir = workDir
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), string(exitErr.Stderr))
+			return "", fmt.Errorf("%s %s: %s", binary, strings.Join(args, " "), string(exitErr.Stderr))
 		}
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		return "", fmt.Errorf("%s %s: %w", binary, strings.Join(args, " "), err)
 	}
 	return string(out), nil
 }

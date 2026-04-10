@@ -109,7 +109,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
-| `B` | Toggle git blame gutter (author name + commit age per line) |
+| `B` | Toggle blame gutter (author name + commit age per line) |
 | `W` | Toggle intra-line word-diff highlighting for paired add/remove lines |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `T` | Open theme selector with live preview |
@@ -130,7 +130,7 @@ The status bar shows a fixed row of mode indicators on the right side. All ten s
 | `≋` | `/` | Search active |
 | `⊟` | `t` | Tree/TOC pane hidden (diff uses full width) |
 | `#` | `L` | Line numbers visible in gutter |
-| `b` | `B` | Git blame gutter visible |
+| `b` | `B` | Blame gutter visible |
 | `±` | `W` | Intra-line word-diff highlighting |
 | `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
 | `∅` | `u` | Untracked files visible in tree |

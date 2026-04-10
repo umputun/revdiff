@@ -104,7 +104,7 @@
         <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, the Claude Code plugin, and the Codex plugin.</p>
 
         <h2 id="requirements">Requirements</h2>
-        <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
+        <p><code>git</code> or <code>hg</code> (Mercurial) is used to generate diffs. VCS is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
 
         <h2 id="installation">Installation</h2>
         <h3>Homebrew (macOS/Linux)</h3>
@@ -446,7 +446,7 @@ color-border = #6272a4
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
-                <tr><td><code>B</code></td><td>Toggle git blame gutter (author + commit age)</td></tr>
+                <tr><td><code>B</code></td><td>Toggle blame gutter (author + commit age)</td></tr>
                 <tr><td><code>W</code></td><td>Toggle intra-line word-diff highlighting</td></tr>
                 <tr><td><code>.</code></td><td>Expand/collapse hunk (collapsed mode)</td></tr>
                 <tr><td><code>T</code></td><td>Theme selector with live preview</td></tr>
@@ -468,7 +468,7 @@ color-border = #6272a4
                 <tr><td><code>≋</code></td><td><code>/</code></td><td>Search active</td></tr>
                 <tr><td><code>⊟</code></td><td><code>t</code></td><td>Tree/TOC pane hidden (diff uses full width)</td></tr>
                 <tr><td><code>#</code></td><td><code>L</code></td><td>Line numbers visible in gutter</td></tr>
-                <tr><td><code>b</code></td><td><code>B</code></td><td>Git blame gutter visible</td></tr>
+                <tr><td><code>b</code></td><td><code>B</code></td><td>Blame gutter visible</td></tr>
                 <tr><td><code>±</code></td><td><code>W</code></td><td>Intra-line word-diff highlighting</td></tr>
                 <tr><td><code>✓</code></td><td><code>Space</code></td><td>Reviewed count (increments when a file is marked reviewed)</td></tr>
                 <tr><td><code>∅</code></td><td><code>u</code></td><td>Untracked files visible in tree</td></tr>

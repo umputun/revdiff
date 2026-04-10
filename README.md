@@ -13,7 +13,8 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
 - Line numbers: side-by-side old/new line number gutter, toggle with `L`
-- Git blame gutter: shows author name and commit age per line, toggle with `B`
+- Mercurial support: auto-detects hg repos, translates git-style refs (HEAD, HEAD~N) to Mercurial revsets
+- Blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
@@ -36,7 +37,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 ## Requirements
 
-- `git` (used to generate diffs; optional when using `--only` or `--stdin`)
+- `git` or `hg` (used to generate diffs; optional when using `--only` or `--stdin`)
 
 ## Installation
 
@@ -235,7 +236,7 @@ Positional arguments support several forms:
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
-| `--blame` | Show git blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
+| `--blame` | Show blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
 | `--word-diff` | Highlight intra-line word-level changes in paired add/remove lines, env: `REVDIFF_WORD_DIFF` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
@@ -245,7 +246,7 @@ Positional arguments support several forms:
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
 | `--init-all-themes` | Write all gallery themes (bundled + community) to themes dir and exit | |
 | `--install-theme` | Install theme(s) from gallery or local file path and exit (repeatable) | |
-| `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
+| `-A`, `--all-files` | Browse all git-tracked files, not just diffs (git only) | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
@@ -541,7 +542,7 @@ Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env v
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
-| `B` | Toggle git blame gutter (author name + commit age per line) |
+| `B` | Toggle blame gutter (author name + commit age per line) |
 | `W` | Toggle intra-line word-diff highlighting for paired add/remove lines |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `T` | Open theme selector with live preview |
@@ -562,7 +563,7 @@ The status bar shows a fixed row of mode indicators on the right side. All ten s
 | `≋` | `/` | Search active |
 | `⊟` | `t` | Tree/TOC pane hidden (diff uses full width) |
 | `#` | `L` | Line numbers visible in gutter |
-| `b` | `B` | Git blame gutter visible |
+| `b` | `B` | Blame gutter visible |
 | `±` | `W` | Intra-line word-diff highlighting |
 | `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
 | `∅` | `u` | Untracked files visible in tree |
