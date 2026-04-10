@@ -222,7 +222,16 @@ func (m *Model) centerViewportOnCursor() {
 // centerHunkInViewport centers the current hunk in the viewport.
 // For small hunks, the entire hunk is centered. For large hunks that exceed
 // the viewport height, the first line is placed near the top with a small context margin.
+// No-op if the cursor is not on a changed line (ChangeAdd/ChangeRemove).
 func (m *Model) centerHunkInViewport() {
+	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+		return
+	}
+	ct := m.diffLines[m.diffCursor].ChangeType
+	if ct != diff.ChangeAdd && ct != diff.ChangeRemove {
+		return
+	}
+
 	cursorY := m.cursorViewportY()
 
 	// find hunk end: scan forward from cursor while lines are changed

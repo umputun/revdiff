@@ -935,9 +935,11 @@ func TestModel_CenterHunkInViewport_SmallHunk(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
 	}
-	lines = append(lines, diff.DiffLine{NewNum: 21, Content: "add1", ChangeType: diff.ChangeAdd}) // idx 20
-	lines = append(lines, diff.DiffLine{NewNum: 22, Content: "add2", ChangeType: diff.ChangeAdd}) // idx 21
-	lines = append(lines, diff.DiffLine{NewNum: 23, Content: "add3", ChangeType: diff.ChangeAdd}) // idx 22
+	lines = append(lines,
+		diff.DiffLine{NewNum: 21, Content: "add1", ChangeType: diff.ChangeAdd}, // idx 20
+		diff.DiffLine{NewNum: 22, Content: "add2", ChangeType: diff.ChangeAdd}, // idx 21
+		diff.DiffLine{NewNum: 23, Content: "add3", ChangeType: diff.ChangeAdd}, // idx 22
+	)
 	for i := 24; i <= 50; i++ {
 		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
 	}
@@ -990,8 +992,10 @@ func TestModel_CenterHunkInViewport_LargeHunk(t *testing.T) {
 func TestModel_CenterHunkInViewport_HunkAtStart(t *testing.T) {
 	// hunk starts at line 0 — offset should be clamped to 0
 	var lines []diff.DiffLine
-	lines = append(lines, diff.DiffLine{NewNum: 1, Content: "add1", ChangeType: diff.ChangeAdd})
-	lines = append(lines, diff.DiffLine{NewNum: 2, Content: "add2", ChangeType: diff.ChangeAdd})
+	lines = append(lines,
+		diff.DiffLine{NewNum: 1, Content: "add1", ChangeType: diff.ChangeAdd},
+		diff.DiffLine{NewNum: 2, Content: "add2", ChangeType: diff.ChangeAdd},
+	)
 	for i := 3; i <= 50; i++ {
 		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
 	}
@@ -1015,8 +1019,10 @@ func TestModel_CenterHunkInViewport_PrevHunkCenters(t *testing.T) {
 	for i := 1; i <= 25; i++ {
 		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
 	}
-	lines = append(lines, diff.DiffLine{NewNum: 26, Content: "add1", ChangeType: diff.ChangeAdd}) // idx 25
-	lines = append(lines, diff.DiffLine{NewNum: 27, Content: "add2", ChangeType: diff.ChangeAdd}) // idx 26
+	lines = append(lines,
+		diff.DiffLine{NewNum: 26, Content: "add1", ChangeType: diff.ChangeAdd}, // idx 25
+		diff.DiffLine{NewNum: 27, Content: "add2", ChangeType: diff.ChangeAdd}, // idx 26
+	)
 	for i := 28; i <= 60; i++ {
 		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
 	}
@@ -1065,6 +1071,118 @@ func TestModel_CenterHunkInViewport_SingleLineHunk(t *testing.T) {
 	// single-line hunk: midY = 25 + 0 = 25, offset = 25 - vpHeight/2
 	expectedOffset := 25 - vpHeight/2
 	assert.Equal(t, expectedOffset, m.viewport.YOffset, "single-line hunk midpoint centered in viewport")
+}
+
+func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
+	// when wrap mode is on, long changed lines occupy multiple visual rows;
+	// the hunk visual height (and thus the centering offset) must account for them
+	var lines []diff.DiffLine
+	for i := 1; i <= 20; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	// two changed lines: one short, one long enough to wrap
+	lines = append(lines,
+		diff.DiffLine{NewNum: 21, Content: "short add", ChangeType: diff.ChangeAdd},                      // idx 20
+		diff.DiffLine{NewNum: 22, Content: strings.Repeat("a", 200), ChangeType: diff.ChangeAdd}, // idx 21, wraps
+	)
+	for i := 23; i <= 60; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	m.wrapMode = true
+	vpHeight := m.viewport.Height
+	require.Positive(t, vpHeight)
+
+	m.diffCursor = 0
+	m.moveToNextHunk()
+	assert.Equal(t, 20, m.diffCursor, "cursor should land on first line of hunk")
+
+	// compute expected offset using the same helpers the production code uses
+	wrapCount0 := m.wrappedLineCount(20)
+	wrapCount1 := m.wrappedLineCount(21)
+	require.Greater(t, wrapCount1, 1, "long line should wrap to multiple rows")
+	hunkVisualHeight := wrapCount0 + wrapCount1
+	cursorY := m.cursorViewportY()
+	hunkMidY := cursorY + hunkVisualHeight/2
+	expectedOffset := max(0, hunkMidY-vpHeight/2)
+	assert.Equal(t, expectedOffset, m.viewport.YOffset, "wrap mode: offset should account for wrapped line height")
+}
+
+func TestModel_CenterHunkInViewport_WithAnnotation(t *testing.T) {
+	// an inline annotation on a hunk line adds visual rows that must be
+	// included when computing the hunk midpoint for centering
+	var lines []diff.DiffLine
+	for i := 1; i <= 25; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	lines = append(lines,
+		diff.DiffLine{NewNum: 26, Content: "add1", ChangeType: diff.ChangeAdd}, // idx 25
+		diff.DiffLine{NewNum: 27, Content: "add2", ChangeType: diff.ChangeAdd}, // idx 26
+	)
+	for i := 28; i <= 60; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	vpHeight := m.viewport.Height
+
+	// add an annotation on the first changed line
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 26, Type: "+", Comment: "review note"})
+	defer m.store.Delete("a.go", 26, "+")
+
+	m.diffCursor = 0
+	m.moveToNextHunk()
+	assert.Equal(t, 25, m.diffCursor, "cursor should land on first line of hunk")
+
+	// expected: hunk height = 2 changed lines + annotation visual rows
+	annotKey := m.annotationKey(26, "+")
+	annotHeight := m.wrappedAnnotationLineCount(annotKey)
+	require.Positive(t, annotHeight, "annotation should contribute visual rows")
+	hunkVisualHeight := 2 + annotHeight // 2 changed lines + annotation
+	cursorY := m.cursorViewportY()
+	hunkMidY := cursorY + hunkVisualHeight/2
+	expectedOffset := max(0, hunkMidY-vpHeight/2)
+	assert.Equal(t, expectedOffset, m.viewport.YOffset, "annotation: offset should include annotation visual rows")
+}
+
+func TestModel_CenterHunkInViewport_NoOpOnContextLine(t *testing.T) {
+	// calling centerHunkInViewport when the cursor is on a context line
+	// should be a no-op — viewport offset must not change
+	var lines []diff.DiffLine
+	for i := 1; i <= 30; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	lines = append(lines, diff.DiffLine{NewNum: 31, Content: "add", ChangeType: diff.ChangeAdd})
+	for i := 32; i <= 60; i++ {
+		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+
+	// position cursor on a context line and set a known viewport offset
+	m.diffCursor = 10
+	m.viewport.SetYOffset(5)
+	m.viewport.SetContent(m.renderDiff())
+	beforeOffset := m.viewport.YOffset
+
+	m.centerHunkInViewport()
+	assert.Equal(t, beforeOffset, m.viewport.YOffset, "should be no-op when cursor is on context line")
 }
 
 func TestModel_HunkNavigationViaKeys(t *testing.T) {
