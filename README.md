@@ -173,6 +173,10 @@ The plugin uses the same terminal overlay mechanism (tmux, Zellij, kitty, wezter
 **Install:**
 
 ```bash
+# clone the repo first
+git clone https://github.com/umputun/revdiff.git
+cd revdiff
+
 # copy skills to Codex skills directory
 cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
 cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan

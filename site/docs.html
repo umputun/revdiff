@@ -466,7 +466,11 @@ unmap q</code></div>
         <!-- codex plugin -->
         <h2 id="codex-install">Codex plugin</h2>
         <p>revdiff ships with a <a href="https://github.com/openai/codex">Codex CLI</a> plugin for interactive diff review and plan annotation directly from a Codex session.</p>
-        <div class="code-block"><code><span class="code-comment"># copy skills to Codex skills directory</span>
+        <div class="code-block"><code><span class="code-comment"># clone the repo first</span>
+git clone https://github.com/umputun/revdiff.git
+cd revdiff
+
+<span class="code-comment"># copy skills to Codex skills directory</span>
 cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
 cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div>
         <p>Requirements: <code>revdiff</code> binary on PATH, <code>jq</code> (for <code>/revdiff-plan</code>), and a supported terminal multiplexer.</p>

@@ -18,11 +18,25 @@ This directory contains the **Codex CLI** skills for revdiff.
 
 ## Install
 
-Copy each skill to your Codex skills directory:
+Clone the repo first:
+
+```bash
+git clone https://github.com/umputun/revdiff.git
+cd revdiff
+```
+
+Then copy each skill to your Codex skills directory:
 
 ```bash
 cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
 cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
+```
+
+Alternatively, symlink them so `git pull` updates propagate without re-copying:
+
+```bash
+ln -s "$PWD/plugins/codex/skills/revdiff" ~/.codex/skills/revdiff
+ln -s "$PWD/plugins/codex/skills/revdiff-plan" ~/.codex/skills/revdiff-plan
 ```
 
 ## Skills
