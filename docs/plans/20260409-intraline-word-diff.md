@@ -135,15 +135,15 @@ All functions below are standalone package-level utilities (pure algorithm, no M
 
 `pairHunkLines` and `recomputeIntraRanges` are methods on Model (called exclusively from Model methods). `intraRanges` field added here so `recomputeIntraRanges` compiles and is testable.
 
-- [ ] add `intraRanges [][]matchRange` field to `Model` struct in `model.go` (after `highlightedLines`)
-- [ ] implement `pairHunkLines(start, end int) []intralinePair` as method on Model — walk contiguous change block in `m.diffLines`, collect remove/add indices
-- [ ] implement scoring: equal-length runs pair 1:1, unequal runs use greedy best-match with `2*commonPrefixLen + 2*commonSuffixLen`
-- [ ] implement `recomputeIntraRanges()` as method on Model — walk `m.diffLines`, find change blocks, call `m.pairHunkLines` + `changedTokenRanges` on tab-replaced content (`strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)`), store results in `m.intraRanges`
-- [ ] implement 30% similarity gate inside `recomputeIntraRanges`: after `changedTokenRanges`, if `totalEqual*100 < shorter*30`, discard ranges for that pair
-- [ ] write tests for pairing: equal-count, unequal-count, pure-add (no pairs), pure-remove (no pairs)
-- [ ] write tests for similarity gate: similar lines get ranges, dissimilar lines get nil
-- [ ] write test for `recomputeIntraRanges` with a realistic hunk
-- [ ] run tests — must pass before task 4
+- [x] add `intraRanges [][]matchRange` field to `Model` struct in `model.go` (after `highlightedLines`)
+- [x] implement `pairHunkLines(start, end int) []intralinePair` as method on Model — walk contiguous change block in `m.diffLines`, collect remove/add indices
+- [x] implement scoring: equal-length runs pair 1:1, unequal runs use greedy best-match with `2*commonPrefixLen + 2*commonSuffixLen`
+- [x] implement `recomputeIntraRanges()` as method on Model — walk `m.diffLines`, find change blocks, call `m.pairHunkLines` + `changedTokenRanges` on tab-replaced content (`strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)`), store results in `m.intraRanges`
+- [x] implement 30% similarity gate inside `recomputeIntraRanges`: after `changedTokenRanges`, if `totalEqual*100 < shorter*30`, discard ranges for that pair
+- [x] write tests for pairing: equal-count, unequal-count, pure-add (no pairs), pure-remove (no pairs)
+- [x] write tests for similarity gate: similar lines get ranges, dissimilar lines get nil
+- [x] write test for `recomputeIntraRanges` with a realistic hunk
+- [x] run tests — must pass before task 4
 
 ### Task 4: Integrate into render pipeline
 

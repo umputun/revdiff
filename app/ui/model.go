@@ -73,6 +73,7 @@ type Model struct {
 
 	highlighter        SyntaxHighlighter // syntax highlighter
 	highlightedLines   []string          // pre-computed highlighted content, parallel to diffLines
+	intraRanges        [][]matchRange    // per-line intra-line word-diff ranges, parallel to diffLines (nil for unpaired lines)
 	diffLines          []diff.DiffLine   // current file's parsed diff lines
 	currFile           string            // currently displayed file
 	loadSeq            uint64            // monotonic counter to identify the latest load request

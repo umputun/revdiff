@@ -1,6 +1,11 @@
 package ui
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+
+	"github.com/umputun/revdiff/app/diff"
+)
 
 // intralineToken represents a single token from the regex tokenizer with its byte offset in the source line.
 type intralineToken struct {
@@ -123,4 +128,191 @@ func changedTokenRanges(minusLine, plusLine string) ([]matchRange, []matchRange)
 
 	keepMinus, keepPlus := lcsKeptTokens(minusToks, plusToks)
 	return buildChangedRanges(minusToks, keepMinus), buildChangedRanges(plusToks, keepPlus)
+}
+
+// intralinePair represents a paired remove/add line for intra-line diffing.
+type intralinePair struct {
+	removeIdx int // index into m.diffLines for the remove line
+	addIdx    int // index into m.diffLines for the add line
+}
+
+// pairHunkLines pairs remove and add lines within a contiguous change block [start, end).
+// equal-length runs pair 1:1 in order. unequal runs use greedy best-match scoring.
+func (m Model) pairHunkLines(start, end int) []intralinePair {
+	var removes, adds []int
+	for i := start; i < end; i++ {
+		switch m.diffLines[i].ChangeType { //nolint:exhaustive // only add/remove relevant for pairing
+		case diff.ChangeRemove:
+			removes = append(removes, i)
+		case diff.ChangeAdd:
+			adds = append(adds, i)
+		}
+	}
+
+	if len(removes) == 0 || len(adds) == 0 {
+		return nil
+	}
+
+	// equal-length: pair 1:1 in order
+	if len(removes) == len(adds) {
+		pairs := make([]intralinePair, len(removes))
+		for i := range removes {
+			pairs[i] = intralinePair{removeIdx: removes[i], addIdx: adds[i]}
+		}
+		return pairs
+	}
+
+	// unequal: greedy best-match — iterate the shorter side, find best match in longer side
+	return m.greedyPairLines(removes, adds)
+}
+
+// greedyPairLines pairs lines greedily using prefix+suffix scoring.
+// iterates the shorter side and picks the best unused match from the longer side.
+func (m Model) greedyPairLines(removes, adds []int) []intralinePair {
+	shorter, longer := removes, adds
+	shorterIsRemove := true
+	if len(adds) < len(removes) {
+		shorter, longer = adds, removes
+		shorterIsRemove = false
+	}
+
+	used := make([]bool, len(longer))
+	pairs := make([]intralinePair, 0, len(shorter))
+
+	for _, si := range shorter {
+		bestScore := -1
+		bestIdx := -1
+		sContent := m.diffLines[si].Content
+
+		for li, li2 := range longer {
+			if used[li] {
+				continue
+			}
+			lContent := m.diffLines[li2].Content
+			score := 2*commonPrefixLen(sContent, lContent) + 2*commonSuffixLen(sContent, lContent)
+			if score > bestScore {
+				bestScore = score
+				bestIdx = li
+			}
+		}
+
+		if bestIdx >= 0 {
+			used[bestIdx] = true
+			if shorterIsRemove {
+				pairs = append(pairs, intralinePair{removeIdx: si, addIdx: longer[bestIdx]})
+			} else {
+				pairs = append(pairs, intralinePair{removeIdx: longer[bestIdx], addIdx: si})
+			}
+		}
+	}
+	return pairs
+}
+
+// commonPrefixLen returns the number of common prefix bytes between two strings.
+func commonPrefixLen(a, b string) int {
+	n := min(len(a), len(b))
+	for i := range n {
+		if a[i] != b[i] {
+			return i
+		}
+	}
+	return n
+}
+
+// commonSuffixLen returns the number of common suffix bytes between two strings.
+func commonSuffixLen(a, b string) int {
+	la, lb := len(a), len(b)
+	n := min(la, lb)
+	for i := range n {
+		if a[la-1-i] != b[lb-1-i] {
+			return i
+		}
+	}
+	return n
+}
+
+// similarityThreshold is the minimum percentage of common tokens for intra-line highlighting.
+// pairs with less than this percentage of common content get no intra-line overlay.
+const similarityThreshold = 30
+
+// recomputeIntraRanges walks m.diffLines, finds contiguous change blocks,
+// pairs remove/add lines, runs word-diff, and stores results in m.intraRanges.
+// applies a 30% similarity gate: pairs with <30% common tokens get no ranges.
+func (m *Model) recomputeIntraRanges() {
+	n := len(m.diffLines)
+	m.intraRanges = make([][]matchRange, n)
+
+	i := 0
+	for i < n {
+		// find start of a contiguous change block
+		if m.diffLines[i].ChangeType != diff.ChangeAdd && m.diffLines[i].ChangeType != diff.ChangeRemove {
+			i++
+			continue
+		}
+
+		// find end of the contiguous change block
+		blockStart := i
+		for i < n && (m.diffLines[i].ChangeType == diff.ChangeAdd || m.diffLines[i].ChangeType == diff.ChangeRemove) {
+			i++
+		}
+		blockEnd := i
+
+		pairs := m.pairHunkLines(blockStart, blockEnd)
+		for _, p := range pairs {
+			minusContent := strings.ReplaceAll(m.diffLines[p.removeIdx].Content, "\t", m.tabSpaces)
+			plusContent := strings.ReplaceAll(m.diffLines[p.addIdx].Content, "\t", m.tabSpaces)
+
+			minusRanges, plusRanges := changedTokenRanges(minusContent, plusContent)
+			if len(minusRanges) == 0 && len(plusRanges) == 0 {
+				continue // identical lines after tokenization
+			}
+
+			// similarity gate: count kept vs total tokens
+			if !m.passesSimilarityGate(minusContent, plusContent) {
+				continue
+			}
+
+			m.intraRanges[p.removeIdx] = minusRanges
+			m.intraRanges[p.addIdx] = plusRanges
+		}
+	}
+}
+
+// passesSimilarityGate returns true if the pair has at least 30% common non-whitespace tokens.
+// uses the shorter line's non-whitespace token count as the denominator.
+// whitespace tokens are excluded from the calculation to avoid inflating similarity.
+func (m Model) passesSimilarityGate(minusContent, plusContent string) bool {
+	minusToks := tokenizeLineWithOffsets(minusContent)
+	plusToks := tokenizeLineWithOffsets(plusContent)
+	if len(minusToks) == 0 || len(plusToks) == 0 {
+		return false
+	}
+
+	keepMinus, _ := lcsKeptTokens(minusToks, plusToks)
+	equalNonWS := 0
+	for i, k := range keepMinus {
+		if k && !isWhitespaceToken(minusToks[i]) {
+			equalNonWS++
+		}
+	}
+
+	minusNonWS := countNonWhitespace(minusToks)
+	plusNonWS := countNonWhitespace(plusToks)
+	shorter := min(minusNonWS, plusNonWS)
+	if shorter == 0 {
+		return false
+	}
+
+	return equalNonWS*100 >= shorter*similarityThreshold
+}
+
+// countNonWhitespace returns the number of non-whitespace tokens.
+func countNonWhitespace(tokens []intralineToken) int {
+	n := 0
+	for _, t := range tokens {
+		if !isWhitespaceToken(t) {
+			n++
+		}
+	}
+	return n
 }

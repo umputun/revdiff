@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/app/diff"
 )
 
 func TestTokenizeLineWithOffsets(t *testing.T) {
@@ -280,4 +283,267 @@ func TestChangedTokenRanges_MultibytePrecision(t *testing.T) {
 	require.Len(t, plusRanges, 1)
 	assert.Equal(t, 7, plusRanges[0].start)
 	assert.Equal(t, "earth", plus[plusRanges[0].start:plusRanges[0].end])
+}
+
+func TestModel_PairHunkLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []diff.DiffLine
+		start int
+		end   int
+		want  []intralinePair
+	}{
+		{
+			name: "equal count pairs 1:1",
+			lines: []diff.DiffLine{
+				{Content: "old line 1", ChangeType: diff.ChangeRemove},
+				{Content: "old line 2", ChangeType: diff.ChangeRemove},
+				{Content: "new line 1", ChangeType: diff.ChangeAdd},
+				{Content: "new line 2", ChangeType: diff.ChangeAdd},
+			},
+			start: 0, end: 4,
+			want: []intralinePair{{removeIdx: 0, addIdx: 2}, {removeIdx: 1, addIdx: 3}},
+		},
+		{
+			name: "pure add, no pairs",
+			lines: []diff.DiffLine{
+				{Content: "added 1", ChangeType: diff.ChangeAdd},
+				{Content: "added 2", ChangeType: diff.ChangeAdd},
+			},
+			start: 0, end: 2,
+			want: nil,
+		},
+		{
+			name: "pure remove, no pairs",
+			lines: []diff.DiffLine{
+				{Content: "removed 1", ChangeType: diff.ChangeRemove},
+				{Content: "removed 2", ChangeType: diff.ChangeRemove},
+			},
+			start: 0, end: 2,
+			want: nil,
+		},
+		{
+			name: "unequal count, more adds than removes",
+			lines: []diff.DiffLine{
+				{Content: "return foo(bar)", ChangeType: diff.ChangeRemove},
+				{Content: "return foo(baz)", ChangeType: diff.ChangeAdd},
+				{Content: "return extra()", ChangeType: diff.ChangeAdd},
+			},
+			start: 0, end: 3,
+			want: []intralinePair{{removeIdx: 0, addIdx: 1}}, // best match by prefix/suffix
+		},
+		{
+			name: "unequal count, more removes than adds",
+			lines: []diff.DiffLine{
+				{Content: "return foo(bar)", ChangeType: diff.ChangeRemove},
+				{Content: "return extra()", ChangeType: diff.ChangeRemove},
+				{Content: "return foo(baz)", ChangeType: diff.ChangeAdd},
+			},
+			start: 0, end: 3,
+			want: []intralinePair{{removeIdx: 0, addIdx: 2}}, // foo(bar)->foo(baz) scores higher
+		},
+		{
+			name: "single pair",
+			lines: []diff.DiffLine{
+				{Content: "old", ChangeType: diff.ChangeRemove},
+				{Content: "new", ChangeType: diff.ChangeAdd},
+			},
+			start: 0, end: 2,
+			want: []intralinePair{{removeIdx: 0, addIdx: 1}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.diffLines = tc.lines
+			got := m.pairHunkLines(tc.start, tc.end)
+			if tc.want == nil {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestModel_PairHunkLines_BestMatchScoring(t *testing.T) {
+	// verify that greedy scoring picks the best match, not just first match
+	m := testModel(nil, nil)
+	m.diffLines = []diff.DiffLine{
+		{Content: "func alpha() {", ChangeType: diff.ChangeRemove},
+		{Content: "func completely_different() {", ChangeType: diff.ChangeAdd},
+		{Content: "func alpha(ctx) {", ChangeType: diff.ChangeAdd},
+	}
+	pairs := m.pairHunkLines(0, 3)
+	require.Len(t, pairs, 1)
+	// alpha() should pair with alpha(ctx), not completely_different()
+	assert.Equal(t, 0, pairs[0].removeIdx)
+	assert.Equal(t, 2, pairs[0].addIdx)
+}
+
+func TestModel_PassesSimilarityGate(t *testing.T) {
+	m := testModel(nil, nil)
+
+	tests := []struct {
+		name  string
+		minus string
+		plus  string
+		want  bool
+	}{
+		{name: "similar lines pass", minus: "return foo(bar)", plus: "return foo(baz)", want: true},
+		{name: "identical lines pass", minus: "hello world", plus: "hello world", want: true},
+		{name: "dissimilar lines fail", minus: "aaa bbb ccc", plus: "xxx yyy zzz", want: false},
+		{name: "empty minus fails", minus: "", plus: "something", want: false},
+		{name: "empty plus fails", minus: "something", plus: "", want: false},
+		{name: "one of three common tokens passes 33%", minus: "a b c", plus: "a x y", want: true},
+		{name: "one of four below threshold 25%", minus: "a b c d", plus: "a x y z", want: false},
+		{name: "two of three common tokens pass", minus: "a b c", plus: "a b x", want: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := m.passesSimilarityGate(tc.minus, tc.plus)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestModel_RecomputeIntraRanges(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "context before", ChangeType: diff.ChangeContext},
+		{Content: "return foo(bar)", ChangeType: diff.ChangeRemove},
+		{Content: "return foo(baz)", ChangeType: diff.ChangeAdd},
+		{Content: "context after", ChangeType: diff.ChangeContext},
+	}
+
+	m.recomputeIntraRanges()
+
+	require.Len(t, m.intraRanges, 4)
+	assert.Nil(t, m.intraRanges[0], "context line should have no ranges")
+	assert.NotNil(t, m.intraRanges[1], "remove line should have ranges")
+	assert.NotNil(t, m.intraRanges[2], "add line should have ranges")
+	assert.Nil(t, m.intraRanges[3], "context line should have no ranges")
+
+	// verify the ranges point to "bar" and "baz"
+	require.Len(t, m.intraRanges[1], 1)
+	assert.Equal(t, matchRange{start: 11, end: 14}, m.intraRanges[1][0])
+	require.Len(t, m.intraRanges[2], 1)
+	assert.Equal(t, matchRange{start: 11, end: 14}, m.intraRanges[2][0])
+}
+
+func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "context", ChangeType: diff.ChangeContext},
+		{Content: "new line 1", ChangeType: diff.ChangeAdd},
+		{Content: "new line 2", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// pure add block has no pairs, so no intra-line ranges
+	for i, r := range m.intraRanges {
+		assert.Nil(t, r, "line %d should have no ranges", i)
+	}
+}
+
+func TestModel_RecomputeIntraRanges_DissimilarPair(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "alpha bravo charlie delta echo foxtrot golf hotel india juliet", ChangeType: diff.ChangeRemove},
+		{Content: "xxx yyy zzz aaa bbb ccc ddd eee fff ggg", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// dissimilar pair should have no ranges due to similarity gate
+	assert.Nil(t, m.intraRanges[0])
+	assert.Nil(t, m.intraRanges[1])
+}
+
+func TestModel_RecomputeIntraRanges_TabContent(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "\treturn foo(bar)", ChangeType: diff.ChangeRemove},
+		{Content: "\treturn foo(baz)", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// ranges should be on tab-replaced content
+	require.NotNil(t, m.intraRanges[0])
+	require.NotNil(t, m.intraRanges[1])
+
+	// after tab replacement, "\t" becomes "    " (4 spaces), so "bar" starts at 4+11=15
+	tabReplaced := strings.ReplaceAll(m.diffLines[0].Content, "\t", m.tabSpaces)
+	require.Len(t, m.intraRanges[0], 1)
+	changed := tabReplaced[m.intraRanges[0][0].start:m.intraRanges[0][0].end]
+	assert.Equal(t, "bar", changed)
+}
+
+func TestModel_RecomputeIntraRanges_MultipleBlocks(t *testing.T) {
+	m := testModel(nil, nil)
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "old first", ChangeType: diff.ChangeRemove},
+		{Content: "new first", ChangeType: diff.ChangeAdd},
+		{Content: "context between", ChangeType: diff.ChangeContext},
+		{Content: "old second", ChangeType: diff.ChangeRemove},
+		{Content: "new second", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// both blocks should have ranges
+	assert.NotNil(t, m.intraRanges[0], "first block remove")
+	assert.NotNil(t, m.intraRanges[1], "first block add")
+	assert.Nil(t, m.intraRanges[2], "context line")
+	assert.NotNil(t, m.intraRanges[3], "second block remove")
+	assert.NotNil(t, m.intraRanges[4], "second block add")
+}
+
+func TestCommonPrefixLen(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+		want int
+	}{
+		{name: "identical", a: "hello", b: "hello", want: 5},
+		{name: "common prefix", a: "hello world", b: "hello earth", want: 6},
+		{name: "no common", a: "abc", b: "xyz", want: 0},
+		{name: "empty a", a: "", b: "xyz", want: 0},
+		{name: "empty b", a: "xyz", b: "", want: 0},
+		{name: "both empty", a: "", b: "", want: 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, commonPrefixLen(tc.a, tc.b))
+		})
+	}
+}
+
+func TestCommonSuffixLen(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b string
+		want int
+	}{
+		{name: "identical", a: "hello", b: "hello", want: 5},
+		{name: "common suffix", a: "old world", b: "new world", want: 6},
+		{name: "no common", a: "abc", b: "xyz", want: 0},
+		{name: "empty a", a: "", b: "xyz", want: 0},
+		{name: "empty b", a: "xyz", b: "", want: 0},
+		{name: "both empty", a: "", b: "", want: 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, commonSuffixLen(tc.a, tc.b))
+		})
+	}
 }
