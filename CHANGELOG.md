@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.16.0 - 2026-04-10
+
+### New Features
+
+- add horizontal scroll overflow indicators #89 @umputun
+- make intra-line word-diff highlighting opt-in #88 @umputun
+- add intra-line word-diff highlighting #87 @umputun
+- add Codex CLI plugin for revdiff #86 @umputun
+- add Zed integration task for running revdiff #77 @rashpile
+- show explanations in revdiff TUI via --only e70c9c4
+
+### Improvements
+
+- wrap Zed tasks in JSON array and quote shell vars d84767a
+- add clone step and symlink alternative to codex plugin install 7e1ea68
+- add contribution guidelines for issues, PRs, and scope evaluation 7f45727
+
+### Bug Fixes
+
+- preserve syntax highlight foreground on wrapped lines #85 @umputun
+- correct codex skill install path and remove dead plugin manifest f16be04
+- use window_id instead of id in kitty overlay matcher aa83b55
+- auto-detect staged-only changes and pass --staged to revdiff 249abf9
+
 ## v0.15.3 - 2026-04-09
 
 ### Bug Fixes
