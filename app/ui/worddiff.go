@@ -116,8 +116,16 @@ func buildChangedRanges(tokens []intralineToken, keep []bool) []matchRange {
 // changedTokenRanges computes the changed byte-offset ranges for a pair of minus/plus lines.
 // returns ranges for the minus line and plus line respectively.
 // if either line is empty, returns nil ranges.
+// maxLineLenForDiff caps intra-line diff to lines up to this many bytes.
+// longer lines skip word-level highlighting to avoid O(m*n) LCS memory blowup
+// on pathological input (minified files, very long configs).
+const maxLineLenForDiff = 500
+
 func changedTokenRanges(minusLine, plusLine string) ([]matchRange, []matchRange) {
 	if minusLine == "" || plusLine == "" {
+		return nil, nil
+	}
+	if len(minusLine) > maxLineLenForDiff || len(plusLine) > maxLineLenForDiff {
 		return nil, nil
 	}
 	minusToks := tokenizeLineWithOffsets(minusLine)

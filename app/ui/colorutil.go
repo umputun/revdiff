@@ -28,9 +28,17 @@ func shiftLightness(hexColor string, amount float64) string {
 }
 
 // parseHexRGB parses "#RRGGBB" into 0-255 components.
+// returns ok=false if the string is not exactly 7 chars, missing the leading #,
+// or contains any non-hex digits.
 func parseHexRGB(hex string) (r, g, b uint8, ok bool) {
 	if len(hex) != 7 || hex[0] != '#' {
 		return 0, 0, 0, false
+	}
+	for i := 1; i < 7; i++ {
+		c := hex[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return 0, 0, 0, false
+		}
 	}
 	rv := hexVal(hex[1])<<4 | hexVal(hex[2])
 	gv := hexVal(hex[3])<<4 | hexVal(hex[4])

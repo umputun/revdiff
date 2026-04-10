@@ -20,6 +20,8 @@ func TestShiftLightness(t *testing.T) {
 		{name: "white gets darker", hex: "#ffffff", amount: 0.15},
 		{name: "empty returns empty", hex: "", amount: 0.15, want: ""},
 		{name: "invalid returns unchanged", hex: "nothex", amount: 0.15, want: "nothex"},
+		{name: "malformed all g returns unchanged", hex: "#gggggg", amount: 0.15, want: "#gggggg"},
+		{name: "malformed one bad char returns unchanged", hex: "#12345z", amount: 0.15, want: "#12345z"},
 		{name: "zero amount returns same", hex: "#808080", amount: 0.0},
 		{name: "mid gray small shift", hex: "#808080", amount: 0.05},
 	}
@@ -96,9 +98,13 @@ func TestParseHexRGB(t *testing.T) {
 		{name: "valid green", hex: "#00ff00", r: 0, g: 255, b: 0, ok: true},
 		{name: "valid blue", hex: "#0000ff", r: 0, g: 0, b: 255, ok: true},
 		{name: "mixed", hex: "#1a2b3c", r: 0x1a, g: 0x2b, b: 0x3c, ok: true},
+		{name: "uppercase", hex: "#AABBCC", r: 0xAA, g: 0xBB, b: 0xCC, ok: true},
 		{name: "too short", hex: "#fff", ok: false},
 		{name: "no hash", hex: "ff0000", ok: false},
 		{name: "empty", hex: "", ok: false},
+		{name: "invalid chars all", hex: "#gggggg", ok: false},
+		{name: "invalid char one", hex: "#12345z", ok: false},
+		{name: "invalid char first", hex: "#g12345", ok: false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -285,6 +285,30 @@ func TestChangedTokenRanges_MultibytePrecision(t *testing.T) {
 	assert.Equal(t, "earth", plus[plusRanges[0].start:plusRanges[0].end])
 }
 
+func TestChangedTokenRanges_SkipsVeryLongLines(t *testing.T) {
+	// lines above maxLineLenForDiff must skip intra-line diff to prevent
+	// LCS memory blowup on pathological input (minified content).
+	longMinus := strings.Repeat("a", maxLineLenForDiff+1)
+	longPlus := strings.Repeat("b", maxLineLenForDiff+1)
+
+	minusRanges, plusRanges := changedTokenRanges(longMinus, longPlus)
+	assert.Nil(t, minusRanges, "very long minus line should skip diff")
+	assert.Nil(t, plusRanges, "very long plus line should skip diff")
+
+	// line at exactly the cap still gets diffed
+	atCapMinus := strings.Repeat("a", maxLineLenForDiff)
+	atCapPlus := strings.Repeat("b", maxLineLenForDiff)
+	mr, pr := changedTokenRanges(atCapMinus, atCapPlus)
+	assert.NotNil(t, mr, "line at cap should still be diffed")
+	assert.NotNil(t, pr, "line at cap should still be diffed")
+
+	// asymmetric: only one line above cap still skips
+	shortLine := "abc"
+	mr2, pr2 := changedTokenRanges(longMinus, shortLine)
+	assert.Nil(t, mr2, "asymmetric long minus should skip")
+	assert.Nil(t, pr2, "asymmetric long minus should skip")
+}
+
 func TestModel_PairHunkLines(t *testing.T) {
 	tests := []struct {
 		name  string
