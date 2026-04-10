@@ -46,13 +46,15 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
   (or: disk file → diff.readFileAsContext() → []DiffLine, all ChangeContext)
   (or: stdin / arbitrary reader → diff.readReaderAsContext() → []DiffLine, all ChangeContext)
   → highlight.HighlightLines() → []string (ANSI foreground-only)
-  → recomputeIntraRanges(): pairs add/remove lines within hunks via pairHunkLines(),
+  → when m.wordDiff is true (opt-in via --word-diff flag or `W` toggle):
+    recomputeIntraRanges() pairs add/remove lines within hunks via pairHunkLines(),
     runs token-level LCS diff (changedTokenRanges) on each pair, stores [][]matchRange
     parallel to diffLines. 30% similarity gate discards ranges for dissimilar pairs.
     Ranges are byte offsets on tab-replaced content, aligning with prepareLineContent output.
+    When wordDiff is off, m.intraRanges stays nil and applyIntraLineHighlight is a no-op.
   → ui.renderDiff() dispatches:
     expanded (default): renderDiffLine() for each line
-      intra-line word-diff: when intraRanges[idx] is non-nil, insertHighlightMarkers()
+      intra-line word-diff: when intraRanges[idx] is non-nil, applyIntraLineHighlight()
       adds WordAddBg/WordRemoveBg ANSI bg markers around changed spans (reverse-video in no-color mode)
     collapsed (`v` toggle): renderCollapsedDiff() → skips removed lines,
       uses buildModifiedSet() to style adds as modify (amber ~) or pure add (green +)
@@ -144,7 +146,7 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
 - Help overlay uses `overlayCenter()` (ANSI-aware compositing via `charmbracelet/x/ansi.Cut`) to render on top of existing content; background (tree pane) remains visible at the edges
 - **ANSI nesting with lipgloss**: `lipgloss.Render()` emits `\033[0m` (full reset) which breaks outer style backgrounds. For styled substrings inside a lipgloss container (status bar separators, search highlights, diff cursor, annotation lines), use raw ANSI sequences via `ansiColor(hex, code)` / `ansiFg(hex)` / `ansiBg(hex)`, or dedicated helpers `diffCursorCell()` and `annotationInline()`. Never use `lipgloss.NewStyle().Render()` for inline elements within a lipgloss-rendered parent.
 - **Background fill for themed panes**: lipgloss pane `Render()` and viewport internal padding emit plain spaces after `\033[0m` reset, causing pane background to show terminal default. Three workarounds: (1) `extendLineBg()` pads individual add/remove/modify lines to full content width with their specific bg color; (2) `padContentBg()` strips viewport trailing spaces and re-pads every line of pane content with DiffBg/TreeBg; (3) `BorderBackground()` is set on pane border styles to match pane bg. Context and line-number styles also set DiffBg explicitly via `contextStyle()`/`lineNumberStyle()`/`contextHighlightStyle()`. **Ordering constraint**: `extendLineBg()` must be called AFTER `applyHorizontalScroll()` — extending before scroll causes bg fill to be computed for the wrong visible width. `styleDiffContent()` does NOT call `extendLineBg` internally; callers handle it via `changeBgColor()`.
-- Status bar mode icons (`▼ ◉ ↩ ≋ ⊟ # @`) are always rendered on the right side via `statusModeIcons()`. `@` indicates blame gutter active via `B` toggle. `⊟` indicates tree/TOC pane hidden via `t` toggle. Active modes use `StatusFg`, inactive use `Muted` — both via raw ANSI fg sequences. Graceful degradation on narrow terminals drops left segments: search position first (`statusSegmentsNoSearch`), then line number and hunk info (`statusSegmentsMinimal`), then truncates filename.
+- Status bar mode icons (`▼ ◉ ↩ ≋ ⊟ # b ± ✓ ∅`) are always rendered on the right side via `statusModeIcons()`. `▼` collapsed mode (`v`), `◉` filter (`f`), `↩` wrap (`w`), `≋` search active, `⊟` tree/TOC pane hidden (`t`), `#` line numbers (`L`), `b` blame gutter (`B`), `±` intra-line word-diff (`W`), `✓` reviewed count, `∅` untracked visible (`u`). Active modes use `StatusFg`, inactive use `Muted` — both via raw ANSI fg sequences. Graceful degradation on narrow terminals drops left segments: search position first (`statusSegmentsNoSearch`), then line number and hunk info (`statusSegmentsMinimal`), then truncates filename.
 - Search and hunk navigation both use `centerViewportOnCursor()` to center the target in the middle of the viewport. Use `syncViewportToCursor()` only for cursor movements that should keep the cursor barely visible (j/k scrolling).
 - Single-file mode (`m.singleFile`): when diff has exactly one file, tree pane is hidden, `treeWidth = 0`, diff gets full width (`m.width - 2` for borders, content width `m.width - 4` including right padding). Pane-switching keys (tab, h, l) and file navigation (n/p, f) become no-ops. Search nav (n/N) still works. Detection happens in `handleFilesLoaded`. Exception: when the file is markdown and full-context (all `ChangeContext` lines), an `mdTOC` pane replaces the tree pane with header navigation — see `app/ui/mdtoc.go`.
 - Tree pane toggle (`t` key): `m.treeHidden` hides the tree/TOC pane and gives diff full width. Orthogonal to `singleFile` — sets `treeWidth = 0`, forces `focus = paneDiff`, blocks `togglePane()`/`handleSwitchToTree()`. `handleViewToggle()` dispatches `v`, `w`, `t`, and `L` keys. `handleFileLoaded` respects `treeHidden` when setting up mdTOC layout.

@@ -227,6 +227,37 @@ func TestParseArgs_Blame(t *testing.T) {
 	})
 }
 
+func TestParseArgs_WordDiff(t *testing.T) {
+	t.Run("default off", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.False(t, opts.WordDiff)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--word-diff"))
+		require.NoError(t, err)
+		assert.True(t, opts.WordDiff)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_WORD_DIFF", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.WordDiff)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nword-diff = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.WordDiff)
+	})
+}
+
 func TestParseArgs_OutputFlag(t *testing.T) {
 	opts, err := parseArgs([]string{"-o", "/tmp/out.txt"})
 	require.NoError(t, err)

@@ -347,7 +347,7 @@ func (m Model) effectiveStatusFg() string {
 	return m.styles.colors.Muted
 }
 
-// statusModeIcons returns combined mode indicator icons (▼ collapsed, ◉ filter, ↩ wrap, ≋ search).
+// statusModeIcons returns combined mode indicator icons (one per view toggle).
 // all icons are always shown; active modes use status foreground, inactive use muted color.
 func (m Model) statusModeIcons() string {
 	type indicator struct {
@@ -362,6 +362,7 @@ func (m Model) statusModeIcons() string {
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
+		{"±", m.wordDiff},
 		{"✓", m.tree.reviewedCount() > 0},
 		{"∅", m.showUntracked},
 	}

@@ -36,7 +36,8 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList},
 		{"v", ActionToggleCollapsed}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
-		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
+		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
+		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
 		{"u", ActionToggleUntracked},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
 	}

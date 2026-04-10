@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
@@ -450,6 +451,7 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 	t.Run("paired add/remove lines get bg markers", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.styles = newStyles(Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"})
+		m.wordDiff = true
 		m.diffLines = []diff.DiffLine{
 			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
 			{NewNum: 1, Content: "hello earth", ChangeType: diff.ChangeAdd},
@@ -471,6 +473,7 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 	t.Run("pure add block produces no markers", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.styles = newStyles(Colors{AddBg: "#1a3320", WordAddBg: "#2d5a3a"})
+		m.wordDiff = true
 		m.diffLines = []diff.DiffLine{
 			{NewNum: 1, Content: "new line one", ChangeType: diff.ChangeAdd},
 			{NewNum: 2, Content: "new line two", ChangeType: diff.ChangeAdd},
@@ -489,6 +492,7 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 		m := testModel(nil, nil)
 		m.noColors = true
 		m.styles = plainStyles()
+		m.wordDiff = true
 		m.diffLines = []diff.DiffLine{
 			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
 			{NewNum: 1, Content: "hello earth", ChangeType: diff.ChangeAdd},
@@ -534,6 +538,7 @@ func TestModel_RenderDiffWithIntraLine(t *testing.T) {
 			WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
 			DiffBg: "#1e1e1e",
 		})
+		m.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
@@ -556,6 +561,7 @@ func TestModel_RenderDiffWithIntraLine(t *testing.T) {
 			WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
 		})
 		m.tabSpaces = "    "
+		m.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
@@ -583,6 +589,7 @@ func TestModel_WrapModeWithIntraLine(t *testing.T) {
 	m.width = 50
 	m.treeWidth = 0
 	m.singleFile = true
+	m.wordDiff = true
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
@@ -591,6 +598,91 @@ func TestModel_WrapModeWithIntraLine(t *testing.T) {
 	output := m.renderDiff()
 	// verify word-diff markers are present in wrapped output
 	assert.Contains(t, output, "\033[48;2;", "wrapped output should contain word-diff bg markers")
+}
+
+func TestModel_WordDiffOptIn(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, Content: "old value here", ChangeType: diff.ChangeRemove},
+		{NewNum: 1, Content: "new value here", ChangeType: diff.ChangeAdd},
+	}
+	colors := Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"}
+
+	t.Run("default off: no ranges computed", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.styles = newStyles(colors)
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+
+		assert.False(t, m.wordDiff, "wordDiff should default to false")
+		assert.Nil(t, m.intraRanges, "intraRanges should be nil when wordDiff is off")
+	})
+
+	t.Run("enabled: ranges computed on file load and bg markers in render", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.styles = newStyles(colors)
+		m.wordDiff = true
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+
+		require.NotNil(t, m.intraRanges, "intraRanges should be computed when wordDiff is on")
+		assert.Contains(t, m.renderDiff(), "\033[48;2;", "rendered output should contain word-diff bg markers")
+	})
+
+	t.Run("toggleWordDiff flips state and recomputes", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.styles = newStyles(colors)
+		m.ready = true
+		m.width = 200
+		m.height = 30
+		m.viewport.Width = 196
+		m.viewport.Height = 28
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+		m.focus = paneDiff
+
+		assert.Nil(t, m.intraRanges, "initial state: no ranges")
+
+		m.toggleWordDiff()
+		assert.True(t, m.wordDiff, "should be enabled after toggle")
+		assert.NotNil(t, m.intraRanges, "ranges computed after enabling")
+
+		m.toggleWordDiff()
+		assert.False(t, m.wordDiff, "should be disabled after second toggle")
+		assert.Nil(t, m.intraRanges, "ranges cleared after disabling")
+	})
+
+	t.Run("toggleWordDiff is no-op when no file loaded", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.focus = paneDiff
+		m.toggleWordDiff()
+		assert.False(t, m.wordDiff, "should stay off with no file")
+	})
+
+	t.Run("W key flips wordDiff through Update dispatch", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.styles = newStyles(colors)
+		m.ready = true
+		m.width = 200
+		m.height = 30
+		m.viewport.Width = 196
+		m.viewport.Height = 28
+		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+		m.focus = paneDiff
+
+		require.False(t, m.wordDiff, "initial state: off")
+		require.Nil(t, m.intraRanges, "initial state: no ranges")
+
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'W'}})
+		m = result.(Model)
+		assert.True(t, m.wordDiff, "W key should enable wordDiff")
+		assert.NotNil(t, m.intraRanges, "ranges should be computed after W")
+
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'W'}})
+		m = result.(Model)
+		assert.False(t, m.wordDiff, "second W should disable wordDiff")
+		assert.Nil(t, m.intraRanges, "ranges should be cleared after second W")
+	})
 }
 
 func TestModel_UpdateRestoreBg(t *testing.T) {

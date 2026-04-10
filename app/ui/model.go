@@ -94,6 +94,7 @@ type Model struct {
 	lineNumbers    bool // true when line numbers are shown in gutter
 	lineNumWidth   int  // digit width for line number columns (max digits across old/new nums)
 
+	wordDiff       bool                     // true when intra-line word-diff highlighting is enabled
 	blamer         Blamer                   // optional blame provider (nil when git unavailable)
 	showBlame      bool                     // true when blame gutter is shown
 	blameData      map[int]diff.BlameLine   // blame info keyed by 1-based new line number
@@ -167,6 +168,7 @@ type ModelConfig struct {
 	CrossFileHunks   bool                     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool                     // show line numbers in diff gutter
 	ShowBlame        bool                     // show blame gutter on startup when available
+	WordDiff         bool                     // enable intra-line word-diff highlighting on startup
 	Only             []string                 // show only these files (match by exact path or path suffix)
 	WorkDir          string                   // working directory for resolving absolute --only paths
 	Keymap           *keymap.Keymap           // custom key bindings (nil uses defaults)
@@ -212,6 +214,7 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 		crossFileHunks:   cfg.CrossFileHunks,
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
+		wordDiff:         cfg.WordDiff,
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
 		showUntracked:    false,
 		loadUntracked:    cfg.LoadUntracked,
@@ -318,7 +321,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleUntracked:
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums,
+		keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -457,6 +461,19 @@ func (m *Model) toggleBlame() tea.Cmd {
 	return nil
 }
 
+// toggleWordDiff toggles intra-line word-diff highlighting on/off.
+// recomputeIntraRanges honors the new wordDiff state: it populates ranges
+// when enabling and clears them when disabling.
+// no-op when the diff pane is not focused or no file is loaded.
+func (m *Model) toggleWordDiff() {
+	if m.focus != paneDiff || m.currFile == "" {
+		return
+	}
+	m.wordDiff = !m.wordDiff
+	m.recomputeIntraRanges()
+	m.viewport.SetContent(m.renderDiff())
+}
+
 // toggleUntracked toggles visibility of untracked files in the tree.
 func (m *Model) toggleUntracked() tea.Cmd {
 	m.showUntracked = !m.showUntracked
@@ -477,6 +494,8 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleBlame:
 		cmd := m.toggleBlame()
 		return m, cmd
+	case keymap.ActionToggleWordDiff:
+		m.toggleWordDiff()
 	case keymap.ActionToggleUntracked:
 		cmd := m.toggleUntracked()
 		return m, cmd
