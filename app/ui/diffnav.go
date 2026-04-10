@@ -249,7 +249,7 @@ func (m *Model) centerHunkInViewport() {
 	if m.collapsed.enabled {
 		hunks = m.findHunks()
 	}
-	annotationSet := m.buildAnnotationSet()
+	annotationSet := m.buildAnnotationSet() // note: also built inside cursorViewportY; acceptable duplication for now
 	hunkVisualHeight := 0
 	for i := m.diffCursor; i <= hunkEnd; i++ {
 		if m.collapsed.enabled && m.isCollapsedHidden(i, hunks) {

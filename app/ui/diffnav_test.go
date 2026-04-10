@@ -1185,6 +1185,48 @@ func TestModel_CenterHunkInViewport_NoOpOnContextLine(t *testing.T) {
 	assert.Equal(t, beforeOffset, m.viewport.YOffset, "should be no-op when cursor is on context line")
 }
 
+func TestModel_CenterHunkInViewport_CollapsedMode(t *testing.T) {
+	// in collapsed mode, removed lines in a mixed add/remove hunk are hidden;
+	// the visual height should only count visible (add) lines
+	var lines []diff.DiffLine
+	for i := 1; i <= 20; i++ {
+		lines = append(lines, diff.DiffLine{OldNum: i, NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	// mixed hunk: 3 removes then 3 adds (indices 20-25)
+	lines = append(lines,
+		diff.DiffLine{OldNum: 21, Content: "old1", ChangeType: diff.ChangeRemove}, // idx 20, hidden in collapsed
+		diff.DiffLine{OldNum: 22, Content: "old2", ChangeType: diff.ChangeRemove}, // idx 21, hidden
+		diff.DiffLine{OldNum: 23, Content: "old3", ChangeType: diff.ChangeRemove}, // idx 22, hidden
+		diff.DiffLine{NewNum: 21, Content: "new1", ChangeType: diff.ChangeAdd},    // idx 23, visible
+		diff.DiffLine{NewNum: 22, Content: "new2", ChangeType: diff.ChangeAdd},    // idx 24, visible
+		diff.DiffLine{NewNum: 23, Content: "new3", ChangeType: diff.ChangeAdd},    // idx 25, visible
+	)
+	for i := 24; i <= 60; i++ {
+		lines = append(lines, diff.DiffLine{OldNum: i, NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = result.(Model)
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	vpHeight := m.viewport.Height
+
+	m.diffCursor = 0
+	m.moveToNextHunk()
+	// in collapsed mode, cursor lands on first visible line (first add, idx 23)
+	assert.Equal(t, 23, m.diffCursor, "cursor should skip hidden removes and land on first add")
+
+	// hunk visual height = 3 visible add lines (removes are hidden)
+	cursorY := m.cursorViewportY()
+	hunkMidY := cursorY + 3/2
+	expectedOffset := max(0, hunkMidY-vpHeight/2)
+	assert.Equal(t, expectedOffset, m.viewport.YOffset, "collapsed mode: offset should only count visible lines")
+}
+
 func TestModel_HunkNavigationViaKeys(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
