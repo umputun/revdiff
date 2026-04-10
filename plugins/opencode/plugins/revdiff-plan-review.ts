@@ -14,8 +14,8 @@ import os from "os";
 import fs from "fs/promises";
 
 const LAUNCHER = path.join(
-  os.homedir(),
-  ".config/opencode/plugins/launch-plan-review.sh",
+    os.homedir(),
+    ".config/opencode/plugins/launch-plan-review.sh",
 );
 
 async function isExecutable(filePath: string): Promise<boolean> {
@@ -33,8 +33,8 @@ async function isInstalled(bin: string): Promise<boolean> {
 }
 
 async function getLastPlanContent(
-  client: any,
-  sessionID: string,
+    client: any,
+    sessionID: string,
 ): Promise<string | null> {
   const resp = await client.session.messages({ path: { id: sessionID } });
   const messages = resp.data ?? [];
@@ -45,9 +45,9 @@ async function getLastPlanContent(
     if ((info as any).mode !== "plan") return null;
 
     return parts
-      .filter((p: any) => p.type === "text")
-      .map((p: any) => p.text)
-      .join("\n");
+        .filter((p: any) => p.type === "text")
+        .map((p: any) => p.text)
+        .join("\n");
   }
 
   return null;
@@ -62,9 +62,9 @@ async function launchReview(planFile: string): Promise<string> {
 }
 
 async function injectAnnotations(
-  client: any,
-  sessionID: string,
-  annotations: string,
+    client: any,
+    sessionID: string,
+    annotations: string,
 ): Promise<void> {
   await client.session.prompt({
     path: { id: sessionID },
@@ -98,7 +98,7 @@ export const server: Plugin = async ({ client }) => ({
     if (!planContent?.trim()) return;
 
     const planFile = `/tmp/revdiff-plan-${sessionID}.md`;
-    await Bun.$.write(planFile, planContent);
+    await Bun.write(planFile, planContent);
 
     let annotations: string;
     try {
