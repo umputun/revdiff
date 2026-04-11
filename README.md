@@ -197,6 +197,12 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
 
 ### Integration with Other Tools
 
+#### OpenCode
+
+See [OpenCode configs](plugins/opencode/README.md)
+
+#### General
+
 The structured stdout output works with any tool that can read text:
 
 ```bash
