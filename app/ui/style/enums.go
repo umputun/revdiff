@@ -1,7 +1,7 @@
 package style
 
-//go:generate go run github.com/go-pkgz/enum@latest -type colorKey
-//go:generate go run github.com/go-pkgz/enum@latest -type styleKey
+//go:generate go run github.com/go-pkgz/enum@v0.7.0 -type colorKey
+//go:generate go run github.com/go-pkgz/enum@v0.7.0 -type styleKey
 
 // colorKey is the generator input for ColorKey (see generated color_key_enum.go).
 // names intentionally diverge from Colors struct field names — enum describes what the

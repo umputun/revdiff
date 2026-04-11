@@ -84,24 +84,34 @@ func (r Renderer) StatusBarSeparator() string {
 
 // FileStatusMark returns a colored file status character (A, M, D, ?, etc.)
 // followed by a space, using raw ANSI sequences to avoid lipgloss full reset.
-// restores the Normal foreground after the status character.
+// restores the Normal foreground after the status character; falls back to
+// ResetFg when Colors.Normal is empty to prevent the status color from
+// bleeding into subsequent text on the same line.
 func (r Renderer) FileStatusMark(status diff.FileStatus) string {
 	fg := r.fileStatusFg(status)
 	if fg == "" {
 		return string(status) + " "
 	}
 	normalFg := Color(ansiColor(r.res.colors.Normal, 38))
+	if normalFg == "" {
+		normalFg = ResetFg
+	}
 	return string(fg) + string(status) + string(normalFg) + " "
 }
 
 // FileReviewedMark returns a colored checkmark for reviewed files.
-// uses AddFg for the checkmark and Normal for the reset.
+// uses AddFg for the checkmark and Normal for the reset; falls back to
+// ResetFg when Colors.Normal is empty to prevent the AddFg color from
+// bleeding into subsequent text on the same line.
 func (r Renderer) FileReviewedMark() string {
 	addFg := Color(ansiColor(r.res.colors.AddFg, 38))
 	if addFg == "" {
 		return "✓ "
 	}
 	normalFg := Color(ansiColor(r.res.colors.Normal, 38))
+	if normalFg == "" {
+		normalFg = ResetFg
+	}
 	return string(addFg) + "✓" + string(normalFg) + " "
 }
 

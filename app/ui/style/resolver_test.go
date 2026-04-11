@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
 )
@@ -177,8 +176,9 @@ func TestResolver_Style_coversAllKeys(t *testing.T) {
 				if k == StyleKeyUnknown {
 					continue
 				}
-				got := r.Style(k)
-				require.NotNil(t, got, "style for %s should not be nil", k)
+				// exhaustiveness check: no panic for any defined key.
+				// lipgloss.Style is a struct value type so NotNil would be tautological.
+				_ = r.Style(k)
 			}
 		})
 	}

@@ -118,6 +118,25 @@ func TestRenderer_FileStatusMark_plain(t *testing.T) {
 	assert.Equal(t, "A ", got, "plain mode has no ANSI codes, just status + space")
 }
 
+// TestRenderer_FileStatusMark_emptyNormalFallsBackToResetFg verifies the fix
+// for a color-leak bug: when Colors.Normal is unset, the status color would
+// previously have no terminating sequence, causing it to bleed into text
+// rendered after the mark on the same line. The fix falls back to ResetFg
+// ("\033[39m") which resets fg to terminal default without touching bg.
+func TestRenderer_FileStatusMark_emptyNormalFallsBackToResetFg(t *testing.T) {
+	// Colors with status colors set but Normal empty — the bug condition
+	c := Colors{AddFg: "#87d787", RemoveFg: "#ff8787", Muted: "#6c6c6c"}
+	rnd := NewRenderer(NewResolver(c))
+
+	for _, status := range []diff.FileStatus{diff.FileAdded, diff.FileDeleted, diff.FileModified} {
+		got := rnd.FileStatusMark(status)
+		assert.Contains(t, got, "\033[39m",
+			"status %s with empty Normal should emit ResetFg to avoid color bleed, got %q", status, got)
+		assert.True(t, strings.HasSuffix(got, "\033[39m "),
+			"status %s output should end with ResetFg before the trailing space, got %q", status, got)
+	}
+}
+
 func TestRenderer_FileReviewedMark(t *testing.T) {
 	t.Run("colored", func(t *testing.T) {
 		rnd := NewRenderer(NewResolver(fullColorsForTesting))
@@ -131,6 +150,19 @@ func TestRenderer_FileReviewedMark(t *testing.T) {
 		rnd := NewRenderer(PlainResolver())
 		got := rnd.FileReviewedMark()
 		assert.Equal(t, "✓ ", got, "plain mode has no color")
+	})
+
+	// regression: when Colors.Normal is unset, the AddFg color would
+	// previously have no terminating sequence and bleed into subsequent
+	// text. Fix falls back to ResetFg.
+	t.Run("emptyNormalFallsBackToResetFg", func(t *testing.T) {
+		c := Colors{AddFg: "#87d787"} // Normal deliberately empty
+		rnd := NewRenderer(NewResolver(c))
+		got := rnd.FileReviewedMark()
+		assert.Contains(t, got, "\033[39m",
+			"empty Normal should emit ResetFg to avoid AddFg bleed, got %q", got)
+		assert.True(t, strings.HasSuffix(got, "\033[39m "),
+			"output should end with ResetFg before the trailing space, got %q", got)
 	})
 }
 
