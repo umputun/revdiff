@@ -11,12 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_AnnotatedFilesMarker(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
 
 	annotated := m.annotatedFiles()
@@ -30,7 +31,7 @@ func TestModel_AnnotateKey(t *testing.T) {
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -49,7 +50,7 @@ func TestModel_EnterInDiffPaneStartsAnnotation(t *testing.T) {
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -72,7 +73,7 @@ func TestModel_EnterInDiffPaneScrollsToShowAnnotationInputAtBottom(t *testing.T)
 		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -100,7 +101,7 @@ func TestModel_AnnotateEnterSaves(t *testing.T) {
 		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -151,7 +152,7 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 
 	t.Run("hunk keyword populates EndLine", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -167,7 +168,7 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 
 	t.Run("uppercase hunk keyword populates EndLine", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -183,7 +184,7 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 
 	t.Run("block is not a hunk keyword", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -199,7 +200,7 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 
 	t.Run("no keyword does not set EndLine", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -214,7 +215,7 @@ func TestModel_AnnotateHunkKeywordSetsEndLine(t *testing.T) {
 
 	t.Run("context line with keyword does not set EndLine", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -238,7 +239,7 @@ func TestModel_AnnotateReAnnotateKeywordChange(t *testing.T) {
 
 	t.Run("add keyword to existing annotation updates EndLine", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -262,7 +263,7 @@ func TestModel_AnnotateReAnnotateKeywordChange(t *testing.T) {
 
 	t.Run("remove keyword from existing annotation clears EndLine", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
-		m.tree = newFileTree([]string{"a.go"})
+		m.tree = testNewFileTree([]string{"a.go"})
 		m.focus = paneDiff
 		m.currFile = "a.go"
 		m.diffLines = lines
@@ -294,7 +295,7 @@ func TestModel_AnnotateSingleLineHunkWithKeyword(t *testing.T) {
 	}
 
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -322,7 +323,7 @@ func TestModel_AnnotateRemovedLineInMixedHunk(t *testing.T) {
 	}
 
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -439,7 +440,7 @@ func TestModel_DeleteAnnotation(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -532,7 +533,7 @@ func TestModel_NoAnnotationCountWhenEmpty(t *testing.T) {
 
 func TestModel_AnnotateStatusBar(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.ready = true
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{
@@ -549,7 +550,7 @@ func TestModel_AnnotateStatusBar(t *testing.T) {
 
 func TestModel_AnnotateKeysBlockedInTreePane(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneTree
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{
@@ -566,12 +567,12 @@ func TestModel_FileLoadedDiscardsStaleResponse(t *testing.T) {
 	// simulate rapid n/n where second load completes first, then stale first response arrives
 	files := []string{"a.go", "b.go", "c.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 
 	// user presses n twice: first for b.go (seq=1), then for c.go (seq=2)
 	m.loadSeq = 2
-	m.tree.nextFile() // -> b.go
-	m.tree.nextFile() // -> c.go
+	m.tree.StepFile(sidepane.DirectionNext) // -> b.go
+	m.tree.StepFile(sidepane.DirectionNext) // -> c.go
 
 	// c.go response arrives first with latest seq - accepted
 	cLines := []diff.DiffLine{{NewNum: 1, Content: "package c", ChangeType: diff.ChangeContext}}
@@ -591,7 +592,7 @@ func TestModel_FileLoadedStaleErrorDiscarded(t *testing.T) {
 	// stale error responses should also be discarded, not overwrite the current diff
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 
 	// load a.go successfully (seq=1)
 	m.loadSeq = 1
@@ -602,7 +603,7 @@ func TestModel_FileLoadedStaleErrorDiscarded(t *testing.T) {
 
 	// user navigates to b.go (seq=2)
 	model.loadSeq = 2
-	model.tree.nextFile()
+	model.tree.StepFile(sidepane.DirectionNext)
 
 	// stale error for a.go arrives with old seq - should be discarded
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: 1, err: errors.New("stale error")})
@@ -616,7 +617,7 @@ func TestModel_SameFileDuplicateLoadDiscarded(t *testing.T) {
 	// the older response (seq=1) must be discarded even though it's for the same file.
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 
 	// first enter on a.go (seq=1), then another enter on a.go (seq=2)
 	m.loadSeq = 2
@@ -643,21 +644,17 @@ func TestModel_SameFileDuplicateLoadDiscarded(t *testing.T) {
 func TestModel_FilterRefreshedAfterAnnotationSave(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "initial annotation"})
 
 	// enable filter - should show only a.go
 	annotated := m.annotatedFiles()
-	m.tree.toggleFilter(annotated)
-	assert.True(t, m.tree.filter)
+	m.tree.ToggleFilter(annotated)
+	assert.True(t, m.tree.FilterActive())
 
-	fileCount := 0
-	for _, e := range m.tree.entries {
-		if !e.isDir {
-			fileCount++
-		}
-	}
-	assert.Equal(t, 1, fileCount, "only a.go should be visible")
+	// only a.go should be visible
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
+	assert.False(t, m.tree.HasFile(sidepane.DirectionNext), "only a.go should be visible")
 
 	// add annotation to b.go via saveAnnotation
 	m.currFile = "b.go"
@@ -668,13 +665,8 @@ func TestModel_FilterRefreshedAfterAnnotationSave(t *testing.T) {
 	m.saveAnnotation()
 
 	// after save, filter should be refreshed and b.go should be visible
-	fileCount = 0
-	for _, e := range m.tree.entries {
-		if !e.isDir {
-			fileCount++
-		}
-	}
-	assert.Equal(t, 2, fileCount, "both a.go and b.go should be visible after adding annotation")
+	assert.True(t, m.tree.HasFile(sidepane.DirectionNext) || m.tree.HasFile(sidepane.DirectionPrev),
+		"both a.go and b.go should be visible after adding annotation")
 }
 
 func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
@@ -683,14 +675,14 @@ func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
 		"b.go": {{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext}},
 	}
 	m := testModel(files, diffs)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "annotation on a"})
 	m.store.Add(annotation.Annotation{File: "b.go", Line: 5, Type: " ", Comment: "annotation on b"})
 
 	// enable filter - should show both annotated files
 	annotated := m.annotatedFiles()
-	m.tree.toggleFilter(annotated)
-	assert.True(t, m.tree.filter)
+	m.tree.ToggleFilter(annotated)
+	assert.True(t, m.tree.FilterActive())
 
 	// delete the annotation on a.go via deleteAnnotation
 	m.currFile = "a.go"
@@ -700,13 +692,8 @@ func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
 	cmd := m.deleteAnnotation()
 
 	// after delete, filter should be refreshed and only b.go should be visible
-	fileCount := 0
-	for _, e := range m.tree.entries {
-		if !e.isDir {
-			fileCount++
-		}
-	}
-	assert.Equal(t, 1, fileCount, "only b.go should be visible after deleting a.go annotation")
+	assert.Equal(t, "b.go", m.tree.SelectedFile(), "only b.go should be visible after deleting a.go annotation")
+	assert.False(t, m.tree.HasFile(sidepane.DirectionNext), "only one file should be visible")
 
 	// should return a command to load the new selection (b.go)
 	require.NotNil(t, cmd, "should trigger file load for new tree selection")
@@ -716,13 +703,13 @@ func TestModel_FilterRefreshedAfterAnnotationDelete(t *testing.T) {
 func TestModel_FilterDisabledWhenLastAnnotationDeleted(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "only annotation"})
 
 	// enable filter
 	annotated := m.annotatedFiles()
-	m.tree.toggleFilter(annotated)
-	assert.True(t, m.tree.filter)
+	m.tree.ToggleFilter(annotated)
+	assert.True(t, m.tree.FilterActive())
 
 	// delete the last annotation
 	m.currFile = "a.go"
@@ -732,15 +719,10 @@ func TestModel_FilterDisabledWhenLastAnnotationDeleted(t *testing.T) {
 	cmd := m.deleteAnnotation()
 
 	// filter should be disabled since no annotated files remain
-	assert.False(t, m.tree.filter, "filter should be disabled when no annotated files remain")
+	assert.False(t, m.tree.FilterActive(), "filter should be disabled when no annotated files remain")
 
-	fileCount := 0
-	for _, e := range m.tree.entries {
-		if !e.isDir {
-			fileCount++
-		}
-	}
-	assert.Equal(t, 2, fileCount, "all files should be visible")
+	// all files should be visible
+	assert.Equal(t, 2, m.tree.TotalFiles(), "all files should be visible")
 
 	// when filter switches back to all-files, cursor lands on a.go (first file) which matches currFile,
 	// so no file load command is needed
@@ -751,7 +733,7 @@ func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
 	linesA := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}, {NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd}}
 	linesB := []diff.DiffLine{{NewNum: 1, Content: "b-line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": linesA, "b.go": linesB})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 
 	// load file a.go
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: linesA})
@@ -766,8 +748,8 @@ func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
 	model.saveAnnotation()
 
 	// navigate tree to b.go and load it
-	model.tree.nextFile()
-	assert.Equal(t, "b.go", model.tree.selectedFile())
+	model.tree.StepFile(sidepane.DirectionNext)
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
 	result, _ = model.Update(fileLoadedMsg{file: "b.go", lines: linesB})
 	model = result.(Model)
 	assert.Equal(t, "b.go", model.currFile)
@@ -780,8 +762,8 @@ func TestModel_AnnotationsPersistAcrossFileSwitch(t *testing.T) {
 	model.saveAnnotation()
 
 	// navigate tree back to a.go and load it
-	model.tree.prevFile()
-	assert.Equal(t, "a.go", model.tree.selectedFile())
+	model.tree.StepFile(sidepane.DirectionPrev)
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: linesA})
 	model = result.(Model)
 
@@ -961,7 +943,7 @@ func TestModel_ShiftAStartsFileAnnotation(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -979,7 +961,7 @@ func TestModel_AnnotationInputWidthNarrowTerminal(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.diffCursor = 0
@@ -1007,7 +989,7 @@ func TestModel_FileAnnotationInputWidthNarrowerThanLineLevel(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.diffCursor = 0
@@ -1034,7 +1016,7 @@ func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -1058,7 +1040,7 @@ func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {
 
 func TestModel_FileAnnotationPreFillsExisting(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}}
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "existing file note"})
@@ -1069,7 +1051,7 @@ func TestModel_FileAnnotationPreFillsExisting(t *testing.T) {
 
 func TestModel_FileAnnotationCancelResetsFlags(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}}
 	m.focus = paneDiff
@@ -1123,7 +1105,7 @@ func TestModel_EnterOnFileAnnotationLineTriggersFileAnnotation(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -1143,7 +1125,7 @@ func TestModel_EnterOnFileAnnotationLinePreFillsText(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -1162,7 +1144,7 @@ func TestModel_EnterOnRegularDiffLineStillTriggersLineAnnotation(t *testing.T) {
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -1183,7 +1165,7 @@ func TestModel_DeleteFileAnnotationViaD(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -1202,7 +1184,7 @@ func TestModel_DeleteFileAnnotationCursorNotOnFileLine(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -1226,7 +1208,7 @@ func TestModel_DeleteFileAnnotationFilterShiftsSelection(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines
@@ -1235,8 +1217,8 @@ func TestModel_DeleteFileAnnotationFilterShiftsSelection(t *testing.T) {
 	m.diffCursor = -1 // on file annotation line
 
 	// enable filter to show only annotated files
-	m.tree.toggleFilter(m.annotatedFiles())
-	require.True(t, m.tree.filter)
+	m.tree.ToggleFilter(m.annotatedFiles())
+	require.True(t, m.tree.FilterActive())
 
 	// press 'd' to delete file-level annotation on a.go
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -1279,7 +1261,7 @@ func TestModel_CursorNavigatesToFileAnnotation(t *testing.T) {
 		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -1301,7 +1283,7 @@ func TestModel_HomeGoesToFileAnnotation(t *testing.T) {
 		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneDiff
@@ -1669,7 +1651,7 @@ func TestModel_AnnotationsWithTOCActive(t *testing.T) {
 
 func TestModel_ShiftAIgnoredWithoutFile(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = ""
 	m.focus = paneTree
 
@@ -1686,7 +1668,7 @@ func TestModel_ShiftAOnlyWorksFromDiffPane(t *testing.T) {
 
 	// from tree pane — should be ignored to avoid annotating wrong file
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.focus = paneTree
@@ -1698,7 +1680,7 @@ func TestModel_ShiftAOnlyWorksFromDiffPane(t *testing.T) {
 
 	// from diff pane — should work
 	m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m2.tree = newFileTree([]string{"a.go"})
+	m2.tree = testNewFileTree([]string{"a.go"})
 	m2.currFile = "a.go"
 	m2.diffLines = lines
 	m2.focus = paneDiff

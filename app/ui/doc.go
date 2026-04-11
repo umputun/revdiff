@@ -15,11 +15,9 @@
 //     hunk navigation (including cross-file), viewport synchronization, horizontal scroll
 //   - collapsed.go — collapsed diff mode: hides removed lines, shows modified markers,
 //     per-hunk expansion, delete-only placeholders
-//   - filetree.go — file tree sidebar component with cursor, scroll, and selection
 //   - annotate.go — annotation input lifecycle: start, save, cancel, delete (line and file level),
 //     cursor-viewport coordination, annotation key map
 //   - annotlist.go — annotation list overlay for cross-file annotation browsing
-//   - mdtoc.go — markdown table-of-contents sidebar for single-file markdown review
 //   - search.go — incremental search: input handling, match computation, navigation
 //   - worddiff.go — intra-line word-diff: tokenizer, LCS, line pairing, range computation
 //
@@ -28,6 +26,13 @@
 // and HSL color math. Model holds style types through consumer-side interfaces
 // (styleResolver, styleRenderer, sgrProcessor) defined in model.go; concrete
 // implementations live in the style sub-package.
+//
+// Left-pane navigation components live in the [sidepane] sub-package (app/ui/sidepane/).
+// It owns the file tree (FileTree) and markdown table-of-contents (TOC) types,
+// including cursor/offset management, entry parsing, and rendering logic.
+// Model holds sidepane types through consumer-side interfaces (FileTreeComponent,
+// TOCComponent) defined in model.go; concrete construction is injected via
+// ModelConfig.NewFileTree and ModelConfig.ParseTOC factory closures wired in app/main.go.
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
 // [SyntaxHighlighter] (provides ANSI-highlighted lines), and [Blamer] (provides blame data).

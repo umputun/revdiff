@@ -1,4 +1,4 @@
-package ui
+package sidepane
 
 import (
 	"fmt"
@@ -156,7 +156,7 @@ func TestParseTOC(t *testing.T) {
 	topEntry := tocEntry{title: "test.md", level: 1, lineIdx: 0}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseTOC(tt.lines, "test.md")
+			got := ParseTOC(tt.lines, "test.md")
 			if tt.wantNil {
 				assert.Nil(t, got)
 				return
@@ -174,14 +174,38 @@ func TestParseTOC(t *testing.T) {
 
 func TestParseTOC_FilenamePathStripping(t *testing.T) {
 	lines := []diff.DiffLine{{Content: "# Title", ChangeType: diff.ChangeContext}}
-	got := parseTOC(lines, "docs/plans/guide.md")
+	got := ParseTOC(lines, "docs/plans/guide.md")
 	require.NotNil(t, got)
 	assert.Equal(t, "guide.md", got.entries[0].title, "top entry should use base filename, not full path")
 	assert.Equal(t, "Title", got.entries[1].title)
 }
 
-func TestMdTOC_MoveUpDown(t *testing.T) {
-	toc := &mdTOC{entries: []tocEntry{
+func TestParseTOC_NoHeaders(t *testing.T) {
+	// returns nil (not a typed-nil wrapped in a valid *TOC), so main.go factory guard works
+	got := ParseTOC([]diff.DiffLine{
+		{Content: "just text", ChangeType: diff.ChangeContext},
+		{Content: "more text", ChangeType: diff.ChangeContext},
+	}, "readme.md")
+	assert.Nil(t, got, "ParseTOC with no headers must return nil")
+
+	// also verify nil for empty input
+	got = ParseTOC(nil, "empty.md")
+	assert.Nil(t, got, "ParseTOC with nil lines must return nil")
+}
+
+func TestParseTOC_InitialActiveSection(t *testing.T) {
+	// newly returned *TOC must have activeSection == -1
+	lines := []diff.DiffLine{
+		{Content: "# Header One", ChangeType: diff.ChangeContext},
+		{Content: "## Header Two", ChangeType: diff.ChangeContext},
+	}
+	got := ParseTOC(lines, "test.md")
+	require.NotNil(t, got)
+	assert.Equal(t, -1, got.activeSection, "initial activeSection must be -1 sentinel")
+}
+
+func TestTOC_MoveUpDown(t *testing.T) {
+	toc := &TOC{entries: []tocEntry{
 		{title: "A", level: 1, lineIdx: 0},
 		{title: "B", level: 2, lineIdx: 5},
 		{title: "C", level: 2, lineIdx: 10},
@@ -189,44 +213,44 @@ func TestMdTOC_MoveUpDown(t *testing.T) {
 
 	t.Run("move down from first", func(t *testing.T) {
 		toc.cursor = 0
-		toc.moveDown()
+		toc.Move(MotionDown)
 		assert.Equal(t, 1, toc.cursor)
 	})
 
 	t.Run("move down to last", func(t *testing.T) {
 		toc.cursor = 1
-		toc.moveDown()
+		toc.Move(MotionDown)
 		assert.Equal(t, 2, toc.cursor)
 	})
 
 	t.Run("move down clamped at last", func(t *testing.T) {
 		toc.cursor = 2
-		toc.moveDown()
+		toc.Move(MotionDown)
 		assert.Equal(t, 2, toc.cursor)
 	})
 
 	t.Run("move up from last", func(t *testing.T) {
 		toc.cursor = 2
-		toc.moveUp()
+		toc.Move(MotionUp)
 		assert.Equal(t, 1, toc.cursor)
 	})
 
 	t.Run("move up clamped at first", func(t *testing.T) {
 		toc.cursor = 0
-		toc.moveUp()
+		toc.Move(MotionUp)
 		assert.Equal(t, 0, toc.cursor)
 	})
 
 	t.Run("single entry no movement", func(t *testing.T) {
-		single := &mdTOC{entries: []tocEntry{{title: "Only", level: 1, lineIdx: 0}}, cursor: 0}
-		single.moveUp()
+		single := &TOC{entries: []tocEntry{{title: "Only", level: 1, lineIdx: 0}}, cursor: 0}
+		single.Move(MotionUp)
 		assert.Equal(t, 0, single.cursor)
-		single.moveDown()
+		single.Move(MotionDown)
 		assert.Equal(t, 0, single.cursor)
 	})
 }
 
-func TestMdTOC_EnsureVisible(t *testing.T) {
+func TestTOC_EnsureVisible(t *testing.T) {
 	tests := []struct {
 		name       string
 		entries    int
@@ -250,15 +274,15 @@ func TestMdTOC_EnsureVisible(t *testing.T) {
 			for i := range entries {
 				entries[i] = tocEntry{title: "H", level: 1, lineIdx: i * 10}
 			}
-			toc := &mdTOC{entries: entries, cursor: tt.cursor, offset: tt.offset}
-			toc.ensureVisible(tt.height)
+			toc := &TOC{entries: entries, cursor: tt.cursor, offset: tt.offset}
+			toc.EnsureVisible(tt.height)
 			assert.Equal(t, tt.wantOffset, toc.offset)
 		})
 	}
 }
 
-func TestMdTOC_UpdateActiveSection(t *testing.T) {
-	toc := &mdTOC{entries: []tocEntry{
+func TestTOC_UpdateActiveSection(t *testing.T) {
+	toc := &TOC{entries: []tocEntry{
 		{title: "Intro", level: 1, lineIdx: 0},
 		{title: "Setup", level: 2, lineIdx: 10},
 		{title: "Usage", level: 2, lineIdx: 25},
@@ -281,42 +305,42 @@ func TestMdTOC_UpdateActiveSection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			toc.updateActiveSection(tt.diffCursor)
+			toc.UpdateActiveSection(tt.diffCursor)
 			assert.Equal(t, tt.wantActive, toc.activeSection)
 		})
 	}
 
 	t.Run("empty entries", func(t *testing.T) {
-		empty := &mdTOC{entries: nil, activeSection: 5}
-		empty.updateActiveSection(10)
+		empty := &TOC{entries: nil, activeSection: 5}
+		empty.UpdateActiveSection(10)
 		assert.Equal(t, -1, empty.activeSection)
 	})
 }
 
-func TestMdTOC_Render(t *testing.T) {
+func TestTOC_Render(t *testing.T) {
 	res := style.PlainResolver()
 
 	t.Run("empty TOC", func(t *testing.T) {
-		toc := &mdTOC{entries: nil}
-		got := toc.render(40, 10, paneTree, res)
+		toc := &TOC{entries: nil}
+		got := toc.Render(TOCRender{Width: 40, Height: 10, Focused: true, Resolver: res})
 		assert.Equal(t, "  no headers", got)
 	})
 
 	t.Run("single h1 entry, tree focused", func(t *testing.T) {
-		toc := &mdTOC{entries: []tocEntry{{title: "Title", level: 1, lineIdx: 0}}, cursor: 0, activeSection: -1}
-		got := toc.render(40, 10, paneTree, res)
+		toc := &TOC{entries: []tocEntry{{title: "Title", level: 1, lineIdx: 0}}, cursor: 0, activeSection: -1}
+		got := toc.Render(TOCRender{Width: 40, Height: 10, Focused: true, Resolver: res})
 		assert.Contains(t, got, "Title")
 		// cursor should be highlighted with FileSelected style (reverse in plain)
 		assert.NotEqual(t, "  Title", got) // styled, not plain
 	})
 
 	t.Run("indentation by level", func(t *testing.T) {
-		toc := &mdTOC{entries: []tocEntry{
+		toc := &TOC{entries: []tocEntry{
 			{title: "H1", level: 1, lineIdx: 0},
 			{title: "H2", level: 2, lineIdx: 5},
 			{title: "H3", level: 3, lineIdx: 10},
 		}, cursor: 0, activeSection: -1}
-		got := toc.render(40, 10, paneDiff, res)
+		got := toc.Render(TOCRender{Width: 40, Height: 10, Focused: false, Resolver: res})
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 3)
 		// h1 has no indent (level-1=0), h2 has 2 spaces, h3 has 4 spaces
@@ -326,11 +350,11 @@ func TestMdTOC_Render(t *testing.T) {
 	})
 
 	t.Run("active section highlighted in diff focus", func(t *testing.T) {
-		toc := &mdTOC{entries: []tocEntry{
+		toc := &TOC{entries: []tocEntry{
 			{title: "First", level: 1, lineIdx: 0},
 			{title: "Second", level: 1, lineIdx: 10},
 		}, cursor: 0, activeSection: 1}
-		got := toc.render(40, 10, paneDiff, res)
+		got := toc.Render(TOCRender{Width: 40, Height: 10, Focused: false, Resolver: res})
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 2)
 		// active section (Second) should be highlighted, first should not
@@ -341,11 +365,11 @@ func TestMdTOC_Render(t *testing.T) {
 	})
 
 	t.Run("cursor highlighted in tree focus", func(t *testing.T) {
-		toc := &mdTOC{entries: []tocEntry{
+		toc := &TOC{entries: []tocEntry{
 			{title: "First", level: 1, lineIdx: 0},
 			{title: "Second", level: 1, lineIdx: 10},
 		}, cursor: 1, activeSection: 0}
-		got := toc.render(40, 10, paneTree, res)
+		got := toc.Render(TOCRender{Width: 40, Height: 10, Focused: true, Resolver: res})
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 2)
 		// cursor (Second) should be highlighted, not active section
@@ -353,10 +377,10 @@ func TestMdTOC_Render(t *testing.T) {
 	})
 
 	t.Run("truncation of long title", func(t *testing.T) {
-		toc := &mdTOC{entries: []tocEntry{
+		toc := &TOC{entries: []tocEntry{
 			{title: "This is a very long title that should be truncated", level: 1, lineIdx: 0},
 		}, cursor: 0, activeSection: -1}
-		got := toc.render(20, 10, paneDiff, res)
+		got := toc.Render(TOCRender{Width: 20, Height: 10, Focused: false, Resolver: res})
 		assert.Contains(t, got, "…")
 	})
 
@@ -365,8 +389,8 @@ func TestMdTOC_Render(t *testing.T) {
 		for i := range entries {
 			entries[i] = tocEntry{title: fmt.Sprintf("Header %d", i), level: 1, lineIdx: i * 10}
 		}
-		toc := &mdTOC{entries: entries, cursor: 15, offset: 0, activeSection: -1}
-		got := toc.render(40, 5, paneTree, res)
+		toc := &TOC{entries: entries, cursor: 15, offset: 0, activeSection: -1}
+		got := toc.Render(TOCRender{Width: 40, Height: 5, Focused: true, Resolver: res})
 		lines := strings.Split(got, "\n")
 		assert.Len(t, lines, 5)
 		assert.Contains(t, got, "Header 15")   // cursor entry should be visible
@@ -374,20 +398,20 @@ func TestMdTOC_Render(t *testing.T) {
 	})
 
 	t.Run("tree focus highlights cursor, diff focus highlights active section", func(t *testing.T) {
-		toc := &mdTOC{entries: []tocEntry{
+		toc := &TOC{entries: []tocEntry{
 			{title: "A", level: 1, lineIdx: 0},
 			{title: "B", level: 1, lineIdx: 10},
 			{title: "C", level: 1, lineIdx: 20},
 		}, cursor: 1, activeSection: 2}
 		// in tree focus, cursor (B at idx 1) is highlighted
-		gotTree := toc.render(40, 10, paneTree, res)
+		gotTree := toc.Render(TOCRender{Width: 40, Height: 10, Focused: true, Resolver: res})
 		treeLines := strings.Split(gotTree, "\n")
 		require.Len(t, treeLines, 3)
 		assert.Greater(t, len(treeLines[1]), len(treeLines[0]), "cursor B should be highlighted in tree focus")
 		assert.Less(t, len(treeLines[2]), len(treeLines[1]), "C should not be highlighted in tree focus")
 
 		// in diff focus, active section (C at idx 2) is highlighted
-		gotDiff := toc.render(40, 10, paneDiff, res)
+		gotDiff := toc.Render(TOCRender{Width: 40, Height: 10, Focused: false, Resolver: res})
 		diffLines := strings.Split(gotDiff, "\n")
 		require.Len(t, diffLines, 3)
 		assert.Greater(t, len(diffLines[2]), len(diffLines[0]), "active section C should be highlighted in diff focus")
@@ -395,7 +419,7 @@ func TestMdTOC_Render(t *testing.T) {
 	})
 }
 
-func TestMdTOC_Render_ActiveSectionViewportVisibility(t *testing.T) {
+func TestTOC_Render_ActiveSectionViewportVisibility(t *testing.T) {
 	// when diff pane is focused and activeSection is far from cursor,
 	// the TOC viewport should scroll to keep activeSection visible
 	res := style.PlainResolver()
@@ -403,14 +427,14 @@ func TestMdTOC_Render_ActiveSectionViewportVisibility(t *testing.T) {
 	for i := range entries {
 		entries[i] = tocEntry{title: fmt.Sprintf("Header %d", i), level: 1, lineIdx: i * 10}
 	}
-	toc := &mdTOC{entries: entries, cursor: 0, offset: 0, activeSection: 25}
-	got := toc.render(40, 5, paneDiff, res)
+	toc := &TOC{entries: entries, cursor: 0, offset: 0, activeSection: 25}
+	got := toc.Render(TOCRender{Width: 40, Height: 5, Focused: false, Resolver: res})
 	assert.Contains(t, got, "Header 25", "active section entry should be visible in viewport")
 	assert.NotContains(t, got, "Header 0", "cursor entry should scroll out of viewport")
 }
 
-func TestMdTOC_TruncateTitle(t *testing.T) {
-	toc := &mdTOC{}
+func TestTOC_TruncateTitle(t *testing.T) {
+	toc := &TOC{}
 	tests := []struct {
 		name     string
 		title    string
@@ -432,58 +456,204 @@ func TestMdTOC_TruncateTitle(t *testing.T) {
 	}
 }
 
-func TestModel_IsFullContext(t *testing.T) {
-	m := &Model{}
-	tests := []struct {
-		name  string
-		lines []diff.DiffLine
-		want  bool
-	}{
-		{name: "all context", lines: []diff.DiffLine{
-			{ChangeType: diff.ChangeContext}, {ChangeType: diff.ChangeContext},
-		}, want: true},
-		{name: "context with dividers", lines: []diff.DiffLine{
-			{ChangeType: diff.ChangeContext}, {ChangeType: diff.ChangeDivider}, {ChangeType: diff.ChangeContext},
-		}, want: true},
-		{name: "mixed with add", lines: []diff.DiffLine{
-			{ChangeType: diff.ChangeContext}, {ChangeType: diff.ChangeAdd},
-		}, want: false},
-		{name: "mixed with remove", lines: []diff.DiffLine{
-			{ChangeType: diff.ChangeContext}, {ChangeType: diff.ChangeRemove},
-		}, want: false},
-		{name: "empty", lines: nil, want: false},
-		{name: "divider only", lines: []diff.DiffLine{
-			{ChangeType: diff.ChangeDivider},
-		}, want: false},
-	}
+func TestTOCMove_Exhaustive(t *testing.T) {
+	// iterating all MotionValues, asserting no panic with or without count argument
+	toc := &TOC{entries: []tocEntry{
+		{title: "A", level: 1, lineIdx: 0},
+		{title: "B", level: 2, lineIdx: 5},
+		{title: "C", level: 2, lineIdx: 10},
+		{title: "D", level: 3, lineIdx: 15},
+		{title: "E", level: 3, lineIdx: 20},
+	}, cursor: 2, activeSection: -1}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, m.isFullContext(tt.lines))
+	for _, m := range MotionValues {
+		t.Run(m.String()+"_no_count", func(t *testing.T) {
+			assert.NotPanics(t, func() { toc.Move(m) })
+		})
+		t.Run(m.String()+"_with_count", func(t *testing.T) {
+			assert.NotPanics(t, func() { toc.Move(m, 3) })
 		})
 	}
 }
 
-func TestModel_IsMarkdownFile(t *testing.T) {
-	m := &Model{}
+func TestTOCMove_PageUpDown(t *testing.T) {
+	toc := &TOC{entries: []tocEntry{
+		{title: "A", level: 1, lineIdx: 0},
+		{title: "B", level: 1, lineIdx: 5},
+		{title: "C", level: 1, lineIdx: 10},
+		{title: "D", level: 1, lineIdx: 15},
+		{title: "E", level: 1, lineIdx: 20},
+		{title: "F", level: 1, lineIdx: 25},
+		{title: "G", level: 1, lineIdx: 30},
+		{title: "H", level: 1, lineIdx: 35},
+		{title: "I", level: 1, lineIdx: 40},
+		{title: "J", level: 1, lineIdx: 45},
+	}, cursor: 0, activeSection: -1}
+
+	t.Run("page down by 3", func(t *testing.T) {
+		toc.cursor = 0
+		toc.Move(MotionPageDown, 3)
+		assert.Equal(t, 3, toc.cursor)
+	})
+
+	t.Run("page down clamped at end", func(t *testing.T) {
+		toc.cursor = 8
+		toc.Move(MotionPageDown, 5)
+		assert.Equal(t, 9, toc.cursor)
+	})
+
+	t.Run("page up by 3", func(t *testing.T) {
+		toc.cursor = 5
+		toc.Move(MotionPageUp, 3)
+		assert.Equal(t, 2, toc.cursor)
+	})
+
+	t.Run("page up clamped at start", func(t *testing.T) {
+		toc.cursor = 1
+		toc.Move(MotionPageUp, 5)
+		assert.Equal(t, 0, toc.cursor)
+	})
+
+	t.Run("page down no count defaults to 1", func(t *testing.T) {
+		toc.cursor = 3
+		toc.Move(MotionPageDown)
+		assert.Equal(t, 4, toc.cursor)
+	})
+
+	t.Run("page up no count defaults to 1", func(t *testing.T) {
+		toc.cursor = 3
+		toc.Move(MotionPageUp)
+		assert.Equal(t, 2, toc.cursor)
+	})
+}
+
+func TestTOCMove_FirstLast(t *testing.T) {
+	toc := &TOC{entries: []tocEntry{
+		{title: "A", level: 1, lineIdx: 0},
+		{title: "B", level: 1, lineIdx: 5},
+		{title: "C", level: 1, lineIdx: 10},
+	}, cursor: 1, activeSection: -1}
+
+	toc.Move(MotionFirst)
+	assert.Equal(t, 0, toc.cursor)
+
+	toc.Move(MotionLast)
+	assert.Equal(t, 2, toc.cursor)
+}
+
+func TestTOCCurrentLineIdx(t *testing.T) {
+	t.Run("valid cursor returns idx and true", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 2, lineIdx: 15},
+			{title: "C", level: 2, lineIdx: 30},
+		}, cursor: 1}
+		idx, ok := toc.CurrentLineIdx()
+		assert.True(t, ok)
+		assert.Equal(t, 15, idx)
+	})
+
+	t.Run("empty entries returns false", func(t *testing.T) {
+		toc := &TOC{entries: nil, cursor: 0}
+		idx, ok := toc.CurrentLineIdx()
+		assert.False(t, ok)
+		assert.Equal(t, 0, idx)
+	})
+
+	t.Run("cursor past end returns false", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+		}, cursor: 5}
+		idx, ok := toc.CurrentLineIdx()
+		assert.False(t, ok)
+		assert.Equal(t, 0, idx)
+	})
+
+	t.Run("negative cursor returns false", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+		}, cursor: -1}
+		idx, ok := toc.CurrentLineIdx()
+		assert.False(t, ok)
+		assert.Equal(t, 0, idx)
+	})
+
+	t.Run("first entry", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 42},
+		}, cursor: 0}
+		idx, ok := toc.CurrentLineIdx()
+		assert.True(t, ok)
+		assert.Equal(t, 42, idx)
+	})
+}
+
+func TestTOCSyncCursorToActiveSection(t *testing.T) {
+	t.Run("activeSection -1 is no-op", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 10},
+		}, cursor: 0, activeSection: -1}
+		toc.SyncCursorToActiveSection()
+		assert.Equal(t, 0, toc.cursor, "cursor should not change when activeSection is -1")
+	})
+
+	t.Run("activeSection >= 0 moves cursor to match", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 10},
+			{title: "C", level: 1, lineIdx: 20},
+		}, cursor: 0, activeSection: 2}
+		toc.SyncCursorToActiveSection()
+		assert.Equal(t, 2, toc.cursor, "cursor should move to activeSection")
+	})
+
+	t.Run("activeSection 0 moves cursor", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 10},
+		}, cursor: 1, activeSection: 0}
+		toc.SyncCursorToActiveSection()
+		assert.Equal(t, 0, toc.cursor, "cursor should move to activeSection 0")
+	})
+}
+
+func TestTOC_NumEntries(t *testing.T) {
+	t.Run("with entries", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 5},
+		}}
+		assert.Equal(t, 2, toc.NumEntries())
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		toc := &TOC{}
+		assert.Equal(t, 0, toc.NumEntries())
+	})
+}
+
+func TestFencePrefix(t *testing.T) {
 	tests := []struct {
-		name string
-		file string
-		want bool
+		name    string
+		input   string
+		wantCh  rune
+		wantLen int
 	}{
-		{name: ".md", file: "README.md", want: true},
-		{name: ".markdown", file: "notes.markdown", want: true},
-		{name: ".go", file: "main.go", want: false},
-		{name: ".MD uppercase", file: "README.MD", want: true},
-		{name: ".MARKDOWN uppercase", file: "DOC.MARKDOWN", want: true},
-		{name: "no extension", file: "Makefile", want: false},
-		{name: "path with .md", file: "docs/guide.md", want: true},
-		{name: "empty", file: "", want: false},
+		{name: "empty", input: "", wantCh: 0, wantLen: 0},
+		{name: "no fence", input: "hello", wantCh: 0, wantLen: 0},
+		{name: "3 backticks", input: "```", wantCh: '`', wantLen: 3},
+		{name: "3 tildes", input: "~~~", wantCh: '~', wantLen: 3},
+		{name: "4 backticks with lang", input: "````go", wantCh: '`', wantLen: 4},
+		{name: "5 tildes", input: "~~~~~", wantCh: '~', wantLen: 5},
+		{name: "single backtick", input: "`", wantCh: '`', wantLen: 1},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, m.isMarkdownFile(tt.file))
+			ch, n := fencePrefix(tt.input)
+			assert.Equal(t, tt.wantCh, ch)
+			assert.Equal(t, tt.wantLen, n)
 		})
 	}
 }

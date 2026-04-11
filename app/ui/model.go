@@ -21,6 +21,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -78,6 +79,61 @@ var (
 	_ sgrProcessor  = (*style.SGR)(nil)
 )
 
+// FileTreeComponent is what Model needs from a file-tree navigation component.
+// Implemented by *sidepane.FileTree. Exported so main.go can spell it in the
+// factory closure's return type.
+type FileTreeComponent interface {
+	// SelectedFile returns the full path of the currently selected file.
+	SelectedFile() string
+	// TotalFiles returns the count of original file paths (before filtering).
+	TotalFiles() int
+	// FileStatus returns the git change status for the given file path.
+	FileStatus(path string) diff.FileStatus
+	// FilterActive returns true when the file tree is showing only annotated files.
+	FilterActive() bool
+	// ReviewedCount returns the number of files marked as reviewed.
+	ReviewedCount() int
+	// HasFile returns true if there is a file entry in the given direction.
+	HasFile(dir sidepane.Direction) bool
+	// Move navigates the cursor according to the given motion.
+	Move(m sidepane.Motion, count ...int)
+	// StepFile moves to the next or previous file entry, wrapping around at ends.
+	StepFile(dir sidepane.Direction)
+	// SelectByPath sets the cursor to the file entry matching the given path.
+	SelectByPath(path string) bool
+	// EnsureVisible adjusts offset so the cursor is within the visible range.
+	EnsureVisible(height int)
+	// Rebuild rebuilds the file tree from new entries in-place.
+	Rebuild(entries []diff.FileEntry)
+	// ToggleFilter toggles between showing all files and only annotated files.
+	ToggleFilter(annotated map[string]bool)
+	// RefreshFilter updates the filtered view with the current annotation state.
+	RefreshFilter(annotated map[string]bool)
+	// ToggleReviewed toggles the reviewed mark for the given file path.
+	ToggleReviewed(path string)
+	// Render renders the file tree into a string for display.
+	Render(r sidepane.FileTreeRender) string
+}
+
+// TOCComponent is what Model needs from a table-of-contents navigation component.
+// Implemented by *sidepane.TOC. Exported so main.go can spell it in the factory closure.
+type TOCComponent interface {
+	// CurrentLineIdx returns the diff line index for the current TOC cursor entry.
+	CurrentLineIdx() (int, bool)
+	// NumEntries returns the number of TOC entries.
+	NumEntries() int
+	// Move navigates the cursor according to the given motion.
+	Move(m sidepane.Motion, count ...int)
+	// EnsureVisible adjusts offset so the cursor is within the visible range.
+	EnsureVisible(height int)
+	// UpdateActiveSection sets the active section based on the diff cursor position.
+	UpdateActiveSection(diffCursor int)
+	// SyncCursorToActiveSection sets cursor to activeSection when activeSection >= 0.
+	SyncCursorToActiveSection()
+	// Render renders the TOC into a string for display.
+	Render(r sidepane.TOCRender) string
+}
+
 // pane identifies which pane has focus.
 type pane int
 
@@ -93,8 +149,9 @@ type Model struct {
 	resolver     styleResolver
 	renderer     styleRenderer
 	sgr          sgrProcessor
-	tree         fileTree
+	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
 	viewport     viewport.Model
+	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
 	store        *annotation.Store
 	diffRenderer Renderer
 	keymap       *keymap.Keymap
@@ -166,7 +223,7 @@ type Model struct {
 	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
 	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
-	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
+	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 
 	themesDir  string // path to themes directory for theme selector
 	configPath string // path to config file for persisting theme choice
@@ -211,6 +268,20 @@ type ModelConfig struct {
 	StyleResolver styleResolver // color/style lookups
 	StyleRenderer styleRenderer // compound ANSI rendering
 	SGR           sgrProcessor  // SGR stream reemit
+
+	// --- Sidepane factories (required, wired from main.go) ---
+
+	// NewFileTree constructs a fresh FileTreeComponent from the file list.
+	// Injected by main.go (typically a closure wrapping sidepane.NewFileTree).
+	// Required — NewModel returns an error when nil.
+	NewFileTree func(entries []diff.FileEntry) FileTreeComponent
+
+	// ParseTOC parses markdown headers from diff lines into a TOCComponent.
+	// Returns nil when no headers are found. The closure must collapse typed-nil
+	// to interface-nil for empty TOCs to avoid the typed-nil trap.
+	// Injected by main.go (typically a closure wrapping sidepane.ParseTOC).
+	// Required — NewModel returns an error when nil.
+	ParseTOC func(lines []diff.DiffLine, filename string) TOCComponent
 
 	// --- Optional dependencies ---
 	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
@@ -260,6 +331,12 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.SGR == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.SGR is required")
 	}
+	if cfg.NewFileTree == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.NewFileTree is required")
+	}
+	if cfg.ParseTOC == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.ParseTOC is required")
+	}
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
 		cfg.TreeWidthRatio = 2
 	}
@@ -280,6 +357,8 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		diffRenderer:     cfg.Renderer,
 		highlighter:      cfg.Highlighter,
 		blamer:           cfg.Blamer,
+		tree:             cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
+		parseTOC:         cfg.ParseTOC,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
 		only:             cfg.Only,
@@ -617,7 +696,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = diffHeight
 	}
 
-	m.tree.ensureVisible(m.treePageSize())
+	m.tree.EnsureVisible(m.treePageSize())
 
 	if m.currFile != "" {
 		m.syncViewportToCursor()

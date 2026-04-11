@@ -5,6 +5,7 @@ import (
 
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
 const scrollStep = 4 // horizontal scroll step in characters
@@ -382,17 +383,17 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	}
 	// cursor did not move — we are at the boundary; try to cross to adjacent file
 	if forward {
-		if m.tree.hasNextFile() {
+		if m.tree.HasFile(sidepane.DirectionNext) {
 			fwd := true
 			m.pendingHunkJump = &fwd
-			m.tree.nextFile()
+			m.tree.StepFile(sidepane.DirectionNext)
 			return m.loadSelectedIfChanged()
 		}
 	} else {
-		if m.tree.hasPrevFile() {
+		if m.tree.HasFile(sidepane.DirectionPrev) {
 			bwd := false
 			m.pendingHunkJump = &bwd
-			m.tree.prevFile()
+			m.tree.StepFile(sidepane.DirectionPrev)
 			return m.loadSelectedIfChanged()
 		}
 	}
@@ -470,21 +471,21 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	action := m.keymap.Resolve(msg.String())
 	switch action {
 	case keymap.ActionDown:
-		m.tree.moveDown()
+		m.tree.Move(sidepane.MotionDown)
 	case keymap.ActionUp:
-		m.tree.moveUp()
+		m.tree.Move(sidepane.MotionUp)
 	case keymap.ActionPageDown:
-		m.tree.pageDown(m.treePageSize())
+		m.tree.Move(sidepane.MotionPageDown, m.treePageSize())
 	case keymap.ActionHalfPageDown:
-		m.tree.pageDown(max(1, m.treePageSize()/2))
+		m.tree.Move(sidepane.MotionPageDown, max(1, m.treePageSize()/2))
 	case keymap.ActionPageUp:
-		m.tree.pageUp(m.treePageSize())
+		m.tree.Move(sidepane.MotionPageUp, m.treePageSize())
 	case keymap.ActionHalfPageUp:
-		m.tree.pageUp(max(1, m.treePageSize()/2))
+		m.tree.Move(sidepane.MotionPageUp, max(1, m.treePageSize()/2))
 	case keymap.ActionHome:
-		m.tree.moveToFirst()
+		m.tree.Move(sidepane.MotionFirst)
 	case keymap.ActionEnd:
-		m.tree.moveToLast()
+		m.tree.Move(sidepane.MotionLast)
 	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
@@ -493,7 +494,7 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 	m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
-	m.tree.ensureVisible(m.treePageSize())
+	m.tree.EnsureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
 }
 
@@ -502,29 +503,21 @@ func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	action := m.keymap.Resolve(msg.String())
 	switch action {
 	case keymap.ActionDown:
-		m.mdTOC.moveDown()
+		m.mdTOC.Move(sidepane.MotionDown)
 	case keymap.ActionUp:
-		m.mdTOC.moveUp()
+		m.mdTOC.Move(sidepane.MotionUp)
 	case keymap.ActionPageDown:
-		for range m.treePageSize() {
-			m.mdTOC.moveDown()
-		}
+		m.mdTOC.Move(sidepane.MotionPageDown, m.treePageSize())
 	case keymap.ActionHalfPageDown:
-		for range max(1, m.treePageSize()/2) {
-			m.mdTOC.moveDown()
-		}
+		m.mdTOC.Move(sidepane.MotionPageDown, max(1, m.treePageSize()/2))
 	case keymap.ActionPageUp:
-		for range m.treePageSize() {
-			m.mdTOC.moveUp()
-		}
+		m.mdTOC.Move(sidepane.MotionPageUp, m.treePageSize())
 	case keymap.ActionHalfPageUp:
-		for range max(1, m.treePageSize()/2) {
-			m.mdTOC.moveUp()
-		}
+		m.mdTOC.Move(sidepane.MotionPageUp, max(1, m.treePageSize()/2))
 	case keymap.ActionHome:
-		m.mdTOC.cursor = 0
+		m.mdTOC.Move(sidepane.MotionFirst)
 	case keymap.ActionEnd:
-		m.mdTOC.cursor = max(0, len(m.mdTOC.entries)-1)
+		m.mdTOC.Move(sidepane.MotionLast)
 	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
 		if m.currFile != "" {
 			m.focus = paneDiff
@@ -532,7 +525,7 @@ func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil // switch pane without re-jumping viewport
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
-	m.mdTOC.ensureVisible(m.treePageSize())
+	m.mdTOC.EnsureVisible(m.treePageSize())
 	m.syncDiffToTOCCursor()
 	return m, nil
 }
@@ -566,37 +559,46 @@ func (m Model) paneHeight() int {
 }
 
 // jumpTOCEntry moves the TOC cursor by delta (+1 next, -1 prev) and jumps the diff viewport.
+// jumpTOCEntry always passes delta +/-1; if that ever changes, extend here
 func (m Model) jumpTOCEntry(delta int) (tea.Model, tea.Cmd) {
 	if m.mdTOC == nil {
 		return m, nil
 	}
-	m.mdTOC.cursor = max(0, min(m.mdTOC.cursor+delta, len(m.mdTOC.entries)-1))
+	if delta > 0 {
+		m.mdTOC.Move(sidepane.MotionDown)
+	} else {
+		m.mdTOC.Move(sidepane.MotionUp)
+	}
 	m.syncDiffToTOCCursor()
 	return m, nil
 }
 
 // syncTOCCursorToActive sets the TOC cursor to the current active section.
 func (m *Model) syncTOCCursorToActive() {
-	if m.mdTOC != nil && m.mdTOC.activeSection >= 0 {
-		m.mdTOC.cursor = m.mdTOC.activeSection
+	if m.mdTOC != nil {
+		m.mdTOC.SyncCursorToActiveSection()
 	}
 }
 
 // syncDiffToTOCCursor jumps the diff viewport to the TOC entry at the current cursor position.
 func (m *Model) syncDiffToTOCCursor() {
-	if m.mdTOC == nil || m.mdTOC.cursor >= len(m.mdTOC.entries) {
+	if m.mdTOC == nil {
 		return
 	}
-	m.diffCursor = m.mdTOC.entries[m.mdTOC.cursor].lineIdx
+	idx, ok := m.mdTOC.CurrentLineIdx()
+	if !ok {
+		return
+	}
+	m.diffCursor = idx
 	m.cursorOnAnnotation = false
-	m.mdTOC.updateActiveSection(m.diffCursor)
+	m.mdTOC.UpdateActiveSection(m.diffCursor)
 	m.topAlignViewportOnCursor()
 }
 
 // syncTOCActiveSection updates the TOC active section to match the current diff cursor position.
 func (m *Model) syncTOCActiveSection() {
 	if m.mdTOC != nil {
-		m.mdTOC.updateActiveSection(m.diffCursor)
+		m.mdTOC.UpdateActiveSection(m.diffCursor)
 	}
 }
 
