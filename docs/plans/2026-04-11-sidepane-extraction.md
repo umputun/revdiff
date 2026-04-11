@@ -694,9 +694,9 @@ Update `main.go` to construct the `NewFileTree` and `ParseTOC` factory closures 
 - Delete: `app/ui/mdtoc.go`
 - Delete: `app/ui/mdtoc_test.go`
 
-- [ ] `git rm app/ui/filetree.go app/ui/filetree_test.go app/ui/mdtoc.go app/ui/mdtoc_test.go`
-- [ ] confirm no ui file still references `fileTree` (unexported type), `newFileTree`, `newFileTreeFromEntries`, `mdTOC` (type), `parseTOC` (function), `ensureVisibleInList` — grep for each, should find zero hits
-- [ ] `go build ./...` — should compile now; if it doesn't, fix remaining errors
+- [x] `git rm app/ui/filetree.go app/ui/filetree_test.go app/ui/mdtoc.go app/ui/mdtoc_test.go`
+- [x] confirm no ui file still references `fileTree` (unexported type), `newFileTree`, `newFileTreeFromEntries`, `mdTOC` (type), `parseTOC` (function), `ensureVisibleInList` — grep for each, should find zero hits
+- [x] `go build ./...` — should compile now; if it doesn't, fix remaining errors
 
 ### Task 14: Fix ui package tests
 

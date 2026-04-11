@@ -335,3 +335,24 @@ func (m *Model) skipInitialDividers() {
 		return
 	}
 }
+
+// isFullContext returns true when every non-divider line is ChangeContext.
+func (m Model) isFullContext(lines []diff.DiffLine) bool {
+	hasContext := false
+	for _, line := range lines {
+		if line.ChangeType == diff.ChangeDivider {
+			continue
+		}
+		if line.ChangeType != diff.ChangeContext {
+			return false
+		}
+		hasContext = true
+	}
+	return hasContext
+}
+
+// isMarkdownFile returns true when the filename has a markdown extension.
+func (m Model) isMarkdownFile(filename string) bool {
+	ext := strings.ToLower(filepath.Ext(filename))
+	return ext == ".md" || ext == ".markdown"
+}
