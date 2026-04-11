@@ -239,14 +239,9 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 		}
 	}
 
-	// rebuild entries list based on current filter state
-	if ft.filter {
-		// filter state preserved but we can't apply it without annotated map here,
-		// so rebuild with all files. refreshFilter will be called separately if needed.
-		ft.entries = ft.buildEntries(paths)
-	} else {
-		ft.entries = ft.buildEntries(paths)
-	}
+	// rebuild entries list with all files; filter state is preserved but can't be applied
+	// without annotated map here — refreshFilter will be called separately if needed
+	ft.entries = ft.buildEntries(paths)
 
 	// reset cursor/offset and position on first file entry
 	ft.cursor = 0

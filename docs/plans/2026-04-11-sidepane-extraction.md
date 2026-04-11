@@ -524,19 +524,19 @@ Port `app/ui/filetree.go` logic into the new package, adapting method names, and
 **Files:**
 - Create: `app/ui/sidepane/filetree_test.go`
 
-- [ ] copy `app/ui/filetree_test.go` to `app/ui/sidepane/filetree_test.go`, change package header to `package sidepane` (**NOT** `package sidepane_test`) — tests need to touch private fields like `cursor`, `offset`, `reviewed`, `filter`, `entries` for setup and assertions, so they must live in the same package
-- [ ] adapt test constructors: `newFileTree(...)` / `newFileTreeFromEntries(...)` → `NewFileTree(...)`, changing `[]string` inputs to `[]diff.FileEntry{}`
-- [ ] rename method calls: `moveDown/moveUp` → `Move(MotionDown)` / `Move(MotionUp)`; `pageDown(n)/pageUp(n)` → `Move(MotionPageDown, n)` / `Move(MotionPageUp, n)`; `moveToFirst/moveToLast` → `Move(MotionFirst)` / `Move(MotionLast)`
-- [ ] replace `hasNextFile/nextFile/hasPrevFile/prevFile` → `HasFile(DirNext/DirPrev)` / `StepFile(DirNext/DirPrev)`
-- [ ] replace `selectedFile` → `SelectedFile`, `selectByPath` → `SelectByPath`, `toggleFilter` → `ToggleFilter`, `refreshFilter` → `RefreshFilter`, `toggleReviewed` → `ToggleReviewed`, `reviewedCount` → `ReviewedCount`
-- [ ] update any direct field-access assertions to use exported methods where possible (`.allFiles` → `.TotalFiles()`, `.filter` → `.FilterActive()`, etc.) — remaining field-access stays OK because tests live in `package sidepane`
-- [ ] add new test `TestFileTreeRebuild` covering: reviewed map preservation (keys kept for files still present), reviewed map pruning (stale keys dropped for removed files), cursor reset to first file entry, fileStatuses refresh from new entries, filter state preservation
-- [ ] add new test `TestFileTreeRebuildThenSelectByPath` covering the contract: after `Rebuild(entries)` + `SelectByPath(existingFile)`, cursor lands on that file; after `Rebuild(entries)` + `SelectByPath(deletedFile)`, cursor stays on first file (SelectByPath returns false)
-- [ ] add test `TestFileTreeMove_Exhaustive` iterating all `MotionValues`, ensuring `Move` doesn't panic with any enum value (both with and without a count argument)
-- [ ] add test `TestFileTreeMove_VariadicCount` covering: `Move(MotionPageDown)` with no count argument (fallback behavior), `Move(MotionPageDown, 5)`, `Move(MotionDown, 99)` (count ignored for non-page motions)
-- [ ] add test `TestNewFileTree_Nil` covering `NewFileTree(nil)` returns a valid empty `*FileTree` (needed for NewModel nil-safe initialization path)
-- [ ] adapt render tests — replace direct style field access with `FileTreeRender{Resolver: ..., Renderer: ...}`
-- [ ] for render tests, use `style.NewResolver(...)` / `style.NewRenderer(...)` from `app/ui/style/` — tests importing style is fine (coupling is test→style, not sidepane→style; sidepane's production code uses only `style.StyleKey`/`ColorKey` type names)
+- [x] copy `app/ui/filetree_test.go` to `app/ui/sidepane/filetree_test.go`, change package header to `package sidepane` (**NOT** `package sidepane_test`) — tests need to touch private fields like `cursor`, `offset`, `reviewed`, `filter`, `entries` for setup and assertions, so they must live in the same package
+- [x] adapt test constructors: `newFileTree(...)` / `newFileTreeFromEntries(...)` → `NewFileTree(...)`, changing `[]string` inputs to `[]diff.FileEntry{}`
+- [x] rename method calls: `moveDown/moveUp` → `Move(MotionDown)` / `Move(MotionUp)`; `pageDown(n)/pageUp(n)` → `Move(MotionPageDown, n)` / `Move(MotionPageUp, n)`; `moveToFirst/moveToLast` → `Move(MotionFirst)` / `Move(MotionLast)`
+- [x] replace `hasNextFile/nextFile/hasPrevFile/prevFile` → `HasFile(DirNext/DirPrev)` / `StepFile(DirNext/DirPrev)`
+- [x] replace `selectedFile` → `SelectedFile`, `selectByPath` → `SelectByPath`, `toggleFilter` → `ToggleFilter`, `refreshFilter` → `RefreshFilter`, `toggleReviewed` → `ToggleReviewed`, `reviewedCount` → `ReviewedCount`
+- [x] update any direct field-access assertions to use exported methods where possible (`.allFiles` → `.TotalFiles()`, `.filter` → `.FilterActive()`, etc.) — remaining field-access stays OK because tests live in `package sidepane`
+- [x] add new test `TestFileTreeRebuild` covering: reviewed map preservation (keys kept for files still present), reviewed map pruning (stale keys dropped for removed files), cursor reset to first file entry, fileStatuses refresh from new entries, filter state preservation
+- [x] add new test `TestFileTreeRebuildThenSelectByPath` covering the contract: after `Rebuild(entries)` + `SelectByPath(existingFile)`, cursor lands on that file; after `Rebuild(entries)` + `SelectByPath(deletedFile)`, cursor stays on first file (SelectByPath returns false)
+- [x] add test `TestFileTreeMove_Exhaustive` iterating all `MotionValues`, ensuring `Move` doesn't panic with any enum value (both with and without a count argument)
+- [x] add test `TestFileTreeMove_VariadicCount` covering: `Move(MotionPageDown)` with no count argument (fallback behavior), `Move(MotionPageDown, 5)`, `Move(MotionDown, 99)` (count ignored for non-page motions)
+- [x] add test `TestNewFileTree_Nil` covering `NewFileTree(nil)` returns a valid empty `*FileTree` (needed for NewModel nil-safe initialization path)
+- [x] adapt render tests — replace direct style field access with `FileTreeRender{Resolver: ..., Renderer: ...}`
+- [x] for render tests, use `style.NewResolver(...)` / `style.NewRenderer(...)` from `app/ui/style/` — tests importing style is fine (coupling is test→style, not sidepane→style; sidepane's production code uses only `style.StyleKey`/`ColorKey` type names)
 
 ### Task 4: Implement TOC type and all methods
 
