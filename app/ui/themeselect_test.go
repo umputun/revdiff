@@ -20,27 +20,29 @@ func TestColorsFromTheme(t *testing.T) {
 	th := theme.Theme{
 		ChromaStyle: "dracula",
 		Colors: map[string]string{
-			"color-accent":      "#bd93f9",
-			"color-border":      "#6272a4",
-			"color-normal":      "#f8f8f2",
-			"color-muted":       "#6272a4",
-			"color-selected-fg": "#f8f8f2",
-			"color-selected-bg": "#44475a",
-			"color-annotation":  "#f1fa8c",
-			"color-cursor-fg":   "#282a36",
-			"color-cursor-bg":   "#f8f8f2",
-			"color-add-fg":      "#50fa7b",
-			"color-add-bg":      "#2a4a2a",
-			"color-remove-fg":   "#ff5555",
-			"color-remove-bg":   "#4a2a2a",
-			"color-modify-fg":   "#ffb86c",
-			"color-modify-bg":   "#3a3a2a",
-			"color-tree-bg":     "#21222c",
-			"color-diff-bg":     "#282a36",
-			"color-status-fg":   "#f8f8f2",
-			"color-status-bg":   "#44475a",
-			"color-search-fg":   "#282a36",
-			"color-search-bg":   "#f1fa8c",
+			"color-accent":         "#bd93f9",
+			"color-border":         "#6272a4",
+			"color-normal":         "#f8f8f2",
+			"color-muted":          "#6272a4",
+			"color-selected-fg":    "#f8f8f2",
+			"color-selected-bg":    "#44475a",
+			"color-annotation":     "#f1fa8c",
+			"color-cursor-fg":      "#282a36",
+			"color-cursor-bg":      "#f8f8f2",
+			"color-add-fg":         "#50fa7b",
+			"color-add-bg":         "#2a4a2a",
+			"color-remove-fg":      "#ff5555",
+			"color-remove-bg":      "#4a2a2a",
+			"color-word-add-bg":    "#3a5a3a",
+			"color-word-remove-bg": "#5a3a3a",
+			"color-modify-fg":      "#ffb86c",
+			"color-modify-bg":      "#3a3a2a",
+			"color-tree-bg":        "#21222c",
+			"color-diff-bg":        "#282a36",
+			"color-status-fg":      "#f8f8f2",
+			"color-status-bg":      "#44475a",
+			"color-search-fg":      "#282a36",
+			"color-search-bg":      "#f1fa8c",
 		},
 	}
 
@@ -50,6 +52,8 @@ func TestColorsFromTheme(t *testing.T) {
 	assert.Equal(t, "#f8f8f2", colors.Normal)
 	assert.Equal(t, "#50fa7b", colors.AddFg)
 	assert.Equal(t, "#282a36", colors.DiffBg)
+	assert.Equal(t, "#3a5a3a", colors.WordAddBg)
+	assert.Equal(t, "#5a3a3a", colors.WordRemoveBg)
 }
 
 func TestBuildThemeEntries(t *testing.T) {
@@ -122,8 +126,9 @@ func TestThemeSelectOverlay_renders(t *testing.T) {
 	m.width = 80
 	m.height = 24
 	m.themesDir = t.TempDir()
-	m.resolver = style.NewResolver(style.Colors{})
-	m.renderer = style.NewRenderer(m.resolver)
+	res := style.NewResolver(style.Colors{})
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	m.openThemeSelector()
 
 	overlay := m.themeSelectOverlay()
@@ -191,8 +196,9 @@ func TestFormatThemeEntry_localDiamond(t *testing.T) {
 func TestFormatThemeEntry_selectedRestoresSelectedForegroundAfterSwatch(t *testing.T) {
 	m := testModel(nil, nil)
 	tc := style.Colors{Normal: "#d0d0d0", Muted: "#6272a4", SelectedFg: "#f8f8f2", SelectedBg: "#44475a"}
-	m.resolver = style.NewResolver(tc)
-	m.renderer = style.NewRenderer(m.resolver)
+	res := style.NewResolver(tc)
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 
 	e := themeEntry{
 		name:  "dracula",
@@ -219,7 +225,7 @@ func TestConfirmThemeSelect_noMatchesRestoresOriginalTheme(t *testing.T) {
 		StyleNameFunc: func() string { return currentStyle },
 	}
 
-	m := NewModel(renderer, annotation.NewStore(), highlighter, ModelConfig{TreeWidthRatio: 3})
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{TreeWidthRatio: 3})
 	m.width = 80
 	m.height = 24
 	m.ready = true
@@ -265,7 +271,7 @@ func TestThemeSelectPreviewAndConfirmPreserveNoColors(t *testing.T) {
 		StyleNameFunc:      func() string { return "orig-style" },
 	}
 
-	m := NewModel(renderer, annotation.NewStore(), highlighter, ModelConfig{NoColors: true, TreeWidthRatio: 3})
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{NoColors: true, TreeWidthRatio: 3})
 	m.width = 80
 	m.height = 24
 	m.ready = true
@@ -313,7 +319,7 @@ func TestApplyTheme_invalidChromaStyleKeepsPreviousHighlightingStyle(t *testing.
 		StyleNameFunc: func() string { return currentStyle },
 	}
 
-	m := NewModel(renderer, annotation.NewStore(), highlighter, ModelConfig{TreeWidthRatio: 3})
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{TreeWidthRatio: 3})
 	m.currFile = "main.go"
 	m.diffLines = []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "package main"}}
 	m.highlightedLines = []string{"existing"}

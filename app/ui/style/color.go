@@ -23,6 +23,10 @@ const (
 	ResetBg Color = "\033[49m"
 )
 
+// AnsiFg returns an ANSI 24-bit foreground color escape for a #RRGGBB hex string.
+// returns empty string for invalid input.
+func AnsiFg(hex string) string { return ansiColor(hex, 38) }
+
 // ansiColor returns an ANSI 24-bit color escape sequence for a hex color.
 // code 38 = foreground, 48 = background. uses raw ANSI instead of lipgloss.Render
 // to avoid full reset that breaks outer backgrounds.

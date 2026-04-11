@@ -167,8 +167,7 @@ func (m Model) helpOverlay() string {
 		}
 	}
 
-	boxStyle := m.resolver.Style(style.StyleKeyHelpBox).
-		Padding(1, 2)
+	boxStyle := m.resolver.Style(style.StyleKeyHelpBox)
 
 	return boxStyle.Render(buf.String())
 }

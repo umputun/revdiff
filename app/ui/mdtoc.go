@@ -133,7 +133,7 @@ func (toc *mdTOC) updateActiveSection(diffCursor int) {
 // render produces the TOC display string with indentation by level.
 // the highlighted entry uses FileSelected style in both modes:
 // when TOC is focused it highlights the cursor, when diff is focused it highlights the active section.
-func (toc *mdTOC) render(width, height int, focusedPane pane, res style.Resolver) string {
+func (toc *mdTOC) render(width, height int, focusedPane pane, res styleResolver) string {
 	if len(toc.entries) == 0 {
 		return "  no headers"
 	}

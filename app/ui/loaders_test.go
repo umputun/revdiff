@@ -257,7 +257,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
 			TreeWidthRatio: 3,
 			LoadUntracked: func() ([]string, error) {
 				return []string{"newfile.go"}, nil
@@ -311,7 +311,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -335,7 +335,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
 			TreeWidthRatio: 3,
 			LoadUntracked: func() ([]string, error) {
 				return []string{"newfile.go", "other.go"}, nil
@@ -368,7 +368,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -394,7 +394,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -418,7 +418,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -442,7 +442,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -468,7 +468,7 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -501,7 +501,7 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -533,7 +533,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -561,7 +561,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
 		m.width = 120
 		m.height = 40
 		m.ready = true
@@ -592,7 +592,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			},
 		}
 		store := annotation.NewStore()
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
 		m.width = 120
 		m.height = 40
 		m.ready = true

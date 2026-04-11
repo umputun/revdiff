@@ -22,13 +22,12 @@
 //   - mdtoc.go — markdown table-of-contents sidebar for single-file markdown review
 //   - search.go — incremental search: input handling, match computation, navigation
 //   - worddiff.go — intra-line word-diff: tokenizer, LCS, line pairing, range computation
-//   - deps.go — consumer-side interfaces for the style sub-package (styleResolver,
-//     styleRenderer, sgrProcessor) with compile-time assertions and moq generation
 //
 // Color and style management lives in the [style] sub-package (app/ui/style/).
 // It owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking,
-// and HSL color math. Model holds concrete style types (style.Resolver, style.Renderer,
-// style.SGR); consumer-side interfaces in deps.go enforce the contract at compile time.
+// and HSL color math. Model holds style types through consumer-side interfaces
+// (styleResolver, styleRenderer, sgrProcessor) defined in model.go; concrete
+// implementations live in the style sub-package.
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
 // [SyntaxHighlighter] (provides ANSI-highlighted lines), and [Blamer] (provides git blame data).

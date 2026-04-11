@@ -264,7 +264,7 @@ func (ft *fileTree) fileIndices() []int {
 
 // render produces the file tree display string, showing only entries visible within the given height.
 // it adjusts the internal offset so the cursor stays within the visible window.
-func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, res style.Resolver, rnd style.Renderer) string {
+func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, res styleResolver, rnd styleRenderer) string {
 	if len(ft.entries) == 0 {
 		return "  no changed files"
 	}
@@ -296,8 +296,8 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, re
 // reducing the parameter count of renderFileEntry.
 type renderCtx struct {
 	annotatedFiles map[string]bool
-	res            style.Resolver
-	rnd            style.Renderer
+	res            styleResolver
+	rnd            styleRenderer
 }
 
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.

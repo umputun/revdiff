@@ -3,8 +3,12 @@ package ui
 //go:generate moq -out mocks/renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
 //go:generate moq -out mocks/syntax_highlighter.go -pkg mocks -skip-ensure -fmt goimports . SyntaxHighlighter
 //go:generate moq -out mocks/blamer.go -pkg mocks -skip-ensure -fmt goimports . Blamer
+//go:generate moq -out mocks/style_resolver.go -pkg mocks -skip-ensure -fmt goimports . styleResolver
+//go:generate moq -out mocks/style_renderer.go -pkg mocks -skip-ensure -fmt goimports . styleRenderer
+//go:generate moq -out mocks/sgr_processor.go -pkg mocks -skip-ensure -fmt goimports . sgrProcessor
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +16,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
@@ -37,6 +42,42 @@ type Blamer interface {
 	FileBlame(ref, file string, staged bool) (map[int]diff.BlameLine, error)
 }
 
+// styleResolver is what Model needs for static and runtime style/color lookups.
+// Implemented by style.Resolver.
+type styleResolver interface {
+	Color(k style.ColorKey) style.Color
+	Style(k style.StyleKey) lipgloss.Style
+	LineBg(change diff.ChangeType) style.Color
+	LineStyle(change diff.ChangeType, highlighted bool) lipgloss.Style
+	WordDiffBg(change diff.ChangeType) style.Color
+	IndicatorBg(change diff.ChangeType) style.Color
+}
+
+// styleRenderer is what Model needs for compound ANSI rendering operations.
+// Implemented by style.Renderer.
+type styleRenderer interface {
+	AnnotationInline(text string) string
+	DiffCursor(noColors bool) string
+	StatusBarSeparator() string
+	FileStatusMark(status diff.FileStatus) string
+	FileReviewedMark() string
+	FileAnnotationMark() string
+}
+
+// sgrProcessor is what Model needs for ANSI SGR stream processing.
+// Implemented by style.SGR.
+type sgrProcessor interface {
+	Reemit(lines []string) []string
+}
+
+// compile-time assertions — enforce that the concrete style package types
+// satisfy the consumer-side interfaces.
+var (
+	_ styleResolver = (*style.Resolver)(nil)
+	_ styleRenderer = (*style.Renderer)(nil)
+	_ sgrProcessor  = (*style.SGR)(nil)
+)
+
 // pane identifies which pane has focus.
 type pane int
 
@@ -49,9 +90,9 @@ const (
 
 // Model is the top-level bubbletea model for revdiff.
 type Model struct {
-	resolver     style.Resolver
-	renderer     style.Renderer
-	sgr          style.SGR
+	resolver     styleResolver
+	renderer     styleRenderer
+	sgr          sgrProcessor
 	tree         fileTree
 	viewport     viewport.Model
 	store        *annotation.Store
@@ -157,36 +198,68 @@ type filesLoadedMsg struct {
 	warnings []string // non-fatal issues (staged/untracked fetch failures)
 }
 
-// ModelConfig holds configuration options for NewModel.
+// ModelConfig holds all dependencies and configuration for NewModel.
+// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR)
+// are required and must be constructed by the caller. Blamer is optional.
 type ModelConfig struct {
+	// --- UI dependencies (required, caller-constructed) ---
+	Renderer    Renderer          // diff renderer: ChangedFiles, FileDiff
+	Store       *annotation.Store // annotation store
+	Highlighter SyntaxHighlighter // syntax highlighter
+
+	// --- Style dependencies (required, caller-constructed) ---
+	StyleResolver styleResolver // color/style lookups
+	StyleRenderer styleRenderer // compound ANSI rendering
+	SGR           sgrProcessor  // SGR stream reemit
+
+	// --- Optional dependencies ---
+	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
+	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
+	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
+
+	// --- Configuration values ---
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TabWidth         int                      // number of spaces per tab character
-	NoColors         bool                     // disable all colors including syntax highlighting
-	NoStatusBar      bool                     // hide the status bar
-	NoConfirmDiscard bool                     // skip confirmation prompt when discarding annotations
-	Wrap             bool                     // enable line wrapping
-	Collapsed        bool                     // start in collapsed diff mode
-	CrossFileHunks   bool                     // allow [ and ] to jump across file boundaries
-	LineNumbers      bool                     // show line numbers in diff gutter
-	ShowBlame        bool                     // show blame gutter on startup when available
-	WordDiff         bool                     // enable intra-line word-diff highlighting on startup
-	Only             []string                 // show only these files (match by exact path or path suffix)
-	WorkDir          string                   // working directory for resolving absolute --only paths
-	Keymap           *keymap.Keymap           // custom key bindings (nil uses defaults)
-	LoadUntracked    func() ([]string, error) // fetches untracked files; nil when unavailable
-	Blamer           Blamer                   // optional blame provider (nil when git unavailable)
-	Resolver         style.Resolver
-	Renderer         style.Renderer
-	SGR              style.SGR
-	ThemesDir        string // path to themes directory for theme selector
-	ConfigPath       string // path to config file for persisting theme choice
-	ActiveThemeName  string // name of theme currently applied (for theme selector cursor positioning)
+	TabWidth         int      // number of spaces per tab character
+	NoColors         bool     // disable all colors including syntax highlighting
+	NoStatusBar      bool     // hide the status bar
+	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
+	Wrap             bool     // enable line wrapping
+	Collapsed        bool     // start in collapsed diff mode
+	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
+	LineNumbers      bool     // show line numbers in diff gutter
+	ShowBlame        bool     // show blame gutter on startup when available
+	WordDiff         bool     // enable intra-line word-diff highlighting on startup
+	Only             []string // show only these files (match by exact path or path suffix)
+	WorkDir          string   // working directory for resolving absolute --only paths
+	ThemesDir        string   // path to themes directory for theme selector
+	ConfigPath       string   // path to config file for persisting theme choice
+	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
 }
 
-// NewModel creates a new Model with the given diff renderer, store, highlighter and configuration.
-func NewModel(diffRenderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
+// NewModel creates a new Model from the given configuration. All dependencies
+// must be provided by the caller — there is no fallback construction.
+// Returns an error if any required dependency is missing from the config.
+func NewModel(cfg ModelConfig) (Model, error) {
+	if cfg.Renderer == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Renderer is required")
+	}
+	if cfg.Store == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Store is required")
+	}
+	if cfg.Highlighter == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Highlighter is required")
+	}
+	if cfg.StyleResolver == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.StyleResolver is required")
+	}
+	if cfg.StyleRenderer == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.StyleRenderer is required")
+	}
+	if cfg.SGR == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.SGR is required")
+	}
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
 		cfg.TreeWidthRatio = 2
 	}
@@ -197,26 +270,15 @@ func NewModel(diffRenderer Renderer, store *annotation.Store, highlighter Syntax
 	if km == nil {
 		km = keymap.Default()
 	}
-	res := cfg.Resolver
-	rnd := cfg.Renderer
-	sgr := cfg.SGR
-	if !res.Ready() {
-		if cfg.NoColors {
-			res = style.PlainResolver()
-		} else {
-			res = style.NewResolver(style.Colors{})
-		}
-		rnd = style.NewRenderer(res)
-	}
 
 	return Model{
-		resolver:         res,
-		renderer:         rnd,
-		sgr:              sgr,
+		resolver:         cfg.StyleResolver,
+		renderer:         cfg.StyleRenderer,
+		sgr:              cfg.SGR,
 		keymap:           km,
-		store:            store,
-		diffRenderer:     diffRenderer,
-		highlighter:      highlighter,
+		store:            cfg.Store,
+		diffRenderer:     cfg.Renderer,
+		highlighter:      cfg.Highlighter,
 		blamer:           cfg.Blamer,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
@@ -239,7 +301,7 @@ func NewModel(diffRenderer Renderer, store *annotation.Store, highlighter Syntax
 		themesDir:        cfg.ThemesDir,
 		configPath:       cfg.ConfigPath,
 		activeThemeName:  cfg.ActiveThemeName,
-	}
+	}, nil
 }
 
 // Store returns the annotation store for reading results after quit.

@@ -11,6 +11,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func noopHighlighter() *mocks.SyntaxHighlighterMock {
@@ -19,6 +20,29 @@ func noopHighlighter() *mocks.SyntaxHighlighterMock {
 		SetStyleFunc:       func(string) bool { return true },
 		StyleNameFunc:      func() string { return "monokai" },
 	}
+}
+
+// testNewModel is a test-only helper that preserves the old 4-arg NewModel
+// shape while the production NewModel takes a single ModelConfig. It accepts
+// the diff renderer, store, and highlighter as explicit args (so tests can
+// pass mocks/fakes directly) and fills in default style dependencies
+// (PlainResolver + its derived Renderer + a zero SGR) when the cfg doesn't
+// set them explicitly. Tests that exercise custom colors pre-populate
+// cfg.StyleResolver / StyleRenderer / SGR and those take precedence.
+func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
+	t.Helper()
+	cfg.Renderer = renderer
+	cfg.Store = store
+	cfg.Highlighter = highlighter
+	if cfg.StyleResolver == nil {
+		res := style.PlainResolver()
+		cfg.StyleResolver = res
+		cfg.StyleRenderer = style.NewRenderer(res)
+		cfg.SGR = style.SGR{}
+	}
+	m, err := NewModel(cfg)
+	require.NoError(t, err)
+	return m
 }
 
 func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
@@ -34,8 +58,20 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 			return fileDiffs[file], nil
 		},
 	}
-	store := annotation.NewStore()
-	m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3})
+	res := style.PlainResolver()
+	m, err := NewModel(ModelConfig{
+		Renderer:       renderer,
+		Store:          annotation.NewStore(),
+		Highlighter:    noopHighlighter(),
+		StyleResolver:  res,
+		StyleRenderer:  style.NewRenderer(res),
+		SGR:            style.SGR{},
+		TreeWidthRatio: 3,
+	})
+	if err != nil {
+		// testModel supplies all required deps — an error here is a bug in the helper, not the test.
+		panic("testModel: " + err.Error())
+	}
 	// simulate window size
 	m.width = 120
 	m.height = 40
@@ -111,12 +147,12 @@ func TestModel_WrapModeFromConfig(t *testing.T) {
 	store := annotation.NewStore()
 
 	t.Run("wrap enabled via config", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Wrap: true, TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{Wrap: true, TreeWidthRatio: 2})
 		assert.True(t, m.wrapMode)
 	})
 
 	t.Run("wrap disabled by default", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
 		assert.False(t, m.wrapMode)
 	})
 }
@@ -129,12 +165,12 @@ func TestModel_CollapsedModeFromConfig(t *testing.T) {
 	store := annotation.NewStore()
 
 	t.Run("collapsed enabled via config", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Collapsed: true, TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{Collapsed: true, TreeWidthRatio: 2})
 		assert.True(t, m.collapsed.enabled)
 	})
 
 	t.Run("collapsed disabled by default", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
 		assert.False(t, m.collapsed.enabled)
 	})
 }
@@ -147,12 +183,12 @@ func TestModel_LineNumbersFromConfig(t *testing.T) {
 	store := annotation.NewStore()
 
 	t.Run("line numbers enabled via config", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{LineNumbers: true, TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{LineNumbers: true, TreeWidthRatio: 2})
 		assert.True(t, m.lineNumbers)
 	})
 
 	t.Run("line numbers disabled by default", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
 		assert.False(t, m.lineNumbers)
 	})
 }
@@ -168,17 +204,17 @@ func TestModel_BlameFromConfig(t *testing.T) {
 	}
 
 	t.Run("blame enabled via config when blamer is available", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, Blamer: blamer, TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, Blamer: blamer, TreeWidthRatio: 2})
 		assert.True(t, m.showBlame)
 	})
 
 	t.Run("blame disabled without blamer even if requested", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, TreeWidthRatio: 2})
 		assert.False(t, m.showBlame)
 	})
 
 	t.Run("blame disabled by default", func(t *testing.T) {
-		m := NewModel(renderer, store, noopHighlighter(), ModelConfig{Blamer: blamer, TreeWidthRatio: 2})
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{Blamer: blamer, TreeWidthRatio: 2})
 		assert.False(t, m.showBlame)
 	})
 }
@@ -253,7 +289,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 				ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
 				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 			}
-			m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: tc.ratio})
+			m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: tc.ratio})
 			result, _ := m.Update(tea.WindowSizeMsg{Width: tc.termWidth, Height: 40})
 			model := result.(Model)
 			assert.Equal(t, tc.wantTreeWidth, model.treeWidth)

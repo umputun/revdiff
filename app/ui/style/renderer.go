@@ -106,7 +106,7 @@ func (r Renderer) FileReviewedMark() string {
 }
 
 // FileAnnotationMark returns a colored annotation marker for files with annotations.
-// uses AnnotationFg with no reset (fg-only, safe inside lipgloss parent).
+// uses AnnotationFg with ResetFg after the marker.
 func (r Renderer) FileAnnotationMark() string {
 	annotFg := r.res.Color(ColorKeyAnnotationFg)
 	if annotFg == "" {

@@ -378,7 +378,7 @@ func TestModel_NoConfirmDiscardWired(t *testing.T) {
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
-	m := NewModel(renderer, store, noopHighlighter(), ModelConfig{NoConfirmDiscard: true, TreeWidthRatio: 3})
+	m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{NoConfirmDiscard: true, TreeWidthRatio: 3})
 	assert.True(t, m.noConfirmDiscard, "noConfirmDiscard should be wired from ModelConfig")
 }
 

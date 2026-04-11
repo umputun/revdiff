@@ -416,9 +416,16 @@ func run(opts options) error {
 		res = style.NewResolver(styleColors)
 	}
 
-	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
-		Keymap:           km,
+	model, err := ui.NewModel(ui.ModelConfig{
+		Renderer:         renderer,
+		Store:            store,
+		Highlighter:      hl,
+		StyleResolver:    res,
+		StyleRenderer:    style.NewRenderer(res),
+		SGR:              style.SGR{},
 		Blamer:           blamer,
+		LoadUntracked:    untrackedFn,
+		Keymap:           km,
 		NoColors:         opts.NoColors,
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,
@@ -434,14 +441,13 @@ func run(opts options) error {
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
 		WorkDir:          workDir,
-		LoadUntracked:    untrackedFn,
 		ThemesDir:        defaultThemesDir(),
 		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
 		ActiveThemeName:  theme.ActiveName(opts.Theme),
-		Resolver:         res,
-		Renderer:         style.NewRenderer(res),
-		SGR:              style.SGR{},
 	})
+	if err != nil {
+		return fmt.Errorf("create model: %w", err)
+	}
 
 	p := tea.NewProgram(model, programOptions...)
 	finalModel, err := p.Run()

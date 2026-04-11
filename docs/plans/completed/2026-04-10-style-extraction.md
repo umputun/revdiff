@@ -143,6 +143,20 @@ For finite sets of keys (color roles, style roles), use `go-pkgz/enum` rather th
 
 Every file with executable code gets a matching `_test.go` file. Missing tests are a bug. The old branch shipped `ansi.go` without `ansi_test.go`; this plan fixes that and the same rule applies to future extractions.
 
+### 10. Dependency injection: all deps required, constructor returns error, no fallbacks
+
+A consumer's constructor must receive all dependencies from the caller and must NOT fabricate them internally as a "convenience" fallback. The rules:
+
+1. **One config struct** — a single `ModelConfig` (or similar) holds all required dependencies as fields. The constructor signature is `New(cfg Config) (T, error)`, not a mix of explicit args and cfg fields. Consistency beats a few characters saved.
+
+2. **Required deps are required** — if a caller forgets to set a dep, the constructor returns a clear error `"ui.NewModel: cfg.X is required"`. The caller handles it (main.go wraps with `fmt.Errorf`; tests use `require.NoError`). Do NOT panic in the constructor. Do NOT fabricate a default. Programmer-error vs runtime-error isn't a meaningful distinction at the API boundary — returning an error lets the caller decide, and Go test ergonomics (`require.NoError`) are already built for this.
+
+3. **No fallback construction** — a consumer constructor that says "if cfg.X is nil, build a default X" is a DI violation. It hides two problems: (a) there are now two places that construct X, creating a drift risk between them; (b) callers that forgot to set X silently get a potentially-wrong default instead of a loud failure. Both are worse than "loud error at the wiring site".
+
+4. **Test helpers wrap the strict constructor** — if tests would otherwise need to set many fields at every call site, write a test helper (`testNewModel(t, renderer, store, highlighter, cfg) Model`) that accepts the most-common args positionally, fills in default style deps if the caller doesn't set them, calls the real constructor, and `require.NoError`s the result. The helper encapsulates the defaults — not the production constructor. Production code stays strict.
+
+5. **Concrete example from this refactor** — the initial implementation had `NewModel` fabricate a `PlainResolver` when `cfg.StyleResolver == nil`, with a matching `Ready()` method on `style.Resolver` so the check could detect zero-value struct. This was added to avoid breaking tests that didn't set the style deps. It was wrong: the production code was accommodating a testing shortcut at the cost of DI purity. The correction moved the fallback out of `NewModel` (into `testNewModel` helper for tests only) and made `NewModel` strict. Lesson: tests should adapt to production, not the other way around.
+
 ## Design Decisions (Locked)
 
 Each decision here has a "why" because future extractions should understand the reasoning, not just the conclusion.
@@ -223,16 +237,17 @@ Each decision here has a "why" because future extractions should understand the 
 - **Decision**: do NOT absorb `app/theme/` into `app/ui/style/`.
 - **Why**: `app/theme/` handles file I/O (reading `.ini` theme files from `~/.config/revdiff/themes/`). That's a different concern from style materialization. Keeping them separate preserves clean separation: `theme.Load()` returns `Colors` → `main.go` calls `style.NewResolver(colors)` / `style.NewRenderer(res)` / `style.SGR{}` and wires them into `ModelConfig`. `main.go` is the wiring point.
 
-### D12: Three narrow consumer-side interfaces in `app/ui/deps.go` — AND Model uses them as field types
+### D12: Three narrow consumer-side interfaces in `model.go` — AND Model uses them as field types
 
-- **Decision**: define **three** interfaces in `app/ui/deps.go` (new file), one per `style` type, matching the D15 three-type split. Each is narrow and independently mockable. **Model AND ModelConfig hold these interface types as field types**, not the concrete `style.Resolver` / `style.Renderer` / `style.SGR`.
+- **Decision**: define **three** interfaces in `app/ui/model.go` (alongside the existing `Renderer`, `SyntaxHighlighter`, `Blamer` interfaces), one per `style` type, matching the D15 three-type split. Each is narrow and independently mockable. **Model AND ModelConfig hold these interface types as field types**, not the concrete `style.Resolver` / `style.Renderer` / `style.SGR`.
   - `styleResolver` — 6 methods: `Color`, `Style`, `LineBg`, `LineStyle`, `WordDiffBg`, `IndicatorBg`. Implemented by `style.Resolver`.
   - `styleRenderer` — 6 methods: `AnnotationInline`, `DiffCursor`, `StatusBarSeparator`, `FileStatusMark`, `FileReviewedMark`, `FileAnnotationMark`. Implemented by `style.Renderer`.
   - `sgrProcessor` — 1 method: `Reemit`. Implemented by `style.SGR`.
 - **Why three instead of one**: the three types serve different concerns (lookups, compound assembly, stream processing). A single fat interface would force test code that only cares about one concern to depend on all three. Three narrow interfaces let a test mock just the piece it needs. This matches D15's "single responsibility per type" principle and keeps the test boundary aligned with the production boundary.
-- **Why Model holds interface types (NOT concrete types)**: idiomatic Go — "accept interfaces, return concrete types". Model is the consumer; it accepts the interfaces. The provider (`style` package) returns concrete types from constructors (`NewResolver`, `NewRenderer`) which are then assigned to interface-typed fields on Model via ModelConfig. Go handles the concrete-to-interface conversion at assignment with zero ceremony. The overhead of interface dispatch is negligible for a TUI (~1-2ns per call). The win is huge: tests can mock any of the three concerns independently without touching the others, Model is decoupled from the concrete style types, and the interfaces are actually used by production code (not just the compile-time assertion). **An interface that isn't used by any field or function signature is dead weight — it violates Rule 1 (no code without callers).**
-- **Generated mocks**: three moq directives produce `app/ui/mocks/style_resolver.go`, `app/ui/mocks/style_renderer.go`, `app/ui/mocks/sgr_processor.go`. Each mock is small because each interface is small. Tests that only care about one concern can construct a Model with a mock for just that field and real `style.NewResolver(...)` / etc. for the others.
-- **Compile-time contract enforcement**: `deps.go` contains three assertions that cost nothing at runtime but catch contract violations at compile time (they're redundant with Model using the interfaces as field types, but harmless — keep as defensive documentation):
+- **Why interfaces live in `model.go`, not a separate `deps.go`**: revdiff's existing convention is "consumer-side interfaces live in the file that contains the consuming type". The `Renderer`, `SyntaxHighlighter`, `Blamer` interfaces are already in `model.go` for this reason. Adding a separate `deps.go` for the three style interfaces (as an early draft did) would introduce an inconsistency with the project's own patterns. Corrected mid-implementation (commit `b7f92a8`) by moving the interfaces into `model.go` and deleting `deps.go`. Lesson: follow project conventions — if the existing code has a pattern for interface placement, don't invent a new one.
+- **Why Model holds interface types (NOT concrete types)**: idiomatic Go — "accept interfaces, return concrete types". Model is the consumer; it accepts the interfaces. The provider (`style` package) returns concrete types from constructors (`NewResolver`, `NewRenderer`) which are then assigned to interface-typed fields on Model via `ModelConfig`. Go handles the concrete-to-interface conversion at assignment with zero ceremony. The overhead of interface dispatch is negligible for a TUI (~1-2ns per call). The win is huge: tests can mock any of the three concerns independently without touching the others, Model is decoupled from the concrete style types, and the interfaces are actually used by production code (not just the compile-time assertion). **An interface that isn't used by any field or function signature is dead weight — it violates Rule 1 (no code without callers).**
+- **Generated mocks**: three moq directives in `model.go` produce `app/ui/mocks/style_resolver.go`, `app/ui/mocks/style_renderer.go`, `app/ui/mocks/sgr_processor.go`. Each mock is small because each interface is small. Tests that only care about one concern can construct a Model with a mock for just that field and real `style.NewResolver(...)` / etc. for the others.
+- **Compile-time contract enforcement**: `model.go` contains three assertions that cost nothing at runtime but catch contract violations at compile time:
   ```go
   var (
       _ styleResolver = (*style.Resolver)(nil)
@@ -240,24 +255,33 @@ Each decision here has a "why" because future extractions should understand the 
       _ sgrProcessor  = (*style.SGR)(nil)
   )
   ```
-- **Model field types (CORRECTED)**:
+- **Model field types (FINAL)**:
   ```go
   type Model struct {
-      resolver styleResolver   // was: style.Resolver
-      renderer styleRenderer   // was: style.Renderer
-      sgr      sgrProcessor    // was: style.SGR
+      resolver styleResolver
+      renderer styleRenderer
+      sgr      sgrProcessor
       // ...
   }
 
   type ModelConfig struct {
-      Resolver styleResolver   // was: style.Resolver
-      Renderer styleRenderer
-      SGR      sgrProcessor
-      // ...
+      // UI deps
+      Renderer    Renderer           // diff renderer
+      Store       *annotation.Store
+      Highlighter SyntaxHighlighter
+      Blamer      Blamer             // optional
+
+      // Style deps (renamed from Resolver/Renderer to free the Renderer name
+      // for the diff renderer field — see D16 for the constructor shape)
+      StyleResolver styleResolver
+      StyleRenderer styleRenderer
+      SGR           sgrProcessor
+
+      // ... config values
   }
   ```
-  `main.go` still calls `style.NewResolver(...)` / `style.NewRenderer(...)` / uses `style.SGR{}` and assigns those concrete values into the interface-typed `ModelConfig` fields. No cast, no wrapping — Go converts automatically.
-- **Historical note**: an earlier draft of D12 specified concrete types on Model with the reasoning "interface dispatch overhead, simplify field init, interfaces are for mockability". This was incoherent — if interfaces exist only for a compile-time assertion with no runtime callers, they're dead code. The correction happened after the plan shipped, prompted by a review during implementation. Lesson: if you define an interface, USE IT at the field level on consumers. Don't create interfaces as documentation-only artifacts. See also Design Philosophy #5 and Rule 1 in the "Rule 1/Rule 2 audit" section.
+  `main.go` calls `style.NewResolver(...)` / `style.NewRenderer(...)` / uses `style.SGR{}` and assigns those concrete values into the interface-typed `ModelConfig` fields. No cast, no wrapping — Go converts automatically at assignment.
+- **Historical note**: an earlier draft of D12 specified concrete types on Model with the reasoning "interface dispatch overhead, simplify field init, interfaces are for mockability". This was incoherent — if interfaces exist only for a compile-time assertion with no runtime callers, they're dead code. A separate `deps.go` file was also created for the three interfaces, violating the project's convention of putting consumer interfaces in the consumer file. Both were corrected mid-implementation (commit `b7f92a8`). See also Design Philosophy #5, D16 (the corresponding constructor-shape decision), and the Rule 1/Rule 2 audit section. Lesson: if you define an interface, USE IT at the field level on consumers; and follow existing project conventions for interface placement.
 
 ### D13: Full test coverage — every file gets a `_test.go`
 
@@ -311,6 +335,27 @@ Each decision here has a "why" because future extractions should understand the 
 
 - **Interface contract**: the consumer side gets **three interfaces** (`resolver`, `renderer`, `sgrProcessor`) in `app/ui/deps.go`, one per type. Each is narrow (1-6 methods), each can be mocked independently, and a test that only cares about rendering doesn't need to construct a color lookup mock.
 
+### D16: `NewModel` takes a single `ModelConfig` argument and returns `(Model, error)`
+
+- **Decision**: `func NewModel(cfg ModelConfig) (Model, error)`. Single config argument. Returns an error for missing required dependencies. No panics. No fallback construction of dependencies inside the constructor.
+- **Required fields on `ModelConfig`**:
+  - `Renderer Renderer` — the diff renderer (type `Renderer` from this package)
+  - `Store *annotation.Store` — annotation store
+  - `Highlighter SyntaxHighlighter` — syntax highlighter
+  - `StyleResolver styleResolver` — style package resolver (renamed from `Resolver` to free up the `Renderer` name for the diff renderer)
+  - `StyleRenderer styleRenderer` — style package renderer (renamed from `Renderer`)
+  - `SGR sgrProcessor` — SGR processor
+  - Missing any of these → `NewModel` returns `errors.New("ui.NewModel: cfg.X is required")` and the caller handles it.
+- **Optional fields on `ModelConfig`**:
+  - `Blamer Blamer` — nil when git unavailable
+  - `LoadUntracked func() ([]string, error)` — nil when unavailable
+  - `Keymap *keymap.Keymap` — nil uses defaults
+- **Why a single config arg instead of explicit positional args**: the earlier shape was `NewModel(diffRenderer, store, highlighter, cfg)` — a mix of positional deps and config fields. Inconsistent: `Blamer` was already in cfg, while `diffRenderer`/`store`/`highlighter` were explicit. Promoting all deps into the cfg struct gives uniform DI ergonomics: one place to set everything, named fields so the reader sees exactly what's being wired, and trivial evolution (add a new field without breaking the signature).
+- **Why return `(Model, error)` instead of panicking**: the decision hinges on Go idioms. Panics are for impossible programmer errors that should crash immediately (e.g., nil pointer deref in already-validated state). Constructor arg validation is not that — it's "caller gave me incomplete input". `require.NoError(t, err)` in tests and `if err != nil { return fmt.Errorf("create model: %w", err) }` in `main.go` are standard patterns. Returning an error lets the caller decide whether to fail fast, wrap with context, or report gracefully. Panicking from a constructor forces the caller into one behavior.
+- **Why field renames `Resolver` → `StyleResolver` / `Renderer` → `StyleRenderer`**: once `Renderer` (diff renderer) moved into ModelConfig as a field, it collided with the existing `Renderer` field (style renderer). The style fields were renamed with a `Style` prefix for the two that collided; `SGR` stayed as-is since there's no collision. Result: `StyleResolver` / `StyleRenderer` / `SGR` for style deps, `Renderer` / `Store` / `Highlighter` / `Blamer` for UI deps. The naming is slightly asymmetric (one group has a prefix, one doesn't) but unambiguous at call sites.
+- **Test ergonomics — `testNewModel` helper**: tests that construct a Model with explicit arguments (bypassing `testModel`) use a test-only helper `testNewModel(t, renderer, store, highlighter, cfg) Model` in `model_test.go`. It populates default style dependencies (PlainResolver etc.) when `cfg.StyleResolver` is nil, calls the real `NewModel`, and `require.NoError`s the result. The helper encapsulates the DI-defaults-for-tests convenience without leaking back into production code.
+- **Historical note**: an intermediate implementation had `NewModel` fabricate a `PlainResolver` when `cfg.StyleResolver == nil`, plus a `Ready()` method on `style.Resolver` to detect zero-value struct. This was added so ~30 tests that didn't set the style deps would still work. It was wrong — production code was accommodating test shortcuts. The correction removed the fallback + the `Ready()` method, introduced `testNewModel` for tests, and enforced strict DI in production. See also Design Philosophy #10.
+
 ## Alternatives Considered and Rejected
 
 | Alternative | Why rejected |
@@ -337,6 +382,10 @@ Each decision here has a "why" because future extractions should understand the 
 | `Bundle` container struct returned by `func New(c Colors) Bundle` | Considered during the D15 brainstorm and initially adopted. Rejected during a second plan review as pure ceremony — Bundle would exist solely to group three types with zero behavior. Three separate public constructors (`NewResolver`, `PlainResolver`, `NewRenderer`) and direct `style.SGR{}` instantiation gives `main.go` an explicit dependency-flow reading without a wrapper type. |
 | Constructor returning three values `func New(c Colors) (Resolver, Renderer, SGR)` | Considered as an alternative to Bundle. Tuple returns are awkward for >2 values and positional ordering is fragile. Rejected in favor of three separate named constructors that each return one type. |
 | Private style-builder functions (`contextStyle(c Colors)`, `dirEntryStyle(c Colors)`, etc.) as standalone functions in `resolver.go` | **INITIAL DESIGN MISTAKE, corrected mid-implementation** (commit `4e866a1`). The plan drafted ~6 private helpers that take `Colors` as their primary operand and build derived `lipgloss.Style` values. These were implemented as standalone functions in Task 1.6 and then refactored to methods on `Colors` after Ralphex had completed through Task 2.6. The standalone form violated the CLAUDE.md rule "Prefer methods over standalone utility functions" and the plan's own Design Philosophy #4. Lesson: the rule applies uniformly to private helpers — any function taking a type as its primary operand must be a method on that type, even if it's package-private and called only from one place. Design Philosophy #4 has been strengthened to state this explicitly so future extractions (filetree, mdtoc, worddiff) apply it from the start. |
+| `Model` field types as concrete `style.Resolver` / `style.Renderer` / `style.SGR` | **INITIAL DESIGN MISTAKE, corrected mid-implementation** (commit `b7f92a8`). D12's first draft said Model fields held concrete types "to avoid runtime interface dispatch overhead and simplify field initialization". This made the three consumer-side interfaces (`styleResolver` / `styleRenderer` / `sgrProcessor`) dead weight — they existed only for compile-time assertions with no runtime callers, violating Rule 1 (no code without callers). Corrected by changing Model and ModelConfig field types to the interface types. Also moved the three interface definitions from a separate `deps.go` file into `model.go` alongside the existing `Renderer`/`SyntaxHighlighter`/`Blamer` interfaces, matching the project's "interfaces go where the consumer lives" convention. Lesson: if you define an interface for a consumer, the consumer MUST use it at the field level. Otherwise delete the interface. |
+| `NewModel` with fallback construction of style deps + `Ready()` method on `style.Resolver` | **INITIAL DESIGN MISTAKE, corrected mid-implementation** (commit `21c8aa2`). An intermediate implementation had `NewModel` fabricate `PlainResolver` / `NewRenderer(res)` / `SGR{}` when the caller didn't set them, using a `Ready() bool` method on `style.Resolver` to detect zero-value struct. This was added so ~30 tests that didn't set style deps would still work. It was wrong — production code was accommodating test shortcuts, two places were constructing the same dependencies (main.go and NewModel), and the nil-check was hidden behind a method that existed for the sole purpose of supporting the fallback. Corrected by: removing the fallback and the `Ready()` method from `NewModel` / `style.Resolver`, changing `NewModel` signature from `(diffRenderer, store, highlighter, cfg) Model` to `(cfg ModelConfig) (Model, error)`, returning errors on missing deps, introducing a test-only `testNewModel` helper that preserves the old 4-arg positional ergonomics and fills in style-dep defaults. See D16 and Design Philosophy #10. Lesson: tests adapt to production, not the other way around. |
+| `NewModel` panicking on missing dependencies | Considered during implementation. Returning `(Model, error)` is more Go-idiomatic at API boundaries — it lets callers decide whether to fail fast, wrap with context, or recover. `require.NoError(t, err)` is the standard test pattern for constructor validation. Panicking forces one behavior and can't be wrapped with context at the call site. |
+| `NewModel` with explicit dep args + cfg struct (mixed shape: `NewModel(diffRenderer, store, highlighter, cfg)`) | The pre-correction shape. Inconsistent: `Blamer` was already in `cfg`, while three of the six deps were positional. Replaced with uniform `NewModel(cfg)` where all deps are cfg fields. Enables future dep additions without breaking the signature. |
 | Extract multiple sub-packages in one plan (filetree, mdtoc, worddiff) | Old branch tried this and it was "what's easy" rather than principled. Start with `style` alone, get it right, use as template. |
 | Per-task test gating | Structurally impossible for coordinated refactor; forces artificial commit gymnastics |
 

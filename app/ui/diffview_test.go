@@ -479,7 +479,7 @@ func TestModel_PlainStyles(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
-	m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{NoColors: true, TreeWidthRatio: 3})
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{NoColors: true, TreeWidthRatio: 3})
 	m.width = 120
 	m.height = 40
 	m.treeWidth = 36
@@ -494,10 +494,10 @@ func TestModel_TabWidthDefault(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
-	m := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 0})
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 0})
 	assert.Equal(t, "    ", m.tabSpaces, "tab width 0 should default to 4 spaces")
 
-	m2 := NewModel(renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 2})
+	m2 := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 2})
 	assert.Equal(t, "  ", m2.tabSpaces, "tab width 2 should produce 2 spaces")
 }
 

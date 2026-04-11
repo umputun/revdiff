@@ -24,16 +24,16 @@ const (
 
 // themeSelectState holds all state for the theme selector overlay.
 type themeSelectState struct {
-	active       bool           // true when overlay is visible
-	all          []themeEntry   // all available themes (unfiltered)
-	entries      []themeEntry   // filtered view into all
-	cursor       int            // selected item in filtered list
-	offset       int            // scroll offset
-	filter       string         // current filter text
-	origResolver style.Resolver // saved resolver for cancel/restore
-	origRenderer style.Renderer // saved renderer for cancel/restore
-	origSGR      style.SGR      // saved SGR for cancel/restore
-	origChroma   string         // saved chroma style name for cancel/restore
+	active       bool          // true when overlay is visible
+	all          []themeEntry  // all available themes (unfiltered)
+	entries      []themeEntry  // filtered view into all
+	cursor       int           // selected item in filtered list
+	offset       int           // scroll offset
+	filter       string        // current filter text
+	origResolver styleResolver // saved resolver for cancel/restore
+	origRenderer styleRenderer // saved renderer for cancel/restore
+	origSGR      sgrProcessor  // saved SGR for cancel/restore
+	origChroma   string        // saved chroma style name for cancel/restore
 }
 
 // themeEntry represents a single entry in the theme selector list.
@@ -182,7 +182,7 @@ func (m Model) formatThemeEntry(e themeEntry, width int, selected bool) string {
 	case e.local:
 		swatch = swatchText(string(m.resolver.Color(style.ColorKeyMutedFg)), "◇", resetFg)
 	case accentColor != "":
-		swatch = swatchText(fgFromHex(accentColor), "■", resetFg)
+		swatch = swatchText(style.AnsiFg(accentColor), "■", resetFg)
 	default:
 		swatch = "■"
 	}
@@ -285,12 +285,14 @@ func (m *Model) previewTheme() {
 // applyTheme rebuilds styles and re-highlights the current file.
 func (m *Model) applyTheme(th theme.Theme) {
 	sc := colorsFromTheme(th)
+	var res style.Resolver
 	if m.noColors {
-		m.resolver = style.PlainResolver()
+		res = style.PlainResolver()
 	} else {
-		m.resolver = style.NewResolver(sc)
+		res = style.NewResolver(sc)
 	}
-	m.renderer = style.NewRenderer(m.resolver)
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
 	prevStyle := m.highlighter.StyleName()
 	chromaChanged := false
@@ -361,27 +363,29 @@ func (m Model) themeSelectMaxVisible() int {
 // colorsFromTheme converts a theme.Theme to a style.Colors struct.
 func colorsFromTheme(th theme.Theme) style.Colors {
 	return style.Colors{
-		Accent:     th.Colors["color-accent"],
-		Border:     th.Colors["color-border"],
-		Normal:     th.Colors["color-normal"],
-		Muted:      th.Colors["color-muted"],
-		SelectedFg: th.Colors["color-selected-fg"],
-		SelectedBg: th.Colors["color-selected-bg"],
-		Annotation: th.Colors["color-annotation"],
-		CursorFg:   th.Colors["color-cursor-fg"],
-		CursorBg:   th.Colors["color-cursor-bg"],
-		AddFg:      th.Colors["color-add-fg"],
-		AddBg:      th.Colors["color-add-bg"],
-		RemoveFg:   th.Colors["color-remove-fg"],
-		RemoveBg:   th.Colors["color-remove-bg"],
-		ModifyFg:   th.Colors["color-modify-fg"],
-		ModifyBg:   th.Colors["color-modify-bg"],
-		TreeBg:     th.Colors["color-tree-bg"],
-		DiffBg:     th.Colors["color-diff-bg"],
-		StatusFg:   th.Colors["color-status-fg"],
-		StatusBg:   th.Colors["color-status-bg"],
-		SearchFg:   th.Colors["color-search-fg"],
-		SearchBg:   th.Colors["color-search-bg"],
+		Accent:       th.Colors["color-accent"],
+		Border:       th.Colors["color-border"],
+		Normal:       th.Colors["color-normal"],
+		Muted:        th.Colors["color-muted"],
+		SelectedFg:   th.Colors["color-selected-fg"],
+		SelectedBg:   th.Colors["color-selected-bg"],
+		Annotation:   th.Colors["color-annotation"],
+		CursorFg:     th.Colors["color-cursor-fg"],
+		CursorBg:     th.Colors["color-cursor-bg"],
+		AddFg:        th.Colors["color-add-fg"],
+		AddBg:        th.Colors["color-add-bg"],
+		RemoveFg:     th.Colors["color-remove-fg"],
+		RemoveBg:     th.Colors["color-remove-bg"],
+		WordAddBg:    th.Colors["color-word-add-bg"],
+		WordRemoveBg: th.Colors["color-word-remove-bg"],
+		ModifyFg:     th.Colors["color-modify-fg"],
+		ModifyBg:     th.Colors["color-modify-bg"],
+		TreeBg:       th.Colors["color-tree-bg"],
+		DiffBg:       th.Colors["color-diff-bg"],
+		StatusFg:     th.Colors["color-status-fg"],
+		StatusBg:     th.Colors["color-status-bg"],
+		SearchFg:     th.Colors["color-search-fg"],
+		SearchBg:     th.Colors["color-search-bg"],
 	}
 }
 
@@ -396,30 +400,4 @@ func swatchText(fg, text, resetFg string) string {
 		reset = resetFg
 	}
 	return fg + text + reset
-}
-
-// fgFromHex builds an ANSI 24-bit foreground sequence from a #RRGGBB hex string.
-// used for theme preview swatches where colors come from arbitrary theme entries.
-func fgFromHex(hex string) string {
-	if len(hex) == 7 && hex[0] == '#' {
-		r := hexNibble(hex[1])<<4 | hexNibble(hex[2])
-		g := hexNibble(hex[3])<<4 | hexNibble(hex[4])
-		b := hexNibble(hex[5])<<4 | hexNibble(hex[6])
-		return fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
-	}
-	return ""
-}
-
-// hexNibble converts a single hex digit to its numeric value.
-func hexNibble(c byte) byte {
-	switch {
-	case c >= '0' && c <= '9':
-		return c - '0'
-	case c >= 'a' && c <= 'f':
-		return c - 'a' + 10
-	case c >= 'A' && c <= 'F':
-		return c - 'A' + 10
-	default:
-		return 0
-	}
 }

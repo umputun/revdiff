@@ -32,10 +32,6 @@ func PlainResolver() Resolver {
 	}
 }
 
-// Ready reports whether the Resolver was properly constructed (via NewResolver
-// or PlainResolver). A zero-value Resolver is not ready.
-func (r Resolver) Ready() bool { return r.styles != nil }
-
 // Color returns the ANSI escape sequence for the given color key.
 // ColorKeyStatusFg falls back to MutedFg when Colors.StatusFg is empty.
 // returns empty Color for ColorKeyUnknown.
