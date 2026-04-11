@@ -197,8 +197,8 @@ func (t *TOC) Render(r TOCRender) string {
 	var b strings.Builder
 	for idx := t.offset; idx < end; idx++ {
 		e := t.entries[idx]
-		indent := strings.Repeat("  ", e.level-1)                  // h1=0 indent, h2=2, h3=4, etc.
-		title := t.truncateTitle(e.title, r.Width-len(indent)-4)   // 2 prefix + 2 padding (matches FileSelected width-2)
+		indent := strings.Repeat("  ", e.level-1)                // h1=0 indent, h2=2, h3=4, etc.
+		title := t.truncateTitle(e.title, r.Width-len(indent)-4) // 2 prefix + 2 padding (matches FileSelected width-2)
 		line := fmt.Sprintf("  %s%s", indent, title)
 
 		if idx == highlighted {
@@ -227,6 +227,22 @@ func (t *TOC) truncateTitle(title string, maxWidth int) string {
 	}
 	return string(runes[:maxWidth-1]) + "…"
 }
+
+// Cursor returns the current cursor index. Exported for cross-package test assertions;
+// not part of the TOCComponent interface.
+func (t *TOC) Cursor() int { return t.cursor }
+
+// SetCursor sets the cursor to the given index. Exported for cross-package test setup;
+// not part of the TOCComponent interface.
+func (t *TOC) SetCursor(idx int) { t.cursor = idx }
+
+// ActiveSection returns the active section index. Exported for cross-package test assertions;
+// not part of the TOCComponent interface.
+func (t *TOC) ActiveSection() int { return t.activeSection }
+
+// SetActiveSection sets the active section index. Exported for cross-package test setup;
+// not part of the TOCComponent interface.
+func (t *TOC) SetActiveSection(idx int) { t.activeSection = idx }
 
 // fencePrefix returns the fence character ('`' or '~') and count of leading consecutive
 // occurrences. returns (0, 0) if the string doesn't start with backticks or tildes.

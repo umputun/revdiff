@@ -11,6 +11,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -22,13 +23,40 @@ func noopHighlighter() *mocks.SyntaxHighlighterMock {
 	}
 }
 
+// testFileTreeFactory returns the sidepane factory closures for NewFileTree and ParseTOC,
+// suitable for injection into ModelConfig in tests.
+func testFileTreeFactory() func(entries []diff.FileEntry) FileTreeComponent {
+	return func(entries []diff.FileEntry) FileTreeComponent {
+		return sidepane.NewFileTree(entries)
+	}
+}
+
+func testParseTOCFactory() func(lines []diff.DiffLine, filename string) TOCComponent {
+	return func(lines []diff.DiffLine, filename string) TOCComponent {
+		toc := sidepane.ParseTOC(lines, filename)
+		if toc == nil {
+			return nil
+		}
+		return toc
+	}
+}
+
+// testNewFileTree creates a sidepane.FileTree from a list of file paths,
+// replacing the old testNewFileTree([]string{...}) pattern in tests.
+func testNewFileTree(files []string) *sidepane.FileTree {
+	entries := make([]diff.FileEntry, len(files))
+	for i, f := range files {
+		entries[i] = diff.FileEntry{Path: f}
+	}
+	return sidepane.NewFileTree(entries)
+}
+
 // testNewModel is a test-only helper that preserves the old 4-arg NewModel
 // shape while the production NewModel takes a single ModelConfig. It accepts
 // the diff renderer, store, and highlighter as explicit args (so tests can
 // pass mocks/fakes directly) and fills in default style dependencies
-// (PlainResolver + its derived Renderer + a zero SGR) when the cfg doesn't
-// set them explicitly. Tests that exercise custom colors pre-populate
-// cfg.StyleResolver / StyleRenderer / SGR and those take precedence.
+// (PlainResolver + its derived Renderer + a zero SGR) and sidepane factories
+// when the cfg doesn't set them explicitly.
 func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
 	t.Helper()
 	cfg.Renderer = renderer
@@ -39,6 +67,12 @@ func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, high
 		cfg.StyleResolver = res
 		cfg.StyleRenderer = style.NewRenderer(res)
 		cfg.SGR = style.SGR{}
+	}
+	if cfg.NewFileTree == nil {
+		cfg.NewFileTree = testFileTreeFactory()
+	}
+	if cfg.ParseTOC == nil {
+		cfg.ParseTOC = testParseTOCFactory()
 	}
 	m, err := NewModel(cfg)
 	require.NoError(t, err)
@@ -67,6 +101,8 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		StyleRenderer:  style.NewRenderer(res),
 		SGR:            style.SGR{},
 		TreeWidthRatio: 3,
+		NewFileTree:    testFileTreeFactory(),
+		ParseTOC:       testParseTOCFactory(),
 	})
 	if err != nil {
 		// testModel supplies all required deps — an error here is a bug in the helper, not the test.
@@ -96,7 +132,7 @@ func TestModel_Init(t *testing.T) {
 func TestModel_EnterSwitchesToDiffPane(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.focus = paneTree
 	// simulate file already loaded (tree nav auto-loads)
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -112,7 +148,7 @@ func TestModel_EnterSwitchesToDiffPane(t *testing.T) {
 func TestModel_TabPaneSwitching(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 
 	t.Run("tree to diff when file loaded", func(t *testing.T) {
 		m.focus = paneTree
@@ -222,26 +258,26 @@ func TestModel_BlameFromConfig(t *testing.T) {
 func TestModel_TreeNavigation(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 
 	// cursor starts on first file (a.go)
-	assert.Equal(t, "a.go", m.tree.selectedFile())
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
 
 	// j moves down
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model := result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile())
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
 
 	// k moves up
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	model = result.(Model)
-	assert.Equal(t, "a.go", model.tree.selectedFile())
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
 }
 
 func TestModel_FocusSwitching(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go" // pretend a file is loaded
 	m.focus = paneTree
 
@@ -352,27 +388,27 @@ func TestModel_CustomKeymapTreeNav(t *testing.T) {
 	files := []string{"a.go", "b.go", "c.go"}
 	m := testModel(files, nil)
 	m.keymap = km
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 
-	assert.Equal(t, "a.go", m.tree.selectedFile())
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
 
 	// "x" should move down
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	model := result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile(), "x should move tree cursor down")
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "x should move tree cursor down")
 
 	// "j" should not move (unbound)
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model = result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile(), "j should not move when unbound")
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "j should not move when unbound")
 }
 
 func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
 	// scroll_right in tree pane should focus diff (implicit fallback)
 	files := []string{"a.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.currFile = "a.go"
 	m.focus = paneTree
 

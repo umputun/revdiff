@@ -777,7 +777,7 @@ func TestModel_ExpandedModeCursorMovementUnchanged(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})

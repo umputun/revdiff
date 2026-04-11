@@ -393,7 +393,7 @@ func TestTOC_Render(t *testing.T) {
 		got := toc.Render(TOCRender{Width: 40, Height: 5, Focused: true, Resolver: res})
 		lines := strings.Split(got, "\n")
 		assert.Len(t, lines, 5)
-		assert.Contains(t, got, "Header 15")  // cursor entry should be visible
+		assert.Contains(t, got, "Header 15")   // cursor entry should be visible
 		assert.NotContains(t, got, "Header 0") // first entry should not be visible
 	})
 

@@ -438,7 +438,7 @@ func run(opts options) error {
 		WorkDir:          workDir,
 		ThemesDir:        defaultThemesDir(),
 		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
-		ActiveThemeName: theme.ActiveName(opts.Theme),
+		ActiveThemeName:  theme.ActiveName(opts.Theme),
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},

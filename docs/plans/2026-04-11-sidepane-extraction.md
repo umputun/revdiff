@@ -710,27 +710,27 @@ Tests in ui that touched `fileTree` or `mdTOC` directly need mechanical updates.
 - Modify: `app/ui/annotate_test.go`
 - Modify: `app/ui/handlers_test.go`
 
-- [ ] pre-task scoping: run `grep -rn 'ui.ModelConfig{' app/ui/*_test.go app/main/*_test.go 2>/dev/null | wc -l` to count how many `ui.ModelConfig{...}` literals need updating. Document the count in this checkbox before proceeding so the executor knows scope. If count > 20, consider adding a helper constructor `testModelConfig(t *testing.T, overrides ...func(*ui.ModelConfig)) ui.ModelConfig` that sets defaults including the factories, and have tests override only what they need.
-- [ ] add a shared test helper `testSidepaneFactories()` (or include inside existing `testNewModel`-style helper if one exists) that returns valid `NewFileTree func(...)` and `ParseTOC func(...)` closures wrapping `sidepane.NewFileTree` and `sidepane.ParseTOC`. Test files import `app/ui/sidepane` directly — tests are not Model, so the import is fine.
-- [ ] update every `ui.ModelConfig{...}` literal in test files to include the new `NewFileTree` and `ParseTOC` fields via the helper (or directly via inline closures for one-off tests)
-- [ ] grep each test file for `fileTree{`, `.tree.`, `.mdTOC.`, `.tree =`, `.mdTOC =` — fix each hit by calling the new API
-- [ ] replace any test setup that constructs a `fileTree` directly with `sidepane.NewFileTree(...)`
-- [ ] replace any test that assigned a `*mdTOC` to `m.mdTOC` with `sidepane.ParseTOC(...)` + explicit nil guard in the test helper closure (matches main.go production pattern)
-- [ ] update assertions reading `.cursor`, `.offset`, `.reviewed`, `.filter`, `.entries`, `.allFiles`, `.fileStatuses` — first try the new getter (`.ReviewedCount()`, `.TotalFiles()`, `.FilterActive()`, `.SelectedFile()`, etc.). If the test needs to inspect internal state not exposed via getters, either add a test-only getter to sidepane OR move that specific assertion into `sidepane/filetree_test.go` (where private field access is free)
-- [ ] grep for `m.mdTOC = ` assignments in tests (beyond the construction replacement) — verify none remain that would bypass the typed-nil collapse pattern
-- [ ] run `go test ./app/ui/... -race` iteratively, fixing errors file-by-file
+- [x] pre-task scoping: run `grep -rn 'ui.ModelConfig{' app/ui/*_test.go app/main/*_test.go 2>/dev/null | wc -l` to count how many `ui.ModelConfig{...}` literals need updating. Document the count in this checkbox before proceeding so the executor knows scope. If count > 20, consider adding a helper constructor `testModelConfig(t *testing.T, overrides ...func(*ui.ModelConfig)) ui.ModelConfig` that sets defaults including the factories, and have tests override only what they need.
+- [x] add a shared test helper `testSidepaneFactories()` (or include inside existing `testNewModel`-style helper if one exists) that returns valid `NewFileTree func(...)` and `ParseTOC func(...)` closures wrapping `sidepane.NewFileTree` and `sidepane.ParseTOC`. Test files import `app/ui/sidepane` directly — tests are not Model, so the import is fine.
+- [x] update every `ui.ModelConfig{...}` literal in test files to include the new `NewFileTree` and `ParseTOC` fields via the helper (or directly via inline closures for one-off tests)
+- [x] grep each test file for `fileTree{`, `.tree.`, `.mdTOC.`, `.tree =`, `.mdTOC =` — fix each hit by calling the new API
+- [x] replace any test setup that constructs a `fileTree` directly with `sidepane.NewFileTree(...)`
+- [x] replace any test that assigned a `*mdTOC` to `m.mdTOC` with `sidepane.ParseTOC(...)` + explicit nil guard in the test helper closure (matches main.go production pattern)
+- [x] update assertions reading `.cursor`, `.offset`, `.reviewed`, `.filter`, `.entries`, `.allFiles`, `.fileStatuses` — first try the new getter (`.ReviewedCount()`, `.TotalFiles()`, `.FilterActive()`, `.SelectedFile()`, etc.). If the test needs to inspect internal state not exposed via getters, either add a test-only getter to sidepane OR move that specific assertion into `sidepane/filetree_test.go` (where private field access is free)
+- [x] grep for `m.mdTOC = ` assignments in tests (beyond the construction replacement) — verify none remain that would bypass the typed-nil collapse pattern
+- [x] run `go test ./app/ui/... -race` iteratively, fixing errors file-by-file
 
 ### Task 15: M2 MILESTONE — full test suite green
 
-- [ ] run `go test ./... -race` — must be green end-to-end
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — must be clean
-- [ ] run `go test ./app/ui/... -cover` and verify coverage has not regressed meaningfully compared to pre-extraction (target: within 2 percentage points of pre-extraction baseline)
-- [ ] build the binary: `make build`
-- [ ] manual smoke test 1: launch `.bin/revdiff` in a git repo with multiple files — verify file tree navigates with j/k, page up/down, home/end, n/p, cross-file hunk nav, filter toggle, reviewed toggle
-- [ ] manual smoke test 2: launch `.bin/revdiff --only README.md` in a repo with README.md — verify markdown TOC appears in side pane, navigates with j/k/n/p/Enter, active section tracks diff cursor
-- [ ] manual smoke test 3: launch with `--no-colors` — verify tree and TOC render without styling issues
-- [ ] manual smoke test 4: launch with `--all-files` — verify untracked toggle works, tree rebuild preserves reviewed marks
-- [ ] commit M2: `git add -A && git commit -m "refactor(ui): migrate to sidepane sub-package"` (full call-site migration + main.go wiring + old files deleted)
+- [x] run `go test ./... -race` — must be green end-to-end
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — must be clean
+- [x] run `go test ./app/ui/... -cover` and verify coverage has not regressed meaningfully compared to pre-extraction (target: within 2 percentage points of pre-extraction baseline)
+- [x] build the binary: `make build`
+- [x] manual smoke test 1: launch `.bin/revdiff` in a git repo with multiple files — verify file tree navigates with j/k, page up/down, home/end, n/p, cross-file hunk nav, filter toggle, reviewed toggle
+- [x] manual smoke test 2: launch `.bin/revdiff --only README.md` in a repo with README.md — verify markdown TOC appears in side pane, navigates with j/k/n/p/Enter, active section tracks diff cursor
+- [x] manual smoke test 3: launch with `--no-colors` — verify tree and TOC render without styling issues
+- [x] manual smoke test 4: launch with `--all-files` — verify untracked toggle works, tree rebuild preserves reviewed marks
+- [x] commit M2: `git add -A && git commit -m "refactor(ui): migrate to sidepane sub-package"` (full call-site migration + main.go wiring + old files deleted)
 
 ### Task 16: Update app/ui/doc.go and CLAUDE.md
 

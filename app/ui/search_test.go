@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -592,7 +593,7 @@ func TestModel_NKeyFallsThroughToNextFileWhenNoSearch(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.currFile = "a.go"
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := result.(Model)
@@ -601,7 +602,7 @@ func TestModel_NKeyFallsThroughToNextFileWhenNoSearch(t *testing.T) {
 	assert.Empty(t, model.searchMatches)
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model = result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile(), "n should go to next file when no search active")
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "n should go to next file when no search active")
 }
 
 func TestModel_ShiftNDoesPrevMatchWhenSearchActive(t *testing.T) {
@@ -631,15 +632,15 @@ func TestModel_ShiftNNavigatesPrevFileWithoutSearch(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
-	m.tree.cursor = 2 // start at second file (b.go); entries: [dir=0, a.go=1, b.go=2]
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.tree.SelectByPath("b.go") // start at second file
 	m.currFile = "b.go"
 
 	// no search active, N (prev_item) should navigate to previous file
 	assert.Empty(t, m.searchMatches)
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model := result.(Model)
-	assert.Equal(t, "a.go", model.tree.selectedFile(), "N should navigate to previous file")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "N should navigate to previous file")
 }
 
 func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
@@ -650,7 +651,7 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 		{OldNum: 4, Content: "old line", ChangeType: diff.ChangeRemove},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
@@ -724,7 +725,7 @@ func TestModel_SearchHighlightWithWrap(t *testing.T) {
 		{NewNum: 2, Content: "short line", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
@@ -766,7 +767,7 @@ func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
 		{NewNum: 3, Content: "added other line", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.currFile = "a.go"
 	m.diffLines = lines
 	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
@@ -1309,6 +1310,6 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model = result.(Model)
 		// active section should reflect the cursor position after search nav (index 2 = Section, accounting for top entry)
-		assert.Equal(t, 2, model.mdTOC.activeSection, "TOC should track active section after search jump")
+		assert.Equal(t, 2, model.mdTOC.(*sidepane.TOC).ActiveSection(), "TOC should track active section after search jump")
 	})
 }

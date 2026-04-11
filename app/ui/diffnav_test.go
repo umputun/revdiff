@@ -13,6 +13,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
 func TestModel_NextPrevFile(t *testing.T) {
@@ -22,28 +23,28 @@ func TestModel_NextPrevFile(t *testing.T) {
 		"b.go": {{NewNum: 1, Content: "b", ChangeType: diff.ChangeContext}},
 		"c.go": {{NewNum: 1, Content: "c", ChangeType: diff.ChangeContext}},
 	})
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.currFile = "a.go" // pretend first file is already loaded
 
 	// starts on first file (a.go)
-	assert.Equal(t, "a.go", m.tree.selectedFile())
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
 
 	// press n - should move to b.go
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model := result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile())
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
 	assert.NotNil(t, cmd) // triggers file load
 
 	// press n - should move to c.go
 	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model = result.(Model)
-	assert.Equal(t, "c.go", model.tree.selectedFile())
+	assert.Equal(t, "c.go", model.tree.SelectedFile())
 	assert.NotNil(t, cmd)
 
 	// press p - back to b.go
 	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model = result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile())
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
 	assert.NotNil(t, cmd)
 }
 func TestModel_DiffScrolling(t *testing.T) {
@@ -53,7 +54,7 @@ func TestModel_DiffScrolling(t *testing.T) {
 	}
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 
 	// load file
@@ -79,7 +80,7 @@ func TestModel_DiffCursorSkipsDividers(t *testing.T) {
 	}
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -104,7 +105,7 @@ func TestModel_DiffCursorAutoScrolls(t *testing.T) {
 	}
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -234,24 +235,24 @@ func TestModel_NextPrevFileWrapAround(t *testing.T) {
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 		"b.go": {{NewNum: 1, Content: "b", ChangeType: diff.ChangeContext}},
 	})
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.currFile = "a.go"
 
 	// move to last file
-	m.tree.nextFile()
-	assert.Equal(t, "b.go", m.tree.selectedFile())
+	m.tree.StepFile(sidepane.DirectionNext)
+	assert.Equal(t, "b.go", m.tree.SelectedFile())
 	m.currFile = "b.go"
 
 	// n should wrap to first
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model := result.(Model)
-	assert.Equal(t, "a.go", model.tree.selectedFile())
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
 
 	// p should wrap to last
 	model.currFile = "a.go"
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model = result.(Model)
-	assert.Equal(t, "b.go", model.tree.selectedFile())
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
 }
 func TestModel_PgDownMovesCursorByPageHeight(t *testing.T) {
 	lines := make([]diff.DiffLine, 100)
@@ -400,7 +401,7 @@ func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
 	}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 	m.height = 20
 
@@ -410,35 +411,35 @@ func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	// ctrl+d from start
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model := result.(Model)
-	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.selectedFile(),
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.SelectedFile(),
 		"ctrl+d should move by half page")
 
 	// ctrl+u from end area
 	m3 := testModel(files, nil)
-	m3.tree = newFileTree(files)
+	m3.tree = testNewFileTree(files)
 	m3.focus = paneTree
 	m3.height = 20
 	// move to file 39
-	m3.tree.moveToLast()
+	m3.tree.Move(sidepane.MotionLast)
 	for range 10 {
-		m3.tree.moveUp()
+		m3.tree.Move(sidepane.MotionUp)
 	}
-	assert.Equal(t, "pkg/file39.go", m3.tree.selectedFile())
+	assert.Equal(t, "pkg/file39.go", m3.tree.SelectedFile())
 
 	result, _ = m3.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model3 := result.(Model)
-	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", 39-halfPage), model3.tree.selectedFile(),
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", 39-halfPage), model3.tree.SelectedFile(),
 		"ctrl+u should move by half page")
 
 	// PgDn from start should move full page
 	m2 := testModel(files, nil)
-	m2.tree = newFileTree(files)
+	m2.tree = testNewFileTree(files)
 	m2.focus = paneTree
 	m2.height = 20
 
 	result, _ = m2.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model2 := result.(Model)
-	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model2.tree.selectedFile(),
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model2.tree.SelectedFile(),
 		"PgDn should move by full page")
 }
 func TestModel_HomeEndMoveCursorToBoundaries(t *testing.T) {
@@ -646,12 +647,12 @@ func TestModel_TreePgDownMovesCursorByPage(t *testing.T) {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
 	}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 	m.height = 20
 
 	// cursor starts on first file
-	assert.Equal(t, "pkg/file00.go", m.tree.selectedFile())
+	assert.Equal(t, "pkg/file00.go", m.tree.SelectedFile())
 
 	pageSize := m.treePageSize()
 	require.Positive(t, pageSize)
@@ -659,7 +660,7 @@ func TestModel_TreePgDownMovesCursorByPage(t *testing.T) {
 	// PgDown should advance cursor by page size files
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model := result.(Model)
-	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model.tree.selectedFile(),
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", pageSize), model.tree.SelectedFile(),
 		"PgDown in tree should move cursor by page size")
 }
 func TestModel_TreePgUpMovesCursorByPage(t *testing.T) {
@@ -668,7 +669,7 @@ func TestModel_TreePgUpMovesCursorByPage(t *testing.T) {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
 	}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 	m.height = 20
 
@@ -676,17 +677,17 @@ func TestModel_TreePgUpMovesCursorByPage(t *testing.T) {
 	require.Positive(t, pageSize)
 
 	// move cursor to the last file, then back 10 — lands on file39
-	m.tree.moveToLast()
+	m.tree.Move(sidepane.MotionLast)
 	for range 10 {
-		m.tree.moveUp()
+		m.tree.Move(sidepane.MotionUp)
 	}
-	assert.Equal(t, "pkg/file39.go", m.tree.selectedFile())
+	assert.Equal(t, "pkg/file39.go", m.tree.SelectedFile())
 
 	// PgUp should move back by page size files
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model := result.(Model)
 	expected := fmt.Sprintf("pkg/file%02d.go", 39-pageSize)
-	assert.Equal(t, expected, model.tree.selectedFile(), "PgUp in tree should move cursor by page size")
+	assert.Equal(t, expected, model.tree.SelectedFile(), "PgUp in tree should move cursor by page size")
 }
 func TestModel_TreeCtrlDMovesCursorByHalfPage(t *testing.T) {
 	files := make([]string, 50)
@@ -694,11 +695,11 @@ func TestModel_TreeCtrlDMovesCursorByHalfPage(t *testing.T) {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
 	}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 	m.height = 20
 
-	assert.Equal(t, "pkg/file00.go", m.tree.selectedFile())
+	assert.Equal(t, "pkg/file00.go", m.tree.SelectedFile())
 
 	pageSize := m.treePageSize()
 	require.Positive(t, pageSize)
@@ -706,7 +707,7 @@ func TestModel_TreeCtrlDMovesCursorByHalfPage(t *testing.T) {
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model := result.(Model)
-	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.selectedFile(),
+	assert.Equal(t, fmt.Sprintf("pkg/file%02d.go", halfPage), model.tree.SelectedFile(),
 		"ctrl+d in tree should move cursor by half page size")
 }
 func TestModel_TreeCtrlUMovesCursorByHalfPage(t *testing.T) {
@@ -715,7 +716,7 @@ func TestModel_TreeCtrlUMovesCursorByHalfPage(t *testing.T) {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
 	}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 	m.height = 20
 
@@ -723,37 +724,37 @@ func TestModel_TreeCtrlUMovesCursorByHalfPage(t *testing.T) {
 	require.Positive(t, pageSize)
 	halfPage := max(1, pageSize/2)
 
-	m.tree.moveToLast()
+	m.tree.Move(sidepane.MotionLast)
 	for range 10 {
-		m.tree.moveUp()
+		m.tree.Move(sidepane.MotionUp)
 	}
-	assert.Equal(t, "pkg/file39.go", m.tree.selectedFile())
+	assert.Equal(t, "pkg/file39.go", m.tree.SelectedFile())
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model := result.(Model)
 	expected := fmt.Sprintf("pkg/file%02d.go", 39-halfPage)
-	assert.Equal(t, expected, model.tree.selectedFile(), "ctrl+u in tree should move cursor by half page size")
+	assert.Equal(t, expected, model.tree.SelectedFile(), "ctrl+u in tree should move cursor by half page size")
 }
 func TestModel_TreeHomeEndMoveToBoundaries(t *testing.T) {
 	files := []string{"cmd/main.go", "internal/a.go", "internal/b.go", "internal/c.go", "pkg/util.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 
 	// move to middle
-	m.tree.moveDown()
-	m.tree.moveDown()
-	assert.NotEqual(t, "cmd/main.go", m.tree.selectedFile())
+	m.tree.Move(sidepane.MotionDown)
+	m.tree.Move(sidepane.MotionDown)
+	assert.NotEqual(t, "cmd/main.go", m.tree.SelectedFile())
 
 	// end should move to last file
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	model := result.(Model)
-	assert.Equal(t, "pkg/util.go", model.tree.selectedFile(), "End in tree should move to last file")
+	assert.Equal(t, "pkg/util.go", model.tree.SelectedFile(), "End in tree should move to last file")
 
 	// home should move to first file
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyHome})
 	model = result.(Model)
-	assert.Equal(t, "cmd/main.go", model.tree.selectedFile(), "Home in tree should move to first file")
+	assert.Equal(t, "cmd/main.go", model.tree.SelectedFile(), "Home in tree should move to first file")
 }
 func TestModel_TreeScrollOffsetPersistsAcrossUpdates(t *testing.T) {
 	// many files so tree needs scrolling at the given height
@@ -762,7 +763,7 @@ func TestModel_TreeScrollOffsetPersistsAcrossUpdates(t *testing.T) {
 		files[i] = fmt.Sprintf("pkg/file%02d.go", i)
 	}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 	m.focus = paneTree
 	m.height = 10 // visible tree height = 10-3 = 7 rows
 
@@ -773,14 +774,16 @@ func TestModel_TreeScrollOffsetPersistsAcrossUpdates(t *testing.T) {
 		m = result.(Model)
 	}
 	// cursor should be well past the initial visible window
-	offsetAfterDown := m.tree.offset
-	assert.Positive(t, offsetAfterDown, "offset should be non-zero after scrolling past visible area")
+	fileAfterDown := m.tree.SelectedFile()
+	assert.NotEqual(t, "pkg/file00.go", fileAfterDown, "cursor should have moved past first file")
 
-	// move up one step, offset should stay stable (not jump to 0)
+	// move up one step, the selected file should change by one
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	m = result.(Model)
-	assert.Equal(t, offsetAfterDown, m.tree.offset,
-		"offset should remain stable when moving cursor up within the visible window")
+	assert.NotEqual(t, fileAfterDown, m.tree.SelectedFile(),
+		"selected file should change after moving up")
+	assert.NotEqual(t, "pkg/file00.go", m.tree.SelectedFile(),
+		"cursor should not jump back to first file after moving up within scrolled view")
 }
 func TestModel_FindHunks(t *testing.T) {
 	tests := []struct {
@@ -1775,7 +1778,7 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 	t.Run("scrolling diff updates TOC active section", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
 		m.singleFile = true
-		m.mdTOC = parseTOC(mdLines, "README.md")
+		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
 		require.NotNil(t, m.mdTOC)
 		m.currFile = "README.md"
 		m.diffLines = mdLines
@@ -1784,22 +1787,32 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 		m.diffCursor = 0
 
 		// TOC entries: [0]=README.md(0), [1]=First(0), [2]=Second(2), [3]=Third(4)
-		// move down one line at a time and check active section
+		// move down one line at a time and verify active section via SyncCursorToActiveSection + CurrentLineIdx
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Equal(t, 1, model.mdTOC.activeSection, "cursor at line 1 should be in First section")
+		// after scrolling to line 1 (under # First), sync cursor and check
+		model.mdTOC.SyncCursorToActiveSection()
+		idx, ok := model.mdTOC.CurrentLineIdx()
+		assert.True(t, ok, "active section should be set")
+		assert.Equal(t, 0, idx, "cursor at line 1 should be in First section (lineIdx=0)")
 
 		// move to line 2 (## Second)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
-		assert.Equal(t, 2, model.mdTOC.activeSection, "cursor at line 2 should be in Second section")
+		model.mdTOC.SyncCursorToActiveSection()
+		idx, ok = model.mdTOC.CurrentLineIdx()
+		assert.True(t, ok)
+		assert.Equal(t, 2, idx, "cursor at line 2 should be in Second section (lineIdx=2)")
 
 		// move to line 4 (### Third)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
-		assert.Equal(t, 3, model.mdTOC.activeSection, "cursor at line 4 should be in Third section")
+		model.mdTOC.SyncCursorToActiveSection()
+		idx, ok = model.mdTOC.CurrentLineIdx()
+		assert.True(t, ok)
+		assert.Equal(t, 4, idx, "cursor at line 4 should be in Third section (lineIdx=4)")
 	})
 
 	t.Run("no TOC does not crash on scroll", func(t *testing.T) {
@@ -2002,7 +2015,7 @@ func TestModel_HunkNav_NextCrossesFileForward(t *testing.T) {
 
 	require.NotNil(t, model.pendingHunkJump, "pendingHunkJump should be set for cross-file forward jump")
 	assert.True(t, *model.pendingHunkJump, "pendingHunkJump should be true (land on first hunk)")
-	assert.Equal(t, "b.go", model.tree.selectedFile(), "tree should have advanced to b.go")
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "tree should have advanced to b.go")
 	assert.NotNil(t, cmd, "a load command should be returned")
 }
 func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
@@ -2013,8 +2026,8 @@ func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
 	m.crossFileHunks = true
-	// tree: index 0 = dir entry, index 1 = a.go, index 2 = b.go
-	m.tree.cursor = 2
+	// select b.go in tree (index 0 = dir entry, index 1 = a.go, index 2 = b.go)
+	m.tree.SelectByPath("b.go")
 	m.loadSeq++
 	bLoad := m.loadFileDiff("b.go")()
 	result, _ := m.Update(bLoad)
@@ -2028,7 +2041,7 @@ func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
 
 	require.NotNil(t, model.pendingHunkJump, "pendingHunkJump should be set for cross-file backward jump")
 	assert.False(t, *model.pendingHunkJump, "pendingHunkJump should be false (land on last hunk)")
-	assert.Equal(t, "a.go", model.tree.selectedFile(), "tree should have moved back to a.go")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree should have moved back to a.go")
 	assert.NotNil(t, cmd, "a load command should be returned")
 }
 func TestModel_HunkNav_NextAtLastFileNoOp(t *testing.T) {
@@ -2126,8 +2139,8 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
 	m.crossFileHunks = true
-	// tree: index 0 = dir entry, index 1 = a.go, index 2 = b.go; navigate to b.go
-	m.tree.cursor = 2
+	// select b.go in tree (index 0 = dir entry, index 1 = a.go, index 2 = b.go)
+	m.tree.SelectByPath("b.go")
 	m.loadSeq++
 	loadMsg := m.loadFileDiff("b.go")()
 	result, _ := m.Update(loadMsg)
@@ -2165,7 +2178,7 @@ func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
 	assert.Nil(t, cmd)
 	assert.Nil(t, model.pendingHunkJump)
 	assert.Equal(t, "a.go", model.currFile)
-	assert.Equal(t, "a.go", model.tree.selectedFile())
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
 	assert.Equal(t, 0, model.diffCursor)
 }
 func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testing.T) {
@@ -2226,7 +2239,7 @@ func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
 	m.currFile = "a.go"
 	m.diffLines = lines

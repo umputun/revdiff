@@ -11,6 +11,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -53,7 +54,7 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 	res := style.PlainResolver()
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.ready = true
 	m.width = 100
 	m.height = 80
@@ -211,21 +212,19 @@ func TestModel_MarkReviewedFromTreePane(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.currFile = "a.go"
 	m.focus = paneTree
 
 	// space bar toggles reviewed
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := result.(Model)
-	assert.True(t, model.tree.reviewed["a.go"], "space should mark current file as reviewed")
-	assert.Equal(t, 1, model.tree.reviewedCount())
+	assert.Equal(t, 1, model.tree.ReviewedCount(), "space should mark current file as reviewed")
 
 	// space again toggles off
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model = result.(Model)
-	assert.False(t, model.tree.reviewed["a.go"], "space should unmark reviewed file")
-	assert.Equal(t, 0, model.tree.reviewedCount())
+	assert.Equal(t, 0, model.tree.ReviewedCount(), "space should unmark reviewed file")
 }
 
 func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
@@ -233,15 +232,17 @@ func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.currFile = "a.go"
 	m.focus = paneTree
-	m.tree.moveDown() // cursor -> b.go while the diff pane still shows a.go
+	m.tree.Move(sidepane.MotionDown) // cursor -> b.go while the diff pane still shows a.go
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := result.(Model)
-	assert.True(t, model.tree.reviewed["b.go"], "space in tree pane should mark selected file")
-	assert.False(t, model.tree.reviewed["a.go"], "space in tree pane should not mark stale currFile")
+	assert.Equal(t, 1, model.tree.ReviewedCount(), "space in tree pane should mark selected file (b.go)")
+	// verify it's b.go that's reviewed by toggling it off and checking count drops
+	model.tree.ToggleReviewed("b.go")
+	assert.Equal(t, 0, model.tree.ReviewedCount(), "b.go was the reviewed file")
 }
 
 func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
@@ -249,57 +250,53 @@ func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
 		"a.go": lines, "b.go": lines,
 	})
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.currFile = "b.go"
 	m.focus = paneDiff
 
 	// space from diff pane marks currFile
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := result.(Model)
-	assert.True(t, model.tree.reviewed["b.go"], "space in diff pane should mark currFile as reviewed")
+	assert.Equal(t, 1, model.tree.ReviewedCount(), "space in diff pane should mark currFile as reviewed")
 }
 
 func TestModel_FKeyFilterToggle(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test annotation"})
 
 	t.Run("toggle filter on and off from tree pane", func(t *testing.T) {
 		m.focus = paneTree
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 		model := result.(Model)
-		assert.True(t, model.tree.filter)
+		assert.True(t, model.tree.FilterActive())
 
-		// only a.go should be visible (1 dir + 1 file)
-		fileCount := 0
-		for _, e := range model.tree.entries {
-			if !e.isDir {
-				fileCount++
-			}
-		}
-		assert.Equal(t, 1, fileCount)
+		// only a.go should be visible after filter
+		assert.Equal(t, "a.go", model.tree.SelectedFile(), "only annotated file should be selected")
+		assert.False(t, model.tree.HasFile(sidepane.DirectionNext), "no next file when only one annotated")
 
 		// toggle filter off
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 		model = result.(Model)
-		assert.False(t, model.tree.filter)
+		assert.False(t, model.tree.FilterActive())
 	})
 
 	t.Run("works from diff pane", func(t *testing.T) {
 		m.focus = paneDiff
-		m.tree.filter = false
+		// filter should be off after previous subtest toggled it off
+		require.False(t, m.tree.FilterActive(), "precondition: filter must be off")
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 		model := result.(Model)
-		assert.True(t, model.tree.filter)
+		assert.True(t, model.tree.FilterActive())
 	})
 
 	t.Run("no-op when no annotations", func(t *testing.T) {
 		m2 := testModel([]string{"a.go", "b.go"}, nil)
-		m2.tree = newFileTree([]string{"a.go", "b.go"})
+		m2.tree = testNewFileTree([]string{"a.go", "b.go"})
 		// no annotations added
 		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 		model := result.(Model)
-		assert.False(t, model.tree.filter, "filter should not toggle when no annotated files")
+		assert.False(t, model.tree.FilterActive(), "filter should not toggle when no annotated files")
 	})
 }
 
@@ -309,7 +306,7 @@ func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
 		"b.go": {{NewNum: 1, Content: "b-line", ChangeType: diff.ChangeAdd}},
 	}
 	m := testModel([]string{"a.go", "b.go"}, lines)
-	m.tree = newFileTree([]string{"a.go", "b.go"})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.currFile = "b.go"
 	m.diffLines = lines["b.go"]
 	m.focus = paneTree
@@ -320,7 +317,7 @@ func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
 	// toggle filter on — should select a.go (the only annotated file)
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 	model := result.(Model)
-	assert.True(t, model.tree.filter)
+	assert.True(t, model.tree.FilterActive())
 
 	// since b.go was current and a.go is now selected, a load command should be returned
 	if cmd != nil {

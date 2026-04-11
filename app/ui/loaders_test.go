@@ -14,6 +14,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
 func TestModel_FilesLoaded(t *testing.T) {
@@ -22,9 +23,9 @@ func TestModel_FilesLoaded(t *testing.T) {
 	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "internal/handler.go"}, {Path: "internal/store.go"}, {Path: "main.go"}}})
 	model := result.(Model)
 
-	// tree should be populated
-	assert.Len(t, model.tree.entries, 5) // 2 dirs + 3 files
-	assert.NotNil(t, cmd)                // should auto-select first file
+	// tree should be populated with 3 files
+	assert.Equal(t, 3, model.tree.TotalFiles())
+	assert.NotNil(t, cmd) // should auto-select first file
 }
 
 func TestModel_FilesLoadedError(t *testing.T) {
@@ -35,7 +36,7 @@ func TestModel_FilesLoadedError(t *testing.T) {
 	model := result.(Model)
 
 	assert.Nil(t, cmd)
-	assert.Empty(t, model.tree.entries)
+	assert.Equal(t, 0, model.tree.TotalFiles())
 }
 
 func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
@@ -48,7 +49,7 @@ func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
 
 func TestModel_FileLoaded(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
@@ -146,7 +147,7 @@ func TestModel_FileLoadedComputesStats(t *testing.T) {
 		{NewNum: 3, Content: "added2", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.loadSeq = 1
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: 1, lines: lines})
@@ -652,10 +653,7 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 		model := result.(Model)
 
 		require.NotNil(t, model.mdTOC, "mdTOC should be set for markdown full-context")
-		assert.Len(t, model.mdTOC.entries, 3) // top + 2 headers
-		assert.Equal(t, "README.md", model.mdTOC.entries[0].title)
-		assert.Equal(t, "Title", model.mdTOC.entries[1].title)
-		assert.Equal(t, "Section", model.mdTOC.entries[2].title)
+		assert.Equal(t, 3, model.mdTOC.NumEntries()) // top + 2 headers
 		assert.Positive(t, model.treeWidth, "treeWidth should be set when TOC is active")
 	})
 
@@ -716,7 +714,9 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 		goLines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
 		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": goLines})
 		m.singleFile = true
-		m.mdTOC = &mdTOC{entries: []tocEntry{{title: "stale", lineIdx: 1}}} // pre-existing TOC from previous file
+		// pre-existing TOC from previous markdown file
+		staleMdLines := []diff.DiffLine{{NewNum: 1, Content: "# Stale", ChangeType: diff.ChangeContext}}
+		m.mdTOC = sidepane.ParseTOC(staleMdLines, "old.md")
 
 		result, _ := m.Update(fileLoadedMsg{file: "main.go", lines: goLines})
 		model := result.(Model)
@@ -792,7 +792,7 @@ func TestModel_FileLoadedResetsCursor(t *testing.T) {
 	}
 
 	m := testModel([]string{"a.go"}, nil)
-	m.tree = newFileTree([]string{"a.go"})
+	m.tree = testNewFileTree([]string{"a.go"})
 	m.diffCursor = 5 // simulate cursor was elsewhere
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -805,15 +805,15 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	// the response for b.go should still be accepted because it carries the latest sequence number.
 	files := []string{"a.go", "b.go", "c.go"}
 	m := testModel(files, nil)
-	m.tree = newFileTree(files)
+	m.tree = testNewFileTree(files)
 
 	// user presses n to load b.go
 	m.loadSeq = 1
-	m.tree.nextFile() // cursor -> b.go
+	m.tree.StepFile(sidepane.DirectionNext) // cursor -> b.go
 
 	// then j/k moves cursor to c.go (without triggering a load)
-	m.tree.moveDown() // cursor -> c.go
-	assert.Equal(t, "c.go", m.tree.selectedFile(), "cursor moved to c.go")
+	m.tree.Move(sidepane.MotionDown) // cursor -> c.go
+	assert.Equal(t, "c.go", m.tree.SelectedFile(), "cursor moved to c.go")
 
 	// b.go response arrives with matching seq - should be accepted
 	bLines := []diff.DiffLine{{NewNum: 1, Content: "package b", ChangeType: diff.ChangeContext}}
