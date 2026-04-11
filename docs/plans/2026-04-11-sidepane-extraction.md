@@ -484,18 +484,18 @@ Create the package shell, generator directives, shared helper, interfaces, and r
 - Create: `app/ui/sidepane/motion_enum.go` (after go generate)
 - Create: `app/ui/sidepane/direction_enum.go` (after go generate)
 
-- [ ] create `app/ui/sidepane/sidepane.go` with package doc comment describing the sub-package
-- [ ] verify the `go-pkgz/enum` version pin used in `app/ui/style/enums.go` (check both `styleKey` and `colorKey` directives) and use the exact same version in sidepane directives — avoids drift between the two sub-packages
-- [ ] define `motion` and `direction` unexported enum types in `sidepane.go` with matching `//go:generate go run github.com/go-pkgz/enum@<version> -type motion` and `-type direction` directives (mirrors `app/ui/style/enums.go` pattern)
-- [ ] run `go generate ./app/ui/sidepane/...` to produce `motion_enum.go` and `direction_enum.go` (generates `Motion`/`Direction` exported types with `Values`/`String`/parse helpers)
-- [ ] add shared `ensureVisible(cursor, offset *int, count, height int)` unexported helper (copied from `app/ui/filetree.go:ensureVisibleInList`)
-- [ ] define consumer-side `Resolver` interface (narrow view of style — only the methods sidepane render paths actually call)
-- [ ] define consumer-side `Renderer` interface (FileStatusMark, FileReviewedMark, FileAnnotationMark — FileTree only)
-- [ ] define `FileTreeRender` struct with Width/Height/Annotated/Resolver/Renderer fields
-- [ ] define `TOCRender` struct with Width/Height/Focused/Resolver fields
-- [ ] write table-driven test for `ensureVisible` covering: cursor-above-viewport, cursor-below-viewport, cursor-in-range, empty count, count-smaller-than-height, negative height
-- [ ] write exhaustiveness test iterating `MotionValues` and `DirectionValues` asserting `String()` returns non-empty for every value
-- [ ] verify `go test ./app/ui/sidepane/... -race` green for the scaffold (only exhaustiveness + ensureVisible tests should be running so far)
+- [x] create `app/ui/sidepane/sidepane.go` with package doc comment describing the sub-package
+- [x] verify the `go-pkgz/enum` version pin used in `app/ui/style/enums.go` (check both `styleKey` and `colorKey` directives) and use the exact same version in sidepane directives — avoids drift between the two sub-packages
+- [x] define `motion` and `direction` unexported enum types in `sidepane.go` with matching `//go:generate go run github.com/go-pkgz/enum@<version> -type motion` and `-type direction` directives (mirrors `app/ui/style/enums.go` pattern)
+- [x] run `go generate ./app/ui/sidepane/...` to produce `motion_enum.go` and `direction_enum.go` (generates `Motion`/`Direction` exported types with `Values`/`String`/parse helpers)
+- [x] add shared `ensureVisible(cursor, offset *int, count, height int)` unexported helper (copied from `app/ui/filetree.go:ensureVisibleInList`)
+- [x] define consumer-side `Resolver` interface (narrow view of style — only the methods sidepane render paths actually call)
+- [x] define consumer-side `Renderer` interface (FileStatusMark, FileReviewedMark, FileAnnotationMark — FileTree only)
+- [x] define `FileTreeRender` struct with Width/Height/Annotated/Resolver/Renderer fields
+- [x] define `TOCRender` struct with Width/Height/Focused/Resolver fields
+- [x] write table-driven test for `ensureVisible` covering: cursor-above-viewport, cursor-below-viewport, cursor-in-range, empty count, count-smaller-than-height, negative height
+- [x] write exhaustiveness test iterating `MotionValues` and `DirectionValues` asserting `String()` returns non-empty for every value
+- [x] verify `go test ./app/ui/sidepane/... -race` green for the scaffold (only exhaustiveness + ensureVisible tests should be running so far)
 
 ### Task 2: Implement FileTree type and all methods
 
