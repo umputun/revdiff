@@ -11,18 +11,18 @@ import (
 	"strings"
 )
 
-// FallbackRenderer wraps a *Git renderer and knows about --only file paths.
+// FallbackRenderer wraps a VCS renderer and knows about --only file paths.
 // it delegates to the inner renderer, falling back to disk read for --only files
-// that are not present in the git diff.
+// that are not present in the diff.
 type FallbackRenderer struct {
-	inner   *Git
+	inner   renderer
 	only    []string
 	workDir string
 }
 
 // NewFallbackRenderer creates a FallbackRenderer that delegates to inner and falls back
-// to reading files from disk for --only patterns not found in the git diff.
-func NewFallbackRenderer(inner *Git, only []string, workDir string) *FallbackRenderer {
+// to reading files from disk for --only patterns not found in the diff.
+func NewFallbackRenderer(inner renderer, only []string, workDir string) *FallbackRenderer {
 	return &FallbackRenderer{inner: inner, only: only, workDir: workDir}
 }
 
@@ -31,7 +31,7 @@ func NewFallbackRenderer(inner *Git, only []string, workDir string) *FallbackRen
 func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	entries, err := fr.inner.ChangedFiles(ref, staged)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("fallback changed files: %w", err)
 	}
 
 	for _, pattern := range fr.only {
@@ -50,14 +50,14 @@ func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, 
 }
 
 // FileDiff returns the diff for a file. for files outside the repo (absolute paths
-// that escape workDir), it skips the inner git renderer entirely and reads from disk.
+// that escape workDir), it skips the inner renderer entirely and reads from disk.
 // for in-repo files, it calls the inner renderer first; if the result is empty
 // (no error, no lines) and the file matches an --only pattern, it falls back to
 // reading the file from disk as all-context lines.
 func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 	resolved := resolvePath(fr.workDir, file)
 
-	// skip inner git renderer for files outside the repo — git would reject them
+	// skip inner renderer for files outside the repo — VCS would reject them
 	// with "is outside repository" error
 	if !fr.isInsideWorkDir(resolved) {
 		if _, statErr := os.Stat(resolved); statErr == nil {
@@ -68,7 +68,7 @@ func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool) ([]DiffLine,
 
 	lines, err := fr.inner.FileDiff(ref, file, staged)
 	if err != nil {
-		return lines, err // propagate git errors, don't mask with fallback
+		return lines, fmt.Errorf("fallback file diff %s: %w", file, err)
 	}
 	if len(lines) > 0 {
 		return lines, nil

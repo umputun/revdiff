@@ -562,7 +562,7 @@ func makeHgRenderer(h *diff.Hg, only, exclude []string, allFiles bool, repoRoot 
 	case allFiles:
 		return nil, "", errors.New("--all-files is not supported in mercurial repositories")
 	case len(only) > 0:
-		r = diff.NewFileReader(only, repoRoot)
+		r = diff.NewFallbackRenderer(h, only, repoRoot)
 	default:
 		r = h
 	}

@@ -248,7 +248,8 @@ func TestHg_UntrackedFiles(t *testing.T) {
 	assert.NotContains(t, files, "tracked.txt")
 }
 
-func TestParseStatus(t *testing.T) {
+func TestHg_ParseStatus(t *testing.T) {
+	h := &Hg{}
 	tests := []struct {
 		name  string
 		input string
@@ -281,12 +282,13 @@ func TestParseStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, parseStatus(tt.input))
+			assert.Equal(t, tt.want, h.parseStatus(tt.input))
 		})
 	}
 }
 
-func TestHgStatusToFileStatus(t *testing.T) {
+func TestHg_StatusToFileStatus(t *testing.T) {
+	h := &Hg{}
 	tests := []struct {
 		status string
 		want   FileStatus
@@ -300,7 +302,7 @@ func TestHgStatusToFileStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.status, func(t *testing.T) {
-			assert.Equal(t, tt.want, hgStatusToFileStatus(tt.status))
+			assert.Equal(t, tt.want, h.hgStatusToFileStatus(tt.status))
 		})
 	}
 }

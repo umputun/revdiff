@@ -37,7 +37,7 @@ var hgStatusRe = regexp.MustCompile(`^([MAR?!]) (.+)$`)
 // hgStatusToFileStatus converts an hg status letter to a FileStatus.
 // hg uses "R" for removed (not renamed), mapping to FileDeleted.
 // returns empty string for unknown or skipped statuses.
-func hgStatusToFileStatus(status string) FileStatus {
+func (h *Hg) hgStatusToFileStatus(status string) FileStatus {
 	switch FileStatus(status) {
 	case FileModified:
 		return FileModified
@@ -63,7 +63,7 @@ func (h *Hg) ChangedFiles(ref string, _ bool) ([]FileEntry, error) {
 		return nil, fmt.Errorf("get changed files: %w", err)
 	}
 
-	return parseStatus(out), nil
+	return h.parseStatus(out), nil
 }
 
 // changedFilesFromDiff lists changed files between revisions using hg status --rev.
@@ -78,11 +78,11 @@ func (h *Hg) changedFilesFromDiff(ref string) ([]FileEntry, error) {
 		return nil, fmt.Errorf("get changed files: %w", err)
 	}
 
-	return parseStatus(out), nil
+	return h.parseStatus(out), nil
 }
 
 // parseStatus parses hg status output into file entries.
-func parseStatus(out string) []FileEntry {
+func (h *Hg) parseStatus(out string) []FileEntry {
 	var entries []FileEntry
 	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
 		m := hgStatusRe.FindStringSubmatch(line)
@@ -90,7 +90,7 @@ func parseStatus(out string) []FileEntry {
 			continue
 		}
 		status, path := m[1], m[2]
-		fs := hgStatusToFileStatus(status)
+		fs := h.hgStatusToFileStatus(status)
 		if fs == "" {
 			continue
 		}
