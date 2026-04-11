@@ -865,15 +865,15 @@ The goal of M1 is a **fully self-contained `app/ui/style/` package** with all ty
 **Files:**
 - Create: `app/ui/style/enums.go`
 
-- [ ] create `app/ui/style/enums.go` with `package style` header
-- [ ] add `//go:generate` directives for both enums: `go run github.com/go-pkgz/enum@latest -type colorKey` and same for `styleKey`
-- [ ] declare `type colorKey int` (unexported) with all 11 iota constants: `colorKeyUnknown` (zero sentinel), `colorKeyAccentFg`, `colorKeyMutedFg`, `colorKeyAnnotationFg`, `colorKeyStatusFg`, `colorKeyDiffPaneBg`, `colorKeyAddLineBg`, `colorKeyRemoveLineBg`, `colorKeyWordAddBg`, `colorKeyWordRemoveBg`, `colorKeySearchBg`
-- [ ] declare `type styleKey int` (unexported) with all 32 iota constants (1 sentinel + 24 core + 7 D14 ad-hoc styles: `styleKeyAnnotInputText`, `styleKeyAnnotInputPlaceholder`, `styleKeyAnnotInputCursor`, `styleKeyAnnotListBorder`, `styleKeyHelpBox`, `styleKeyThemeSelectBox`, `styleKeyThemeSelectBoxFocused`). Exact list finalized during Task 1.6 (resolver.go) after grepping for inline `lipgloss.NewStyle()` calls.
-- [ ] add comments above both type declarations noting they are generator input and the exported generated names are what to use at call sites (reference: D4 enum/field naming mismatch note, D14 ad-hoc style expansion note)
-- [ ] run `go generate ./app/ui/style/...` to produce `color_key_enum.go` and `style_key_enum.go`
-- [ ] verify both generated files exist and compile (`go build ./app/ui/style/...`)
-- [ ] verify generated exports: `ColorKey` type, `ColorKeyUnknown`/`ColorKeyAccentFg`/... constants, `ColorKeyValues` slice, `String()` method. Same for `StyleKey`. Pattern verified against `~/.claude2/skills/knowledge-base/references/enum.md` (unexported source → exported generated names).
-- [ ] no tests for the `enums.go` declarations themselves — the generator's output is covered by the exhaustiveness tests in Task 1.6 (resolver_test.go)
+- [x] create `app/ui/style/enums.go` with `package style` header
+- [x] add `//go:generate` directives for both enums: `go run github.com/go-pkgz/enum@latest -type colorKey` and same for `styleKey`
+- [x] declare `type colorKey int` (unexported) with all 11 iota constants: `colorKeyUnknown` (zero sentinel), `colorKeyAccentFg`, `colorKeyMutedFg`, `colorKeyAnnotationFg`, `colorKeyStatusFg`, `colorKeyDiffPaneBg`, `colorKeyAddLineBg`, `colorKeyRemoveLineBg`, `colorKeyWordAddBg`, `colorKeyWordRemoveBg`, `colorKeySearchBg`
+- [x] declare `type styleKey int` (unexported) with all 32 iota constants (1 sentinel + 24 core + 7 D14 ad-hoc styles: `styleKeyAnnotInputText`, `styleKeyAnnotInputPlaceholder`, `styleKeyAnnotInputCursor`, `styleKeyAnnotListBorder`, `styleKeyHelpBox`, `styleKeyThemeSelectBox`, `styleKeyThemeSelectBoxFocused`). Exact list finalized during Task 1.6 (resolver.go) after grepping for inline `lipgloss.NewStyle()` calls.
+- [x] add comments above both type declarations noting they are generator input and the exported generated names are what to use at call sites (reference: D4 enum/field naming mismatch note, D14 ad-hoc style expansion note)
+- [x] run `go generate ./app/ui/style/...` to produce `color_key_enum.go` and `style_key_enum.go`
+- [x] verify both generated files exist and compile (`go build ./app/ui/style/...`)
+- [x] verify generated exports: `ColorKey` type, `ColorKeyUnknown`/`ColorKeyAccentFg`/... constants, `ColorKeyValues` slice, `String()` method. Same for `StyleKey`. Pattern verified against `~/.claude2/skills/knowledge-base/references/enum.md` (unexported source → exported generated names).
+- [x] no tests for the `enums.go` declarations themselves — the generator's output is covered by the exhaustiveness tests in Task 1.6 (resolver_test.go)
 
 #### Task 1.3: Create `color.go` with Color type, reset constants, and HSL helpers
 
@@ -881,14 +881,14 @@ The goal of M1 is a **fully self-contained `app/ui/style/` package** with all ty
 - Create: `app/ui/style/color.go`
 - Create: `app/ui/style/color_test.go`
 
-- [ ] create `color.go` with `type Color string` — NO methods initially (per D3, add methods only if a caller emerges during M2)
-- [ ] add `ResetFg` and `ResetBg` typed `Color` constants
-- [ ] port HSL helpers from old branch: `shiftLightness`, `parseHexRGB`, `rgbToHSL`, `hslToRGB`, `hueToRGB` — all private. Reference: `git show ui-subpackage-extraction:app/ui/style/color.go`
-- [ ] write tests for `shiftLightness` (dark → lighter, light → darker, saturation 0, boundaries 0/1)
-- [ ] write tests for `parseHexRGB` (valid 7-char hex, missing #, wrong length, invalid chars)
-- [ ] write tests for `rgbToHSL` / `hslToRGB` roundtrip with known colors
-- [ ] write tests for `hueToRGB` all 4 branches
-- [ ] tests for `ResetFg` / `ResetBg` constant values
+- [x] create `color.go` with `type Color string` — NO methods initially (per D3, add methods only if a caller emerges during M2)
+- [x] add `ResetFg` and `ResetBg` typed `Color` constants
+- [x] port HSL helpers from old branch: `shiftLightness`, `parseHexRGB`, `rgbToHSL`, `hslToRGB`, `hueToRGB` — all private. Reference: `git show ui-subpackage-extraction:app/ui/style/color.go`
+- [x] write tests for `shiftLightness` (dark → lighter, light → darker, saturation 0, boundaries 0/1)
+- [x] write tests for `parseHexRGB` (valid 7-char hex, missing #, wrong length, invalid chars)
+- [x] write tests for `rgbToHSL` / `hslToRGB` roundtrip with known colors
+- [x] write tests for `hueToRGB` all 4 branches
+- [x] tests for `ResetFg` / `ResetBg` constant values
 
 #### Task 1.4: Create `ansi.go` with Write helper and private AnsiColor
 
@@ -896,13 +896,13 @@ The goal of M1 is a **fully self-contained `app/ui/style/` package** with all ty
 - Create: `app/ui/style/ansi.go`
 - Create: `app/ui/style/ansi_test.go`
 
-- [ ] create `ansi.go` with `func Write(w io.Writer, c Color) (int, error)` (standalone, per D10)
-- [ ] add private `AnsiColor(hex string, code int) string` — builds `\033[<code>;2;r;g;b;m` sequence (used internally by `Resolver.Color`)
-- [ ] add private `hexVal(c byte) byte` helper
-- [ ] write tests for `Write` — empty color (0 bytes, nil err), non-empty color (writes exact bytes), writer error propagation (use a fake writer)
-- [ ] write tests for `AnsiColor` — valid 7-char hex with `#`, valid 6-char without `#`, invalid inputs return empty
-- [ ] write tests for `hexVal` — all hex digits 0-9, a-f, A-F, invalid chars return 0
-- [ ] **this file is the one the old branch skipped — full coverage is a hard requirement**
+- [x] create `ansi.go` with `func Write(w io.Writer, c Color) (int, error)` (standalone, per D10)
+- [x] add private `AnsiColor(hex string, code int) string` — builds `\033[<code>;2;r;g;b;m` sequence (used internally by `Resolver.Color`)
+- [x] add private `hexVal(c byte) byte` helper
+- [x] write tests for `Write` — empty color (0 bytes, nil err), non-empty color (writes exact bytes), writer error propagation (use a fake writer)
+- [x] write tests for `AnsiColor` — valid 7-char hex with `#`, valid 6-char without `#`, invalid inputs return empty
+- [x] write tests for `hexVal` — all hex digits 0-9, a-f, A-F, invalid chars return 0
+- [x] **this file is the one the old branch skipped — full coverage is a hard requirement**
 
 #### Task 1.5: Create `style.go` with Colors struct and normalizeColors
 
@@ -912,10 +912,10 @@ The goal of M1 is a **fully self-contained `app/ui/style/` package** with all ty
 
 Small file — the package-level `Colors` config struct and a private normalization helper. No types beyond `Colors`, no constructors. Per D15, each of the three types (`Resolver`, `Renderer`, `SGR`) has its own file; `style.go` is just the package-level data bag and helper.
 
-- [ ] create `style.go` with `Colors` struct (same 23 hex fields as current `ui.Colors` — copy field list from `app/ui/styles.go:12`)
-- [ ] implement private `normalizeColors(c Colors) Colors` (copy from `ui-subpackage-extraction:app/ui/style/style.go`, includes `WordAddBg`/`WordRemoveBg` auto-derivation via `shiftLightness` from `color.go`)
-- [ ] (optional) add a package-level godoc comment at the top of `style.go` describing the three-type layout (`Resolver`, `Renderer`, `SGR`) so future readers browsing the package understand the structure without hunting through multiple files. Alternative: put this doc comment in a dedicated `doc.go`.
-- [ ] write tests for `normalizeColors` — `#` prefix normalization, auto-derivation of `WordAddBg`/`WordRemoveBg` when empty, preservation of already-set values
+- [x] create `style.go` with `Colors` struct (same 23 hex fields as current `ui.Colors` — copy field list from `app/ui/styles.go:12`)
+- [x] implement private `normalizeColors(c Colors) Colors` (copy from `ui-subpackage-extraction:app/ui/style/style.go`, includes `WordAddBg`/`WordRemoveBg` auto-derivation via `shiftLightness` from `color.go`)
+- [x] (optional) add a package-level godoc comment at the top of `style.go` describing the three-type layout (`Resolver`, `Renderer`, `SGR`) so future readers browsing the package understand the structure without hunting through multiple files. Alternative: put this doc comment in a dedicated `doc.go`.
+- [x] write tests for `normalizeColors` — `#` prefix normalization, auto-derivation of `WordAddBg`/`WordRemoveBg` when empty, preservation of already-set values
 
 #### Task 1.6: Create `resolver.go` with `Resolver` type, constructors, and 6 methods
 
@@ -925,23 +925,23 @@ Small file — the package-level `Colors` config struct and a private normalizat
 
 `Resolver` is the lookup/dispatch layer. It holds the pre-materialized color and lipgloss style tables and exposes 6 methods. Its constructor takes `Colors` and normalizes + builds internally.
 
-- [ ] declare `type Resolver struct` with ALL-PRIVATE fields (private `Colors` field, private lipgloss style table keyed by `StyleKey` — or individual fields — implementation choice)
-- [ ] implement `NewResolver(c Colors) Resolver` — public constructor. Calls `normalizeColors` from style.go, builds all ~32 lipgloss.Style values (including the D14 ad-hoc popup/input styles), stores them privately. Used by `main.go`.
-- [ ] implement `PlainResolver() Resolver` — public constructor for `--no-colors` mode. Borders preserved, all color styling stripped. Used by `main.go`.
-- [ ] **before writing the `Style(k)` switch, grep `app/ui/*.go` for every `lipgloss.NewStyle()` call and confirm the `StyleKey` enum covers each ad-hoc inline construction** — add missing keys to `enums.go` if the initial set doesn't cover everything
-- [ ] implement `(r Resolver) Color(k ColorKey) Color` with a switch over all 11 keys. Each returns the ANSI fg or bg sequence via private `AnsiColor` from `ansi.go`. `ColorKeyStatusFg` case implements `StatusFg || MutedFg` fallback.
-- [ ] implement `(r Resolver) Style(k StyleKey) lipgloss.Style` with a switch over all 32 keys (1 sentinel + 24 core + 7 D14 popup/input styles)
-- [ ] implement `(r Resolver) LineBg(change diff.ChangeType) Color` (ChangeAdd → AddBg ANSI, ChangeRemove → RemoveBg ANSI, else empty)
-- [ ] implement `(r Resolver) LineStyle(change diff.ChangeType, highlighted bool) lipgloss.Style` (dispatches to LineAdd/LineAddHighlight/etc)
-- [ ] implement `(r Resolver) WordDiffBg(change diff.ChangeType) Color` (dispatches to WordAddBg/WordRemoveBg)
-- [ ] implement `(r Resolver) IndicatorBg(change diff.ChangeType) Color` (LineBg if non-empty, else DiffPaneBg)
-- [ ] private lipgloss builders (`contextStyle`, `dirEntryStyle`, `fileEntryStyle`, `treeItemStyle`, `lineNumberStyle`, `contextHighlightStyle`, etc.) called by `NewResolver` — copy bodies from old branch reference `git show ui-subpackage-extraction:app/ui/style/style.go`
-- [ ] define test fixtures `fullColorsForTesting` and `sparseColorsForTesting` at the top of `resolver_test.go` — these are package-private, reusable by `renderer_test.go` in the same package
-- [ ] write tests for `NewResolver` and `PlainResolver` (construction doesn't panic, internal state is non-nil)
-- [ ] write tests for all 6 Resolver methods (table-driven where possible)
-- [ ] write `TestResolver_Color_coversAllKeys` — two-fixture exhaustiveness iterating `ColorKeyValues` with both `fullColorsForTesting` and `sparseColorsForTesting`
-- [ ] write `TestResolver_Style_coversAllKeys` — same pattern for `StyleKeyValues`
-- [ ] write `TestResolver_Color_StatusFgFallback` verifying `ColorKeyStatusFg` falls back to `ColorKeyMutedFg` when `Colors.StatusFg` is empty
+- [x] declare `type Resolver struct` with ALL-PRIVATE fields (private `Colors` field, private lipgloss style table keyed by `StyleKey` — or individual fields — implementation choice)
+- [x] implement `NewResolver(c Colors) Resolver` — public constructor. Calls `normalizeColors` from style.go, builds all ~32 lipgloss.Style values (including the D14 ad-hoc popup/input styles), stores them privately. Used by `main.go`.
+- [x] implement `PlainResolver() Resolver` — public constructor for `--no-colors` mode. Borders preserved, all color styling stripped. Used by `main.go`.
+- [x] **before writing the `Style(k)` switch, grep `app/ui/*.go` for every `lipgloss.NewStyle()` call and confirm the `StyleKey` enum covers each ad-hoc inline construction** — add missing keys to `enums.go` if the initial set doesn't cover everything
+- [x] implement `(r Resolver) Color(k ColorKey) Color` with a switch over all 11 keys. Each returns the ANSI fg or bg sequence via private `AnsiColor` from `ansi.go`. `ColorKeyStatusFg` case implements `StatusFg || MutedFg` fallback.
+- [x] implement `(r Resolver) Style(k StyleKey) lipgloss.Style` with a switch over all 32 keys (1 sentinel + 24 core + 7 D14 popup/input styles)
+- [x] implement `(r Resolver) LineBg(change diff.ChangeType) Color` (ChangeAdd → AddBg ANSI, ChangeRemove → RemoveBg ANSI, else empty)
+- [x] implement `(r Resolver) LineStyle(change diff.ChangeType, highlighted bool) lipgloss.Style` (dispatches to LineAdd/LineAddHighlight/etc)
+- [x] implement `(r Resolver) WordDiffBg(change diff.ChangeType) Color` (dispatches to WordAddBg/WordRemoveBg)
+- [x] implement `(r Resolver) IndicatorBg(change diff.ChangeType) Color` (LineBg if non-empty, else DiffPaneBg)
+- [x] private lipgloss builders (`contextStyle`, `dirEntryStyle`, `fileEntryStyle`, `treeItemStyle`, `lineNumberStyle`, `contextHighlightStyle`, etc.) called by `NewResolver` — copy bodies from old branch reference `git show ui-subpackage-extraction:app/ui/style/style.go`
+- [x] define test fixtures `fullColorsForTesting` and `sparseColorsForTesting` at the top of `resolver_test.go` — these are package-private, reusable by `renderer_test.go` in the same package
+- [x] write tests for `NewResolver` and `PlainResolver` (construction doesn't panic, internal state is non-nil)
+- [x] write tests for all 6 Resolver methods (table-driven where possible)
+- [x] write `TestResolver_Color_coversAllKeys` — two-fixture exhaustiveness iterating `ColorKeyValues` with both `fullColorsForTesting` and `sparseColorsForTesting`
+- [x] write `TestResolver_Style_coversAllKeys` — same pattern for `StyleKeyValues`
+- [x] write `TestResolver_Color_StatusFgFallback` verifying `ColorKeyStatusFg` falls back to `ColorKeyMutedFg` when `Colors.StatusFg` is empty
 
 #### Task 1.7: Create `renderer.go` with `Renderer` type, constructor, and 6 methods
 
@@ -951,17 +951,17 @@ Small file — the package-level `Colors` config struct and a private normalizat
 
 `Renderer` produces complete rendered strings for specific UI widgets. It holds a `Resolver` internally to look up colors during assembly.
 
-- [ ] declare `type Renderer struct { res Resolver }` (holds a Resolver internally for color lookups)
-- [ ] implement `NewRenderer(res Resolver) Renderer` — public constructor. Called by `main.go` after the caller constructs a Resolver via `NewResolver` or `PlainResolver`.
-- [ ] implement `(r Renderer) AnnotationInline(text string) string` — port from `diffview.go:848`, use `r.res.Color(style.ColorKeyAnnotationFg)` and `r.res.Color(style.ColorKeyDiffPaneBg)` internally
-- [ ] implement `(r Renderer) DiffCursor(noColors bool) string` — port from `diffview.go:872`
-- [ ] implement `(r Renderer) StatusBarSeparator() string` — port from `view.go:153` — `" " + MutedFg + "|" + StatusFg + " "`
-- [ ] implement `(r Renderer) FileStatusMark(status diff.FileStatus) string` — calls private `fileStatusFg(status)` internally
-- [ ] implement `(r Renderer) FileReviewedMark() string` — the `coloredTextWithReset(AddFg, "✓", Normal)` pattern
-- [ ] implement `(r Renderer) FileAnnotationMark() string` — the `coloredText(Annotation, " *")` pattern
-- [ ] implement private helper `(r Renderer) fileStatusFg(status diff.FileStatus) Color` — used only by `FileStatusMark`, NOT exposed publicly (I6 feedback)
-- [ ] write tests for `NewRenderer` (wires the resolver correctly)
-- [ ] write tests for all 6 Renderer methods — construct a `Renderer` from `NewResolver(fullColorsForTesting)` or `PlainResolver()` (fixtures live in `resolver_test.go`, same package)
+- [x] declare `type Renderer struct { res Resolver }` (holds a Resolver internally for color lookups)
+- [x] implement `NewRenderer(res Resolver) Renderer` — public constructor. Called by `main.go` after the caller constructs a Resolver via `NewResolver` or `PlainResolver`.
+- [x] implement `(r Renderer) AnnotationInline(text string) string` — port from `diffview.go:848`, use `r.res.Color(style.ColorKeyAnnotationFg)` and `r.res.Color(style.ColorKeyDiffPaneBg)` internally
+- [x] implement `(r Renderer) DiffCursor(noColors bool) string` — port from `diffview.go:872`
+- [x] implement `(r Renderer) StatusBarSeparator() string` — port from `view.go:153` — `" " + MutedFg + "|" + StatusFg + " "`
+- [x] implement `(r Renderer) FileStatusMark(status diff.FileStatus) string` — calls private `fileStatusFg(status)` internally
+- [x] implement `(r Renderer) FileReviewedMark() string` — the `coloredTextWithReset(AddFg, "✓", Normal)` pattern
+- [x] implement `(r Renderer) FileAnnotationMark() string` — the `coloredText(Annotation, " *")` pattern
+- [x] implement private helper `(r Renderer) fileStatusFg(status diff.FileStatus) Color` — used only by `FileStatusMark`, NOT exposed publicly (I6 feedback)
+- [x] write tests for `NewRenderer` (wires the resolver correctly)
+- [x] write tests for all 6 Renderer methods — construct a `Renderer` from `NewResolver(fullColorsForTesting)` or `PlainResolver()` (fixtures live in `resolver_test.go`, same package)
 
 #### Task 1.8: Create `sgr.go` with `SGR` type, private `sgrState`, and parsing helpers
 
@@ -971,29 +971,29 @@ Small file — the package-level `Colors` config struct and a private normalizat
 
 Per D15, `SGR` is one of the three public types exposed by the `style` package (alongside `Resolver` and `Renderer`). It wraps the internal SGR parsing state machine and exposes a single method `Reemit`. Zero coupling to `Colors`, `Resolver`, or any other styling state.
 
-- [ ] create `sgr.go` with exported type `type SGR struct{}` (stateless; zero-value is usable)
-- [ ] create private `sgrState` struct (fields: fg, bg string; bold, italic, reverse bool) — tracks active SGR state during a scan
-- [ ] implement `(s sgrState) scan(line string) sgrState` — ports `Model.scanANSIState` + `Model.parseSGR` + `Model.applySGR` logic
-- [ ] implement `(s sgrState) prefix() string` — ports `Model.buildSGRPrefix`
-- [ ] implement `(s sgrState) applySGR(params, seq string) sgrState` — ports `Model.applySGR`
-- [ ] private package-level helpers: `parseSGR(s string, i int) (seq, params string, end int)`, `isFgColor(params string) bool`, `isBgColor(params string) bool` — ports from `diffview.go:484-539`. These stay as functions (no natural state type) per D9.
-- [ ] implement **`(SGR) Reemit(lines []string) []string`** — the public entry point. Method name shortened from `ReemitANSIState` because the type name `SGR` already carries the "ANSI state" context. Body: iterate lines, accumulate `sgrState` via `.scan`, prepend `.prefix()` to continuation lines. Receiver is unused (stateless `SGR{}`), which is fine — the type exists to provide a method namespace for the interface contract.
-- [ ] write tests for `sgrState.scan` — no SGR, single SGR, multiple SGRs, full reset, fg reset, bg reset, bold/italic/reverse transitions
-- [ ] write tests for `sgrState.prefix` — empty state, fg only, bg only, all attributes combined
-- [ ] write tests for `parseSGR` — valid SGR, unterminated CSI, non-SGR CSI, string boundaries
-- [ ] write tests for `isFgColor` and `isBgColor` — 24-bit (38;2 / 48;2), basic (30-37 / 40-47), rejections (other SGR codes)
-- [ ] write tests for `SGR.Reemit` — empty input, single line, multi-line with carryover, reset mid-stream
+- [x] create `sgr.go` with exported type `type SGR struct{}` (stateless; zero-value is usable)
+- [x] create private `sgrState` struct (fields: fg, bg string; bold, italic, reverse bool) — tracks active SGR state during a scan
+- [x] implement `(s sgrState) scan(line string) sgrState` — ports `Model.scanANSIState` + `Model.parseSGR` + `Model.applySGR` logic
+- [x] implement `(s sgrState) prefix() string` — ports `Model.buildSGRPrefix`
+- [x] implement `(s sgrState) applySGR(params, seq string) sgrState` — ports `Model.applySGR`
+- [x] private package-level helpers: `parseSGR(s string, i int) (seq, params string, end int)`, `isFgColor(params string) bool`, `isBgColor(params string) bool` — ports from `diffview.go:484-539`. These stay as functions (no natural state type) per D9.
+- [x] implement **`(SGR) Reemit(lines []string) []string`** — the public entry point. Method name shortened from `ReemitANSIState` because the type name `SGR` already carries the "ANSI state" context. Body: iterate lines, accumulate `sgrState` via `.scan`, prepend `.prefix()` to continuation lines. Receiver is unused (stateless `SGR{}`), which is fine — the type exists to provide a method namespace for the interface contract.
+- [x] write tests for `sgrState.scan` — no SGR, single SGR, multiple SGRs, full reset, fg reset, bg reset, bold/italic/reverse transitions
+- [x] write tests for `sgrState.prefix` — empty state, fg only, bg only, all attributes combined
+- [x] write tests for `parseSGR` — valid SGR, unterminated CSI, non-SGR CSI, string boundaries
+- [x] write tests for `isFgColor` and `isBgColor` — 24-bit (38;2 / 48;2), basic (30-37 / 40-47), rejections (other SGR codes)
+- [x] write tests for `SGR.Reemit` — empty input, single line, multi-line with carryover, reset mid-stream
 
 #### Task 1.9: M1 convergence gate
 
 **Files:**
 - none (verification task)
 
-- [ ] run `go build ./app/ui/style/...` — must compile
-- [ ] run `go test ./app/ui/style/... -race` — all tests green
-- [ ] run `golangci-lint run ./app/ui/style/...` — clean (expect linter to check only style/)
-- [ ] **full project build/test is NOT required at this milestone — it is still broken**
-- [ ] M1 COMPLETE — commit as single git commit: `refactor(ui): create app/ui/style/ package skeleton`
+- [x] run `go build ./app/ui/style/...` — must compile
+- [x] run `go test ./app/ui/style/... -race` — all tests green
+- [x] run `golangci-lint run ./app/ui/style/...` — clean (expect linter to check only style/)
+- [x] **full project build/test is NOT required at this milestone — it is still broken**
+- [x] M1 COMPLETE — commit as single git commit: `refactor(ui): create app/ui/style/ package skeleton`
 
 ### Milestone 2: Call-site migration (green-gate: full `go test ./... -race`)
 
