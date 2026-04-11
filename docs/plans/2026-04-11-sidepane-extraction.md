@@ -545,20 +545,20 @@ Port `app/ui/mdtoc.go` into the new package. Tests in Task 5 (same DP #9 deviati
 **Files:**
 - Create: `app/ui/sidepane/toc.go`
 
-- [ ] create `app/ui/sidepane/toc.go`
-- [ ] define `TOC` struct (fields: entries, cursor, offset, activeSection) and unexported `tocEntry` struct
-- [ ] implement `ParseTOC(lines []diff.DiffLine, filename string) *TOC` — port logic from old `parseTOC`, return `nil` when no headers found, include synthetic filename prepend entry
-- [ ] **CRITICAL: `ParseTOC` must initialize `activeSection: -1`** in the returned `*TOC` literal — this is the sentinel value that `UpdateActiveSection` and `SyncCursorToActiveSection` depend on. Zero-value `activeSection=0` would misbehave (pointing at the synthetic filename entry instead of "no active section"). See `mdtoc.go:100` for the original initialization.
-- [ ] add godoc on `TOC.activeSection` field documenting the `-1` sentinel meaning "no active section"
-- [ ] implement `fencePrefix` as unexported package function (pure string helper — not a method because neither `TOC` nor `string` is the natural owner, and it's called from `ParseTOC` during construction before any `*TOC` exists)
-- [ ] implement `NumEntries() int`
-- [ ] implement `CurrentLineIdx() (int, bool)` — returns lineIdx of entry at cursor, ok=false when empty or cursor out of range
-- [ ] implement `Move(m Motion, count ...int)` — exhaustive switch, covers all motions (MotionPageUp/Down loop internally since TOC allows full page, reusing the same pattern as FileTree). Variadic contract documented in godoc.
-- [ ] implement `EnsureVisible(height int)` via shared `ensureVisible` helper
-- [ ] implement `UpdateActiveSection(diffCursor int)` (port from old — sets `activeSection` back to `-1` when no entry matches, preserving the sentinel contract)
-- [ ] implement `SyncCursorToActiveSection()` — NEW method; sets `cursor = activeSection` when `activeSection >= 0` (no-op when `activeSection == -1`, replaces the guarded block in diffnav.go:580)
-- [ ] implement `Render(r TOCRender) string` — port old `render`, replace `focusedPane pane` with `r.Focused bool`, use `r.Resolver`
-- [ ] implement `truncateTitle` as unexported method on `*TOC`
+- [x] create `app/ui/sidepane/toc.go`
+- [x] define `TOC` struct (fields: entries, cursor, offset, activeSection) and unexported `tocEntry` struct
+- [x] implement `ParseTOC(lines []diff.DiffLine, filename string) *TOC` — port logic from old `parseTOC`, return `nil` when no headers found, include synthetic filename prepend entry
+- [x] **CRITICAL: `ParseTOC` must initialize `activeSection: -1`** in the returned `*TOC` literal — this is the sentinel value that `UpdateActiveSection` and `SyncCursorToActiveSection` depend on. Zero-value `activeSection=0` would misbehave (pointing at the synthetic filename entry instead of "no active section"). See `mdtoc.go:100` for the original initialization.
+- [x] add godoc on `TOC.activeSection` field documenting the `-1` sentinel meaning "no active section"
+- [x] implement `fencePrefix` as unexported package function (pure string helper — not a method because neither `TOC` nor `string` is the natural owner, and it's called from `ParseTOC` during construction before any `*TOC` exists)
+- [x] implement `NumEntries() int`
+- [x] implement `CurrentLineIdx() (int, bool)` — returns lineIdx of entry at cursor, ok=false when empty or cursor out of range
+- [x] implement `Move(m Motion, count ...int)` — exhaustive switch, covers all motions (MotionPageUp/Down loop internally since TOC allows full page, reusing the same pattern as FileTree). Variadic contract documented in godoc.
+- [x] implement `EnsureVisible(height int)` via shared `ensureVisible` helper
+- [x] implement `UpdateActiveSection(diffCursor int)` (port from old — sets `activeSection` back to `-1` when no entry matches, preserving the sentinel contract)
+- [x] implement `SyncCursorToActiveSection()` — NEW method; sets `cursor = activeSection` when `activeSection >= 0` (no-op when `activeSection == -1`, replaces the guarded block in diffnav.go:580)
+- [x] implement `Render(r TOCRender) string` — port old `render`, replace `focusedPane pane` with `r.Focused bool`, use `r.Resolver`
+- [x] implement `truncateTitle` as unexported method on `*TOC`
 
 ### Task 5: Port TOC tests
 
