@@ -37,6 +37,16 @@ If the user asks a question about revdiff (configuration, themes, keybindings, i
 - `references/config.md` — config file, options, colors, chroma themes
 - `references/usage.md` — examples, key bindings, output format
 
+## Using Existing Review History
+
+If the user says things like "locate my review", "use my latest revdiff annotations", "pull up the review I just did in another terminal", or "what did I annotate earlier" — the user ran revdiff outside this plugin flow and wants Codex to process the stored annotations. Read the most recent file from the persistent history directory via the helper script, then process the annotations through Step 3.5 classification as if they had come from a fresh launcher call:
+
+```bash
+$SCRIPT_DIR/read-latest-history.sh
+```
+
+The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via `git rev-parse --show-toplevel` basename, and prints the newest `.md` file found. Each history file contains a header (path, refs, commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
+
 ## How It Works
 
 1. Launch revdiff in a terminal overlay (tmux popup, Zellij floating pane, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
@@ -127,9 +137,14 @@ The script:
      cat "$output_file"
    fi
    ```
-4. If it has content, process as annotations below. If empty or no file, the user quit without annotating.
+4. If it has content, process as annotations below.
+5. If step 4 produced nothing (temp file missing, cleaned up by the script's trap, or user ran revdiff outside the plugin), try the persistent history directory as a tertiary fallback:
+   ```bash
+   $SCRIPT_DIR/read-latest-history.sh
+   ```
+   History files contain the annotations in the same `## file:line (type)` format plus the raw git diff for annotated files. If neither source produces content, the user quit without annotating.
 
-This fallback is safe because revdiff writes the output file atomically on exit — there is never a partial read.
+This fallback chain is safe because revdiff writes both the temp output file and the history file atomically on exit — there is never a partial read. See `references/usage.md` "Review History" for directory layout details.
 
 If the script produces output, the user made annotations. The output format is:
 

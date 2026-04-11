@@ -289,6 +289,7 @@ revdiff --only=/tmp/draft-comment.md</code></div>
         <p>Each history file contains a header with path, git refs, and commit hash, the full annotation output (same format as stdout), and the raw git diff for annotated files only.</p>
         <p>History auto-save is always on and silent &mdash; errors are logged to stderr, never fail the process. No history is saved on discard quit (<code>Q</code>) or when there are no annotations. For <code>--stdin</code> mode, files are saved under a <code>stdin/</code> subdirectory; for <code>--only</code> without git, the parent directory name is used instead of a repo name.</p>
         <p>Override the directory with <code>--history-dir</code>, <code>REVDIFF_HISTORY_DIR</code> env var, or <code>history-dir</code> in the config file.</p>
+        <p>In the Claude Code and Codex plugins, you can also tell the agent to use a past review by saying things like &ldquo;locate my latest revdiff review&rdquo; or &ldquo;use the annotations from the review I just did in another terminal&rdquo;. The plugin reads the newest history file for the current repo via the helper script <code>read-latest-history.sh</code> and processes the annotations as if they had come from a fresh launcher call. This is useful for standalone revdiff runs outside the plugin, or when the live launcher output is unavailable (e.g., a broken custom launcher or a crashed agent).</p>
 
         <!-- configuration -->
         <h2 id="config-file">Config file</h2>
