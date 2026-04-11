@@ -565,28 +565,28 @@ Port `app/ui/mdtoc.go` into the new package. Tests in Task 5 (same DP #9 deviati
 **Files:**
 - Create: `app/ui/sidepane/toc_test.go`
 
-- [ ] copy `app/ui/mdtoc_test.go` to `app/ui/sidepane/toc_test.go`, change package header to `package sidepane` (**NOT** `package sidepane_test`) — tests need access to private fields like `entries`, `cursor`, `activeSection` for setup and assertions
-- [ ] rename `parseTOC` → `ParseTOC` in tests
-- [ ] rename `moveUp/moveDown` → `Move(MotionUp)` / `Move(MotionDown)`
-- [ ] rename `updateActiveSection` → `UpdateActiveSection`, `ensureVisible` → `EnsureVisible`, `render` → `Render`
-- [ ] add `TestTOCMove_Exhaustive` iterating all `MotionValues`, asserting no panic with or without count argument
-- [ ] add `TestTOCCurrentLineIdx` covering: valid cursor returns (idx, true), empty entries returns (0, false), cursor past end returns (0, false), nil TOC... wait — methods on nil receiver are not valid, so callers must nil-check first; confirm this by removing any test that calls methods on a nil *TOC
-- [ ] add `TestTOCSyncCursorToActiveSection` covering: activeSection=-1 is no-op (cursor unchanged), activeSection >= 0 moves cursor to match
-- [ ] add `TestParseTOC_NoHeaders` covering: returns nil (not a typed-nil wrapped in a valid *TOC), so main.go factory guard works
-- [ ] add `TestParseTOC_InitialActiveSection` covering: newly returned *TOC has `activeSection == -1`
-- [ ] adapt `render` test calls to use `TOCRender{Resolver: ..., Focused: true/false}` instead of positional args
-- [ ] verify `go test ./app/ui/sidepane/... -race` green and coverage is comparable to the pre-extraction tests
+- [x] copy `app/ui/mdtoc_test.go` to `app/ui/sidepane/toc_test.go`, change package header to `package sidepane` (**NOT** `package sidepane_test`) — tests need access to private fields like `entries`, `cursor`, `activeSection` for setup and assertions
+- [x] rename `parseTOC` → `ParseTOC` in tests
+- [x] rename `moveUp/moveDown` → `Move(MotionUp)` / `Move(MotionDown)`
+- [x] rename `updateActiveSection` → `UpdateActiveSection`, `ensureVisible` → `EnsureVisible`, `render` → `Render`
+- [x] add `TestTOCMove_Exhaustive` iterating all `MotionValues`, asserting no panic with or without count argument
+- [x] add `TestTOCCurrentLineIdx` covering: valid cursor returns (idx, true), empty entries returns (0, false), cursor past end returns (0, false), nil TOC... wait — methods on nil receiver are not valid, so callers must nil-check first; confirm this by removing any test that calls methods on a nil *TOC
+- [x] add `TestTOCSyncCursorToActiveSection` covering: activeSection=-1 is no-op (cursor unchanged), activeSection >= 0 moves cursor to match
+- [x] add `TestParseTOC_NoHeaders` covering: returns nil (not a typed-nil wrapped in a valid *TOC), so main.go factory guard works
+- [x] add `TestParseTOC_InitialActiveSection` covering: newly returned *TOC has `activeSection == -1`
+- [x] adapt `render` test calls to use `TOCRender{Resolver: ..., Focused: true/false}` instead of positional args
+- [x] verify `go test ./app/ui/sidepane/... -race` green and coverage is comparable to the pre-extraction tests
 
 ### Task 6: M1 MILESTONE — Sidepane package green
 
 This is the milestone gate for M1. No new code, just verification and commit.
 
-- [ ] run `go test ./app/ui/sidepane/... -race` — must be green
-- [ ] run `go vet ./app/ui/sidepane/...` — must be clean
-- [ ] run `golangci-lint run app/ui/sidepane/...` — must be clean
-- [ ] verify test coverage is ≥ 80% for sidepane: `go test ./app/ui/sidepane/... -cover`
-- [ ] acknowledge that full project build is still broken — expected
-- [ ] commit M1: `git add app/ui/sidepane/ && git commit -m "feat(sidepane): add filetree and mdtoc sub-package"` (message expands to cover Motion/Direction enums + new Rebuild API + consumer-side interfaces)
+- [x] run `go test ./app/ui/sidepane/... -race` — must be green
+- [x] run `go vet ./app/ui/sidepane/...` — must be clean
+- [x] run `golangci-lint run app/ui/sidepane/...` — must be clean
+- [x] verify test coverage is ≥ 80% for sidepane: `go test ./app/ui/sidepane/... -cover`
+- [x] acknowledge that full project build is still broken — expected
+- [x] commit M1: `git add app/ui/sidepane/ && git commit -m "feat(sidepane): add filetree and mdtoc sub-package"` (message expands to cover Motion/Direction enums + new Rebuild API + consumer-side interfaces)
 
 ### Task 7: Add ui consumer-side interfaces, factory fields, and change Model field types
 
