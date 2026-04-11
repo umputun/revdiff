@@ -791,11 +791,13 @@ func TestDefaultKeysPath(t *testing.T) {
 }
 
 func TestDetectVCS_Git(t *testing.T) {
-	// this test runs from inside the revdiff repo (which is a git repo)
+	repoRoot := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(repoRoot, ".git"), 0o750))
+	t.Chdir(repoRoot)
+
 	vcsType, root := diff.DetectVCS(".")
 	assert.Equal(t, diff.VCSGit, vcsType)
-	assert.DirExists(t, root)
-	assert.NotEmpty(t, root)
+	assert.Equal(t, repoRoot, root)
 }
 
 func TestDetectVCS_None(t *testing.T) {

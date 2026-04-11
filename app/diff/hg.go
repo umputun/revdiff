@@ -100,10 +100,23 @@ func parseStatus(out string) []FileEntry {
 }
 
 // revFlag builds revision arguments from a ref string using the given flag name.
-// handles range refs (A..B) producing two separate flags (e.g. -r A -r B).
+// handles triple-dot (A...B) and double-dot (A..B) range refs, producing two separate flags.
 func (h *Hg) revFlag(flag, ref string) []string {
 	if ref == "" {
 		return nil
+	}
+
+	// check triple-dot first so "A...B" isn't mis-split on ".."
+	if left, right, ok := strings.Cut(ref, "..."); ok {
+		l := translateRef(left)
+		r := translateRef(right)
+		if l == "" {
+			l = "0"
+		}
+		if r == "" {
+			r = "."
+		}
+		return []string{flag, fmt.Sprintf("ancestor(%s,%s)", l, r), flag, r}
 	}
 
 	if left, right, ok := strings.Cut(ref, ".."); ok {

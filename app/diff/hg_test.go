@@ -71,6 +71,8 @@ func TestHg_RevFlag(t *testing.T) {
 		{name: "range --rev", flag: "--rev", ref: "main..feature", want: []string{"--rev", "main", "--rev", "feature"}},
 		{name: "left empty", flag: "-r", ref: "..HEAD", want: []string{"-r", "0", "-r", "."}},
 		{name: "right empty", flag: "-r", ref: "main..", want: []string{"-r", "main", "-r", "."}},
+		{name: "triple dot", flag: "-r", ref: "main...feature", want: []string{"-r", "ancestor(main,feature)", "-r", "feature"}},
+		{name: "triple dot HEAD", flag: "-r", ref: "HEAD~3...HEAD", want: []string{"-r", "ancestor(.~3,.)", "-r", "."}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
