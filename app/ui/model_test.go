@@ -41,9 +41,29 @@ func testParseTOCFactory() func(lines []diff.DiffLine, filename string) TOCCompo
 	}
 }
 
-// tocDirect unwraps a TOCComponent interface to the concrete *sidepane.TOC
-// for accessing test-only methods (Cursor, SetCursor, ActiveSection, SetActiveSection).
-func tocDirect(toc TOCComponent) *sidepane.TOC { return toc.(*sidepane.TOC) }
+// moveTOCTo positions the TOC cursor at the given entry index via the production Move API.
+func moveTOCTo(toc TOCComponent, idx int) {
+	toc.Move(sidepane.MotionFirst)
+	if idx > 0 {
+		toc.Move(sidepane.MotionPageDown, idx)
+	}
+}
+
+// tocLineIdx returns the current TOC cursor's diff line index for assertions.
+func tocLineIdx(t *testing.T, toc TOCComponent) int {
+	t.Helper()
+	idx, ok := toc.CurrentLineIdx()
+	require.True(t, ok, "expected valid TOC cursor position")
+	return idx
+}
+
+// tocActiveLineIdx calls SyncCursorToActiveSection and returns the resulting line index.
+// this mutates cursor state — use as the last assertion in a test.
+func tocActiveLineIdx(t *testing.T, toc TOCComponent) int {
+	t.Helper()
+	toc.SyncCursorToActiveSection()
+	return tocLineIdx(t, toc)
+}
 
 // testNewFileTree creates a sidepane.FileTree from a list of file paths,
 // replacing the old testNewFileTree([]string{...}) pattern in tests.

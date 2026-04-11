@@ -63,50 +63,6 @@ func NewFileTree(entries []diff.FileEntry) *FileTree {
 	return ft
 }
 
-// buildEntries groups files by directory and creates a flat entry list.
-func (ft *FileTree) buildEntries(files []string) []treeEntry {
-	if len(files) == 0 {
-		return nil
-	}
-
-	// group files by directory
-	dirFiles := make(map[string][]string)
-	var dirs []string
-	for _, f := range files {
-		dir := filepath.Dir(f)
-		if _, ok := dirFiles[dir]; !ok {
-			dirs = append(dirs, dir)
-		}
-		dirFiles[dir] = append(dirFiles[dir], f)
-	}
-	sort.Strings(dirs)
-
-	entries := make([]treeEntry, 0, len(dirs)+len(files))
-	for _, dir := range dirs {
-		// add directory entry
-		dirName := dir
-		if dirName == "." {
-			dirName = "./"
-		} else {
-			dirName = dir + "/"
-		}
-		entries = append(entries, treeEntry{name: dirName, isDir: true, depth: 0})
-
-		// add file entries under this directory, sorted
-		dirFileList := dirFiles[dir]
-		sort.Strings(dirFileList)
-		for _, f := range dirFileList {
-			entries = append(entries, treeEntry{
-				name:  filepath.Base(f),
-				path:  f,
-				isDir: false,
-				depth: 1,
-			})
-		}
-	}
-	return entries
-}
-
 // SelectedFile returns the full path of the currently selected file,
 // or empty string if a directory is selected or entries are empty.
 func (ft *FileTree) SelectedFile() string {
@@ -356,6 +312,50 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 		}
 	}
 	return b.String()
+}
+
+// buildEntries groups files by directory and creates a flat entry list.
+func (ft *FileTree) buildEntries(files []string) []treeEntry {
+	if len(files) == 0 {
+		return nil
+	}
+
+	// group files by directory
+	dirFiles := make(map[string][]string)
+	var dirs []string
+	for _, f := range files {
+		dir := filepath.Dir(f)
+		if _, ok := dirFiles[dir]; !ok {
+			dirs = append(dirs, dir)
+		}
+		dirFiles[dir] = append(dirFiles[dir], f)
+	}
+	sort.Strings(dirs)
+
+	entries := make([]treeEntry, 0, len(dirs)+len(files))
+	for _, dir := range dirs {
+		// add directory entry
+		dirName := dir
+		if dirName == "." {
+			dirName = "./"
+		} else {
+			dirName = dir + "/"
+		}
+		entries = append(entries, treeEntry{name: dirName, isDir: true, depth: 0})
+
+		// add file entries under this directory, sorted
+		dirFileList := dirFiles[dir]
+		sort.Strings(dirFileList)
+		for _, f := range dirFileList {
+			entries = append(entries, treeEntry{
+				name:  filepath.Base(f),
+				path:  f,
+				isDir: false,
+				depth: 1,
+			})
+		}
+	}
+	return entries
 }
 
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.

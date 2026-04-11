@@ -36,26 +36,6 @@ const (
 	directionPrev                     // backward / previous
 )
 
-// ensureVisible adjusts offset so cursor is within the visible range of given height.
-// shared by FileTree.EnsureVisible and TOC.EnsureVisible.
-func ensureVisible(cursor, offset *int, count, height int) {
-	if height <= 0 {
-		return
-	}
-	switch {
-	case *cursor < *offset:
-		*offset = *cursor
-	case *cursor >= *offset+height:
-		*offset = *cursor - height + 1
-	}
-	if *offset < 0 {
-		*offset = 0
-	}
-	if maxOff := max(count-height, 0); *offset > maxOff {
-		*offset = maxOff
-	}
-}
-
 // Resolver is what sidepane needs for style lookups.
 // satisfied by *style.Resolver via ui's styleResolver interface.
 type Resolver interface {
@@ -86,4 +66,24 @@ type TOCRender struct {
 	Height   int
 	Focused  bool
 	Resolver Resolver
+}
+
+// ensureVisible adjusts offset so cursor is within the visible range of given height.
+// shared by FileTree.EnsureVisible and TOC.EnsureVisible.
+func ensureVisible(cursor, offset *int, count, height int) {
+	if height <= 0 {
+		return
+	}
+	switch {
+	case *cursor < *offset:
+		*offset = *cursor
+	case *cursor >= *offset+height:
+		*offset = *cursor - height + 1
+	}
+	if *offset < 0 {
+		*offset = 0
+	}
+	if maxOff := max(count-height, 0); *offset > maxOff {
+		*offset = maxOff
+	}
 }

@@ -1308,7 +1308,7 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		// navigate to search match via 'n' key
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model = result.(Model)
-		// active section should reflect the cursor position after search nav (index 2 = Section, accounting for top entry)
-		assert.Equal(t, 2, tocDirect(model.mdTOC).ActiveSection(), "TOC should track active section after search jump")
+		// active section should reflect the cursor position after search nav (Section entry at lineIdx=2)
+		assert.Equal(t, 2, tocActiveLineIdx(t, model.mdTOC), "TOC should track active section after search jump (lineIdx=2)")
 	})
 }

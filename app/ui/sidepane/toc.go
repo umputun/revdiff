@@ -241,18 +241,6 @@ func (t *TOC) truncateTitle(title string, maxWidth int) string {
 	return string(runes[:end]) + "…"
 }
 
-// Cursor returns the current cursor index.
-func (t *TOC) Cursor() int { return t.cursor }
-
-// SetCursor sets the cursor to the given index.
-func (t *TOC) SetCursor(idx int) { t.cursor = idx }
-
-// ActiveSection returns the active section index.
-func (t *TOC) ActiveSection() int { return t.activeSection }
-
-// SetActiveSection sets the active section index.
-func (t *TOC) SetActiveSection(idx int) { t.activeSection = idx }
-
 // fencePrefix returns the fence character ('`' or '~') and count of leading consecutive
 // occurrences. returns (0, 0) if the string doesn't start with backticks or tildes.
 func fencePrefix(s string) (rune, int) {
