@@ -10,6 +10,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // helpLine holds a key-description pair for rendering help overlay sections.
@@ -55,7 +56,7 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 // helpColors returns the ANSI color sequences used in help overlay rendering.
 // reset is fg-only to preserve background, header and key are fg sequences.
 func (m Model) helpColors() (reset, header, key string) {
-	return "\033[39m", m.ansiFg(m.styles.colors.Accent), m.ansiFg(m.styles.colors.Annotation)
+	return string(style.ResetFg), string(m.resolver.Color(style.ColorKeyAccentFg)), string(m.resolver.Color(style.ColorKeyAnnotationFg))
 }
 
 // helpOverlay returns a bordered help popup with keybinding sections arranged in two columns.
@@ -166,15 +167,8 @@ func (m Model) helpOverlay() string {
 		}
 	}
 
-	border := lipgloss.NormalBorder()
-	boxStyle := lipgloss.NewStyle().
-		Border(border).
-		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
+	boxStyle := m.resolver.Style(style.StyleKeyHelpBox).
 		Padding(1, 2)
-	if m.styles.colors.DiffBg != "" {
-		bg := lipgloss.Color(m.styles.colors.DiffBg)
-		boxStyle = boxStyle.Background(bg).BorderBackground(bg)
-	}
 
 	return boxStyle.Render(buf.String())
 }

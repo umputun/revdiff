@@ -17,7 +17,7 @@ import (
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
 		var warnings []string
-		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
+		entries, err := m.diffRenderer.ChangedFiles(m.ref, m.staged)
 		if err != nil {
 			return filesLoadedMsg{entries: entries, err: err}
 		}
@@ -25,7 +25,7 @@ func (m Model) loadFiles() tea.Cmd {
 		// only when there are no unstaged entries; otherwise unstaged review should stay focused
 		// on actual unstaged changes.
 		if m.ref == "" && !m.staged && len(entries) == 0 {
-			stagedEntries, stagedErr := m.renderer.ChangedFiles("", true)
+			stagedEntries, stagedErr := m.diffRenderer.ChangedFiles("", true)
 			if stagedErr != nil {
 				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
 			} else {
@@ -65,7 +65,7 @@ func (m Model) loadFiles() tea.Cmd {
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.loadSeq
 	return func() tea.Msg {
-		lines, err := m.renderer.FileDiff(m.ref, file, m.staged)
+		lines, err := m.diffRenderer.FileDiff(m.ref, file, m.staged)
 		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
 	}
 }
@@ -218,8 +218,8 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 		return
 	}
 	// staged-only files: retry with git diff --cached
-	if !m.staged && fileStatus == diff.FileAdded && m.renderer != nil {
-		if cachedLines, err := m.renderer.FileDiff(m.ref, file, true); err == nil && len(cachedLines) > 0 {
+	if !m.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
+		if cachedLines, err := m.diffRenderer.FileDiff(m.ref, file, true); err == nil && len(cachedLines) > 0 {
 			m.diffLines = cachedLines
 			return
 		}

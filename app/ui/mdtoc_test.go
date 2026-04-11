@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestParseTOC(t *testing.T) {
@@ -293,17 +294,17 @@ func TestMdTOC_UpdateActiveSection(t *testing.T) {
 }
 
 func TestMdTOC_Render(t *testing.T) {
-	s := plainStyles()
+	res := style.PlainResolver()
 
 	t.Run("empty TOC", func(t *testing.T) {
 		toc := &mdTOC{entries: nil}
-		got := toc.render(40, 10, paneTree, s)
+		got := toc.render(40, 10, paneTree, res)
 		assert.Equal(t, "  no headers", got)
 	})
 
 	t.Run("single h1 entry, tree focused", func(t *testing.T) {
 		toc := &mdTOC{entries: []tocEntry{{title: "Title", level: 1, lineIdx: 0}}, cursor: 0, activeSection: -1}
-		got := toc.render(40, 10, paneTree, s)
+		got := toc.render(40, 10, paneTree, res)
 		assert.Contains(t, got, "Title")
 		// cursor should be highlighted with FileSelected style (reverse in plain)
 		assert.NotEqual(t, "  Title", got) // styled, not plain
@@ -315,7 +316,7 @@ func TestMdTOC_Render(t *testing.T) {
 			{title: "H2", level: 2, lineIdx: 5},
 			{title: "H3", level: 3, lineIdx: 10},
 		}, cursor: 0, activeSection: -1}
-		got := toc.render(40, 10, paneDiff, s)
+		got := toc.render(40, 10, paneDiff, res)
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 3)
 		// h1 has no indent (level-1=0), h2 has 2 spaces, h3 has 4 spaces
@@ -329,7 +330,7 @@ func TestMdTOC_Render(t *testing.T) {
 			{title: "First", level: 1, lineIdx: 0},
 			{title: "Second", level: 1, lineIdx: 10},
 		}, cursor: 0, activeSection: 1}
-		got := toc.render(40, 10, paneDiff, s)
+		got := toc.render(40, 10, paneDiff, res)
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 2)
 		// active section (Second) should be highlighted, first should not
@@ -344,7 +345,7 @@ func TestMdTOC_Render(t *testing.T) {
 			{title: "First", level: 1, lineIdx: 0},
 			{title: "Second", level: 1, lineIdx: 10},
 		}, cursor: 1, activeSection: 0}
-		got := toc.render(40, 10, paneTree, s)
+		got := toc.render(40, 10, paneTree, res)
 		lines := strings.Split(got, "\n")
 		require.Len(t, lines, 2)
 		// cursor (Second) should be highlighted, not active section
@@ -355,7 +356,7 @@ func TestMdTOC_Render(t *testing.T) {
 		toc := &mdTOC{entries: []tocEntry{
 			{title: "This is a very long title that should be truncated", level: 1, lineIdx: 0},
 		}, cursor: 0, activeSection: -1}
-		got := toc.render(20, 10, paneDiff, s)
+		got := toc.render(20, 10, paneDiff, res)
 		assert.Contains(t, got, "…")
 	})
 
@@ -365,7 +366,7 @@ func TestMdTOC_Render(t *testing.T) {
 			entries[i] = tocEntry{title: fmt.Sprintf("Header %d", i), level: 1, lineIdx: i * 10}
 		}
 		toc := &mdTOC{entries: entries, cursor: 15, offset: 0, activeSection: -1}
-		got := toc.render(40, 5, paneTree, s)
+		got := toc.render(40, 5, paneTree, res)
 		lines := strings.Split(got, "\n")
 		assert.Len(t, lines, 5)
 		assert.Contains(t, got, "Header 15")   // cursor entry should be visible
@@ -379,14 +380,14 @@ func TestMdTOC_Render(t *testing.T) {
 			{title: "C", level: 1, lineIdx: 20},
 		}, cursor: 1, activeSection: 2}
 		// in tree focus, cursor (B at idx 1) is highlighted
-		gotTree := toc.render(40, 10, paneTree, s)
+		gotTree := toc.render(40, 10, paneTree, res)
 		treeLines := strings.Split(gotTree, "\n")
 		require.Len(t, treeLines, 3)
 		assert.Greater(t, len(treeLines[1]), len(treeLines[0]), "cursor B should be highlighted in tree focus")
 		assert.Less(t, len(treeLines[2]), len(treeLines[1]), "C should not be highlighted in tree focus")
 
 		// in diff focus, active section (C at idx 2) is highlighted
-		gotDiff := toc.render(40, 10, paneDiff, s)
+		gotDiff := toc.render(40, 10, paneDiff, res)
 		diffLines := strings.Split(gotDiff, "\n")
 		require.Len(t, diffLines, 3)
 		assert.Greater(t, len(diffLines[2]), len(diffLines[0]), "active section C should be highlighted in diff focus")
@@ -397,13 +398,13 @@ func TestMdTOC_Render(t *testing.T) {
 func TestMdTOC_Render_ActiveSectionViewportVisibility(t *testing.T) {
 	// when diff pane is focused and activeSection is far from cursor,
 	// the TOC viewport should scroll to keep activeSection visible
-	s := plainStyles()
+	res := style.PlainResolver()
 	entries := make([]tocEntry, 30)
 	for i := range entries {
 		entries[i] = tocEntry{title: fmt.Sprintf("Header %d", i), level: 1, lineIdx: i * 10}
 	}
 	toc := &mdTOC{entries: entries, cursor: 0, offset: 0, activeSection: 25}
-	got := toc.render(40, 5, paneDiff, s)
+	got := toc.render(40, 5, paneDiff, res)
 	assert.Contains(t, got, "Header 25", "active section entry should be visible in viewport")
 	assert.NotContains(t, got, "Header 0", "cursor entry should scroll out of viewport")
 }

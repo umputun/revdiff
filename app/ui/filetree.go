@@ -9,6 +9,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // fileTree manages the list of changed files grouped by directory.
@@ -263,7 +264,7 @@ func (ft *fileTree) fileIndices() []int {
 
 // render produces the file tree display string, showing only entries visible within the given height.
 // it adjusts the internal offset so the cursor stays within the visible window.
-func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s styles) string {
+func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, res style.Resolver, rnd style.Renderer) string {
 	if len(ft.entries) == 0 {
 		return "  no changed files"
 	}
@@ -271,14 +272,14 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 	ft.ensureVisible(height)
 	end := min(ft.offset+height, len(ft.entries))
 
-	rc := renderCtx{annotatedFiles: annotatedFiles, s: s}
+	rc := renderCtx{annotatedFiles: annotatedFiles, res: res, rnd: rnd}
 	var b strings.Builder
 	for idx := ft.offset; idx < end; idx++ {
 		e := ft.entries[idx]
 		var line string
 
 		if e.isDir {
-			line = s.DirEntry.Render(" " + ft.truncateDirName(e.name, width-3))
+			line = res.Style(style.StyleKeyDirEntry).Render(" " + ft.truncateDirName(e.name, width-3))
 		} else {
 			line = ft.renderFileEntry(e, idx, width, rc)
 		}
@@ -295,7 +296,8 @@ func (ft *fileTree) render(width, height int, annotatedFiles map[string]bool, s 
 // reducing the parameter count of renderFileEntry.
 type renderCtx struct {
 	annotatedFiles map[string]bool
-	s              styles
+	res            style.Resolver
+	rnd            style.Renderer
 }
 
 // renderFileEntry renders a single file entry in the tree, truncating long names to prevent wrapping.
@@ -310,7 +312,7 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) s
 		if isSelected {
 			reviewMark = "✓ "
 		} else {
-			reviewMark = coloredTextWithReset(rc.s.colors.AddFg, "✓", rc.s.colors.Normal) + " "
+			reviewMark = rc.rnd.FileReviewedMark()
 		}
 	}
 
@@ -323,13 +325,13 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) s
 		case isSelected:
 			statusMark = string(status) + " "
 		default:
-			statusMark = coloredTextWithReset(rc.s.fileStatusFg(status), string(status), rc.s.colors.Normal) + " "
+			statusMark = rc.rnd.FileStatusMark(status)
 		}
 	}
 
 	marker := "  "
 	if rc.annotatedFiles[e.path] {
-		marker = coloredText(rc.s.colors.Annotation, " *")
+		marker = rc.rnd.FileAnnotationMark()
 	}
 
 	prefix := reviewMark + statusMark
@@ -356,9 +358,9 @@ func (ft *fileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) s
 	}
 
 	if isSelected {
-		return rc.s.FileSelected.Width(maxWidth).Render(name)
+		return rc.res.Style(style.StyleKeyFileSelected).Width(maxWidth).Render(name)
 	}
-	return rc.s.FileEntry.Render(name)
+	return rc.res.Style(style.StyleKeyFileEntry).Render(name)
 }
 
 // filterFiles returns the subset of allFiles that have annotations.

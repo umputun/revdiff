@@ -10,6 +10,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // matchRange represents a range of visible character positions for search match highlighting.
@@ -22,7 +23,7 @@ func (m Model) lineNumGutterWidth() int {
 }
 
 // lineNumGutter returns the formatted line number gutter string for a diff line.
-// uses muted color via lipgloss style (m.styles.LineNumber); safe here because the gutter
+// uses muted color via lipgloss style (StyleKeyLineNumber); safe here because the gutter
 // is concatenated before content, so the lipgloss reset doesn't break outer backgrounds.
 // layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
 // blank columns for adds (no old), removes (no new), and dividers (both blank).
@@ -46,7 +47,7 @@ func (m Model) lineNumGutter(dl diff.DiffLine) string {
 	}
 
 	gutter := " " + oldCol + " " + newCol
-	return m.styles.LineNumber.Render(gutter)
+	return m.resolver.Style(style.StyleKeyLineNumber).Render(gutter)
 }
 
 // blameGutterWidth returns the total character width of the blame gutter.
@@ -65,12 +66,12 @@ func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 
 	lineNum := dl.NewNum
 	if lineNum == 0 || dl.ChangeType == diff.ChangeDivider {
-		return m.styles.LineNumber.Render(blank)
+		return m.resolver.Style(style.StyleKeyLineNumber).Render(blank)
 	}
 
 	bl, ok := m.blameData[lineNum]
 	if !ok {
-		return m.styles.LineNumber.Render(blank)
+		return m.resolver.Style(style.StyleKeyLineNumber).Render(blank)
 	}
 
 	author := runewidth.Truncate(bl.Author, w, "…")
@@ -81,7 +82,7 @@ func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 
 	age := diff.RelativeAge(bl.Time, now)
 	gutter := " " + author + " " + age
-	return m.styles.LineNumber.Render(gutter)
+	return m.resolver.Style(style.StyleKeyLineNumber).Render(gutter)
 }
 
 // hasBlameGutter returns true when the blame gutter should be rendered.
@@ -140,7 +141,7 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 // truncates whenever the viewport has room (cutWidth > 0), even when scroll offset is zero, to
 // prevent long lines from overflowing the right padding. when cutWidth ≤ 0 (pathologically narrow
 // terminal with wide gutters), returns the content unchanged.
-func (m Model) applyHorizontalScroll(content, indicatorBg string) string {
+func (m Model) applyHorizontalScroll(content string, indicatorBg style.Color) string {
 	cutWidth := m.diffContentWidth() - m.gutterExtra()
 	if cutWidth <= 0 {
 		return content
@@ -198,7 +199,7 @@ func (m Model) plainHorizontalCut(content string) string {
 // so it doesn't break outer lipgloss backgrounds. the « replaces the first visible content column,
 // so it belongs to the line and uses lineBg for its background; empty string emits foreground only.
 // in no-colors mode, falls back to reverse video.
-func (m Model) leftScrollIndicator(lineBg string) string {
+func (m Model) leftScrollIndicator(lineBg style.Color) string {
 	return m.scrollIndicatorANSI("«", lineBg, lineBg, false)
 }
 
@@ -208,8 +209,8 @@ func (m Model) leftScrollIndicator(lineBg string) string {
 // extends contiguously through the content area, while the » glyph itself is drawn on DiffBg so it
 // visually sits on pane chrome (matching the surrounding right-padding column) rather than on the
 // line's colored bg. in no-colors mode, falls back to reverse video.
-func (m Model) rightScrollIndicator(lineBg string) string {
-	return m.scrollIndicatorANSI("»", lineBg, m.styles.colors.DiffBg, true)
+func (m Model) rightScrollIndicator(lineBg style.Color) string {
+	return m.scrollIndicatorANSI("»", lineBg, m.resolver.Color(style.ColorKeyDiffPaneBg), true)
 }
 
 // scrollIndicatorANSI builds the ANSI-encoded indicator string shared by left and right variants.
@@ -219,7 +220,7 @@ func (m Model) rightScrollIndicator(lineBg string) string {
 // drawing its glyph on DiffBg to read as pane chrome. only emits the fg/bg reset sequences we
 // actually set, so callers that pass an empty bg (or a theme with empty Muted) don't accidentally
 // trash inherited pane background or foreground.
-func (m Model) scrollIndicatorANSI(glyph, spaceBg, glyphBg string, leadingSpace bool) string {
+func (m Model) scrollIndicatorANSI(glyph string, spaceBg, glyphBg style.Color, leadingSpace bool) string {
 	if m.noColors {
 		prefix := ""
 		if leadingSpace {
@@ -229,28 +230,26 @@ func (m Model) scrollIndicatorANSI(glyph, spaceBg, glyphBg string, leadingSpace 
 	}
 	var b strings.Builder
 	if leadingSpace {
-		sbg := m.ansiBg(spaceBg)
-		if sbg != "" {
-			b.WriteString(sbg)
+		if spaceBg != "" {
+			b.WriteString(string(spaceBg))
 		}
 		b.WriteString(" ")
-		if sbg != "" {
+		if spaceBg != "" {
 			b.WriteString("\033[49m")
 		}
 	}
-	gbg := m.ansiBg(glyphBg)
-	if gbg != "" {
-		b.WriteString(gbg)
+	if glyphBg != "" {
+		b.WriteString(string(glyphBg))
 	}
-	fg := m.ansiFg(m.styles.colors.Muted)
+	fg := m.resolver.Color(style.ColorKeyMutedFg)
 	if fg != "" {
-		b.WriteString(fg)
+		b.WriteString(string(fg))
 	}
 	b.WriteString(glyph)
 	if fg != "" {
 		b.WriteString("\033[39m")
 	}
-	if gbg != "" {
+	if glyphBg != "" {
 		b.WriteString("\033[49m")
 	}
 	return b.String()
@@ -301,17 +300,17 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annotating && m.fileAnnotating {
-		line := " " + m.annotationInline("\U0001f4ac file: ") + m.annotateInput.View()
+		line := " " + m.renderer.AnnotationInline("\U0001f4ac file: ") + m.annotateInput.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
-		b.WriteString(m.extendLineBg(line, m.styles.colors.DiffBg) + "\n")
+		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
 		return
 	}
 
 	if fileComment != "" {
 		cursor := " "
 		if m.diffCursor == -1 && m.focus == paneDiff {
-			cursor = m.diffCursorCell()
+			cursor = m.renderer.DiffCursor(m.noColors)
 		}
 		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
 	}
@@ -336,24 +335,24 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 	var content string
 	if dl.ChangeType == diff.ChangeDivider {
-		content = m.styles.LineNumber.Render(" " + lineContent)
+		content = m.resolver.Style(style.StyleKeyLineNumber).Render(" " + lineContent)
 	} else {
 		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight, isSearchMatch)
 	}
 
-	lineBg := m.changeBgColor(dl.ChangeType)
+	lineBg := m.resolver.LineBg(dl.ChangeType)
 	// wrap mode divider fallthrough: dividers are unwrapped even in wrap mode, but indicators
 	// only belong in unwrapped mode globally, so skip them for this edge case.
 	if m.wrapMode && dl.ChangeType == diff.ChangeDivider {
 		content = m.plainHorizontalCut(content)
 	} else {
-		content = m.applyHorizontalScroll(content, m.indicatorBg(lineBg))
+		content = m.applyHorizontalScroll(content, m.resolver.IndicatorBg(dl.ChangeType))
 	}
 	content = m.extendLineBg(content, lineBg)
 
 	cursor := " "
 	if isCursor {
-		cursor = m.diffCursorCell()
+		cursor = m.renderer.DiffCursor(m.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -375,11 +374,11 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
-		styled = m.extendLineBg(styled, m.changeBgColor(dl.ChangeType))
+		styled = m.extendLineBg(styled, m.resolver.LineBg(dl.ChangeType))
 
 		cursor := " "
 		if i == 0 && isCursor {
-			cursor = m.diffCursorCell()
+			cursor = m.renderer.DiffCursor(m.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -414,128 +413,7 @@ func (m Model) wrapContent(content string, width int) []string {
 	if len(lines) <= 1 {
 		return lines
 	}
-	return m.reemitANSIState(lines)
-}
-
-// reemitANSIState scans each line for active SGR attributes (foreground color, background color,
-// bold, italic, reverse video) and prepends the accumulated state to the next line. this fixes
-// the issue where ansi.Wrap splits a line mid-token, causing continuation lines to lose their styling.
-func (m Model) reemitANSIState(lines []string) []string {
-	var activeFg, activeBg string // e.g. "\033[38;2;100;200;50m" or "\033[48;2;...]m"
-	var bold, italic, reverse bool
-
-	for i, line := range lines {
-		if i > 0 {
-			if prefix := m.buildSGRPrefix(activeFg, activeBg, bold, italic, reverse); prefix != "" {
-				lines[i] = prefix + line
-			}
-		}
-		activeFg, activeBg, bold, italic, reverse = m.scanANSIState(lines[i], activeFg, activeBg, bold, italic, reverse)
-	}
-	return lines
-}
-
-// buildSGRPrefix assembles an ANSI prefix string from the accumulated SGR state.
-func (m Model) buildSGRPrefix(fg, bg string, bold, italic, reverse bool) string {
-	var b strings.Builder
-	if fg != "" {
-		b.WriteString(fg)
-	}
-	if bg != "" {
-		b.WriteString(bg)
-	}
-	if bold {
-		b.WriteString("\033[1m")
-	}
-	if italic {
-		b.WriteString("\033[3m")
-	}
-	if reverse {
-		b.WriteString("\033[7m")
-	}
-	return b.String()
-}
-
-// scanANSIState scans a string for SGR sequences and returns the updated state.
-// tracks foreground color (38;2;r;g;b or 3x), background color (48;2;r;g;b or 4x),
-// bold (1), italic (3), reverse video (7) and their resets.
-func (m Model) scanANSIState(s, fg, bg string, bold, italic, reverse bool) (string, string, bool, bool, bool) {
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\033' || i+1 >= len(s) || s[i+1] != '[' {
-			continue
-		}
-		seq, params, end := m.parseSGR(s, i)
-		if end < 0 {
-			break
-		}
-		i = end
-		if seq == "" { // not an SGR sequence
-			continue
-		}
-		fg, bg, bold, italic, reverse = m.applySGR(params, seq, fg, bg, bold, italic, reverse)
-	}
-	return fg, bg, bold, italic, reverse
-}
-
-// parseSGR extracts an SGR sequence starting at position i in s.
-// returns the full sequence, the parameter string, and the end index.
-// returns end=-1 if the sequence is unterminated.
-// returns seq="" if the CSI sequence is not SGR (not terminated by 'm').
-func (m Model) parseSGR(s string, i int) (seq, params string, end int) {
-	j := i + 2
-	for j < len(s) && s[j] >= 0x20 && s[j] <= 0x3F {
-		j++
-	}
-	if j >= len(s) {
-		return "", "", -1
-	}
-	if s[j] != 'm' {
-		return "", "", j
-	}
-	return s[i : j+1], s[i+2 : j], j
-}
-
-// applySGR updates the active SGR state based on a parameter string.
-func (m Model) applySGR(params, seq, fg, bg string, bold, italic, reverse bool) (string, string, bool, bool, bool) {
-	switch params {
-	case "", "0": // full reset (\033[m and \033[0m)
-		return "", "", false, false, false
-	case "1": // bold on
-		return fg, bg, true, italic, reverse
-	case "3": // italic on
-		return fg, bg, bold, true, reverse
-	case "7": // reverse video on
-		return fg, bg, bold, italic, true
-	case "22": // bold off
-		return fg, bg, false, italic, reverse
-	case "23": // italic off
-		return fg, bg, bold, false, reverse
-	case "27": // reverse video off
-		return fg, bg, bold, italic, false
-	case "39": // fg reset
-		return "", bg, bold, italic, reverse
-	case "49": // bg reset
-		return fg, "", bold, italic, reverse
-	}
-	if m.isFgColor(params) {
-		return seq, bg, bold, italic, reverse
-	}
-	if m.isBgColor(params) {
-		return fg, seq, bold, italic, reverse
-	}
-	return fg, bg, bold, italic, reverse
-}
-
-// isFgColor returns true if the SGR params represent a foreground color (24-bit or basic).
-func (m Model) isFgColor(params string) bool {
-	return strings.HasPrefix(params, "38;2;") ||
-		(len(params) == 2 && params[0] == '3' && params[1] >= '0' && params[1] <= '7')
-}
-
-// isBgColor returns true if the SGR params represent a background color (24-bit or basic).
-func (m Model) isBgColor(params string) bool {
-	return strings.HasPrefix(params, "48;2;") ||
-		(len(params) == 2 && params[0] == '4' && params[1] >= '0' && params[1] <= '7')
+	return m.sgr.Reemit(lines)
 }
 
 // prepareLineContent returns the display-ready content for a diff line with tabs replaced.
@@ -573,11 +451,11 @@ func (m Model) applyIntraLineHighlight(idx int, changeType diff.ChangeType, text
 	} else {
 		switch changeType { //nolint:exhaustive // only add/remove relevant
 		case diff.ChangeAdd:
-			hlOn = m.ansiBg(m.styles.colors.WordAddBg)
-			hlOff = m.ansiBg(m.styles.colors.AddBg) // restore line bg
+			hlOn = string(m.resolver.WordDiffBg(diff.ChangeAdd))
+			hlOff = string(m.resolver.LineBg(diff.ChangeAdd)) // restore line bg
 		case diff.ChangeRemove:
-			hlOn = m.ansiBg(m.styles.colors.WordRemoveBg)
-			hlOff = m.ansiBg(m.styles.colors.RemoveBg) // restore line bg
+			hlOn = string(m.resolver.WordDiffBg(diff.ChangeRemove))
+			hlOff = string(m.resolver.LineBg(diff.ChangeRemove)) // restore line bg
 		}
 	}
 
@@ -637,14 +515,15 @@ func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) stri
 	// background-only highlight preserves syntax foreground colors within matches.
 	// restore to line bg (add/remove) after each match instead of terminal default (\033[49m]),
 	// so word-diff and line bg overlays are not broken by search highlights.
-	hlOn := m.ansiBg(m.styles.colors.SearchBg)
+	searchBg := m.resolver.Color(style.ColorKeySearchBg)
+	hlOn := string(searchBg)
 	hlOff := "\033[49m"
 	if hlOn == "" {
 		// no-colors mode: fall back to reverse video so matches remain visible
 		hlOn = "\033[7m"
 		hlOff = "\033[27m"
-	} else if bg := m.ansiBg(m.changeBgColor(changeType)); bg != "" {
-		hlOff = bg
+	} else if bg := m.resolver.LineBg(changeType); bg != "" {
+		hlOff = string(bg)
 	}
 
 	return m.insertHighlightMarkers(s, matches, hlOn, hlOff)
@@ -742,52 +621,14 @@ func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content stri
 		content = m.highlightSearchMatches(content, changeType)
 	}
 
-	switch changeType {
-	case diff.ChangeAdd:
-		if hasHighlight {
-			return m.styles.LineAddHighlight.Render(prefix + content)
-		}
-		return m.styles.LineAdd.Render(prefix + content)
-	case diff.ChangeRemove:
-		if hasHighlight {
-			return m.styles.LineRemoveHighlight.Render(prefix + content)
-		}
-		return m.styles.LineRemove.Render(prefix + content)
-	default:
-		if hasHighlight {
-			return m.styles.LineContextHighlight.Render(prefix + content)
-		}
-		return m.styles.LineContext.Render(prefix + content)
-	}
-}
-
-// changeBgColor returns the background color for a given change type.
-func (m Model) changeBgColor(changeType diff.ChangeType) string {
-	switch changeType {
-	case diff.ChangeAdd:
-		return m.styles.colors.AddBg
-	case diff.ChangeRemove:
-		return m.styles.colors.RemoveBg
-	default:
-		return ""
-	}
-}
-
-// indicatorBg returns the background color to use for a horizontal scroll indicator,
-// falling back to the diff pane background when the line has no explicit bg (context/divider).
-// this keeps the indicator visible and consistent with the surrounding line.
-func (m Model) indicatorBg(lineBg string) string {
-	if lineBg != "" {
-		return lineBg
-	}
-	return m.styles.colors.DiffBg
+	return m.resolver.LineStyle(changeType, hasHighlight).Render(prefix + content)
 }
 
 // extendLineBg extends a styled line's background to the full diff content width
 // using raw ANSI sequences. this ensures add/remove/modify backgrounds fill the entire line.
 // subtracts line number gutter width when line numbers are enabled.
-func (m Model) extendLineBg(styled, bgColor string) string {
-	if bgColor == "" {
+func (m Model) extendLineBg(styled string, bg style.Color) string {
+	if bg == "" {
 		return styled
 	}
 	// target = content area minus cursor bar (1) minus gutters (if on)
@@ -796,7 +637,7 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 	targetWidth := m.diffContentWidth() - m.gutterExtra()
 	currentWidth := lipgloss.Width(styled)
 	if pad := targetWidth - currentWidth; pad > 0 {
-		return styled + m.ansiBg(bgColor) + strings.Repeat(" ", pad) + "\033[49m"
+		return styled + string(bg) + strings.Repeat(" ", pad) + "\033[49m"
 	}
 	return styled
 }
@@ -804,10 +645,10 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
-		line := " " + m.annotationInline("\U0001f4ac ") + m.annotateInput.View()
+		line := " " + m.renderer.AnnotationInline("\U0001f4ac ") + m.annotateInput.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
-		b.WriteString(m.extendLineBg(line, m.styles.colors.DiffBg) + "\n")
+		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
 		return
 	}
 	dl := m.diffLines[idx]
@@ -816,7 +657,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
-				cursor = m.diffCursorCell()
+				cursor = m.renderer.DiffCursor(m.noColors)
 			}
 			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
 		}
@@ -835,64 +676,12 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) 
 			if i == 0 {
 				c = cursor
 			}
-			b.WriteString(c + m.annotationInline(line) + "\n")
+			b.WriteString(c + m.renderer.AnnotationInline(line) + "\n")
 		}
 		return
 	}
 
-	b.WriteString(cursor + m.annotationInline(text) + "\n")
-}
-
-// annotationInline renders annotation text using raw ANSI sequences instead of lipgloss.Render()
-// to avoid \033[0m full reset that kills the outer DiffBg background.
-func (m Model) annotationInline(text string) string {
-	fg := m.styles.colors.Annotation
-	bg := m.styles.colors.DiffBg
-	var b strings.Builder
-	if fg != "" {
-		b.WriteString(m.ansiFg(fg))
-	}
-	if bg != "" {
-		b.WriteString(m.ansiBg(bg))
-	}
-	b.WriteString("\033[3m") // italic on
-	b.WriteString(text)
-	b.WriteString("\033[23m") // italic off
-	if fg != "" {
-		b.WriteString("\033[39m")
-	}
-	if bg != "" {
-		b.WriteString("\033[49m")
-	}
-	return b.String()
-}
-
-// diffCursorCell renders the ▶ cursor using raw ANSI sequences instead of lipgloss.Render()
-// to avoid \033[0m full reset that kills the outer DiffBg background.
-func (m Model) diffCursorCell() string {
-	if m.noColors {
-		return "\033[7m▶\033[27m" // reverse video
-	}
-	fg := m.styles.colors.CursorFg
-	bg := m.styles.colors.CursorBg
-	if bg == "" {
-		bg = m.styles.colors.DiffBg
-	}
-	var b strings.Builder
-	if fg != "" {
-		b.WriteString(m.ansiFg(fg))
-	}
-	if bg != "" {
-		b.WriteString(m.ansiBg(bg))
-	}
-	b.WriteString("▶")
-	if fg != "" {
-		b.WriteString("\033[39m")
-	}
-	if bg != "" {
-		b.WriteString("\033[49m")
-	}
-	return b.String()
+	b.WriteString(cursor + m.renderer.AnnotationInline(text) + "\n")
 }
 
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "

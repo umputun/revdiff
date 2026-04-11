@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // collapsedState holds the state for collapsed diff view mode.
@@ -84,22 +85,27 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 	isSearchMatch := m.searchMatchSet[idx]
 
-	style, hlStyle, gutter := m.styles.LineAdd, m.styles.LineAddHighlight, " + "
+	lineStyle := m.resolver.Style(style.StyleKeyLineAdd)
+	lineHlStyle := m.resolver.Style(style.StyleKeyLineAddHighlight)
+	gutter := " + "
 	if modified {
-		style, hlStyle, gutter = m.styles.LineModify, m.styles.LineModifyHighlight, " ~ "
+		lineStyle = m.resolver.Style(style.StyleKeyLineModify)
+		lineHlStyle = m.resolver.Style(style.StyleKeyLineModifyHighlight)
+		gutter = " ~ "
 	}
 	if isSearchMatch {
-		style = m.styles.SearchMatch
-		hlStyle = m.styles.SearchMatch.UnsetForeground()
+		sm := m.resolver.Style(style.StyleKeySearchMatch)
+		lineStyle = sm
+		lineHlStyle = sm.UnsetForeground()
 	}
 
 	isCursor := m.isCursorLine(idx)
 
 	numGutter, blGutter := m.lineGutters(dl)
 
-	bgColor := m.styles.colors.AddBg
+	bgColor := m.resolver.Color(style.ColorKeyAddLineBg)
 	if modified {
-		bgColor = m.styles.colors.ModifyBg
+		bgColor = m.resolver.Color(style.ColorKeyModifyLineBg)
 	}
 
 	// wrap mode: break long lines at word boundaries with continuation markers
@@ -107,21 +113,21 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		m.renderWrappedCollapsedLine(b, textContent, wrappedLineCtx{
 			gutter: gutter, numGutter: numGutter, blGutter: blGutter,
 			isCursor: isCursor, hasHighlight: hasHighlight,
-			style: style, hlStyle: hlStyle, bgColor: bgColor,
+			lineStyle: lineStyle, hlStyle: lineHlStyle, bgColor: bgColor,
 		})
 		return
 	}
 
-	content := style.Render(gutter + lineContent)
+	content := lineStyle.Render(gutter + lineContent)
 	if hasHighlight {
-		content = hlStyle.Render(gutter + textContent)
+		content = lineHlStyle.Render(gutter + textContent)
 	}
 	content = m.applyHorizontalScroll(content, bgColor)
 	content = m.extendLineBg(content, bgColor)
 
 	cursor := " "
 	if isCursor {
-		cursor = m.diffCursorCell()
+		cursor = m.renderer.DiffCursor(m.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -131,8 +137,8 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 type wrappedLineCtx struct {
 	gutter, numGutter, blGutter string
 	isCursor, hasHighlight      bool
-	style, hlStyle              lipgloss.Style
-	bgColor                     string
+	lineStyle, hlStyle          lipgloss.Style
+	bgColor                     style.Color
 }
 
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
@@ -153,13 +159,13 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string
 		if ctx.hasHighlight {
 			styled = ctx.hlStyle.Render(prefix + vl)
 		} else {
-			styled = ctx.style.Render(prefix + vl)
+			styled = ctx.lineStyle.Render(prefix + vl)
 		}
 		styled = m.extendLineBg(styled, ctx.bgColor)
 
 		cursor := " "
 		if i == 0 && ctx.isCursor {
-			cursor = m.diffCursorCell()
+			cursor = m.renderer.DiffCursor(m.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -200,10 +206,11 @@ func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
 func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	text := m.deletePlaceholderText(hunkStart)
 
-	style := m.styles.LineRemove
+	lineStyle := m.resolver.Style(style.StyleKeyLineRemove)
 	if m.searchMatchSet[idx] {
-		style = m.styles.SearchMatch
+		lineStyle = m.resolver.Style(style.StyleKeySearchMatch)
 	}
+	removeBg := m.resolver.Color(style.ColorKeyRemoveLineBg)
 
 	isCursor := m.isCursorLine(idx)
 
@@ -223,25 +230,25 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 				ng = numGutter
 				bg = blGutter
 			}
-			styled := style.Render(prefix + vl)
-			styled = m.extendLineBg(styled, m.styles.colors.RemoveBg)
+			styled := lineStyle.Render(prefix + vl)
+			styled = m.extendLineBg(styled, removeBg)
 
 			cursor := " "
 			if i == 0 && isCursor {
-				cursor = m.diffCursorCell()
+				cursor = m.renderer.DiffCursor(m.noColors)
 			}
 			b.WriteString(cursor + ng + bg + styled + "\n")
 		}
 		return
 	}
 
-	content := style.Render(" - " + text)
-	content = m.applyHorizontalScroll(content, m.styles.colors.RemoveBg)
-	content = m.extendLineBg(content, m.styles.colors.RemoveBg)
+	content := lineStyle.Render(" - " + text)
+	content = m.applyHorizontalScroll(content, removeBg)
+	content = m.extendLineBg(content, removeBg)
 
 	cursor := " "
 	if isCursor {
-		cursor = m.diffCursorCell()
+		cursor = m.renderer.DiffCursor(m.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }

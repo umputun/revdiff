@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_AnnotatedFilesMarker(t *testing.T) {
@@ -1555,7 +1556,9 @@ func TestModel_SingleFileAnnotationWorks(t *testing.T) {
 	model.singleFile = true
 	model.focus = paneDiff
 	model.diffCursor = 1 // on the add line
-	model.styles = plainStyles()
+	res := style.PlainResolver()
+	model.resolver = res
+	model.renderer = style.NewRenderer(res)
 
 	// press enter to start annotation
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})

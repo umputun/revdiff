@@ -11,11 +11,14 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_HelpOverlaySections(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	help := m.helpOverlay()
 
 	// verify section headers are present
@@ -28,7 +31,9 @@ func TestModel_HelpOverlaySections(t *testing.T) {
 
 func TestModel_HelpOverlayKeyListings(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	help := m.helpOverlay()
 
 	// verify key listings are present (dynamic rendering uses display names)
@@ -45,7 +50,9 @@ func TestModel_HelpOverlayKeyListings(t *testing.T) {
 
 func TestModel_HelpOverlayInView(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	m.tree = newFileTree([]string{"a.go"})
 	m.ready = true
 	m.width = 100
@@ -70,7 +77,9 @@ func TestModel_HelpOverlayInView(t *testing.T) {
 
 func TestModel_HelpOverlayContainsWordWrap(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	help := m.helpOverlay()
 	assert.Contains(t, help, "toggle word wrap")
 	assert.Contains(t, help, "w")
@@ -78,7 +87,9 @@ func TestModel_HelpOverlayContainsWordWrap(t *testing.T) {
 
 func TestModel_HelpOverlayContainsSearchKeys(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	help := m.helpOverlay()
 
 	assert.Contains(t, help, "Search")
@@ -90,7 +101,9 @@ func TestModel_HelpOverlayContainsSearchKeys(t *testing.T) {
 
 func TestModel_HelpOverlayContainsTOCSection(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	help := m.helpOverlay()
 
 	assert.Contains(t, help, "Markdown TOC")
@@ -110,7 +123,9 @@ func TestModel_HelpOverlayContainsLineNumbers(t *testing.T) {
 
 func TestModel_HelpOverlayCustomBinding(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	m.keymap.Bind("x", keymap.ActionQuit)
 	help := m.helpOverlay()
 
@@ -122,7 +137,9 @@ func TestModel_HelpOverlayCustomBinding(t *testing.T) {
 
 func TestModel_HelpOverlayUnmappedAction(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.styles = plainStyles()
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	// unbind all keys for search action
 	m.keymap.Unbind("/")
 	help := m.helpOverlay()

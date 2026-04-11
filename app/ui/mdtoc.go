@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // tocEntry represents a single markdown header in the table of contents.
@@ -132,7 +133,7 @@ func (toc *mdTOC) updateActiveSection(diffCursor int) {
 // render produces the TOC display string with indentation by level.
 // the highlighted entry uses FileSelected style in both modes:
 // when TOC is focused it highlights the cursor, when diff is focused it highlights the active section.
-func (toc *mdTOC) render(width, height int, focusedPane pane, s styles) string {
+func (toc *mdTOC) render(width, height int, focusedPane pane, res style.Resolver) string {
 	if len(toc.entries) == 0 {
 		return "  no headers"
 	}
@@ -158,7 +159,7 @@ func (toc *mdTOC) render(width, height int, focusedPane pane, s styles) string {
 		line := fmt.Sprintf("  %s%s", indent, title)
 
 		if idx == highlighted {
-			line = s.FileSelected.Width(max(width-2, 1)).Render(line)
+			line = res.Style(style.StyleKeyFileSelected).Width(max(width-2, 1)).Render(line)
 		}
 
 		b.WriteString(line)

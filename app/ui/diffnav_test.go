@@ -1380,7 +1380,6 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 	m.wrapMode = true
 	m.width = 60
 	m.treeWidth = 12
-	m.styles = plainStyles()
 
 	t.Run("short line no continuation", func(t *testing.T) {
 		var b strings.Builder

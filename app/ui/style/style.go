@@ -29,10 +29,10 @@ type Colors struct {
 	SearchBg     string // search match background
 }
 
-// normalizeColors ensures all color values have # prefix where needed
-// and auto-derives WordAddBg/WordRemoveBg from AddBg/RemoveBg via
-// shiftLightness when those fields are empty.
-func normalizeColors(c Colors) Colors {
+// normalize ensures all color values have # prefix where needed and
+// auto-derives WordAddBg/WordRemoveBg from AddBg/RemoveBg via shiftLightness
+// when those fields are empty. Returns a copy; the receiver is not mutated.
+func (c Colors) normalize() Colors {
 	c.Accent = normalizeColor(c.Accent)
 	c.Border = normalizeColor(c.Border)
 	c.Normal = normalizeColor(c.Normal)

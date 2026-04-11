@@ -16,6 +16,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // Renderer provides methods to extract changed files and build full-file diff views.
@@ -48,12 +49,14 @@ const (
 
 // Model is the top-level bubbletea model for revdiff.
 type Model struct {
-	styles   styles
-	tree     fileTree
-	viewport viewport.Model
-	store    *annotation.Store
-	renderer Renderer
-	keymap   *keymap.Keymap
+	resolver     style.Resolver
+	renderer     style.Renderer
+	sgr          style.SGR
+	tree         fileTree
+	viewport     viewport.Model
+	store        *annotation.Store
+	diffRenderer Renderer
+	keymap       *keymap.Keymap
 
 	ref            string
 	staged         bool
@@ -174,14 +177,16 @@ type ModelConfig struct {
 	Keymap           *keymap.Keymap           // custom key bindings (nil uses defaults)
 	LoadUntracked    func() ([]string, error) // fetches untracked files; nil when unavailable
 	Blamer           Blamer                   // optional blame provider (nil when git unavailable)
-	Colors           Colors
+	Resolver         style.Resolver
+	Renderer         style.Renderer
+	SGR              style.SGR
 	ThemesDir        string // path to themes directory for theme selector
 	ConfigPath       string // path to config file for persisting theme choice
 	ActiveThemeName  string // name of theme currently applied (for theme selector cursor positioning)
 }
 
-// NewModel creates a new Model with the given renderer, store, highlighter and configuration.
-func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
+// NewModel creates a new Model with the given diff renderer, store, highlighter and configuration.
+func NewModel(diffRenderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
 		cfg.TreeWidthRatio = 2
 	}
@@ -192,15 +197,25 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 	if km == nil {
 		km = keymap.Default()
 	}
-	s := newStyles(cfg.Colors)
-	if cfg.NoColors {
-		s = plainStyles()
+	res := cfg.Resolver
+	rnd := cfg.Renderer
+	sgr := cfg.SGR
+	if !res.Ready() {
+		if cfg.NoColors {
+			res = style.PlainResolver()
+		} else {
+			res = style.NewResolver(style.Colors{})
+		}
+		rnd = style.NewRenderer(res)
 	}
+
 	return Model{
-		styles:           s,
+		resolver:         res,
+		renderer:         rnd,
+		sgr:              sgr,
 		keymap:           km,
 		store:            store,
-		renderer:         renderer,
+		diffRenderer:     diffRenderer,
 		highlighter:      highlighter,
 		blamer:           cfg.Blamer,
 		ref:              cfg.Ref,

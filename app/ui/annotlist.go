@@ -11,6 +11,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // buildAnnotListItems builds a flat list of all annotations across all files.
@@ -26,9 +27,7 @@ func (m *Model) buildAnnotListItems() []annotation.Annotation {
 
 // annotListBoxStyle builds the bordered box style used by annotation list overlays.
 func (m Model) annotListBoxStyle(width int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
+	return m.resolver.Style(style.StyleKeyAnnotListBorder).
 		Padding(1, 1).
 		Width(width)
 }
@@ -109,11 +108,12 @@ func (m Model) formatAnnotListItem(a annotation.Annotation, width int, selected 
 	// apply styling
 	if selected {
 		cursor := "> "
-		styled := m.styles.FileSelected.Render(cursor + line)
+		selStyle := m.resolver.Style(style.StyleKeyFileSelected)
+		styled := selStyle.Render(cursor + line)
 		// pad to full width
 		w := lipgloss.Width(styled)
 		if w < width {
-			styled += m.styles.FileSelected.Render(strings.Repeat(" ", width-w))
+			styled += selStyle.Render(strings.Repeat(" ", width-w))
 		}
 		return styled
 	}
@@ -122,11 +122,11 @@ func (m Model) formatAnnotListItem(a annotation.Annotation, width int, selected 
 	var styledPrefix string
 	switch a.Type {
 	case "+":
-		styledPrefix = m.ansiFg(m.styles.colors.AddFg) + prefix + "\033[39m"
+		styledPrefix = string(m.resolver.Color(style.ColorKeyAddLineFg)) + prefix + string(style.ResetFg)
 	case "-":
-		styledPrefix = m.ansiFg(m.styles.colors.RemoveFg) + prefix + "\033[39m"
+		styledPrefix = string(m.resolver.Color(style.ColorKeyRemoveLineFg)) + prefix + string(style.ResetFg)
 	default:
-		styledPrefix = m.ansiFg(m.styles.colors.Muted) + prefix + "\033[39m"
+		styledPrefix = string(m.resolver.Color(style.ColorKeyMutedFg)) + prefix + string(style.ResetFg)
 	}
 
 	if comment != "" {
@@ -153,7 +153,7 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 
 	titleStart := max((topWidth-titleWidth)/2, 2)
 
-	borderColor := m.styles.colors.Accent
+	borderFg := m.resolver.Color(style.ColorKeyAccentFg)
 	border := lipgloss.NormalBorder()
 
 	// rebuild top border: corner + left segment + title + right segment + corner
@@ -164,17 +164,17 @@ func (m Model) injectBorderTitle(box, title string, popupWidth int) string {
 	// \033[0m full reset which would break the popup's background color
 	bgSeq := ""
 	bgReset := ""
-	if m.styles.colors.DiffBg != "" {
-		bgSeq = m.ansiBg(m.styles.colors.DiffBg)
-		bgReset = "\033[49m"
+	if bg := m.resolver.Color(style.ColorKeyDiffPaneBg); bg != "" {
+		bgSeq = string(bg)
+		bgReset = string(style.ResetBg)
 	}
-	newTop := bgSeq + m.ansiFg(borderColor) +
+	newTop := bgSeq + string(borderFg) +
 		border.TopLeft +
 		strings.Repeat(border.Top, leftLen) +
 		title +
 		strings.Repeat(border.Top, rightLen) +
 		border.TopRight +
-		"\033[39m" + bgReset
+		string(style.ResetFg) + bgReset
 
 	boxLines[0] = newTop
 	return strings.Join(boxLines, "\n")

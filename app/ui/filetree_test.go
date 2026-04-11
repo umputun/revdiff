@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestFileTree_BuildEntries(t *testing.T) {
@@ -167,9 +168,10 @@ func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
 func TestFileTree_Render(t *testing.T) {
 	ft := newFileTree([]string{"internal/handler.go", "main.go"})
 	ft.cursor = 1 // select handler.go
-	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	rnd := style.NewRenderer(res)
 
-	result := ft.render(30, 100, map[string]bool{"internal/handler.go": true}, s)
+	result := ft.render(30, 100, map[string]bool{"internal/handler.go": true}, res, rnd)
 	assert.Contains(t, result, "internal/")
 	assert.Contains(t, result, "handler.go")
 	assert.Contains(t, result, "main.go")
@@ -177,8 +179,9 @@ func TestFileTree_Render(t *testing.T) {
 
 func TestFileTree_RenderEmpty(t *testing.T) {
 	ft := newFileTree(nil)
-	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
-	result := ft.render(30, 100, nil, s)
+	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	rnd := style.NewRenderer(res)
+	result := ft.render(30, 100, nil, res, rnd)
 	assert.Contains(t, result, "no changed files")
 }
 
@@ -382,7 +385,8 @@ func TestFileTree_MoveToFirstLast(t *testing.T) {
 
 func TestFileTree_RenderIndentation(t *testing.T) {
 	ft := newFileTree([]string{"cmd/main.go", "internal/handler.go", "internal/store.go"})
-	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	rnd := style.NewRenderer(res)
 
 	// verify entry depth: directories at depth 0, files at depth 1
 	for _, e := range ft.entries {
@@ -393,7 +397,7 @@ func TestFileTree_RenderIndentation(t *testing.T) {
 		}
 	}
 
-	result := ft.render(40, 100, nil, s)
+	result := ft.render(40, 100, nil, res, rnd)
 	lines := strings.Split(result, "\n")
 	assert.GreaterOrEqual(t, len(lines), 5, "expected at least 5 lines (2 dirs + 3 files)")
 
@@ -465,16 +469,17 @@ func TestFileTree_RenderViewport(t *testing.T) {
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
 		"b/1.go", "b/2.go", "b/3.go",
 	})
-	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	rnd := style.NewRenderer(res)
 
 	// render with height=3, cursor on first file
-	result := ft.render(40, 3, nil, s)
+	result := ft.render(40, 3, nil, res, rnd)
 	lines := strings.Split(result, "\n")
 	assert.Len(t, lines, 3, "should render exactly 3 lines")
 
 	// move cursor to last file and render again
 	ft.moveToLast()
-	result = ft.render(40, 3, nil, s)
+	result = ft.render(40, 3, nil, res, rnd)
 	lines = strings.Split(result, "\n")
 	assert.Len(t, lines, 3, "should still render exactly 3 lines")
 	assert.Contains(t, result, "3.go", "last file should be visible after scrolling")
@@ -517,9 +522,10 @@ func TestFileTree_SelectByPath(t *testing.T) {
 func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 	files := []string{".claude-plugin/skills/revdiff/references/config.md"}
 	ft := newFileTree(files)
-	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	rnd := style.NewRenderer(res)
 
-	result := ft.render(30, 10, nil, s)
+	result := ft.render(30, 10, nil, res, rnd)
 	assert.Contains(t, result, "…", "long dir name should be truncated with ellipsis")
 	assert.Contains(t, result, "references/", "truncated dir should show trailing path")
 	assert.NotContains(t, result, ".claude-plugin/skills/revdiff/references/", "full dir name should not appear")
@@ -528,10 +534,11 @@ func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 func TestFileTree_RenderTruncatesLongFileNames(t *testing.T) {
 	files := []string{"docs/plans/completed/20260402-status-line-help-overlay.md"}
 	ft := newFileTree(files)
-	s := plainStyles()
+	res := style.PlainResolver()
+	rnd := style.NewRenderer(res)
 
 	// narrow tree pane should truncate long filename with ellipsis
-	result := ft.render(30, 10, nil, s)
+	result := ft.render(30, 10, nil, res, rnd)
 	lines := strings.Split(result, "\n")
 
 	// find the file entry line (not the dir entry)
@@ -554,18 +561,19 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
 	}
 	ft := newFileTree(files)
-	s := newStyles(Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
+	rnd := style.NewRenderer(res)
 
 	// page down past visible area with small height
 	ft.pageDown(100)
 	assert.Equal(t, "internal/h.go", ft.selectedFile())
 
-	result := ft.render(40, 5, nil, s)
+	result := ft.render(40, 5, nil, res, rnd)
 	assert.Contains(t, result, "h.go", "cursor file must be visible after page down")
 
 	// page back up
 	ft.pageUp(100)
-	result = ft.render(40, 5, nil, s)
+	result = ft.render(40, 5, nil, res, rnd)
 	// selectedFile() returns full path ("cmd/flags.go"), but render shows basename ("flags.go")
 	selected := ft.selectedFile()
 	assert.Contains(t, result, selected[strings.LastIndex(selected, "/")+1:],
@@ -596,21 +604,22 @@ func TestFileTree_ToggleReviewed(t *testing.T) {
 
 func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
 	ft := newFileTree([]string{"a.go", "b.go"})
-	s := plainStyles()
+	res := style.PlainResolver()
+	rnd := style.NewRenderer(res)
 
 	// no checkmarks initially
-	result := ft.render(40, 10, nil, s)
+	result := ft.render(40, 10, nil, res, rnd)
 	assert.NotContains(t, result, "✓")
 
 	// mark a.go as reviewed
 	ft.toggleReviewed("a.go")
-	result = ft.render(40, 10, nil, s)
+	result = ft.render(40, 10, nil, res, rnd)
 	assert.Contains(t, result, "✓")
 
 	// both checkmark and annotation mark can coexist
 	ft.toggleReviewed("b.go")
 	annotated := map[string]bool{"b.go": true}
-	result = ft.render(40, 10, annotated, s)
+	result = ft.render(40, 10, annotated, res, rnd)
 	assert.Contains(t, result, "✓")
 	assert.Contains(t, result, "*")
 }
@@ -620,13 +629,14 @@ func TestFileTree_RenderFileEntryRestoresNormalForegroundAfterColoredPrefix(t *t
 	ft.cursor = 0 // keep the file unselected so the inline ANSI path is used
 	ft.toggleReviewed("a.go")
 
-	s := newStyles(Colors{
+	res := style.NewResolver(style.Colors{
 		Normal: "#d0d0d0",
 		AddFg:  "#87d787",
 		Muted:  "#6c6c6c",
 	})
+	rnd := style.NewRenderer(res)
 
-	line := ft.renderFileEntry(ft.entries[1], 1, 40, renderCtx{annotatedFiles: nil, s: s})
+	line := ft.renderFileEntry(ft.entries[1], 1, 40, renderCtx{annotatedFiles: nil, res: res, rnd: rnd})
 
 	assert.Contains(t, line, "\033[38;2;135;215;135m✓\033[38;2;208;208;208m ")
 	assert.Contains(t, line, "\033[38;2;135;215;135mA\033[38;2;208;208;208m a.go")

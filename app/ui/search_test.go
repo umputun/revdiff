@@ -11,12 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_HighlightSearchMatches(t *testing.T) {
-	colors := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700"}
+	colors := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700"}
 	m := testModel(nil, nil)
-	m.styles = newStyles(colors)
+	m.resolver = style.NewResolver(colors)
 
 	t.Run("plain text single match", func(t *testing.T) {
 		m.searchTerm = "hello"
@@ -68,52 +69,52 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 	})
 
 	t.Run("add line restores add bg instead of terminal default", func(t *testing.T) {
-		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200"}
+		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200"}
 		am := testModel(nil, nil)
-		am.styles = newStyles(c)
+		am.resolver = style.NewResolver(c)
 		am.searchTerm = "hello"
 		result := am.highlightSearchMatches("say hello world", diff.ChangeAdd)
 		assert.Contains(t, result, "\033[48;2;215;215;0m", "should have search bg on")
 		assert.NotContains(t, result, "\033[49m", "should not reset to terminal default")
-		assert.Contains(t, result, am.ansiBg(c.AddBg), "should restore to add bg")
+		assert.Contains(t, result, string(am.resolver.Color(style.ColorKeyAddLineBg)), "should restore to add bg")
 	})
 
 	t.Run("remove line restores remove bg instead of terminal default", func(t *testing.T) {
-		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", RemoveFg: "#ff0000", RemoveBg: "#220000"}
+		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", RemoveFg: "#ff0000", RemoveBg: "#220000"}
 		rm := testModel(nil, nil)
-		rm.styles = newStyles(c)
+		rm.resolver = style.NewResolver(c)
 		rm.searchTerm = "hello"
 		result := rm.highlightSearchMatches("say hello world", diff.ChangeRemove)
 		assert.Contains(t, result, "\033[48;2;215;215;0m", "should have search bg on")
 		assert.NotContains(t, result, "\033[49m", "should not reset to terminal default")
-		assert.Contains(t, result, rm.ansiBg(c.RemoveBg), "should restore to remove bg")
+		assert.Contains(t, result, string(rm.resolver.Color(style.ColorKeyRemoveLineBg)), "should restore to remove bg")
 	})
 
 	t.Run("search inside word-diff span restores word-diff bg", func(t *testing.T) {
-		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
+		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
 		am := testModel(nil, nil)
-		am.styles = newStyles(c)
+		am.resolver = style.NewResolver(c)
 		am.searchTerm = "foo"
 		// simulate input with word-diff markers: [WordAddBg]foobar[AddBg]rest
-		wordBg := am.ansiBg(c.WordAddBg)
-		lineBg := am.ansiBg(c.AddBg)
+		wordBg := string(am.resolver.Color(style.ColorKeyWordAddBg))
+		lineBg := string(am.resolver.Color(style.ColorKeyAddLineBg))
 		input := wordBg + "foobar" + lineBg + "rest"
 		result := am.highlightSearchMatches(input, diff.ChangeAdd)
 		// after search match ends at "foo", should restore to word-diff bg, not line bg
-		searchBg := am.ansiBg(c.SearchBg)
+		searchBg := string(am.resolver.Color(style.ColorKeySearchBg))
 		assert.Contains(t, result, searchBg, "should have search bg on")
 		assert.Contains(t, result, wordBg+"bar", "bar should keep word-diff bg after search match")
 	})
 
 	t.Run("search match spanning word-diff boundary preserves search bg", func(t *testing.T) {
-		c := Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
+		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
 		am := testModel(nil, nil)
-		am.styles = newStyles(c)
+		am.resolver = style.NewResolver(c)
 		am.searchTerm = "foobar rest"
 		// simulate input with word-diff markers: [WordAddBg]foobar[AddBg] rest
-		wordBg := am.ansiBg(c.WordAddBg)
-		lineBg := am.ansiBg(c.AddBg)
-		searchBg := am.ansiBg(c.SearchBg)
+		wordBg := string(am.resolver.Color(style.ColorKeyWordAddBg))
+		lineBg := string(am.resolver.Color(style.ColorKeyAddLineBg))
+		searchBg := string(am.resolver.Color(style.ColorKeySearchBg))
 		input := wordBg + "foobar" + lineBg + " rest"
 		result := am.highlightSearchMatches(input, diff.ChangeAdd)
 		// search bg must persist across word-diff boundary so " rest" stays highlighted
@@ -655,7 +656,9 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
 	m.focus = paneDiff
 	m.diffCursor = 0
-	m.styles = plainStyles()
+	pRes := style.PlainResolver()
+	m.resolver = pRes
+	m.renderer = style.NewRenderer(pRes)
 
 	t.Run("no search, renderDiff succeeds with all lines", func(t *testing.T) {
 		m.searchMatches = nil
@@ -730,7 +733,9 @@ func TestModel_SearchHighlightWithWrap(t *testing.T) {
 	m.wrapMode = true
 	m.width = 60
 	m.treeWidth = 12
-	m.styles = plainStyles()
+	pRes := style.PlainResolver()
+	m.resolver = pRes
+	m.renderer = style.NewRenderer(pRes)
 
 	m.searchTerm = "hello"
 	m.searchMatches = []int{0}
@@ -767,7 +772,9 @@ func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
 	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
 	m.focus = paneDiff
 	m.diffCursor = 0
-	m.styles = plainStyles()
+	pRes := style.PlainResolver()
+	m.resolver = pRes
+	m.renderer = style.NewRenderer(pRes)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
 
@@ -793,7 +800,9 @@ func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
 
 func TestModel_StyleDiffContentSearchMatch(t *testing.T) {
 	m := testModel(nil, nil)
-	m.styles = plainStyles()
+	pRes := style.PlainResolver()
+	m.resolver = pRes
+	m.renderer = style.NewRenderer(pRes)
 
 	t.Run("search match returns same text content", func(t *testing.T) {
 		resultMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, true)
@@ -809,15 +818,15 @@ func TestModel_StyleDiffContentSearchMatch(t *testing.T) {
 	})
 
 	t.Run("search match uses different style than normal add", func(t *testing.T) {
-		// use newStyles with distinct colors so rendering produces different output
-		c := Colors{
+		// use resolver with distinct colors so rendering produces different output
+		c := style.Colors{
 			Accent: "#ffffff", Border: "#555555", Normal: "#cccccc", Muted: "#666666",
 			SelectedFg: "#ffffff", SelectedBg: "#333333", Annotation: "#ff9900",
 			AddFg: "#00ff00", AddBg: "#002200", RemoveFg: "#ff0000", RemoveBg: "#220000",
 			ModifyFg: "#ffaa00", ModifyBg: "#221100",
 			SearchFg: "#1a1a1a", SearchBg: "#d7d700",
 		}
-		m.styles = newStyles(c)
+		m.resolver = style.NewResolver(c)
 		resultMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, true)
 		resultNoMatch := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, false)
 		// both have same text but may differ in ANSI sequences (depends on terminal detection)
@@ -1197,7 +1206,9 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
 	model.focus = paneDiff
-	model.styles = plainStyles()
+	plainRes := style.PlainResolver()
+	model.resolver = plainRes
+	model.renderer = style.NewRenderer(plainRes)
 	model.collapsed.enabled = true
 	model.collapsed.expandedHunks = make(map[int]bool)
 	model.diffCursor = 1

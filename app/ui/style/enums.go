@@ -17,12 +17,18 @@ const (
 	colorKeyMutedFg
 	colorKeyAnnotationFg
 	colorKeyStatusFg // internal fallback: StatusFg || MutedFg
+	colorKeyTreePaneBg
 	colorKeyDiffPaneBg
 	colorKeyAddLineBg
 	colorKeyRemoveLineBg
+	colorKeyModifyLineBg
 	colorKeyWordAddBg
 	colorKeyWordRemoveBg
 	colorKeySearchBg
+	colorKeyAddLineFg
+	colorKeyRemoveLineFg
+	colorKeyNormalFg
+	colorKeySelectedFg
 )
 
 // styleKey is the generator input for StyleKey (see generated style_key_enum.go).

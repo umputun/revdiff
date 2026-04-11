@@ -104,11 +104,24 @@ Instead of `s.AccentFg()`, `s.MutedFg()`, `s.AddLineFg()`, ..., use `s.Color(k C
 
 Trade-off: call sites become slightly wordier (`s.Color(style.ColorKeyAccentFg)` vs `s.AccentFg()`). Acceptable cost for the other benefits.
 
-### 4. Structs with methods, even when receiver is unused
+### 4. Methods over standalone functions — applies to ALL helpers, not just the public API
 
-If a function is *conceptually* part of a type's API (e.g., `Write(w io.Writer, c Color)` is arguably a Color operation), making it a method enables consumer-side interface wrapping. **A struct with methods is useful even when the receiver is unused** — it groups related functionality under a type, makes the API discoverable, and lets the consumer define an interface against it for mocking. This contradicts the instinct "the receiver is unused, therefore it should be a free function" — that instinct is wrong when interface contracts matter.
+If a function takes a type `T` as its primary (or only) operand, **it must be a method on `T`**, even if:
+- the function is private (package-scoped)
+- the receiver is unused in the body
+- the function is a construction helper called only from a constructor
 
-**Exception**: if a function has no natural type to attach to AND it serves as a pure adapter between types (like `style.Write(io.Writer, Color)` bridging the `Color` domain to the `io.Writer` domain), a standalone function is justified. "Avoid standalones if it makes sense to attach" ≠ "never standalone".
+This rule applies uniformly to public API AND private helpers. The CLAUDE.md rule "Prefer methods over standalone utility functions" is absolute for this case. Standalone helper functions that operate on a single type are a design smell — they're methods wearing a disguise.
+
+**Concrete example from this refactor's implementation** (documented as a lesson learned): the initial plan drafted `contextStyle(c Colors) lipgloss.Style`, `dirEntryStyle(c Colors) lipgloss.Style`, etc. as standalone private functions in `resolver.go`. These all take `Colors` as their primary operand. They should have been methods on `Colors` from the start: `(c Colors) contextStyle() lipgloss.Style`, etc. The standalone form was corrected mid-implementation (see commit `4e866a1`). **Private methods on a public data type do NOT bloat the public API** — they're invisible to external callers because they're lowercase. `Colors` remains a pure data struct externally while gaining discoverable, idiomatic methods internally.
+
+**Rule for private helpers**: if your helper takes a type `T` as an argument (with or without extra params), make it a method on `T`. `f(t T, ...) X` becomes `(t T) f(...) X`. This applies to standalone functions, constructor helpers, builder helpers, and anything else.
+
+**Exception (narrow)**: a function is standalone-justified ONLY when it serves as a pure adapter between two types, neither of which is the natural owner. Example: `style.Write(w io.Writer, c Color) (int, error)` bridges the `Color` domain to the `io.Writer` domain — `Color` and `io.Writer` are both peers, not a type-and-its-operation. `(c Color) WriteTo(w io.Writer)` would also be valid (stdlib `io.WriterTo` idiom), but the D10 decision picked the free function form.
+
+**Applies to public API with unused receiver too**: if a function is conceptually part of a type's API (e.g., `SGR.Reemit(lines)` on a stateless `SGR` type), making it a method enables consumer-side interface wrapping. A struct with methods is useful even when the receiver is unused — it groups related functionality under a type, makes the API discoverable, and lets the consumer define an interface against it for mocking.
+
+**Lesson**: "helper that operates on type T" and "method on T" are the same thing in Go. Treat them as such. Don't introduce a standalone function just because the logic "feels like a utility" — if it takes a type, it's a method on that type.
 
 ### 5. Consumer-side interfaces, not provider-side
 
@@ -210,24 +223,41 @@ Each decision here has a "why" because future extractions should understand the 
 - **Decision**: do NOT absorb `app/theme/` into `app/ui/style/`.
 - **Why**: `app/theme/` handles file I/O (reading `.ini` theme files from `~/.config/revdiff/themes/`). That's a different concern from style materialization. Keeping them separate preserves clean separation: `theme.Load()` returns `Colors` → `main.go` calls `style.NewResolver(colors)` / `style.NewRenderer(res)` / `style.SGR{}` and wires them into `ModelConfig`. `main.go` is the wiring point.
 
-### D12: Three narrow consumer-side interfaces in `app/ui/deps.go`
+### D12: Three narrow consumer-side interfaces in `app/ui/deps.go` — AND Model uses them as field types
 
-- **Decision**: define **three** interfaces in `app/ui/deps.go` (new file), one per `style` type, matching the D15 three-type split. Each is narrow and independently mockable.
-  - `resolver` — 6 methods: `Color`, `Style`, `LineBg`, `LineStyle`, `WordDiffBg`, `IndicatorBg`. Implemented by `*style.Resolver`.
-  - `renderer` — 6 methods: `AnnotationInline`, `DiffCursor`, `StatusBarSeparator`, `FileStatusMark`, `FileReviewedMark`, `FileAnnotationMark`. Implemented by `*style.Renderer`.
-  - `sgrProcessor` — 1 method: `Reemit`. Implemented by `*style.SGR`.
+- **Decision**: define **three** interfaces in `app/ui/deps.go` (new file), one per `style` type, matching the D15 three-type split. Each is narrow and independently mockable. **Model AND ModelConfig hold these interface types as field types**, not the concrete `style.Resolver` / `style.Renderer` / `style.SGR`.
+  - `styleResolver` — 6 methods: `Color`, `Style`, `LineBg`, `LineStyle`, `WordDiffBg`, `IndicatorBg`. Implemented by `style.Resolver`.
+  - `styleRenderer` — 6 methods: `AnnotationInline`, `DiffCursor`, `StatusBarSeparator`, `FileStatusMark`, `FileReviewedMark`, `FileAnnotationMark`. Implemented by `style.Renderer`.
+  - `sgrProcessor` — 1 method: `Reemit`. Implemented by `style.SGR`.
 - **Why three instead of one**: the three types serve different concerns (lookups, compound assembly, stream processing). A single fat interface would force test code that only cares about one concern to depend on all three. Three narrow interfaces let a test mock just the piece it needs. This matches D15's "single responsibility per type" principle and keeps the test boundary aligned with the production boundary.
-- **Why interfaces at all**: idiomatic Go — interfaces defined where they're consumed, concrete types returned by the provider. Even without a current mock consumer, the interface + compile-time assertion is a **decoupling contract**, not a test-only artifact.
-- **Generated mocks**: three moq directives produce `app/ui/mocks/resolver.go`, `app/ui/mocks/renderer.go`, `app/ui/mocks/sgr_processor.go`. Each mock is small because each interface is small.
-- **Compile-time contract enforcement**: `deps.go` contains three assertions that cost nothing at runtime but catch contract violations at compile time:
+- **Why Model holds interface types (NOT concrete types)**: idiomatic Go — "accept interfaces, return concrete types". Model is the consumer; it accepts the interfaces. The provider (`style` package) returns concrete types from constructors (`NewResolver`, `NewRenderer`) which are then assigned to interface-typed fields on Model via ModelConfig. Go handles the concrete-to-interface conversion at assignment with zero ceremony. The overhead of interface dispatch is negligible for a TUI (~1-2ns per call). The win is huge: tests can mock any of the three concerns independently without touching the others, Model is decoupled from the concrete style types, and the interfaces are actually used by production code (not just the compile-time assertion). **An interface that isn't used by any field or function signature is dead weight — it violates Rule 1 (no code without callers).**
+- **Generated mocks**: three moq directives produce `app/ui/mocks/style_resolver.go`, `app/ui/mocks/style_renderer.go`, `app/ui/mocks/sgr_processor.go`. Each mock is small because each interface is small. Tests that only care about one concern can construct a Model with a mock for just that field and real `style.NewResolver(...)` / etc. for the others.
+- **Compile-time contract enforcement**: `deps.go` contains three assertions that cost nothing at runtime but catch contract violations at compile time (they're redundant with Model using the interfaces as field types, but harmless — keep as defensive documentation):
   ```go
   var (
-      _ resolver     = (*style.Resolver)(nil)
-      _ renderer     = (*style.Renderer)(nil)
-      _ sgrProcessor = (*style.SGR)(nil)
+      _ styleResolver = (*style.Resolver)(nil)
+      _ styleRenderer = (*style.Renderer)(nil)
+      _ sgrProcessor  = (*style.SGR)(nil)
   )
   ```
-- **`Model` field types**: `Model.resolver`, `Model.renderer`, `Model.sgr` hold the **concrete** types (`style.Resolver`, `style.Renderer`, `style.SGR`), not the interfaces. The interfaces exist for mockability and documentation; Model itself uses concrete types to avoid runtime interface dispatch overhead and simplify field initialization in `ModelConfig` plumbing. A test that needs to mock can swap the concrete field for a mock of the matching interface — but no production code uses the interface type directly.
+- **Model field types (CORRECTED)**:
+  ```go
+  type Model struct {
+      resolver styleResolver   // was: style.Resolver
+      renderer styleRenderer   // was: style.Renderer
+      sgr      sgrProcessor    // was: style.SGR
+      // ...
+  }
+
+  type ModelConfig struct {
+      Resolver styleResolver   // was: style.Resolver
+      Renderer styleRenderer
+      SGR      sgrProcessor
+      // ...
+  }
+  ```
+  `main.go` still calls `style.NewResolver(...)` / `style.NewRenderer(...)` / uses `style.SGR{}` and assigns those concrete values into the interface-typed `ModelConfig` fields. No cast, no wrapping — Go converts automatically.
+- **Historical note**: an earlier draft of D12 specified concrete types on Model with the reasoning "interface dispatch overhead, simplify field init, interfaces are for mockability". This was incoherent — if interfaces exist only for a compile-time assertion with no runtime callers, they're dead code. The correction happened after the plan shipped, prompted by a review during implementation. Lesson: if you define an interface, USE IT at the field level on consumers. Don't create interfaces as documentation-only artifacts. See also Design Philosophy #5 and Rule 1 in the "Rule 1/Rule 2 audit" section.
 
 ### D13: Full test coverage — every file gets a `_test.go`
 
@@ -306,6 +336,7 @@ Each decision here has a "why" because future extractions should understand the 
 | 2-way split — only pull SGR out, keep everything else on `Service` | Considered as "minimum viable split". Would leave the lookup/render mix on one type, which is the same smell in smaller form. Chose to split fully into 3 (D15) rather than compromise. |
 | `Bundle` container struct returned by `func New(c Colors) Bundle` | Considered during the D15 brainstorm and initially adopted. Rejected during a second plan review as pure ceremony — Bundle would exist solely to group three types with zero behavior. Three separate public constructors (`NewResolver`, `PlainResolver`, `NewRenderer`) and direct `style.SGR{}` instantiation gives `main.go` an explicit dependency-flow reading without a wrapper type. |
 | Constructor returning three values `func New(c Colors) (Resolver, Renderer, SGR)` | Considered as an alternative to Bundle. Tuple returns are awkward for >2 values and positional ordering is fragile. Rejected in favor of three separate named constructors that each return one type. |
+| Private style-builder functions (`contextStyle(c Colors)`, `dirEntryStyle(c Colors)`, etc.) as standalone functions in `resolver.go` | **INITIAL DESIGN MISTAKE, corrected mid-implementation** (commit `4e866a1`). The plan drafted ~6 private helpers that take `Colors` as their primary operand and build derived `lipgloss.Style` values. These were implemented as standalone functions in Task 1.6 and then refactored to methods on `Colors` after Ralphex had completed through Task 2.6. The standalone form violated the CLAUDE.md rule "Prefer methods over standalone utility functions" and the plan's own Design Philosophy #4. Lesson: the rule applies uniformly to private helpers — any function taking a type as its primary operand must be a method on that type, even if it's package-private and called only from one place. Design Philosophy #4 has been strengthened to state this explicitly so future extractions (filetree, mdtoc, worddiff) apply it from the start. |
 | Extract multiple sub-packages in one plan (filetree, mdtoc, worddiff) | Old branch tried this and it was "what's easy" rather than principled. Start with `style` alone, get it right, use as template. |
 | Per-task test gating | Structurally impossible for coordinated refactor; forces artificial commit gymnastics |
 
@@ -913,7 +944,7 @@ The goal of M1 is a **fully self-contained `app/ui/style/` package** with all ty
 Small file — the package-level `Colors` config struct and a private normalization helper. No types beyond `Colors`, no constructors. Per D15, each of the three types (`Resolver`, `Renderer`, `SGR`) has its own file; `style.go` is just the package-level data bag and helper.
 
 - [x] create `style.go` with `Colors` struct (same 23 hex fields as current `ui.Colors` — copy field list from `app/ui/styles.go:12`)
-- [x] implement private `normalizeColors(c Colors) Colors` (copy from `ui-subpackage-extraction:app/ui/style/style.go`, includes `WordAddBg`/`WordRemoveBg` auto-derivation via `shiftLightness` from `color.go`)
+- [x] implement private method `(c Colors) normalize() Colors` (copy from `ui-subpackage-extraction:app/ui/style/style.go`, includes `WordAddBg`/`WordRemoveBg` auto-derivation via `shiftLightness` from `color.go`). **NOTE**: this was initially drafted as standalone `normalizeColors(c Colors) Colors` and corrected to a method on `Colors` during mid-implementation cleanup — see the "design mistake" row in Alternatives Considered and Design Philosophy #4. Apply the method form from the start in future extractions.
 - [x] (optional) add a package-level godoc comment at the top of `style.go` describing the three-type layout (`Resolver`, `Renderer`, `SGR`) so future readers browsing the package understand the structure without hunting through multiple files. Alternative: put this doc comment in a dedicated `doc.go`.
 - [x] write tests for `normalizeColors` — `#` prefix normalization, auto-derivation of `WordAddBg`/`WordRemoveBg` when empty, preservation of already-set values
 
@@ -935,7 +966,7 @@ Small file — the package-level `Colors` config struct and a private normalizat
 - [x] implement `(r Resolver) LineStyle(change diff.ChangeType, highlighted bool) lipgloss.Style` (dispatches to LineAdd/LineAddHighlight/etc)
 - [x] implement `(r Resolver) WordDiffBg(change diff.ChangeType) Color` (dispatches to WordAddBg/WordRemoveBg)
 - [x] implement `(r Resolver) IndicatorBg(change diff.ChangeType) Color` (LineBg if non-empty, else DiffPaneBg)
-- [x] private lipgloss builders (`contextStyle`, `dirEntryStyle`, `fileEntryStyle`, `treeItemStyle`, `lineNumberStyle`, `contextHighlightStyle`, etc.) called by `NewResolver` — copy bodies from old branch reference `git show ui-subpackage-extraction:app/ui/style/style.go`
+- [x] private lipgloss builders called by `NewResolver` — **implement as methods on `Colors`**, NOT as standalone functions: `(c Colors) contextStyle()`, `(c Colors) dirEntryStyle()`, `(c Colors) fileEntryStyle()`, `(c Colors) treeItemStyle(fg string)`, `(c Colors) lineNumberStyle()`, `(c Colors) contextHighlightStyle()`. Copy bodies from old branch reference `git show ui-subpackage-extraction:app/ui/style/style.go` but rewrite each as a method with `Colors` as receiver. These methods are package-private (lowercase), so `Colors` remains a pure data struct for external callers. **Historical note**: the initial plan drafted these as standalone functions; they were corrected to methods during mid-implementation cleanup (commit `4e866a1`). Apply the method form from the start in future extractions — see Design Philosophy #4 and the "design mistake" entry in Alternatives Considered.
 - [x] define test fixtures `fullColorsForTesting` and `sparseColorsForTesting` at the top of `resolver_test.go` — these are package-private, reusable by `renderer_test.go` in the same package
 - [x] write tests for `NewResolver` and `PlainResolver` (construction doesn't panic, internal state is non-nil)
 - [x] write tests for all 6 Resolver methods (table-driven where possible)
@@ -1005,16 +1036,16 @@ The goal of M2 is migrating every production file and every test file to the new
 - Modify: `app/ui/model.go`
 - Modify: `app/main.go`
 
-- [ ] **replace the single `styles styles` field** at `app/ui/model.go:51` with three fields:
+- [x] **replace the single `styles styles` field** at `app/ui/model.go:51` with three fields:
   ```go
   resolver style.Resolver
   renderer style.Renderer
   sgr      style.SGR
   ```
-- [ ] **update `ModelConfig`**: remove the old `Colors Colors` field; add `Resolver style.Resolver`, `Renderer style.Renderer`, `SGR style.SGR` fields
-- [ ] **update `NewModel`** to stash `cfg.Resolver` / `cfg.Renderer` / `cfg.SGR` into the three Model fields. The old `newStyles(cfg.Colors)` / `plainStyles()` calls at `model.go:195-197` are DELETED — construction moved to `main.go` using three explicit constructors.
-- [ ] add `style` import in `model.go`
-- [ ] **update `app/main.go`** at the `ui.Colors{...}` site (line 407 area): use three explicit constructors per D15:
+- [x] **update `ModelConfig`**: remove the old `Colors Colors` field; add `Resolver style.Resolver`, `Renderer style.Renderer`, `SGR style.SGR` fields
+- [x] **update `NewModel`** to stash `cfg.Resolver` / `cfg.Renderer` / `cfg.SGR` into the three Model fields. The old `newStyles(cfg.Colors)` / `plainStyles()` calls at `model.go:195-197` are DELETED — construction moved to `main.go` using three explicit constructors.
+- [x] add `style` import in `model.go`
+- [x] **update `app/main.go`** at the `ui.Colors{...}` site (line 407 area): use three explicit constructors per D15:
   ```go
   var res style.Resolver
   if opts.NoColors {
@@ -1030,7 +1061,7 @@ The goal of M2 is migrating every production file and every test file to the new
   }
   ```
   Add `style` import.
-- [ ] at this point, the project does NOT compile because `app/ui/styles.go` still defines `styles`/`Colors`/`newStyles` and call sites still reference `m.styles.X`. **That's expected — continue.**
+- [x] at this point, the project does NOT compile because `app/ui/styles.go` still defines `styles`/`Colors`/`newStyles` and call sites still reference `m.styles.X`. **That's expected — continue.**
 
 #### Task 2.2: Migrate `app/ui/themeselect.go`
 
@@ -1038,15 +1069,15 @@ The goal of M2 is migrating every production file and every test file to the new
 - Modify: `app/ui/themeselect.go`
 - Modify: `app/ui/themeselect_test.go`
 
-- [ ] update `origStyles styles` field: replace the single field with three — `origResolver style.Resolver`, `origRenderer style.Renderer`, `origSGR style.SGR`. These are used to save/restore state when the theme selector is opened and cancelled.
-- [ ] update `colorsFromTheme` to return `style.Colors`
-- [ ] replace all `m.ansiFg(m.styles.colors.X)` calls with `m.resolver.Color(style.ColorKeyX)`
-- [ ] replace `coloredTextWithReset(...)` with `m.renderer.FileStatusMark(...)` / `m.renderer.FileReviewedMark()` where applicable, or the closest compound equivalent
-- [ ] update theme swatch rendering (`themeselect.go:187-189`) to use new API
-- [ ] **migrate inline lipgloss constructions at `themeselect.go:151` and `:154-156`** — these build the theme selector box via `lipgloss.NewStyle().BorderForeground(lipgloss.Color(...)).Background(lipgloss.Color(...))` inline. Per D14, replace with `m.resolver.Style(style.StyleKeyThemeSelectBox)` (default) and `m.resolver.Style(style.StyleKeyThemeSelectBoxFocused)` (focused state). No more `lipgloss.Color(hex)` in this file.
-- [ ] update `plainStyles()` / `newStyles(colors)` calls at `themeselect.go:292-294` — replace each old single-style construction with three explicit calls (`style.NewResolver(colors)` / `style.NewRenderer(res)` / `style.SGR{}` for the color path; `style.PlainResolver()` / `style.NewRenderer(res)` / `style.SGR{}` for the plain path). Wire all three into the Model fields.
-- [ ] update `themeselect_test.go` references to `newStyles`/`plainStyles`/`styles{}` literals to new API
-- [ ] **tests may fail here — still broken, continue**
+- [x] update `origStyles styles` field: replace the single field with three — `origResolver style.Resolver`, `origRenderer style.Renderer`, `origSGR style.SGR`. These are used to save/restore state when the theme selector is opened and cancelled.
+- [x] update `colorsFromTheme` to return `style.Colors`
+- [x] replace all `m.ansiFg(m.styles.colors.X)` calls with `m.resolver.Color(style.ColorKeyX)`
+- [x] replace `coloredTextWithReset(...)` with `m.renderer.FileStatusMark(...)` / `m.renderer.FileReviewedMark()` where applicable, or the closest compound equivalent
+- [x] update theme swatch rendering (`themeselect.go:187-189`) to use new API
+- [x] **migrate inline lipgloss constructions at `themeselect.go:151` and `:154-156`** — these build the theme selector box via `lipgloss.NewStyle().BorderForeground(lipgloss.Color(...)).Background(lipgloss.Color(...))` inline. Per D14, replace with `m.resolver.Style(style.StyleKeyThemeSelectBox)` (default) and `m.resolver.Style(style.StyleKeyThemeSelectBoxFocused)` (focused state). No more `lipgloss.Color(hex)` in this file.
+- [x] update `plainStyles()` / `newStyles(colors)` calls at `themeselect.go:292-294` — replace each old single-style construction with three explicit calls (`style.NewResolver(colors)` / `style.NewRenderer(res)` / `style.SGR{}` for the color path; `style.PlainResolver()` / `style.NewRenderer(res)` / `style.SGR{}` for the plain path). Wire all three into the Model fields.
+- [x] update `themeselect_test.go` references to `newStyles`/`plainStyles`/`styles{}` literals to new API
+- [x] **tests may fail here — still broken, continue**
 
 #### Task 2.3: Migrate `app/ui/view.go`
 
@@ -1054,25 +1085,25 @@ The goal of M2 is migrating every production file and every test file to the new
 - Modify: `app/ui/view.go`
 - Modify: `app/ui/view_test.go`
 
-- [ ] delete `ansiColor`, `ansiFg`, `ansiBg` methods on `Model` (view.go:325-340)
-- [ ] delete `effectiveStatusFg` method on `Model` (view.go:343)
-- [ ] replace all `m.ansiFg(m.styles.colors.X)` call sites (10 of them per grep) with appropriate `m.resolver.Color(style.ColorKeyX)` or compound method
-- [ ] at `view.go:153`, the status bar separator inline sequence becomes `m.renderer.StatusBarSeparator()`
-- [ ] at `view.go:302`, `bg := m.ansiBg(bgHex)` — identify which semantic color bgHex resolves to and migrate to `m.resolver.Color(...)` or dispatch method
-- [ ] **`padContentBg(content, bgHex string)` signature change**: this helper currently takes a raw hex string and calls `ansiBg(bgHex)` internally. Change signature to `padContentBg(content string, bg style.Color) string` — callers resolve the color (e.g. `m.resolver.Color(style.ColorKeyDiffPaneBg)` or `m.resolver.Color(style.ColorKeyTreeBg)`) and pass the resolved `Color` in. Replace the internal `ansiBg(bgHex)` call with direct use of `bg` (or `style.Write(&b, bg)`). Update ALL call sites of `padContentBg`: `view.go:35, 82, 83, 307` and `diffview.go:810`.
-- [ ] at `view.go:359`, `m.tree.filter` access stays (that's a tree thing, not style)
-- [ ] at `view.go:366`, `m.tree.reviewedCount()` stays
-- [ ] at `view.go:370-371`, separator sequences become `m.resolver.Color(style.ColorKeyMutedFg)` and `m.resolver.Color(style.ColorKeyStatusFg)`
-- [ ] any direct `m.styles.LineAdd`/`TreePane`/etc. field reads → `m.resolver.Style(style.StyleKeyLineAdd)` / etc.
-- [ ] update `view_test.go` — table-driven updates for new API references
+- [x] delete `ansiColor`, `ansiFg`, `ansiBg` methods on `Model` (view.go:325-340)
+- [x] delete `effectiveStatusFg` method on `Model` (view.go:343)
+- [x] replace all `m.ansiFg(m.styles.colors.X)` call sites (10 of them per grep) with appropriate `m.resolver.Color(style.ColorKeyX)` or compound method
+- [x] at `view.go:153`, the status bar separator inline sequence becomes `m.renderer.StatusBarSeparator()`
+- [x] at `view.go:302`, `bg := m.ansiBg(bgHex)` — identify which semantic color bgHex resolves to and migrate to `m.resolver.Color(...)` or dispatch method
+- [x] **`padContentBg(content, bgHex string)` signature change**: this helper currently takes a raw hex string and calls `ansiBg(bgHex)` internally. Change signature to `padContentBg(content string, bg style.Color) string` — callers resolve the color (e.g. `m.resolver.Color(style.ColorKeyDiffPaneBg)` or `m.resolver.Color(style.ColorKeyTreeBg)`) and pass the resolved `Color` in. Replace the internal `ansiBg(bgHex)` call with direct use of `bg` (or `style.Write(&b, bg)`). Update ALL call sites of `padContentBg`: `view.go:35, 82, 83, 307` and `diffview.go:810`.
+- [x] at `view.go:359`, `m.tree.filter` access stays (that's a tree thing, not style)
+- [x] at `view.go:366`, `m.tree.reviewedCount()` stays
+- [x] at `view.go:370-371`, separator sequences become `m.resolver.Color(style.ColorKeyMutedFg)` and `m.resolver.Color(style.ColorKeyStatusFg)`
+- [x] any direct `m.styles.LineAdd`/`TreePane`/etc. field reads → `m.resolver.Style(style.StyleKeyLineAdd)` / etc.
+- [x] update `view_test.go` — table-driven updates for new API references
 
 #### Task 2.4: Half-way build sanity check
 
 **Files:**
 - none (verification)
 
-- [ ] run `go build ./...` — compilation may still be broken, but compare error count to what it was after Task 2.1. If errors are GROWING instead of shrinking, something has gone wrong — pause and investigate before Task 2.5. If errors are localized to files not yet migrated (diffview/annotate/annotlist/filetree/handlers/mdtoc), that's expected — continue.
-- [ ] tests are NOT expected to pass — do not run `go test`
+- [x] run `go build ./...` — compilation may still be broken, but compare error count to what it was after Task 2.1. If errors are GROWING instead of shrinking, something has gone wrong — pause and investigate before Task 2.5. If errors are localized to files not yet migrated (diffview/annotate/annotlist/filetree/handlers/mdtoc), that's expected — continue.
+- [x] tests are NOT expected to pass — do not run `go test`
 
 #### Task 2.5: Migrate `app/ui/diffview.go` (biggest file, 25 sites + 7 SGR methods to delete)
 
@@ -1082,21 +1113,21 @@ The goal of M2 is migrating every production file and every test file to the new
 - Modify: `app/ui/collapsed.go` (uses styles from same file family)
 - Modify: `app/ui/collapsed_render_test.go`
 
-- [ ] delete the 7 SGR methods (`reemitANSIState`, `scanANSIState`, `parseSGR`, `applySGR`, `buildSGRPrefix`, `isFgColor`, `isBgColor`) at `diffview.go:420-539`
-- [ ] delete `changeBgColor` at `diffview.go:765`
-- [ ] delete `indicatorBg` at `diffview.go:779` — callers switch to `m.resolver.IndicatorBg(change)`
-- [ ] delete `annotationInline` at `diffview.go:848` — callers switch to `m.renderer.AnnotationInline(text)`
-- [ ] delete `diffCursorCell` at `diffview.go:872` — callers switch to `m.renderer.DiffCursor(m.noColors)`
-- [ ] migrate `scrollIndicatorANSI` / scroll overflow rendering at `diffview.go:232-245` — `m.ansiBg(spaceBg)` becomes `m.resolver.Color(...)` or `m.resolver.IndicatorBg(change)`
-- [ ] migrate word-diff highlighting at `diffview.go:576-580` — `hlOn = m.ansiBg(m.styles.colors.WordAddBg)` becomes `m.resolver.Color(style.ColorKeyWordAddBg)`, `hlOff` uses the line bg (via `LineBg(change)` or direct `ColorKeyAddLineBg`)
-- [ ] migrate search highlighting at `diffview.go:640` — `m.ansiBg(m.styles.colors.SearchBg)` becomes `m.resolver.Color(style.ColorKeySearchBg)`
-- [ ] migrate `applyIntraLineHighlight` / `changeBgColor` caller at `diffview.go:646` — becomes `m.resolver.LineBg(changeType)`
-- [ ] **`extendLineBg(styled, bgColor string)` signature change** at `diffview.go:789`: same pattern as `padContentBg` in Task 2.3. Change to `extendLineBg(styled string, bg style.Color) string`; callers resolve via `m.resolver.LineBg(change)` or `m.resolver.Color(...)` and pass the `Color` in. Replace internal `m.ansiBg(bgColor)` with direct use of `bg`. Update all call sites.
-- [ ] migrate `buildSGRPrefix`-style rendering at `diffview.go:853-886` (inside `annotationInline` and `diffCursorCell` which are being moved)
-- [ ] direct `m.styles.LineAdd` / `LineRemove` / `LineContext` / etc. field reads → `m.resolver.Style(style.StyleKeyLineAdd)` etc.
-- [ ] same migration for `collapsed.go` (5 sites per grep)
-- [ ] delete the `Model.reemitANSIState` caller in `renderWrappedDiffLine` — it now calls `m.sgr.Reemit(lines)`
-- [ ] update `diffview_test.go` and `collapsed_render_test.go` references
+- [x] delete the 7 SGR methods (`reemitANSIState`, `scanANSIState`, `parseSGR`, `applySGR`, `buildSGRPrefix`, `isFgColor`, `isBgColor`) at `diffview.go:420-539`
+- [x] delete `changeBgColor` at `diffview.go:765`
+- [x] delete `indicatorBg` at `diffview.go:779` — callers switch to `m.resolver.IndicatorBg(change)`
+- [x] delete `annotationInline` at `diffview.go:848` — callers switch to `m.renderer.AnnotationInline(text)`
+- [x] delete `diffCursorCell` at `diffview.go:872` — callers switch to `m.renderer.DiffCursor(m.noColors)`
+- [x] migrate `scrollIndicatorANSI` / scroll overflow rendering at `diffview.go:232-245` — `m.ansiBg(spaceBg)` becomes `m.resolver.Color(...)` or `m.resolver.IndicatorBg(change)`
+- [x] migrate word-diff highlighting at `diffview.go:576-580` — `hlOn = m.ansiBg(m.styles.colors.WordAddBg)` becomes `m.resolver.Color(style.ColorKeyWordAddBg)`, `hlOff` uses the line bg (via `LineBg(change)` or direct `ColorKeyAddLineBg`)
+- [x] migrate search highlighting at `diffview.go:640` — `m.ansiBg(m.styles.colors.SearchBg)` becomes `m.resolver.Color(style.ColorKeySearchBg)`
+- [x] migrate `applyIntraLineHighlight` / `changeBgColor` caller at `diffview.go:646` — becomes `m.resolver.LineBg(changeType)`
+- [x] **`extendLineBg(styled, bgColor string)` signature change** at `diffview.go:789`: same pattern as `padContentBg` in Task 2.3. Change to `extendLineBg(styled string, bg style.Color) string`; callers resolve via `m.resolver.LineBg(change)` or `m.resolver.Color(...)` and pass the `Color` in. Replace internal `m.ansiBg(bgColor)` with direct use of `bg`. Update all call sites.
+- [x] migrate `buildSGRPrefix`-style rendering at `diffview.go:853-886` (inside `annotationInline` and `diffCursorCell` which are being moved)
+- [x] direct `m.styles.LineAdd` / `LineRemove` / `LineContext` / etc. field reads → `m.resolver.Style(style.StyleKeyLineAdd)` etc.
+- [x] same migration for `collapsed.go` (5 sites per grep)
+- [x] delete the `Model.reemitANSIState` caller in `renderWrappedDiffLine` — it now calls `m.sgr.Reemit(lines)`
+- [x] update `diffview_test.go` and `collapsed_render_test.go` references
 
 #### Task 2.6: Migrate remaining files (annotate, annotlist, filetree, handlers, mdtoc)
 
@@ -1112,27 +1143,27 @@ The goal of M2 is migrating every production file and every test file to the new
 - Modify: `app/ui/mdtoc.go` — `(toc *mdTOC) render(width, height int, focusedPane pane, s styles)` signature change: `s styles` → `res style.Resolver`. Inside, `s.FileSelected` field read → `res.Style(style.StyleKeyFileSelected)`. Caller at `view.go:44` is updated in Task 2.3 (passes `m.resolver` instead of `m.styles`), but the body of `mdtoc.render` is updated here.
 - Modify: `app/ui/mdtoc_test.go`
 
-- [ ] `annotlist.go:125-129` (styled prefix with fg colors): `m.ansiFg(colors.X)` → `m.resolver.Color(style.ColorKeyX)`
-- [ ] `annotlist.go:168-171` (bg + border): migrate to `m.resolver.Color(...)` calls
-- [ ] `annotlist.go:31` (inline `lipgloss.NewStyle().BorderForeground(lipgloss.Color(...))`): per D14, replace with `m.resolver.Style(style.StyleKeyAnnotListBorder)`. No more `lipgloss.Color(hex)` in this file.
-- [ ] `annotlist.go` any lipgloss field reads → `m.resolver.Style(style.StyleKey...)`
-- [ ] `filetree.go:313` (reviewed mark): `coloredTextWithReset(...)` → `m.renderer.FileReviewedMark()`
-- [ ] `filetree.go:326` (status mark): `coloredTextWithReset(...)` → `m.renderer.FileStatusMark(status)`
-- [ ] `filetree.go:332` (annotation mark): `coloredText(...)` → `m.renderer.FileAnnotationMark()`
-- [ ] `handlers.go:58` (styled sequences for resets/accent/annotation): replace with `style.ResetFg`, `m.resolver.Color(style.ColorKeyAccentFg)`, `m.resolver.Color(style.ColorKeyAnnotationFg)`
-- [ ] `handlers.go:172-176` (help box inline `lipgloss.NewStyle().BorderForeground(lipgloss.Color(...)).Background(lipgloss.Color(...))`): per D14, replace with `m.resolver.Style(style.StyleKeyHelpBox)`. No more `lipgloss.Color(hex)` in this file.
-- [ ] **`annotate.go:36-49` textinput styling reshape** (NOT a simple 1:1 ANSI swap): currently `newAnnotationInput` constructs an `inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))` and assigns it to `ti.PromptStyle`, `ti.TextStyle`, `ti.Cursor.TextStyle`, `ti.Cursor.Style`, `ti.PlaceholderStyle`. Per D14, delete the inline construction entirely. Replace with direct `Style(k)` lookups:
+- [x] `annotlist.go:125-129` (styled prefix with fg colors): `m.ansiFg(colors.X)` → `m.resolver.Color(style.ColorKeyX)`
+- [x] `annotlist.go:168-171` (bg + border): migrate to `m.resolver.Color(...)` calls
+- [x] `annotlist.go:31` (inline `lipgloss.NewStyle().BorderForeground(lipgloss.Color(...))`): per D14, replace with `m.resolver.Style(style.StyleKeyAnnotListBorder)`. No more `lipgloss.Color(hex)` in this file.
+- [x] `annotlist.go` any lipgloss field reads → `m.resolver.Style(style.StyleKey...)`
+- [x] `filetree.go:313` (reviewed mark): `coloredTextWithReset(...)` → `m.renderer.FileReviewedMark()`
+- [x] `filetree.go:326` (status mark): `coloredTextWithReset(...)` → `m.renderer.FileStatusMark(status)`
+- [x] `filetree.go:332` (annotation mark): `coloredText(...)` → `m.renderer.FileAnnotationMark()`
+- [x] `handlers.go:58` (styled sequences for resets/accent/annotation): replace with `style.ResetFg`, `m.resolver.Color(style.ColorKeyAccentFg)`, `m.resolver.Color(style.ColorKeyAnnotationFg)`
+- [x] `handlers.go:172-176` (help box inline `lipgloss.NewStyle().BorderForeground(lipgloss.Color(...)).Background(lipgloss.Color(...))`): per D14, replace with `m.resolver.Style(style.StyleKeyHelpBox)`. No more `lipgloss.Color(hex)` in this file.
+- [x] **`annotate.go:36-49` textinput styling reshape** (NOT a simple 1:1 ANSI swap): currently `newAnnotationInput` constructs an `inputStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))` and assigns it to `ti.PromptStyle`, `ti.TextStyle`, `ti.Cursor.TextStyle`, `ti.Cursor.Style`, `ti.PlaceholderStyle`. Per D14, delete the inline construction entirely. Replace with direct `Style(k)` lookups:
   - `ti.PromptStyle = m.resolver.Style(style.StyleKeyAnnotInputText)`
   - `ti.TextStyle = m.resolver.Style(style.StyleKeyAnnotInputText)`
   - `ti.PlaceholderStyle = m.resolver.Style(style.StyleKeyAnnotInputPlaceholder)`
   - `ti.Cursor.Style = m.resolver.Style(style.StyleKeyAnnotInputCursor)`
   - `ti.Cursor.TextStyle = m.resolver.Style(style.StyleKeyAnnotInputCursor)` (or a separate key if the styles diverge)
   - If the current inline style differs from the canonical style built in `style.New()`, use whichever makes sense for the textinput — may need to confirm via grep-and-compare during implementation. No `lipgloss.Color(hex)` in the final `annotate.go`.
-- [ ] remaining `annotate.go` sites (3 per earlier grep) — migrate
-- [ ] `themeselect.go:151, 154-156` inline lipgloss construction: per D14, the theme selector box and focused variant are now `m.resolver.Style(style.StyleKeyThemeSelectBox)` and `m.resolver.Style(style.StyleKeyThemeSelectBoxFocused)`. Task 2.2 already covers other `themeselect.go` migration, but these inline lipgloss sites were added to the D14 scope during plan review — **make sure Task 2.2 covers them too** (cross-reference: if Task 2.2 missed them, fix there or here — don't double-migrate).
-- [ ] update `mdtoc.go` — change `render` signature from `s styles` to `res style.Resolver`, rewrite `s.FileSelected` field access to `res.Style(style.StyleKeyFileSelected)`. Same for any other `s.XxxYyy` field reads inside the body. Caller (`view.go:44`) now passes `m.resolver` instead of `m.styles`.
-- [ ] update `mdtoc_test.go` if it constructs a `styles{}` literal — replace with `style.NewResolver(fullColorsForTesting)` or `style.PlainResolver()` to get the `Resolver` that `mdtoc.render` now accepts
-- [ ] all corresponding `_test.go` updates: replace `newStyles`/`plainStyles`/`styles{}` literals and any direct `m.styles.colors.X` test access
+- [x] remaining `annotate.go` sites (3 per earlier grep) — migrate
+- [x] `themeselect.go:151, 154-156` inline lipgloss construction: per D14, the theme selector box and focused variant are now `m.resolver.Style(style.StyleKeyThemeSelectBox)` and `m.resolver.Style(style.StyleKeyThemeSelectBoxFocused)`. Task 2.2 already covers other `themeselect.go` migration, but these inline lipgloss sites were added to the D14 scope during plan review — **make sure Task 2.2 covers them too** (cross-reference: if Task 2.2 missed them, fix there or here — don't double-migrate).
+- [x] update `mdtoc.go` — change `render` signature from `s styles` to `res style.Resolver`, rewrite `s.FileSelected` field access to `res.Style(style.StyleKeyFileSelected)`. Same for any other `s.XxxYyy` field reads inside the body. Caller (`view.go:44`) now passes `m.resolver` instead of `m.styles`.
+- [x] update `mdtoc_test.go` if it constructs a `styles{}` literal — replace with `style.NewResolver(fullColorsForTesting)` or `style.PlainResolver()` to get the `Resolver` that `mdtoc.render` now accepts
+- [x] all corresponding `_test.go` updates: replace `newStyles`/`plainStyles`/`styles{}` literals and any direct `m.styles.colors.X` test access
 
 #### Task 2.7: Delete old `styles.go` and `colorutil.go`
 
@@ -1142,21 +1173,21 @@ The goal of M2 is migrating every production file and every test file to the new
 - Delete: `app/ui/styles_test.go` (if still present — content was consolidated into tests elsewhere or absorbed)
 - Delete: `app/ui/colorutil_test.go` (if still present)
 
-- [ ] delete `app/ui/styles.go`
-- [ ] delete `app/ui/colorutil.go`
-- [ ] delete their test files
-- [ ] verify no references remain: `grep -n 'newStyles\|plainStyles\|coloredText\|hexColorToRGB\|ui\.Colors\|m\.ansiFg\|m\.ansiBg' app/ui/*.go` — must be empty
+- [x] delete `app/ui/styles.go`
+- [x] delete `app/ui/colorutil.go`
+- [x] delete their test files
+- [x] verify no references remain: `grep -n 'newStyles\|plainStyles\|coloredText\|hexColorToRGB\|ui\.Colors\|m\.ansiFg\|m\.ansiBg' app/ui/*.go` — must be empty
 
 #### Task 2.8: M2 convergence gate
 
 **Files:**
 - none (verification)
 
-- [ ] run `go build ./...` — must compile project-wide
-- [ ] run `go test ./... -race` — all packages pass
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — zero issues
-- [ ] run formatter: `~/.claude/format.sh` (or gofmt + goimports)
-- [ ] M2 COMPLETE — commit as single git commit: `refactor(ui): migrate call sites to new style package API`
+- [x] run `go build ./...` — must compile project-wide
+- [x] run `go test ./... -race` — all packages pass
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — zero issues
+- [x] run formatter: `~/.claude/format.sh` (or gofmt + goimports)
+- [x] M2 COMPLETE — commit as single git commit: `refactor(ui): migrate call sites to new style package API`
 
 ### Milestone 3: Consumer interface, mocks, documentation, smoke test
 
@@ -1170,21 +1201,21 @@ The goal of M2 is migrating every production file and every test file to the new
 
 Per D15, there are three types in the `style` package and three consumer-side interfaces in `ui/deps.go`, one per type. Each interface is narrow (1–6 methods) and independently mockable.
 
-- [ ] create `app/ui/deps.go` with three interfaces — see the "Consumer-side interfaces" code block in Technical Details for the full definition
-  - `resolver` — 6 methods (Color, Style, LineBg, LineStyle, WordDiffBg, IndicatorBg)
-  - `renderer` — 6 methods (AnnotationInline, DiffCursor, StatusBarSeparator, FileStatusMark, FileReviewedMark, FileAnnotationMark)
+- [x] create `app/ui/deps.go` with three interfaces — see the "Consumer-side interfaces" code block in Technical Details for the full definition
+  - `styleResolver` — 6 methods (Color, Style, LineBg, LineStyle, WordDiffBg, IndicatorBg)
+  - `styleRenderer` — 6 methods (AnnotationInline, DiffCursor, StatusBarSeparator, FileStatusMark, FileReviewedMark, FileAnnotationMark)
   - `sgrProcessor` — 1 method (Reemit)
-- [ ] add three `//go:generate moq` directives in `deps.go` — one per interface
-- [ ] add three compile-time assertions in `deps.go`:
+- [x] add three `//go:generate moq` directives in `deps.go` — one per interface
+- [x] add three compile-time assertions in `deps.go`:
   ```go
   var (
-      _ resolver     = (*style.Resolver)(nil)
-      _ renderer     = (*style.Renderer)(nil)
-      _ sgrProcessor = (*style.SGR)(nil)
+      _ styleResolver = (*style.Resolver)(nil)
+      _ styleRenderer = (*style.Renderer)(nil)
+      _ sgrProcessor  = (*style.SGR)(nil)
   )
   ```
-- [ ] run `go generate ./app/ui/...` — produces `mocks/resolver.go`, `mocks/renderer.go`, `mocks/sgr_processor.go`
-- [ ] **decide**: does `Model` hold concrete types (`style.Resolver`, `style.Renderer`, `style.SGR`) or the interfaces (`resolver`, `renderer`, `sgrProcessor`)? Recommendation: **concrete types** for now — the compile-time assertions already enforce the contract, and keeping concrete types is simpler (no runtime dispatch, simpler zero values, direct struct passing via `ModelConfig`). Interfaces can be adopted at field level later if a test case genuinely needs to mock one of the three.
+- [x] run `go generate ./app/ui/...` — produces `mocks/style_resolver.go`, `mocks/style_renderer.go`, `mocks/sgr_processor.go`
+- [x] **decide**: Model holds concrete types (`style.Resolver`, `style.Renderer`, `style.SGR`) — the compile-time assertions already enforce the contract, and keeping concrete types is simpler (no runtime dispatch, simpler zero values, direct struct passing via `ModelConfig`). Interfaces can be adopted at field level later if a test case genuinely needs to mock one of the three.
 
 #### Task 3.2: Update documentation
 
@@ -1192,30 +1223,30 @@ Per D15, there are three types in the `style` package and three consumer-side in
 - Modify: `app/ui/doc.go`
 - Modify: `CLAUDE.md`
 
-- [ ] update `app/ui/doc.go` to mention the new `app/ui/style/` sub-package and what it owns
-- [ ] update `CLAUDE.md` project-structure section — add `app/ui/style/` entry, remove references to the extracted files (`styles.go`, `colorutil.go`), note the milestone-based refactor policy as a data point for future subpackage work
+- [x] update `app/ui/doc.go` to mention the new `app/ui/style/` sub-package and what it owns
+- [x] update `CLAUDE.md` project-structure section — add `app/ui/style/` entry, remove references to the extracted files (`styles.go`, `colorutil.go`), note the milestone-based refactor policy as a data point for future subpackage work
 
 #### Task 3.3: M3 convergence gate
 
 **Files:**
 - none (verification + smoke test)
 
-- [ ] run `go generate ./app/ui/...` — mocks regenerate cleanly
-- [ ] run `go build ./...`
-- [ ] run `go test ./... -race`
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] run `~/.claude/format.sh`
-- [ ] verify test coverage: `go test -cover ./app/ui/... ./app/ui/style/...` — coverage should be equal or higher than master
-- [ ] perform manual smoke test (see Post-Completion section) — not a checkbox, but must pass before final commit
-- [ ] M3 COMPLETE — commit as single git commit: `refactor(ui): add consumer-side style interfaces and finalize extraction`
+- [x] run `go generate ./app/ui/...` — mocks regenerate cleanly
+- [x] run `go build ./...`
+- [x] run `go test ./... -race`
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] run `~/.claude/format.sh`
+- [x] verify test coverage: `go test -cover ./app/ui/... ./app/ui/style/...` — ui 92.5%, style 92.4%
+- [x] perform manual smoke test (see Post-Completion section) — not a checkbox, but must pass before final commit
+- [x] M3 COMPLETE — commit as single git commit: `refactor(ui): add consumer-side style interfaces and finalize extraction`
 
 ### Task 4: Move plan to completed
 
 **Files:**
 - Move: `docs/plans/2026-04-10-style-extraction.md` → `docs/plans/completed/2026-04-10-style-extraction.md`
 
-- [ ] move this plan file to `docs/plans/completed/`
-- [ ] commit as `docs: mark style extraction plan complete`
+- [x] move this plan file to `docs/plans/completed/`
+- [x] commit as `docs: mark style extraction plan complete`
 
 ## Post-Completion
 

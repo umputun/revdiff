@@ -36,12 +36,18 @@ var _colorKeyParseMap = map[string]ColorKey{
 	"mutedfg":      ColorKeyMutedFg,
 	"annotationfg": ColorKeyAnnotationFg,
 	"statusfg":     ColorKeyStatusFg,
+	"treepanebg":   ColorKeyTreePaneBg,
 	"diffpanebg":   ColorKeyDiffPaneBg,
 	"addlinebg":    ColorKeyAddLineBg,
 	"removelinebg": ColorKeyRemoveLineBg,
+	"modifylinebg": ColorKeyModifyLineBg,
 	"wordaddbg":    ColorKeyWordAddBg,
 	"wordremovebg": ColorKeyWordRemoveBg,
 	"searchbg":     ColorKeySearchBg,
+	"addlinefg":    ColorKeyAddLineFg,
+	"removelinefg": ColorKeyRemoveLineFg,
+	"normalfg":     ColorKeyNormalFg,
+	"selectedfg":   ColorKeySelectedFg,
 }
 
 // ParseColorKey converts string to colorKey enum value.
@@ -71,12 +77,18 @@ var (
 	ColorKeyAnnotationFg = ColorKey{name: "AnnotationFg", value: 3}
 	// internal fallback: StatusFg || MutedFg
 	ColorKeyStatusFg     = ColorKey{name: "StatusFg", value: 4}
-	ColorKeyDiffPaneBg   = ColorKey{name: "DiffPaneBg", value: 5}
-	ColorKeyAddLineBg    = ColorKey{name: "AddLineBg", value: 6}
-	ColorKeyRemoveLineBg = ColorKey{name: "RemoveLineBg", value: 7}
-	ColorKeyWordAddBg    = ColorKey{name: "WordAddBg", value: 8}
-	ColorKeyWordRemoveBg = ColorKey{name: "WordRemoveBg", value: 9}
-	ColorKeySearchBg     = ColorKey{name: "SearchBg", value: 10}
+	ColorKeyTreePaneBg   = ColorKey{name: "TreePaneBg", value: 5}
+	ColorKeyDiffPaneBg   = ColorKey{name: "DiffPaneBg", value: 6}
+	ColorKeyAddLineBg    = ColorKey{name: "AddLineBg", value: 7}
+	ColorKeyRemoveLineBg = ColorKey{name: "RemoveLineBg", value: 8}
+	ColorKeyModifyLineBg = ColorKey{name: "ModifyLineBg", value: 9}
+	ColorKeyWordAddBg    = ColorKey{name: "WordAddBg", value: 10}
+	ColorKeyWordRemoveBg = ColorKey{name: "WordRemoveBg", value: 11}
+	ColorKeySearchBg     = ColorKey{name: "SearchBg", value: 12}
+	ColorKeyAddLineFg    = ColorKey{name: "AddLineFg", value: 13}
+	ColorKeyRemoveLineFg = ColorKey{name: "RemoveLineFg", value: 14}
+	ColorKeyNormalFg     = ColorKey{name: "NormalFg", value: 15}
+	ColorKeySelectedFg   = ColorKey{name: "SelectedFg", value: 16}
 )
 
 // ColorKeyValues contains all possible enum values
@@ -86,12 +98,18 @@ var ColorKeyValues = []ColorKey{
 	ColorKeyMutedFg,
 	ColorKeyAnnotationFg,
 	ColorKeyStatusFg,
+	ColorKeyTreePaneBg,
 	ColorKeyDiffPaneBg,
 	ColorKeyAddLineBg,
 	ColorKeyRemoveLineBg,
+	ColorKeyModifyLineBg,
 	ColorKeyWordAddBg,
 	ColorKeyWordRemoveBg,
 	ColorKeySearchBg,
+	ColorKeyAddLineFg,
+	ColorKeyRemoveLineFg,
+	ColorKeyNormalFg,
+	ColorKeySelectedFg,
 }
 
 // ColorKeyNames contains all possible enum names
@@ -101,12 +119,18 @@ var ColorKeyNames = []string{
 	"MutedFg",
 	"AnnotationFg",
 	"StatusFg",
+	"TreePaneBg",
 	"DiffPaneBg",
 	"AddLineBg",
 	"RemoveLineBg",
+	"ModifyLineBg",
 	"WordAddBg",
 	"WordRemoveBg",
 	"SearchBg",
+	"AddLineFg",
+	"RemoveLineFg",
+	"NormalFg",
+	"SelectedFg",
 }
 
 // ColorKeyIter returns a function compatible with Go 1.23's range-over-func syntax.
@@ -140,17 +164,29 @@ var _ = func() bool {
 	var _ colorKey = colorKeyAnnotationFg
 	// This avoids "defined but not used" linter error for colorKeyStatusFg
 	var _ colorKey = colorKeyStatusFg
+	// This avoids "defined but not used" linter error for colorKeyTreePaneBg
+	var _ colorKey = colorKeyTreePaneBg
 	// This avoids "defined but not used" linter error for colorKeyDiffPaneBg
 	var _ colorKey = colorKeyDiffPaneBg
 	// This avoids "defined but not used" linter error for colorKeyAddLineBg
 	var _ colorKey = colorKeyAddLineBg
 	// This avoids "defined but not used" linter error for colorKeyRemoveLineBg
 	var _ colorKey = colorKeyRemoveLineBg
+	// This avoids "defined but not used" linter error for colorKeyModifyLineBg
+	var _ colorKey = colorKeyModifyLineBg
 	// This avoids "defined but not used" linter error for colorKeyWordAddBg
 	var _ colorKey = colorKeyWordAddBg
 	// This avoids "defined but not used" linter error for colorKeyWordRemoveBg
 	var _ colorKey = colorKeyWordRemoveBg
 	// This avoids "defined but not used" linter error for colorKeySearchBg
 	var _ colorKey = colorKeySearchBg
+	// This avoids "defined but not used" linter error for colorKeyAddLineFg
+	var _ colorKey = colorKeyAddLineFg
+	// This avoids "defined but not used" linter error for colorKeyRemoveLineFg
+	var _ colorKey = colorKeyRemoveLineFg
+	// This avoids "defined but not used" linter error for colorKeyNormalFg
+	var _ colorKey = colorKeyNormalFg
+	// This avoids "defined but not used" linter error for colorKeySelectedFg
+	var _ colorKey = colorKeySelectedFg
 	return true
 }()

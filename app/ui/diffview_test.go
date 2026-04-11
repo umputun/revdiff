@@ -13,6 +13,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_LineNumGutter(t *testing.T) {
@@ -143,6 +144,8 @@ func TestModel_RenderDiffLines(t *testing.T) {
 }
 
 func TestModel_ExtendLineBg(t *testing.T) {
+	bg := style.Color("\033[48;2;46;52;64m") // pre-resolved ANSI bg sequence
+
 	t.Run("empty bgColor is no-op", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.width = 80
@@ -152,7 +155,7 @@ func TestModel_ExtendLineBg(t *testing.T) {
 	t.Run("pads to content width", func(t *testing.T) {
 		m := testModel(nil, nil)
 		m.width = 80
-		result := m.extendLineBg("hi", "#2e3440")
+		result := m.extendLineBg("hi", bg)
 		assert.Contains(t, result, "\033[48;2;46;52;64m")
 		assert.Contains(t, result, "\033[49m")
 		w := lipgloss.Width(result)
@@ -164,9 +167,9 @@ func TestModel_ExtendLineBg(t *testing.T) {
 		m.width = 80
 		m.lineNumbers = true
 		m.lineNumWidth = 3
-		resultWithNums := m.extendLineBg("hi", "#2e3440")
+		resultWithNums := m.extendLineBg("hi", bg)
 		m.lineNumbers = false
-		resultWithout := m.extendLineBg("hi", "#2e3440")
+		resultWithout := m.extendLineBg("hi", bg)
 		assert.Less(t, lipgloss.Width(resultWithNums), lipgloss.Width(resultWithout), "line numbers should reduce target width")
 	})
 }
@@ -235,17 +238,21 @@ func TestModel_ApplyHorizontalScrollTruncatesLongLines(t *testing.T) {
 }
 
 func TestModel_ExtendLineBgAfterScrollFillsWidth(t *testing.T) {
+	bg := style.Color("\033[48;2;46;52;64m")
+	res := style.PlainResolver()
 	m := testModel(nil, nil)
 	m.width = 80
 	m.singleFile = true
 	m.treeWidth = 0
 	m.scrollX = 10
-	m.styles = plainStyles()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
 
 	// simulate a styled add line longer than content width
 	longContent := strings.Repeat("x", 200)
-	scrolled := m.applyHorizontalScroll(longContent, "#2e3440")
-	extended := m.extendLineBg(scrolled, "#2e3440")
+	scrolled := m.applyHorizontalScroll(longContent, bg)
+	extended := m.extendLineBg(scrolled, bg)
 
 	// scrollX > 0 and overflow on both sides: right indicator extends by 1 col into pane padding
 	expectedWidth := m.diffContentWidth() - m.gutterExtra() + 1
@@ -254,17 +261,21 @@ func TestModel_ExtendLineBgAfterScrollFillsWidth(t *testing.T) {
 }
 
 func TestModel_ExtendLineBgWithoutOverflowFillsWidth(t *testing.T) {
+	bg := style.Color("\033[48;2;46;52;64m")
+	res := style.PlainResolver()
 	m := testModel(nil, nil)
 	m.width = 80
 	m.singleFile = true
 	m.treeWidth = 0
 	m.scrollX = 0
-	m.styles = plainStyles()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
 
 	// short content with no overflow gets padded by extendLineBg to full cut width (no indicator extension)
 	shortContent := "hello"
-	scrolled := m.applyHorizontalScroll(shortContent, "#2e3440")
-	extended := m.extendLineBg(scrolled, "#2e3440")
+	scrolled := m.applyHorizontalScroll(shortContent, bg)
+	extended := m.extendLineBg(scrolled, bg)
 
 	expectedWidth := m.diffContentWidth() - m.gutterExtra()
 	resultWidth := lipgloss.Width(extended)
@@ -280,7 +291,7 @@ func TestModel_ApplyHorizontalScrollShowsRightIndicator(t *testing.T) {
 
 	// content wider than viewport should get a right-pointing indicator with a leading space
 	longContent := strings.Repeat("x", 200)
-	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	result := m.applyHorizontalScroll(longContent, style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.Contains(t, plain, "»", "right indicator should appear when content overflows right")
 	assert.NotContains(t, plain, "«", "left indicator should not appear when scrollX is 0")
@@ -301,7 +312,7 @@ func TestModel_ApplyHorizontalScrollShowsBothIndicators(t *testing.T) {
 
 	// scrolling right with content longer than scrollX+cutWidth triggers both overflows
 	longContent := strings.Repeat("x", 200)
-	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	result := m.applyHorizontalScroll(longContent, style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.Contains(t, plain, "«", "left indicator should appear when scrolled right with hidden content on the left")
 	assert.Contains(t, plain, "»", "right indicator should still appear when content also overflows right")
@@ -319,7 +330,7 @@ func TestModel_ApplyHorizontalScrollLeftOnlyOverflow(t *testing.T) {
 	// left-only path: total visible width should equal cutWidth (no +1 extension)
 	cutWidth := m.diffContentWidth() - m.gutterExtra()
 	content := strings.Repeat("x", m.scrollX+cutWidth)
-	result := m.applyHorizontalScroll(content, "#2e3440")
+	result := m.applyHorizontalScroll(content, style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.Contains(t, plain, "«", "left indicator should appear when scrolled past hidden content on the left")
 	assert.NotContains(t, plain, "»", "right indicator should not appear when content fits within viewport end")
@@ -341,7 +352,7 @@ func TestModel_ApplyHorizontalScrollWithLineNumberGutter(t *testing.T) {
 	// with gutters enabled, cutWidth = diffContentWidth - gutterExtra = 76 - 8 = 68
 	// right-overflow extends by 1 col into pane padding: total = cutWidth + 1 = 69
 	longContent := strings.Repeat("x", 200)
-	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	result := m.applyHorizontalScroll(longContent, style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.Contains(t, plain, "»", "right indicator should appear with gutters enabled")
 
@@ -364,7 +375,7 @@ func TestModel_ApplyHorizontalScrollNarrowViewportFallback(t *testing.T) {
 	require.Equal(t, 2, m.diffContentWidth()-m.gutterExtra(), "test precondition: cutWidth=2")
 	longContent := strings.Repeat("x", 200)
 	assert.NotPanics(t, func() {
-		result := m.applyHorizontalScroll(longContent, "#2e3440")
+		result := m.applyHorizontalScroll(longContent, style.Color("\033[48;2;46;52;64m"))
 		plain := ansi.Strip(result)
 		// fallback path returns plain cut; no indicators present
 		assert.NotContains(t, plain, "«", "narrow viewport fallback should drop indicators")
@@ -380,7 +391,7 @@ func TestModel_ApplyHorizontalScrollNoIndicatorForShortLines(t *testing.T) {
 	m.scrollX = 0
 
 	// short content that fits entirely within the viewport should have no indicators
-	result := m.applyHorizontalScroll("short", "#2e3440")
+	result := m.applyHorizontalScroll("short", style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.NotContains(t, plain, "»", "no right indicator for short lines")
 	assert.NotContains(t, plain, "«", "no left indicator for short lines")
@@ -394,43 +405,50 @@ func TestModel_ApplyHorizontalScrollNoLeftIndicatorWhenScrolledPastContent(t *te
 	m.scrollX = 100
 
 	// content shorter than scrollX should not show a left indicator (nothing to the left is visible)
-	result := m.applyHorizontalScroll("short", "#2e3440")
+	result := m.applyHorizontalScroll("short", style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.NotContains(t, plain, "«", "left indicator should not appear when content ends before viewport start")
 	assert.NotContains(t, plain, "»", "right indicator should not appear when content ends before viewport")
 }
 
 func TestModel_ApplyHorizontalScrollRightGlyphAlwaysOnDiffBg(t *testing.T) {
+	colors := style.Colors{DiffBg: "#112233", Muted: "#999999"}
+	res := style.NewResolver(colors)
 	m := testModel(nil, nil)
 	m.width = 80
 	m.singleFile = true
 	m.treeWidth = 0
 	m.scrollX = 0
-	m.styles.colors.DiffBg = "#112233"
-	m.styles.colors.Muted = "#999999"
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
 
 	// right indicator: leading space carries the line bg so the colored content area extends
 	// naturally, but the » glyph itself is always drawn on DiffBg so it reads as pane chrome.
 	// passing a non-empty line bg should produce both the line bg (for the separator space) and
 	// a DiffBg ANSI sequence (for the glyph) in the output, and these must differ.
+	lineBg := style.Color("\033[48;2;170;187;204m") // pre-resolved ANSI for #aabbcc
 	longContent := strings.Repeat("x", 200)
-	result := m.applyHorizontalScroll(longContent, "#aabbcc")
+	result := m.applyHorizontalScroll(longContent, lineBg)
 	assert.Contains(t, ansi.Strip(result), "»", "right indicator glyph should be present")
-	assert.Contains(t, result, m.ansiBg("#aabbcc"), "leading space should carry the passed line bg")
-	assert.Contains(t, result, m.ansiBg("#112233"), "right glyph should be drawn on DiffBg regardless of line bg")
+	assert.Contains(t, result, string(lineBg), "leading space should carry the passed line bg")
+	assert.Contains(t, result, "\033[48;2;17;34;51m", "right glyph should be drawn on DiffBg regardless of line bg")
 
 	// exactly two \033[49m bg resets: one after the space, one after the glyph
 	assert.Equal(t, 2, strings.Count(result, "\033[49m"), "one bg reset after the space and one after the glyph")
 }
 
 func TestModel_ApplyHorizontalScrollEmptyLineBgSkipsSpaceBg(t *testing.T) {
+	colors := style.Colors{DiffBg: "#112233", Muted: "#999999"}
+	res := style.NewResolver(colors)
 	m := testModel(nil, nil)
 	m.width = 80
 	m.singleFile = true
 	m.treeWidth = 0
 	m.scrollX = 0
-	m.styles.colors.DiffBg = "#112233"
-	m.styles.colors.Muted = "#999999"
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
 
 	// empty line bg (defensive test; production callers never pass ""): the leading space must
 	// not emit a bg setter so the caller's inherited bg is preserved for that cell. the glyph
@@ -438,7 +456,7 @@ func TestModel_ApplyHorizontalScrollEmptyLineBgSkipsSpaceBg(t *testing.T) {
 	longContent := strings.Repeat("x", 200)
 	result := m.applyHorizontalScroll(longContent, "")
 	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still render with empty line bg")
-	assert.Contains(t, result, m.ansiBg("#112233"), "glyph should still be drawn on DiffBg")
+	assert.Contains(t, result, "\033[48;2;17;34;51m", "glyph should still be drawn on DiffBg")
 	assert.Equal(t, 1, strings.Count(result, "\033[49m"), "empty line bg should skip the space-bg reset but keep the glyph-bg reset")
 }
 
@@ -451,17 +469,9 @@ func TestModel_ApplyHorizontalScrollIndicatorInNoColorsMode(t *testing.T) {
 	m.noColors = true
 
 	longContent := strings.Repeat("x", 200)
-	result := m.applyHorizontalScroll(longContent, "#2e3440")
+	result := m.applyHorizontalScroll(longContent, style.Color("\033[48;2;46;52;64m"))
 	assert.Contains(t, result, "\033[7m", "no-colors mode should use reverse video for indicator")
 	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still be visible in no-colors mode")
-}
-
-func TestModel_ChangeBgColor(t *testing.T) {
-	m := testModel(nil, nil)
-	assert.Equal(t, m.styles.colors.AddBg, m.changeBgColor(diff.ChangeAdd))
-	assert.Equal(t, m.styles.colors.RemoveBg, m.changeBgColor(diff.ChangeRemove))
-	assert.Empty(t, m.changeBgColor(diff.ChangeContext))
-	assert.Empty(t, m.changeBgColor(diff.ChangeDivider))
 }
 
 func TestModel_PlainStyles(t *testing.T) {
@@ -492,8 +502,11 @@ func TestModel_TabWidthDefault(t *testing.T) {
 }
 
 func TestModel_StyleDiffContent(t *testing.T) {
+	res := style.PlainResolver()
 	m := testModel(nil, nil)
-	m.styles = plainStyles()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
 
 	t.Run("add line", func(t *testing.T) {
 		result := m.styleDiffContent(diff.ChangeAdd, " + ", "content", false, false)
@@ -655,8 +668,11 @@ func TestModel_WrapContent_ANSIStatePreservation(t *testing.T) {
 
 func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 	t.Run("paired add/remove lines get bg markers", func(t *testing.T) {
+		res := style.NewResolver(style.Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"})
 		m := testModel(nil, nil)
-		m.styles = newStyles(Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"})
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.wordDiff = true
 		m.diffLines = []diff.DiffLine{
 			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
@@ -677,8 +693,11 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 	})
 
 	t.Run("pure add block produces no markers", func(t *testing.T) {
+		res := style.NewResolver(style.Colors{AddBg: "#1a3320", WordAddBg: "#2d5a3a"})
 		m := testModel(nil, nil)
-		m.styles = newStyles(Colors{AddBg: "#1a3320", WordAddBg: "#2d5a3a"})
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.wordDiff = true
 		m.diffLines = []diff.DiffLine{
 			{NewNum: 1, Content: "new line one", ChangeType: diff.ChangeAdd},
@@ -695,9 +714,12 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 	})
 
 	t.Run("no-color mode uses reverse-video", func(t *testing.T) {
+		res := style.PlainResolver()
 		m := testModel(nil, nil)
 		m.noColors = true
-		m.styles = plainStyles()
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.wordDiff = true
 		m.diffLines = []diff.DiffLine{
 			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
@@ -738,12 +760,15 @@ func TestModel_RenderDiffWithIntraLine(t *testing.T) {
 			{OldNum: 2, Content: "old value", ChangeType: diff.ChangeRemove},
 			{NewNum: 2, Content: "new value", ChangeType: diff.ChangeAdd},
 		}
-		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.styles = newStyles(Colors{
+		res := style.NewResolver(style.Colors{
 			AddBg: "#1a3320", RemoveBg: "#331a1a",
 			WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
 			DiffBg: "#1e1e1e",
 		})
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
@@ -761,11 +786,14 @@ func TestModel_RenderDiffWithIntraLine(t *testing.T) {
 			{OldNum: 1, Content: "\treturn old", ChangeType: diff.ChangeRemove},
 			{NewNum: 1, Content: "\treturn new", ChangeType: diff.ChangeAdd},
 		}
-		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.styles = newStyles(Colors{
+		res := style.NewResolver(style.Colors{
 			AddBg: "#1a3320", RemoveBg: "#331a1a",
 			WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
 		})
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.tabSpaces = "    "
 		m.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
@@ -786,11 +814,14 @@ func TestModel_WrapModeWithIntraLine(t *testing.T) {
 		{OldNum: 1, Content: "this is a long line with old word in it that needs to wrap because it is very long", ChangeType: diff.ChangeRemove},
 		{NewNum: 1, Content: "this is a long line with new word in it that needs to wrap because it is very long", ChangeType: diff.ChangeAdd},
 	}
-	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.styles = newStyles(Colors{
+	res := style.NewResolver(style.Colors{
 		AddBg: "#1a3320", RemoveBg: "#331a1a",
 		WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d",
 	})
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
 	m.wrapMode = true
 	m.width = 50
 	m.treeWidth = 0
@@ -811,11 +842,14 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		{OldNum: 1, Content: "old value here", ChangeType: diff.ChangeRemove},
 		{NewNum: 1, Content: "new value here", ChangeType: diff.ChangeAdd},
 	}
-	colors := Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"}
+	sc := style.Colors{AddBg: "#1a3320", RemoveBg: "#331a1a", WordAddBg: "#2d5a3a", WordRemoveBg: "#5a2d2d"}
 
 	t.Run("default off: no ranges computed", func(t *testing.T) {
+		res := style.NewResolver(sc)
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.styles = newStyles(colors)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
@@ -824,8 +858,11 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 	})
 
 	t.Run("enabled: ranges computed on file load and bg markers in render", func(t *testing.T) {
+		res := style.NewResolver(sc)
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.styles = newStyles(colors)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
@@ -835,8 +872,11 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 	})
 
 	t.Run("toggleWordDiff flips state and recomputes", func(t *testing.T) {
+		res := style.NewResolver(sc)
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.styles = newStyles(colors)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.ready = true
 		m.width = 200
 		m.height = 30
@@ -865,8 +905,11 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 	})
 
 	t.Run("W key flips wordDiff through Update dispatch", func(t *testing.T) {
+		res := style.NewResolver(sc)
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.styles = newStyles(colors)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
 		m.ready = true
 		m.width = 200
 		m.height = 30

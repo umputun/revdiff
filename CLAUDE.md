@@ -27,8 +27,11 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
   - `mdtoc.go` - markdown TOC component
   - `search.go` - search input and navigation
   - `worddiff.go` - intra-line word-diff: tokenizer, LCS, line pairing, range computation
-  - `colorutil.go` - color utility: HSL conversion, shiftLightness for auto-deriving word-diff bg
-  - `styles.go` - lipgloss styles and theme integration
+  - `deps.go` - consumer-side interfaces for the style sub-package (styleResolver, styleRenderer, sgrProcessor) with compile-time assertions
+- `app/ui/style/` - color and style resolution sub-package. Owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking, HSL color math, and semantic color accessors. Three main types:
+  - `style.Resolver` - static and runtime style/color lookups (Color, Style, LineBg, LineStyle, WordDiffBg, IndicatorBg)
+  - `style.Renderer` - compound ANSI rendering (AnnotationInline, DiffCursor, StatusBarSeparator, FileStatusMark, FileReviewedMark, FileAnnotationMark)
+  - `style.SGR` - ANSI SGR stream processing (Reemit for wrap-mode continuation lines)
 - `app/highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `app/keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
 - `app/theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, ColorKeys (bundled: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark)
@@ -39,6 +42,9 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 ## Key Interfaces (consumer-side, in `app/ui/`)
 - `Renderer` - `ChangedFiles()`, `FileDiff()` - implemented by `diff.Git`, `diff.FallbackRenderer`, `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.ExcludeFilter`
 - `SyntaxHighlighter` - `HighlightLines()` - implemented by `highlight.Highlighter`
+- `styleResolver` - `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()` - implemented by `style.Resolver`
+- `styleRenderer` - `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` - implemented by `style.Renderer`
+- `sgrProcessor` - `Reemit()` - implemented by `style.SGR`
 
 ## Data Flow
 ```
@@ -60,20 +66,20 @@ git diff → diff.parseUnifiedDiff() → []DiffLine
       uses buildModifiedSet() to style adds as modify (amber ~) or pure add (green +)
       expanded hunks (`.` toggle) show all lines inline
   when line numbers are on (`L` toggle, orthogonal to above):
-    lineNumGutter(dl) formats " OOO NNN" gutter via m.styles.LineNumber,
+    lineNumGutter(dl) formats " OOO NNN" gutter via m.resolver.Style(StyleKeyLineNumber),
     prepended in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
     lineNumWidth recomputed per file in handleFileLoaded; lineNumGutterWidth() = 2*W+2
   when blame gutter is on (`B` toggle, orthogonal to above):
-    blameGutter(dl, now) formats " author age" gutter via m.styles.LineNumber,
+    blameGutter(dl, now) formats " author age" gutter via m.resolver.Style(StyleKeyLineNumber),
     prepended after lineNumGutter in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
     blame data loaded async via loadBlame() → blameLoadedMsg; keyed by NewNum (blank for removed lines/dividers)
     blameAuthorLen capped at 8; blameGutterWidth() = W+5; Blamer interface (optional, nil when git unavailable)
   when wrap mode is on (`w` toggle, orthogonal to above):
     wrapContent() splits long lines via ansi.Wrap,
     continuation lines get `↪` gutter marker, cursorViewportY() sums wrapped line counts.
-    ansi.Wrap does not preserve SGR state across inserted newlines, so reemitANSIState()
+    ansi.Wrap does not preserve SGR state across inserted newlines, so m.sgr.Reemit()
     re-prepends active fg color, bold, italic, and bg at the start of each continuation line.
-    State tracking via scanANSIState()/parseSGR()/applySGR(); handles chroma's fg (24-bit/basic),
+    State tracking via style.SGR internal methods; handles chroma's fg (24-bit/basic),
     bold (1/22), italic (3/23), bg (48;2;r;g;b/49), fg reset (39), and full reset (0/bare)
   when search is active (`/` to search, `n`/`N` to navigate, `esc` to clear):
     buildSearchMatchSet() converts match indices to O(1) map per render,

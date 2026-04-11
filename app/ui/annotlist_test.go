@@ -11,6 +11,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_BuildAnnotListItems(t *testing.T) {
@@ -148,7 +149,9 @@ func TestModel_AnnotListOverlay(t *testing.T) {
 
 func TestModel_FormatAnnotListItem(t *testing.T) {
 	m := testModel(nil, nil)
-	m.styles = newStyles(Colors{Accent: "#5f87ff", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", AddFg: "#87d787", RemoveFg: "#ff8787"})
+	c := style.Colors{Accent: "#5f87ff", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", AddFg: "#87d787", RemoveFg: "#ff8787"}
+	m.resolver = style.NewResolver(c)
+	m.renderer = style.NewRenderer(m.resolver)
 
 	t.Run("add type item", func(t *testing.T) {
 		a := annotation.Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "fix this"}

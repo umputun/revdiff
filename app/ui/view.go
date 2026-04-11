@@ -2,13 +2,13 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // View renders the full TUI.
@@ -24,7 +24,7 @@ func (m Model) View() string {
 	if m.currFile != "" {
 		diffTitle = m.currFile
 	}
-	diffHeader := m.styles.DirEntry.Render(" " + diffTitle)
+	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(" " + diffTitle)
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
 
 	var mainView string
@@ -32,8 +32,8 @@ func (m Model) View() string {
 	case m.treePaneHidden():
 		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
 		paneW := m.width - 2
-		diffContent = m.padContentBg(diffContent, paneW, m.styles.colors.DiffBg)
-		diffPane := m.styles.DiffPaneActive.
+		diffContent = m.padContentBg(diffContent, paneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
+		diffPane := m.resolver.Style(style.StyleKeyDiffPaneActive).
 			Width(paneW).
 			Height(ph).
 			Render(diffContent)
@@ -41,12 +41,12 @@ func (m Model) View() string {
 
 	case m.singleFile && m.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
-		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.styles)
+		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.resolver)
 		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph)
 
 	default:
 		annotated := m.annotatedFiles()
-		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
+		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.resolver, m.renderer)
 		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph)
 	}
 
@@ -63,24 +63,24 @@ func (m Model) View() string {
 		return mainView
 	}
 
-	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText())
+	status := m.resolver.Style(style.StyleKeyStatusBar).Width(m.width).Render(m.statusBarText())
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
 
 // renderTwoPaneLayout renders a two-pane layout with left (tree/TOC) and right (diff) content.
 // applies focus-based pane styles, background padding, and joins horizontally.
 func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) string {
-	treeStyle := m.styles.TreePane
-	diffStyle := m.styles.DiffPane
+	treeStyle := m.resolver.Style(style.StyleKeyTreePane)
+	diffStyle := m.resolver.Style(style.StyleKeyDiffPane)
 	if m.focus == paneTree {
-		treeStyle = m.styles.TreePaneActive
+		treeStyle = m.resolver.Style(style.StyleKeyTreePaneActive)
 	} else {
-		diffStyle = m.styles.DiffPaneActive
+		diffStyle = m.resolver.Style(style.StyleKeyDiffPaneActive)
 	}
 
 	diffW := m.width - m.treeWidth - 4
-	leftContent = m.padContentBg(leftContent, m.treeWidth, m.styles.colors.TreeBg)
-	diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
+	leftContent = m.padContentBg(leftContent, m.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
+	diffContent = m.padContentBg(diffContent, diffW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 
 	leftPane := treeStyle.
 		Width(m.treeWidth).
@@ -150,7 +150,7 @@ func (m Model) statusBarText() string {
 
 	// build separator with muted foreground using raw ANSI (not lipgloss.Render)
 	// to avoid full reset that would break the status bar background
-	sep := " " + m.ansiFg(m.styles.colors.Muted) + "|" + m.ansiFg(m.effectiveStatusFg()) + " "
+	sep := m.renderer.StatusBarSeparator()
 	left := strings.Join(segments, sep)
 	right := strings.Join(rightParts, sep)
 
@@ -290,17 +290,13 @@ func (m Model) searchSegment() string {
 	return fmt.Sprintf("%d/%d", pos, len(m.searchMatches))
 }
 
-// padContentBg pads every line in content to targetWidth using raw ANSI background.
+// padContentBg pads every line in content to targetWidth using the given ANSI background color.
 // strips trailing plain spaces first (left by viewport/lipgloss padding after \033[0m reset),
 // then re-pads with bg-colored spaces. this ensures the background fills the entire pane
 // interior, working around lipgloss full-reset that kills outer pane backgrounds.
-// no-op when bgHex is empty.
-func (m Model) padContentBg(content string, targetWidth int, bgHex string) string {
-	if bgHex == "" || targetWidth <= 0 {
-		return content
-	}
-	bg := m.ansiBg(bgHex)
-	if bg == "" {
+// no-op when bg is empty.
+func (m Model) padContentBg(content string, targetWidth int, bg style.Color) string {
+	if bg == "" || targetWidth <= 0 {
 		return content
 	}
 
@@ -311,40 +307,12 @@ func (m Model) padContentBg(content string, targetWidth int, bgHex string) strin
 		w := lipgloss.Width(trimmed)
 		pad := targetWidth - w
 		if pad > 0 {
-			lines[i] = trimmed + bg + strings.Repeat(" ", pad) + "\033[49m"
+			lines[i] = trimmed + string(bg) + strings.Repeat(" ", pad) + "\033[49m"
 		} else {
 			lines[i] = trimmed
 		}
 	}
 	return strings.Join(lines, "\n")
-}
-
-// ansiColor returns an ANSI 24-bit color escape sequence for a hex color.
-// code 38 = foreground, 48 = background. uses raw ANSI instead of lipgloss.Render
-// to avoid full reset that breaks outer backgrounds.
-func (m Model) ansiColor(hex string, code int) string {
-	hex = strings.TrimPrefix(hex, "#")
-	if len(hex) != 6 {
-		return ""
-	}
-	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
-	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
-	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
-	return fmt.Sprintf("\033[%d;2;%d;%d;%dm", code, r, g, b)
-}
-
-// ansiFg returns an ANSI 24-bit foreground escape sequence for a hex color.
-func (m Model) ansiFg(hex string) string { return m.ansiColor(hex, 38) }
-
-// ansiBg returns an ANSI 24-bit background escape sequence for a hex color.
-func (m Model) ansiBg(hex string) string { return m.ansiColor(hex, 48) }
-
-// effectiveStatusFg returns the status bar foreground color, falling back to Muted when StatusFg is unset.
-func (m Model) effectiveStatusFg() string {
-	if m.styles.colors.StatusFg != "" {
-		return m.styles.colors.StatusFg
-	}
-	return m.styles.colors.Muted
 }
 
 // statusModeIcons returns combined mode indicator icons (one per view toggle).
@@ -367,8 +335,8 @@ func (m Model) statusModeIcons() string {
 		{"∅", m.showUntracked},
 	}
 
-	mutedSeq := m.ansiFg(m.styles.colors.Muted)
-	activeSeq := m.ansiFg(m.effectiveStatusFg())
+	mutedSeq := string(m.resolver.Color(style.ColorKeyMutedFg))
+	activeSeq := string(m.resolver.Color(style.ColorKeyStatusFg))
 
 	var icons []string
 	for _, ind := range indicators {

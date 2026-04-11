@@ -25,12 +25,12 @@ func TestNormalizeColor(t *testing.T) {
 
 func TestNormalizeColors(t *testing.T) {
 	t.Run("adds # prefix to bare hex values", func(t *testing.T) {
-		c := normalizeColors(Colors{
+		c := Colors{
 			Accent: "5f87ff", Border: "#585858", Normal: "d0d0d0",
 			ModifyFg: "f5c542", ModifyBg: "#3D2E00",
 			TreeBg: "1a1a1a", DiffBg: "", StatusFg: "aabbcc", StatusBg: "",
 			SearchFg: "1a1a1a", SearchBg: "#d7d700",
-		})
+		}.normalize()
 		assert.Equal(t, "#5f87ff", c.Accent, "should add # prefix")
 		assert.Equal(t, "#585858", c.Border, "should keep existing #")
 		assert.Equal(t, "#d0d0d0", c.Normal)
@@ -45,36 +45,36 @@ func TestNormalizeColors(t *testing.T) {
 	})
 
 	t.Run("auto-derives WordAddBg from AddBg when empty", func(t *testing.T) {
-		c := normalizeColors(Colors{AddBg: "#022800", RemoveBg: "#3D0100"})
+		c := Colors{AddBg: "#022800", RemoveBg: "#3D0100"}.normalize()
 		require.NotEmpty(t, c.WordAddBg, "WordAddBg should be auto-derived")
 		assert.Equal(t, byte('#'), c.WordAddBg[0], "auto-derived WordAddBg should have # prefix")
 		assert.NotEqual(t, c.AddBg, c.WordAddBg, "WordAddBg should differ from AddBg")
 	})
 
 	t.Run("auto-derives WordRemoveBg from RemoveBg when empty", func(t *testing.T) {
-		c := normalizeColors(Colors{AddBg: "#022800", RemoveBg: "#3D0100"})
+		c := Colors{AddBg: "#022800", RemoveBg: "#3D0100"}.normalize()
 		require.NotEmpty(t, c.WordRemoveBg, "WordRemoveBg should be auto-derived")
 		assert.Equal(t, byte('#'), c.WordRemoveBg[0], "auto-derived WordRemoveBg should have # prefix")
 		assert.NotEqual(t, c.RemoveBg, c.WordRemoveBg, "WordRemoveBg should differ from RemoveBg")
 	})
 
 	t.Run("preserves explicitly set WordAddBg/WordRemoveBg", func(t *testing.T) {
-		c := normalizeColors(Colors{
+		c := Colors{
 			AddBg: "#022800", RemoveBg: "#3D0100",
 			WordAddBg: "#045e04", WordRemoveBg: "#5e0404",
-		})
+		}.normalize()
 		assert.Equal(t, "#045e04", c.WordAddBg, "explicit WordAddBg should be preserved")
 		assert.Equal(t, "#5e0404", c.WordRemoveBg, "explicit WordRemoveBg should be preserved")
 	})
 
 	t.Run("no derivation when AddBg/RemoveBg are empty", func(t *testing.T) {
-		c := normalizeColors(Colors{})
+		c := Colors{}.normalize()
 		assert.Empty(t, c.WordAddBg, "WordAddBg should stay empty when AddBg is empty")
 		assert.Empty(t, c.WordRemoveBg, "WordRemoveBg should stay empty when RemoveBg is empty")
 	})
 
 	t.Run("normalizes all 23 fields", func(t *testing.T) {
-		c := normalizeColors(Colors{
+		c := Colors{
 			Accent: "aaaaaa", Border: "bbbbbb", Normal: "cccccc", Muted: "dddddd",
 			SelectedFg: "111111", SelectedBg: "222222", Annotation: "333333",
 			CursorFg: "444444", CursorBg: "555555",
@@ -84,7 +84,7 @@ func TestNormalizeColors(t *testing.T) {
 			TreeBg: "778899", DiffBg: "001122",
 			StatusFg: "334455", StatusBg: "667788",
 			SearchFg: "990011", SearchBg: "223344",
-		})
+		}.normalize()
 		assert.Equal(t, "#aaaaaa", c.Accent)
 		assert.Equal(t, "#bbbbbb", c.Border)
 		assert.Equal(t, "#cccccc", c.Normal)

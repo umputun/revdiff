@@ -17,7 +17,7 @@ type Resolver struct {
 // NewResolver builds a Resolver from a Colors palette. Normalizes the
 // input, builds all lipgloss.Style values, stores them privately.
 func NewResolver(c Colors) Resolver {
-	c = normalizeColors(c)
+	c = c.normalize()
 	return Resolver{
 		colors: c,
 		styles: buildStyles(c),
@@ -31,6 +31,10 @@ func PlainResolver() Resolver {
 		styles: buildPlainStyles(),
 	}
 }
+
+// Ready reports whether the Resolver was properly constructed (via NewResolver
+// or PlainResolver). A zero-value Resolver is not ready.
+func (r Resolver) Ready() bool { return r.styles != nil }
 
 // Color returns the ANSI escape sequence for the given color key.
 // ColorKeyStatusFg falls back to MutedFg when Colors.StatusFg is empty.
@@ -49,18 +53,30 @@ func (r Resolver) Color(k ColorKey) Color {
 			hex = r.colors.Muted
 		}
 		return Color(ansiColor(hex, 38))
+	case ColorKeyTreePaneBg:
+		return Color(ansiColor(r.colors.TreeBg, 48))
 	case ColorKeyDiffPaneBg:
 		return Color(ansiColor(r.colors.DiffBg, 48))
 	case ColorKeyAddLineBg:
 		return Color(ansiColor(r.colors.AddBg, 48))
 	case ColorKeyRemoveLineBg:
 		return Color(ansiColor(r.colors.RemoveBg, 48))
+	case ColorKeyModifyLineBg:
+		return Color(ansiColor(r.colors.ModifyBg, 48))
 	case ColorKeyWordAddBg:
 		return Color(ansiColor(r.colors.WordAddBg, 48))
 	case ColorKeyWordRemoveBg:
 		return Color(ansiColor(r.colors.WordRemoveBg, 48))
 	case ColorKeySearchBg:
 		return Color(ansiColor(r.colors.SearchBg, 48))
+	case ColorKeyAddLineFg:
+		return Color(ansiColor(r.colors.AddFg, 38))
+	case ColorKeyRemoveLineFg:
+		return Color(ansiColor(r.colors.RemoveFg, 38))
+	case ColorKeyNormalFg:
+		return Color(ansiColor(r.colors.Normal, 38))
+	case ColorKeySelectedFg:
+		return Color(ansiColor(r.colors.SelectedFg, 38))
 	default:
 		return ""
 	}
@@ -172,7 +188,7 @@ func buildStyles(c Colors) map[StyleKey]lipgloss.Style {
 	m[StyleKeyLineRemove] = lipgloss.NewStyle().
 		Background(lipgloss.Color(c.RemoveBg)).
 		Foreground(lipgloss.Color(c.RemoveFg))
-	m[StyleKeyLineContext] = contextStyle(c)
+	m[StyleKeyLineContext] = c.contextStyle()
 	m[StyleKeyLineModify] = lipgloss.NewStyle().
 		Background(lipgloss.Color(c.ModifyBg)).
 		Foreground(lipgloss.Color(c.ModifyFg))
@@ -182,27 +198,27 @@ func buildStyles(c Colors) map[StyleKey]lipgloss.Style {
 		Background(lipgloss.Color(c.AddBg))
 	m[StyleKeyLineRemoveHighlight] = lipgloss.NewStyle().
 		Background(lipgloss.Color(c.RemoveBg))
-	m[StyleKeyLineContextHighlight] = contextHighlightStyle(c)
+	m[StyleKeyLineContextHighlight] = c.contextHighlightStyle()
 	m[StyleKeyLineModifyHighlight] = lipgloss.NewStyle().
 		Background(lipgloss.Color(c.ModifyBg))
 
 	// line number style
-	m[StyleKeyLineNumber] = lineNumberStyle(c)
+	m[StyleKeyLineNumber] = c.lineNumberStyle()
 
 	// file tree entry styles
-	m[StyleKeyDirEntry] = dirEntryStyle(c)
-	m[StyleKeyFileEntry] = fileEntryStyle(c)
+	m[StyleKeyDirEntry] = c.dirEntryStyle()
+	m[StyleKeyFileEntry] = c.fileEntryStyle()
 	m[StyleKeyFileSelected] = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(c.SelectedFg)).
 		Background(lipgloss.Color(c.SelectedBg))
-	m[StyleKeyAnnotationMark] = treeItemStyle(c, c.Annotation)
-	m[StyleKeyReviewedMark] = treeItemStyle(c, c.AddFg)
+	m[StyleKeyAnnotationMark] = c.treeItemStyle(c.Annotation)
+	m[StyleKeyReviewedMark] = c.treeItemStyle(c.AddFg)
 
 	// file status styles
-	m[StyleKeyStatusAdded] = treeItemStyle(c, c.AddFg)
-	m[StyleKeyStatusDeleted] = treeItemStyle(c, c.RemoveFg)
-	m[StyleKeyStatusUntracked] = treeItemStyle(c, c.AddFg)
-	m[StyleKeyStatusDefault] = treeItemStyle(c, c.Muted)
+	m[StyleKeyStatusAdded] = c.treeItemStyle(c.AddFg)
+	m[StyleKeyStatusDeleted] = c.treeItemStyle(c.RemoveFg)
+	m[StyleKeyStatusUntracked] = c.treeItemStyle(c.AddFg)
+	m[StyleKeyStatusDefault] = c.treeItemStyle(c.Muted)
 
 	// status bar
 	statusFg := c.Muted
@@ -333,7 +349,7 @@ func buildPlainStyles() map[StyleKey]lipgloss.Style {
 }
 
 // contextStyle builds the context line style, applying DiffBg as background when set.
-func contextStyle(c Colors) lipgloss.Style {
+func (c Colors) contextStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))
 	if c.DiffBg != "" {
 		s = s.Background(lipgloss.Color(c.DiffBg))
@@ -342,7 +358,7 @@ func contextStyle(c Colors) lipgloss.Style {
 }
 
 // dirEntryStyle builds the directory entry style, applying TreeBg as background when set.
-func dirEntryStyle(c Colors) lipgloss.Style {
+func (c Colors) dirEntryStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Accent)).Bold(true)
 	if c.TreeBg != "" {
 		s = s.Background(lipgloss.Color(c.TreeBg))
@@ -351,7 +367,7 @@ func dirEntryStyle(c Colors) lipgloss.Style {
 }
 
 // fileEntryStyle builds the file entry style, applying TreeBg as background when set.
-func fileEntryStyle(c Colors) lipgloss.Style {
+func (c Colors) fileEntryStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Normal))
 	if c.TreeBg != "" {
 		s = s.Background(lipgloss.Color(c.TreeBg))
@@ -360,7 +376,7 @@ func fileEntryStyle(c Colors) lipgloss.Style {
 }
 
 // treeItemStyle builds a tree item style with the given foreground, applying TreeBg when set.
-func treeItemStyle(c Colors, fg string) lipgloss.Style {
+func (c Colors) treeItemStyle(fg string) lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(fg))
 	if c.TreeBg != "" {
 		s = s.Background(lipgloss.Color(c.TreeBg))
@@ -369,7 +385,7 @@ func treeItemStyle(c Colors, fg string) lipgloss.Style {
 }
 
 // lineNumberStyle builds the line number style, applying DiffBg as background when set.
-func lineNumberStyle(c Colors) lipgloss.Style {
+func (c Colors) lineNumberStyle() lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Muted))
 	if c.DiffBg != "" {
 		s = s.Background(lipgloss.Color(c.DiffBg))
@@ -378,7 +394,7 @@ func lineNumberStyle(c Colors) lipgloss.Style {
 }
 
 // contextHighlightStyle builds the syntax-highlighted context line style (DiffBg only).
-func contextHighlightStyle(c Colors) lipgloss.Style {
+func (c Colors) contextHighlightStyle() lipgloss.Style {
 	s := lipgloss.NewStyle()
 	if c.DiffBg != "" {
 		s = s.Background(lipgloss.Color(c.DiffBg))

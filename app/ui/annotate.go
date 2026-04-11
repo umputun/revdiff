@@ -10,6 +10,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // annotKeyFile is the lookup key for file-level annotations in wrappedAnnotationLineCount.
@@ -32,23 +33,13 @@ func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinp
 	// wrapping View() externally doesn't work because lipgloss Render emits \033[0m resets.
 	// text uses Normal fg (context line color) so active input is readable on any theme
 	// and visually distinct from saved annotations (which use Annotation color + italic).
-	inputStyle := lipgloss.NewStyle()
-	if fg := m.styles.colors.Normal; fg != "" {
-		inputStyle = inputStyle.Foreground(lipgloss.Color(fg))
-	}
-	if bg := m.styles.colors.DiffBg; bg != "" {
-		inputStyle = inputStyle.Background(lipgloss.Color(bg))
-	}
+	inputStyle := m.resolver.Style(style.StyleKeyAnnotInputText)
 	ti.PromptStyle = inputStyle
 	ti.TextStyle = inputStyle
-	ti.Cursor.TextStyle = inputStyle
-	ti.Cursor.Style = inputStyle
-
-	muted := inputStyle
-	if fg := m.styles.colors.Muted; fg != "" {
-		muted = muted.Foreground(lipgloss.Color(fg))
-	}
-	ti.PlaceholderStyle = muted
+	cursorStyle := m.resolver.Style(style.StyleKeyAnnotInputCursor)
+	ti.Cursor.TextStyle = cursorStyle
+	ti.Cursor.Style = cursorStyle
+	ti.PlaceholderStyle = m.resolver.Style(style.StyleKeyAnnotInputPlaceholder)
 
 	return ti, cmd
 }

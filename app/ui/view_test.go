@@ -13,6 +13,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestModel_ResizeInSingleFileMode(t *testing.T) {
@@ -72,9 +73,11 @@ func TestModel_StatusModeIcons(t *testing.T) {
 	})
 
 	t.Run("with colors active icons use status fg", func(t *testing.T) {
-		colors := Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+		sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
 		m := testModel(nil, nil)
-		m.styles = newStyles(colors)
+		res := style.NewResolver(sc)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
 		m.collapsed.enabled = true
 		m.tree.filter = false
 		icons := m.statusModeIcons()
@@ -478,9 +481,11 @@ func TestModel_StatusBarPipeSeparators(t *testing.T) {
 	})
 
 	t.Run("with colors", func(t *testing.T) {
-		colors := Colors{Muted: "#6c6c6c", StatusFg: "#202020", StatusBg: "#C5794F", Normal: "#d0d0d0"}
+		sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020", StatusBg: "#C5794F", Normal: "#d0d0d0"}
 		m := testModel(nil, nil)
-		m.styles = newStyles(colors)
+		res := style.NewResolver(sc)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
 		m.currFile = "a.go"
 		m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
 		m.fileAdds = 1
@@ -633,7 +638,9 @@ func TestModel_SingleFileKeysNoOp(t *testing.T) {
 		m.currFile = "main.go"
 		m.diffLines = lines
 		m.highlightedLines = noopHighlighter().HighlightLines("main.go", lines)
-		m.styles = plainStyles()
+		plainRes := style.PlainResolver()
+		m.resolver = plainRes
+		m.renderer = style.NewRenderer(plainRes)
 		return m
 	}
 
@@ -1276,8 +1283,10 @@ func TestModel_StatusModeIconsWordDiff(t *testing.T) {
 	assert.Contains(t, icons, "±", "word-diff icon should always be present")
 
 	m.wordDiff = true
-	colors := Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
-	m.styles = newStyles(colors)
+	sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+	res := style.NewResolver(sc)
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
 	icons = m.statusModeIcons()
 	assert.Contains(t, icons, "\033[38;2;32;32;32m±", "active word-diff icon uses status fg")
 }
@@ -1443,47 +1452,33 @@ func TestModel_LineNumberSegment(t *testing.T) {
 	})
 }
 
-func TestModel_AnsiFg(t *testing.T) {
-	m := testModel(nil, nil)
-	assert.Equal(t, "\033[38;2;108;108;108m", m.ansiFg("#6c6c6c"))
-	assert.Equal(t, "\033[38;2;255;0;0m", m.ansiFg("#ff0000"))
-	assert.Equal(t, "\033[38;2;255;0;0m", m.ansiFg("ff0000"), "should work without # prefix")
-	assert.Empty(t, m.ansiFg("bad"), "should return empty for invalid hex")
-}
-
-func TestModel_AnsiBg(t *testing.T) {
-	m := testModel(nil, nil)
-	assert.Equal(t, "\033[48;2;108;108;108m", m.ansiBg("#6c6c6c"))
-	assert.Equal(t, "\033[48;2;255;0;0m", m.ansiBg("#ff0000"))
-	assert.Empty(t, m.ansiBg("bad"), "should return empty for invalid hex")
-}
-
 func TestModel_PadContentBg(t *testing.T) {
 	m := testModel(nil, nil)
+	bg := style.Color("\033[48;2;46;52;64m") // pre-built ANSI bg sequence for #2e3440
 
-	t.Run("empty bgHex is no-op", func(t *testing.T) {
+	t.Run("empty bg is no-op", func(t *testing.T) {
 		assert.Equal(t, "hello", m.padContentBg("hello", 20, ""))
 	})
 
 	t.Run("zero width is no-op", func(t *testing.T) {
-		assert.Equal(t, "hello", m.padContentBg("hello", 0, "#2e3440"))
+		assert.Equal(t, "hello", m.padContentBg("hello", 0, bg))
 	})
 
 	t.Run("pads short line", func(t *testing.T) {
-		result := m.padContentBg("hi", 10, "#2e3440")
+		result := m.padContentBg("hi", 10, bg)
 		assert.Contains(t, result, "\033[48;2;46;52;64m")
 		assert.Contains(t, result, "\033[49m")
 		assert.Equal(t, 10, lipgloss.Width(result))
 	})
 
 	t.Run("strips trailing spaces before padding", func(t *testing.T) {
-		result := m.padContentBg("hi      ", 10, "#2e3440")
+		result := m.padContentBg("hi      ", 10, bg)
 		assert.Contains(t, result, "\033[48;2;46;52;64m")
 		assert.Equal(t, 10, lipgloss.Width(result))
 	})
 
 	t.Run("multi-line pads each line", func(t *testing.T) {
-		result := m.padContentBg("ab\ncd", 5, "#2e3440")
+		result := m.padContentBg("ab\ncd", 5, bg)
 		lines := strings.Split(result, "\n")
 		assert.Len(t, lines, 2)
 		assert.Equal(t, 5, lipgloss.Width(lines[0]))
@@ -1491,7 +1486,7 @@ func TestModel_PadContentBg(t *testing.T) {
 	})
 
 	t.Run("line at target width is no-op", func(t *testing.T) {
-		result := m.padContentBg("abcde", 5, "#2e3440")
+		result := m.padContentBg("abcde", 5, bg)
 		assert.Equal(t, "abcde", result)
 	})
 }
