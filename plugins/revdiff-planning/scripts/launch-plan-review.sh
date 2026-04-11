@@ -38,6 +38,17 @@ PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")
 REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "--only=$PLAN_ABS") $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
+# custom launcher: REVDIFF_LAUNCHER overrides all terminal-specific launchers.
+# set it to a script that receives the revdiff binary + args as "$@";
+# REVDIFF_TITLE is exported for use as a window title.
+# example ~/bin/my-launcher: #!/bin/sh\nexec kitty -t "$REVDIFF_TITLE" "$@"
+if [ -n "${REVDIFF_LAUNCHER:-}" ]; then
+    export REVDIFF_TITLE="$OVERLAY_TITLE"
+    sh -c "$(sq "$REVDIFF_LAUNCHER") $REVDIFF_CMD"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # -T (title) requires tmux 3.3+; skip on older versions

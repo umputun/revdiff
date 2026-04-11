@@ -46,14 +46,23 @@ Then uncomment and edit the values you want to change.
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
 
-## Popup Size (Claude Code plugin)
+## Popup Size and Custom Launcher (Claude Code plugin)
 
-When launched via the Claude Code plugin skill, revdiff opens in a terminal overlay. The popup size is configurable via env vars:
+When launched via the Claude Code plugin skill, revdiff opens in a terminal overlay. The overlay behavior is configurable via env vars:
 
 | Env var | Description | Default |
 |---------|-------------|---------|
 | `REVDIFF_POPUP_WIDTH` | Tmux popup width (e.g., `100%`, `80%`) | `90%` |
 | `REVDIFF_POPUP_HEIGHT` | Tmux popup height / wezterm split percent | `90%` |
+| `REVDIFF_LAUNCHER` | Path to a custom launcher script (overrides all built-in terminal detection) | unset |
+
+When `REVDIFF_LAUNCHER` is set, the script is called with the revdiff binary and all args as `$@`. The window title is available as `$REVDIFF_TITLE`.
+
+Example `~/bin/my-revdiff-launcher`:
+```sh
+#!/bin/sh
+exec kitty -t "$REVDIFF_TITLE" "$@"
+```
 
 ## Themes
 

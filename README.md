@@ -67,7 +67,18 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: `REVDIFF_LAUNCHER` (custom) → tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+
+**Custom launcher:** set `REVDIFF_LAUNCHER` to a script that receives the revdiff binary and all args as `$@`. The window title is passed via the `REVDIFF_TITLE` env var. This overrides all built-in terminal detection.
+
+Example `~/bin/my-revdiff-launcher`:
+```sh
+#!/bin/sh
+exec kitty -t "$REVDIFF_TITLE" "$@"
+```
+```bash
+export REVDIFF_LAUNCHER="$HOME/bin/my-revdiff-launcher"
+```
 
 > **Note:** cmux is detected before ghostty because cmux also sets `$TERM_PROGRAM=ghostty`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 

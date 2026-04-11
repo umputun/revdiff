@@ -50,6 +50,17 @@ OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
+# custom launcher: REVDIFF_LAUNCHER overrides all terminal-specific launchers.
+# set it to a script that receives the revdiff binary + args as "$@";
+# REVDIFF_TITLE is exported for use as a window title.
+# example ~/bin/my-launcher: #!/bin/sh\nexec kitty -T "$REVDIFF_TITLE" "$@"
+if [ -n "${REVDIFF_LAUNCHER:-}" ]; then
+    export REVDIFF_TITLE="$OVERLAY_TITLE"
+    sh -c "$(sq "$REVDIFF_LAUNCHER") $REVDIFF_CMD"
+    cat "$OUTPUT_FILE"
+    exit 0
+fi
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # -T (title) requires tmux 3.3+; skip on older versions
