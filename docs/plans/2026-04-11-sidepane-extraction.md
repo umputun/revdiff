@@ -504,20 +504,20 @@ Port `app/ui/filetree.go` logic into the new package, adapting method names, and
 **Files:**
 - Create: `app/ui/sidepane/filetree.go`
 
-- [ ] before writing code: grep `app/ui/` for all callers of `newFileTree(` and `newFileTreeFromEntries(` — verify no production caller passes `[]string`; confirm all production call sites already use `[]diff.FileEntry` (the `[]string` form is only used internally by `newFileTreeFromEntries` → `newFileTree`). If any production caller needs the `[]string` form, document and extend `NewFileTree` signature before proceeding.
-- [ ] create `app/ui/sidepane/filetree.go` with package `sidepane` header
-- [ ] define `FileTree` struct (fields: entries, cursor, offset, allFiles, filter, reviewed, fileStatuses) and `treeEntry`/`renderCtx` unexported types (copied from old file)
-- [ ] implement `NewFileTree(entries []diff.FileEntry) *FileTree` (merges old `newFileTree` + `newFileTreeFromEntries`, takes `diff.FileEntry` directly; must handle `entries == nil` gracefully — returns a valid empty `*FileTree` so `NewModel` can construct an initial empty tree for nil-safety)
-- [ ] implement `buildEntries` as method on `*FileTree` (same logic as old)
-- [ ] implement query methods: `SelectedFile`, `TotalFiles`, `FileStatus`, `FilterActive`, `ReviewedCount`, `HasFile(Direction)` (HasFile merges old `hasNextFile`/`hasPrevFile` via switch on Direction) — each with godoc starting with the method name
-- [ ] implement `Move(m Motion, count ...int)` with exhaustive switch — merges `moveUp`/`moveDown`/`pageUp`/`pageDown`/`moveToFirst`/`moveToLast`. Page cases read `count[0]` (with safe fallback if `len(count) == 0`); non-page cases ignore count entirely. Document the variadic contract in godoc.
-- [ ] implement `StepFile(dir Direction)` — merges `nextFile`/`prevFile`, preserves wrap-around semantic
-- [ ] implement `SelectByPath(path string) bool`
-- [ ] implement `EnsureVisible(height int)` calling shared `ensureVisible(&ft.cursor, &ft.offset, len(ft.entries), height)`
-- [ ] implement `Rebuild(entries []diff.FileEntry)` — NEW method that rebuilds entries in-place, prunes stale keys from `reviewed` and `fileStatuses`, resets cursor/offset, positions cursor on first file entry, preserves `filter` state
-- [ ] implement mutation methods: `ToggleFilter`, `RefreshFilter`, `ToggleReviewed`
-- [ ] implement `Render(r FileTreeRender) string` — port `render` + `renderFileEntry` + `truncateDirName` + `filterFiles` logic, using `r.Resolver` and `r.Renderer` instead of direct style field access
-- [ ] implement `fileIndices` as unexported helper method (used by StepFile)
+- [x] before writing code: grep `app/ui/` for all callers of `newFileTree(` and `newFileTreeFromEntries(` — verify no production caller passes `[]string`; confirm all production call sites already use `[]diff.FileEntry` (the `[]string` form is only used internally by `newFileTreeFromEntries` → `newFileTree`). If any production caller needs the `[]string` form, document and extend `NewFileTree` signature before proceeding.
+- [x] create `app/ui/sidepane/filetree.go` with package `sidepane` header
+- [x] define `FileTree` struct (fields: entries, cursor, offset, allFiles, filter, reviewed, fileStatuses) and `treeEntry`/`renderCtx` unexported types (copied from old file)
+- [x] implement `NewFileTree(entries []diff.FileEntry) *FileTree` (merges old `newFileTree` + `newFileTreeFromEntries`, takes `diff.FileEntry` directly; must handle `entries == nil` gracefully — returns a valid empty `*FileTree` so `NewModel` can construct an initial empty tree for nil-safety)
+- [x] implement `buildEntries` as method on `*FileTree` (same logic as old)
+- [x] implement query methods: `SelectedFile`, `TotalFiles`, `FileStatus`, `FilterActive`, `ReviewedCount`, `HasFile(Direction)` (HasFile merges old `hasNextFile`/`hasPrevFile` via switch on Direction) — each with godoc starting with the method name
+- [x] implement `Move(m Motion, count ...int)` with exhaustive switch — merges `moveUp`/`moveDown`/`pageUp`/`pageDown`/`moveToFirst`/`moveToLast`. Page cases read `count[0]` (with safe fallback if `len(count) == 0`); non-page cases ignore count entirely. Document the variadic contract in godoc.
+- [x] implement `StepFile(dir Direction)` — merges `nextFile`/`prevFile`, preserves wrap-around semantic
+- [x] implement `SelectByPath(path string) bool`
+- [x] implement `EnsureVisible(height int)` calling shared `ensureVisible(&ft.cursor, &ft.offset, len(ft.entries), height)`
+- [x] implement `Rebuild(entries []diff.FileEntry)` — NEW method that rebuilds entries in-place, prunes stale keys from `reviewed` and `fileStatuses`, resets cursor/offset, positions cursor on first file entry, preserves `filter` state
+- [x] implement mutation methods: `ToggleFilter`, `RefreshFilter`, `ToggleReviewed`
+- [x] implement `Render(r FileTreeRender) string` — port `render` + `renderFileEntry` + `truncateDirName` + `filterFiles` logic, using `r.Resolver` and `r.Renderer` instead of direct style field access
+- [x] implement `fileIndices` as unexported helper method (used by StepFile)
 
 ### Task 3: Port FileTree tests
 
