@@ -631,11 +631,11 @@ Add the exported `FileTreeComponent` and `TOCComponent` interfaces to `ui/model.
 **Files:**
 - Modify: `app/ui/view.go`
 
-- [ ] replace `m.mdTOC.render(m.treeWidth, ph, m.focus, m.resolver)` with `m.mdTOC.Render(sidepane.TOCRender{Width: m.treeWidth, Height: ph, Focused: m.focus == paneTree, Resolver: m.resolver})`
-- [ ] replace `m.tree.render(m.treeWidth, ph, annotated, m.resolver, m.renderer)` with `m.tree.Render(sidepane.FileTreeRender{Width: m.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})`
-- [ ] replace `m.tree.reviewedCount()` → `m.tree.ReviewedCount()` (two sites)
-- [ ] replace `len(m.tree.allFiles)` → `m.tree.TotalFiles()`
-- [ ] replace `m.tree.filter` → `m.tree.FilterActive()`
+- [x] replace `m.mdTOC.render(m.treeWidth, ph, m.focus, m.resolver)` with `m.mdTOC.Render(sidepane.TOCRender{Width: m.treeWidth, Height: ph, Focused: m.focus == paneTree, Resolver: m.resolver})`
+- [x] replace `m.tree.render(m.treeWidth, ph, annotated, m.resolver, m.renderer)` with `m.tree.Render(sidepane.FileTreeRender{Width: m.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})`
+- [x] replace `m.tree.reviewedCount()` → `m.tree.ReviewedCount()` (two sites)
+- [x] replace `len(m.tree.allFiles)` → `m.tree.TotalFiles()`
+- [x] replace `m.tree.filter` → `m.tree.FilterActive()`
 
 ### Task 10: Migrate diffnav.go call sites
 

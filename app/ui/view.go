@@ -8,6 +8,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -41,12 +42,12 @@ func (m Model) View() string {
 
 	case m.singleFile && m.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
-		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.resolver)
+		tocContent := m.mdTOC.Render(sidepane.TOCRender{Width: m.treeWidth, Height: ph, Focused: m.focus == paneTree, Resolver: m.resolver})
 		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph)
 
 	default:
 		annotated := m.annotatedFiles()
-		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.resolver, m.renderer)
+		treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
 		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph)
 	}
 
@@ -136,8 +137,8 @@ func (m Model) statusBarText() string {
 
 	// build right-side segments
 	var rightParts []string
-	if rc := m.tree.reviewedCount(); rc > 0 {
-		rightParts = append(rightParts, fmt.Sprintf("✓ %d/%d", rc, len(m.tree.allFiles)))
+	if rc := m.tree.ReviewedCount(); rc > 0 {
+		rightParts = append(rightParts, fmt.Sprintf("✓ %d/%d", rc, m.tree.TotalFiles()))
 	}
 	if cnt := m.store.Count(); cnt > 0 {
 		suffix := "annotations"
@@ -324,14 +325,14 @@ func (m Model) statusModeIcons() string {
 	}
 	indicators := []indicator{
 		{"▼", m.collapsed.enabled},
-		{"◉", m.tree.filter},
+		{"◉", m.tree.FilterActive()},
 		{"↩", m.wrapMode},
 		{"≋", len(m.searchMatches) > 0},
 		{"⊟", m.treeHidden},
 		{"#", m.lineNumbers},
 		{"b", m.showBlame},
 		{"±", m.wordDiff},
-		{"✓", m.tree.reviewedCount() > 0},
+		{"✓", m.tree.ReviewedCount() > 0},
 		{"∅", m.showUntracked},
 	}
 
