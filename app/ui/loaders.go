@@ -87,8 +87,8 @@ func (m Model) loadBlame(file string) tea.Cmd {
 
 // loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
 func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
-	m.tree.ensureVisible(m.treePageSize())
-	if f := m.tree.selectedFile(); f != "" && f != m.currFile {
+	m.tree.EnsureVisible(m.treePageSize())
+	if f := m.tree.SelectedFile(); f != "" && f != m.currFile {
 		m.loadSeq++
 		return m, m.loadFileDiff(f)
 	}
@@ -110,14 +110,11 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
-	oldReviewed := m.tree.reviewed
-	m.tree = newFileTreeFromEntries(entries)
-	// preserve reviewed marks and cursor across tree rebuilds (e.g. toggle untracked)
-	m.tree.restoreReviewed(oldReviewed)
+	m.tree.Rebuild(entries)
 	if m.currFile != "" {
-		m.tree.selectByPath(m.currFile)
+		m.tree.SelectByPath(m.currFile)
 	}
-	m.singleFile = len(m.tree.allFiles) == 1
+	m.singleFile = m.tree.TotalFiles() == 1
 	if len(entries) == 0 {
 		m.currFile = ""
 		m.diffLines = nil
@@ -134,7 +131,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// auto-select first file
-	if f := m.tree.selectedFile(); f != "" {
+	if f := m.tree.SelectedFile(); f != "" {
 		m.loadSeq++
 		return m, m.loadFileDiff(f)
 	}
@@ -152,7 +149,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.currFile = msg.file
 	m.diffLines = msg.lines
-	m.resolveEmptyDiff(msg.file, m.tree.fileStatuses[msg.file])
+	m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
 	m.clearSearch()
 	m.computeFileStats()
 	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)
@@ -167,7 +164,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	// detect markdown full-context mode and build TOC
 	m.mdTOC = nil
 	if m.singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines) {
-		m.mdTOC = parseTOC(msg.lines, msg.file)
+		m.mdTOC = m.parseTOC(msg.lines, msg.file)
 	}
 	switch {
 	case m.mdTOC != nil && !m.treeHidden:

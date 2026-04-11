@@ -615,16 +615,16 @@ Add the exported `FileTreeComponent` and `TOCComponent` interfaces to `ui/model.
 **Files:**
 - Modify: `app/ui/loaders.go`
 
-- [ ] replace `m.tree = newFileTreeFromEntries(entries)` with `m.tree.Rebuild(entries)` — no nil-check needed because Task 7 initializes `m.tree` to an empty tree in `NewModel`, so `m.tree` is never nil. Rebuild handles both empty→populated and populated→populated transitions.
-- [ ] remove the `oldReviewed := m.tree.reviewed` / `m.tree.restoreReviewed(oldReviewed)` lines — `Rebuild` handles it
-- [ ] replace `m.tree.selectByPath(m.currFile)` → `m.tree.SelectByPath(m.currFile)`
-- [ ] replace `len(m.tree.allFiles) == 1` → `m.tree.TotalFiles() == 1`
-- [ ] replace `m.tree.fileStatuses[msg.file]` → `m.tree.FileStatus(msg.file)`
-- [ ] replace `m.tree.selectedFile()` → `m.tree.SelectedFile()` (two sites)
-- [ ] replace `m.tree.ensureVisible(m.treePageSize())` → `m.tree.EnsureVisible(m.treePageSize())`
-- [ ] replace `parseTOC(msg.lines, msg.file)` call with injected factory: `m.mdTOC = m.parseTOC(msg.lines, msg.file)` — the factory closure in main.go handles the typed-nil collapse, so Model just assigns directly
-- [ ] confirm loaders.go does NOT import `app/ui/sidepane` — Model stays decoupled (only `ui/model.go` imports sidepane, and only for type names in interface signatures)
-- [ ] verify loaders.go compiles when viewed in isolation (other ui files may still error — expected)
+- [x] replace `m.tree = newFileTreeFromEntries(entries)` with `m.tree.Rebuild(entries)` — no nil-check needed because Task 7 initializes `m.tree` to an empty tree in `NewModel`, so `m.tree` is never nil. Rebuild handles both empty→populated and populated→populated transitions.
+- [x] remove the `oldReviewed := m.tree.reviewed` / `m.tree.restoreReviewed(oldReviewed)` lines — `Rebuild` handles it
+- [x] replace `m.tree.selectByPath(m.currFile)` → `m.tree.SelectByPath(m.currFile)`
+- [x] replace `len(m.tree.allFiles) == 1` → `m.tree.TotalFiles() == 1`
+- [x] replace `m.tree.fileStatuses[msg.file]` → `m.tree.FileStatus(msg.file)`
+- [x] replace `m.tree.selectedFile()` → `m.tree.SelectedFile()` (two sites)
+- [x] replace `m.tree.ensureVisible(m.treePageSize())` → `m.tree.EnsureVisible(m.treePageSize())`
+- [x] replace `parseTOC(msg.lines, msg.file)` call with injected factory: `m.mdTOC = m.parseTOC(msg.lines, msg.file)` — the factory closure in main.go handles the typed-nil collapse, so Model just assigns directly
+- [x] confirm loaders.go does NOT import `app/ui/sidepane` — Model stays decoupled (only `ui/model.go` imports sidepane, and only for type names in interface signatures)
+- [x] verify loaders.go compiles when viewed in isolation (other ui files may still error — expected)
 
 ### Task 9: Migrate view.go call sites
 
