@@ -738,27 +738,27 @@ Tests in ui that touched `fileTree` or `mdTOC` directly need mechanical updates.
 - Modify: `app/ui/doc.go`
 - Modify: `CLAUDE.md`
 
-- [ ] first read `app/ui/doc.go` end-to-end to confirm the style sub-package paragraph exists and understand its structure — the sidepane paragraph must match its form
-- [ ] remove `filetree.go` and `mdtoc.go` bullet points from `app/ui/doc.go` file map
-- [ ] add a paragraph in `app/ui/doc.go` describing the `sidepane` sub-package, mirroring the existing `style` sub-package paragraph's structure, and noting that sidepane components are injected via `ModelConfig.NewFileTree` / `ModelConfig.ParseTOC` factory closures (wired in `app/main.go`)
-- [ ] in CLAUDE.md Project Structure section, remove individual `filetree.go` / `mdtoc.go` descriptions, add new `app/ui/sidepane/` description listing FileTree and TOC types and noting that concrete construction lives in main.go via factory closures
-- [ ] in CLAUDE.md Key Interfaces section, add mention of exported `ui.FileTreeComponent` / `ui.TOCComponent` interfaces and the factory-injection pattern
-- [ ] in CLAUDE.md "Gotchas" section, add an entry about the typed-nil trap: "`ParseTOC` factory closure in main.go MUST guard `if toc == nil { return nil }` to collapse typed-nil `*sidepane.TOC` into a truly nil interface"
+- [x] first read `app/ui/doc.go` end-to-end to confirm the style sub-package paragraph exists and understand its structure — the sidepane paragraph must match its form
+- [x] remove `filetree.go` and `mdtoc.go` bullet points from `app/ui/doc.go` file map
+- [x] add a paragraph in `app/ui/doc.go` describing the `sidepane` sub-package, mirroring the existing `style` sub-package paragraph's structure, and noting that sidepane components are injected via `ModelConfig.NewFileTree` / `ModelConfig.ParseTOC` factory closures (wired in `app/main.go`)
+- [x] in CLAUDE.md Project Structure section, remove individual `filetree.go` / `mdtoc.go` descriptions, add new `app/ui/sidepane/` description listing FileTree and TOC types and noting that concrete construction lives in main.go via factory closures
+- [x] in CLAUDE.md Key Interfaces section, add mention of exported `ui.FileTreeComponent` / `ui.TOCComponent` interfaces and the factory-injection pattern
+- [x] in CLAUDE.md "Gotchas" section, add an entry about the typed-nil trap: "`ParseTOC` factory closure in main.go MUST guard `if toc == nil { return nil }` to collapse typed-nil `*sidepane.TOC` into a truly nil interface"
 
 ### Task 17: Verify acceptance criteria
 
-- [ ] grep for orphan references using word-boundary matching: `grep -rwE 'fileTree|newFileTree|newFileTreeFromEntries|mdTOC|parseTOC|ensureVisibleInList' app/ui/*.go` — should find zero hits in the `ui` package (excluding `app/ui/sidepane/`). Word-boundary `-w` avoids false negatives from substrings like `fileTreeSomething`.
-- [ ] grep `app/ui/` for `"github.com/umputun/revdiff/app/ui/sidepane"` in production files (exclude `*_test.go`): `grep -l '"github.com/umputun/revdiff/app/ui/sidepane"' app/ui/*.go | grep -v _test.go` — should return only `app/ui/model.go` (the single data-object-import site). Model handlers (loaders, view, diffnav, handlers, annotate, annotlist) must not appear.
-- [ ] run `go test ./... -race` once more
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] verify `app/ui/sidepane` test coverage is ≥ 80%
-- [ ] verify no `var _ FileTreeComponent = ...` or `var _ TOCComponent = ...` assertions exist (they were intentionally omitted per Design Philosophy decision)
-- [ ] verify all Motion/Direction enum values are used in at least one call site or test (no dead enum values)
+- [x] grep for orphan references using word-boundary matching: `grep -rwE 'fileTree|newFileTree|newFileTreeFromEntries|mdTOC|parseTOC|ensureVisibleInList' app/ui/*.go` — should find zero hits in the `ui` package (excluding `app/ui/sidepane/`). Word-boundary `-w` avoids false negatives from substrings like `fileTreeSomething`.
+- [x] grep `app/ui/` for `"github.com/umputun/revdiff/app/ui/sidepane"` in production files (exclude `*_test.go`): `grep -l '"github.com/umputun/revdiff/app/ui/sidepane"' app/ui/*.go | grep -v _test.go` — should return only `app/ui/model.go` (the single data-object-import site). Model handlers (loaders, view, diffnav, handlers, annotate, annotlist) must not appear.
+- [x] run `go test ./... -race` once more
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] verify `app/ui/sidepane` test coverage is ≥ 80%
+- [x] verify no `var _ FileTreeComponent = ...` or `var _ TOCComponent = ...` assertions exist (they were intentionally omitted per Design Philosophy decision)
+- [x] verify all Motion/Direction enum values are used in at least one call site or test (no dead enum values)
 
 ### Task 18: M3 MILESTONE — move plan to completed
 
-- [ ] `git mv docs/plans/2026-04-11-sidepane-extraction.md docs/plans/completed/`
-- [ ] commit M3: `git add -A && git commit -m "docs: complete sidepane extraction plan"` (docs updates + plan moved)
+- [x] `git mv docs/plans/2026-04-11-sidepane-extraction.md docs/plans/completed/`
+- [x] commit M3: `git add -A && git commit -m "docs: complete sidepane extraction plan"` (docs updates + plan moved)
 
 ## Post-Completion
 

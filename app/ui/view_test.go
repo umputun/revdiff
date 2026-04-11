@@ -17,12 +17,6 @@ import (
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
-// testTOCConcrete extracts the concrete *sidepane.TOC from a Model's mdTOC interface field.
-// used for whitebox test assertions that need access to cursor/activeSection.
-func testTOCConcrete(m Model) *sidepane.TOC {
-	return m.mdTOC.(*sidepane.TOC)
-}
-
 func TestModel_ResizeInSingleFileMode(t *testing.T) {
 	m := testModel(nil, nil)
 	// set up single-file mode via filesLoadedMsg
@@ -1047,60 +1041,60 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 
 	t.Run("j moves cursor down in TOC and auto-jumps diff", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, testTOCConcrete(m).Cursor()) // starts on "top" entry
+		assert.Equal(t, 0, tocDirect(m.mdTOC).Cursor()) // starts on "top" entry
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Equal(t, 1, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 1, tocDirect(model.mdTOC).Cursor())
 		assert.Equal(t, 0, model.diffCursor, "diff cursor should jump to # First at index 0")
 		assert.Equal(t, paneTree, model.focus, "focus should stay on TOC pane")
 	})
 
 	t.Run("k moves cursor up in TOC and auto-jumps diff", func(t *testing.T) {
 		m := setup(t)
-		testTOCConcrete(m).SetCursor(3) // on "Third"
+		tocDirect(m.mdTOC).SetCursor(3) // on "Third"
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 		model := result.(Model)
-		assert.Equal(t, 2, testTOCConcrete(model).Cursor()) // on "Second"
+		assert.Equal(t, 2, tocDirect(model.mdTOC).Cursor()) // on "Second"
 		assert.Equal(t, 2, model.diffCursor, "diff cursor should jump to ## Second at index 2")
 		assert.Equal(t, paneTree, model.focus, "focus should stay on TOC pane")
 	})
 
 	t.Run("j clamped at last entry", func(t *testing.T) {
 		m := setup(t)
-		testTOCConcrete(m).SetCursor(3) // last entry (Third)
+		tocDirect(m.mdTOC).SetCursor(3) // last entry (Third)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Equal(t, 3, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 3, tocDirect(model.mdTOC).Cursor())
 	})
 
 	t.Run("k clamped at first entry", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, testTOCConcrete(m).Cursor())
+		assert.Equal(t, 0, tocDirect(m.mdTOC).Cursor())
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 		model := result.(Model)
-		assert.Equal(t, 0, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 0, tocDirect(model.mdTOC).Cursor())
 	})
 
 	t.Run("home moves to first entry", func(t *testing.T) {
 		m := setup(t)
-		testTOCConcrete(m).SetCursor(3)
+		tocDirect(m.mdTOC).SetCursor(3)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
 		model := result.(Model)
-		assert.Equal(t, 0, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 0, tocDirect(model.mdTOC).Cursor())
 	})
 
 	t.Run("end moves to last entry", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, testTOCConcrete(m).Cursor())
+		assert.Equal(t, 0, tocDirect(m.mdTOC).Cursor())
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
 		model := result.(Model)
-		assert.Equal(t, 3, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 3, tocDirect(model.mdTOC).Cursor())
 	})
 
 	t.Run("l switches to diff pane", func(t *testing.T) {
@@ -1113,56 +1107,56 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 
 	t.Run("pgdn moves cursor by page size", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, testTOCConcrete(m).Cursor())
+		assert.Equal(t, 0, tocDirect(m.mdTOC).Cursor())
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 		model := result.(Model)
-		assert.Equal(t, 3, testTOCConcrete(model).Cursor(), "pgdn should move to last entry (4 entries including top)")
+		assert.Equal(t, 3, tocDirect(model.mdTOC).Cursor(), "pgdn should move to last entry (4 entries including top)")
 	})
 
 	t.Run("pgup moves cursor by page size", func(t *testing.T) {
 		m := setup(t)
-		testTOCConcrete(m).SetCursor(3)
+		tocDirect(m.mdTOC).SetCursor(3)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 		model := result.(Model)
-		assert.Equal(t, 0, testTOCConcrete(model).Cursor(), "pgup should move to first entry")
+		assert.Equal(t, 0, tocDirect(model.mdTOC).Cursor(), "pgup should move to first entry")
 	})
 
 	t.Run("tab back to TOC syncs cursor to active section", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		testTOCConcrete(m).SetCursor(0)        // cursor was on top entry
-		testTOCConcrete(m).SetActiveSection(3) // but diff scrolled to Third section
+		tocDirect(m.mdTOC).SetCursor(0)        // cursor was on top entry
+		tocDirect(m.mdTOC).SetActiveSection(3) // but diff scrolled to Third section
 		m.diffCursor = 4                       // cursor on Third header line
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.focus)
-		assert.Equal(t, 3, testTOCConcrete(model).Cursor(), "TOC cursor should sync to active section on tab back")
+		assert.Equal(t, 3, tocDirect(model.mdTOC).Cursor(), "TOC cursor should sync to active section on tab back")
 	})
 
 	t.Run("h key syncs TOC cursor to active section", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		testTOCConcrete(m).SetCursor(0)
-		testTOCConcrete(m).SetActiveSection(2) // second section
+		tocDirect(m.mdTOC).SetCursor(0)
+		tocDirect(m.mdTOC).SetActiveSection(2) // second section
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.focus)
-		assert.Equal(t, 2, testTOCConcrete(model).Cursor(), "TOC cursor should sync to active section on h key")
+		assert.Equal(t, 2, tocDirect(model.mdTOC).Cursor(), "TOC cursor should sync to active section on h key")
 	})
 
 	t.Run("n jumps to next TOC entry from diff pane", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		testTOCConcrete(m).SetCursor(1) // on First
-		testTOCConcrete(m).SetActiveSection(1)
+		tocDirect(m.mdTOC).SetCursor(1) // on First
+		tocDirect(m.mdTOC).SetActiveSection(1)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := result.(Model)
-		assert.Equal(t, 2, testTOCConcrete(model).Cursor(), "n should advance TOC cursor to Second")
+		assert.Equal(t, 2, tocDirect(model.mdTOC).Cursor(), "n should advance TOC cursor to Second")
 		assert.Equal(t, 2, model.diffCursor, "diff cursor should jump to ## Second at index 2")
 		assert.Equal(t, paneDiff, model.focus, "focus should stay on diff pane")
 	})
@@ -1170,12 +1164,12 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	t.Run("p jumps to prev TOC entry from diff pane", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		testTOCConcrete(m).SetCursor(3) // on Third
-		testTOCConcrete(m).SetActiveSection(3)
+		tocDirect(m.mdTOC).SetCursor(3) // on Third
+		tocDirect(m.mdTOC).SetActiveSection(3)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 		model := result.(Model)
-		assert.Equal(t, 2, testTOCConcrete(model).Cursor(), "p should move TOC cursor to Second")
+		assert.Equal(t, 2, tocDirect(model.mdTOC).Cursor(), "p should move TOC cursor to Second")
 		assert.Equal(t, 2, model.diffCursor, "diff cursor should jump to ## Second at index 2")
 		assert.Equal(t, paneDiff, model.focus, "focus should stay on diff pane")
 	})
@@ -1183,23 +1177,23 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	t.Run("n clamped at last TOC entry", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		testTOCConcrete(m).SetCursor(3) // last entry
-		testTOCConcrete(m).SetActiveSection(3)
+		tocDirect(m.mdTOC).SetCursor(3) // last entry
+		tocDirect(m.mdTOC).SetActiveSection(3)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := result.(Model)
-		assert.Equal(t, 3, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 3, tocDirect(model.mdTOC).Cursor())
 	})
 
 	t.Run("p clamped at first TOC entry", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		testTOCConcrete(m).SetCursor(0)
-		testTOCConcrete(m).SetActiveSection(0)
+		tocDirect(m.mdTOC).SetCursor(0)
+		tocDirect(m.mdTOC).SetActiveSection(0)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 		model := result.(Model)
-		assert.Equal(t, 0, testTOCConcrete(model).Cursor())
+		assert.Equal(t, 0, tocDirect(model.mdTOC).Cursor())
 	})
 }
 
@@ -1224,13 +1218,13 @@ func TestModel_EnterInTOCPane(t *testing.T) {
 		m.focus = paneTree
 
 		// move cursor to third entry (## Second at lineIdx=3), accounting for top entry at [0]
-		testTOCConcrete(m).SetCursor(2)
+		tocDirect(m.mdTOC).SetCursor(2)
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		model := result.(Model)
 
 		assert.Equal(t, 3, model.diffCursor, "diffCursor should jump to Second header at index 3")
 		assert.Equal(t, paneDiff, model.focus, "focus should switch to diff pane after enter")
-		assert.Equal(t, 2, testTOCConcrete(model).ActiveSection(), "active section should track jumped entry")
+		assert.Equal(t, 2, tocDirect(model.mdTOC).ActiveSection(), "active section should track jumped entry")
 	})
 
 	t.Run("enter on last TOC entry", func(t *testing.T) {
@@ -1242,7 +1236,7 @@ func TestModel_EnterInTOCPane(t *testing.T) {
 		m.diffLines = mdLines
 		m.highlightedLines = make([]string, len(mdLines))
 		m.focus = paneTree
-		testTOCConcrete(m).SetCursor(3) // ### Third at lineIdx=5, accounting for top entry at [0]
+		tocDirect(m.mdTOC).SetCursor(3) // ### Third at lineIdx=5, accounting for top entry at [0]
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		model := result.(Model)

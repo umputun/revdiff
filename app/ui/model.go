@@ -151,7 +151,6 @@ type Model struct {
 	sgr          sgrProcessor
 	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
 	viewport     viewport.Model
-	newFileTree  func(entries []diff.FileEntry) FileTreeComponent
 	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
 	store        *annotation.Store
 	diffRenderer Renderer
@@ -359,7 +358,6 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		highlighter:      cfg.Highlighter,
 		blamer:           cfg.Blamer,
 		tree:             cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
-		newFileTree:      cfg.NewFileTree,
 		parseTOC:         cfg.ParseTOC,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,

@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
-	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -1310,6 +1309,6 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model = result.(Model)
 		// active section should reflect the cursor position after search nav (index 2 = Section, accounting for top entry)
-		assert.Equal(t, 2, model.mdTOC.(*sidepane.TOC).ActiveSection(), "TOC should track active section after search jump")
+		assert.Equal(t, 2, tocDirect(model.mdTOC).ActiveSection(), "TOC should track active section after search jump")
 	})
 }

@@ -111,6 +111,9 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.tree.Rebuild(entries)
+	if m.tree.FilterActive() {
+		m.tree.RefreshFilter(m.annotatedFiles())
+	}
 	if m.currFile != "" {
 		m.tree.SelectByPath(m.currFile)
 	}

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/style"
 )
@@ -213,35 +215,42 @@ func (t *TOC) Render(r TOCRender) string {
 	return b.String()
 }
 
-// truncateTitle trims a title to fit maxWidth, appending ellipsis when truncated.
+// truncateTitle trims a title to fit maxWidth display cells, appending ellipsis when truncated.
+// uses runewidth for correct CJK/wide-character handling, consistent with FileTree.truncateDirName.
 func (t *TOC) truncateTitle(title string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""
 	}
-	runes := []rune(title)
-	if len(runes) <= maxWidth {
+	if runewidth.StringWidth(title) <= maxWidth {
 		return title
 	}
 	if maxWidth <= 1 {
 		return "…"
 	}
-	return string(runes[:maxWidth-1]) + "…"
+	runes := []rune(title)
+	w := 0
+	end := 0
+	for i, r := range runes {
+		rw := runewidth.RuneWidth(r)
+		if w+rw > maxWidth-1 { // reserve 1 cell for "…"
+			break
+		}
+		w += rw
+		end = i + 1
+	}
+	return string(runes[:end]) + "…"
 }
 
-// Cursor returns the current cursor index. Exported for cross-package test assertions;
-// not part of the TOCComponent interface.
+// Cursor returns the current cursor index.
 func (t *TOC) Cursor() int { return t.cursor }
 
-// SetCursor sets the cursor to the given index. Exported for cross-package test setup;
-// not part of the TOCComponent interface.
+// SetCursor sets the cursor to the given index.
 func (t *TOC) SetCursor(idx int) { t.cursor = idx }
 
-// ActiveSection returns the active section index. Exported for cross-package test assertions;
-// not part of the TOCComponent interface.
+// ActiveSection returns the active section index.
 func (t *TOC) ActiveSection() int { return t.activeSection }
 
-// SetActiveSection sets the active section index. Exported for cross-package test setup;
-// not part of the TOCComponent interface.
+// SetActiveSection sets the active section index.
 func (t *TOC) SetActiveSection(idx int) { t.activeSection = idx }
 
 // fencePrefix returns the fence character ('`' or '~') and count of leading consecutive

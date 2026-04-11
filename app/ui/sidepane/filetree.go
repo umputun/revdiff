@@ -215,6 +215,8 @@ func (ft *FileTree) EnsureVisible(height int) {
 // Rebuild rebuilds the file tree from new entries in-place.
 // preserves reviewed map (pruned to files still present), resets cursor/offset,
 // positions cursor on first file entry, and preserves filter state.
+// entries are rebuilt from all files regardless of filter flag;
+// call RefreshFilter afterward when FilterActive returns true.
 func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	paths := diff.FileEntryPaths(entries)
 	ft.allFiles = paths

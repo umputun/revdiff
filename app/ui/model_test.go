@@ -41,6 +41,10 @@ func testParseTOCFactory() func(lines []diff.DiffLine, filename string) TOCCompo
 	}
 }
 
+// tocDirect unwraps a TOCComponent interface to the concrete *sidepane.TOC
+// for accessing test-only methods (Cursor, SetCursor, ActiveSection, SetActiveSection).
+func tocDirect(toc TOCComponent) *sidepane.TOC { return toc.(*sidepane.TOC) }
+
 // testNewFileTree creates a sidepane.FileTree from a list of file paths,
 // replacing the old testNewFileTree([]string{...}) pattern in tests.
 func testNewFileTree(files []string) *sidepane.FileTree {
