@@ -241,7 +241,9 @@ func (m *Model) centerHunkInViewport() {
 
 	cursorY := m.cursorViewportYUsing(hunks, annotationSet)
 
-	// find hunk end: scan forward from cursor while lines are changed
+	// find hunk end: scan forward from cursor while lines are changed.
+	// hidden ChangeRemove lines (collapsed mode) are included in the range because
+	// hunkLineHeight returns 0 for them, so over-extending hunkEnd is harmless.
 	hunkEnd := m.diffCursor
 	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
 		ct := m.diffLines[i].ChangeType

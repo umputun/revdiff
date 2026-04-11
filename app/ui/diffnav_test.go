@@ -1082,7 +1082,7 @@ func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
 	}
 	// two changed lines: one short, one long enough to wrap
 	lines = append(lines,
-		diff.DiffLine{NewNum: 21, Content: "short add", ChangeType: diff.ChangeAdd},                      // idx 20
+		diff.DiffLine{NewNum: 21, Content: "short add", ChangeType: diff.ChangeAdd},              // idx 20
 		diff.DiffLine{NewNum: 22, Content: strings.Repeat("a", 200), ChangeType: diff.ChangeAdd}, // idx 21, wraps
 	)
 	for i := 23; i <= 60; i++ {
@@ -1096,6 +1096,10 @@ func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
 	m = result.(Model)
 	m.focus = paneDiff
 	m.wrapMode = true
+	// force single-file mode so tree pane is hidden and wrap width is deterministic:
+	// diffContentWidth = 80 - 4 = 76, wrapWidth = 76 - 3 (wrap gutter) = 73
+	m.singleFile = true
+	m.treeWidth = 0
 	vpHeight := m.viewport.Height
 	require.Positive(t, vpHeight)
 
@@ -1103,14 +1107,14 @@ func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
 	m.moveToNextHunk()
 	assert.Equal(t, 20, m.diffCursor, "cursor should land on first line of hunk")
 
-	// compute expected offset using the same helpers the production code uses
-	wrapCount0 := m.wrappedLineCount(20)
-	wrapCount1 := m.wrappedLineCount(21)
-	require.Greater(t, wrapCount1, 1, "long line should wrap to multiple rows")
-	hunkVisualHeight := wrapCount0 + wrapCount1
-	cursorY := m.cursorViewportY()
-	hunkMidY := cursorY + hunkVisualHeight/2
-	expectedOffset := max(0, hunkMidY-vpHeight/2)
+	// pinned literals independent of production helpers:
+	// - 20 context lines above hunk, each 1 visual row → cursorY = 20
+	// - first add line "short add" → 1 row
+	// - second add line is 200 'a' chars at wrap width 73 → 3 rows
+	// - total hunk visual height = 1 + 3 = 4
+	const cursorY = 20
+	const hunkVisualHeight = 4
+	expectedOffset := max(0, cursorY+hunkVisualHeight/2-vpHeight/2)
 	assert.Equal(t, expectedOffset, m.viewport.YOffset, "wrap mode: offset should account for wrapped line height")
 }
 
@@ -1145,14 +1149,14 @@ func TestModel_CenterHunkInViewport_WithAnnotation(t *testing.T) {
 	m.moveToNextHunk()
 	assert.Equal(t, 25, m.diffCursor, "cursor should land on first line of hunk")
 
-	// expected: hunk height = 2 changed lines + annotation visual rows
-	annotKey := m.annotationKey(26, "+")
-	annotHeight := m.wrappedAnnotationLineCount(annotKey)
-	require.Positive(t, annotHeight, "annotation should contribute visual rows")
-	hunkVisualHeight := 2 + annotHeight // 2 changed lines + annotation
-	cursorY := m.cursorViewportY()
-	hunkMidY := cursorY + hunkVisualHeight/2
-	expectedOffset := max(0, hunkMidY-vpHeight/2)
+	// pinned literals independent of production helpers:
+	// - 25 context lines above hunk, each 1 visual row → cursorY = 25
+	// - 2 short add lines, each 1 row
+	// - "review note" annotation (short, no wrap) → 1 row
+	// - total hunk visual height = 2 + 1 = 3
+	const cursorY = 25
+	const hunkVisualHeight = 3
+	expectedOffset := max(0, cursorY+hunkVisualHeight/2-vpHeight/2)
 	assert.Equal(t, expectedOffset, m.viewport.YOffset, "annotation: offset should include annotation visual rows")
 }
 
@@ -1220,10 +1224,13 @@ func TestModel_CenterHunkInViewport_CollapsedMode(t *testing.T) {
 	// in collapsed mode, cursor lands on first visible line (first add, idx 23)
 	assert.Equal(t, 23, m.diffCursor, "cursor should skip hidden removes and land on first add")
 
-	// hunk visual height = 3 visible add lines (removes are hidden)
-	cursorY := m.cursorViewportY()
-	hunkMidY := cursorY + 3/2
-	expectedOffset := max(0, hunkMidY-vpHeight/2)
+	// pinned literals independent of production helpers:
+	// - 20 context lines above hunk, each 1 visual row
+	// - in collapsed mode, 3 hidden removes contribute 0 rows each → cursorY = 20
+	// - hunk visual height = 3 visible add lines (removes contribute 0)
+	const cursorY = 20
+	const hunkVisualHeight = 3
+	expectedOffset := max(0, cursorY+hunkVisualHeight/2-vpHeight/2)
 	assert.Equal(t, expectedOffset, m.viewport.YOffset, "collapsed mode: offset should only count visible lines")
 }
 
