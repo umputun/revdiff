@@ -18,6 +18,7 @@ import (
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
 	"github.com/umputun/revdiff/app/ui"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -437,7 +438,17 @@ func run(opts options) error {
 		WorkDir:          workDir,
 		ThemesDir:        defaultThemesDir(),
 		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
-		ActiveThemeName:  theme.ActiveName(opts.Theme),
+		ActiveThemeName: theme.ActiveName(opts.Theme),
+		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
+			return sidepane.NewFileTree(entries)
+		},
+		ParseTOC: func(lines []diff.DiffLine, filename string) ui.TOCComponent {
+			toc := sidepane.ParseTOC(lines, filename)
+			if toc == nil {
+				return nil // collapse typed-nil *TOC into truly nil interface
+			}
+			return toc
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("create model: %w", err)

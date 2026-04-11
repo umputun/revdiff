@@ -681,10 +681,10 @@ Update `main.go` to construct the `NewFileTree` and `ParseTOC` factory closures 
 **Files:**
 - Modify: `app/main.go`
 
-- [ ] add `import "github.com/umputun/revdiff/app/ui/sidepane"` to main.go
-- [ ] in the `ModelConfig{...}` literal that main.go currently builds, add `NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent { return sidepane.NewFileTree(entries) }`
-- [ ] add `ParseTOC: func(lines []diff.DiffLine, filename string) ui.TOCComponent { toc := sidepane.ParseTOC(lines, filename); if toc == nil { return nil }; return toc }` — the explicit nil guard is mandatory, not cosmetic
-- [ ] verify main.go compiles and can construct a Model
+- [x] add `import "github.com/umputun/revdiff/app/ui/sidepane"` to main.go
+- [x] in the `ModelConfig{...}` literal that main.go currently builds, add `NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent { return sidepane.NewFileTree(entries) }`
+- [x] add `ParseTOC: func(lines []diff.DiffLine, filename string) ui.TOCComponent { toc := sidepane.ParseTOC(lines, filename); if toc == nil { return nil }; return toc }` — the explicit nil guard is mandatory, not cosmetic
+- [x] verify main.go compiles and can construct a Model
 
 ### Task 13: Delete old filetree.go, mdtoc.go, and their tests
 
