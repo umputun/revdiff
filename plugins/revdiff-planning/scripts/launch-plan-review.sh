@@ -175,7 +175,7 @@ $REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" <<'APPLESCRIPT'
+    if ! GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" <<'APPLESCRIPT'
 on run argv
     set launchScript to item 1 of argv
     tell application "Ghostty"
@@ -189,8 +189,7 @@ on run argv
     end tell
 end run
 APPLESCRIPT
-    )
-    if [ $? -ne 0 ]; then
+    ); then
         rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
         exit 1
     fi

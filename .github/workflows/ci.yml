@@ -42,3 +42,20 @@ jobs:
         run: $(go env GOPATH)/bin/goveralls -service="github" -coverprofile=$GITHUB_WORKSPACE/profile.cov
         env:
           COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: validate YAML frontmatter in markdown files
+        run: |
+          pip install pyyaml
+          python3 .github/scripts/validate-frontmatter.py
+
+      - name: shellcheck
+        run: |
+          find . -name '*.sh' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 shellcheck
