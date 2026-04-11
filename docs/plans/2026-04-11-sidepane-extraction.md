@@ -595,20 +595,20 @@ Add the exported `FileTreeComponent` and `TOCComponent` interfaces to `ui/model.
 **Files:**
 - Modify: `app/ui/model.go`
 
-- [ ] add `FileTreeComponent` exported interface definition with all 15 methods; each method gets a godoc comment starting with the method name (CLAUDE.md `rules/comments.md` requirement for exported types)
-- [ ] add `TOCComponent` exported interface definition with all 7 methods; same godoc requirement
-- [ ] add `import "github.com/umputun/revdiff/app/ui/sidepane"` to model.go — **data-object import only** (for `sidepane.Motion`, `sidepane.Direction`, `sidepane.FileTreeRender`, `sidepane.TOCRender` type names in interface signatures). Model code MUST NOT call `sidepane.NewFileTree(...)` or `sidepane.ParseTOC(...)` — all construction goes through injected factories.
-- [ ] change `Model.tree fileTree` → `Model.tree FileTreeComponent`
-- [ ] change `Model.mdTOC *mdTOC` → `Model.mdTOC TOCComponent`
-- [ ] add `newFileTree func(entries []diff.FileEntry) FileTreeComponent` field to `Model` struct
-- [ ] add `parseTOC func(lines []diff.DiffLine, filename string) TOCComponent` field to `Model` struct
-- [ ] add `NewFileTree func(entries []diff.FileEntry) FileTreeComponent` field to `ModelConfig` with godoc noting it's required and typically wraps `sidepane.NewFileTree`
-- [ ] add `ParseTOC func(lines []diff.DiffLine, filename string) TOCComponent` field to `ModelConfig` with godoc noting it's required, must collapse typed-nil to interface-nil for empty TOCs
-- [ ] update `NewModel` to validate both factories are non-nil (return `errors.New("ui.NewModel: cfg.NewFileTree is required")` / `cfg.ParseTOC is required`) matching existing validation pattern for other required deps
-- [ ] copy factories from `cfg.NewFileTree` / `cfg.ParseTOC` into the `Model{newFileTree: ..., parseTOC: ...}` struct literal in `NewModel`
-- [ ] **CRITICAL nil-safety**: in `NewModel`, initialize `m.tree` to an empty tree via `cfg.NewFileTree(nil)` — the interface field would otherwise be a nil interface, and `loaders.go:90 loadSelectedIfChanged` calls `m.tree.EnsureVisible(...)` before any `handleFilesLoaded`. Current code is zero-value-safe because `fileTree` is a value type; switching to interface breaks that safety unless we pre-initialize. Add godoc on the field noting this invariant: "tree is never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg".
-- [ ] leave `m.mdTOC` as nil-interface by default (nil-check guards already exist at every call site — `if m.mdTOC == nil` in diffnav.go, handlers.go, view.go, loaders.go)
-- [ ] NOTE: many call sites will be broken at this point — expected, they get fixed in Tasks 8–12
+- [x] add `FileTreeComponent` exported interface definition with all 15 methods; each method gets a godoc comment starting with the method name (CLAUDE.md `rules/comments.md` requirement for exported types)
+- [x] add `TOCComponent` exported interface definition with all 7 methods; same godoc requirement
+- [x] add `import "github.com/umputun/revdiff/app/ui/sidepane"` to model.go — **data-object import only** (for `sidepane.Motion`, `sidepane.Direction`, `sidepane.FileTreeRender`, `sidepane.TOCRender` type names in interface signatures). Model code MUST NOT call `sidepane.NewFileTree(...)` or `sidepane.ParseTOC(...)` — all construction goes through injected factories.
+- [x] change `Model.tree fileTree` → `Model.tree FileTreeComponent`
+- [x] change `Model.mdTOC *mdTOC` → `Model.mdTOC TOCComponent`
+- [x] add `newFileTree func(entries []diff.FileEntry) FileTreeComponent` field to `Model` struct
+- [x] add `parseTOC func(lines []diff.DiffLine, filename string) TOCComponent` field to `Model` struct
+- [x] add `NewFileTree func(entries []diff.FileEntry) FileTreeComponent` field to `ModelConfig` with godoc noting it's required and typically wraps `sidepane.NewFileTree`
+- [x] add `ParseTOC func(lines []diff.DiffLine, filename string) TOCComponent` field to `ModelConfig` with godoc noting it's required, must collapse typed-nil to interface-nil for empty TOCs
+- [x] update `NewModel` to validate both factories are non-nil (return `errors.New("ui.NewModel: cfg.NewFileTree is required")` / `cfg.ParseTOC is required`) matching existing validation pattern for other required deps
+- [x] copy factories from `cfg.NewFileTree` / `cfg.ParseTOC` into the `Model{newFileTree: ..., parseTOC: ...}` struct literal in `NewModel`
+- [x] **CRITICAL nil-safety**: in `NewModel`, initialize `m.tree` to an empty tree via `cfg.NewFileTree(nil)` — the interface field would otherwise be a nil interface, and `loaders.go:90 loadSelectedIfChanged` calls `m.tree.EnsureVisible(...)` before any `handleFilesLoaded`. Current code is zero-value-safe because `fileTree` is a value type; switching to interface breaks that safety unless we pre-initialize. Add godoc on the field noting this invariant: "tree is never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg".
+- [x] leave `m.mdTOC` as nil-interface by default (nil-check guards already exist at every call site — `if m.mdTOC == nil` in diffnav.go, handlers.go, view.go, loaders.go)
+- [x] NOTE: many call sites will be broken at this point — expected, they get fixed in Tasks 8–12
 
 ### Task 8: Migrate loaders.go call sites
 
