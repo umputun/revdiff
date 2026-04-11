@@ -135,7 +135,7 @@ func (m *Model) saveAnnotation() {
 		m.annotating = false
 		m.fileAnnotating = false
 		m.diffCursor = -1 // position cursor on the file annotation line
-		m.tree.refreshFilter(m.annotatedFiles())
+		m.tree.RefreshFilter(m.annotatedFiles())
 		m.viewport.SetContent(m.renderDiff())
 		m.viewport.GotoTop()
 		return
@@ -156,7 +156,7 @@ func (m *Model) saveAnnotation() {
 	}
 	m.store.Add(a)
 	m.annotating = false
-	m.tree.refreshFilter(m.annotatedFiles())
+	m.tree.RefreshFilter(m.annotatedFiles())
 	m.viewport.SetContent(m.renderDiff())
 }
 
@@ -176,9 +176,9 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 	m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 	m.skipInitialDividers()
 
-	m.tree.refreshFilter(m.annotatedFiles())
+	m.tree.RefreshFilter(m.annotatedFiles())
 
-	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
+	if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.currFile {
 		m.loadSeq++
 		return m.loadFileDiff(newFile)
 	}
@@ -210,10 +210,10 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 		m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
 		m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 		m.cursorOnAnnotation = false
-		m.tree.refreshFilter(m.annotatedFiles())
+		m.tree.RefreshFilter(m.annotatedFiles())
 
 		// if filter moved cursor to a different file, load the new selection
-		if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
+		if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.currFile {
 			m.loadSeq++
 			return m.loadFileDiff(newFile)
 		}

@@ -698,7 +698,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = diffHeight
 	}
 
-	m.tree.ensureVisible(m.treePageSize())
+	m.tree.EnsureVisible(m.treePageSize())
 
 	if m.currFile != "" {
 		m.syncViewportToCursor()

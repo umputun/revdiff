@@ -251,7 +251,7 @@ func (m Model) jumpToAnnotation() (tea.Model, tea.Cmd) {
 	// different file: set pending jump and trigger file load
 	m.pendingAnnotJump = &a
 	if !m.singleFile {
-		if !m.tree.selectByPath(a.File) {
+		if !m.tree.SelectByPath(a.File) {
 			m.pendingAnnotJump = nil // file not in tree, cancel jump
 			return m, nil
 		}

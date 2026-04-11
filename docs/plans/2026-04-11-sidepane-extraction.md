@@ -663,16 +663,16 @@ Largest migration file — 24 call sites. Use the mechanical table from Technica
 - Modify: `app/ui/annotlist.go`
 - Modify: `app/ui/model.go`
 
-- [ ] handlers.go: replace the mdTOC access block (lines 283-288) — use `CurrentLineIdx()` with the ok guard, then `UpdateActiveSection`
-- [ ] handlers.go: `m.tree.toggleFilter(annotated)` → `m.tree.ToggleFilter(annotated)`, `m.tree.ensureVisible(...)` → `m.tree.EnsureVisible(...)`
-- [ ] handlers.go: `m.tree.selectedFile()` → `m.tree.SelectedFile()` (two sites)
-- [ ] handlers.go: `m.tree.toggleReviewed(file)` → `m.tree.ToggleReviewed(file)`
-- [ ] handlers.go: `m.tree.nextFile()` / `m.tree.prevFile()` → `m.tree.StepFile(sidepane.DirNext/DirPrev)`
-- [ ] annotate.go: `m.tree.refreshFilter(...)` → `m.tree.RefreshFilter(...)` (four sites)
-- [ ] annotate.go: `m.tree.selectedFile()` → `m.tree.SelectedFile()` (two sites)
-- [ ] annotlist.go: `m.tree.selectByPath(a.File)` → `m.tree.SelectByPath(a.File)`
-- [ ] model.go handleResize: `m.tree.ensureVisible(m.treePageSize())` → `m.tree.EnsureVisible(m.treePageSize())`
-- [ ] verify all modified files compile individually
+- [x] handlers.go: replace the mdTOC access block (lines 283-288) — use `CurrentLineIdx()` with the ok guard, then `UpdateActiveSection`
+- [x] handlers.go: `m.tree.toggleFilter(annotated)` → `m.tree.ToggleFilter(annotated)`, `m.tree.ensureVisible(...)` → `m.tree.EnsureVisible(...)`
+- [x] handlers.go: `m.tree.selectedFile()` → `m.tree.SelectedFile()` (two sites)
+- [x] handlers.go: `m.tree.toggleReviewed(file)` → `m.tree.ToggleReviewed(file)`
+- [x] handlers.go: `m.tree.nextFile()` / `m.tree.prevFile()` → `m.tree.StepFile(sidepane.DirNext/DirPrev)`
+- [x] annotate.go: `m.tree.refreshFilter(...)` → `m.tree.RefreshFilter(...)` (four sites)
+- [x] annotate.go: `m.tree.selectedFile()` → `m.tree.SelectedFile()` (two sites)
+- [x] annotlist.go: `m.tree.selectByPath(a.File)` → `m.tree.SelectByPath(a.File)`
+- [x] model.go handleResize: `m.tree.ensureVisible(m.treePageSize())` → `m.tree.EnsureVisible(m.treePageSize())`
+- [x] verify all modified files compile individually
 
 ### Task 12: Wire sidepane factories in main.go
 

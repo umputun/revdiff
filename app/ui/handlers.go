@@ -10,6 +10,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -280,15 +281,16 @@ func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
 func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case paneTree:
-		if m.mdTOC != nil && m.mdTOC.cursor < len(m.mdTOC.entries) {
-			// jump to selected header in diff
-			entry := m.mdTOC.entries[m.mdTOC.cursor]
-			m.diffCursor = entry.lineIdx
-			m.cursorOnAnnotation = false
-			m.mdTOC.updateActiveSection(m.diffCursor)
-			m.focus = paneDiff
-			m.topAlignViewportOnCursor()
-			return m, nil
+		if m.mdTOC != nil {
+			if idx, ok := m.mdTOC.CurrentLineIdx(); ok {
+				// jump to selected header in diff
+				m.diffCursor = idx
+				m.cursorOnAnnotation = false
+				m.mdTOC.UpdateActiveSection(m.diffCursor)
+				m.focus = paneDiff
+				m.topAlignViewportOnCursor()
+				return m, nil
+			}
 		}
 		if m.currFile != "" {
 			m.focus = paneDiff
@@ -344,8 +346,8 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	if len(annotated) > 0 {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
-		m.tree.toggleFilter(annotated)
-		m.tree.ensureVisible(m.treePageSize())
+		m.tree.ToggleFilter(annotated)
+		m.tree.EnsureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
 	}
 	return m, nil
@@ -356,12 +358,12 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 	file := m.currFile
 	if m.focus == paneTree && m.mdTOC == nil {
-		file = m.tree.selectedFile()
+		file = m.tree.SelectedFile()
 	}
 	if file == "" {
-		file = m.tree.selectedFile()
+		file = m.tree.SelectedFile()
 	}
-	m.tree.toggleReviewed(file)
+	m.tree.ToggleReviewed(file)
 	return m, nil
 }
 
@@ -389,9 +391,9 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 		if forward {
-			m.tree.nextFile()
+			m.tree.StepFile(sidepane.DirectionNext)
 		} else {
-			m.tree.prevFile()
+			m.tree.StepFile(sidepane.DirectionPrev)
 		}
 		return m.loadSelectedIfChanged()
 	}
