@@ -644,16 +644,16 @@ Largest migration file — 24 call sites. Use the mechanical table from Technica
 **Files:**
 - Modify: `app/ui/diffnav.go`
 
-- [ ] migrate handleHunkNav cross-file path (lines 385-398): `hasNextFile`/`nextFile`/`hasPrevFile`/`prevFile` → `HasFile`/`StepFile` with `Direction`
-- [ ] migrate handleTreeNav (lines 471-497): 8 tree nav cases → `Move(Motion, count)`, `ensureVisible` → `EnsureVisible`
-- [ ] migrate handleTOCNav (lines 501-538): mdTOC nav methods → `Move(Motion, count)`, delete the `for range` page loops and replace with direct `Move(MotionPageDown/Up, count)` calls
-- [ ] migrate TOC MoveToFirst/Last: `m.mdTOC.cursor = 0` / `= max(0, len(...)-1)` → `m.mdTOC.Move(MotionFirst/Last, 0)`
-- [ ] migrate `m.mdTOC.ensureVisible(...)` → `m.mdTOC.EnsureVisible(...)`
-- [ ] migrate `jumpTOCEntry` (line 569-576) — `m.mdTOC.cursor + delta` clamp → `m.mdTOC.Move(MotionUp/Down, 0)` based on delta sign
-- [ ] migrate `syncTOCCursorToActive` (lines 579-583) → delegate to `m.mdTOC.SyncCursorToActiveSection()`
-- [ ] migrate `syncDiffToTOCCursor` (lines 586-594) — replace `m.mdTOC.cursor >= len(m.mdTOC.entries)` and `m.mdTOC.entries[m.mdTOC.cursor].lineIdx` with `idx, ok := m.mdTOC.CurrentLineIdx(); if !ok { return }; m.diffCursor = idx`
-- [ ] migrate `syncTOCActiveSection` (line 598-600) → `m.mdTOC.UpdateActiveSection(m.diffCursor)`
-- [ ] verify diffnav.go compiles
+- [x] migrate handleHunkNav cross-file path (lines 385-398): `hasNextFile`/`nextFile`/`hasPrevFile`/`prevFile` → `HasFile`/`StepFile` with `Direction`
+- [x] migrate handleTreeNav (lines 471-497): 8 tree nav cases → `Move(Motion, count)`, `ensureVisible` → `EnsureVisible`
+- [x] migrate handleTOCNav (lines 501-538): mdTOC nav methods → `Move(Motion, count)`, delete the `for range` page loops and replace with direct `Move(MotionPageDown/Up, count)` calls
+- [x] migrate TOC MoveToFirst/Last: `m.mdTOC.cursor = 0` / `= max(0, len(...)-1)` → `m.mdTOC.Move(MotionFirst/Last, 0)`
+- [x] migrate `m.mdTOC.ensureVisible(...)` → `m.mdTOC.EnsureVisible(...)`
+- [x] migrate `jumpTOCEntry` (line 569-576) — `m.mdTOC.cursor + delta` clamp → `m.mdTOC.Move(MotionUp/Down, 0)` based on delta sign
+- [x] migrate `syncTOCCursorToActive` (lines 579-583) → delegate to `m.mdTOC.SyncCursorToActiveSection()`
+- [x] migrate `syncDiffToTOCCursor` (lines 586-594) — replace `m.mdTOC.cursor >= len(m.mdTOC.entries)` and `m.mdTOC.entries[m.mdTOC.cursor].lineIdx` with `idx, ok := m.mdTOC.CurrentLineIdx(); if !ok { return }; m.diffCursor = idx`
+- [x] migrate `syncTOCActiveSection` (line 598-600) → `m.mdTOC.UpdateActiveSection(m.diffCursor)`
+- [x] verify diffnav.go compiles
 
 ### Task 11: Migrate handlers.go, annotate.go, annotlist.go, model.go call sites
 
