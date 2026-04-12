@@ -957,6 +957,7 @@ func TestHandleFileLoaded_SingleColLineNum_FullContext(t *testing.T) {
 	model := result.(Model)
 
 	assert.True(t, model.singleColLineNum, "full-context file should set singleColLineNum to true")
+	assert.Equal(t, model.lineNumWidth+1, model.lineNumGutterWidth(), "full-context should use single-column gutter width")
 }
 
 func TestHandleFileLoaded_SingleColLineNum_RealDiff(t *testing.T) {
