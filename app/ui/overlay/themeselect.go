@@ -21,7 +21,6 @@ const (
 )
 
 type themeSelectOverlay struct {
-	active            bool
 	all               []ThemeItem
 	entries           []ThemeItem
 	cursor            int
@@ -32,7 +31,6 @@ type themeSelectOverlay struct {
 }
 
 func (t *themeSelectOverlay) open(spec ThemeSelectSpec) {
-	t.active = true
 	t.all = spec.Items
 	t.filter = ""
 	t.lastPreviewedName = ""

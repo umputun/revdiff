@@ -14,7 +14,6 @@ import (
 )
 
 type annotListOverlay struct {
-	active bool
 	items  []AnnotationItem
 	cursor int
 	offset int
@@ -22,7 +21,6 @@ type annotListOverlay struct {
 }
 
 func (a *annotListOverlay) open(spec AnnotListSpec) {
-	a.active = true
 	a.items = spec.Items
 	a.cursor = 0
 	a.offset = 0
@@ -60,7 +58,7 @@ func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 func (a *annotListOverlay) emptyOverlay(popupWidth int, resolver Resolver, mgr *Manager) string {
 	text := "no annotations"
 	innerWidth := popupWidth - 4
-	pad := max((innerWidth-len(text))/2, 0)
+	pad := max((innerWidth-lipgloss.Width(text))/2, 0)
 	centered := strings.Repeat(" ", pad) + text
 
 	box := a.boxStyle(popupWidth, resolver).Render(centered)

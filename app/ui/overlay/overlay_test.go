@@ -53,7 +53,7 @@ func TestManager_OpenClosesExisting(t *testing.T) {
 	assert.Equal(t, KindHelp, mgr.Kind())
 	mgr.OpenAnnotList(AnnotListSpec{})
 	assert.Equal(t, KindAnnotList, mgr.Kind(), "opening annot list should close help first")
-	assert.False(t, mgr.help.active, "help should be deactivated")
+	assert.NotEqual(t, KindHelp, mgr.Kind(), "help should be deactivated")
 }
 
 func TestManager_HandleKeyNoOverlay(t *testing.T) {

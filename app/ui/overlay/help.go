@@ -13,12 +13,10 @@ import (
 )
 
 type helpOverlay struct {
-	active bool
-	spec   HelpSpec
+	spec HelpSpec
 }
 
 func (h *helpOverlay) open(spec HelpSpec) {
-	h.active = true
 	h.spec = spec
 }
 

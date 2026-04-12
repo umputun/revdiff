@@ -140,16 +140,6 @@ func (m *Manager) Kind() Kind { return m.kind }
 
 // Close dismisses whatever overlay is active.
 func (m *Manager) Close() {
-	switch m.kind {
-	case KindNone:
-		return
-	case KindHelp:
-		m.help.active = false
-	case KindAnnotList:
-		m.annotLst.active = false
-	case KindThemeSelect:
-		m.themeSel.active = false
-	}
 	m.kind = KindNone
 }
 
