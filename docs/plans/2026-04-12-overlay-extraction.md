@@ -434,9 +434,9 @@ These methods remain on Model because they perform side effects that depend on M
 - Modify: `app/ui/model.go` (if needed for test helper)
 - Modify: various `app/ui/*_test.go` files
 
-- [ ] update all test helpers that construct `Model` or `ModelConfig` to include `Overlay: overlay.NewManager()` field
-- [ ] verify no test references removed fields (`showHelp`, `showAnnotList`, `annotListCursor`, `annotListOffset`, `annotListItems`, `themeSel`)
-- [ ] fix any compilation errors in test files from the field removal
+- [x] update all test helpers that construct `Model` or `ModelConfig` to include `Overlay: overlay.NewManager()` field
+- [x] verify no test references removed fields (`showHelp`, `showAnnotList`, `annotListCursor`, `annotListOffset`, `annotListItems`, `themeSel`)
+- [x] fix any compilation errors in test files from the field removal
 
 ### Task 12: M2 milestone gate — full project green
 

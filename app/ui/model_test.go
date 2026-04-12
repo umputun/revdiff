@@ -103,6 +103,9 @@ func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, high
 	if cfg.ParseTOC == nil {
 		cfg.ParseTOC = testParseTOCFactory()
 	}
+	if cfg.Overlay == nil {
+		cfg.Overlay = overlay.NewManager()
+	}
 	m, err := NewModel(cfg)
 	require.NoError(t, err)
 	return m
