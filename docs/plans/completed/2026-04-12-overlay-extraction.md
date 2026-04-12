@@ -459,11 +459,11 @@ These methods remain on Model because they perform side effects that depend on M
 
 ### Task 14: M3 milestone gate — docs and cleanup
 
-- [ ] verify `CLAUDE.md` overlay section matches actual package contents
-- [ ] verify no orphan references to `showHelp`, `showAnnotList`, `annotListCursor`, `annotListOffset`, `annotListItems`, `themeSel`, `themeSelectState` in any `.go` file
-- [ ] run full test suite: `go test ./... -race`
-- [ ] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] verify `CLAUDE.md` overlay section matches actual package contents
+- [x] verify no orphan references to `showHelp`, `showAnnotList`, `annotListCursor`, `annotListOffset`, `annotListItems`, `themeSel`, `themeSelectState` in any `.go` file
+- [x] run full test suite: `go test ./... -race`
+- [x] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
