@@ -11,6 +11,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -23,6 +24,41 @@ func (m *Model) buildAnnotListItems() []annotation.Annotation {
 		items = append(items, m.store.Get(f)...)
 	}
 	return items
+}
+
+// buildAnnotListSpec builds an overlay.AnnotListSpec from the annotation store.
+func (m Model) buildAnnotListSpec() overlay.AnnotListSpec {
+	annots := m.buildAnnotListItems()
+	items := make([]overlay.AnnotationItem, len(annots))
+	for i, a := range annots {
+		items[i] = overlay.AnnotationItem{
+			File: a.File, ChangeType: a.Type, Comment: a.Comment, Line: a.Line,
+			Target: overlay.AnnotationTarget{File: a.File, ChangeType: a.Type, Line: a.Line},
+		}
+	}
+	return overlay.AnnotListSpec{Items: items}
+}
+
+// jumpToAnnotationTarget jumps to an annotation target returned by the overlay manager.
+func (m Model) jumpToAnnotationTarget(target *overlay.AnnotationTarget) (tea.Model, tea.Cmd) {
+	if target == nil {
+		return m, nil
+	}
+	a := annotation.Annotation{File: target.File, Line: target.Line, Type: target.ChangeType}
+
+	if a.File == m.currFile {
+		m.positionOnAnnotation(a)
+		return m, nil
+	}
+
+	m.pendingAnnotJump = &a
+	if !m.singleFile {
+		if !m.tree.SelectByPath(a.File) {
+			m.pendingAnnotJump = nil
+			return m, nil
+		}
+	}
+	return m.loadSelectedIfChanged()
 }
 
 // annotListBoxStyle builds the bordered box style used by annotation list overlays.

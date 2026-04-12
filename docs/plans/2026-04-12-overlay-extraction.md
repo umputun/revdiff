@@ -391,10 +391,10 @@ These methods remain on Model because they perform side effects that depend on M
 - Modify: `app/ui/handlers.go`
 - Modify: `app/ui/model.go`
 
-- [ ] consolidate all overlay dispatch into `handleModalKey`: add a single `if m.overlay.Active()` guard after annotation-input and search-input checks (model.go:525). This replaces the separate help check in `handleKey` (462-465) and the annotList/themeSelect checks in `handleModalKey` (530-539) with one unified block that delegates to `m.overlay.HandleKey(msg, action)` and switches on `Outcome.Kind`
-- [ ] update help open action in `handleKey`: replace direct `m.showHelp = !m.showHelp` with: if overlay active and kind is help → `m.overlay.Close()`, else build `HelpSpec` from `m.keymap.HelpSections()` + `m.overlay.OpenHelp(spec)`
-- [ ] remove `handleHelpKey`, `helpOverlay`, `writeTOCHelpSection`, `helpColors` methods from `handlers.go`. Keep `formatKeysForHelp`, `displayKeyName`, `helpKeyDisplay`, `helpLine` — they are spec-building helpers used when constructing `HelpSpec`
-- [ ] remove help-related tests from `handlers_test.go` (lines 18-208) — covered by `overlay/help_test.go` now
+- [x] consolidate all overlay dispatch into `handleModalKey`: add a single `if m.overlay.Active()` guard after annotation-input and search-input checks (model.go:525). This replaces the separate help check in `handleKey` (462-465) and the annotList/themeSelect checks in `handleModalKey` (530-539) with one unified block that delegates to `m.overlay.HandleKey(msg, action)` and switches on `Outcome.Kind`
+- [x] update help open action in `handleKey`: replace direct `m.showHelp = !m.showHelp` with: if overlay active and kind is help → `m.overlay.Close()`, else build `HelpSpec` from `m.keymap.HelpSections()` + `m.overlay.OpenHelp(spec)`
+- [x] remove `handleHelpKey`, `helpOverlay`, `writeTOCHelpSection`, `helpColors` methods from `handlers.go`. Keep `formatKeysForHelp`, `displayKeyName`, `helpKeyDisplay`, `helpLine` — they are spec-building helpers used when constructing `HelpSpec`
+- [x] remove help-related tests from `handlers_test.go` (lines 18-208) — covered by `overlay/help_test.go` now
 
 ### Task 9: Migrate annotation list overlay dispatch
 

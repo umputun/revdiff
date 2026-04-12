@@ -1,20 +1,14 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
-	"github.com/umputun/revdiff/app/ui/style"
 )
-
-// helpLine holds a key-description pair for rendering help overlay sections.
-type helpLine struct{ keys, desc string }
 
 // helpKeyDisplay maps bubbletea key names to user-friendly display names.
 var helpKeyDisplay = map[string]string{
@@ -53,129 +47,30 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 	return strings.Join(display, " / ")
 }
 
-// helpColors returns the ANSI color sequences used in help overlay rendering.
-// reset is fg-only to preserve background, header and key are fg sequences.
-func (m Model) helpColors() (reset, header, key string) {
-	return string(style.ResetFg), string(m.resolver.Color(style.ColorKeyAccentFg)), string(m.resolver.Color(style.ColorKeyAnnotationFg))
-}
-
-// helpOverlay returns a bordered help popup with keybinding sections arranged in two columns.
-// sections and key bindings are rendered dynamically from the keymap.
-func (m Model) helpOverlay() string {
+// buildHelpSpec builds an overlay.HelpSpec from the keymap's help sections,
+// converting raw key names to display names and inserting the TOC section.
+func (m Model) buildHelpSpec() overlay.HelpSpec {
 	sections := m.keymap.HelpSections()
-
-	// render each section into a block of lines
-	type sectionBlock struct {
-		lines []string
-	}
-	blocks := make([]sectionBlock, 0, len(sections))
-
-	reset, headerColor, keyColor := m.helpColors()
-
+	var result []overlay.HelpSection
 	for _, sec := range sections {
-		var block sectionBlock
-		block.lines = append(block.lines, headerColor+sec.Name+reset)
-
-		lines := make([]helpLine, 0, len(sec.Entries))
-		maxW := 0
+		var entries []overlay.HelpEntry
 		for _, e := range sec.Entries {
-			keys := m.formatKeysForHelp(e.Action)
-			lines = append(lines, helpLine{keys, e.Description})
-			if w := runewidth.StringWidth(keys); w > maxW {
-				maxW = w
-			}
+			entries = append(entries, overlay.HelpEntry{
+				Keys:        m.formatKeysForHelp(e.Action),
+				Description: e.Description,
+			})
 		}
-		for _, l := range lines {
-			pad := max(maxW-runewidth.StringWidth(l.keys), 0)
-			block.lines = append(block.lines, fmt.Sprintf("  %s%s%s%s  %s",
-				keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc))
-		}
-		blocks = append(blocks, block)
+		result = append(result, overlay.HelpSection{Title: sec.Name, Entries: entries})
 
-		// add Markdown TOC section after Pane
 		if sec.Name == keymap.SectionPane {
-			var tocBuf strings.Builder
-			m.writeTOCHelpSection(&tocBuf)
-			tocLines := strings.Split(strings.TrimRight(tocBuf.String(), "\n"), "\n")
-			blocks = append(blocks, sectionBlock{lines: tocLines})
+			result = append(result, m.buildTOCHelpSection())
 		}
 	}
-
-	// count total lines (with blank line separators between sections)
-	totalLines := 0
-	for _, b := range blocks {
-		totalLines += len(b.lines) + 1 // +1 for separator
-	}
-
-	// assign sections to left/right columns, keeping sections intact
-	var leftBlocks, rightBlocks []sectionBlock
-	leftLines := 0
-	half := totalLines / 2
-	for _, b := range blocks {
-		blockSize := len(b.lines) + 1
-		if leftLines < half {
-			leftBlocks = append(leftBlocks, b)
-			leftLines += blockSize
-		} else {
-			rightBlocks = append(rightBlocks, b)
-		}
-	}
-
-	// render column from blocks
-	renderColumn := func(colBlocks []sectionBlock) []string {
-		var result []string
-		for i, b := range colBlocks {
-			if i > 0 {
-				result = append(result, "")
-			}
-			result = append(result, b.lines...)
-		}
-		return result
-	}
-
-	left := renderColumn(leftBlocks)
-	right := renderColumn(rightBlocks)
-
-	// find max visible width of left column for padding (ANSI-aware)
-	leftWidth := 0
-	for _, line := range left {
-		if w := lipgloss.Width(line); w > leftWidth {
-			leftWidth = w
-		}
-	}
-
-	gap := 4
-	// join columns side by side
-	maxRows := max(len(left), len(right))
-	var buf strings.Builder
-	for i := range maxRows {
-		l := ""
-		if i < len(left) {
-			l = left[i]
-		}
-		// pad left column to fixed width (ANSI-aware width)
-		pad := max(leftWidth-lipgloss.Width(l), 0)
-		buf.WriteString(l)
-		buf.WriteString(strings.Repeat(" ", pad))
-
-		if i < len(right) {
-			buf.WriteString(strings.Repeat(" ", gap))
-			buf.WriteString(right[i])
-		}
-		if i < maxRows-1 {
-			buf.WriteString("\n")
-		}
-	}
-
-	boxStyle := m.resolver.Style(style.StyleKeyHelpBox)
-
-	return boxStyle.Render(buf.String())
+	return overlay.HelpSpec{Sections: result}
 }
 
-// writeTOCHelpSection writes the Markdown TOC contextual help section.
-// keys are resolved dynamically from the keymap.
-func (m Model) writeTOCHelpSection(buf *strings.Builder) {
-	// collect display keys for multiple actions combined
+// buildTOCHelpSection returns the Markdown TOC contextual help section.
+func (m Model) buildTOCHelpSection() overlay.HelpSection {
 	mergedKeys := func(actions ...keymap.Action) string {
 		var all []string
 		seen := map[string]bool{}
@@ -191,26 +86,14 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		return strings.Join(all, " / ")
 	}
 
-	lines := []helpLine{
-		{mergedKeys(keymap.ActionTogglePane), "switch between TOC and diff"},
-		{mergedKeys(keymap.ActionDown, keymap.ActionUp), "navigate TOC entries"},
-		{mergedKeys(keymap.ActionNextItem, keymap.ActionPrevItem), "next / prev header"},
-		{mergedKeys(keymap.ActionConfirm), "jump to header in diff"},
-	}
-
-	maxW := 0
-	for _, l := range lines {
-		if w := runewidth.StringWidth(l.keys); w > maxW {
-			maxW = w
-		}
-	}
-
-	reset, headerColor, keyColor := m.helpColors()
-
-	buf.WriteString(headerColor + "Markdown TOC (single-file full-context mode)" + reset + "\n")
-	for _, l := range lines {
-		pad := max(maxW-runewidth.StringWidth(l.keys), 0)
-		fmt.Fprintf(buf, "  %s%s%s%s  %s\n", keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc)
+	return overlay.HelpSection{
+		Title: "Markdown TOC (single-file full-context mode)",
+		Entries: []overlay.HelpEntry{
+			{Keys: mergedKeys(keymap.ActionTogglePane), Description: "switch between TOC and diff"},
+			{Keys: mergedKeys(keymap.ActionDown, keymap.ActionUp), Description: "navigate TOC entries"},
+			{Keys: mergedKeys(keymap.ActionNextItem, keymap.ActionPrevItem), Description: "next / prev header"},
+			{Keys: mergedKeys(keymap.ActionConfirm), Description: "jump to header in diff"},
+		},
 	}
 }
 
@@ -271,20 +154,6 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		}
 		m.viewport.SetContent(m.renderDiff())
 		return m, cmd
-	}
-	return m, nil
-}
-
-// handleHelpKey handles help overlay keys.
-// help action toggles the overlay, dismiss/esc closes it, all other keys are blocked while showing.
-func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	action := m.keymap.Resolve(msg.String())
-	if action == keymap.ActionHelp {
-		m.showHelp = !m.showHelp
-		return m, nil
-	}
-	if action == keymap.ActionDismiss || msg.Type == tea.KeyEsc {
-		m.showHelp = false
 	}
 	return m, nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 	"github.com/umputun/revdiff/app/ui/worddiff"
@@ -129,6 +130,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		StyleRenderer:  style.NewRenderer(res),
 		SGR:            style.SGR{},
 		WordDiffer:     worddiff.New(),
+		Overlay:        overlay.NewManager(),
 		TreeWidthRatio: 3,
 		NewFileTree:    testFileTreeFactory(),
 		ParseTOC:       testParseTOCFactory(),
@@ -486,5 +488,6 @@ func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
 	m2 := testModel([]string{"a.go"}, nil)
 	result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
 	model := result.(Model)
-	assert.True(t, model.showHelp, "? should open help with default keymap")
+	assert.True(t, model.overlay.Active(), "? should open help with default keymap")
+	assert.Equal(t, overlay.KindHelp, model.overlay.Kind())
 }

@@ -389,6 +389,32 @@ func colorsFromTheme(th theme.Theme) style.Colors {
 	}
 }
 
+// previewThemeByName looks up a theme by name and applies it as a preview.
+// stub for Task 10 migration — will use themePreviewSession entries.
+func (m *Model) previewThemeByName(name string) {
+	th, err := theme.Load(m.themesDir, name)
+	if err != nil {
+		return
+	}
+	m.applyTheme(th)
+}
+
+// confirmThemeByName applies the named theme and persists to config.
+// stub for Task 10 migration — will use themePreviewSession entries.
+func (m *Model) confirmThemeByName(name string) {
+	th, err := theme.Load(m.themesDir, name)
+	if err != nil {
+		return
+	}
+	m.activeThemeName = name
+	m.applyTheme(th)
+	if m.configPath != "" {
+		if err := patchConfigTheme(m.configPath, name); err != nil {
+			log.Printf("[WARN] failed to persist theme %q to %s: %v", name, m.configPath, err)
+		}
+	}
+}
+
 // swatchText renders text with the given ANSI fg sequence and resets afterward.
 // if fg is empty, returns text unchanged. if resetFg is empty, uses style.ResetFg.
 func swatchText(fg, text, resetFg string) string {

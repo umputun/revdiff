@@ -478,17 +478,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	action := m.keymap.Resolve(msg.String())
 
-	// help overlay: toggle with help action, dismiss with esc, block everything else
-	if action == keymap.ActionHelp || m.showHelp {
-		return m.handleHelpKey(msg)
-	}
-
 	switch action {
+	case keymap.ActionHelp:
+		if m.overlay.Active() && m.overlay.Kind() == overlay.KindHelp {
+			m.overlay.Close()
+		} else {
+			m.overlay.OpenHelp(m.buildHelpSpec())
+		}
+		return m, nil
 	case keymap.ActionAnnotList:
-		m.annotListItems = m.buildAnnotListItems()
-		m.annotListCursor = 0
-		m.annotListOffset = 0
-		m.showAnnotList = true
+		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
 		return m, nil
 	case keymap.ActionThemeSelect:
 		m.openThemeSelector()
@@ -545,16 +544,23 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		return true, model, cmd
 	}
 
-	// annotation list popup: handle keys when already open
-	if m.showAnnotList {
-		model, cmd := m.handleAnnotListKey(msg)
-		return true, model, cmd
-	}
-
-	// theme selector: handle keys when already open
-	if m.themeSel.active {
-		model, cmd := m.handleThemeSelectKey(msg)
-		return true, model, cmd
+	// overlay popup dispatch (help, annotation list, theme selector)
+	if m.overlay.Active() {
+		action := m.keymap.Resolve(msg.String())
+		out := m.overlay.HandleKey(msg, action)
+		switch out.Kind {
+		case overlay.OutcomeAnnotationChosen:
+			model, cmd := m.jumpToAnnotationTarget(out.AnnotationTarget)
+			return true, model, cmd
+		case overlay.OutcomeThemePreview:
+			m.previewThemeByName(out.ThemeChoice.Name)
+		case overlay.OutcomeThemeConfirmed:
+			m.confirmThemeByName(out.ThemeChoice.Name)
+		case overlay.OutcomeThemeCanceled:
+			m.cancelThemeSelect()
+		case overlay.OutcomeClosed, overlay.OutcomeNone:
+		}
+		return true, m, nil
 	}
 
 	return false, m, nil
