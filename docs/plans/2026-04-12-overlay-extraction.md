@@ -453,9 +453,9 @@ These methods remain on Model because they perform side effects that depend on M
 - Modify: `app/ui/overlay/doc.go` (if needed)
 - Modify: `CLAUDE.md`
 
-- [ ] update `app/ui/doc.go` to reference new `overlay` sub-package and `overlayManager` interface
-- [ ] update `CLAUDE.md` project structure section: add `app/ui/overlay/` entry with file descriptions, add `overlayManager` to Key Interfaces section, update Data Flow section if needed
-- [ ] audit `handlers.go`, `annotlist.go`, `themeselect.go` for stale comments referencing removed code
+- [x] update `app/ui/doc.go` to reference new `overlay` sub-package and `overlayManager` interface
+- [x] update `CLAUDE.md` project structure section: add `app/ui/overlay/` entry with file descriptions, add `overlayManager` to Key Interfaces section, update Data Flow section if needed
+- [x] audit `handlers.go`, `annotlist.go`, `themeselect.go` for stale comments referencing removed code
 
 ### Task 14: M3 milestone gate — docs and cleanup
 
