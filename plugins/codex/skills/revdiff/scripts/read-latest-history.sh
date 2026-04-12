@@ -11,9 +11,14 @@
 #
 # prints file contents if found, prints nothing if not. exits 0 in both cases.
 
-set -euo pipefail
+set -uo pipefail  # not -e: final cat must not abort the fallback on permission/race errors
 
-hist_dir="${REVDIFF_HISTORY_DIR:-$HOME/.config/revdiff/history}"
+# resolve hist_dir defensively so unset HOME doesn't trip set -u
+hist_dir="${REVDIFF_HISTORY_DIR:-}"
+if [ -z "$hist_dir" ]; then
+    hist_dir="${HOME:-}/.config/revdiff/history"
+fi
+
 repo="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
 repo_dir="$hist_dir/$repo"
 

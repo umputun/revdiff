@@ -137,14 +137,9 @@ The script:
      cat "$output_file"
    fi
    ```
-4. If it has content, process as annotations below.
-5. If step 4 produced nothing (temp file missing, cleaned up by the script's trap, or user ran revdiff outside the plugin), try the persistent history directory as a tertiary fallback:
-   ```bash
-   $SCRIPT_DIR/read-latest-history.sh
-   ```
-   History files contain the annotations in the same `## file:line (type)` format plus the raw git diff for annotated files. If neither source produces content, the user quit without annotating.
+4. If it has content, process as annotations below. If empty or no file, the user quit without annotating.
 
-This fallback chain is safe because revdiff writes both the temp output file and the history file atomically on exit — there is never a partial read. See `references/usage.md` "Review History" for directory layout details.
+This fallback is safe because revdiff writes the output file atomically on exit — there is never a partial read.
 
 If the script produces output, the user made annotations. The output format is:
 
