@@ -300,16 +300,16 @@ These methods remain on Model because they perform side effects that depend on M
 - Create: `app/ui/overlay/overlay.go`
 - Create: `app/ui/overlay/overlay_test.go`
 
-- [ ] create `app/ui/overlay/doc.go` with package-level godoc describing the overlay sub-package purpose
-- [ ] create `app/ui/overlay/overlay.go` with all exported types: `Kind` (iota enum), `OutcomeKind` (iota enum), `Outcome` struct, `RenderCtx` struct, `Resolver` interface
-- [ ] add `Manager` struct — thin coordinator with fields: `kind Kind`, `help helpOverlay`, `annotLst annotListOverlay`, `themeSel themeSelectOverlay` (each overlay is its own type defined in its own file)
-- [ ] implement `NewManager() *Manager`, `Active() bool`, `Kind() Kind`, `Close()`
-- [ ] implement `HandleKey` that routes to the active overlay's `handleKey` method based on `m.kind` and returns the `Outcome`
-- [ ] implement `Compose` that routes to the active overlay's `render` method and wraps with `overlayCenter`; returns base unchanged when `m.kind == KindNone`
-- [ ] implement `(m *Manager) overlayCenter(bg, fg string, width int) string` — port from `handlers.go:220-249`, replace `m.width` with explicit param, use `ansi.Cut`/`ansi.StringWidth` for ANSI-aware line splicing
-- [ ] implement `(m *Manager) injectBorderTitle(box, title string, popupWidth int, bgColor string) string` — port from `annotlist.go:139-181`, replace `m.resolver.Color(style.ColorKeyDiffPaneBg)` with explicit `bgColor` param
-- [ ] write tests for `overlayCenter`: empty bg, empty fg, fg smaller than bg, fg wider than bg, ANSI content in both
-- [ ] write tests for `injectBorderTitle`: title injection, empty title, title with ANSI, empty bgColor fallback
+- [x] create `app/ui/overlay/doc.go` with package-level godoc describing the overlay sub-package purpose
+- [x] create `app/ui/overlay/overlay.go` with all exported types: `Kind` (iota enum), `OutcomeKind` (iota enum), `Outcome` struct, `RenderCtx` struct, `Resolver` interface
+- [x] add `Manager` struct — thin coordinator with fields: `kind Kind`, `help helpOverlay`, `annotLst annotListOverlay`, `themeSel themeSelectOverlay` (each overlay is its own type defined in its own file)
+- [x] implement `NewManager() *Manager`, `Active() bool`, `Kind() Kind`, `Close()`
+- [x] implement `HandleKey` that routes to the active overlay's `handleKey` method based on `m.kind` and returns the `Outcome`
+- [x] implement `Compose` that routes to the active overlay's `render` method and wraps with `overlayCenter`; returns base unchanged when `m.kind == KindNone`
+- [x] implement `(m *Manager) overlayCenter(bg, fg string, width int) string` — port from `handlers.go:220-249`, replace `m.width` with explicit param, use `ansi.Cut`/`ansi.StringWidth` for ANSI-aware line splicing
+- [x] implement `(m *Manager) injectBorderTitle(box, title string, popupWidth int, bgColor string) string` — port from `annotlist.go:139-181`, replace `m.resolver.Color(style.ColorKeyDiffPaneBg)` with explicit `bgColor` param
+- [x] write tests for `overlayCenter`: empty bg, empty fg, fg smaller than bg, fg wider than bg, ANSI content in both
+- [x] write tests for `injectBorderTitle`: title injection, empty title, title with ANSI, empty bgColor fallback
 
 ### Task 2: Implement help overlay
 
