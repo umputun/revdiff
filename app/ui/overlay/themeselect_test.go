@@ -457,6 +457,49 @@ func TestThemeSelectOverlay_ScrollUp(t *testing.T) {
 	assert.Equal(t, 4, mgr.themeSel.offset, "offset should scroll up to follow cursor")
 }
 
+func TestThemeSelectOverlay_RenderClampsOffsetAfterResize(t *testing.T) {
+	items := make([]ThemeItem, 20)
+	for i := range items {
+		items[i] = ThemeItem{Name: string(rune('a' + i)), AccentColor: "#ffffff"}
+	}
+	mgr := NewManager()
+
+	// simulate stale state: cursor far down, offset 0, height from a tall terminal
+	mgr.OpenThemeSelect(ThemeSelectSpec{Items: items})
+	mgr.themeSel.cursor = 15
+	mgr.themeSel.offset = 0
+	mgr.themeSel.height = 50 // stale height from previous tall render
+
+	// render with a short terminal — clamp in render must adjust offset
+	shortCtx := RenderCtx{Width: 80, Height: 16, Resolver: style.PlainResolver()}
+	result := mgr.themeSel.render(shortCtx, mgr)
+	maxVis := mgr.themeSel.maxVisible()
+	assert.GreaterOrEqual(t, mgr.themeSel.cursor, mgr.themeSel.offset, "cursor must be >= offset")
+	assert.Less(t, mgr.themeSel.cursor, mgr.themeSel.offset+maxVis, "cursor must be < offset+maxVisible")
+	assert.Contains(t, result, string(rune('a'+15)), "active theme must be visible")
+}
+
+func TestThemeSelectOverlay_RenderClampsStaleOffsetOnFirstRender(t *testing.T) {
+	items := make([]ThemeItem, 20)
+	for i := range items {
+		items[i] = ThemeItem{Name: string(rune('a' + i)), AccentColor: "#ffffff"}
+	}
+	mgr := NewManager()
+
+	// open with zero height (fresh manager) — active theme at index 15 sets offset too high
+	spec := ThemeSelectSpec{Items: items, ActiveName: string(rune('a' + 15))}
+	mgr.OpenThemeSelect(spec)
+	assert.Equal(t, 15, mgr.themeSel.cursor, "cursor should be on active theme")
+	assert.Positive(t, mgr.themeSel.offset, "offset should be non-zero from stale maxVisible")
+
+	// first render with a tall terminal where all 20 items fit — offset must be reduced
+	tallCtx := RenderCtx{Width: 80, Height: 40, Resolver: style.PlainResolver()}
+	result := mgr.themeSel.render(tallCtx, mgr)
+	assert.Equal(t, 0, mgr.themeSel.offset, "offset should be 0 when all items fit")
+	assert.Contains(t, result, string(rune('a')), "first item must be visible")
+	assert.Contains(t, result, string(rune('a'+15)), "active item must be visible")
+}
+
 func TestSwatchText_WithFg(t *testing.T) {
 	result := swatchText("\033[38;2;255;0;0m", "■", "")
 	assert.Contains(t, result, "\033[38;2;255;0;0m")

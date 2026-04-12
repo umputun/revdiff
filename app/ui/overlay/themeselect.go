@@ -71,6 +71,18 @@ func (t *themeSelectOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	t.height = ctx.Height
 	popupWidth := max(min(ctx.Width-themePopupMargin, themePopupMaxWidth), themePopupMinWidth)
 	maxVisible := t.maxVisible()
+
+	// clamp offset after height refresh so cursor stays visible on terminal resize
+	if maxOffset := max(len(t.entries)-maxVisible, 0); t.offset > maxOffset {
+		t.offset = maxOffset
+	}
+	if t.cursor >= t.offset+maxVisible {
+		t.offset = t.cursor - maxVisible + 1
+	}
+	if t.cursor < t.offset {
+		t.offset = t.cursor
+	}
+
 	contentWidth := popupWidth - themePopupBorderPad
 
 	var parts []string
