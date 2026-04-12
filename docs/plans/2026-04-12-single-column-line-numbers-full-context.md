@@ -67,12 +67,12 @@
 ### Task 3: Update `lineNumGutter()` to render single column when `singleColLineNum` is true
 <!-- [architect][simplifier][conventions][completionist][go_idioms] UNANIMOUS: Drop the two-column fallback guard for add/remove lines. It creates a width mismatch (lineNumGutter outputs 2*W+2 while lineNumGutterWidth reports W+1), causing visual corruption in horizontal scroll, extendLineBg, and gutterBlanks. The invariant is structural — isFullContext() guarantees no add/remove lines exist. Always render single-column when singleColLineNum is true -->
 <!-- [completionist] Add a width-consistency test: assert runewidth.StringWidth(lineNumGutter(dl)) == lineNumGutterWidth() for representative DiffLine values in both single-column and two-column modes -->
-- [ ] modify `lineNumGutter()` in `app/ui/diffview.go:28`: when `m.singleColLineNum`, render `" NNN"` (single column using `dl.NewNum`) for all line types — no fallback to two-column logic (width must always match `lineNumGutterWidth()`)
-- [ ] write tests for single-column gutter output format (`" NNN"`) for context lines
-- [ ] write tests for divider lines rendering blank single column
-- [ ] write width-consistency test: `runewidth.StringWidth(stripANSI(lineNumGutter(dl))) == lineNumGutterWidth()` for both modes
-- [ ] write test that two-column format is unchanged when `singleColLineNum` is false
-- [ ] run tests - must pass before next task
+- [x] modify `lineNumGutter()` in `app/ui/diffview.go:28`: when `m.singleColLineNum`, render `" NNN"` (single column using `dl.NewNum`) for all line types — no fallback to two-column logic (width must always match `lineNumGutterWidth()`)
+- [x] write tests for single-column gutter output format (`" NNN"`) for context lines
+- [x] write tests for divider lines rendering blank single column
+- [x] write width-consistency test: `runewidth.StringWidth(stripANSI(lineNumGutter(dl))) == lineNumGutterWidth()` for both modes
+- [x] write test that two-column format is unchanged when `singleColLineNum` is false
+- [x] run tests - must pass before next task
 
 <!-- [architect][simplifier][go_idioms] Task 4 (audit) folded into Task 2 — audit callers before making changes, not after -->
 

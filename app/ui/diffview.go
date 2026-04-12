@@ -27,11 +27,22 @@ func (m Model) lineNumGutterWidth() int {
 // lineNumGutter returns the formatted line number gutter string for a diff line.
 // uses muted color via lipgloss style (StyleKeyLineNumber); safe here because the gutter
 // is concatenated before content, so the lipgloss reset doesn't break outer backgrounds.
-// layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
+// two-column layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
 // blank columns for adds (no old), removes (no new), and dividers (both blank).
+// single-column layout: " NNN" — used for full-context files where OldNum == NewNum.
 func (m Model) lineNumGutter(dl diff.DiffLine) string {
 	w := m.lineNumWidth
 	blank := strings.Repeat(" ", w)
+
+	if m.singleColLineNum {
+		var col string
+		if dl.ChangeType == diff.ChangeDivider {
+			col = blank
+		} else {
+			col = fmt.Sprintf("%*d", w, dl.NewNum)
+		}
+		return m.resolver.Style(style.StyleKeyLineNumber).Render(" " + col)
+	}
 
 	var oldCol, newCol string
 	switch dl.ChangeType {
