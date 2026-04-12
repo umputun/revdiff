@@ -22,6 +22,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 	"github.com/umputun/revdiff/app/ui/worddiff"
@@ -81,13 +82,27 @@ type wordDiffer interface {
 	InsertHighlightMarkers(s string, matches []worddiff.Range, hlOn, hlOff string) string
 }
 
+// overlayManager is what Model needs for overlay popup coordination.
+// Implemented by *overlay.Manager.
+type overlayManager interface {
+	Active() bool
+	Kind() overlay.Kind
+	OpenHelp(spec overlay.HelpSpec)
+	OpenAnnotList(spec overlay.AnnotListSpec)
+	OpenThemeSelect(spec overlay.ThemeSelectSpec)
+	Close()
+	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
+	Compose(base string, ctx overlay.RenderCtx) string
+}
+
 // compile-time assertions — enforce that the concrete package types
 // satisfy the consumer-side interfaces.
 var (
-	_ styleResolver = (*style.Resolver)(nil)
-	_ styleRenderer = (*style.Renderer)(nil)
-	_ sgrProcessor  = (*style.SGR)(nil)
-	_ wordDiffer    = (*worddiff.Differ)(nil)
+	_ styleResolver  = (*style.Resolver)(nil)
+	_ styleRenderer  = (*style.Renderer)(nil)
+	_ sgrProcessor   = (*style.SGR)(nil)
+	_ wordDiffer     = (*worddiff.Differ)(nil)
+	_ overlayManager = (*overlay.Manager)(nil)
 )
 
 // FileTreeComponent is what Model needs from a file-tree navigation component.
@@ -161,6 +176,7 @@ type Model struct {
 	renderer     styleRenderer
 	sgr          sgrProcessor
 	differ       wordDiffer
+	overlay      overlayManager
 	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
 	viewport     viewport.Model
 	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
@@ -201,7 +217,6 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp         bool // true when help overlay is visible
 	wrapMode         bool // true when line wrapping is enabled
 	crossFileHunks   bool // allow [ and ] to jump across file boundaries
 	lineNumbers      bool // true when line numbers are shown in gutter
@@ -229,11 +244,7 @@ type Model struct {
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
 	singleFile       bool // true when diff contains exactly one file, hides tree pane
 
-	showAnnotList    bool                    // true when annotation list popup is visible
-	annotListCursor  int                     // selected item in the flat list
-	annotListOffset  int                     // scroll offset for the annotation list
-	annotListItems   []annotation.Annotation // flat sorted list of all annotations
-	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
+	pendingAnnotJump *annotation.Annotation // pending jump target after cross-file annotation list jump
 	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
@@ -241,8 +252,7 @@ type Model struct {
 	themesDir  string // path to themes directory for theme selector
 	configPath string // path to config file for persisting theme choice
 
-	themeSel        themeSelectState // theme selector overlay state
-	activeThemeName string           // name of currently applied theme (for cursor positioning)
+	activeThemeName string // name of currently applied theme (for cursor positioning)
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -284,6 +294,9 @@ type ModelConfig struct {
 
 	// --- Word-diff dependency (required, caller-constructed) ---
 	WordDiffer wordDiffer // intra-line diff and highlight insertion
+
+	// --- Overlay dependency (required, caller-constructed) ---
+	Overlay overlayManager // overlay popup coordinator
 
 	// --- Sidepane factories (required, wired from main.go) ---
 
@@ -350,6 +363,9 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.WordDiffer == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.WordDiffer is required")
 	}
+	if cfg.Overlay == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Overlay is required")
+	}
 	if cfg.NewFileTree == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.NewFileTree is required")
 	}
@@ -372,6 +388,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		renderer:         cfg.StyleRenderer,
 		sgr:              cfg.SGR,
 		differ:           cfg.WordDiffer,
+		overlay:          cfg.Overlay,
 		keymap:           km,
 		store:            cfg.Store,
 		diffRenderer:     cfg.Renderer,

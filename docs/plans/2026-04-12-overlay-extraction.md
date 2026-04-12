@@ -370,12 +370,12 @@ These methods remain on Model because they perform side effects that depend on M
 - Modify: `app/ui/model.go`
 - Modify: `app/main.go`
 
-- [ ] add `overlayManager` interface in `model.go` with 8 methods (Active, Kind, OpenHelp, OpenAnnotList, OpenThemeSelect, Close, HandleKey, Compose)
-- [ ] add compile-time assertion: `var _ overlayManager = (*overlay.Manager)(nil)`
-- [ ] add `overlay overlayManager` field to `Model` struct, remove old overlay fields: `showHelp`, `showAnnotList`, `annotListCursor`, `annotListOffset`, `annotListItems`, `themeSel` (the `themeSelectState` struct). Keep `activeThemeName`, `themesDir`, `configPath`, `pendingAnnotJump`
-- [ ] add `Overlay overlayManager` to `ModelConfig` struct
-- [ ] wire `overlay` field in `NewModel` from `ModelConfig.Overlay`, add nil check matching existing pattern for required deps (model.go:331-356)
-- [ ] add `Overlay: overlay.NewManager()` to ModelConfig in `app/main.go` (around line 415)
+- [x] add `overlayManager` interface in `model.go` with 8 methods (Active, Kind, OpenHelp, OpenAnnotList, OpenThemeSelect, Close, HandleKey, Compose)
+- [x] add compile-time assertion: `var _ overlayManager = (*overlay.Manager)(nil)`
+- [x] add `overlay overlayManager` field to `Model` struct, remove old overlay fields: `showHelp`, `showAnnotList`, `annotListCursor`, `annotListOffset`, `annotListItems`, `themeSel` (the `themeSelectState` struct). Keep `activeThemeName`, `themesDir`, `configPath`, `pendingAnnotJump`
+- [x] add `Overlay overlayManager` to `ModelConfig` struct
+- [x] wire `overlay` field in `NewModel` from `ModelConfig.Overlay`, add nil check matching existing pattern for required deps (model.go:331-356)
+- [x] add `Overlay: overlay.NewManager()` to ModelConfig in `app/main.go` (around line 415)
 
 ### Task 7: Migrate View() overlay dispatch
 
