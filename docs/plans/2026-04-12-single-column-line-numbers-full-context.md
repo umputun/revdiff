@@ -79,11 +79,11 @@
 ### Task 4: Verify acceptance criteria
 <!-- [completionist] Add horizontal scroll test with single-column mode — scroll indicators shift when gutter is narrower -->
 <!-- [completionist] Add manual test for blame + line numbers together in full-context mode -->
-- [ ] verify single-column gutter renders for full-context files (all ChangeContext)
-- [ ] verify two-column gutter still renders for files with real diffs
-- [ ] verify per-file detection: switching between full-context and diff files updates the gutter correctly
-- [ ] run full test suite (`make test`)
-- [ ] run linter (`make lint`) — all issues must be fixed
+- [x] verify single-column gutter renders for full-context files (all ChangeContext)
+- [x] verify two-column gutter still renders for files with real diffs
+- [x] verify per-file detection: switching between full-context and diff files updates the gutter correctly
+- [x] run full test suite (`make test`)
+- [x] run linter (`make lint`) — all issues must be fixed
 
 <!-- [simplifier][conventions][go_idioms] Task 6 (documentation) dropped — no user-facing behavior change, no new flags/keybindings/modes. Gutter column count is an internal rendering detail not documented anywhere -->
 

@@ -12,7 +12,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
-- Line numbers: side-by-side old/new line number gutter, toggle with `L`
+- Line numbers: side-by-side old/new line number gutter for diffs, single column for full-context files, toggle with `L`
 - Mercurial support: auto-detects hg repos, translates git-style refs (HEAD, HEAD~N) to Mercurial revsets
 - Blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
@@ -543,7 +543,7 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
-| `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
+| `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
 | `B` | Toggle blame gutter (author name + commit age per line) |
 | `W` | Toggle intra-line word-diff highlighting for paired add/remove lines |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |

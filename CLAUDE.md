@@ -73,9 +73,12 @@ DetectVCS() → VCSGit | VCSHg | VCSNone
       uses buildModifiedSet() to style adds as modify (amber ~) or pure add (green +)
       expanded hunks (`.` toggle) show all lines inline
   when line numbers are on (`L` toggle, orthogonal to above):
-    lineNumGutter(dl) formats " OOO NNN" gutter via m.resolver.Style(StyleKeyLineNumber),
+    lineNumGutter(dl) formats gutter via m.resolver.Style(StyleKeyLineNumber):
+      two-column (diff files): " OOO NNN", lineNumGutterWidth() = 2*W+2
+      single-column (full-context files): " NNN", lineNumGutterWidth() = W+1
+    singleColLineNum detected per-file in handleFileLoaded via isFullContext()
     prepended in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
-    lineNumWidth recomputed per file in handleFileLoaded; lineNumGutterWidth() = 2*W+2
+    lineNumWidth recomputed per file in handleFileLoaded
   when blame gutter is on (`B` toggle, orthogonal to above):
     blameGutter(dl, now) formats " author age" gutter via m.resolver.Style(StyleKeyLineNumber),
     prepended after lineNumGutter in renderDiffLine, renderWrappedDiffLine, renderCollapsedAddLine, renderDeletePlaceholder
