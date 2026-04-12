@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/keymap"
@@ -213,39 +212,6 @@ func (m Model) writeTOCHelpSection(buf *strings.Builder) {
 		pad := max(maxW-runewidth.StringWidth(l.keys), 0)
 		fmt.Fprintf(buf, "  %s%s%s%s  %s\n", keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc)
 	}
-}
-
-// overlayCenter composites fg on top of bg, centered horizontally and vertically.
-// uses ANSI-aware string cutting to preserve styling in both layers.
-func (m Model) overlayCenter(bg, fg string) string {
-	bgLines := strings.Split(bg, "\n")
-	fgLines := strings.Split(fg, "\n")
-
-	fgWidth := lipgloss.Width(fg)
-	fgHeight := len(fgLines)
-	bgHeight := len(bgLines)
-
-	startY := (bgHeight - fgHeight) / 2
-	startX := max((m.width-fgWidth)/2, 0)
-
-	for i, fgLine := range fgLines {
-		bgIdx := startY + i
-		if bgIdx < 0 || bgIdx >= bgHeight {
-			continue
-		}
-		bgLine := bgLines[bgIdx]
-		// pad bg line to full width so right part is always available
-		bgW := lipgloss.Width(bgLine)
-		if bgW < m.width {
-			bgLine += strings.Repeat(" ", m.width-bgW)
-		}
-
-		left := ansi.Cut(bgLine, 0, startX)
-		right := ansi.Cut(bgLine, startX+fgWidth, m.width)
-		bgLines[bgIdx] = left + fgLine + right
-	}
-
-	return strings.Join(bgLines, "\n")
 }
 
 // handleDiscardQuit handles the Q key press for discard-and-quit.

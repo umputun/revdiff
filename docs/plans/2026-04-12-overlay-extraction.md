@@ -382,8 +382,8 @@ These methods remain on Model because they perform side effects that depend on M
 **Files:**
 - Modify: `app/ui/view.go`
 
-- [ ] replace the `switch { case m.themeSel.active / m.showAnnotList / m.showHelp }` block (lines 54-61) with single call: `mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.width, Height: m.height, Resolver: m.resolver})`
-- [ ] remove `overlayCenter` method from `handlers.go` (lines 220-249) — now a Manager method in `overlay/overlay.go`
+- [x] replace the `switch { case m.themeSel.active / m.showAnnotList / m.showHelp }` block (lines 54-61) with single call: `mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.width, Height: m.height, Resolver: m.resolver})`
+- [x] remove `overlayCenter` method from `handlers.go` (lines 220-249) — now a Manager method in `overlay/overlay.go`
 
 ### Task 8: Migrate help overlay dispatch and consolidate overlay key routing
 

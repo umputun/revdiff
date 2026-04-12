@@ -8,6 +8,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
@@ -51,14 +52,7 @@ func (m Model) View() string {
 		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph)
 	}
 
-	switch {
-	case m.themeSel.active:
-		mainView = m.overlayCenter(mainView, m.themeSelectOverlay())
-	case m.showAnnotList:
-		mainView = m.overlayCenter(mainView, m.annotListOverlay())
-	case m.showHelp:
-		mainView = m.overlayCenter(mainView, m.helpOverlay())
-	}
+	mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.width, Height: m.height, Resolver: m.resolver})
 
 	if m.noStatusBar {
 		return mainView
