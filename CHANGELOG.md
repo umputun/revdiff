@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.17.0 - 2026-04-12
+
+### New Features
+
+- add Mercurial VCS support #90 @paskal
+- add history fallback to revdiff skill #95 @umputun
+
+### Improvements
+
+- extract style sub-package with Resolver/Renderer/SGR #92 @umputun
+- extract sidepane sub-package with FileTree and TOC #93 @umputun
+- extract worddiff sub-package with Differ type #96 @umputun
+- add lint-scripts CI job, fix SC2181 shellcheck warnings #91 @paskal
+- harden ci.yml caching and pin golangci-lint version 3b6559b
+- pin hunk-centering test expectations to literals e50fade
+- add status bar icons reference table f4421f3
+
+### Bug Fixes
+
+- center entire hunk in viewport during hunk navigation #83 @p4elkin
+
 ## v0.16.1 - 2026-04-10
 
 ### Improvements
