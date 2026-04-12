@@ -165,19 +165,30 @@ func (m *Manager) OpenThemeSelect(spec ThemeSelectSpec) {
 }
 
 // HandleKey routes a key press to the active overlay and returns the outcome.
+// auto-closes the overlay for outcomes that imply dismissal.
 // returns Outcome{Kind: OutcomeNone} when no overlay is active.
 func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
+	var out Outcome
 	switch m.kind {
 	case KindNone:
 		return Outcome{}
 	case KindHelp:
-		return m.help.handleKey(msg, action)
+		out = m.help.handleKey(msg, action)
 	case KindAnnotList:
-		return m.annotLst.handleKey(msg, action)
+		out = m.annotLst.handleKey(msg, action)
 	case KindThemeSelect:
-		return m.themeSel.handleKey(msg, action)
+		out = m.themeSel.handleKey(msg, action)
+	default:
+		return Outcome{}
 	}
-	return Outcome{}
+
+	switch out.Kind {
+	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled:
+		m.Close()
+	case OutcomeNone, OutcomeThemePreview: // no state change
+	}
+
+	return out
 }
 
 // Compose renders the active overlay on top of base using centered compositing.

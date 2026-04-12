@@ -317,13 +317,13 @@ These methods remain on Model because they perform side effects that depend on M
 - Create: `app/ui/overlay/help.go`
 - Create: `app/ui/overlay/help_test.go` (1:1 with source file)
 
-- [ ] define `helpOverlay` struct (unexported): `active bool`, `spec HelpSpec`
-- [ ] add `OpenHelp(spec HelpSpec)` to Manager — sets `m.kind = KindHelp`, delegates to `m.help.open(spec)`
-- [ ] implement `(h *helpOverlay) render(ctx RenderCtx, mgr *Manager) string` — port two-column layout from `handlers.go:65-174`, `helpColors` (59-61), and `writeTOCHelpSection` (178-216). Replace `m.resolver`, `m.width`, `m.height` with `RenderCtx` + spec data. `mgr` param is for `injectBorderTitle` call. Note: `formatKeysForHelp` (48-55), `displayKeyName` (37-45), `helpKeyDisplay` map (21-34), and `helpLine` struct (18) stay in `handlers.go` — they need `m.keymap` access and pre-format the `HelpEntry.Keys` strings at spec-building time. TOC section: include in `HelpSpec.Sections` at build time instead of a separate method
-- [ ] implement `(h *helpOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome` — port `handleHelpKey` (314-324): `ActionHelp` toggles, `ActionDismiss`/Esc closes, all other keys consumed. Return `OutcomeClosed` on close, `OutcomeNone` otherwise
-- [ ] wire help into Manager's `HandleKey` and `Compose` — `Compose` calls `m.overlayCenter(base, m.help.render(ctx, m), ctx.Width)` when help is active
-- [ ] write tests for help rendering: section headers present, key names present, two-column layout, TOC section, custom keybinding reflected
-- [ ] write tests for help key handling: toggle on/off, Esc close, other keys blocked
+- [x] define `helpOverlay` struct (unexported): `active bool`, `spec HelpSpec`
+- [x] add `OpenHelp(spec HelpSpec)` to Manager — sets `m.kind = KindHelp`, delegates to `m.help.open(spec)`
+- [x] implement `(h *helpOverlay) render(ctx RenderCtx, mgr *Manager) string` — port two-column layout from `handlers.go:65-174`, `helpColors` (59-61), and `writeTOCHelpSection` (178-216). Replace `m.resolver`, `m.width`, `m.height` with `RenderCtx` + spec data. `mgr` param is for `injectBorderTitle` call. Note: `formatKeysForHelp` (48-55), `displayKeyName` (37-45), `helpKeyDisplay` map (21-34), and `helpLine` struct (18) stay in `handlers.go` — they need `m.keymap` access and pre-format the `HelpEntry.Keys` strings at spec-building time. TOC section: include in `HelpSpec.Sections` at build time instead of a separate method
+- [x] implement `(h *helpOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome` — port `handleHelpKey` (314-324): `ActionHelp` toggles, `ActionDismiss`/Esc closes, all other keys consumed. Return `OutcomeClosed` on close, `OutcomeNone` otherwise
+- [x] wire help into Manager's `HandleKey` and `Compose` — `Compose` calls `m.overlayCenter(base, m.help.render(ctx, m), ctx.Width)` when help is active
+- [x] write tests for help rendering: section headers present, key names present, two-column layout, TOC section, custom keybinding reflected
+- [x] write tests for help key handling: toggle on/off, Esc close, other keys blocked
 
 ### Task 3: Implement annotation list overlay
 
