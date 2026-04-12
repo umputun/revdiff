@@ -440,11 +440,11 @@ These methods remain on Model because they perform side effects that depend on M
 
 ### Task 12: M2 milestone gate — full project green
 
-- [ ] run `go test ./... -race` — must pass
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — must be clean
-- [ ] run `~/.claude/format.sh` — must produce no changes
-- [ ] manual smoke test: open revdiff on a git repo, verify `?` (help), `@` (annotation list), `T` (theme selector) all work correctly
-- [ ] verify theme preview on cursor move, confirm with Enter, cancel with Esc (two-press), filter typing
+- [x] run `go test ./... -race` — must pass
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — must be clean
+- [x] run `~/.claude/format.sh` — must produce no changes
+- [x] manual smoke test: open revdiff on a git repo, verify `?` (help), `@` (annotation list), `T` (theme selector) all work correctly
+- [x] verify theme preview on cursor move, confirm with Enter, cancel with Esc (two-press), filter typing
 
 ### Task 13: Update documentation
 
