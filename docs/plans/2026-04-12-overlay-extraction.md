@@ -346,16 +346,16 @@ These methods remain on Model because they perform side effects that depend on M
 - Create: `app/ui/overlay/themeselect.go`
 - Create: `app/ui/overlay/themeselect_test.go` (1:1 with source file)
 
-- [ ] define `themeSelectOverlay` struct (unexported): `active bool`, `all []ThemeItem`, `entries []ThemeItem` (filtered), `cursor int`, `offset int`, `filter string`, `lastPreviewedName string`
-- [ ] add `OpenThemeSelect(spec ThemeSelectSpec)` to Manager — sets `m.kind = KindThemeSelect`, delegates to `m.themeSel.open(spec)`
-- [ ] implement `(t *themeSelectOverlay) applyFilter()` — port `applyThemeFilter` (102-119): case-insensitive name match, reset cursor/offset on filter change
-- [ ] implement `(t *themeSelectOverlay) render(ctx RenderCtx, mgr *Manager) string` — port `themeSelectOverlay` (122-158), and popup dimension constants (`themePopupMaxWidth`, `themePopupMinWidth`, `themePopupMargin`, `themePopupBorderPad`, `themePopupChromeLines` at 18-23). `mgr` param for `injectBorderTitle`. Replace `m.resolver` with `RenderCtx.Resolver`
-- [ ] implement `(t *themeSelectOverlay) formatEntry(...)`, `renderFilter(...)`, `swatchText(...)`, `maxVisible(...)` — port from themeselect.go (161-209, 358-361, 394-403)
-- [ ] implement `(t *themeSelectOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome` — port `handleThemeSelectKey` (213-274): Enter returns `OutcomeThemeConfirmed`, Esc first clears filter (+ returns `OutcomeThemePreview` to re-preview unfiltered selection), Esc second returns `OutcomeThemeCanceled`. Up/Down navigate + return `OutcomeThemePreview` (with dedup via `lastPreviewedName`). Rune input appends to filter + returns `OutcomeThemePreview`. Backspace pops filter. ActionThemeSelect returns `OutcomeThemeCanceled`. Note: theme selector uses `msg.Type` for navigation/filter input (not keymap actions) — fzf-style behavior where all printable chars go to filter. Only `ActionThemeSelect` uses the keymap action
-- [ ] wire theme selector into Manager's `HandleKey` and `Compose`
-- [ ] write tests for theme selector rendering: item formatting (local vs gallery swatch), filter input display, filtered count, cursor highlight, scroll
-- [ ] write tests for theme selector key handling: navigation, filter input/clear, enter confirm, esc cancel (two-press), preview dedup (same name = OutcomeNone)
-- [ ] write tests for `OpenThemeSelect` cursor positioning on `ActiveName`
+- [x] define `themeSelectOverlay` struct (unexported): `active bool`, `all []ThemeItem`, `entries []ThemeItem` (filtered), `cursor int`, `offset int`, `filter string`, `lastPreviewedName string`
+- [x] add `OpenThemeSelect(spec ThemeSelectSpec)` to Manager — sets `m.kind = KindThemeSelect`, delegates to `m.themeSel.open(spec)`
+- [x] implement `(t *themeSelectOverlay) applyFilter()` — port `applyThemeFilter` (102-119): case-insensitive name match, reset cursor/offset on filter change
+- [x] implement `(t *themeSelectOverlay) render(ctx RenderCtx, mgr *Manager) string` — port `themeSelectOverlay` (122-158), and popup dimension constants (`themePopupMaxWidth`, `themePopupMinWidth`, `themePopupMargin`, `themePopupBorderPad`, `themePopupChromeLines` at 18-23). `mgr` param for `injectBorderTitle`. Replace `m.resolver` with `RenderCtx.Resolver`
+- [x] implement `(t *themeSelectOverlay) formatEntry(...)`, `renderFilter(...)`, `swatchText(...)`, `maxVisible(...)` — port from themeselect.go (161-209, 358-361, 394-403)
+- [x] implement `(t *themeSelectOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome` — port `handleThemeSelectKey` (213-274): Enter returns `OutcomeThemeConfirmed`, Esc first clears filter (+ returns `OutcomeThemePreview` to re-preview unfiltered selection), Esc second returns `OutcomeThemeCanceled`. Up/Down navigate + return `OutcomeThemePreview` (with dedup via `lastPreviewedName`). Rune input appends to filter + returns `OutcomeThemePreview`. Backspace pops filter. ActionThemeSelect returns `OutcomeThemeCanceled`. Note: theme selector uses `msg.Type` for navigation/filter input (not keymap actions) — fzf-style behavior where all printable chars go to filter. Only `ActionThemeSelect` uses the keymap action
+- [x] wire theme selector into Manager's `HandleKey` and `Compose`
+- [x] write tests for theme selector rendering: item formatting (local vs gallery swatch), filter input display, filtered count, cursor highlight, scroll
+- [x] write tests for theme selector key handling: navigation, filter input/clear, enter confirm, esc cancel (two-press), preview dedup (same name = OutcomeNone)
+- [x] write tests for `OpenThemeSelect` cursor positioning on `ActiveName`
 
 ### Task 5: M1 milestone gate — overlay package green
 
