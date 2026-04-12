@@ -6,6 +6,7 @@ package ui
 //go:generate moq -out mocks/style_resolver.go -pkg mocks -skip-ensure -fmt goimports . styleResolver
 //go:generate moq -out mocks/style_renderer.go -pkg mocks -skip-ensure -fmt goimports . styleRenderer
 //go:generate moq -out mocks/sgr_processor.go -pkg mocks -skip-ensure -fmt goimports . sgrProcessor
+//go:generate moq -out mocks/word_differ.go -pkg mocks -skip-ensure -fmt goimports . wordDiffer
 
 import (
 	"errors"
@@ -23,6 +24,7 @@ import (
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // Renderer provides methods to extract changed files and build full-file diff views.
@@ -71,12 +73,21 @@ type sgrProcessor interface {
 	Reemit(lines []string) []string
 }
 
-// compile-time assertions — enforce that the concrete style package types
+// wordDiffer is what Model needs for intra-line word-diff and highlight insertion.
+// Implemented by *worddiff.Differ.
+type wordDiffer interface {
+	ComputeIntraRanges(minusLine, plusLine string) ([]worddiff.Range, []worddiff.Range)
+	PairLines(lines []worddiff.LinePair) []worddiff.Pair
+	InsertHighlightMarkers(s string, matches []worddiff.Range, hlOn, hlOff string) string
+}
+
+// compile-time assertions — enforce that the concrete package types
 // satisfy the consumer-side interfaces.
 var (
 	_ styleResolver = (*style.Resolver)(nil)
 	_ styleRenderer = (*style.Renderer)(nil)
 	_ sgrProcessor  = (*style.SGR)(nil)
+	_ wordDiffer    = (*worddiff.Differ)(nil)
 )
 
 // FileTreeComponent is what Model needs from a file-tree navigation component.
@@ -149,6 +160,7 @@ type Model struct {
 	resolver     styleResolver
 	renderer     styleRenderer
 	sgr          sgrProcessor
+	differ       wordDiffer
 	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
 	viewport     viewport.Model
 	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
@@ -172,17 +184,17 @@ type Model struct {
 	diffCursor     int    // index into diffLines for current cursor line
 	scrollX        int    // horizontal scroll offset for diff pane
 
-	highlighter        SyntaxHighlighter // syntax highlighter
-	highlightedLines   []string          // pre-computed highlighted content, parallel to diffLines
-	intraRanges        [][]matchRange    // per-line intra-line word-diff ranges, parallel to diffLines (nil for unpaired lines)
-	diffLines          []diff.DiffLine   // current file's parsed diff lines
-	currFile           string            // currently displayed file
-	loadSeq            uint64            // monotonic counter to identify the latest load request
-	ready              bool              // true after first WindowSizeMsg
-	annotating         bool              // true when annotation text input is active
-	fileAnnotating     bool              // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
-	annotateInput      textinput.Model   // text input for annotations
+	highlighter        SyntaxHighlighter  // syntax highlighter
+	highlightedLines   []string           // pre-computed highlighted content, parallel to diffLines
+	intraRanges        [][]worddiff.Range // per-line intra-line word-diff ranges, parallel to diffLines (nil for unpaired lines)
+	diffLines          []diff.DiffLine    // current file's parsed diff lines
+	currFile           string             // currently displayed file
+	loadSeq            uint64             // monotonic counter to identify the latest load request
+	ready              bool               // true after first WindowSizeMsg
+	annotating         bool               // true when annotation text input is active
+	fileAnnotating     bool               // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool               // true when cursor is on the annotation sub-line (not the diff line)
+	annotateInput      textinput.Model    // text input for annotations
 
 	collapsed collapsedState // collapsed diff view state
 
@@ -256,7 +268,7 @@ type filesLoadedMsg struct {
 }
 
 // ModelConfig holds all dependencies and configuration for NewModel.
-// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR)
+// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer)
 // are required and must be constructed by the caller. Blamer is optional.
 type ModelConfig struct {
 	// --- UI dependencies (required, caller-constructed) ---
@@ -268,6 +280,9 @@ type ModelConfig struct {
 	StyleResolver styleResolver // color/style lookups
 	StyleRenderer styleRenderer // compound ANSI rendering
 	SGR           sgrProcessor  // SGR stream reemit
+
+	// --- Word-diff dependency (required, caller-constructed) ---
+	WordDiffer wordDiffer // intra-line diff and highlight insertion
 
 	// --- Sidepane factories (required, wired from main.go) ---
 
@@ -331,6 +346,9 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.SGR == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.SGR is required")
 	}
+	if cfg.WordDiffer == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.WordDiffer is required")
+	}
 	if cfg.NewFileTree == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.NewFileTree is required")
 	}
@@ -352,6 +370,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		resolver:         cfg.StyleResolver,
 		renderer:         cfg.StyleRenderer,
 		sgr:              cfg.SGR,
+		differ:           cfg.WordDiffer,
 		keymap:           km,
 		store:            cfg.Store,
 		diffRenderer:     cfg.Renderer,

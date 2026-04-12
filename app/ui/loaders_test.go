@@ -15,6 +15,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/sidepane"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 func TestModel_FilesLoaded(t *testing.T) {
@@ -486,9 +487,9 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 		msg2 := cmd()
 		result, _ = m.Update(msg2)
 		m = result.(Model)
-		// should not be empty — either fallback worked or file doesn't exist on disk
-		// (if testdata/newfile.go doesn't exist, diffLines stays nil — that's OK, we just test no crash)
-		assert.NotNil(t, m, "should not crash on untracked file load")
+		// reaching here without panic means the fallback path handled the untracked file correctly.
+		// if testdata/newfile.go doesn't exist on disk, diffLines stays nil — that's expected
+		assert.Equal(t, "newfile.go", m.currFile)
 	})
 
 	t.Run("non-untracked file with empty diff does not trigger fallback", func(t *testing.T) {
@@ -821,4 +822,124 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	model := result.(Model)
 	assert.Equal(t, "b.go", model.currFile, "response should be accepted despite cursor being on c.go")
 	assert.Equal(t, bLines, model.diffLines)
+}
+
+func TestModel_RecomputeIntraRanges(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wordDiff = true
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "context before", ChangeType: diff.ChangeContext},
+		{Content: "return foo(bar)", ChangeType: diff.ChangeRemove},
+		{Content: "return foo(baz)", ChangeType: diff.ChangeAdd},
+		{Content: "context after", ChangeType: diff.ChangeContext},
+	}
+
+	m.recomputeIntraRanges()
+
+	require.Len(t, m.intraRanges, 4)
+	assert.Nil(t, m.intraRanges[0], "context line should have no ranges")
+	assert.NotNil(t, m.intraRanges[1], "remove line should have ranges")
+	assert.NotNil(t, m.intraRanges[2], "add line should have ranges")
+	assert.Nil(t, m.intraRanges[3], "context line should have no ranges")
+
+	// verify the ranges point to "bar" and "baz"
+	require.Len(t, m.intraRanges[1], 1)
+	assert.Equal(t, worddiff.Range{Start: 11, End: 14}, m.intraRanges[1][0])
+	require.Len(t, m.intraRanges[2], 1)
+	assert.Equal(t, worddiff.Range{Start: 11, End: 14}, m.intraRanges[2][0])
+}
+
+func TestModel_RecomputeIntraRanges_IdenticalPair(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wordDiff = true
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "same line content", ChangeType: diff.ChangeRemove},
+		{Content: "same line content", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// identical lines produce no changed ranges, so intra-line ranges remain nil
+	assert.Nil(t, m.intraRanges[0], "identical remove should have no ranges")
+	assert.Nil(t, m.intraRanges[1], "identical add should have no ranges")
+}
+
+func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wordDiff = true
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "context", ChangeType: diff.ChangeContext},
+		{Content: "new line 1", ChangeType: diff.ChangeAdd},
+		{Content: "new line 2", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// pure add block has no pairs, so no intra-line ranges
+	for i, r := range m.intraRanges {
+		assert.Nil(t, r, "line %d should have no ranges", i)
+	}
+}
+
+func TestModel_RecomputeIntraRanges_DissimilarPair(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wordDiff = true
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "alpha bravo charlie delta echo foxtrot golf hotel india juliet", ChangeType: diff.ChangeRemove},
+		{Content: "xxx yyy zzz aaa bbb ccc ddd eee fff ggg", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// dissimilar pair should have no ranges due to similarity gate
+	assert.Nil(t, m.intraRanges[0])
+	assert.Nil(t, m.intraRanges[1])
+}
+
+func TestModel_RecomputeIntraRanges_TabContent(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wordDiff = true
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "\treturn foo(bar)", ChangeType: diff.ChangeRemove},
+		{Content: "\treturn foo(baz)", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// ranges should be on tab-replaced content
+	require.NotNil(t, m.intraRanges[0])
+	require.NotNil(t, m.intraRanges[1])
+
+	// after tab replacement, "\t" becomes "    " (4 spaces), so "bar" starts at 4+11=15
+	tabReplaced := strings.ReplaceAll(m.diffLines[0].Content, "\t", m.tabSpaces)
+	require.Len(t, m.intraRanges[0], 1)
+	changed := tabReplaced[m.intraRanges[0][0].Start:m.intraRanges[0][0].End]
+	assert.Equal(t, "bar", changed)
+}
+
+func TestModel_RecomputeIntraRanges_MultipleBlocks(t *testing.T) {
+	m := testModel(nil, nil)
+	m.wordDiff = true
+	m.tabSpaces = "    "
+	m.diffLines = []diff.DiffLine{
+		{Content: "old first", ChangeType: diff.ChangeRemove},
+		{Content: "new first", ChangeType: diff.ChangeAdd},
+		{Content: "context between", ChangeType: diff.ChangeContext},
+		{Content: "old second", ChangeType: diff.ChangeRemove},
+		{Content: "new second", ChangeType: diff.ChangeAdd},
+	}
+
+	m.recomputeIntraRanges()
+
+	// both blocks should have ranges
+	assert.NotNil(t, m.intraRanges[0], "first block remove")
+	assert.NotNil(t, m.intraRanges[1], "first block add")
+	assert.Nil(t, m.intraRanges[2], "context line")
+	assert.NotNil(t, m.intraRanges[3], "second block remove")
+	assert.NotNil(t, m.intraRanges[4], "second block add")
 }

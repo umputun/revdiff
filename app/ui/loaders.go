@@ -10,6 +10,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // loadFiles returns a command that fetches the list of changed files from the renderer.
@@ -358,4 +359,45 @@ func (m Model) isFullContext(lines []diff.DiffLine) bool {
 func (m Model) isMarkdownFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return ext == ".md" || ext == ".markdown"
+}
+
+// recomputeIntraRanges walks m.diffLines, finds contiguous change blocks,
+// pairs remove/add lines, runs word-diff, and stores results in m.intraRanges.
+// no-op when m.wordDiff is off: clears m.intraRanges to nil so callers don't
+// need to duplicate the guard at each call site.
+func (m *Model) recomputeIntraRanges() {
+	if !m.wordDiff {
+		m.intraRanges = nil
+		return
+	}
+	n := len(m.diffLines)
+	m.intraRanges = make([][]worddiff.Range, n)
+
+	i := 0
+	for i < n {
+		if m.diffLines[i].ChangeType != diff.ChangeAdd && m.diffLines[i].ChangeType != diff.ChangeRemove {
+			i++
+			continue
+		}
+		blockStart := i
+		for i < n && (m.diffLines[i].ChangeType == diff.ChangeAdd || m.diffLines[i].ChangeType == diff.ChangeRemove) {
+			i++
+		}
+
+		// build LinePair slice for the block
+		block := make([]worddiff.LinePair, i-blockStart)
+		for j := blockStart; j < i; j++ {
+			block[j-blockStart] = worddiff.LinePair{
+				Content:  strings.ReplaceAll(m.diffLines[j].Content, "\t", m.tabSpaces),
+				IsRemove: m.diffLines[j].ChangeType == diff.ChangeRemove,
+			}
+		}
+
+		pairs := m.differ.PairLines(block)
+		for _, p := range pairs {
+			minusRanges, plusRanges := m.differ.ComputeIntraRanges(block[p.RemoveIdx].Content, block[p.AddIdx].Content)
+			m.intraRanges[blockStart+p.RemoveIdx] = minusRanges
+			m.intraRanges[blockStart+p.AddIdx] = plusRanges
+		}
+	}
 }

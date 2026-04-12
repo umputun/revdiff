@@ -24,8 +24,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
   - `annotate.go` - annotation input/CRUD
   - `annotlist.go` - annotation list overlay
   - `search.go` - search input and navigation
-  - `worddiff.go` - intra-line word-diff: tokenizer, LCS, line pairing, range computation
-  - `model.go` also holds consumer-side interfaces (styleResolver, styleRenderer, sgrProcessor) with compile-time assertions, and exported `FileTreeComponent`/`TOCComponent` interfaces for sidepane components
+  - `model.go` also holds consumer-side interfaces (styleResolver, styleRenderer, sgrProcessor, wordDiffer) with compile-time assertions, and exported `FileTreeComponent`/`TOCComponent` interfaces for sidepane components
 - `app/ui/style/` - color and style resolution sub-package. Owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking, HSL color math, and semantic color accessors. Three main types:
   - `style.Resolver` - static and runtime style/color lookups (Color, Style, LineBg, LineStyle, WordDiffBg, IndicatorBg)
   - `style.Renderer` - compound ANSI rendering (AnnotationInline, DiffCursor, StatusBarSeparator, FileStatusMark, FileReviewedMark, FileAnnotationMark)
@@ -33,6 +32,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/ui/sidepane/` - left-pane navigation sub-package. Owns file tree (`FileTree`) and markdown table-of-contents (`TOC`) types with cursor/offset management, entry parsing, and rendering. Concrete construction lives in `app/main.go` via factory closures injected into `ModelConfig.NewFileTree` and `ModelConfig.ParseTOC`. Two types:
   - `sidepane.FileTree` - file tree sidebar with navigation (`Move`/`StepFile`), filtering, reviewed tracking, and rendering
   - `sidepane.TOC` - markdown TOC with navigation, active section tracking, and rendering
+- `app/ui/worddiff/` - intra-line word-diff algorithms and shared highlight marker insertion engine. Owns tokenizer, LCS algorithm, line pairing, similarity gate, and ANSI-aware highlight insertion used by both word-diff and search highlighting. Single type:
+  - `worddiff.Differ` - stateless type grouping all word-diff methods (`ComputeIntraRanges`, `PairLines`, `InsertHighlightMarkers`). Injected into Model via `ModelConfig.WordDiffer` wired in `app/main.go`
 - `app/highlight/` - chroma-based syntax highlighting, foreground-only ANSI output
 - `app/keymap/` - user-configurable keybindings (`Action` constants, `Keymap` type, parser, defaults, dump)
 - `app/theme/` - color theme system: Parse (with hex validation), Load, List, Dump, InitBundled, ColorKeys (bundled: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark)
@@ -46,6 +47,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `styleResolver` - `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()` - implemented by `style.Resolver`
 - `styleRenderer` - `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` - implemented by `style.Renderer`
 - `sgrProcessor` - `Reemit()` - implemented by `style.SGR`
+- `wordDiffer` - `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` - implemented by `*worddiff.Differ`. Injected via `ModelConfig.WordDiffer` wired in `app/main.go`
 - `FileTreeComponent` - exported, 15 methods (navigation, query, mutation, render) - implemented by `*sidepane.FileTree`. Concrete construction injected via `ModelConfig.NewFileTree` factory closure wired in `app/main.go`
 - `TOCComponent` - exported, 11 methods (navigation, cursor/section query+set, render) - implemented by `*sidepane.TOC`. Concrete construction injected via `ModelConfig.ParseTOC` factory closure wired in `app/main.go`
 
@@ -57,9 +59,10 @@ DetectVCS() → VCSGit | VCSHg | VCSNone
   (or: stdin / arbitrary reader → diff.readReaderAsContext() → []DiffLine, all ChangeContext)
   → highlight.HighlightLines() → []string (ANSI foreground-only)
   → when m.wordDiff is true (opt-in via --word-diff flag or `W` toggle):
-    recomputeIntraRanges() pairs add/remove lines within hunks via pairHunkLines(),
-    runs token-level LCS diff (changedTokenRanges) on each pair, stores [][]matchRange
-    parallel to diffLines. 30% similarity gate discards ranges for dissimilar pairs.
+    recomputeIntraRanges() pairs add/remove lines within hunks via m.differ.PairLines(),
+    runs token-level LCS diff (m.differ.ComputeIntraRanges()) on each pair,
+    stores [][]worddiff.Range parallel to diffLines. 30% similarity gate discards
+    ranges for dissimilar pairs. All algorithms live in app/ui/worddiff/ sub-package.
     Ranges are byte offsets on tab-replaced content, aligning with prepareLineContent output.
     When wordDiff is off, m.intraRanges stays nil and applyIntraLineHighlight is a no-op.
   → ui.renderDiff() dispatches:

@@ -19,7 +19,13 @@
 //     cursor-viewport coordination, annotation key map
 //   - annotlist.go — annotation list overlay for cross-file annotation browsing
 //   - search.go — incremental search: input handling, match computation, navigation
-//   - worddiff.go — intra-line word-diff: tokenizer, LCS, line pairing, range computation
+//
+// Intra-line word-diff algorithms and the shared highlight marker insertion engine live
+// in the [worddiff] sub-package (app/ui/worddiff/). It owns the tokenizer, LCS algorithm,
+// line pairing, similarity gate, and ANSI-aware highlight marker insertion used by both
+// word-diff and search highlighting. Model holds the worddiff type through a consumer-side
+// interface (wordDiffer) defined in model.go; concrete *worddiff.Differ is injected via
+// ModelConfig.WordDiffer wired in app/main.go.
 //
 // Color and style management lives in the [style] sub-package (app/ui/style/).
 // It owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking,

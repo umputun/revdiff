@@ -11,10 +11,8 @@ import (
 
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
-
-// matchRange represents a range of visible character positions for search match highlighting.
-type matchRange struct{ start, end int }
 
 // lineNumGutterWidth returns the total character width of the line number gutter.
 // layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
@@ -463,7 +461,7 @@ func (m Model) applyIntraLineHighlight(idx int, changeType diff.ChangeType, text
 		return textContent
 	}
 
-	return m.insertHighlightMarkers(textContent, ranges, hlOn, hlOff)
+	return m.differ.InsertHighlightMarkers(textContent, ranges, hlOn, hlOff)
 }
 
 // linePrefix returns the 3-character gutter prefix for a given change type.
@@ -497,7 +495,7 @@ func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) stri
 	}
 
 	// collect all match ranges in visible-character positions
-	var matches []matchRange
+	var matches []worddiff.Range
 	offset := 0
 	for {
 		idx := strings.Index(plainLower[offset:], term)
@@ -505,7 +503,7 @@ func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) stri
 			break
 		}
 		start := offset + idx
-		matches = append(matches, matchRange{start, start + len(term)})
+		matches = append(matches, worddiff.Range{Start: start, End: start + len(term)})
 		offset = start + len(term)
 	}
 	if len(matches) == 0 {
@@ -526,91 +524,7 @@ func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) stri
 		hlOff = string(bg)
 	}
 
-	return m.insertHighlightMarkers(s, matches, hlOn, hlOff)
-}
-
-// insertHighlightMarkers walks the string inserting hlOn/hlOff ANSI sequences at match positions,
-// skipping over existing ANSI escape sequences to preserve them.
-// tracks background ANSI state so that match-end restores to the correct bg (e.g. word-diff bg)
-// rather than always using the static hlOff (line bg). when the input has no bg sequences
-// (word-diff caller), restoreBg stays at hlOff and behavior is unchanged.
-func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOff string) string {
-	var b strings.Builder
-	visPos := 0   // current position in visible text
-	matchIdx := 0 // current match we're processing
-	i := 0
-	restoreBg := hlOff // tracks the active bg to restore after each match
-	inMatch := false   // whether we're inside an active highlight span
-
-	for i < len(s) {
-		// skip ANSI escape sequences (copy them as-is, track bg state)
-		if s[i] == '\033' {
-			j := i + 1
-			for j < len(s) && s[j] != 'm' {
-				j++
-			}
-			if j < len(s) {
-				j++ // include the 'm'
-			}
-			seq := s[i:j]
-			b.WriteString(seq)
-			prev := restoreBg
-			restoreBg = m.updateRestoreBg(seq, restoreBg, hlOff)
-			// if a bg-changing sequence appeared inside a match, re-emit hlOn
-			// so the terminal doesn't switch away from the highlight
-			if inMatch && restoreBg != prev {
-				b.WriteString(hlOn)
-			}
-			i = j
-			continue
-		}
-
-		// insert highlight start/end at match boundaries
-		if matchIdx < len(matches) && visPos == matches[matchIdx].start {
-			b.WriteString(hlOn)
-			inMatch = true
-		}
-		if matchIdx < len(matches) && visPos == matches[matchIdx].end {
-			b.WriteString(restoreBg)
-			inMatch = false
-			matchIdx++
-			if matchIdx < len(matches) && visPos == matches[matchIdx].start {
-				b.WriteString(hlOn)
-				inMatch = true
-			}
-		}
-
-		b.WriteByte(s[i])
-		visPos++
-		i++
-	}
-
-	// close any unclosed highlight
-	if matchIdx < len(matches) && visPos >= matches[matchIdx].start && visPos <= matches[matchIdx].end {
-		b.WriteString(restoreBg)
-	}
-
-	return b.String()
-}
-
-// updateRestoreBg checks if an ANSI escape sequence changes the background or reverse-video state,
-// returning the updated restore sequence. resets to hlOff on bg-reset, reverse-off, or full-reset.
-func (m Model) updateRestoreBg(seq, current, hlOff string) string {
-	if len(seq) < 3 || seq[0] != '\033' || seq[1] != '[' || seq[len(seq)-1] != 'm' {
-		return current
-	}
-	params := seq[2 : len(seq)-1]
-	switch {
-	case strings.HasPrefix(params, "48;2;"): // 24-bit bg
-		return seq
-	case len(params) == 2 && params[0] == '4' && params[1] >= '0' && params[1] <= '7': // basic bg
-		return seq
-	case params == "7": // reverse video on
-		return seq
-	case params == "49" || params == "27" || params == "0" || params == "": // bg/reverse/full reset
-		return hlOff
-	}
-	return current
+	return m.differ.InsertHighlightMarkers(s, matches, hlOn, hlOff)
 }
 
 // styleDiffContent applies the appropriate line style based on change type.

@@ -13,6 +13,7 @@ import (
 	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 func noopHighlighter() *mocks.SyntaxHighlighterMock {
@@ -92,6 +93,9 @@ func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, high
 		cfg.StyleRenderer = style.NewRenderer(res)
 		cfg.SGR = style.SGR{}
 	}
+	if cfg.WordDiffer == nil {
+		cfg.WordDiffer = worddiff.New()
+	}
 	if cfg.NewFileTree == nil {
 		cfg.NewFileTree = testFileTreeFactory()
 	}
@@ -124,6 +128,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		StyleResolver:  res,
 		StyleRenderer:  style.NewRenderer(res),
 		SGR:            style.SGR{},
+		WordDiffer:     worddiff.New(),
 		TreeWidthRatio: 3,
 		NewFileTree:    testFileTreeFactory(),
 		ParseTOC:       testParseTOCFactory(),

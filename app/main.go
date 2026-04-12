@@ -20,6 +20,7 @@ import (
 	"github.com/umputun/revdiff/app/ui"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 type options struct {
@@ -418,6 +419,7 @@ func run(opts options) error {
 		StyleResolver:    res,
 		StyleRenderer:    style.NewRenderer(res),
 		SGR:              style.SGR{},
+		WordDiffer:       worddiff.New(),
 		Blamer:           blamer,
 		LoadUntracked:    untrackedFn,
 		Keymap:           km,

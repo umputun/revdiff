@@ -14,6 +14,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 func TestModel_LineNumGutter(t *testing.T) {
@@ -739,7 +740,7 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 		m.diffLines = []diff.DiffLine{
 			{OldNum: 1, NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
 		}
-		m.intraRanges = [][]matchRange{{matchRange{0, 3}}} // fake ranges
+		m.intraRanges = [][]worddiff.Range{{worddiff.Range{Start: 0, End: 3}}} // fake ranges
 
 		result := m.applyIntraLineHighlight(0, diff.ChangeContext, "context")
 		assert.Equal(t, "context", result, "context lines should not get intra-line markers")
@@ -932,30 +933,4 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		assert.False(t, m.wordDiff, "second W should disable wordDiff")
 		assert.Nil(t, m.intraRanges, "ranges should be cleared after second W")
 	})
-}
-
-func TestModel_UpdateRestoreBg(t *testing.T) {
-	m := testModel(nil, nil)
-	hlOff := "\033[48;2;0;34;0m" // line bg (AddBg)
-
-	tests := []struct {
-		name, seq, current, want string
-	}{
-		{name: "24-bit bg sets restore", seq: "\033[48;2;45;90;58m", current: hlOff, want: "\033[48;2;45;90;58m"},
-		{name: "basic bg sets restore", seq: "\033[42m", current: hlOff, want: "\033[42m"},
-		{name: "reverse on sets restore", seq: "\033[7m", current: hlOff, want: "\033[7m"},
-		{name: "bg reset returns hlOff", seq: "\033[49m", current: "\033[48;2;45;90;58m", want: hlOff},
-		{name: "reverse off returns hlOff", seq: "\033[27m", current: "\033[7m", want: hlOff},
-		{name: "full reset returns hlOff", seq: "\033[0m", current: "\033[48;2;45;90;58m", want: hlOff},
-		{name: "bare reset returns hlOff", seq: "\033[m", current: "\033[7m", want: hlOff},
-		{name: "fg color unchanged", seq: "\033[38;2;255;0;0m", current: "\033[48;2;45;90;58m", want: "\033[48;2;45;90;58m"},
-		{name: "bold unchanged", seq: "\033[1m", current: hlOff, want: hlOff},
-		{name: "too short unchanged", seq: "\033[", current: hlOff, want: hlOff},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := m.updateRestoreBg(tt.seq, tt.current, hlOff)
-			assert.Equal(t, tt.want, got)
-		})
-	}
 }

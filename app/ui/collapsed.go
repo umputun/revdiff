@@ -8,6 +8,7 @@ import (
 
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // collapsedState holds the state for collapsed diff view mode.
@@ -290,9 +291,16 @@ func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 			end--
 		}
 
-		// use pairHunkLines to detect mixed hunks (both removes and adds).
+		// build LinePair slice and use PairLines to detect mixed hunks.
 		// if pairs exist, mark all add lines in the block as modified.
-		pairs := m.pairHunkLines(start, end)
+		block := make([]worddiff.LinePair, end-start)
+		for j := start; j < end; j++ {
+			block[j-start] = worddiff.LinePair{
+				Content:  m.diffLines[j].Content,
+				IsRemove: m.diffLines[j].ChangeType == diff.ChangeRemove,
+			}
+		}
+		pairs := m.differ.PairLines(block)
 		if len(pairs) > 0 {
 			for i := start; i < end; i++ {
 				if m.diffLines[i].ChangeType == diff.ChangeAdd {
