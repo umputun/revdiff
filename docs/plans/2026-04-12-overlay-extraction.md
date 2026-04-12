@@ -331,14 +331,14 @@ These methods remain on Model because they perform side effects that depend on M
 - Create: `app/ui/overlay/annotlist.go`
 - Create: `app/ui/overlay/annotlist_test.go` (1:1 with source file)
 
-- [ ] define `annotListOverlay` struct (unexported): `active bool`, `items []AnnotationItem`, `cursor int`, `offset int`
-- [ ] add `OpenAnnotList(spec AnnotListSpec)` to Manager — sets `m.kind = KindAnnotList`, delegates to `m.annotLst.open(spec)`
-- [ ] implement `(a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string` — port `annotListOverlay` (36-65), `annotListBoxStyle` (29-33), `annotListEmptyOverlay` (68-79), `annotListMaxVisible` (235-237). `mgr` param for `injectBorderTitle`. Replace `m.resolver` with `RenderCtx.Resolver`, `m.width`/`m.height` with `RenderCtx` dimensions
-- [ ] implement `(a *annotListOverlay) formatItem(item AnnotationItem, width int, selected bool, resolver Resolver) string` — port `formatAnnotListItem` (82-136). Color resolution: map `ChangeType` ("+"/"-"/" ") to style keys via Resolver
-- [ ] implement `(a *annotListOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome` — port `handleAnnotListKey` (185-232): ActionAnnotList toggles off, Enter returns `OutcomeAnnotationChosen` with `AnnotationTarget`, Esc/ActionDismiss returns `OutcomeClosed`, Up/Down navigate cursor with scroll offset. All other keys consumed
-- [ ] wire annotation list into Manager's `HandleKey` and `Compose`
-- [ ] write tests for annotation list rendering: item formatting (add/remove/context types), cursor highlight, scroll offset, empty state, truncation
-- [ ] write tests for annotation list key handling: navigation (up/down bounds, scroll), enter selection, toggle close, esc close
+- [x] define `annotListOverlay` struct (unexported): `active bool`, `items []AnnotationItem`, `cursor int`, `offset int`
+- [x] add `OpenAnnotList(spec AnnotListSpec)` to Manager — sets `m.kind = KindAnnotList`, delegates to `m.annotLst.open(spec)`
+- [x] implement `(a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string` — port `annotListOverlay` (36-65), `annotListBoxStyle` (29-33), `annotListEmptyOverlay` (68-79), `annotListMaxVisible` (235-237). `mgr` param for `injectBorderTitle`. Replace `m.resolver` with `RenderCtx.Resolver`, `m.width`/`m.height` with `RenderCtx` dimensions
+- [x] implement `(a *annotListOverlay) formatItem(item AnnotationItem, width int, selected bool, resolver Resolver) string` — port `formatAnnotListItem` (82-136). Color resolution: map `ChangeType` ("+"/"-"/" ") to style keys via Resolver
+- [x] implement `(a *annotListOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome` — port `handleAnnotListKey` (185-232): ActionAnnotList toggles off, Enter returns `OutcomeAnnotationChosen` with `AnnotationTarget`, Esc/ActionDismiss returns `OutcomeClosed`, Up/Down navigate cursor with scroll offset. All other keys consumed
+- [x] wire annotation list into Manager's `HandleKey` and `Compose`
+- [x] write tests for annotation list rendering: item formatting (add/remove/context types), cursor highlight, scroll offset, empty state, truncation
+- [x] write tests for annotation list key handling: navigation (up/down bounds, scroll), enter selection, toggle close, esc close
 
 ### Task 4: Implement theme selector overlay
 
