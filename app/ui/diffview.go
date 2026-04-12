@@ -494,7 +494,7 @@ func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) stri
 		return s
 	}
 
-	// collect all match ranges in visible-character positions
+	// collect all match ranges as byte offsets in ANSI-stripped text
 	var matches []worddiff.Range
 	offset := 0
 	for {

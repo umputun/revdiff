@@ -9,7 +9,7 @@ import "strings"
 // (word-diff caller), restoreBg stays at hlOff and behavior is unchanged.
 func (d *Differ) InsertHighlightMarkers(s string, matches []Range, hlOn, hlOff string) string {
 	var b strings.Builder
-	visPos := 0   // current position in visible text
+	bytePos := 0  // byte position in visible (ANSI-stripped) text
 	matchIdx := 0 // current match we're processing
 	i := 0
 	restoreBg := hlOff // tracks the active bg to restore after each match
@@ -39,27 +39,27 @@ func (d *Differ) InsertHighlightMarkers(s string, matches []Range, hlOn, hlOff s
 		}
 
 		// insert highlight start/end at match boundaries
-		if matchIdx < len(matches) && visPos == matches[matchIdx].Start {
+		if matchIdx < len(matches) && bytePos == matches[matchIdx].Start {
 			b.WriteString(hlOn)
 			inMatch = true
 		}
-		if matchIdx < len(matches) && visPos == matches[matchIdx].End {
+		if matchIdx < len(matches) && bytePos == matches[matchIdx].End {
 			b.WriteString(restoreBg)
 			inMatch = false
 			matchIdx++
-			if matchIdx < len(matches) && visPos == matches[matchIdx].Start {
+			if matchIdx < len(matches) && bytePos == matches[matchIdx].Start {
 				b.WriteString(hlOn)
 				inMatch = true
 			}
 		}
 
 		b.WriteByte(s[i])
-		visPos++
+		bytePos++
 		i++
 	}
 
 	// close any unclosed highlight
-	if matchIdx < len(matches) && visPos >= matches[matchIdx].Start && visPos <= matches[matchIdx].End {
+	if matchIdx < len(matches) && bytePos >= matches[matchIdx].Start && bytePos <= matches[matchIdx].End {
 		b.WriteString(restoreBg)
 	}
 
