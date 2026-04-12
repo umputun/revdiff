@@ -403,13 +403,13 @@ These methods remain on Model because they perform side effects that depend on M
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/annotlist_test.go`
 
-- [ ] add annotation list outcome handling to the unified overlay dispatch in `handleModalKey` (wired in Task 8):
+- [x] add annotation list outcome handling to the unified overlay dispatch in `handleModalKey` (wired in Task 8):
   - `OutcomeAnnotationChosen` → call `m.jumpToAnnotationTarget(outcome.AnnotationTarget)`
   - `OutcomeClosed` → no-op (overlay already closed itself)
-- [ ] update annotation list open action in `handleKey` (model.go:469-474): build `AnnotListSpec` from `buildAnnotListItems()` → convert `[]annotation.Annotation` to `[]overlay.AnnotationItem`, call `m.overlay.OpenAnnotList(spec)`
-- [ ] add `jumpToAnnotationTarget(target *overlay.AnnotationTarget)` method — constructs `annotation.Annotation{File: target.File, Line: target.Line, Type: target.ChangeType}` and delegates to existing jump logic. `pendingAnnotJump` type stays as `*annotation.Annotation` (no type change) — `positionOnAnnotation` and `loaders.go:194` consume it unchanged
-- [ ] remove from `annotlist.go`: `annotListOverlay`, `annotListEmptyOverlay`, `formatAnnotListItem`, `annotListBoxStyle`, `injectBorderTitle`, `handleAnnotListKey`, `annotListMaxVisible`. Keep: `buildAnnotListItems`, `jumpToAnnotation` (refactored), `positionOnAnnotation`, `ensureHunkExpanded`, `findDiffLineIndex`
-- [ ] update `annotlist_test.go` — remove rendering/navigation tests (now in `overlay/annotlist_test.go`), keep jump/position tests, update remaining tests for new interface field
+- [x] update annotation list open action in `handleKey` (model.go:469-474): build `AnnotListSpec` from `buildAnnotListItems()` → convert `[]annotation.Annotation` to `[]overlay.AnnotationItem`, call `m.overlay.OpenAnnotList(spec)`
+- [x] add `jumpToAnnotationTarget(target *overlay.AnnotationTarget)` method — constructs `annotation.Annotation{File: target.File, Line: target.Line, Type: target.ChangeType}` and delegates to existing jump logic. `pendingAnnotJump` type stays as `*annotation.Annotation` (no type change) — `positionOnAnnotation` and `loaders.go:194` consume it unchanged
+- [x] remove from `annotlist.go`: `annotListOverlay`, `annotListEmptyOverlay`, `formatAnnotListItem`, `annotListBoxStyle`, `injectBorderTitle`, `handleAnnotListKey`, `annotListMaxVisible`. Keep: `buildAnnotListItems`, `jumpToAnnotation` (refactored), `positionOnAnnotation`, `ensureHunkExpanded`, `findDiffLineIndex`
+- [x] update `annotlist_test.go` — remove rendering/navigation tests (now in `overlay/annotlist_test.go`), keep jump/position tests, update remaining tests for new interface field
 
 ### Task 10: Migrate theme selector overlay dispatch
 

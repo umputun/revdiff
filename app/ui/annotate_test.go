@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 )
@@ -1628,7 +1629,8 @@ func TestModel_AnnotationsWithTOCActive(t *testing.T) {
 		// press '@' to open annotation list
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
 		model = result.(Model)
-		assert.True(t, model.showAnnotList, "annotation list should open with TOC active")
+		assert.True(t, model.overlay.Active(), "annotation list should open with TOC active")
+		assert.Equal(t, overlay.KindAnnotList, model.overlay.Kind())
 	})
 
 	t.Run("annotation keys blocked in TOC pane", func(t *testing.T) {
