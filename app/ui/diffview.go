@@ -15,8 +15,12 @@ import (
 )
 
 // lineNumGutterWidth returns the total character width of the line number gutter.
-// layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
+// two-column layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
+// single-column layout: " " + num(W) = W + 1
 func (m Model) lineNumGutterWidth() int {
+	if m.singleColLineNum {
+		return m.lineNumWidth + 1
+	}
 	return m.lineNumWidth*2 + 2
 }
 

@@ -57,12 +57,12 @@
 <!-- [go_idioms] Verify gutterBlanks() delegates to lineNumGutterWidth() rather than computing its own width -->
 <!-- [go_idioms] Verify blameGutterWidth() is independent of lineNumGutterWidth() (almost certain — blame W is author width, not line-num width) -->
 <!-- [conventions] Add matching layout comment: // layout: " " + num(W) = W + 1 to parallel existing // layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2 -->
-- [ ] audit: grep all callers of `lineNumGutterWidth()` and `lineNumGutter()` — confirm `renderDiffLine()`, `renderWrappedDiffLine()`, `renderCollapsedAddLine()`, `renderWrappedCollapsedLine()`, `gutterBlanks()`, `applyHorizontalScroll()` all go through shared functions (no inline gutter formatting)
-- [ ] audit: confirm `blameGutterWidth()` is independent of `lineNumGutterWidth()`
-- [ ] modify `lineNumGutterWidth()` in `app/ui/diffview.go:19`: when `m.singleColLineNum`, return `m.lineNumWidth + 1` (layout: `" NNN"`) instead of `m.lineNumWidth*2 + 2`
-- [ ] write tests for `lineNumGutterWidth()` returning correct width in single-column mode
-- [ ] write tests for `lineNumGutterWidth()` still returning two-column width when `singleColLineNum` is false
-- [ ] run tests - must pass before next task
+- [x] audit: grep all callers of `lineNumGutterWidth()` and `lineNumGutter()` — confirm `renderDiffLine()`, `renderWrappedDiffLine()`, `renderCollapsedAddLine()`, `renderWrappedCollapsedLine()`, `gutterBlanks()`, `applyHorizontalScroll()` all go through shared functions (no inline gutter formatting)
+- [x] audit: confirm `blameGutterWidth()` is independent of `lineNumGutterWidth()`
+- [x] modify `lineNumGutterWidth()` in `app/ui/diffview.go:19`: when `m.singleColLineNum`, return `m.lineNumWidth + 1` (layout: `" NNN"`) instead of `m.lineNumWidth*2 + 2`
+- [x] write tests for `lineNumGutterWidth()` returning correct width in single-column mode
+- [x] write tests for `lineNumGutterWidth()` still returning two-column width when `singleColLineNum` is false
+- [x] run tests - must pass before next task
 
 ### Task 3: Update `lineNumGutter()` to render single column when `singleColLineNum` is true
 <!-- [architect][simplifier][conventions][completionist][go_idioms] UNANIMOUS: Drop the two-column fallback guard for add/remove lines. It creates a width mismatch (lineNumGutter outputs 2*W+2 while lineNumGutterWidth reports W+1), causing visual corruption in horizontal scroll, extendLineBg, and gutterBlanks. The invariant is structural — isFullContext() guarantees no add/remove lines exist. Always render single-column when singleColLineNum is true -->

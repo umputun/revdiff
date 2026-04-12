@@ -123,6 +123,32 @@ func TestModel_LineNumGutterWidth(t *testing.T) {
 	assert.Equal(t, 4, m.lineNumGutterWidth())
 }
 
+func TestModel_LineNumGutterWidth_SingleColumn(t *testing.T) {
+	m := testModel(nil, nil)
+	m.singleColLineNum = true
+
+	m.lineNumWidth = 3
+	// single-column: " " + num(3) = 4
+	assert.Equal(t, 4, m.lineNumGutterWidth())
+
+	m.lineNumWidth = 1
+	// single-column: " " + num(1) = 2
+	assert.Equal(t, 2, m.lineNumGutterWidth())
+}
+
+func TestModel_LineNumGutterWidth_TwoColumnWhenNotSingleCol(t *testing.T) {
+	m := testModel(nil, nil)
+	m.singleColLineNum = false
+
+	m.lineNumWidth = 3
+	// two-column: " " + old(3) + " " + new(3) = 8
+	assert.Equal(t, 8, m.lineNumGutterWidth())
+
+	m.lineNumWidth = 2
+	// two-column: " " + old(2) + " " + new(2) = 6
+	assert.Equal(t, 6, m.lineNumGutterWidth())
+}
+
 func TestModel_RenderDiffEmpty(t *testing.T) {
 	m := testModel(nil, nil)
 	m.diffLines = nil
