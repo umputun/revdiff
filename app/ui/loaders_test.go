@@ -943,3 +943,34 @@ func TestModel_RecomputeIntraRanges_MultipleBlocks(t *testing.T) {
 	assert.NotNil(t, m.intraRanges[3], "second block remove")
 	assert.NotNil(t, m.intraRanges[4], "second block add")
 }
+
+func TestHandleFileLoaded_SingleColLineNum_FullContext(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 2, Content: "// comment", ChangeType: diff.ChangeContext},
+		{OldNum: 3, NewNum: 3, Content: "func main() {}", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+
+	assert.True(t, model.singleColLineNum, "full-context file should set singleColLineNum to true")
+}
+
+func TestHandleFileLoaded_SingleColLineNum_RealDiff(t *testing.T) {
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old line", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "new line", ChangeType: diff.ChangeAdd},
+		{OldNum: 3, NewNum: 3, Content: "// end", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+
+	assert.False(t, model.singleColLineNum, "file with add/remove lines should set singleColLineNum to false")
+}
