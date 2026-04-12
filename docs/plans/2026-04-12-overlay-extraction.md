@@ -359,10 +359,10 @@ These methods remain on Model because they perform side effects that depend on M
 
 ### Task 5: M1 milestone gate — overlay package green
 
-- [ ] run `go test ./app/ui/overlay/... -race` — must pass
-- [ ] run `golangci-lint run app/ui/overlay/...` — must be clean
-- [ ] verify all overlay types and Manager methods are tested
-- [ ] verify no dependency on `annotation`, `theme`, `diff`, `highlight`, or `ui` packages (check imports)
+- [x] run `go test ./app/ui/overlay/... -race` — must pass
+- [x] run `golangci-lint run app/ui/overlay/...` — must be clean
+- [x] verify all overlay types and Manager methods are tested
+- [x] verify no dependency on `annotation`, `theme`, `diff`, `highlight`, or `ui` packages (check imports)
 
 ### Task 6: Add consumer-side interface and ModelConfig wiring
 
