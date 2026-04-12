@@ -245,14 +245,15 @@ type Model struct {
 	singleFile       bool // true when diff contains exactly one file, hides tree pane
 
 	pendingAnnotJump *annotation.Annotation // pending jump target after cross-file annotation list jump
-	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
+	pendingHunkJump  *bool                  // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 
 	themesDir  string // path to themes directory for theme selector
 	configPath string // path to config file for persisting theme choice
 
-	activeThemeName string // name of currently applied theme (for cursor positioning)
+	activeThemeName string               // name of currently applied theme (for cursor positioning)
+	themePreview    *themePreviewSession // non-nil while theme selector is open
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -478,20 +479,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	action := m.keymap.Resolve(msg.String())
 
+	if model, ok := m.handleOverlayOpen(action); ok {
+		return model, nil
+	}
+
 	switch action {
-	case keymap.ActionHelp:
-		if m.overlay.Active() && m.overlay.Kind() == overlay.KindHelp {
-			m.overlay.Close()
-		} else {
-			m.overlay.OpenHelp(m.buildHelpSpec())
-		}
-		return m, nil
-	case keymap.ActionAnnotList:
-		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
-		return m, nil
-	case keymap.ActionThemeSelect:
-		m.openThemeSelector()
-		return m, nil
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -529,6 +521,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDiffNav(msg)
 	}
 	return m, nil
+}
+
+func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
+	switch action { //nolint:exhaustive // only overlay-open actions handled here
+	case keymap.ActionHelp:
+		if m.overlay.Active() && m.overlay.Kind() == overlay.KindHelp {
+			m.overlay.Close()
+		} else {
+			m.overlay.OpenHelp(m.buildHelpSpec())
+		}
+		return m, true
+	case keymap.ActionAnnotList:
+		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
+		return m, true
+	case keymap.ActionThemeSelect:
+		m.openThemeSelector()
+		return m, true
+	}
+	return m, false
 }
 
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {

@@ -418,15 +418,15 @@ These methods remain on Model because they perform side effects that depend on M
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/themeselect_test.go`
 
-- [ ] add theme selector outcome handling to the unified overlay dispatch in `handleModalKey` (wired in Task 8):
+- [x] add theme selector outcome handling to the unified overlay dispatch in `handleModalKey` (wired in Task 8):
   - `OutcomeThemePreview` → call `m.previewThemeByName(outcome.ThemeChoice.Name)` (new method: looks up theme in saved entries, calls `applyTheme`)
   - `OutcomeThemeConfirmed` → call `m.confirmThemeByName(outcome.ThemeChoice.Name)` (new method: applies + persists)
   - `OutcomeThemeCanceled` → call `m.cancelThemeSelect()` (existing, restores originals)
-- [ ] refactor `openThemeSelector()` — build `ThemeSelectSpec` from `buildThemeEntries`, save orig state (resolver/renderer/sgr/chroma), call `m.overlay.OpenThemeSelect(spec)`
-- [ ] add `previewThemeByName(name string)` and `confirmThemeByName(name string)` methods — look up theme from saved entries list (stored on Model during open), delegate to existing `applyTheme`/`patchConfigTheme`
-- [ ] remove `themeSelectState` struct and `themeEntry` struct from `themeselect.go` — replaced by `overlay.ThemeSelectSpec`/`overlay.ThemeItem`. Add `themePreviewSession` struct to hold: `entries []themeEntry`, `origResolver`, `origRenderer`, `origSGR`, `origChroma` (the app-side preview state)
-- [ ] remove from `themeselect.go`: `themeSelectOverlay`, `renderThemeFilter`, `formatThemeEntry`, `handleThemeSelectKey`, `applyThemeFilter`, `themeSelectMaxVisible`, `swatchText`. Keep: `openThemeSelector` (refactored), `buildThemeEntries`, `previewTheme` (refactored), `applyTheme`, `confirmThemeSelect` (refactored), `cancelThemeSelect`, `refreshDiff`, `colorsFromTheme`
-- [ ] update `themeselect_test.go` — remove rendering/navigation/filter tests (now in `overlay/themeselect_test.go`), keep apply/confirm/cancel/preview tests, update for new interface field and `themePreviewSession` struct
+- [x] refactor `openThemeSelector()` — build `ThemeSelectSpec` from `buildThemeEntries`, save orig state (resolver/renderer/sgr/chroma), call `m.overlay.OpenThemeSelect(spec)`
+- [x] add `previewThemeByName(name string)` and `confirmThemeByName(name string)` methods — look up theme from saved entries list (stored on Model during open), delegate to existing `applyTheme`/`patchConfigTheme`
+- [x] remove `themeSelectState` struct and `themeEntry` struct from `themeselect.go` — replaced by `overlay.ThemeSelectSpec`/`overlay.ThemeItem`. Add `themePreviewSession` struct to hold: `entries []themeEntry`, `origResolver`, `origRenderer`, `origSGR`, `origChroma` (the app-side preview state)
+- [x] remove from `themeselect.go`: `themeSelectOverlay`, `renderThemeFilter`, `formatThemeEntry`, `handleThemeSelectKey`, `applyThemeFilter`, `themeSelectMaxVisible`, `swatchText`. Keep: `openThemeSelector` (refactored), `buildThemeEntries`, `previewTheme` (refactored), `applyTheme`, `confirmThemeSelect` (refactored), `cancelThemeSelect`, `refreshDiff`, `colorsFromTheme`
+- [x] update `themeselect_test.go` — remove rendering/navigation/filter tests (now in `overlay/themeselect_test.go`), keep apply/confirm/cancel/preview tests, update for new interface field and `themePreviewSession` struct
 
 ### Task 11: Update test helpers and fix Model construction in tests
 
