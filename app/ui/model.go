@@ -22,6 +22,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 	"github.com/umputun/revdiff/app/ui/worddiff"
@@ -81,13 +82,27 @@ type wordDiffer interface {
 	InsertHighlightMarkers(s string, matches []worddiff.Range, hlOn, hlOff string) string
 }
 
+// overlayManager is what Model needs for overlay popup coordination.
+// Implemented by *overlay.Manager.
+type overlayManager interface {
+	Active() bool
+	Kind() overlay.Kind
+	OpenHelp(spec overlay.HelpSpec)
+	OpenAnnotList(spec overlay.AnnotListSpec)
+	OpenThemeSelect(spec overlay.ThemeSelectSpec)
+	Close()
+	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
+	Compose(base string, ctx overlay.RenderCtx) string
+}
+
 // compile-time assertions — enforce that the concrete package types
 // satisfy the consumer-side interfaces.
 var (
-	_ styleResolver = (*style.Resolver)(nil)
-	_ styleRenderer = (*style.Renderer)(nil)
-	_ sgrProcessor  = (*style.SGR)(nil)
-	_ wordDiffer    = (*worddiff.Differ)(nil)
+	_ styleResolver  = (*style.Resolver)(nil)
+	_ styleRenderer  = (*style.Renderer)(nil)
+	_ sgrProcessor   = (*style.SGR)(nil)
+	_ wordDiffer     = (*worddiff.Differ)(nil)
+	_ overlayManager = (*overlay.Manager)(nil)
 )
 
 // FileTreeComponent is what Model needs from a file-tree navigation component.
@@ -161,6 +176,7 @@ type Model struct {
 	renderer     styleRenderer
 	sgr          sgrProcessor
 	differ       wordDiffer
+	overlay      overlayManager
 	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
 	viewport     viewport.Model
 	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
@@ -201,7 +217,6 @@ type Model struct {
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp         bool // true when help overlay is visible
 	wrapMode         bool // true when line wrapping is enabled
 	crossFileHunks   bool // allow [ and ] to jump across file boundaries
 	lineNumbers      bool // true when line numbers are shown in gutter
@@ -229,20 +244,16 @@ type Model struct {
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
 	singleFile       bool // true when diff contains exactly one file, hides tree pane
 
-	showAnnotList    bool                    // true when annotation list popup is visible
-	annotListCursor  int                     // selected item in the flat list
-	annotListOffset  int                     // scroll offset for the annotation list
-	annotListItems   []annotation.Annotation // flat sorted list of all annotations
-	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
-	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
+	pendingAnnotJump *annotation.Annotation // pending jump target after cross-file annotation list jump
+	pendingHunkJump  *bool                  // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 
 	themesDir  string // path to themes directory for theme selector
 	configPath string // path to config file for persisting theme choice
 
-	themeSel        themeSelectState // theme selector overlay state
-	activeThemeName string           // name of currently applied theme (for cursor positioning)
+	activeThemeName string               // name of currently applied theme (for cursor positioning)
+	themePreview    *themePreviewSession // non-nil while theme selector is open
 }
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
@@ -269,7 +280,7 @@ type filesLoadedMsg struct {
 }
 
 // ModelConfig holds all dependencies and configuration for NewModel.
-// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer)
+// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer, Overlay)
 // are required and must be constructed by the caller. Blamer is optional.
 type ModelConfig struct {
 	// --- UI dependencies (required, caller-constructed) ---
@@ -284,6 +295,9 @@ type ModelConfig struct {
 
 	// --- Word-diff dependency (required, caller-constructed) ---
 	WordDiffer wordDiffer // intra-line diff and highlight insertion
+
+	// --- Overlay dependency (required, caller-constructed) ---
+	Overlay overlayManager // overlay popup coordinator
 
 	// --- Sidepane factories (required, wired from main.go) ---
 
@@ -350,6 +364,9 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.WordDiffer == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.WordDiffer is required")
 	}
+	if cfg.Overlay == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Overlay is required")
+	}
 	if cfg.NewFileTree == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.NewFileTree is required")
 	}
@@ -372,6 +389,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		renderer:         cfg.StyleRenderer,
 		sgr:              cfg.SGR,
 		differ:           cfg.WordDiffer,
+		overlay:          cfg.Overlay,
 		keymap:           km,
 		store:            cfg.Store,
 		diffRenderer:     cfg.Renderer,
@@ -461,21 +479,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	action := m.keymap.Resolve(msg.String())
 
-	// help overlay: toggle with help action, dismiss with esc, block everything else
-	if action == keymap.ActionHelp || m.showHelp {
-		return m.handleHelpKey(msg)
+	if model, ok := m.handleOverlayOpen(action); ok {
+		return model, nil
 	}
 
 	switch action {
-	case keymap.ActionAnnotList:
-		m.annotListItems = m.buildAnnotListItems()
-		m.annotListCursor = 0
-		m.annotListOffset = 0
-		m.showAnnotList = true
-		return m, nil
-	case keymap.ActionThemeSelect:
-		m.openThemeSelector()
-		return m, nil
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -515,6 +523,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
+	switch action { //nolint:exhaustive // only overlay-open actions handled here
+	case keymap.ActionHelp:
+		m.overlay.OpenHelp(m.buildHelpSpec())
+		return m, true
+	case keymap.ActionAnnotList:
+		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
+		return m, true
+	case keymap.ActionThemeSelect:
+		m.openThemeSelector()
+		return m, true
+	}
+	return m, false
+}
+
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	// annotation input mode takes priority
 	if m.annotating {
@@ -528,16 +551,23 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		return true, model, cmd
 	}
 
-	// annotation list popup: handle keys when already open
-	if m.showAnnotList {
-		model, cmd := m.handleAnnotListKey(msg)
-		return true, model, cmd
-	}
-
-	// theme selector: handle keys when already open
-	if m.themeSel.active {
-		model, cmd := m.handleThemeSelectKey(msg)
-		return true, model, cmd
+	// overlay popup dispatch (help, annotation list, theme selector)
+	if m.overlay.Active() {
+		action := m.keymap.Resolve(msg.String())
+		out := m.overlay.HandleKey(msg, action)
+		switch out.Kind {
+		case overlay.OutcomeAnnotationChosen:
+			model, cmd := m.jumpToAnnotationTarget(out.AnnotationTarget)
+			return true, model, cmd
+		case overlay.OutcomeThemePreview:
+			m.previewThemeByName(out.ThemeChoice.Name)
+		case overlay.OutcomeThemeConfirmed:
+			m.confirmThemeByName(out.ThemeChoice.Name)
+		case overlay.OutcomeThemeCanceled:
+			m.cancelThemeSelect()
+		case overlay.OutcomeClosed, overlay.OutcomeNone:
+		}
+		return true, m, nil
 	}
 
 	return false, m, nil

@@ -18,6 +18,7 @@ import (
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
 	"github.com/umputun/revdiff/app/ui"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
 	"github.com/umputun/revdiff/app/ui/worddiff"
@@ -420,6 +421,7 @@ func run(opts options) error {
 		StyleRenderer:    style.NewRenderer(res),
 		SGR:              style.SGR{},
 		WordDiffer:       worddiff.New(),
+		Overlay:          overlay.NewManager(),
 		Blamer:           blamer,
 		LoadUntracked:    untrackedFn,
 		Keymap:           km,

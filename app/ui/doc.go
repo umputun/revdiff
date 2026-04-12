@@ -5,8 +5,8 @@
 //
 //   - model.go — struct definition, [NewModel], Init, Update, handleKey dispatch, view toggles
 //   - view.go — View rendering, status bar, ANSI color helpers
-//   - handlers.go — modal key handlers: help overlay, enter/esc dispatch, discard confirmation,
-//     filter toggle, mark-reviewed, file-or-search navigation
+//   - handlers.go — modal key handlers: enter/esc dispatch, discard confirmation,
+//     filter toggle, mark-reviewed, file-or-search navigation, help spec building
 //   - loaders.go — async file/blame loading (tea.Cmd producers), loaded-message handlers,
 //     data preparation (stats, filter, skip-dividers)
 //   - diffview.go — diff content rendering: line styling, gutters (line numbers, blame),
@@ -17,7 +17,9 @@
 //     per-hunk expansion, delete-only placeholders
 //   - annotate.go — annotation input lifecycle: start, save, cancel, delete (line and file level),
 //     cursor-viewport coordination, annotation key map
-//   - annotlist.go — annotation list overlay for cross-file annotation browsing
+//   - annotlist.go — annotation list spec building, cross-file jump logic
+//   - themeselect.go — app-side theme operations: open selector, build entries,
+//     preview/confirm/cancel, apply theme, color conversion
 //   - search.go — incremental search: input handling, match computation, navigation
 //
 // Intra-line word-diff algorithms and the shared highlight marker insertion engine live
@@ -39,6 +41,16 @@
 // Model holds sidepane types through consumer-side interfaces (FileTreeComponent,
 // TOCComponent) defined in model.go; concrete construction is injected via
 // ModelConfig.NewFileTree and ModelConfig.ParseTOC factory closures wired in app/main.go.
+//
+// Layered popup UI lives in the [overlay] sub-package (app/ui/overlay/).
+// It owns help, annotation list, and theme selector overlays — all popup state
+// (cursor, offset, filter text, items, active kind), rendering (box layout,
+// item formatting, border title injection, ANSI-aware centered compositing),
+// and key dispatch (navigation, confirm, cancel, filter input). A Manager
+// coordinator enforces mutual exclusivity (one overlay at a time) and routes
+// key events and compose calls to the active overlay. Model holds the Manager
+// through a consumer-side interface (overlayManager) defined in model.go;
+// concrete *overlay.Manager is injected via ModelConfig.Overlay wired in app/main.go.
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
 // [SyntaxHighlighter] (provides ANSI-highlighted lines), and [Blamer] (provides blame data).
