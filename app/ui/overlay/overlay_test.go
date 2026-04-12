@@ -31,7 +31,9 @@ func TestManager_OpenClose(t *testing.T) {
 	})
 
 	t.Run("annotList", func(t *testing.T) {
-		mgr.OpenAnnotList(AnnotListSpec{Items: []AnnotationItem{{File: "a.go", Line: 1}}})
+		mgr.OpenAnnotList(AnnotListSpec{Items: []AnnotationItem{
+			{AnnotationTarget: AnnotationTarget{File: "a.go", Line: 1}},
+		}})
 		assert.True(t, mgr.Active())
 		assert.Equal(t, KindAnnotList, mgr.Kind())
 		mgr.Close()

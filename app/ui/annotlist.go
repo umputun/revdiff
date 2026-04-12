@@ -24,8 +24,8 @@ func (m Model) buildAnnotListSpec() overlay.AnnotListSpec {
 	items := make([]overlay.AnnotationItem, len(annots))
 	for i, a := range annots {
 		items[i] = overlay.AnnotationItem{
-			File: a.File, ChangeType: a.Type, Comment: a.Comment, Line: a.Line,
-			Target: overlay.AnnotationTarget{File: a.File, ChangeType: a.Type, Line: a.Line},
+			AnnotationTarget: overlay.AnnotationTarget{File: a.File, ChangeType: a.Type, Line: a.Line},
+			Comment:          a.Comment,
 		}
 	}
 	return overlay.AnnotListSpec{Items: items}

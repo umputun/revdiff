@@ -87,12 +87,10 @@ type AnnotListSpec struct {
 }
 
 // AnnotationItem is one entry in the annotation list popup.
+// embeds AnnotationTarget for the jump destination; Comment is the display text.
 type AnnotationItem struct {
-	File       string
-	ChangeType string
-	Comment    string
-	Line       int
-	Target     AnnotationTarget
+	AnnotationTarget
+	Comment string
 }
 
 // AnnotationTarget identifies the jump destination for an annotation list selection.

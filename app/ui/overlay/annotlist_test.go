@@ -18,8 +18,8 @@ func annotListSpec(items ...AnnotationItem) AnnotListSpec {
 
 func annotItem(file string, line int, changeType, comment string) AnnotationItem {
 	return AnnotationItem{
-		File: file, Line: line, ChangeType: changeType, Comment: comment,
-		Target: AnnotationTarget{File: file, ChangeType: changeType, Line: line},
+		AnnotationTarget: AnnotationTarget{File: file, ChangeType: changeType, Line: line},
+		Comment:          comment,
 	}
 }
 

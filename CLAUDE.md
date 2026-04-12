@@ -23,6 +23,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
   - `collapsed.go` - collapsed diff mode logic and rendering
   - `annotate.go` - annotation input/CRUD
   - `annotlist.go` - annotation list spec building, cross-file jump logic
+  - `themeselect.go` - app-side theme operations: open selector, build entries, preview/confirm/cancel, apply theme, color conversion
   - `search.go` - search input and navigation
   - `model.go` also holds consumer-side interfaces (styleResolver, styleRenderer, sgrProcessor, wordDiffer, overlayManager) with compile-time assertions, and exported `FileTreeComponent`/`TOCComponent` interfaces for sidepane components
 - `app/ui/style/` - color and style resolution sub-package. Owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking, HSL color math, and semantic color accessors. Three main types:

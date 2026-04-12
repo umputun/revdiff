@@ -18,6 +18,8 @@
 //   - annotate.go — annotation input lifecycle: start, save, cancel, delete (line and file level),
 //     cursor-viewport coordination, annotation key map
 //   - annotlist.go — annotation list spec building, cross-file jump logic
+//   - themeselect.go — app-side theme operations: open selector, build entries,
+//     preview/confirm/cancel, apply theme, color conversion
 //   - search.go — incremental search: input handling, match computation, navigation
 //
 // Intra-line word-diff algorithms and the shared highlight marker insertion engine live

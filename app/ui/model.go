@@ -280,7 +280,7 @@ type filesLoadedMsg struct {
 }
 
 // ModelConfig holds all dependencies and configuration for NewModel.
-// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer)
+// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer, Overlay)
 // are required and must be constructed by the caller. Blamer is optional.
 type ModelConfig struct {
 	// --- UI dependencies (required, caller-constructed) ---
@@ -526,11 +526,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 	switch action { //nolint:exhaustive // only overlay-open actions handled here
 	case keymap.ActionHelp:
-		if m.overlay.Active() && m.overlay.Kind() == overlay.KindHelp {
-			m.overlay.Close()
-		} else {
-			m.overlay.OpenHelp(m.buildHelpSpec())
-		}
+		m.overlay.OpenHelp(m.buildHelpSpec())
 		return m, true
 	case keymap.ActionAnnotList:
 		m.overlay.OpenAnnotList(m.buildAnnotListSpec())

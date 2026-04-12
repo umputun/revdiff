@@ -62,7 +62,6 @@ func TestModel_BuildAnnotListSpec(t *testing.T) {
 	require.Len(t, spec.Items, 2)
 	assert.Equal(t, "a.go", spec.Items[0].File)
 	assert.Equal(t, 0, spec.Items[0].Line)
-	assert.Equal(t, "a.go", spec.Items[0].Target.File)
 	assert.Equal(t, "a.go", spec.Items[1].File)
 	assert.Equal(t, 5, spec.Items[1].Line)
 	assert.Equal(t, "+", spec.Items[1].ChangeType)

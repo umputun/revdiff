@@ -141,9 +141,10 @@ func (a *annotListOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outco
 			return Outcome{Kind: OutcomeClosed}
 		}
 		item := a.items[a.cursor]
+		target := item.AnnotationTarget
 		return Outcome{
 			Kind:             OutcomeAnnotationChosen,
-			AnnotationTarget: &AnnotationTarget{File: item.Target.File, ChangeType: item.Target.ChangeType, Line: item.Target.Line},
+			AnnotationTarget: &target,
 		}
 
 	case action == keymap.ActionDismiss || msg.Type == tea.KeyEsc:
