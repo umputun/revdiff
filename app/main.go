@@ -569,7 +569,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		}
 		return vcsSetup{renderer: r, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles}, nil
 	default:
-		r, workDir, err := makeNoVCSRenderer(opts.Only, opts.Include, opts.Exclude, cwd)
+		r, workDir, err := makeNoVCSRenderer(opts.Only, cwd)
 		if err != nil {
 			return vcsSetup{}, err
 		}
@@ -620,18 +620,13 @@ func makeHgRenderer(h *diff.Hg, only, include, exclude []string, allFiles bool, 
 }
 
 // makeNoVCSRenderer creates a renderer when no VCS is detected.
-func makeNoVCSRenderer(only, include, exclude []string, cwd string) (ui.Renderer, string, error) {
+// No-VCS mode requires --only, which is mutually exclusive with --include.
+// --exclude is a no-op here (FileReader only returns the --only files).
+func makeNoVCSRenderer(only []string, cwd string) (ui.Renderer, string, error) {
 	if len(only) == 0 {
 		return nil, "", errors.New("no git or mercurial repository found (use --only to review standalone files)")
 	}
-	var r ui.Renderer = diff.NewFileReader(only, cwd)
-	if len(include) > 0 {
-		r = diff.NewIncludeFilter(r, include)
-	}
-	if len(exclude) > 0 {
-		r = diff.NewExcludeFilter(r, exclude)
-	}
-	return r, cwd, nil
+	return diff.NewFileReader(only, cwd), cwd, nil
 }
 
 // defaultThemesDir returns ~/.config/revdiff/themes.

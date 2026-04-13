@@ -565,7 +565,7 @@ func TestMakeGitRenderer_WithoutOnly(t *testing.T) {
 func TestMakeNoVCSRenderer_WithOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	renderer, workDir, err := makeNoVCSRenderer([]string{"file.md"}, nil, nil, tmpDir)
+	renderer, workDir, err := makeNoVCSRenderer([]string{"file.md"}, tmpDir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FileReader{}, renderer)
@@ -573,7 +573,7 @@ func TestMakeNoVCSRenderer_WithOnly(t *testing.T) {
 }
 
 func TestMakeNoVCSRenderer_NoOnly(t *testing.T) {
-	renderer, workDir, err := makeNoVCSRenderer(nil, nil, nil, "/tmp")
+	renderer, workDir, err := makeNoVCSRenderer(nil, "/tmp")
 	require.Error(t, err)
 	assert.Nil(t, renderer)
 	assert.Empty(t, workDir)
