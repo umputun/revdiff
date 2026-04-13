@@ -178,6 +178,12 @@ revdiff --all-files
 <span class="code-comment"># browse all files, excluding vendor and mocks</span>
 revdiff --all-files --exclude vendor --exclude mocks
 
+<span class="code-comment"># include only src/ files</span>
+revdiff --include src
+
+<span class="code-comment"># include src/ but exclude src/vendor/</span>
+revdiff --include src --exclude src/vendor
+
 <span class="code-comment"># exclude paths in normal diff mode</span>
 revdiff main --exclude vendor
 
@@ -198,10 +204,12 @@ some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="all-files">All-files mode</h2>
         <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all git-tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
-        <p><code>--all-files</code> requires a git repository (uses <code>git ls-files</code>) and is mutually exclusive with refs, <code>--staged</code>, and <code>--only</code>. Combine with <code>--exclude</code> (or <code>-X</code>) to filter by prefix.</p>
-        <p><code>--exclude</code> uses prefix matching: <code>--exclude vendor</code> skips <code>vendor/</code>, <code>vendor/foo.go</code>, etc. It works in both <code>--all-files</code> and normal diff modes.</p>
-        <div class="code-block"><code>revdiff --all-files --exclude vendor --exclude mocks</code></div>
-        <p>Persist in config: <code>exclude = vendor</code>. Or env: <code>REVDIFF_EXCLUDE=vendor,mocks</code>.</p>
+        <p><code>--all-files</code> requires a git repository (uses <code>git ls-files</code>) and is mutually exclusive with refs, <code>--staged</code>, and <code>--only</code>. Combine with <code>--include</code> (or <code>-I</code>) to narrow to specific paths and <code>--exclude</code> (or <code>-X</code>) to filter out unwanted paths.</p>
+        <p><code>--include</code> and <code>--exclude</code> both use prefix matching. They are composable: include narrows first, then exclude removes from the included set. Both work in <code>--all-files</code> and normal diff modes.</p>
+        <div class="code-block"><code>revdiff --all-files --include src
+revdiff --all-files --include src --exclude src/vendor
+revdiff --all-files --exclude vendor --exclude mocks</code></div>
+        <p>Persist in config: <code>include = src</code>, <code>exclude = vendor</code>. Or env: <code>REVDIFF_INCLUDE=src</code>, <code>REVDIFF_EXCLUDE=vendor,mocks</code>.</p>
 
         <h2 id="context-only">Context-only file review</h2>
         <p>When <code>--only</code> specifies a file that has no git changes (or when no git repo exists), revdiff shows the file in context-only mode: all lines displayed without +/- markers, with full annotation and syntax highlighting support.</p>
@@ -212,7 +220,7 @@ some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="scratch-buffer">Scratch-buffer review</h2>
         <p>Use <code>--stdin</code> to review arbitrary piped or redirected text as a single synthetic file. All lines are treated as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.</p>
-        <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, and <code>--exclude</code>.</p>
+        <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, <code>--include</code>, and <code>--exclude</code>.</p>
         <p>Use <code>--stdin-name</code> to control the synthetic filename for annotation output and extension-based highlighting or markdown TOC activation.</p>
         <div class="code-block"><code>echo "plain text" | revdiff --stdin
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
@@ -335,6 +343,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>-A, --all-files</code></td><td>Browse all git-tracked files</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
+                <tr><td><code>-I, --include</code></td><td>Include only files matching prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
                 <tr><td><code>-o, --output</code></td><td>Write annotations to file</td><td></td></tr>

@@ -18,6 +18,8 @@ revdiff --only=model.go              # review only files matching model.go
 revdiff --only=ui/model.go --only=README.md  # review specific files
 revdiff --all-files                  # browse all git-tracked files in a project
 revdiff --all-files --exclude vendor # browse all files, excluding vendor directory
+revdiff --include src                # include only src/ files
+revdiff --include src --exclude src/vendor  # include src/ but exclude src/vendor/
 revdiff main --exclude vendor        # diff against main, excluding vendor
 revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
@@ -39,16 +41,18 @@ Use `--all-files` (`-A`) to browse all git-tracked files, not just diffs. Turns 
 
 - Requires a git repository (uses `git ls-files` for file discovery)
 - Mutually exclusive with refs, `--staged`, and `--only`
-- Combine with `--exclude` (`-X`) to filter out paths by prefix matching
+- Combine with `--include` (`-I`) to narrow to specific paths and `--exclude` (`-X`) to filter out unwanted paths
 
 ```bash
 revdiff --all-files                          # all tracked files
+revdiff --all-files --include src            # only src/ files
+revdiff --all-files --include src --exclude src/vendor  # src/ minus src/vendor/
 revdiff --all-files --exclude vendor         # skip vendor/
 revdiff --all-files --exclude vendor --exclude mocks  # skip both
 revdiff main --exclude vendor                # normal diff, excluding vendor
 ```
 
-`--exclude` can be persisted in config file (`exclude = vendor`) or via env var (`REVDIFF_EXCLUDE=vendor,mocks`).
+`--include` and `--exclude` can be persisted in config file (`include = src`, `exclude = vendor`) or via env vars (`REVDIFF_INCLUDE=src`, `REVDIFF_EXCLUDE=vendor,mocks`). Include narrows first, then exclude removes from the included set.
 
 ## Context-Only File Review
 
@@ -63,7 +67,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 
 - `--stdin` is explicit and requires piped or redirected input
 - `--stdin-name` sets the synthetic filename used in annotations and syntax highlighting
-- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, and `--exclude`
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`
 
 ## Key Bindings
 

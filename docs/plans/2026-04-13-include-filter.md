@@ -78,16 +78,16 @@
 - [x] run `make test` — must pass before next task
 
 ### Task 4: Verify acceptance criteria
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
 
 ### Task 5: Update documentation
 <!-- [architect,conventions,completionist] Additional doc targets: site/index.html features grid (if filtering is mentioned), codex skill references at plugins/codex/skills/revdiff/, pi plugin docs if they document flags. -->
-- [ ] update README.md with `--include` flag documentation
-- [ ] update `site/docs.html` with `--include` flag
-- [ ] update `.claude-plugin/skills/revdiff/references/config.md` if it documents flags
-- [ ] update `plugins/codex/skills/revdiff/` references if they document flags
-- [ ] check `site/index.html` features grid — update if filtering is mentioned
+- [x] update README.md with `--include` flag documentation
+- [x] update `site/docs.html` with `--include` flag
+- [x] update `.claude-plugin/skills/revdiff/references/config.md` if it documents flags
+- [x] update `plugins/codex/skills/revdiff/` references if they document flags
+- [x] check `site/index.html` features grid — update if filtering is mentioned
 
 ## Technical Details
 

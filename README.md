@@ -25,7 +25,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Status line with filename, diff stats, hunk position, line number, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
-- All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
+- All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--include` and `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
 - Pi package: launch revdiff from pi, capture annotations, and keep them visible in a widget and right-side panel until you apply or clear them
@@ -292,6 +292,7 @@ Positional arguments support several forms:
 | `-A`, `--all-files` | Browse all git-tracked files, not just diffs (git only) | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
+| `-I`, `--include` | Include only files matching prefix, may be repeated, env: `REVDIFF_INCLUDE` (comma-separated) | |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
@@ -441,6 +442,12 @@ revdiff --all-files
 # browse all files, excluding vendor and mocks directories
 revdiff --all-files --exclude vendor --exclude mocks
 
+# include only src/ files
+revdiff --include src
+
+# include src/ but exclude src/vendor/
+revdiff --include src --exclude src/vendor
+
 # exclude paths in normal diff mode
 revdiff main --exclude vendor
 
@@ -463,20 +470,25 @@ Use `--all-files` (or `-A`) to browse all git-tracked files in a project, not ju
 
 `--all-files` requires a git repository (uses `git ls-files` for file discovery) and is mutually exclusive with refs, `--staged`, and `--only`.
 
-Combine with `--exclude` (or `-X`) to filter out unwanted paths:
+Combine with `--include` (or `-I`) to narrow to specific paths and `--exclude` (or `-X`) to filter out unwanted paths:
 
 ```bash
+revdiff --all-files --include src
+revdiff --all-files --include src --exclude src/vendor
 revdiff --all-files --exclude vendor --exclude mocks
 ```
 
-`--exclude` uses prefix matching: `--exclude vendor` skips `vendor/`, `vendor/foo.go`, etc. It works in both `--all-files` and normal diff modes. The exclude option can be persisted in the config file:
+`--include` and `--exclude` both use prefix matching: `--include src` keeps only `src/`, `src/foo.go`, etc. `--exclude vendor` skips `vendor/`, `vendor/foo.go`, etc. Both work in `--all-files` and normal diff modes and are composable: include narrows first, then exclude removes from the included set.
+
+Both options can be persisted in the config file:
 
 ```ini
+include = src
 exclude = vendor
 exclude = mocks
 ```
 
-Or via environment variable (comma-separated): `REVDIFF_EXCLUDE=vendor,mocks`.
+Or via environment variables (comma-separated): `REVDIFF_INCLUDE=src`, `REVDIFF_EXCLUDE=vendor,mocks`.
 
 ### Context-Only File Review
 
@@ -491,7 +503,7 @@ Two scenarios trigger this mode:
 
 Use `--stdin` to review arbitrary piped or redirected text as a single synthetic file. All lines are shown as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.
 
-`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, and `--exclude`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
+`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
 
 Use `--stdin-name` to control the synthetic filename. This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
 

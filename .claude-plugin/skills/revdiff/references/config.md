@@ -37,6 +37,7 @@ Then uncomment and edit the values you want to change.
 | `--init-all-themes` | | Write all gallery themes (bundled + community) to themes dir and exit | |
 | `--install-theme` | | Install theme(s) from gallery or local file (repeatable) | |
 | `-A`, `--all-files` | | Browse all git-tracked files, not just diffs (CLI-only, not saved in config) | `false` |
+| `-I`, `--include` | `REVDIFF_INCLUDE` | Include only files matching prefix (may be repeated; comma-separated in env) | |
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
