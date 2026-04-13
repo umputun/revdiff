@@ -15,10 +15,15 @@ func NewIncludeFilter(inner renderer, prefixes []string) *IncludeFilter {
 }
 
 // ChangedFiles returns files from the inner renderer, keeping only those matching a prefix.
+// If all prefixes normalized to empty, acts as a no-op and returns all files.
 func (f *IncludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	entries, err := f.inner.ChangedFiles(ref, staged)
 	if err != nil {
 		return nil, fmt.Errorf("include filter, changed files: %w", err)
+	}
+
+	if len(f.prefixes) == 0 {
+		return entries, nil
 	}
 
 	filtered := make([]FileEntry, 0, len(entries))
