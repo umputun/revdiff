@@ -47,6 +47,12 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 brew install umputun/apps/revdiff
 ```
 
+**Arch Linux (AUR):**
+
+```bash
+paru -S revdiff
+```
+
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
 
 ## Claude Code Plugin
