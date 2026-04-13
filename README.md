@@ -200,7 +200,24 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
 
 #### OpenCode
 
-See [OpenCode configs](plugins/opencode/README.md)
+revdiff integrates with [OpenCode](https://github.com/opencode-ai/opencode) via a tool, slash command, and plan-review plugin. The tool wraps the existing `launch-revdiff.sh` launcher, so terminal detection stays in sync automatically.
+
+**Install:**
+
+```bash
+cd plugins/opencode && bash setup.sh
+```
+
+The setup script copies files to `~/.config/opencode/` and registers the plan-review plugin. See [plugins/opencode/README.md](plugins/opencode/README.md) for manual installation and details.
+
+**Commands inside OpenCode:**
+
+```text
+/revdiff                         -- review git diff with revdiff TUI
+/revdiff HEAD~3                  -- review last 3 commits
+```
+
+The plan-review plugin automatically launches revdiff when the assistant exits plan mode, letting you annotate before approval.
 
 #### General
 

@@ -4,20 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Documentation — revdiff | Code Review for AI Agents</title>
-    <meta name="description" content="revdiff documentation: installation, pi package, Claude Code plugin setup, usage, configuration, themes, keybindings, and output format. Code review and plan review tool for AI coding sessions.">
+    <meta name="description" content="revdiff documentation: installation, pi package, Claude Code plugin, Codex plugin, OpenCode integration, usage, configuration, themes, keybindings, and output format. Code review and plan review tool for AI coding sessions.">
     <meta name="keywords" content="code review for ai agents, code review for claude code, plan review for claude code, revdiff docs, tui diff viewer documentation">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/docs.html">
 
     <meta property="og:title" content="revdiff Documentation — Code Review for AI Agents">
-    <meta property="og:description" content="Complete reference for revdiff: usage, configuration, themes, keybindings, pi package, Claude Code plugin, and output format.">
+    <meta property="og:description" content="Complete reference for revdiff: usage, configuration, themes, keybindings, pi package, Claude Code plugin, Codex plugin, OpenCode integration, and output format.">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://revdiff.com/docs.html">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="revdiff Documentation">
-    <meta name="twitter:description" content="Complete reference for revdiff usage, configuration, themes, keybindings, pi package, and Claude Code plugin.">
+    <meta name="twitter:description" content="Complete reference for revdiff usage, configuration, themes, keybindings, pi package, Claude Code plugin, Codex plugin, and OpenCode integration.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
@@ -94,6 +94,10 @@
         <a href="#codex-skills">Skills</a>
         <a href="#codex-differences">Differences</a>
 
+        <h4>OpenCode integration</h4>
+        <a href="#opencode-install">Installation</a>
+        <a href="#opencode-usage">Usage</a>
+
         <h4>Output</h4>
         <a href="#output-format">Output format</a>
         <a href="#integration">Integration</a>
@@ -101,7 +105,7 @@
 
     <main class="docs-content">
         <h1>Documentation</h1>
-        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, the Claude Code plugin, and the Codex plugin.</p>
+        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, the Claude Code plugin, the Codex plugin, and the OpenCode integration.</p>
 
         <h2 id="requirements">Requirements</h2>
         <p><code>git</code> or <code>hg</code> (Mercurial) is used to generate diffs. VCS is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
@@ -582,6 +586,23 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div
             <li>Uses Codex rollout files (<code>~/.codex/sessions/</code>) instead of Claude session logs for message extraction</li>
             <li>Scripts are portable copies from the Claude Code plugin, not symlinks</li>
         </ul>
+
+        <!-- opencode integration -->
+        <h2 id="opencode-install">OpenCode integration</h2>
+        <p>revdiff integrates with <a href="https://github.com/opencode-ai/opencode">OpenCode</a> via a tool, slash command, and plan-review plugin. The tool wraps the existing <code>launch-revdiff.sh</code> launcher, so terminal detection stays in sync automatically.</p>
+        <div class="code-block"><code><span class="code-comment"># from the revdiff repo</span>
+cd plugins/opencode && bash setup.sh</code></div>
+        <p>The setup script copies files to <code>~/.config/opencode/</code> (commands, tools, plugins) and registers the plan-review plugin in <code>opencode.json</code>. Restart OpenCode after installing. See <a href="https://github.com/umputun/revdiff/tree/master/plugins/opencode">plugins/opencode/README.md</a> for manual installation.</p>
+
+        <h2 id="opencode-usage">Usage</h2>
+        <p>The integration provides two components:</p>
+        <ul>
+            <li><code>/revdiff</code> slash command &mdash; launches the diff review TUI with optional ref argument</li>
+            <li>Plan-review plugin &mdash; automatically launches revdiff when the assistant exits plan mode, injecting annotations back as user messages</li>
+        </ul>
+        <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
+/revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
+/revdiff --staged     <span class="code-comment"># review staged changes</span></code></div>
 
         <!-- output -->
         <h2 id="output-format">Output format</h2>

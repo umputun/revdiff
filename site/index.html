@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>revdiff — Code Review for AI Agents, Claude Code, Codex, and pi</title>
-    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, and a pi package.">
-    <meta name="keywords" content="code review for ai agents, code review for claude code, code review for codex, code review for pi, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, codex plugin, pi package, ai code review tool">
+    <title>revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi</title>
+    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
+    <meta name="keywords" content="code review for ai agents, code review for claude code, code review for codex, code review for opencode, code review for pi, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, codex plugin, opencode integration, pi package, ai code review tool">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/">
 
-    <meta property="og:title" content="revdiff — Code Review for AI Agents, Claude Code, Codex, and pi">
-    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, and a pi package.">
+    <meta property="og:title" content="revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi">
+    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://revdiff.com">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
     <meta property="og:site_name" content="revdiff">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="revdiff — Code Review for AI Agents, Claude Code, Codex, and pi">
-    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, and a pi package.">
+    <meta name="twitter:title" content="revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi">
+    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <script type="application/ld+json">
@@ -26,7 +26,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "revdiff",
-        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents, Claude Code, Codex, and pi.",
+        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents - Claude Code, Codex, OpenCode, and pi.",
         "url": "https://revdiff.com",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Linux",
@@ -141,6 +141,11 @@
                 <div class="feature-icon"><span class="glyph accent" aria-label="Pi integration">P</span></div>
                 <h3>Pi integration</h3>
                 <p>Launch revdiff from <a href="https://github.com/badlogic/pi-mono">pi</a>, keep captured annotations visible in a widget and side panel, then rerun or apply them when you’re ready.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent" aria-label="OpenCode integration">O</span></div>
+                <h3>OpenCode integration</h3>
+                <p>Launch revdiff from <a href="https://github.com/opencode-ai/opencode">OpenCode</a> via <code>/revdiff</code> command or tool call. Plan-review plugin auto-launches on plan mode idle.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">v</span></div>
@@ -343,6 +348,30 @@
                     <h3>Review</h3>
                     <div class="code-block"><code>/revdiff<br>/revdiff-plan</code></div>
                     <p>Same <code>/revdiff</code> workflow as Claude Code. <code>/revdiff-plan</code> extracts the last Codex response for annotation.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="plugin">
+    <div class="section-inner">
+        <h2>OpenCode integration</h2>
+        <p class="section-sub">Diff review and plan annotation for <a href="https://github.com/opencode-ai/opencode">OpenCode</a> sessions. Wraps the same launcher script used by Claude Code.</p>
+        <div class="plugin-flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-text">
+                    <h3>Install</h3>
+                    <div class="code-block"><code>cd plugins/opencode && bash setup.sh</code></div>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-text">
+                    <h3>Review</h3>
+                    <div class="code-block"><code>/revdiff<br>/revdiff HEAD~3</code></div>
+                    <p>Plan-review plugin auto-launches revdiff when the assistant exits plan mode.</p>
                 </div>
             </div>
         </div>

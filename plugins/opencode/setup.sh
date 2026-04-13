@@ -18,7 +18,7 @@ copy_file() {
 
   cp "$src" "$dst"
   [[ "$make_exec" == "exec" ]] && chmod +x "$dst"
-  echo "Copied $(realpath --relative-to="$REPO_ROOT" "$src" 2>/dev/null || echo "$src") -> $dst"
+  echo "Copied ${src#"$REPO_ROOT"/} -> $dst"
 }
 
 mkdir -p "$OPENCODE_CONFIG/commands"
@@ -33,7 +33,6 @@ copy_file "$SCRIPT_DIR/commands/revdiff.md"  "$OPENCODE_CONFIG/commands/revdiff.
 copy_file "$SCRIPT_DIR/tools/revdiff.ts"     "$OPENCODE_CONFIG/tools/revdiff.ts" || ((errors++))
 copy_file "$SCRIPT_DIR/plugins/revdiff-plan-review.ts"   "$OPENCODE_CONFIG/plugins/revdiff-plan-review.ts" || ((errors++))
 
-
 OPENCODE_JSON="$HOME/.config/opencode/opencode.json"
 PLUGIN_ENTRY="./plugins/revdiff-plan-review.ts"
 
@@ -46,7 +45,8 @@ if [[ -f "$OPENCODE_JSON" ]]; then
     echo "\"$PLUGIN_ENTRY\" already present in $OPENCODE_JSON, skipping."
   fi
 else
-  echo "WARNING: $OPENCODE_JSON not found, skipping plugin registration." >&2
+  echo "{\"plugin\": [\"$PLUGIN_ENTRY\"]}" > "$OPENCODE_JSON"
+  echo "Created $OPENCODE_JSON with plugin entry"
 fi
 
 if ((errors > 0)); then

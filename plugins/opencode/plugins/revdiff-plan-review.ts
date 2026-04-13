@@ -28,7 +28,10 @@ async function isExecutable(filePath: string): Promise<boolean> {
 }
 
 async function isInstalled(bin: string): Promise<boolean> {
-  const p = await Bun.$`which ${bin}`.text().catch(() => "");
+  const p = await Bun.$`which ${bin}`.text().catch((e) => {
+    console.error(`revdiff-plan-review: failed to check for ${bin}:`, e);
+    return "";
+  });
   return p.trim().length > 0;
 }
 
@@ -56,7 +59,8 @@ async function getLastPlanContent(
 async function launchReview(planFile: string): Promise<string> {
   try {
     return await Bun.$`bash ${LAUNCHER} ${planFile}`.text().then((t) => t.trim());
-  } catch {
+  } catch (e) {
+    console.error("revdiff-plan-review: failed to launch review:", e);
     return "";
   }
 }
@@ -92,7 +96,8 @@ export const server: Plugin = async ({ client }) => ({
     let planContent: string | null;
     try {
       planContent = await getLastPlanContent(client, sessionID);
-    } catch {
+    } catch (e) {
+      console.error("revdiff-plan-review: failed to get plan content:", e);
       return;
     }
     if (!planContent?.trim()) return;
@@ -111,8 +116,8 @@ export const server: Plugin = async ({ client }) => ({
 
     try {
       await injectAnnotations(client, sessionID, annotations);
-    } catch {
-      // best-effort
+    } catch (e) {
+      console.error("revdiff-plan-review: failed to inject annotations:", e);
     }
   },
 });
