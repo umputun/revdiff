@@ -55,13 +55,13 @@
 <!-- [architect,completionist,go_idioms] Add --include + --only mutual exclusivity check in parseArgs(), next to the existing --all-files + --only check. --only specifies exact files; --include is a prefix filter — combining them is contradictory and produces silent empty results. -->
 <!-- [completionist] Verify --dump-config output includes the new field (should be automatic from go-flags). -->
 <!-- [architect] Verify --help output shows --include and --exclude with parallel description style. -->
-- [ ] add `Include` field to `options` struct: `[]string`, `long:"include"`, `short:"I"`, `ini-name:"include"`, `env:"REVDIFF_INCLUDE"`, `env-delim:","`
-- [ ] add `--stdin` + `--include` mutual exclusivity check in `validateStdinFlags()` (after existing --exclude check)
-- [ ] add `--include` + `--only` mutual exclusivity check in `parseArgs()`
-- [ ] verify `--help` output and `--dump-config` output look correct
-- [ ] write tests: `TestParseArgs_IncludeFlag`, `TestParseArgs_IncludeShortFlag`, `TestParseArgs_IncludeEnvVar`, `TestParseArgs_IncludeConfigFile` (mirror exclude patterns)
-- [ ] write test: stdin + include validation error, only + include validation error
-- [ ] run `make test` — must pass before next task
+- [x] add `Include` field to `options` struct: `[]string`, `long:"include"`, `short:"I"`, `ini-name:"include"`, `env:"REVDIFF_INCLUDE"`, `env-delim:","`
+- [x] add `--stdin` + `--include` mutual exclusivity check in `validateStdinFlags()` (after existing --exclude check)
+- [x] add `--include` + `--only` mutual exclusivity check in `parseArgs()`
+- [x] verify `--help` output and `--dump-config` output look correct
+- [x] write tests: `TestParseArgs_IncludeFlag`, `TestParseArgs_IncludeShortFlag`, `TestParseArgs_IncludeEnvVar`, `TestParseArgs_IncludeConfigFile` (mirror exclude patterns)
+- [x] write test: stdin + include validation error, only + include validation error
+- [x] run `make test` — must pass before next task
 
 ### Task 3: Wire IncludeFilter into renderer factories
 <!-- [architect,conventions,go_idioms] Clarify wrapping order: `r = NewIncludeFilter(r, include)` placed BEFORE the existing `r = NewExcludeFilter(r, exclude)` block. Include wraps inner first, exclude wraps that result. -->

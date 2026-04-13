@@ -608,6 +608,41 @@ func TestParseArgs_ExcludeConfigFile(t *testing.T) {
 	assert.Equal(t, []string{"vendor", "mocks"}, opts.Exclude)
 }
 
+func TestParseArgs_IncludeFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--include", "src", "--include", "lib"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src", "lib"}, opts.Include)
+}
+
+func TestParseArgs_IncludeShortFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "-I", "src"))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src"}, opts.Include)
+}
+
+func TestParseArgs_IncludeEnvVar(t *testing.T) {
+	t.Setenv("REVDIFF_INCLUDE", "src,lib,cmd")
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src", "lib", "cmd"}, opts.Include)
+}
+
+func TestParseArgs_IncludeConfigFile(t *testing.T) {
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte("[Application Options]\ninclude = src\ninclude = lib\n"), 0o600)
+	require.NoError(t, err)
+	opts, err := parseArgs([]string{"--config", cfgPath})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"src", "lib"}, opts.Include)
+}
+
+func TestParseArgs_IncludeConflictsWithOnly(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--include", "src", "--only", "main.go"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--include cannot be used with --only")
+}
+
 func TestParseArgs_AllFilesConflictsWithRefs(t *testing.T) {
 	_, err := parseArgs(append(noConfigArgs(t), "--all-files", "HEAD~3"))
 	require.Error(t, err)
@@ -662,6 +697,7 @@ func TestParseArgs_StdinConflicts(t *testing.T) {
 		{name: "only", args: []string{"--stdin", "--only", "main.go"}, want: "--stdin cannot be used with --only"},
 		{name: "all files", args: []string{"--stdin", "--all-files"}, want: "--stdin cannot be used with --all-files"},
 		{name: "exclude", args: []string{"--stdin", "--exclude", "vendor"}, want: "--stdin cannot be used with --exclude"},
+		{name: "include", args: []string{"--stdin", "--include", "src"}, want: "--stdin cannot be used with --include"},
 	}
 
 	for _, tt := range tests {
