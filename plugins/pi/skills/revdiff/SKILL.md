@@ -26,6 +26,7 @@ Examples:
 /revdiff HEAD~1
 /revdiff main
 /revdiff --staged
+/revdiff --all-files --include src
 /revdiff --all-files --exclude vendor
 /revdiff --only README.md
 ```
