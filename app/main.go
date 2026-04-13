@@ -553,7 +553,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 	switch vcsType {
 	case diff.VCSGit:
 		g := diff.NewGit(vcsRoot)
-		r, workDir, err := makeGitRenderer(g, opts.Only, opts.Exclude, opts.AllFiles, vcsRoot)
+		r, workDir, err := makeGitRenderer(g, opts.Only, opts.Include, opts.Exclude, opts.AllFiles, vcsRoot)
 		if err != nil {
 			return vcsSetup{}, err
 		}
@@ -563,13 +563,13 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 			fmt.Fprintln(os.Stderr, "warning: --staged ignored in mercurial repository (no staging area)")
 		}
 		h := diff.NewHg(vcsRoot)
-		r, workDir, err := makeHgRenderer(h, opts.Only, opts.Exclude, opts.AllFiles, vcsRoot)
+		r, workDir, err := makeHgRenderer(h, opts.Only, opts.Include, opts.Exclude, opts.AllFiles, vcsRoot)
 		if err != nil {
 			return vcsSetup{}, err
 		}
 		return vcsSetup{renderer: r, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles}, nil
 	default:
-		r, workDir, err := makeNoVCSRenderer(opts.Only, opts.Exclude, cwd)
+		r, workDir, err := makeNoVCSRenderer(opts.Only, opts.Include, opts.Exclude, cwd)
 		if err != nil {
 			return vcsSetup{}, err
 		}
@@ -579,7 +579,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 
 // makeGitRenderer selects the appropriate git renderer based on flags.
 // reuses the provided *Git instance as the default renderer to avoid double allocation.
-func makeGitRenderer(g *diff.Git, only, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) { //nolint:unparam // error kept for consistency with makeHgRenderer/makeNoVCSRenderer
+func makeGitRenderer(g *diff.Git, only, include, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) { //nolint:unparam // error kept for consistency with makeHgRenderer/makeNoVCSRenderer
 	var r ui.Renderer
 	switch {
 	case allFiles:
@@ -589,6 +589,9 @@ func makeGitRenderer(g *diff.Git, only, exclude []string, allFiles bool, repoRoo
 	default:
 		r = g
 	}
+	if len(include) > 0 {
+		r = diff.NewIncludeFilter(r, include)
+	}
 	if len(exclude) > 0 {
 		r = diff.NewExcludeFilter(r, exclude)
 	}
@@ -597,7 +600,7 @@ func makeGitRenderer(g *diff.Git, only, exclude []string, allFiles bool, repoRoo
 
 // makeHgRenderer selects the appropriate mercurial renderer based on flags.
 // reuses the provided *Hg instance as the default renderer to avoid double allocation.
-func makeHgRenderer(h *diff.Hg, only, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) {
+func makeHgRenderer(h *diff.Hg, only, include, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) {
 	var r ui.Renderer
 	switch {
 	case allFiles:
@@ -607,6 +610,9 @@ func makeHgRenderer(h *diff.Hg, only, exclude []string, allFiles bool, repoRoot 
 	default:
 		r = h
 	}
+	if len(include) > 0 {
+		r = diff.NewIncludeFilter(r, include)
+	}
 	if len(exclude) > 0 {
 		r = diff.NewExcludeFilter(r, exclude)
 	}
@@ -614,11 +620,14 @@ func makeHgRenderer(h *diff.Hg, only, exclude []string, allFiles bool, repoRoot 
 }
 
 // makeNoVCSRenderer creates a renderer when no VCS is detected.
-func makeNoVCSRenderer(only, exclude []string, cwd string) (ui.Renderer, string, error) {
+func makeNoVCSRenderer(only, include, exclude []string, cwd string) (ui.Renderer, string, error) {
 	if len(only) == 0 {
 		return nil, "", errors.New("no git or mercurial repository found (use --only to review standalone files)")
 	}
 	var r ui.Renderer = diff.NewFileReader(only, cwd)
+	if len(include) > 0 {
+		r = diff.NewIncludeFilter(r, include)
+	}
 	if len(exclude) > 0 {
 		r = diff.NewExcludeFilter(r, exclude)
 	}

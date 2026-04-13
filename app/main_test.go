@@ -55,6 +55,19 @@ func (f fakeStdin) Stat() (os.FileInfo, error) {
 	return f.info, f.err
 }
 
+// mockDiffRenderer implements ui.Renderer for composition tests.
+type mockDiffRenderer struct {
+	files []diff.FileEntry
+}
+
+func (m *mockDiffRenderer) ChangedFiles(string, bool) ([]diff.FileEntry, error) {
+	return m.files, nil
+}
+
+func (m *mockDiffRenderer) FileDiff(string, string, bool) ([]diff.DiffLine, error) {
+	return nil, nil
+}
+
 func TestParseArgs_Defaults(t *testing.T) {
 	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)
@@ -531,7 +544,7 @@ func TestDefaultConfigPath(t *testing.T) {
 func TestMakeGitRenderer_WithOnly(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, []string{"file.md"}, nil, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, []string{"file.md"}, nil, nil, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
@@ -541,7 +554,7 @@ func TestMakeGitRenderer_WithOnly(t *testing.T) {
 func TestMakeGitRenderer_WithoutOnly(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, nil, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, nil, nil, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// with no --only, returns *diff.Git directly without FallbackRenderer wrapper
@@ -552,7 +565,7 @@ func TestMakeGitRenderer_WithoutOnly(t *testing.T) {
 func TestMakeNoVCSRenderer_WithOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	renderer, workDir, err := makeNoVCSRenderer([]string{"file.md"}, nil, tmpDir)
+	renderer, workDir, err := makeNoVCSRenderer([]string{"file.md"}, nil, nil, tmpDir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FileReader{}, renderer)
@@ -560,7 +573,7 @@ func TestMakeNoVCSRenderer_WithOnly(t *testing.T) {
 }
 
 func TestMakeNoVCSRenderer_NoOnly(t *testing.T) {
-	renderer, workDir, err := makeNoVCSRenderer(nil, nil, "/tmp")
+	renderer, workDir, err := makeNoVCSRenderer(nil, nil, nil, "/tmp")
 	require.Error(t, err)
 	assert.Nil(t, renderer)
 	assert.Empty(t, workDir)
@@ -712,7 +725,7 @@ func TestParseArgs_StdinConflicts(t *testing.T) {
 func TestMakeGitRenderer_AllFiles(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, nil, true, dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, nil, nil, true, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.DirectoryReader{}, renderer)
@@ -720,7 +733,7 @@ func TestMakeGitRenderer_AllFiles(t *testing.T) {
 }
 
 func TestMakeHgRenderer_AllFilesUnsupported(t *testing.T) {
-	_, _, err := makeHgRenderer(diff.NewHg(""), nil, nil, true, "")
+	_, _, err := makeHgRenderer(diff.NewHg(""), nil, nil, nil, true, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--all-files is not supported in mercurial")
 }
@@ -728,7 +741,7 @@ func TestMakeHgRenderer_AllFilesUnsupported(t *testing.T) {
 func TestMakeHgRenderer_Default(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, nil, nil, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, nil, nil, nil, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.Hg{}, renderer)
@@ -738,7 +751,7 @@ func TestMakeHgRenderer_Default(t *testing.T) {
 func TestMakeHgRenderer_WithOnly(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, []string{"file.go"}, nil, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, []string{"file.go"}, nil, nil, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
@@ -748,7 +761,7 @@ func TestMakeHgRenderer_WithOnly(t *testing.T) {
 func TestMakeHgRenderer_WithExclude(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, nil, []string{"vendor"}, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, nil, nil, []string{"vendor"}, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
@@ -758,7 +771,7 @@ func TestMakeHgRenderer_WithExclude(t *testing.T) {
 func TestMakeGitRenderer_WithExclude(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, []string{"vendor"}, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, nil, []string{"vendor"}, false, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
@@ -768,12 +781,61 @@ func TestMakeGitRenderer_WithExclude(t *testing.T) {
 func TestMakeGitRenderer_AllFilesWithExclude(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, []string{"vendor", "mocks"}, true, dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, nil, []string{"vendor", "mocks"}, true, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// should be ExcludeFilter wrapping DirectoryReader
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
 	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeGitRenderer_WithInclude(t *testing.T) {
+	dir := t.TempDir()
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, []string{"src"}, nil, false, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.IncludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeHgRenderer_WithInclude(t *testing.T) {
+	dir := t.TempDir()
+	h := diff.NewHg(dir)
+	renderer, workDir, err := makeHgRenderer(h, nil, []string{"src"}, nil, false, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.IncludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeGitRenderer_AllFilesWithInclude(t *testing.T) {
+	dir := t.TempDir()
+	g := diff.NewGit(dir)
+	renderer, workDir, err := makeGitRenderer(g, nil, []string{"src"}, nil, true, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	// should be IncludeFilter wrapping DirectoryReader
+	assert.IsType(t, &diff.IncludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestIncludeExcludeComposition(t *testing.T) {
+	// functional composition test: IncludeFilter + ExcludeFilter working together
+	inner := &mockDiffRenderer{
+		files: []diff.FileEntry{
+			{Path: "src/app.go"}, {Path: "src/vendor/lib.go"}, {Path: "src/main.go"},
+			{Path: "pkg/util.go"}, {Path: "vendor/dep.go"},
+		},
+	}
+
+	// include narrows to src/, then exclude removes src/vendor/
+	incl := diff.NewIncludeFilter(inner, []string{"src"})
+	excl := diff.NewExcludeFilter(incl, []string{"src/vendor"})
+
+	files, err := excl.ChangedFiles("", false)
+	require.NoError(t, err)
+	assert.Equal(t, []diff.FileEntry{{Path: "src/app.go"}, {Path: "src/main.go"}}, files)
 }
 
 func TestStdinName(t *testing.T) {

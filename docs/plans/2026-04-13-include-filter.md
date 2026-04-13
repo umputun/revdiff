@@ -68,14 +68,14 @@
 <!-- [go_idioms] Guard with `if len(include) > 0` — unguarded wrap with empty prefixes would return zero files, breaking the default case. -->
 <!-- [go_idioms] Factory signatures are growing (6 params with include). Consider grouping only/include/exclude/allFiles into a filterOpts struct, or accept opts directly. -->
 <!-- [completionist] Add a functional composition test: mock renderer with known files → wrap with both filters → assert final ChangedFiles output, not just structural type checks. -->
-- [ ] update `makeGitRenderer` — add `include []string` param, wrap with `if len(include) > 0 { r = diff.NewIncludeFilter(r, include) }` before the existing exclude wrapping
-- [ ] update `makeHgRenderer` — same pattern
-- [ ] update `makeNoVCSRenderer` — same pattern (--only is now mutually exclusive, so this is safe)
-- [ ] update `setupVCSRenderer` to pass `opts.Include` to factory calls
-- [ ] write tests: `TestMakeGitRenderer_WithInclude`, `TestMakeHgRenderer_WithInclude`
-- [ ] write functional composition test: mock with known files → IncludeFilter + ExcludeFilter → assert correct filtered output
-- [ ] write test: `TestMakeGitRenderer_AllFilesWithInclude`
-- [ ] run `make test` — must pass before next task
+- [x] update `makeGitRenderer` — add `include []string` param, wrap with `if len(include) > 0 { r = diff.NewIncludeFilter(r, include) }` before the existing exclude wrapping
+- [x] update `makeHgRenderer` — same pattern
+- [x] update `makeNoVCSRenderer` — same pattern (--only is now mutually exclusive, so this is safe)
+- [x] update `setupVCSRenderer` to pass `opts.Include` to factory calls
+- [x] write tests: `TestMakeGitRenderer_WithInclude`, `TestMakeHgRenderer_WithInclude`
+- [x] write functional composition test: mock with known files → IncludeFilter + ExcludeFilter → assert correct filtered output
+- [x] write test: `TestMakeGitRenderer_AllFilesWithInclude`
+- [x] run `make test` — must pass before next task
 
 ### Task 4: Verify acceptance criteria
 - [ ] run full test suite: `make test`
