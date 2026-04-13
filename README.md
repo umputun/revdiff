@@ -53,6 +53,20 @@ brew install umputun/apps/revdiff
 paru -S revdiff
 ```
 
+**Debian/Ubuntu (.deb):**
+
+```bash
+# download the latest .deb for your architecture from GitHub Releases
+sudo dpkg -i revdiff_*.deb
+```
+
+**RPM-based (Fedora, RHEL, etc.):**
+
+```bash
+# download the latest .rpm for your architecture from GitHub Releases
+sudo rpm -i revdiff_*.rpm
+```
+
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
 
 ## Claude Code Plugin
