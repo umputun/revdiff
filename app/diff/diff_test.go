@@ -612,6 +612,55 @@ func gitCmd(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %v failed: %s", args, string(out))
 }
 
+func TestMatchesPrefix(t *testing.T) {
+	prefixes := []string{"src", "pkg/util"}
+
+	tests := []struct {
+		file string
+		want bool
+	}{
+		{"src/app.go", true},
+		{"src/lib/deep.go", true},
+		{"src", true},
+		{"pkg/util/helper.go", true},
+		{"pkg/util", true},
+		{"pkg/other.go", false},
+		{"srcutil/foo.go", false},
+		{"other/src/foo.go", false},
+		{"vendor/lib.go", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.file, func(t *testing.T) {
+			assert.Equal(t, tt.want, matchesPrefix(tt.file, prefixes))
+		})
+	}
+}
+
+func TestNormalizePrefixes(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  []string
+		wantN int
+	}{
+		{"trailing slashes", []string{"src/", "vendor/"}, []string{"src", "vendor"}, 2},
+		{"whitespace", []string{" src ", " vendor"}, []string{"src", "vendor"}, 2},
+		{"empty strings", []string{"src", "", "  ", "vendor"}, []string{"src", "vendor"}, 2},
+		{"nil input", nil, []string{}, 0},
+		{"all empty", []string{"", " ", "  "}, []string{}, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizePrefixes(tt.input)
+			assert.Equal(t, tt.want, got)
+			assert.Len(t, got, tt.wantN)
+		})
+	}
+}
+
 func TestGit_UntrackedFiles(t *testing.T) {
 	dir := t.TempDir()
 	gitCmd(t, dir, "init")

@@ -24,48 +24,6 @@ func (m *mockRenderer) FileDiff(string, string, bool) ([]DiffLine, error) {
 	return m.fileDiff, m.fileDiffErr
 }
 
-func TestExcludeFilter_matchesPrefix(t *testing.T) {
-	prefixes := normalizePrefixes([]string{"vendor", "ui/mocks"})
-
-	tests := []struct {
-		file string
-		want bool
-	}{
-		{"vendor/foo.go", true},
-		{"vendor/pkg/bar.go", true},
-		{"vendor", true},
-		{"ui/mocks/mock.go", true},
-		{"ui/mocks", true},
-		{"ui/model.go", false},
-		{"vendorutil/foo.go", false},
-		{"src/vendor/foo.go", false},
-		{"diff/diff.go", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.file, func(t *testing.T) {
-			assert.Equal(t, tt.want, matchesPrefix(tt.file, prefixes))
-		})
-	}
-}
-
-func TestExcludeFilter_normalizePrefixes_trailingSlash(t *testing.T) {
-	// prefixes with trailing slashes should be normalized
-	prefixes := normalizePrefixes([]string{"vendor/", "mocks/"})
-	assert.True(t, matchesPrefix("vendor/foo.go", prefixes))
-	assert.True(t, matchesPrefix("mocks/mock.go", prefixes))
-	assert.False(t, matchesPrefix("src/vendor/foo.go", prefixes))
-}
-
-func TestExcludeFilter_normalizePrefixes_whitespaceAndEmpty(t *testing.T) {
-	// prefixes with whitespace (e.g., from env var "vendor, mocks") should be trimmed
-	prefixes := normalizePrefixes([]string{" vendor ", " mocks", ""})
-	assert.True(t, matchesPrefix("vendor/foo.go", prefixes))
-	assert.True(t, matchesPrefix("mocks/mock.go", prefixes))
-	assert.Len(t, prefixes, 2, "empty prefix should be skipped")
-}
-
 func TestExcludeFilter_ChangedFiles(t *testing.T) {
 	inner := &mockRenderer{
 		changedFiles: []FileEntry{
