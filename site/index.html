@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>revdiff — Code Review for AI Agents, Claude Code, and pi</title>
-    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin and a pi package.">
-    <meta name="keywords" content="code review for ai agents, code review for claude code, code review for pi, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, pi package, ai code review tool">
+    <title>revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi</title>
+    <meta name="description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
+    <meta name="keywords" content="code review for ai agents, code review for claude code, code review for codex, code review for opencode, code review for pi, plan review for claude code, tui diff viewer, terminal code review, inline annotations, claude code plugin, codex plugin, opencode integration, pi package, ai code review tool">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/">
 
-    <meta property="og:title" content="revdiff — Code Review for AI Agents, Claude Code, and pi">
-    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin and a pi package.">
+    <meta property="og:title" content="revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi">
+    <meta property="og:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://revdiff.com">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
     <meta property="og:site_name" content="revdiff">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="revdiff — Code Review for AI Agents, Claude Code, and pi">
-    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin and a pi package.">
+    <meta name="twitter:title" content="revdiff — Code Review for AI Agents - Claude Code, Codex, OpenCode, and pi">
+    <meta name="twitter:description" content="TUI for code review in AI coding sessions. Review diffs, plans, and documents with inline annotations. Ships as a Claude Code plugin, Codex plugin, OpenCode integration, and a pi package.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <script type="application/ld+json">
@@ -26,7 +26,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "revdiff",
-        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents, Claude Code, and pi.",
+        "description": "TUI for reviewing diffs, files, and documents with inline annotations. Code review tool for AI agents - Claude Code, Codex, OpenCode, and pi.",
         "url": "https://revdiff.com",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Linux",
@@ -41,7 +41,7 @@
             "name": "umputun",
             "url": "https://github.com/umputun"
         },
-        "softwareVersion": "0.13.0",
+        "softwareVersion": "0.18.0",
         "downloadUrl": "https://github.com/umputun/revdiff/releases",
         "codeRepository": "https://github.com/umputun/revdiff"
     }
@@ -78,7 +78,7 @@
 
 <header class="hero">
     <div class="hero-content">
-        <div class="hero-badge">v0.13.0 <span class="hero-badge-sep">/</span> open source</div>
+        <div class="hero-badge">v0.18.0 <span class="hero-badge-sep">/</span> open source</div>
         <h1>Review diffs, files, and documents<br>right in your terminal</h1>
         <p class="hero-sub">Code review for AI agents, Claude Code, and pi. Annotate diffs, plans, and documents in a TUI. Structured output on quit, ready for AI agents, scripts, or any tool.</p>
         <div class="hero-actions">
@@ -94,7 +94,15 @@
             <div class="terminal-dots">
                 <span></span><span></span><span></span>
             </div>
-            <img src="assets/screenshot.png" alt="revdiff TUI screenshot" loading="lazy">
+            <div class="gallery-slides">
+                <img src="assets/screenshot.png" alt="revdiff TUI — diff view with syntax highlighting">
+                <img src="assets/screenshot-2.png" alt="revdiff TUI — help overlay with keybindings" loading="lazy">
+                <img src="assets/screenshot-3.png" alt="revdiff TUI — theme selector" loading="lazy">
+                <img src="assets/screenshot-4.png" alt="revdiff TUI — code view with annotations" loading="lazy">
+                <img src="assets/screenshot-5.png" alt="revdiff TUI — theme picker with live preview" loading="lazy">
+                <img src="assets/screenshot-6.png" alt="revdiff TUI — document browsing with markdown TOC" loading="lazy">
+                <img src="assets/screenshot-7.png" alt="revdiff TUI — code review with annotations" loading="lazy">
+            </div>
         </div>
     </div>
 </header>
@@ -107,7 +115,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph add">+</span><span class="glyph remove">-</span></div>
                 <h3>Full-file diff view</h3>
-                <p>Syntax-highlighted diffs with added, removed, and context lines. Collapsed mode shows final text with change markers. Git blame gutter shows who wrote each line.</p>
+                <p>Syntax-highlighted diffs with added, removed, and context lines. Collapsed mode shows final text with change markers. Blame gutter shows who wrote each line.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph annotation">#</span></div>
@@ -127,7 +135,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">A</span></div>
                 <h3>All-files mode</h3>
-                <p>Browse and annotate all git-tracked files with <code>--all-files</code>. Filter with <code>--exclude</code>. Review standalone files with <code>--only</code> or piped output with <code>--stdin</code>.</p>
+                <p>Browse and annotate all tracked files with <code>--all-files</code> (git). Filter with <code>--include</code> and <code>--exclude</code>. Review standalone files with <code>--only</code> or piped output with <code>--stdin</code>.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent" aria-label="Pi integration">P</span></div>
@@ -135,9 +143,14 @@
                 <p>Launch revdiff from <a href="https://github.com/badlogic/pi-mono">pi</a>, keep captured annotations visible in a widget and side panel, then rerun or apply them when you’re ready.</p>
             </div>
             <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent" aria-label="OpenCode integration">O</span></div>
+                <h3>OpenCode integration</h3>
+                <p>Launch revdiff from <a href="https://github.com/opencode-ai/opencode">OpenCode</a> via <code>/revdiff</code> command or tool call. Plan-review plugin auto-launches on plan mode idle.</p>
+            </div>
+            <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">v</span></div>
                 <h3>Collapsed &amp; wrap modes</h3>
-                <p>Collapsed mode (<code>v</code>) shows final text with change markers. Word wrap (<code>w</code>) for long lines. Line numbers (<code>L</code>) and git blame (<code>B</code>) gutters.</p>
+                <p>Collapsed mode (<code>v</code>) shows final text with change markers. Word wrap (<code>w</code>) for long lines. Line numbers (<code>L</code>) and blame (<code>B</code>) gutters.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">&para;</span></div>
@@ -147,7 +160,12 @@
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">~</span></div>
                 <h3>Themes &amp; keybindings</h3>
-                <p>5 bundled color themes. 21 customizable color keys. Full keybinding remapping. Config file, env vars, or CLI flags.</p>
+                <p>7 bundled color themes with interactive selector (<code>T</code>) and live preview. 23 customizable color keys. Full keybinding remapping. Community theme gallery.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><span class="glyph accent">&#x2387;</span></div>
+                <h3>Git &amp; Mercurial</h3>
+                <p>Works with Git and Mercurial repositories. Auto-detects the VCS. Diffs, blame, and untracked file listing work across both backends.</p>
             </div>
         </div>
     </div>
@@ -250,6 +268,18 @@
                 <div class="code-block"><code>brew install umputun/apps/revdiff</code></div>
             </div>
             <div class="install-card">
+                <h3>Arch Linux (AUR)</h3>
+                <div class="code-block"><code>paru -S revdiff</code></div>
+            </div>
+            <div class="install-card">
+                <h3>Debian/Ubuntu</h3>
+                <div class="code-block"><code>sudo dpkg -i revdiff_*.deb</code></div>
+            </div>
+            <div class="install-card">
+                <h3>RPM-based</h3>
+                <div class="code-block"><code>sudo rpm -i revdiff_*.rpm</code></div>
+            </div>
+            <div class="install-card">
                 <h3>Pi package</h3>
                 <div class="code-block"><code>pi install https://github.com/umputun/revdiff</code></div>
             </div>
@@ -308,6 +338,54 @@
 "review all files exclude vendor"   <span class="code-comment">-- browse project, skip vendor/</span>
 "what themes does revdiff support?" <span class="code-comment">-- ask about config without launching</span>
 "switch revdiff to dracula theme"   <span class="code-comment">-- modify config via conversation</span></code></div>
+        </div>
+    </div>
+</section>
+
+<section class="plugin">
+    <div class="section-inner">
+        <h2>Codex plugin</h2>
+        <p class="section-sub">Same diff review workflow for <a href="https://github.com/openai/codex">Codex CLI</a> sessions. Plus plan review via rollout file extraction.</p>
+        <div class="plugin-flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-text">
+                    <h3>Install</h3>
+                    <div class="code-block"><code>git clone https://github.com/umputun/revdiff.git<br>cd revdiff<br>cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff<br>cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-text">
+                    <h3>Review</h3>
+                    <div class="code-block"><code>/revdiff<br>/revdiff-plan</code></div>
+                    <p>Same <code>/revdiff</code> workflow as Claude Code. <code>/revdiff-plan</code> extracts the last Codex response for annotation.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="plugin">
+    <div class="section-inner">
+        <h2>OpenCode integration</h2>
+        <p class="section-sub">Diff review and plan annotation for <a href="https://github.com/opencode-ai/opencode">OpenCode</a> sessions. Wraps the same launcher script used by Claude Code.</p>
+        <div class="plugin-flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-text">
+                    <h3>Install</h3>
+                    <div class="code-block"><code>cd plugins/opencode && bash setup.sh</code></div>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-text">
+                    <h3>Review</h3>
+                    <div class="code-block"><code>/revdiff<br>/revdiff HEAD~3</code></div>
+                    <p>Plan-review plugin auto-launches revdiff when the assistant exits plan mode.</p>
+                </div>
+            </div>
         </div>
     </div>
 </section>

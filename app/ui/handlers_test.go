@@ -1,0 +1,354 @@
+package ui
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/sidepane"
+)
+
+func TestModel_MarkReviewedFromTreePane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+
+	// space bar toggles reviewed
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.tree.ReviewedCount(), "space should mark current file as reviewed")
+
+	// space again toggles off
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model = result.(Model)
+	assert.Equal(t, 0, model.tree.ReviewedCount(), "space should unmark reviewed file")
+}
+
+func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.currFile = "a.go"
+	m.focus = paneTree
+	m.tree.Move(sidepane.MotionDown) // cursor -> b.go while the diff pane still shows a.go
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.tree.ReviewedCount(), "space in tree pane should mark selected file (b.go)")
+	// verify it's b.go that's reviewed by toggling it off and checking count drops
+	model.tree.ToggleReviewed("b.go")
+	assert.Equal(t, 0, model.tree.ReviewedCount(), "b.go was the reviewed file")
+}
+
+func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": lines, "b.go": lines,
+	})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.currFile = "b.go"
+	m.focus = paneDiff
+
+	// space from diff pane marks currFile
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.tree.ReviewedCount(), "space in diff pane should mark currFile as reviewed")
+}
+
+func TestModel_FKeyFilterToggle(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test annotation"})
+
+	t.Run("toggle filter on and off from tree pane", func(t *testing.T) {
+		m.focus = paneTree
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.True(t, model.tree.FilterActive())
+
+		// only a.go should be visible after filter
+		assert.Equal(t, "a.go", model.tree.SelectedFile(), "only annotated file should be selected")
+		assert.False(t, model.tree.HasFile(sidepane.DirectionNext), "no next file when only one annotated")
+
+		// toggle filter off
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model = result.(Model)
+		assert.False(t, model.tree.FilterActive())
+	})
+
+	t.Run("works from diff pane", func(t *testing.T) {
+		m.focus = paneDiff
+		// filter should be off after previous subtest toggled it off
+		require.False(t, m.tree.FilterActive(), "precondition: filter must be off")
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.True(t, model.tree.FilterActive())
+	})
+
+	t.Run("no-op when no annotations", func(t *testing.T) {
+		m2 := testModel([]string{"a.go", "b.go"}, nil)
+		m2.tree = testNewFileTree([]string{"a.go", "b.go"})
+		// no annotations added
+		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+		model := result.(Model)
+		assert.False(t, model.tree.FilterActive(), "filter should not toggle when no annotated files")
+	})
+}
+
+func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
+	lines := map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a-line", ChangeType: diff.ChangeAdd}},
+		"b.go": {{NewNum: 1, Content: "b-line", ChangeType: diff.ChangeAdd}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, lines)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.currFile = "b.go"
+	m.diffLines = lines["b.go"]
+	m.focus = paneTree
+
+	// annotate only a.go
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note on a"})
+
+	// toggle filter on — should select a.go (the only annotated file)
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model := result.(Model)
+	assert.True(t, model.tree.FilterActive())
+
+	// since b.go was current and a.go is now selected, a load command should be returned
+	if cmd != nil {
+		msg := cmd()
+		flm, ok := msg.(fileLoadedMsg)
+		assert.True(t, ok, "filter toggle should trigger file load for new selection")
+		assert.Equal(t, "a.go", flm.file)
+	} else {
+		t.Fatal("expected a load command after filter toggle changed selection")
+	}
+}
+
+func TestModel_QuitKey(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+
+	// cmd should be tea.Quit
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok)
+}
+
+func TestModel_QuitPreservesAnnotations(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 5, Type: "+", Comment: "needs review"})
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 10, Type: " ", Comment: "check this"})
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+
+	// verify annotations survive the quit
+	model := result.(Model)
+	output := model.Store().FormatOutput()
+	assert.Contains(t, output, "a.go:5")
+	assert.Contains(t, output, "needs review")
+	assert.Contains(t, output, "b.go:10")
+	assert.Contains(t, output, "check this")
+}
+
+func TestModel_QuitNoAnnotationsEmptyOutput(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.Empty(t, model.Store().FormatOutput())
+}
+
+func TestModel_NoConfirmDiscardWired(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+	m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{NoConfirmDiscard: true, TreeWidthRatio: 3})
+	assert.True(t, m.noConfirmDiscard, "noConfirmDiscard should be wired from ModelConfig")
+}
+
+func TestModel_ConfirmDiscardY(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "y should confirm discard")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit after y")
+}
+
+func TestModel_ConfirmDiscardN(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	assert.Nil(t, cmd, "n should not quit")
+
+	model := result.(Model)
+	assert.False(t, model.inConfirmDiscard, "n should cancel confirmation")
+	assert.False(t, model.Discarded(), "should not be discarded")
+}
+
+func TestModel_ConfirmDiscardEsc(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	assert.Nil(t, cmd, "esc should not quit")
+
+	model := result.(Model)
+	assert.False(t, model.inConfirmDiscard, "esc should cancel confirmation")
+	assert.False(t, model.Discarded())
+}
+
+func TestModel_ConfirmDiscardSecondQ(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "second Q should confirm discard")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit after second Q")
+}
+
+func TestModel_QKeyNoConfirmDiscardWithAnnotations(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.noConfirmDiscard = true
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
+	require.NotNil(t, cmd)
+
+	model := result.(Model)
+	assert.True(t, model.Discarded(), "should immediately discard with noConfirmDiscard")
+	assert.False(t, model.inConfirmDiscard, "should not enter confirming state")
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok, "should quit immediately")
+}
+
+func TestModel_ConfirmDiscardBlocksOtherKeys(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	// pressing j (navigation) should be blocked
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	assert.Nil(t, cmd, "j should be blocked during confirmation")
+	model := result.(Model)
+	assert.True(t, model.inConfirmDiscard, "should still be confirming")
+
+	// pressing q should be blocked too
+	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	assert.Nil(t, cmd, "q should be blocked during confirmation")
+	model = result.(Model)
+	assert.True(t, model.inConfirmDiscard, "should still be confirming")
+}
+
+func TestModel_ConfirmDiscardAllowsNonKeyMessages(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
+	m.inConfirmDiscard = true
+
+	// WindowSizeMsg should still be handled
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	model := result.(Model)
+	assert.Equal(t, 100, model.width, "resize should be handled during confirmation")
+	assert.True(t, model.inConfirmDiscard, "should still be confirming after resize")
+}
+
+func TestModel_HandleEscKeyClearsSearch(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "hello world"}},
+	})
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "hello world"}}
+	m.searchTerm = "hello"
+	m.searchMatches = []int{0}
+	m.searchCursor = 0
+	m.focus = paneDiff
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := result.(Model)
+	assert.Empty(t, model.searchTerm, "esc should clear search term")
+	assert.Nil(t, model.searchMatches, "esc should clear search matches")
+}
+
+func TestModel_HandleEscKeyNoopWithoutSearch(t *testing.T) {
+	m := testModel(nil, nil)
+	m.focus = paneDiff
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := result.(Model)
+	assert.Empty(t, model.searchTerm)
+	assert.Nil(t, model.searchMatches)
+}
+
+func TestModel_HandleFileAnnotateKey(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+
+	t.Run("starts annotation when focus is diff and file is set", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.focus = paneDiff
+
+		result, cmd := m.handleFileAnnotateKey()
+		model := result.(Model)
+		assert.True(t, model.annotating, "should start annotation mode")
+		assert.NotNil(t, cmd, "should return a command")
+	})
+
+	t.Run("no-op when focus is tree pane", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.focus = paneTree
+
+		result, cmd := m.handleFileAnnotateKey()
+		model := result.(Model)
+		assert.False(t, model.annotating, "should not start annotation")
+		assert.Nil(t, cmd, "should return nil command")
+	})
+
+	t.Run("no-op when currFile is empty", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.currFile = ""
+		m.focus = paneDiff
+
+		result, cmd := m.handleFileAnnotateKey()
+		model := result.(Model)
+		assert.False(t, model.annotating, "should not start annotation")
+		assert.Nil(t, cmd, "should return nil command")
+	})
+}

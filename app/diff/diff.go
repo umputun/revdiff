@@ -23,34 +23,36 @@ const (
 	fullFileContext = "-U1000000" // request full file as diff context
 
 	// MaxLineLength is the maximum line length (in bytes) that scanners will accept.
-	// Used by ParseUnifiedDiff, readReaderAsContext, and parseBlame.
+	// used by parseUnifiedDiff, readReaderAsContext, and parseBlame.
 	MaxLineLength = 1024 * 1024
 
 	// BinaryPlaceholder is the content used for binary file placeholders.
-	// ParseUnifiedDiff returns this when git reports "Binary files ... differ".
+	// parseUnifiedDiff returns this when git reports "Binary files ... differ".
 	BinaryPlaceholder = "(binary file)"
 )
 
 // DiffLine holds parsed line info from a diff.
 type DiffLine struct {
-	OldNum     int        // line number in old version (0 for additions)
-	NewNum     int        // line number in new version (0 for removals)
-	Content    string     // line content without the +/- prefix
-	ChangeType ChangeType // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
-	IsBinary   bool       // true when this line is a binary file placeholder
+	OldNum        int        // line number in old version (0 for additions)
+	NewNum        int        // line number in new version (0 for removals)
+	Content       string     // line content without the +/- prefix
+	ChangeType    ChangeType // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
+	IsBinary      bool       // true when this line is a binary file placeholder
+	IsPlaceholder bool       // true for non-content placeholders (broken symlink, non-regular file, too-long lines)
 }
 
-// FileStatus represents the change type of a file in a git diff.
+// FileStatus represents the change type of a file in a VCS diff.
 type FileStatus string
 
 const (
-	FileAdded    FileStatus = "A"
-	FileModified FileStatus = "M"
-	FileDeleted  FileStatus = "D"
-	FileRenamed  FileStatus = "R"
+	FileAdded     FileStatus = "A"
+	FileModified  FileStatus = "M"
+	FileDeleted   FileStatus = "D"
+	FileRenamed   FileStatus = "R"
+	FileUntracked FileStatus = "?"
 )
 
-// FileEntry represents a file with its change status from git diff.
+// FileEntry represents a file with its change status from a VCS diff.
 type FileEntry struct {
 	Path   string     // file path relative to repo root
 	Status FileStatus // file change status, empty for non-git renderers
@@ -73,6 +75,21 @@ type Git struct {
 // NewGit creates a new Git diff renderer rooted at the given working directory.
 func NewGit(workDir string) *Git {
 	return &Git{workDir: workDir}
+}
+
+// UntrackedFiles returns untracked files (not in .gitignore) using git ls-files --others --exclude-standard.
+func (g *Git) UntrackedFiles() ([]string, error) {
+	out, err := g.runGit("ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for entry := range strings.SplitSeq(out, "\x00") {
+		if entry != "" {
+			files = append(files, entry)
+		}
+	}
+	return files, nil
 }
 
 // ChangedFiles returns a list of files changed relative to the given ref with their change status.
@@ -130,7 +147,7 @@ func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
 		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
 	}
 
-	lines, err := ParseUnifiedDiff(out)
+	lines, err := parseUnifiedDiff(out)
 	if err != nil {
 		return nil, err
 	}
@@ -159,15 +176,20 @@ func (g *Git) diffArgs(ref string, staged bool) []string {
 
 // runGit executes a git command in the working directory and returns its output.
 func (g *Git) runGit(args ...string) (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // args constructed internally, not user input
-	cmd.Dir = g.workDir
+	return runVCS(g.workDir, "git", args...)
+}
+
+// runVCS executes a VCS command in the given directory and returns its output.
+func runVCS(workDir, binary string, args ...string) (string, error) {
+	cmd := exec.CommandContext(context.Background(), binary, args...) //nolint:gosec // args constructed internally, not user input
+	cmd.Dir = workDir
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), string(exitErr.Stderr))
+			return "", fmt.Errorf("%s %s: %s", binary, strings.Join(args, " "), string(exitErr.Stderr))
 		}
-		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+		return "", fmt.Errorf("%s %s: %w", binary, strings.Join(args, " "), err)
 	}
 	return string(out), nil
 }
@@ -203,7 +225,7 @@ const (
 // binaryStatRe matches a git diff --stat line ending with "Bin 1234 -> 5678 bytes".
 // The entire pattern ("Bin", "->", "bytes") assumes English locale; non-English git
 // may localize any of these tokens, causing a graceful fallback to the header-based
-// placeholder from ParseUnifiedDiff (e.g. "(new binary file)" without size info).
+// placeholder from parseUnifiedDiff (e.g. "(new binary file)" without size info).
 var binaryStatRe = regexp.MustCompile(`^\s*.*\|\s+Bin (\d+) -> (\d+) bytes$`)
 
 var (
@@ -288,11 +310,11 @@ var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 // Assumes English locale; non-English git may localize this message.
 var binaryFilesRe = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
 
-// ParseUnifiedDiff parses unified diff output into a slice of DiffLine entries.
-// It handles the diff header, hunk headers, and content lines.
-// For binary diffs ("Binary files ... differ"), it returns a single placeholder DiffLine.
-// Intended for single-file diffs; multi-file diffs are not fully supported.
-func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
+// parseUnifiedDiff parses unified diff output into a slice of DiffLine entries.
+// it handles the diff header, hunk headers, and content lines.
+// for binary diffs ("Binary files ... differ"), it returns a single placeholder DiffLine.
+// intended for single-file diffs; multi-file diffs are not fully supported.
+func parseUnifiedDiff(raw string) ([]DiffLine, error) {
 	var lines []DiffLine
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)
@@ -388,4 +410,30 @@ func ParseUnifiedDiff(raw string) ([]DiffLine, error) {
 	}
 
 	return lines, nil
+}
+
+// normalizePrefixes trims whitespace and trailing slashes from each prefix,
+// skipping empty values (e.g., from env var trailing commas).
+func normalizePrefixes(prefixes []string) []string {
+	normalized := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		p = strings.TrimSpace(p)
+		p = strings.TrimRight(p, "/")
+		if p == "" {
+			continue
+		}
+		normalized = append(normalized, p)
+	}
+	return normalized
+}
+
+// matchesPrefix returns true if the file path matches any prefix.
+// A prefix matches if the file equals the prefix exactly, or starts with prefix + "/".
+func matchesPrefix(file string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if file == prefix || strings.HasPrefix(file, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }

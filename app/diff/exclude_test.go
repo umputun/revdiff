@@ -24,48 +24,6 @@ func (m *mockRenderer) FileDiff(string, string, bool) ([]DiffLine, error) {
 	return m.fileDiff, m.fileDiffErr
 }
 
-func TestExcludeFilter_matchesExclude(t *testing.T) {
-	ef := NewExcludeFilter(&mockRenderer{}, []string{"vendor", "ui/mocks"})
-
-	tests := []struct {
-		file string
-		want bool
-	}{
-		{"vendor/foo.go", true},
-		{"vendor/pkg/bar.go", true},
-		{"vendor", true},
-		{"ui/mocks/mock.go", true},
-		{"ui/mocks", true},
-		{"ui/model.go", false},
-		{"vendorutil/foo.go", false},
-		{"src/vendor/foo.go", false},
-		{"diff/diff.go", false},
-		{"", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.file, func(t *testing.T) {
-			assert.Equal(t, tt.want, ef.matchesExclude(tt.file))
-		})
-	}
-}
-
-func TestExcludeFilter_matchesExclude_trailingSlash(t *testing.T) {
-	// prefixes with trailing slashes should be normalized
-	ef := NewExcludeFilter(&mockRenderer{}, []string{"vendor/", "mocks/"})
-	assert.True(t, ef.matchesExclude("vendor/foo.go"))
-	assert.True(t, ef.matchesExclude("mocks/mock.go"))
-	assert.False(t, ef.matchesExclude("src/vendor/foo.go"))
-}
-
-func TestExcludeFilter_matchesExclude_whitespaceAndEmpty(t *testing.T) {
-	// prefixes with whitespace (e.g., from env var "vendor, mocks") should be trimmed
-	ef := NewExcludeFilter(&mockRenderer{}, []string{" vendor ", " mocks", ""})
-	assert.True(t, ef.matchesExclude("vendor/foo.go"))
-	assert.True(t, ef.matchesExclude("mocks/mock.go"))
-	assert.Len(t, ef.prefixes, 2, "empty prefix should be skipped")
-}
-
 func TestExcludeFilter_ChangedFiles(t *testing.T) {
 	inner := &mockRenderer{
 		changedFiles: []FileEntry{

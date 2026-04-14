@@ -12,6 +12,11 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 )
 
+// chromaFallbackStyle is the name of the Chroma style that doubles as styles.Fallback.
+// styles.Get returns Fallback for unknown names, but "swapoff" is a real built-in style
+// whose registry entry IS the Fallback sentinel, so we must special-case it.
+const chromaFallbackStyle = "swapoff"
+
 // Highlighter applies syntax highlighting to source code lines using Chroma.
 type Highlighter struct {
 	styleName string
@@ -24,11 +29,31 @@ func New(styleName string, enabled bool) *Highlighter {
 	if styleName == "" {
 		styleName = "monokai"
 	}
-	if styles.Get(styleName) == styles.Fallback && styleName != "swapoff" {
+	if styles.Get(styleName) == styles.Fallback && styleName != chromaFallbackStyle {
 		log.Printf("[WARN] unknown chroma style %q, using monokai", styleName)
 		styleName = "monokai"
 	}
 	return &Highlighter{styleName: styleName, enabled: enabled}
+}
+
+// SetStyle changes the Chroma style used for subsequent HighlightLines calls.
+// Returns false if the style name is unknown.
+func (h *Highlighter) SetStyle(styleName string) bool {
+	if styles.Get(styleName) == styles.Fallback && styleName != chromaFallbackStyle {
+		return false
+	}
+	h.styleName = styleName
+	return true
+}
+
+// StyleName returns the current Chroma style name.
+func (h *Highlighter) StyleName() string {
+	return h.styleName
+}
+
+// IsValidStyle reports whether styleName is a known Chroma style.
+func IsValidStyle(styleName string) bool {
+	return styles.Get(styleName) != styles.Fallback || styleName == chromaFallbackStyle
 }
 
 // HighlightLines takes a filename (for lexer detection) and a slice of diff.DiffLine,
@@ -48,17 +73,17 @@ func (h *Highlighter) HighlightLines(filename string, lines []diff.DiffLine) []s
 
 	style := styles.Get(h.styleName)
 
-	newContent, oldContent := reconstructFiles(lines)
+	newContent, oldContent := h.reconstructFiles(lines)
 
-	newHL := highlightFile(lexer, style, newContent)
-	oldHL := highlightFile(lexer, style, oldContent)
+	newHL := h.highlightFile(lexer, style, newContent)
+	oldHL := h.highlightFile(lexer, style, oldContent)
 
-	return mapHighlightedLines(lines, newHL, oldHL)
+	return h.mapHighlightedLines(lines, newHL, oldHL)
 }
 
 // reconstructFiles builds old and new file content from diff lines.
 // new file = context + added lines, old file = context + removed lines.
-func reconstructFiles(lines []diff.DiffLine) (newFile, oldFile string) {
+func (h *Highlighter) reconstructFiles(lines []diff.DiffLine) (newFile, oldFile string) {
 	var newB, oldB strings.Builder
 	for _, dl := range lines {
 		switch dl.ChangeType {
@@ -81,7 +106,7 @@ func reconstructFiles(lines []diff.DiffLine) (newFile, oldFile string) {
 }
 
 // highlightFile tokenizes source code and returns per-line ANSI strings with foreground-only colors.
-func highlightFile(lexer chroma.Lexer, style *chroma.Style, source string) []string {
+func (h *Highlighter) highlightFile(lexer chroma.Lexer, style *chroma.Style, source string) []string {
 	if source == "" {
 		return nil
 	}
@@ -154,7 +179,7 @@ func writeTokenANSI(b *strings.Builder, tokenType chroma.TokenType, value string
 }
 
 // mapHighlightedLines maps highlighted old/new file lines back to the original diff line order.
-func mapHighlightedLines(lines []diff.DiffLine, newHL, oldHL []string) []string {
+func (h *Highlighter) mapHighlightedLines(lines []diff.DiffLine, newHL, oldHL []string) []string {
 	result := make([]string, len(lines))
 	var newIdx, oldIdx int
 

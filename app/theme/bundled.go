@@ -1,148 +1,93 @@
 package theme
 
-// bundled theme definitions — each constant is a complete theme file string
-// with all 21 color keys + chroma-style and comment metadata.
+import (
+	"bytes"
+	"fmt"
+	"io/fs"
+	"sort"
+	"sync"
 
-const bundledDracula = `# name: dracula
-# description: purple accent, vibrant colors on dark background
+	"github.com/umputun/revdiff/themes"
+)
 
-chroma-style = dracula
-color-accent = #bd93f9
-color-border = #6272a4
-color-normal = #f8f8f2
-color-muted = #6272a4
-color-selected-fg = #f8f8f2
-color-selected-bg = #bd93f9
-color-annotation = #f1fa8c
-color-cursor-fg = #50fa7b
-color-cursor-bg = #44475a
-color-add-fg = #50fa7b
-color-add-bg = #1a3a1a
-color-remove-fg = #ff5555
-color-remove-bg = #3a1a1a
-color-modify-fg = #ffb86c
-color-modify-bg = #3a2a1a
-color-tree-bg = #282a36
-color-diff-bg = #282a36
-color-status-fg = #282a36
-color-status-bg = #bd93f9
-color-search-fg = #282a36
-color-search-bg = #f1fa8c
-`
+const galleryDir = "gallery"
 
-const bundledNord = `# name: nord
-# description: frost blue accent, arctic palette on polar night background
+var galleryLoad struct {
+	once   sync.Once
+	themes map[string]Theme
+	err    error
+}
 
-chroma-style = nord
-color-accent = #88c0d0
-color-border = #4c566a
-color-normal = #d8dee9
-color-muted = #4c566a
-color-selected-fg = #eceff4
-color-selected-bg = #88c0d0
-color-annotation = #ebcb8b
-color-cursor-fg = #a3be8c
-color-cursor-bg = #3b4252
-color-add-fg = #b4d09a
-color-add-bg = #1a3a1a
-color-remove-fg = #d06c75
-color-remove-bg = #4a1a1a
-color-modify-fg = #f0d399
-color-modify-bg = #4a3a1a
-color-tree-bg = #2e3440
-color-diff-bg = #2e3440
-color-status-fg = #2e3440
-color-status-bg = #88c0d0
-color-search-fg = #2e3440
-color-search-bg = #ebcb8b
-`
+// Gallery returns all themes from the embedded gallery, keyed by filename.
+// Results are cached after the first call since the embedded FS is immutable.
+// Each call returns a deep copy so callers can mutate the result safely.
+func Gallery() (map[string]Theme, error) {
+	galleryLoad.once.Do(func() {
+		galleryLoad.themes, galleryLoad.err = loadGallery()
+	})
+	if galleryLoad.err != nil {
+		return nil, galleryLoad.err
+	}
+	return cloneGallery(galleryLoad.themes), nil
+}
 
-const bundledSolarizedDark = `# name: solarized-dark
-# description: yellow accent, classic solarized palette on deep teal background
+// loadGallery parses all theme files from the embedded gallery.
+func loadGallery() (map[string]Theme, error) {
+	entries, err := fs.ReadDir(themes.FS, galleryDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading gallery: %w", err)
+	}
 
-chroma-style = solarized-dark
-color-accent = #b58900
-color-border = #586e75
-color-normal = #839496
-color-muted = #586e75
-color-selected-fg = #fdf6e3
-color-selected-bg = #b58900
-color-annotation = #cb4b16
-color-cursor-fg = #859900
-color-cursor-bg = #073642
-color-add-fg = #719e07
-color-add-bg = #0a2e0a
-color-remove-fg = #dc322f
-color-remove-bg = #2e0a0a
-color-modify-fg = #b58900
-color-modify-bg = #2e2a0a
-color-tree-bg = #002b36
-color-diff-bg = #002b36
-color-status-fg = #002b36
-color-status-bg = #b58900
-color-search-fg = #002b36
-color-search-bg = #cb4b16
-`
+	result := make(map[string]Theme, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, err := fs.ReadFile(themes.FS, galleryDir+"/"+e.Name())
+		if err != nil {
+			return nil, fmt.Errorf("reading gallery theme %q: %w", e.Name(), err)
+		}
+		th, err := Parse(bytes.NewReader(data))
+		if err != nil {
+			return nil, fmt.Errorf("parsing gallery theme %q: %w", e.Name(), err)
+		}
+		result[e.Name()] = th
+	}
+	return result, nil
+}
 
-const bundledCatppuccinMocha = `# name: catppuccin-mocha
-# description: pastel colors on dark base, warm and cozy
+// GalleryNames returns sorted names of all themes in the embedded gallery.
+func GalleryNames() ([]string, error) {
+	gallery, err := Gallery()
+	if err != nil {
+		return nil, err
+	}
 
-chroma-style = catppuccin-mocha
-color-accent = #89b4fa
-color-border = #45475a
-color-normal = #cdd6f4
-color-muted = #7f849c
-color-selected-fg = #1e1e2e
-color-selected-bg = #89b4fa
-color-annotation = #f9e2af
-color-cursor-fg = #a6e3a1
-color-cursor-bg = #313244
-color-add-fg = #a6e3a1
-color-add-bg = #1a3a1a
-color-remove-fg = #f38ba8
-color-remove-bg = #4a1a1a
-color-modify-fg = #fab387
-color-modify-bg = #4a3a1a
-color-tree-bg = #1e1e2e
-color-diff-bg = #1e1e2e
-color-status-fg = #1e1e2e
-color-status-bg = #89b4fa
-color-search-fg = #1e1e2e
-color-search-bg = #f9e2af
-`
+	names := make([]string, 0, len(gallery))
+	for name := range gallery {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names, nil
+}
 
-const bundledGruvbox = `# name: gruvbox
-# description: warm retro colors on dark background
+// GalleryTheme returns a single theme from the embedded gallery by name.
+func GalleryTheme(name string) (Theme, error) {
+	gallery, err := Gallery()
+	if err != nil {
+		return Theme{}, err
+	}
+	th, ok := gallery[name]
+	if !ok {
+		return Theme{}, fmt.Errorf("gallery theme %q not found", name)
+	}
+	return th, nil
+}
 
-chroma-style = gruvbox
-color-accent = #fabd2f
-color-border = #504945
-color-normal = #ebdbb2
-color-muted = #928374
-color-selected-fg = #282828
-color-selected-bg = #fabd2f
-color-annotation = #fe8019
-color-cursor-fg = #b8bb26
-color-cursor-bg = #3c3836
-color-add-fg = #b8bb26
-color-add-bg = #1d3a1a
-color-remove-fg = #fb4934
-color-remove-bg = #4a1a1a
-color-modify-fg = #fabd2f
-color-modify-bg = #4a3a1a
-color-tree-bg = #282828
-color-diff-bg = #282828
-color-status-fg = #282828
-color-status-bg = #fabd2f
-color-search-fg = #282828
-color-search-bg = #fe8019
-`
-
-// bundledThemes maps theme name to its file content.
-var bundledThemes = map[string]string{
-	"catppuccin-mocha": bundledCatppuccinMocha,
-	"dracula":          bundledDracula,
-	"gruvbox":          bundledGruvbox,
-	"nord":             bundledNord,
-	"solarized-dark":   bundledSolarizedDark,
+func cloneGallery(src map[string]Theme) map[string]Theme {
+	dst := make(map[string]Theme, len(src))
+	for name, th := range src {
+		dst[name] = th.Clone()
+	}
+	return dst
 }

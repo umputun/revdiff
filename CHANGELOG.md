@@ -1,5 +1,161 @@
 # Changelog
 
+## v0.18.0 - 2026-04-13
+
+### New Features
+
+- add `--include` prefix filter flag #103 @rashpile
+- opencode config docs #41 @hackmajoris
+
+### Improvements
+
+- add AUR install instructions #101 @kovstas
+- extract overlay sub-package from model #99 @umputun
+- add sandbox workaround for Ghostty and iTerm2 launchers ea38082
+- add deb, rpm, and AUR install instructions to readme and site 6663e80
+- improve opencode integration and add docs 4e8cda7
+
+### Bug Fixes
+
+- show single-column line numbers for full-context files #98 @rashpile
+
+## v0.17.0 - 2026-04-12
+
+### New Features
+
+- add Mercurial VCS support #90 @paskal
+- add history fallback to revdiff skill #95 @umputun
+
+### Improvements
+
+- extract style sub-package with Resolver/Renderer/SGR #92 @umputun
+- extract sidepane sub-package with FileTree and TOC #93 @umputun
+- extract worddiff sub-package with Differ type #96 @umputun
+- add lint-scripts CI job, fix SC2181 shellcheck warnings #91 @paskal
+- harden ci.yml caching and pin golangci-lint version 3b6559b
+- pin hunk-centering test expectations to literals e50fade
+- add status bar icons reference table f4421f3
+
+### Bug Fixes
+
+- center entire hunk in viewport during hunk navigation #83 @p4elkin
+
+## v0.16.1 - 2026-04-10
+
+### Improvements
+
+- add revdiff review tasks to local zed config 215df34
+
+### Bug Fixes
+
+- soften auto-derived word-diff bg shift for better contrast 8ec62e5
+- draw right scroll overflow glyph on DiffBg instead of line bg 282f174
+
+## v0.16.0 - 2026-04-10
+
+### New Features
+
+- add horizontal scroll overflow indicators #89 @umputun
+- make intra-line word-diff highlighting opt-in #88 @umputun
+- add intra-line word-diff highlighting #87 @umputun
+- add Codex CLI plugin for revdiff #86 @umputun
+- add Zed integration task for running revdiff #77 @rashpile
+- show explanations in revdiff TUI via --only e70c9c4
+
+### Improvements
+
+- wrap Zed tasks in JSON array and quote shell vars d84767a
+- add clone step and symlink alternative to codex plugin install 7e1ea68
+- add contribution guidelines for issues, PRs, and scope evaluation 7f45727
+
+### Bug Fixes
+
+- preserve syntax highlight foreground on wrapped lines #85 @umputun
+- correct codex skill install path and remove dead plugin manifest f16be04
+- use window_id instead of id in kitty overlay matcher aa83b55
+- auto-detect staged-only changes and pass --staged to revdiff 249abf9
+
+## v0.15.3 - 2026-04-09
+
+### Bug Fixes
+
+- suppress cmux send stdout to prevent output leak #81 @jimmyn
+- load staged diff content for staged-only files in default mode #80 @sanchesfree
+
+## v0.15.2 - 2026-04-09
+
+### New Features
+
+- add screenshot gallery with auto-rotating crossfade to site
+
+### Improvements
+
+- comprehensive code smells cleanup #76 @umputun
+
+### Bug Fixes
+
+- use raw ANSI for cursor and annotation to preserve DiffBg theme background
+- change untracked files status icon from ? to ∅ to avoid conflict with help key
+- set cursor-bg to match diff-bg in all bundled themes
+
+## v0.15.1 - 2026-04-08
+
+### Bug Fixes
+
+- exclude file with no changes from file list #75 @daulet
+
+## v0.15.0 - 2026-04-08
+
+### New Features
+
+- review history auto-save on quit #72 @umputun
+- community themes, gallery, CLI install, and interactive selector #69 @melonamin
+- pause review loop on explanation annotations
+
+### Improvements
+
+- layout-agnostic key bindings for non-Latin keyboards #71 @sanchesfree
+- use CLAUDE_SKILL_DIR instead of CLAUDE_PLUGIN_ROOT #70 @rashpile
+- handle long-running launcher on harnesses with short bash timeouts #51 @rashpile
+
+### Bug Fixes
+
+- shell-quote arguments in overlay launcher scripts #58 @melonamin
+- add fsutil tests and handle SetStyle error in theme cancel
+
+## v0.14.1 - 2026-04-08
+
+### Bug Fixes
+
+- truncate long diff lines to prevent overflow past right padding
+- extend line bg after scroll so colored backgrounds fill at any offset
+
+## v0.14.0 - 2026-04-08
+
+### New Features
+
+- show untracked and staged-only files in file tree (u toggle) (#62)
+- reviewed file marks and A/M/D status indicators in file tree (#54)
+- global hunk navigation (#59)
+- zellij.dev support (#53)
+- pi package integration (#52)
+
+### Improvements
+
+- split large files by concern (#65)
+- move source packages into app/ directory (#49)
+- consolidate assets into site/assets, remove root assets/
+- bump revdiff plugin version to 0.5.0
+
+### Bug Fixes
+
+- annotation on last row of the view (#60)
+- lowercase zellij name to match other terminal entries
+- add missing feature cards and center install grid
+- restore correct two-color logo in site/assets
+- handle no-commits repo in detect-ref script
+- use TMPDIR for temp files in launch script to avoid macOS sandbox restriction
+
 ## v0.13.0 - 2026-04-06
 
 ### New Features

@@ -28,15 +28,18 @@ func (g *Git) FileBlame(ref, file string, staged bool) (map[int]BlameLine, error
 		}
 		defer func() { _ = os.Remove(tmpName) }()
 		args = append(args, "--contents", tmpName)
-	} else if targetRef := blameTargetRef(ref); targetRef != "" {
-		args = append(args, targetRef)
+	}
+	if !staged {
+		if targetRef := g.blameTargetRef(ref); targetRef != "" {
+			args = append(args, targetRef)
+		}
 	}
 	args = append(args, "--", file)
 	out, err := g.runGit(args...)
 	if err != nil {
 		return nil, fmt.Errorf("blame %s: %w", file, err)
 	}
-	return parseBlame(out)
+	return g.parseBlame(out)
 }
 
 // writeStagedBlameFile writes the staged (index) contents of file to a temp file
@@ -60,7 +63,7 @@ func (g *Git) writeStagedBlameFile(file string) (string, error) {
 	return tmp.Name(), nil
 }
 
-func blameTargetRef(ref string) string {
+func (g *Git) blameTargetRef(ref string) string {
 	// check triple-dot first so "A...B" isn't mis-split on ".."
 	if left, right, ok := strings.Cut(ref, "..."); ok {
 		if left == "" || right == "" {
@@ -78,7 +81,7 @@ func blameTargetRef(ref string) string {
 }
 
 // parseBlame parses git blame --line-porcelain output into a map of line number to BlameLine.
-func parseBlame(raw string) (map[int]BlameLine, error) {
+func (g *Git) parseBlame(raw string) (map[int]BlameLine, error) {
 	result := make(map[int]BlameLine)
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)
@@ -91,7 +94,7 @@ func parseBlame(raw string) (map[int]BlameLine, error) {
 		line := scanner.Text()
 
 		// header line: <40-hex-hash> <orig_line> <final_line> [<group_lines>]
-		if len(line) >= 40 && isHexString(line[:40]) {
+		if len(line) >= 40 && g.isHexString(line[:40]) {
 			parts := strings.Fields(line)
 			if len(parts) >= 3 {
 				if n, err := strconv.Atoi(parts[2]); err == nil {
@@ -129,7 +132,7 @@ func parseBlame(raw string) (map[int]BlameLine, error) {
 }
 
 // isHexString returns true if all characters in s are hexadecimal digits.
-func isHexString(s string) bool {
+func (g *Git) isHexString(s string) bool {
 	if s == "" {
 		return false
 	}

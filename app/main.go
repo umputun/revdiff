@@ -1,12 +1,10 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -16,9 +14,14 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/highlight"
+	"github.com/umputun/revdiff/app/history"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
 	"github.com/umputun/revdiff/app/ui"
+	"github.com/umputun/revdiff/app/ui/overlay"
+	"github.com/umputun/revdiff/app/ui/sidepane"
+	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 type options struct {
@@ -37,13 +40,16 @@ type options struct {
 	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
 	CrossFileHunks   bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
 	LineNumbers      bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
-	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show git blame gutter on startup"`
+	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter on startup"`
+	WordDiff         bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
-	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all git-tracked files, not just diffs"`
+	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git only)"`
 	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
 	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
 	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
+	Include          []string `long:"include" short:"I" ini-name:"include" env:"REVDIFF_INCLUDE" env-delim:"," description:"include only files matching prefix (may be repeated)"`
 	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
+	HistoryDir       string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
 	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	Keys             string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
 	DumpKeys         bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
@@ -51,32 +57,36 @@ type options struct {
 	DumpTheme        bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
 	ListThemes       bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
 	InitThemes       bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
+	InitAllThemes    bool     `long:"init-all-themes" no-ini:"true" description:"write all gallery themes (bundled + community) to themes dir and exit"`
+	InstallTheme     []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
 	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {
-		Accent     string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
-		Border     string `long:"color-border"      ini-name:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858" description:"inactive pane borders"`
-		Normal     string `long:"color-normal"      ini-name:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0" description:"file entries and context lines"`
-		Muted      string `long:"color-muted"       ini-name:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#585858" description:"line numbers and status bar"`
-		SelectedFg string `long:"color-selected-fg" ini-name:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf" description:"selected file text color"`
-		SelectedBg string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#D5895F" description:"selected file background color"`
-		Annotation string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
-		CursorFg   string `long:"color-cursor-fg"   ini-name:"color-cursor-fg"   env:"REVDIFF_COLOR_CURSOR_FG"   default:"#bbbb44" description:"diff cursor indicator color"`
-		CursorBg   string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   description:"diff cursor indicator background"`
-		AddFg      string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
-		AddBg      string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#123800" description:"added line background color"`
-		RemoveFg   string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
-		RemoveBg   string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#4D1100" description:"removed line background color"`
-		ModifyFg   string `long:"color-modify-fg"   ini-name:"color-modify-fg"   env:"REVDIFF_COLOR_MODIFY_FG"   default:"#f5c542" description:"modified line text color (collapsed mode)"`
-		ModifyBg   string `long:"color-modify-bg"   ini-name:"color-modify-bg"   env:"REVDIFF_COLOR_MODIFY_BG"   default:"#3D2E00" description:"modified line background color (collapsed mode)"`
-		TreeBg     string `long:"color-tree-bg"     ini-name:"color-tree-bg"     env:"REVDIFF_COLOR_TREE_BG"     description:"file tree pane background"`
-		DiffBg     string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
-		StatusFg   string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   default:"#202020" description:"status bar foreground"`
-		StatusBg   string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   default:"#C5794F" description:"status bar background"`
-		SearchFg   string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
-		SearchBg   string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#4a4a00" description:"search match background"`
+		Accent       string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
+		Border       string `long:"color-border"      ini-name:"color-border"      env:"REVDIFF_COLOR_BORDER"      default:"#585858" description:"inactive pane borders"`
+		Normal       string `long:"color-normal"      ini-name:"color-normal"      env:"REVDIFF_COLOR_NORMAL"      default:"#d0d0d0" description:"file entries and context lines"`
+		Muted        string `long:"color-muted"       ini-name:"color-muted"       env:"REVDIFF_COLOR_MUTED"       default:"#585858" description:"line numbers and status bar"`
+		SelectedFg   string `long:"color-selected-fg" ini-name:"color-selected-fg" env:"REVDIFF_COLOR_SELECTED_FG" default:"#ffffaf" description:"selected file text color"`
+		SelectedBg   string `long:"color-selected-bg" ini-name:"color-selected-bg" env:"REVDIFF_COLOR_SELECTED_BG" default:"#D5895F" description:"selected file background color"`
+		Annotation   string `long:"color-annotation"  ini-name:"color-annotation"  env:"REVDIFF_COLOR_ANNOTATION"  default:"#ffd700" description:"annotation text and markers"`
+		CursorFg     string `long:"color-cursor-fg"   ini-name:"color-cursor-fg"   env:"REVDIFF_COLOR_CURSOR_FG"   default:"#bbbb44" description:"diff cursor indicator color"`
+		CursorBg     string `long:"color-cursor-bg"   ini-name:"color-cursor-bg"   env:"REVDIFF_COLOR_CURSOR_BG"   description:"diff cursor indicator background"`
+		AddFg        string `long:"color-add-fg"      ini-name:"color-add-fg"      env:"REVDIFF_COLOR_ADD_FG"      default:"#87d787" description:"added line text color"`
+		AddBg        string `long:"color-add-bg"      ini-name:"color-add-bg"      env:"REVDIFF_COLOR_ADD_BG"      default:"#123800" description:"added line background color"`
+		RemoveFg     string `long:"color-remove-fg"   ini-name:"color-remove-fg"   env:"REVDIFF_COLOR_REMOVE_FG"   default:"#ff8787" description:"removed line text color"`
+		RemoveBg     string `long:"color-remove-bg"   ini-name:"color-remove-bg"   env:"REVDIFF_COLOR_REMOVE_BG"   default:"#4D1100" description:"removed line background color"`
+		WordAddBg    string `long:"color-word-add-bg"    ini-name:"color-word-add-bg"    env:"REVDIFF_COLOR_WORD_ADD_BG"    description:"intra-line word-diff add background (auto-derived if empty)"`
+		WordRemoveBg string `long:"color-word-remove-bg" ini-name:"color-word-remove-bg" env:"REVDIFF_COLOR_WORD_REMOVE_BG" description:"intra-line word-diff remove background (auto-derived if empty)"`
+		ModifyFg     string `long:"color-modify-fg"      ini-name:"color-modify-fg"      env:"REVDIFF_COLOR_MODIFY_FG"      default:"#f5c542" description:"modified line text color (collapsed mode)"`
+		ModifyBg     string `long:"color-modify-bg"   ini-name:"color-modify-bg"   env:"REVDIFF_COLOR_MODIFY_BG"   default:"#3D2E00" description:"modified line background color (collapsed mode)"`
+		TreeBg       string `long:"color-tree-bg"     ini-name:"color-tree-bg"     env:"REVDIFF_COLOR_TREE_BG"     description:"file tree pane background"`
+		DiffBg       string `long:"color-diff-bg"     ini-name:"color-diff-bg"     env:"REVDIFF_COLOR_DIFF_BG"     description:"diff pane background"`
+		StatusFg     string `long:"color-status-fg"   ini-name:"color-status-fg"   env:"REVDIFF_COLOR_STATUS_FG"   default:"#202020" description:"status bar foreground"`
+		StatusBg     string `long:"color-status-bg"   ini-name:"color-status-bg"   env:"REVDIFF_COLOR_STATUS_BG"   default:"#C5794F" description:"status bar background"`
+		SearchFg     string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
+		SearchBg     string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#4a4a00" description:"search match background"`
 	} `group:"color options"`
 }
 
@@ -118,7 +128,7 @@ func main() {
 	}
 
 	if opts.DumpKeys {
-		km := keymap.LoadOrDefault(resolveKeysPath(os.Args[1:]))
+		km := keymap.LoadOrDefault(resolveFlagPath(os.Args[1:], "keys", "REVDIFF_KEYS", defaultKeysPath))
 		if err := km.Dump(os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -159,7 +169,7 @@ func parseArgs(args []string) (options, error) {
 	p.Usage = "[OPTIONS] [base] [against]"
 
 	// determine config path from args before full parsing
-	configPath := resolveConfigPath(args)
+	configPath := resolveFlagPath(args, "config", "REVDIFF_CONFIG", defaultConfigPath)
 
 	// load config file before parsing CLI args (CLI overrides config)
 	iniParser := flags.NewIniParser(p)
@@ -183,6 +193,10 @@ func parseArgs(args []string) (options, error) {
 		if len(opts.Only) > 0 {
 			return options{}, errors.New("--all-files cannot be used with --only")
 		}
+	}
+
+	if len(opts.Include) > 0 && len(opts.Only) > 0 {
+		return options{}, errors.New("--include cannot be used with --only")
 	}
 
 	if err := validateStdinFlags(opts); err != nil {
@@ -214,6 +228,9 @@ func validateStdinFlags(opts options) error {
 	if len(opts.Exclude) > 0 {
 		return errors.New("--stdin cannot be used with --exclude")
 	}
+	if len(opts.Include) > 0 {
+		return errors.New("--stdin cannot be used with --include")
+	}
 	return nil
 }
 
@@ -222,7 +239,7 @@ func dumpConfig(args []string, w io.Writer) {
 	var opts options
 	p := flags.NewParser(&opts, flags.Default)
 	iniParser := flags.NewIniParser(p)
-	configPath := resolveConfigPath(args)
+	configPath := resolveFlagPath(args, "config", "REVDIFF_CONFIG", defaultConfigPath)
 	loadConfigFile(iniParser, configPath)
 	_, _ = p.ParseArgs(args)
 	iniParser.Write(w, flags.IniIncludeDefaults|flags.IniCommentDefaults|flags.IniIncludeComments)
@@ -245,23 +262,22 @@ func loadConfigFile(iniParser *flags.IniParser, configPath string) {
 	fmt.Fprintf(os.Stderr, "warning: config %s: %v\n", configPath, err)
 }
 
-// resolveConfigPath determines the config file path from args, env, or default location.
-func resolveConfigPath(args []string) string {
-	// check if --config was passed in args (supports both --config value and --config=value)
+// resolveFlagPath determines a file path from CLI args, env var, or default location.
+// it checks args for --flag value and --flag=value forms, falls back to envVar, then defaultFn.
+func resolveFlagPath(args []string, flag, envVar string, defaultFn func() string) string {
+	longFlag := "--" + flag
 	for i, arg := range args {
-		if arg == "--config" && i+1 < len(args) {
+		if arg == longFlag && i+1 < len(args) {
 			return args[i+1]
 		}
-		if after, ok := strings.CutPrefix(arg, "--config="); ok {
+		if after, ok := strings.CutPrefix(arg, longFlag+"="); ok {
 			return after
 		}
 	}
-	// check env
-	if p := os.Getenv("REVDIFF_CONFIG"); p != "" {
+	if p := os.Getenv(envVar); p != "" {
 		return p
 	}
-	// default location
-	return defaultConfigPath()
+	return defaultFn()
 }
 
 // defaultConfigPath returns ~/.config/revdiff/config.
@@ -271,25 +287,6 @@ func defaultConfigPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".config", "revdiff", "config")
-}
-
-// resolveKeysPath determines the keybindings file path from args, env, or default location.
-func resolveKeysPath(args []string) string {
-	// check if --keys was passed in args (supports both --keys value and --keys=value)
-	for i, arg := range args {
-		if arg == "--keys" && i+1 < len(args) {
-			return args[i+1]
-		}
-		if after, ok := strings.CutPrefix(arg, "--keys="); ok {
-			return after
-		}
-	}
-	// check env
-	if p := os.Getenv("REVDIFF_KEYS"); p != "" {
-		return p
-	}
-	// default location
-	return defaultKeysPath()
 }
 
 // defaultKeysPath returns ~/.config/revdiff/keybindings.
@@ -361,10 +358,12 @@ func run(opts options) error {
 	km := keymap.LoadOrDefault(keysPath)
 
 	var (
-		renderer ui.Renderer
-		workDir  string
-		blamer   ui.Blamer
-		err      error
+		renderer    ui.Renderer
+		workDir     string
+		gitRoot     string
+		blamer      ui.Blamer
+		untrackedFn func() ([]string, error)
+		err         error
 	)
 
 	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
@@ -377,21 +376,63 @@ func run(opts options) error {
 		defer tty.Close()
 		programOptions = append(programOptions, tea.WithInput(tty))
 	} else {
-		gitRoot, gitErr := gitTopLevel()
-		renderer, workDir, err = makeRenderer(opts.Only, opts.Exclude, opts.AllFiles, gitRoot, gitErr)
+		var setup vcsSetup
+		setup, err = setupVCSRenderer(opts)
 		if err != nil {
 			return err
 		}
-
-		// blame is only available when git is present
-		if gitErr == nil {
-			blamer = diff.NewGit(gitRoot)
-		}
+		renderer = setup.renderer
+		gitRoot = setup.gitRoot
+		workDir = setup.workDir
+		blamer = setup.blamer
+		untrackedFn = setup.untrackedFn
 	}
 
-	model := ui.NewModel(renderer, store, hl, ui.ModelConfig{
-		Keymap:           km,
+	// construct the three style types per D15: Resolver first, Renderer from Resolver, SGR is zero-value
+	styleColors := style.Colors{
+		Accent:       opts.Colors.Accent,
+		Border:       opts.Colors.Border,
+		Normal:       opts.Colors.Normal,
+		Muted:        opts.Colors.Muted,
+		SelectedFg:   opts.Colors.SelectedFg,
+		SelectedBg:   opts.Colors.SelectedBg,
+		Annotation:   opts.Colors.Annotation,
+		CursorFg:     opts.Colors.CursorFg,
+		CursorBg:     opts.Colors.CursorBg,
+		AddFg:        opts.Colors.AddFg,
+		AddBg:        opts.Colors.AddBg,
+		RemoveFg:     opts.Colors.RemoveFg,
+		RemoveBg:     opts.Colors.RemoveBg,
+		WordAddBg:    opts.Colors.WordAddBg,
+		WordRemoveBg: opts.Colors.WordRemoveBg,
+		ModifyFg:     opts.Colors.ModifyFg,
+		ModifyBg:     opts.Colors.ModifyBg,
+		TreeBg:       opts.Colors.TreeBg,
+		DiffBg:       opts.Colors.DiffBg,
+		StatusFg:     opts.Colors.StatusFg,
+		StatusBg:     opts.Colors.StatusBg,
+		SearchFg:     opts.Colors.SearchFg,
+		SearchBg:     opts.Colors.SearchBg,
+	}
+	var res style.Resolver
+	if opts.NoColors {
+		res = style.PlainResolver()
+	} else {
+		res = style.NewResolver(styleColors)
+	}
+
+	model, err := ui.NewModel(ui.ModelConfig{
+		Renderer:         renderer,
+		Store:            store,
+		Highlighter:      hl,
+		StyleResolver:    res,
+		StyleRenderer:    style.NewRenderer(res),
+		SGR:              style.SGR{},
+		WordDiffer:       worddiff.New(),
+		Overlay:          overlay.NewManager(),
 		Blamer:           blamer,
+		LoadUntracked:    untrackedFn,
+		Keymap:           km,
 		NoColors:         opts.NoColors,
 		NoStatusBar:      opts.NoStatusBar,
 		NoConfirmDiscard: opts.NoConfirmDiscard,
@@ -400,36 +441,30 @@ func run(opts options) error {
 		CrossFileHunks:   opts.CrossFileHunks,
 		LineNumbers:      opts.LineNumbers,
 		ShowBlame:        opts.Blame,
+		WordDiff:         opts.WordDiff,
 		TabWidth:         opts.TabWidth,
 		Ref:              opts.ref(),
 		Staged:           opts.Staged,
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
 		WorkDir:          workDir,
-		Colors: ui.Colors{
-			Accent:     opts.Colors.Accent,
-			Border:     opts.Colors.Border,
-			Normal:     opts.Colors.Normal,
-			Muted:      opts.Colors.Muted,
-			SelectedFg: opts.Colors.SelectedFg,
-			SelectedBg: opts.Colors.SelectedBg,
-			Annotation: opts.Colors.Annotation,
-			CursorFg:   opts.Colors.CursorFg,
-			CursorBg:   opts.Colors.CursorBg,
-			AddFg:      opts.Colors.AddFg,
-			AddBg:      opts.Colors.AddBg,
-			RemoveFg:   opts.Colors.RemoveFg,
-			RemoveBg:   opts.Colors.RemoveBg,
-			ModifyFg:   opts.Colors.ModifyFg,
-			ModifyBg:   opts.Colors.ModifyBg,
-			TreeBg:     opts.Colors.TreeBg,
-			DiffBg:     opts.Colors.DiffBg,
-			StatusFg:   opts.Colors.StatusFg,
-			StatusBg:   opts.Colors.StatusBg,
-			SearchFg:   opts.Colors.SearchFg,
-			SearchBg:   opts.Colors.SearchBg,
+		ThemesDir:        defaultThemesDir(),
+		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
+		ActiveThemeName:  theme.ActiveName(opts.Theme),
+		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
+			return sidepane.NewFileTree(entries)
+		},
+		ParseTOC: func(lines []diff.DiffLine, filename string) ui.TOCComponent {
+			toc := sidepane.ParseTOC(lines, filename)
+			if toc == nil {
+				return nil // collapse typed-nil *TOC into truly nil interface
+			}
+			return toc
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("create model: %w", err)
+	}
 
 	p := tea.NewProgram(model, programOptions...)
 	finalModel, err := p.Run()
@@ -449,6 +484,9 @@ func run(opts options) error {
 	if output == "" {
 		return nil
 	}
+
+	saveHistory(histReq{opts: opts, annotations: output, gitRoot: gitRoot, workDir: workDir, files: m.Store().Files()})
+
 	if opts.Output != "" {
 		if err := os.WriteFile(opts.Output, []byte(output), 0o600); err != nil {
 			return fmt.Errorf("write output: %w", err)
@@ -459,58 +497,136 @@ func run(opts options) error {
 	return nil
 }
 
-// makeRenderer selects the appropriate renderer based on git availability and flags.
-// if --all-files is set, returns DirectoryReader (requires git repo).
-// if git is available with --only, it wraps diff.Git with FallbackRenderer.
-// if git is available without --only, it returns diff.Git directly.
-// if git is unavailable and --only is set, it uses FileReader to read files directly from disk.
-// if git is unavailable and --only is not set, it returns an error.
-// when --exclude prefixes are present, wraps the result with ExcludeFilter.
-func makeRenderer(only, exclude []string, allFiles bool, gitRoot string, gitErr error) (ui.Renderer, string, error) {
-	var r ui.Renderer
-	var workDir string
+type histReq struct {
+	opts        options
+	annotations string
+	gitRoot     string
+	workDir     string
+	files       []string
+}
 
-	switch {
-	case allFiles && gitErr == nil:
-		r = diff.NewDirectoryReader(gitRoot)
-		workDir = gitRoot
-	case allFiles:
-		return nil, "", errors.New("--all-files requires a git repository")
-	case gitErr == nil && len(only) > 0:
-		r = diff.NewFallbackRenderer(diff.NewGit(gitRoot), only, gitRoot)
-		workDir = gitRoot
-	case gitErr == nil:
-		r = diff.NewGit(gitRoot)
-		workDir = gitRoot
-	case len(only) > 0:
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, "", fmt.Errorf("get working directory: %w", err)
-		}
-		r = diff.NewFileReader(only, cwd)
-		workDir = cwd
-	default:
-		return nil, "", fmt.Errorf("find git root: %w", gitErr)
+// saveHistory auto-saves review annotations and relevant diffs as a safety net.
+// for non-git single-file --only mode, uses the full file path for the header
+// and the parent directory basename for the history subdirectory.
+func saveHistory(r histReq) {
+	histPath := r.workDir
+	if histPath == "" {
+		histPath = r.gitRoot
 	}
+	var histSubDir string
+	if r.gitRoot == "" && len(r.opts.Only) == 1 {
+		if abs, err := filepath.Abs(r.opts.Only[0]); err == nil {
+			histPath = abs
+			histSubDir = filepath.Base(filepath.Dir(abs))
+		}
+	}
+	if r.opts.Stdin {
+		histPath = "stdin"
+	}
+	history.New(r.opts.HistoryDir).Save(history.Params{
+		Annotations:    r.annotations,
+		Path:           histPath,
+		Ref:            r.opts.ref(),
+		Staged:         r.opts.Staged,
+		GitRoot:        r.gitRoot,
+		AnnotatedFiles: r.files,
+		SubDir:         histSubDir,
+	})
+}
 
+type vcsSetup struct {
+	renderer    ui.Renderer
+	gitRoot     string // set only when VCS is git; used by history module to run git commands
+	workDir     string
+	blamer      ui.Blamer
+	untrackedFn func() ([]string, error)
+}
+
+// setupVCSRenderer detects the VCS and creates the appropriate renderer, blamer, and untracked function.
+func setupVCSRenderer(opts options) (vcsSetup, error) {
+	cwd, cwdErr := os.Getwd()
+	if cwdErr != nil {
+		cwd = "."
+	}
+	vcsType, vcsRoot := diff.DetectVCS(cwd)
+
+	switch vcsType {
+	case diff.VCSGit:
+		g := diff.NewGit(vcsRoot)
+		r, workDir, err := makeGitRenderer(g, opts.Only, opts.Include, opts.Exclude, opts.AllFiles, vcsRoot)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles}, nil
+	case diff.VCSHg:
+		if opts.Staged {
+			fmt.Fprintln(os.Stderr, "warning: --staged ignored in mercurial repository (no staging area)")
+		}
+		h := diff.NewHg(vcsRoot)
+		r, workDir, err := makeHgRenderer(h, opts.Only, opts.Include, opts.Exclude, opts.AllFiles, vcsRoot)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles}, nil
+	default:
+		r, workDir, err := makeNoVCSRenderer(opts.Only, cwd)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, workDir: workDir}, nil
+	}
+}
+
+// makeGitRenderer selects the appropriate git renderer based on flags.
+// reuses the provided *Git instance as the default renderer to avoid double allocation.
+func makeGitRenderer(g *diff.Git, only, include, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) { //nolint:unparam // error kept for consistency with makeHgRenderer/makeNoVCSRenderer
+	var r ui.Renderer
+	switch {
+	case allFiles:
+		r = diff.NewDirectoryReader(repoRoot)
+	case len(only) > 0:
+		r = diff.NewFallbackRenderer(g, only, repoRoot)
+	default:
+		r = g
+	}
+	if len(include) > 0 {
+		r = diff.NewIncludeFilter(r, include)
+	}
 	if len(exclude) > 0 {
 		r = diff.NewExcludeFilter(r, exclude)
 	}
-	return r, workDir, nil
+	return r, repoRoot, nil
 }
 
-// gitTopLevel returns the root directory of the current git repository.
-func gitTopLevel() (string, error) {
-	cmd := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("git rev-parse --show-toplevel: %s", strings.TrimSpace(string(exitErr.Stderr)))
-		}
-		return "", fmt.Errorf("git rev-parse --show-toplevel: %w", err)
+// makeHgRenderer selects the appropriate mercurial renderer based on flags.
+// reuses the provided *Hg instance as the default renderer to avoid double allocation.
+func makeHgRenderer(h *diff.Hg, only, include, exclude []string, allFiles bool, repoRoot string) (ui.Renderer, string, error) {
+	var r ui.Renderer
+	switch {
+	case allFiles:
+		return nil, "", errors.New("--all-files is not supported in mercurial repositories")
+	case len(only) > 0:
+		r = diff.NewFallbackRenderer(h, only, repoRoot)
+	default:
+		r = h
 	}
-	return strings.TrimSpace(string(out)), nil
+	if len(include) > 0 {
+		r = diff.NewIncludeFilter(r, include)
+	}
+	if len(exclude) > 0 {
+		r = diff.NewExcludeFilter(r, exclude)
+	}
+	return r, repoRoot, nil
+}
+
+// makeNoVCSRenderer creates a renderer when no VCS is detected.
+// No-VCS mode requires --only, which is mutually exclusive with --include.
+// --exclude is a no-op here (FileReader only returns the --only files).
+func makeNoVCSRenderer(only []string, cwd string) (ui.Renderer, string, error) {
+	if len(only) == 0 {
+		return nil, "", errors.New("no git or mercurial repository found (use --only to review standalone files)")
+	}
+	return diff.NewFileReader(only, cwd), cwd, nil
 }
 
 // defaultThemesDir returns ~/.config/revdiff/themes.
@@ -522,11 +638,12 @@ func defaultThemesDir() string {
 	return filepath.Join(home, ".config", "revdiff", "themes")
 }
 
-// handleThemes processes theme-related flags: auto-init on first run, --init-themes, --list-themes, and --theme.
+// handleThemes processes theme-related flags: auto-init on first run, --init-themes, --init-all-themes,
+// --install-theme, --list-themes, and --theme.
 // returns (true, nil) when the caller should exit successfully, (false, error) on failure, (false, nil) to continue.
 func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bool, error) {
 	// auto-init bundled themes on first run (silent, no error on failure)
-	if themesDir != "" {
+	if themesDir != "" && len(opts.InstallTheme) == 0 {
 		if _, err := os.Stat(themesDir); os.IsNotExist(err) {
 			_ = theme.InitBundled(themesDir)
 		}
@@ -543,16 +660,34 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 		return true, nil
 	}
 
+	if opts.InitAllThemes {
+		if themesDir == "" {
+			return false, errors.New("cannot determine home directory for themes")
+		}
+		if err := theme.InitAll(themesDir); err != nil {
+			return false, fmt.Errorf("init all themes: %w", err)
+		}
+		galleryNames, _ := theme.GalleryNames()
+		_, _ = fmt.Fprintf(stdout, "all themes written to %s (%d themes)\n", themesDir, len(galleryNames))
+		return true, nil
+	}
+
+	if len(opts.InstallTheme) > 0 {
+		if themesDir == "" {
+			return false, errors.New("cannot determine home directory for themes")
+		}
+		if err := theme.Install(opts.InstallTheme, themesDir, highlight.IsValidStyle, stdout); err != nil {
+			return false, fmt.Errorf("install theme: %w", err)
+		}
+		return true, nil
+	}
+
 	if opts.ListThemes {
 		if themesDir == "" {
 			return false, errors.New("cannot determine home directory for themes")
 		}
-		names, err := theme.List(themesDir)
-		if err != nil {
+		if err := theme.PrintList(themesDir, stdout); err != nil {
 			return false, fmt.Errorf("list themes: %w", err)
-		}
-		for _, name := range names {
-			_, _ = fmt.Fprintln(stdout, name)
 		}
 		return true, nil
 	}
@@ -587,30 +722,32 @@ func resolveThemeConflicts(opts *options) {
 
 // colorFieldPtrs maps color key names (matching ini-name tags) to pointers into opts.Colors fields.
 // this is the single source of truth for the color key → struct field mapping,
-// used by both applyTheme and collectColors to avoid duplicating the 21-key list.
+// used by both applyTheme and collectColors to avoid duplicating the 23-key list.
 func colorFieldPtrs(opts *options) map[string]*string {
 	return map[string]*string{
-		"color-accent":      &opts.Colors.Accent,
-		"color-border":      &opts.Colors.Border,
-		"color-normal":      &opts.Colors.Normal,
-		"color-muted":       &opts.Colors.Muted,
-		"color-selected-fg": &opts.Colors.SelectedFg,
-		"color-selected-bg": &opts.Colors.SelectedBg,
-		"color-annotation":  &opts.Colors.Annotation,
-		"color-cursor-fg":   &opts.Colors.CursorFg,
-		"color-cursor-bg":   &opts.Colors.CursorBg,
-		"color-add-fg":      &opts.Colors.AddFg,
-		"color-add-bg":      &opts.Colors.AddBg,
-		"color-remove-fg":   &opts.Colors.RemoveFg,
-		"color-remove-bg":   &opts.Colors.RemoveBg,
-		"color-modify-fg":   &opts.Colors.ModifyFg,
-		"color-modify-bg":   &opts.Colors.ModifyBg,
-		"color-tree-bg":     &opts.Colors.TreeBg,
-		"color-diff-bg":     &opts.Colors.DiffBg,
-		"color-status-fg":   &opts.Colors.StatusFg,
-		"color-status-bg":   &opts.Colors.StatusBg,
-		"color-search-fg":   &opts.Colors.SearchFg,
-		"color-search-bg":   &opts.Colors.SearchBg,
+		"color-accent":         &opts.Colors.Accent,
+		"color-border":         &opts.Colors.Border,
+		"color-normal":         &opts.Colors.Normal,
+		"color-muted":          &opts.Colors.Muted,
+		"color-selected-fg":    &opts.Colors.SelectedFg,
+		"color-selected-bg":    &opts.Colors.SelectedBg,
+		"color-annotation":     &opts.Colors.Annotation,
+		"color-cursor-fg":      &opts.Colors.CursorFg,
+		"color-cursor-bg":      &opts.Colors.CursorBg,
+		"color-add-fg":         &opts.Colors.AddFg,
+		"color-add-bg":         &opts.Colors.AddBg,
+		"color-remove-fg":      &opts.Colors.RemoveFg,
+		"color-remove-bg":      &opts.Colors.RemoveBg,
+		"color-word-add-bg":    &opts.Colors.WordAddBg,
+		"color-word-remove-bg": &opts.Colors.WordRemoveBg,
+		"color-modify-fg":      &opts.Colors.ModifyFg,
+		"color-modify-bg":      &opts.Colors.ModifyBg,
+		"color-tree-bg":        &opts.Colors.TreeBg,
+		"color-diff-bg":        &opts.Colors.DiffBg,
+		"color-status-fg":      &opts.Colors.StatusFg,
+		"color-status-bg":      &opts.Colors.StatusBg,
+		"color-search-fg":      &opts.Colors.SearchFg,
+		"color-search-bg":      &opts.Colors.SearchBg,
 	}
 }
 

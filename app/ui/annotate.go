@@ -10,7 +10,11 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
 )
+
+// annotKeyFile is the lookup key for file-level annotations in wrappedAnnotationLineCount.
+const annotKeyFile = "file"
 
 // hunkKeywordRe matches whole-word "hunk" (case-insensitive).
 // "block" was removed as it triggers false positives in casual usage (e.g., "this code block is fine").
@@ -24,6 +28,19 @@ func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinp
 	cmd := ti.Focus()
 	ti.CharLimit = 500
 	ti.Width = max(10, m.diffContentWidth()-prefixWidth)
+
+	// set DiffBg on all textinput sub-styles so View() output inherits the pane background.
+	// wrapping View() externally doesn't work because lipgloss Render emits \033[0m resets.
+	// text uses Normal fg (context line color) so active input is readable on any theme
+	// and visually distinct from saved annotations (which use Annotation color + italic).
+	inputStyle := m.resolver.Style(style.StyleKeyAnnotInputText)
+	ti.PromptStyle = inputStyle
+	ti.TextStyle = inputStyle
+	cursorStyle := m.resolver.Style(style.StyleKeyAnnotInputCursor)
+	ti.Cursor.TextStyle = cursorStyle
+	ti.Cursor.Style = cursorStyle
+	ti.PlaceholderStyle = m.resolver.Style(style.StyleKeyAnnotInputPlaceholder)
+
 	return ti, cmd
 }
 
@@ -73,9 +90,10 @@ func (m *Model) ensureLineAnnotationInputVisible() {
 	}
 
 	inputY := m.cursorViewportY() + m.wrappedLineCount(m.diffCursor)
-	if inputY < m.viewport.YOffset {
+	switch {
+	case inputY < m.viewport.YOffset:
 		m.viewport.SetYOffset(inputY)
-	} else if inputY >= m.viewport.YOffset+m.viewport.Height {
+	case inputY >= m.viewport.YOffset+m.viewport.Height:
 		m.viewport.SetYOffset(inputY - m.viewport.Height + 1)
 	}
 }
@@ -117,7 +135,7 @@ func (m *Model) saveAnnotation() {
 		m.annotating = false
 		m.fileAnnotating = false
 		m.diffCursor = -1 // position cursor on the file annotation line
-		m.tree.refreshFilter(m.annotatedFiles())
+		m.tree.RefreshFilter(m.annotatedFiles())
 		m.viewport.SetContent(m.renderDiff())
 		m.viewport.GotoTop()
 		return
@@ -138,7 +156,7 @@ func (m *Model) saveAnnotation() {
 	}
 	m.store.Add(a)
 	m.annotating = false
-	m.tree.refreshFilter(m.annotatedFiles())
+	m.tree.RefreshFilter(m.annotatedFiles())
 	m.viewport.SetContent(m.renderDiff())
 }
 
@@ -158,9 +176,9 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 	m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 	m.skipInitialDividers()
 
-	m.tree.refreshFilter(m.annotatedFiles())
+	m.tree.RefreshFilter(m.annotatedFiles())
 
-	if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
+	if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.currFile {
 		m.loadSeq++
 		return m.loadFileDiff(newFile)
 	}
@@ -171,7 +189,6 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 
 // deleteAnnotation removes the annotation on the current cursor line if one exists.
 // handles both file-level annotations (cursor at -1) and regular line annotations.
-// if the current line has no annotation, checks the previous line (since annotations
 // only works when cursor is on the annotation sub-line (cursorOnAnnotation=true) or file annotation line.
 // returns a command to load the new file if the tree selection changed after filter refresh.
 func (m *Model) deleteAnnotation() tea.Cmd {
@@ -193,10 +210,10 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 		m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
 		m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 		m.cursorOnAnnotation = false
-		m.tree.refreshFilter(m.annotatedFiles())
+		m.tree.RefreshFilter(m.annotatedFiles())
 
 		// if filter moved cursor to a different file, load the new selection
-		if newFile := m.tree.selectedFile(); newFile != "" && newFile != m.currFile {
+		if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.currFile {
 			m.loadSeq++
 			return m.loadFileDiff(newFile)
 		}
@@ -226,10 +243,7 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // cursorLineHasAnnotation checks if the cursor is on a deletable annotation line.
 // returns true only when cursor is on the file annotation line or on an annotation sub-line.
 func (m Model) cursorLineHasAnnotation() bool {
-	if m.cursorOnFileAnnotationLine() {
-		return true
-	}
-	return m.cursorOnAnnotation
+	return m.cursorOnFileAnnotationLine() || m.cursorOnAnnotation
 }
 
 // hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
@@ -283,21 +297,15 @@ func (m Model) hunkEndLine(idx int) int {
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
 // annotations always wrap at the pane width regardless of wrapMode.
 func (m Model) wrappedAnnotationLineCount(key string) int {
-	comment := ""
-	if key == "file" {
-		for _, a := range m.store.Get(m.currFile) {
-			if a.Line == 0 {
-				comment = "\U0001f4ac file: " + a.Comment
-				break
-			}
+	var comment string
+	for _, a := range m.store.Get(m.currFile) {
+		if key == annotKeyFile && a.Line == 0 {
+			comment = "\U0001f4ac file: " + a.Comment
+			break
 		}
-	} else {
-		for _, a := range m.store.Get(m.currFile) {
-			aKey := m.annotationKey(a.Line, a.Type)
-			if aKey == key {
-				comment = "\U0001f4ac " + a.Comment
-				break
-			}
+		if key != annotKeyFile && m.annotationKey(a.Line, a.Type) == key {
+			comment = "\U0001f4ac " + a.Comment
+			break
 		}
 	}
 	if comment == "" {
@@ -310,54 +318,58 @@ func (m Model) wrappedAnnotationLineCount(key string) int {
 	return 1
 }
 
+// hunkLineHeight returns the visual row count for a single diff line,
+// including collapsed visibility, wrap, and inline annotation.
+func (m Model) hunkLineHeight(idx int, hunks []int, annotationSet map[string]bool) int {
+	if m.isCollapsedHidden(idx, hunks) {
+		return 0
+	}
+	if m.isDeleteOnlyPlaceholder(idx, hunks) {
+		return m.deletePlaceholderVisualHeight(idx)
+	}
+	h := m.wrappedLineCount(idx)
+	dl := m.diffLines[idx]
+	if dl.ChangeType != diff.ChangeDivider {
+		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
+		if annotationSet[key] {
+			h += m.wrappedAnnotationLineCount(key)
+		}
+	}
+	return h
+}
+
 // cursorViewportY computes the actual viewport Y position of the cursor,
 // accounting for injected annotation lines and the file-level annotation line.
 // in collapsed mode, hidden removed lines (those in non-expanded hunks) are not counted.
 func (m Model) cursorViewportY() int {
-	if m.currFile == "" || len(m.diffLines) == 0 {
-		return max(0, m.diffCursor)
-	}
-
-	// file-level annotation line at the top (may wrap to multiple rows)
-	fileAnnotationOffset := 0
-	if m.hasFileAnnotation() {
-		fileAnnotationOffset = m.wrappedAnnotationLineCount("file")
-	}
-
-	// cursor is on the file annotation line
-	if m.diffCursor == -1 {
-		return 0
-	}
-
-	annotationSet := m.buildAnnotationSet()
 	var hunks []int
 	if m.collapsed.enabled {
 		hunks = m.findHunks()
 	}
+	return m.cursorViewportYUsing(hunks, m.buildAnnotationSet())
+}
+
+// cursorViewportYUsing is the same as cursorViewportY but accepts pre-built
+// hunks and annotationSet to avoid redundant computation when the caller
+// already has them (e.g. centerHunkInViewport).
+func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) int {
+	if m.currFile == "" || len(m.diffLines) == 0 {
+		return max(0, m.diffCursor)
+	}
+
+	fileAnnotationOffset := 0
+	if m.hasFileAnnotation() {
+		fileAnnotationOffset = m.wrappedAnnotationLineCount(annotKeyFile)
+	}
+
+	if m.diffCursor == -1 {
+		return 0
+	}
 
 	y := fileAnnotationOffset
 	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
-		// skip hidden removed lines in collapsed mode
-		if m.isCollapsedHidden(i, hunks) {
-			continue
-		}
-		// delete-only placeholders render synthetic text ("⋯ N lines deleted"), not original content.
-		// use placeholder text for wrapping to stay in sync with renderDeletePlaceholder.
-		if m.isDeleteOnlyPlaceholder(i, hunks) {
-			y += m.deletePlaceholderVisualHeight(i)
-			continue
-		}
-		y += m.wrappedLineCount(i) // the diff line (may occupy multiple visual rows when wrapping)
-		dl := m.diffLines[i]
-		if dl.ChangeType != diff.ChangeDivider {
-			key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
-			if annotationSet[key] {
-				y += m.wrappedAnnotationLineCount(key)
-			}
-		}
+		y += m.hunkLineHeight(i, hunks, annotationSet)
 	}
-	// if cursor is on the annotation sub-line, offset by wrapped line count
-	// (annotation renders after all continuation lines of the diff line)
 	if m.cursorOnAnnotation {
 		y += m.wrappedLineCount(m.diffCursor)
 	}

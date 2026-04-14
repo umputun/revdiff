@@ -1,9 +1,6 @@
 package diff
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // renderer is a local interface matching ui.Renderer to avoid import cycle.
 type renderer interface {
@@ -20,18 +17,7 @@ type ExcludeFilter struct {
 
 // NewExcludeFilter creates an ExcludeFilter that removes files matching any prefix from results.
 func NewExcludeFilter(inner renderer, prefixes []string) *ExcludeFilter {
-	// normalize prefixes: trim whitespace, strip trailing slashes so "vendor/" and "vendor" both work,
-	// and skip empty values from env/config inputs like trailing commas.
-	normalized := make([]string, 0, len(prefixes))
-	for _, p := range prefixes {
-		p = strings.TrimSpace(p)
-		p = strings.TrimRight(p, "/")
-		if p == "" {
-			continue
-		}
-		normalized = append(normalized, p)
-	}
-	return &ExcludeFilter{inner: inner, prefixes: normalized}
+	return &ExcludeFilter{inner: inner, prefixes: normalizePrefixes(prefixes)}
 }
 
 // ChangedFiles returns files from the inner renderer, excluding any that match a prefix.
@@ -43,7 +29,7 @@ func (ef *ExcludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, err
 
 	filtered := make([]FileEntry, 0, len(entries))
 	for _, e := range entries {
-		if !ef.matchesExclude(e.Path) {
+		if !matchesPrefix(e.Path, ef.prefixes) {
 			filtered = append(filtered, e)
 		}
 	}
@@ -57,15 +43,4 @@ func (ef *ExcludeFilter) FileDiff(ref, file string, staged bool) ([]DiffLine, er
 		return nil, fmt.Errorf("exclude filter, file diff %s: %w", file, err)
 	}
 	return lines, nil
-}
-
-// matchesExclude returns true if the file path matches any exclude prefix.
-// a prefix matches if the file equals the prefix exactly, or starts with prefix + "/".
-func (ef *ExcludeFilter) matchesExclude(file string) bool {
-	for _, prefix := range ef.prefixes {
-		if file == prefix || strings.HasPrefix(file, prefix+"/") {
-			return true
-		}
-	}
-	return false
 }

@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // collapsedState holds the state for collapsed diff view mode.
@@ -21,7 +23,7 @@ type collapsedState struct {
 // removed lines are hidden unless their hunk is expanded. added lines are styled
 // as "modified" (amber ~) when paired with removes, or "pure add" (green +) otherwise.
 func (m Model) renderCollapsedDiff() string {
-	m.buildSearchMatchSet()
+	m.searchMatchSet = m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
 	hunks := m.findHunks()
@@ -84,71 +86,87 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 	isSearchMatch := m.searchMatchSet[idx]
 
-	style, hlStyle, gutter := m.styles.LineAdd, m.styles.LineAddHighlight, " + "
+	lineStyle := m.resolver.Style(style.StyleKeyLineAdd)
+	lineHlStyle := m.resolver.Style(style.StyleKeyLineAddHighlight)
+	gutter := " + "
 	if modified {
-		style, hlStyle, gutter = m.styles.LineModify, m.styles.LineModifyHighlight, " ~ "
+		lineStyle = m.resolver.Style(style.StyleKeyLineModify)
+		lineHlStyle = m.resolver.Style(style.StyleKeyLineModifyHighlight)
+		gutter = " ~ "
 	}
 	if isSearchMatch {
-		style = m.styles.SearchMatch
-		hlStyle = m.styles.SearchMatch.UnsetForeground()
+		sm := m.resolver.Style(style.StyleKeySearchMatch)
+		lineStyle = sm
+		lineHlStyle = sm.UnsetForeground()
 	}
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	isCursor := m.isCursorLine(idx)
 
 	numGutter, blGutter := m.lineGutters(dl)
 
-	bgColor := m.styles.colors.AddBg
+	bgColor := m.resolver.Color(style.ColorKeyAddLineBg)
 	if modified {
-		bgColor = m.styles.colors.ModifyBg
+		bgColor = m.resolver.Color(style.ColorKeyModifyLineBg)
 	}
 
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.wrapMode {
-		m.renderWrappedCollapsedLine(b, textContent, gutter, numGutter, blGutter, isCursor, hasHighlight, style, hlStyle, bgColor)
+		m.renderWrappedCollapsedLine(b, textContent, wrappedLineCtx{
+			gutter: gutter, numGutter: numGutter, blGutter: blGutter,
+			isCursor: isCursor, hasHighlight: hasHighlight,
+			lineStyle: lineStyle, hlStyle: lineHlStyle, bgColor: bgColor,
+		})
 		return
 	}
 
-	content := style.Render(gutter + lineContent)
+	content := lineStyle.Render(gutter + lineContent)
 	if hasHighlight {
-		content = hlStyle.Render(gutter + textContent)
+		content = lineHlStyle.Render(gutter + textContent)
 	}
+	content = m.applyHorizontalScroll(content, bgColor)
 	content = m.extendLineBg(content, bgColor)
-	content = m.applyHorizontalScroll(content)
 
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▶")
+		cursor = m.renderer.DiffCursor(m.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
 
+// wrappedLineCtx holds rendering context for a wrapped collapsed line,
+// reducing the parameter count of renderWrappedCollapsedLine.
+type wrappedLineCtx struct {
+	gutter, numGutter, blGutter string
+	isCursor, hasHighlight      bool
+	lineStyle, hlStyle          lipgloss.Style
+	bgColor                     style.Color
+}
+
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
-func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent, gutter, numGutter, blGutter string,
-	isCursor, hasHighlight bool, style, hlStyle lipgloss.Style, bgColor string) {
+func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string, ctx wrappedLineCtx) {
 	numBlank, blBlank := m.gutterBlanks()
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-	visualLines := m.wrapContent(textContent, wrapWidth)
+	visualLines := m.wrapContent(textContent, m.wrapWidth())
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
 		bg := blBlank
 		if i == 0 {
-			prefix = gutter
-			ng = numGutter
-			bg = blGutter
+			prefix = ctx.gutter
+			ng = ctx.numGutter
+			bg = ctx.blGutter
 		}
 
 		var styled string
-		if hasHighlight {
-			styled = hlStyle.Render(prefix + vl)
+		if ctx.hasHighlight {
+			styled = ctx.hlStyle.Render(prefix + vl)
 		} else {
-			styled = style.Render(prefix + vl)
+			styled = ctx.lineStyle.Render(prefix + vl)
 		}
-		styled = m.extendLineBg(styled, bgColor)
+		styled = m.extendLineBg(styled, ctx.bgColor)
 
 		cursor := " "
-		if i == 0 && isCursor {
-			cursor = m.styles.DiffCursorLine.Render("▶")
+		if i == 0 && ctx.isCursor {
+			cursor = m.renderer.DiffCursor(m.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -180,8 +198,7 @@ func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
 		return 1
 	}
 	text := m.deletePlaceholderText(hunkStart)
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-	return len(m.wrapContent(text, wrapWidth))
+	return len(m.wrapContent(text, m.wrapWidth()))
 }
 
 // renderDeletePlaceholder renders a placeholder line for a delete-only hunk in collapsed mode.
@@ -190,12 +207,13 @@ func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
 func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	text := m.deletePlaceholderText(hunkStart)
 
-	style := m.styles.LineRemove
+	lineStyle := m.resolver.Style(style.StyleKeyLineRemove)
 	if m.searchMatchSet[idx] {
-		style = m.styles.SearchMatch
+		lineStyle = m.resolver.Style(style.StyleKeySearchMatch)
 	}
+	removeBg := m.resolver.Color(style.ColorKeyRemoveLineBg)
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	isCursor := m.isCursorLine(idx)
 
 	divider := diff.DiffLine{ChangeType: diff.ChangeDivider}
 	numGutter, blGutter := m.lineGutters(divider)
@@ -203,8 +221,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	// wrap mode: break long placeholder at word boundaries
 	if m.wrapMode {
 		numBlank, blBlank := m.gutterBlanks()
-		wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-		visualLines := m.wrapContent(text, wrapWidth)
+		visualLines := m.wrapContent(text, m.wrapWidth())
 		for i, vl := range visualLines {
 			prefix := " ↪ "
 			ng := numBlank
@@ -214,25 +231,25 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 				ng = numGutter
 				bg = blGutter
 			}
-			styled := style.Render(prefix + vl)
-			styled = m.extendLineBg(styled, m.styles.colors.RemoveBg)
+			styled := lineStyle.Render(prefix + vl)
+			styled = m.extendLineBg(styled, removeBg)
 
 			cursor := " "
 			if i == 0 && isCursor {
-				cursor = m.styles.DiffCursorLine.Render("▶")
+				cursor = m.renderer.DiffCursor(m.noColors)
 			}
 			b.WriteString(cursor + ng + bg + styled + "\n")
 		}
 		return
 	}
 
-	content := style.Render(" - " + text)
-	content = m.extendLineBg(content, m.styles.colors.RemoveBg)
-	content = m.applyHorizontalScroll(content)
+	content := lineStyle.Render(" - " + text)
+	content = m.applyHorizontalScroll(content, removeBg)
+	content = m.extendLineBg(content, removeBg)
 
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▶")
+		cursor = m.renderer.DiffCursor(m.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -274,24 +291,21 @@ func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 			end--
 		}
 
-		// check if hunk has both removes and adds
-		hasRemove, hasAdd := false, false
-		var addIndices []int
-		for i := start; i < end; i++ {
-			switch m.diffLines[i].ChangeType {
-			case diff.ChangeRemove:
-				hasRemove = true
-			case diff.ChangeAdd:
-				hasAdd = true
-				addIndices = append(addIndices, i)
-			case diff.ChangeContext, diff.ChangeDivider:
-				// context and divider lines are not part of the hunk's change set
+		// build LinePair slice and use PairLines to detect mixed hunks.
+		// if pairs exist, mark all add lines in the block as modified.
+		block := make([]worddiff.LinePair, end-start)
+		for j := start; j < end; j++ {
+			block[j-start] = worddiff.LinePair{
+				Content:  m.diffLines[j].Content,
+				IsRemove: m.diffLines[j].ChangeType == diff.ChangeRemove,
 			}
 		}
-
-		if hasRemove && hasAdd {
-			for _, idx := range addIndices {
-				result[idx] = true
+		pairs := m.differ.PairLines(block)
+		if len(pairs) > 0 {
+			for i := start; i < end; i++ {
+				if m.diffLines[i].ChangeType == diff.ChangeAdd {
+					result[i] = true
+				}
 			}
 		}
 	}

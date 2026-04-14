@@ -36,10 +36,12 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList},
 		{"v", ActionToggleCollapsed}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
-		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
+		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
+		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
+		{"u", ActionToggleUntracked},
 		{"zz", ActionScrollCenter}, {"zt", ActionScrollTop}, {"zb", ActionScrollBottom},
 		{"q", ActionQuit}, {"ZZ", ActionQuit}, {"Q", ActionDiscardQuit}, {"ZQ", ActionDiscardQuit},
-		{"?", ActionHelp}, {"esc", ActionDismiss},
+		{"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.action, km.Resolve(tt.key), "key %q should map to %q", tt.key, tt.action)

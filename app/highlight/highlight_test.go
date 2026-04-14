@@ -151,7 +151,8 @@ func TestReconstructFiles(t *testing.T) {
 		{Content: "line2", ChangeType: diff.ChangeContext},
 	}
 
-	newFile, oldFile := reconstructFiles(lines)
+	h := New("monokai", true)
+	newFile, oldFile := h.reconstructFiles(lines)
 
 	assert.Equal(t, "line1\nadded\nline2\n", newFile)
 	assert.Equal(t, "line1\nremoved\nline2\n", oldFile)
@@ -188,4 +189,20 @@ func TestWriteTokenANSI_WithAttributes(t *testing.T) {
 			assert.Contains(t, result, "\033[22m", "bold should be reset")
 		}
 	})
+}
+
+func TestSetStyle(t *testing.T) {
+	h := New("monokai", true)
+	assert.Equal(t, "monokai", h.StyleName())
+
+	ok := h.SetStyle("dracula")
+	assert.True(t, ok)
+	assert.Equal(t, "dracula", h.StyleName())
+}
+
+func TestSetStyle_unknownStyle(t *testing.T) {
+	h := New("monokai", true)
+	ok := h.SetStyle("nonexistent-style-xyz")
+	assert.False(t, ok)
+	assert.Equal(t, "monokai", h.StyleName(), "style should not change on failure")
 }

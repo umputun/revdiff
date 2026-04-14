@@ -4,20 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Documentation — revdiff | Code Review for AI Agents</title>
-    <meta name="description" content="revdiff documentation: installation, pi package, Claude Code plugin setup, usage, configuration, themes, keybindings, and output format. Code review and plan review tool for AI coding sessions.">
+    <meta name="description" content="revdiff documentation: installation, pi package, Claude Code plugin, Codex plugin, OpenCode integration, usage, configuration, themes, keybindings, and output format. Code review and plan review tool for AI coding sessions.">
     <meta name="keywords" content="code review for ai agents, code review for claude code, plan review for claude code, revdiff docs, tui diff viewer documentation">
     <meta name="author" content="umputun">
     <link rel="canonical" href="https://revdiff.com/docs.html">
 
     <meta property="og:title" content="revdiff Documentation — Code Review for AI Agents">
-    <meta property="og:description" content="Complete reference for revdiff: usage, configuration, themes, keybindings, pi package, Claude Code plugin, and output format.">
+    <meta property="og:description" content="Complete reference for revdiff: usage, configuration, themes, keybindings, pi package, Claude Code plugin, Codex plugin, OpenCode integration, and output format.">
     <meta property="og:type" content="article">
     <meta property="og:url" content="https://revdiff.com/docs.html">
     <meta property="og:image" content="https://revdiff.com/assets/screenshot.png">
 
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="revdiff Documentation">
-    <meta name="twitter:description" content="Complete reference for revdiff usage, configuration, themes, keybindings, pi package, and Claude Code plugin.">
+    <meta name="twitter:description" content="Complete reference for revdiff usage, configuration, themes, keybindings, pi package, Claude Code plugin, Codex plugin, and OpenCode integration.">
     <meta name="twitter:image" content="https://revdiff.com/assets/screenshot.png">
 
     <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
@@ -64,6 +64,8 @@
         <a href="#scratch-buffer">Scratch-buffer review</a>
         <a href="#markdown-toc">Markdown TOC</a>
         <a href="#beyond-code-review">Beyond code review</a>
+        <a href="#zed-integration">Zed integration</a>
+        <a href="#review-history">Review history</a>
 
         <h4>Configuration</h4>
         <a href="#config-file">Config file</a>
@@ -77,6 +79,7 @@
         <a href="#search">Search</a>
         <a href="#annotations">Annotations</a>
         <a href="#view">View toggles</a>
+        <a href="#status-bar-icons">Status bar icons</a>
         <a href="#custom-keys">Custom keybindings</a>
 
         <h4>Claude Code plugin</h4>
@@ -86,6 +89,15 @@
         <a href="#plugin-autodetect">Auto-detection</a>
         <a href="#plugin-planning">Plan review plugin</a>
 
+        <h4>Codex plugin</h4>
+        <a href="#codex-install">Installation</a>
+        <a href="#codex-skills">Skills</a>
+        <a href="#codex-differences">Differences</a>
+
+        <h4>OpenCode integration</h4>
+        <a href="#opencode-install">Installation</a>
+        <a href="#opencode-usage">Usage</a>
+
         <h4>Output</h4>
         <a href="#output-format">Output format</a>
         <a href="#integration">Integration</a>
@@ -93,14 +105,22 @@
 
     <main class="docs-content">
         <h1>Documentation</h1>
-        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, and the Claude Code plugin.</p>
+        <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, the Claude Code plugin, the Codex plugin, and the OpenCode integration.</p>
 
         <h2 id="requirements">Requirements</h2>
-        <p><code>git</code> is used to generate diffs. It is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
+        <p><code>git</code> or <code>hg</code> (Mercurial) is used to generate diffs. VCS is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
 
         <h2 id="installation">Installation</h2>
         <h3>Homebrew (macOS/Linux)</h3>
         <div class="code-block"><code>brew install umputun/apps/revdiff</code></div>
+        <h3>Arch Linux (AUR)</h3>
+        <div class="code-block"><code>paru -S revdiff</code></div>
+        <h3>Debian/Ubuntu</h3>
+        <div class="code-block"><code>sudo dpkg -i revdiff_*.deb</code></div>
+        <p>Download the latest <code>.deb</code> for your architecture from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a>.</p>
+        <h3>RPM-based (Fedora, RHEL)</h3>
+        <div class="code-block"><code>sudo rpm -i revdiff_*.rpm</code></div>
+        <p>Download the latest <code>.rpm</code> for your architecture from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a>.</p>
         <h3>Binary releases</h3>
         <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
 
@@ -158,6 +178,12 @@ revdiff --all-files
 <span class="code-comment"># browse all files, excluding vendor and mocks</span>
 revdiff --all-files --exclude vendor --exclude mocks
 
+<span class="code-comment"># include only src/ files</span>
+revdiff --include src
+
+<span class="code-comment"># include src/ but exclude src/vendor/</span>
+revdiff --include src --exclude src/vendor
+
 <span class="code-comment"># exclude paths in normal diff mode</span>
 revdiff main --exclude vendor
 
@@ -178,10 +204,12 @@ some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="all-files">All-files mode</h2>
         <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all git-tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
-        <p><code>--all-files</code> requires a git repository (uses <code>git ls-files</code>) and is mutually exclusive with refs, <code>--staged</code>, and <code>--only</code>. Combine with <code>--exclude</code> (or <code>-X</code>) to filter by prefix.</p>
-        <p><code>--exclude</code> uses prefix matching: <code>--exclude vendor</code> skips <code>vendor/</code>, <code>vendor/foo.go</code>, etc. It works in both <code>--all-files</code> and normal diff modes.</p>
-        <div class="code-block"><code>revdiff --all-files --exclude vendor --exclude mocks</code></div>
-        <p>Persist in config: <code>exclude = vendor</code>. Or env: <code>REVDIFF_EXCLUDE=vendor,mocks</code>.</p>
+        <p><code>--all-files</code> requires a git repository (uses <code>git ls-files</code>) and is mutually exclusive with refs, <code>--staged</code>, and <code>--only</code>. Combine with <code>--include</code> (or <code>-I</code>) to narrow to specific paths and <code>--exclude</code> (or <code>-X</code>) to filter out unwanted paths.</p>
+        <p><code>--include</code> and <code>--exclude</code> both use prefix matching. They are composable: include narrows first, then exclude removes from the included set. Both work in <code>--all-files</code> and normal diff modes.</p>
+        <div class="code-block"><code>revdiff --all-files --include src
+revdiff --all-files --include src --exclude src/vendor
+revdiff --all-files --exclude vendor --exclude mocks</code></div>
+        <p>Persist in config: <code>include = src</code>, <code>exclude = vendor</code>. Or env: <code>REVDIFF_INCLUDE=src</code>, <code>REVDIFF_EXCLUDE=vendor,mocks</code>.</p>
 
         <h2 id="context-only">Context-only file review</h2>
         <p>When <code>--only</code> specifies a file that has no git changes (or when no git repo exists), revdiff shows the file in context-only mode: all lines displayed without +/- markers, with full annotation and syntax highlighting support.</p>
@@ -192,7 +220,7 @@ some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="scratch-buffer">Scratch-buffer review</h2>
         <p>Use <code>--stdin</code> to review arbitrary piped or redirected text as a single synthetic file. All lines are treated as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.</p>
-        <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, and <code>--exclude</code>.</p>
+        <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, <code>--include</code>, and <code>--exclude</code>.</p>
         <p>Use <code>--stdin-name</code> to control the synthetic filename for annotation output and extension-based highlighting or markdown TOC activation.</p>
         <div class="code-block"><code>echo "plain text" | revdiff --stdin
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
@@ -208,6 +236,80 @@ git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
         <div class="code-block"><code>revdiff --only=docs/plans/feature.md
 revdiff --only=/tmp/draft-comment.md</code></div>
         <p><strong>Reviewing generated output</strong> — CI configs, Terraform plans, generated migrations — anything that needs human review before being applied.</p>
+
+        <h2 id="zed-integration">Zed integration</h2>
+        <p>Zed's custom tasks can launch revdiff directly in an editor terminal tab. Each task writes annotations to a temp file via <code>--output</code> and copies them to clipboard on quit &mdash; hit <code>cmd-v</code> to paste straight into an assistant panel, a commit message, or a PR comment. The examples below cover the most common workflows, but you can adapt them for any review scenario.</p>
+        <ul>
+            <li><strong>Review current file</strong> (<code>cmd-shift-d</code>) &mdash; open the file you're editing in revdiff for line-by-line annotation</li>
+            <li><strong>Branch diff</strong> &mdash; compare your feature branch against main/master before pushing</li>
+            <li><strong>Uncommitted changes</strong> &mdash; walk through working tree + staged changes before committing</li>
+        </ul>
+
+        <h3>Task definitions</h3>
+        <p>Add these to your <code>.zed/tasks.json</code> (create the file if it doesn't exist). The file must contain a JSON array, so paste the whole block below; if you already have tasks, add each object to the existing <code>tasks</code> array.</p>
+        <div class="code-block"><code>[
+  {
+    "label": "revdiff current file",
+    "command": "rm -f /tmp/revdiff-out.txt; revdiff --only=\"$ZED_FILE\" --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "reveal_target": "center",
+    "hide": "on_success"
+  },
+  {
+    "label": "revdiff vs master",
+    "command": "rm -f /tmp/revdiff-out.txt; MAIN=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||' || echo master); revdiff \"$MAIN\" --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "reveal_target": "center",
+    "hide": "on_success"
+  },
+  {
+    "label": "revdiff uncommitted",
+    "command": "rm -f /tmp/revdiff-out.txt; revdiff --output=/tmp/revdiff-out.txt; [ -f /tmp/revdiff-out.txt ] && pbcopy < /tmp/revdiff-out.txt; true",
+    "use_new_terminal": true,
+    "allow_concurrent_runs": false,
+    "reveal": "always",
+    "reveal_target": "center",
+    "hide": "on_success"
+  }
+]</code></div>
+        <p>These examples use <code>pbcopy</code> to copy annotations to clipboard, which is macOS-only. On Linux, replace <code>pbcopy</code> with <code>xclip -selection clipboard</code> or <code>wl-copy</code> (Wayland).</p>
+
+        <h3>Keybinding</h3>
+        <p>To bind <code>cmd-shift-d</code> to the current-file task, add this to <code>~/.config/zed/keymap.json</code>:</p>
+        <div class="code-block"><code>{
+  "context": "Workspace",
+  "bindings": {
+    "cmd-shift-d": ["task::Spawn", { "task_name": "revdiff current file" }]
+  }
+}</code></div>
+
+        <div class="zed-gallery">
+            <figure class="zed-gallery-item">
+                <div class="terminal-frame">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <img src="assets/zed-gitdiff.png" alt="Reviewing a README diff in Zed's integrated terminal">
+                </div>
+                <figcaption>Reviewing uncommitted changes — revdiff runs as a Zed terminal tab with full syntax highlighting and annotation support</figcaption>
+            </figure>
+            <figure class="zed-gallery-item">
+                <div class="terminal-frame">
+                    <div class="terminal-dots"><span></span><span></span><span></span></div>
+                    <img src="assets/zed-planreview.png" alt="Reviewing an implementation plan in revdiff inside Zed">
+                </div>
+                <figcaption>Reviewing a plan file — file tree, line annotations, and structured output all work inside the editor tab</figcaption>
+            </figure>
+        </div>
+
+        <h2 id="review-history">Review history</h2>
+        <p>When you quit with annotations (<code>q</code>), revdiff automatically saves a copy of the review session to <code>~/.config/revdiff/history/&lt;repo-name&gt;/&lt;timestamp&gt;.md</code>. This is a safety net &mdash; if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.</p>
+        <p>Each history file contains a header with path, git refs, and commit hash, the full annotation output (same format as stdout), and the raw git diff for annotated files only.</p>
+        <p>History auto-save is always on and silent &mdash; errors are logged to stderr, never fail the process. No history is saved on discard quit (<code>Q</code>) or when there are no annotations. For <code>--stdin</code> mode, files are saved under a <code>stdin/</code> subdirectory; for <code>--only</code> without git, the parent directory name is used instead of a repo name.</p>
+        <p>Override the directory with <code>--history-dir</code>, <code>REVDIFF_HISTORY_DIR</code> env var, or <code>history-dir</code> in the config file.</p>
+        <p>In the Claude Code and Codex plugins, you can also tell the agent to use a past review by saying things like &ldquo;locate my latest revdiff review&rdquo; or &ldquo;use the annotations from the review I just did in another terminal&rdquo;. The plugin reads the newest history file for the current repo via the helper script <code>read-latest-history.sh</code> and processes the annotations as if they had come from a fresh launcher call. This is useful for standalone revdiff runs outside the plugin, or when the live launcher output is unavailable (e.g., a broken custom launcher or a crashed agent).</p>
 
         <!-- configuration -->
         <h2 id="config-file">Config file</h2>
@@ -229,18 +331,23 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--collapsed</code></td><td>Start in collapsed diff mode</td><td><code>false</code></td></tr>
                 <tr><td><code>--cross-file-hunks</code></td><td>Allow <code>[</code> and <code>]</code> to continue into adjacent files</td><td><code>false</code></td></tr>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
+                <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-confirm-discard</code></td><td>Skip discard confirmation</td><td><code>false</code></td></tr>
                 <tr><td><code>--chroma-style</code></td><td>Syntax highlighting theme</td><td><code>catppuccin-macchiato</code></td></tr>
                 <tr><td><code>--theme</code></td><td>Load color theme from <code>~/.config/revdiff/themes/</code></td><td></td></tr>
                 <tr><td><code>--dump-theme</code></td><td>Print resolved colors as theme file and exit</td><td></td></tr>
                 <tr><td><code>--list-themes</code></td><td>Print available theme names and exit</td><td></td></tr>
                 <tr><td><code>--init-themes</code></td><td>Write bundled theme files to themes dir and exit</td><td></td></tr>
+                <tr><td><code>--init-all-themes</code></td><td>Write all gallery themes (bundled + community) to themes dir and exit</td><td></td></tr>
+                <tr><td><code>--install-theme</code></td><td>Install theme(s) from gallery or local file (repeatable)</td><td></td></tr>
                 <tr><td><code>-A, --all-files</code></td><td>Browse all git-tracked files</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
+                <tr><td><code>-I, --include</code></td><td>Include only files matching prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
                 <tr><td><code>-o, --output</code></td><td>Write annotations to file</td><td></td></tr>
+                <tr><td><code>--history-dir</code></td><td>Directory for review history auto-saves</td><td><code>~/.config/revdiff/history/</code></td></tr>
                 <tr><td><code>--keys</code></td><td>Path to keybindings file</td><td><code>~/.config/revdiff/keybindings</code></td></tr>
                 <tr><td><code>--dump-keys</code></td><td>Print effective keybindings and exit</td><td></td></tr>
                 <tr><td><code>--config</code></td><td>Path to config file</td><td><code>~/.config/revdiff/config</code></td></tr>
@@ -250,27 +357,32 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
         </table>
 
         <h2 id="themes">Themes</h2>
-        <p>Five bundled color themes: <strong>catppuccin-mocha</strong>, <strong>dracula</strong>, <strong>gruvbox</strong>, <strong>nord</strong>, and <strong>solarized-dark</strong>. Stored in <code>~/.config/revdiff/themes/</code>, auto-created on first run.</p>
+        <p>Seven bundled color themes: <strong>catppuccin-latte</strong>, <strong>catppuccin-mocha</strong>, <strong>dracula</strong>, <strong>gruvbox</strong>, <strong>nord</strong>, <strong>revdiff</strong>, and <strong>solarized-dark</strong>. Stored in <code>~/.config/revdiff/themes/</code>, auto-created on first run.</p>
+        <p>Press <code>T</code> inside revdiff to open the interactive theme selector with live preview &mdash; browse themes, see colors applied instantly, and persist your choice on confirm.</p>
         <div class="code-block"><code>revdiff --theme dracula          <span class="code-comment"># apply a theme</span>
 revdiff --list-themes            <span class="code-comment"># list available</span>
 revdiff --init-themes            <span class="code-comment"># re-create bundled themes</span>
+revdiff --install-theme nord     <span class="code-comment"># install a specific gallery theme</span>
+revdiff --init-all-themes        <span class="code-comment"># install all gallery themes</span>
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom</code></div>
         <p>Set default in config: <code>theme = dracula</code>. Or env: <code>REVDIFF_THEME=dracula</code>.</p>
         <h3>Creating custom themes</h3>
         <p>Two approaches:</p>
         <ol>
             <li><strong>From current colors:</strong> customize individual colors via config or <code>--color-*</code> flags, then dump: <code>revdiff --dump-theme > ~/.config/revdiff/themes/my-custom</code></li>
-            <li><strong>From scratch:</strong> copy a bundled theme and edit directly. Each file defines all 21 color keys plus <code>chroma-style</code> in INI format:</li>
+            <li><strong>From scratch:</strong> copy a bundled theme and edit directly. Each file defines all 23 color keys plus <code>chroma-style</code> in INI format:</li>
         </ol>
         <div class="code-block"><code><span class="code-comment"># name: my-custom</span>
 <span class="code-comment"># description: custom color scheme</span>
 chroma-style = dracula
 color-accent = #bd93f9
 color-border = #6272a4
-<span class="code-comment">...all 21 color keys...</span></code></div>
+<span class="code-comment">...all 23 color keys...</span></code></div>
+        <h3>Community themes</h3>
+        <p>Community-contributed themes live in the <code>themes/gallery/</code> directory of the repository. See the <a href="https://github.com/umputun/revdiff/blob/master/themes/README.md">theme contribution guide</a> for format requirements and validation instructions.</p>
         <h3>Precedence</h3>
         <p>Without <code>--theme</code>: built-in defaults &rarr; config file &rarr; env vars &rarr; CLI flags.</p>
-        <p>When <code>--theme</code> is set, it takes over completely: all 21 color fields and chroma-style are overwritten, ignoring any <code>--color-*</code> flags or env vars. <code>--theme</code> + <code>--no-colors</code> prints a warning and applies the theme.</p>
+        <p>When <code>--theme</code> is set, it takes over completely: all 23 color fields and chroma-style are overwritten, ignoring any <code>--color-*</code> flags or env vars. <code>--theme</code> + <code>--no-colors</code> prints a warning and applies the theme.</p>
 
         <h2 id="colors">Color customization</h2>
         <p>All color options accept hex values (<code>#rrggbb</code>) and have <code>REVDIFF_COLOR_*</code> env vars.</p>
@@ -288,6 +400,8 @@ color-border = #6272a4
                 <tr><td><code>--color-cursor-bg</code></td><td>Cursor indicator background</td><td>terminal default</td></tr>
                 <tr><td><code>--color-add-fg/bg</code></td><td>Added line text / background</td><td><code>#87d787</code> / <code>#123800</code></td></tr>
                 <tr><td><code>--color-remove-fg/bg</code></td><td>Removed line text / background</td><td><code>#ff8787</code> / <code>#4D1100</code></td></tr>
+                <tr><td><code>--color-word-add-bg</code></td><td>Intra-line word-diff add background</td><td>auto-derived from add-bg</td></tr>
+                <tr><td><code>--color-word-remove-bg</code></td><td>Intra-line word-diff remove background</td><td>auto-derived from remove-bg</td></tr>
                 <tr><td><code>--color-modify-fg/bg</code></td><td>Modified line (collapsed mode)</td><td><code>#f5c542</code> / <code>#3D2E00</code></td></tr>
                 <tr><td><code>--color-status-fg/bg</code></td><td>Status bar</td><td><code>#202020</code> / <code>#C5794F</code></td></tr>
                 <tr><td><code>--color-search-fg/bg</code></td><td>Search matches</td><td><code>#1a1a1a</code> / <code>#4a4a00</code></td></tr>
@@ -313,7 +427,7 @@ color-border = #6272a4
                 <tr><td><code>j/k</code> or arrows</td><td>Navigate files (tree) / scroll diff</td></tr>
                 <tr><td><code>h/l</code></td><td>Switch between tree and diff pane</td></tr>
                 <tr><td><code>Tab</code></td><td>Switch between panes</td></tr>
-                <tr><td><code>left/right</code></td><td>Horizontal scroll in diff</td></tr>
+                <tr><td><code>left/right</code></td><td>Horizontal scroll in diff (truncated lines show <code>«</code> / <code>»</code> overflow indicators at the edges)</td></tr>
                 <tr><td><code>PgDown/PgUp</code></td><td>Page scroll</td></tr>
                 <tr><td><code>Ctrl+d/Ctrl+u</code></td><td>Half-page scroll</td></tr>
                 <tr><td><code>Home/End</code></td><td>Jump to first/last item</td></tr>
@@ -357,14 +471,35 @@ color-border = #6272a4
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
-                <tr><td><code>B</code></td><td>Toggle git blame gutter (author + commit age)</td></tr>
+                <tr><td><code>B</code></td><td>Toggle blame gutter (author + commit age)</td></tr>
+                <tr><td><code>W</code></td><td>Toggle intra-line word-diff highlighting</td></tr>
                 <tr><td><code>.</code></td><td>Expand/collapse hunk (collapsed mode)</td></tr>
+                <tr><td><code>T</code></td><td>Theme selector with live preview</td></tr>
                 <tr><td><code>f</code></td><td>Filter: all files / annotated only</td></tr>
                 <tr><td><code>?</code></td><td>Help overlay</td></tr>
                 <tr><td><code>q</code> / <code>ZZ</code></td><td>Quit, output annotations</td></tr>
                 <tr><td><code>Q</code> / <code>ZQ</code></td><td>Discard annotations and quit</td></tr>
             </tbody>
         </table>
+
+        <h2 id="status-bar-icons">Status bar icons</h2>
+        <p>The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered &mdash; active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.</p>
+        <table>
+            <thead><tr><th>Icon</th><th>Toggle</th><th>Meaning</th></tr></thead>
+            <tbody>
+                <tr><td><code>▼</code></td><td><code>v</code></td><td>Collapsed diff mode</td></tr>
+                <tr><td><code>◉</code></td><td><code>f</code></td><td>Filter: annotated files only</td></tr>
+                <tr><td><code>↩</code></td><td><code>w</code></td><td>Word wrap mode</td></tr>
+                <tr><td><code>≋</code></td><td><code>/</code></td><td>Search active</td></tr>
+                <tr><td><code>⊟</code></td><td><code>t</code></td><td>Tree/TOC pane hidden (diff uses full width)</td></tr>
+                <tr><td><code>#</code></td><td><code>L</code></td><td>Line numbers visible in gutter</td></tr>
+                <tr><td><code>b</code></td><td><code>B</code></td><td>Blame gutter visible</td></tr>
+                <tr><td><code>±</code></td><td><code>W</code></td><td>Intra-line word-diff highlighting</td></tr>
+                <tr><td><code>✓</code></td><td><code>Space</code></td><td>Reviewed count (increments when a file is marked reviewed)</td></tr>
+                <tr><td><code>∅</code></td><td><code>u</code></td><td>Untracked files visible in tree</td></tr>
+            </tbody>
+        </table>
+        <p>On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.</p>
 
         <h2 id="custom-keys">Custom keybindings</h2>
         <p>All keybindings can be customized via <code>~/.config/revdiff/keybindings</code>. Override path with <code>--keys</code> or <code>REVDIFF_KEYS</code>.</p>
@@ -381,7 +516,7 @@ unmap q</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_hunk</code>, <code>filter</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <!-- claude code plugin -->
@@ -408,6 +543,9 @@ unmap q</code></div>
             </tbody>
         </table>
         <p>Priority: tmux &rarr; zellij &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty because it also sets <code>$TERM_PROGRAM=ghostty</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
+        <p><strong>Sandbox note:</strong> Ghostty and iTerm2 launchers use <code>osascript</code> (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add the launcher to <code>excludedCommands</code> in your Claude Code <code>settings.json</code>:</p>
+        <div class="code-block"><code>{ "permissions": { "excludedCommands": ["*/launch-revdiff.sh*"] } }</code></div>
+        <p>Terminals that use CLI tools instead of AppleScript (tmux, Zellij, kitty, wezterm, cmux) are not affected.</p>
 
         <h2 id="plugin-usage">Plugin usage</h2>
         <h3>Slash commands</h3>
@@ -442,6 +580,52 @@ unmap q</code></div>
         <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again, looping until you're satisfied.</p>
         <div class="code-block"><code>/plugin install revdiff-planning@umputun-revdiff</code></div>
         <p>This plugin is independent from the main <code>revdiff</code> plugin and does not conflict with other planning plugins.</p>
+
+        <!-- codex plugin -->
+        <h2 id="codex-install">Codex plugin</h2>
+        <p>revdiff ships with a <a href="https://github.com/openai/codex">Codex CLI</a> plugin for interactive diff review and plan annotation directly from a Codex session.</p>
+        <div class="code-block"><code><span class="code-comment"># clone the repo first</span>
+git clone https://github.com/umputun/revdiff.git
+cd revdiff
+
+<span class="code-comment"># copy skills to Codex skills directory</span>
+cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
+cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div>
+        <p>Requirements: <code>revdiff</code> binary on PATH, <code>jq</code> (for <code>/revdiff-plan</code>), and a supported terminal multiplexer.</p>
+
+        <h2 id="codex-skills">Skills</h2>
+        <p>The plugin provides two skills:</p>
+        <ul>
+            <li><code>/revdiff</code> &mdash; same diff review workflow as the Claude Code plugin (detect ref, launch overlay, capture annotations, feedback loop)</li>
+            <li><code>/revdiff-plan</code> &mdash; extracts the last Codex assistant message from session rollout files, opens it in revdiff for annotation, and feeds feedback back</li>
+        </ul>
+        <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
+/revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
+/revdiff-plan         <span class="code-comment"># review last Codex response</span></code></div>
+
+        <h2 id="codex-differences">Differences from Claude Code plugin</h2>
+        <ul>
+            <li>No hook-based automatic plan review &mdash; Codex lacks hook support, so plan review is manual via <code>/revdiff-plan</code></li>
+            <li>Uses Codex rollout files (<code>~/.codex/sessions/</code>) instead of Claude session logs for message extraction</li>
+            <li>Scripts are portable copies from the Claude Code plugin, not symlinks</li>
+        </ul>
+
+        <!-- opencode integration -->
+        <h2 id="opencode-install">OpenCode integration</h2>
+        <p>revdiff integrates with <a href="https://github.com/opencode-ai/opencode">OpenCode</a> via a tool, slash command, and plan-review plugin. The tool wraps the existing <code>launch-revdiff.sh</code> launcher, so terminal detection stays in sync automatically.</p>
+        <div class="code-block"><code><span class="code-comment"># from the revdiff repo</span>
+cd plugins/opencode && bash setup.sh</code></div>
+        <p>The setup script copies files to <code>~/.config/opencode/</code> (commands, tools, plugins) and registers the plan-review plugin in <code>opencode.json</code>. Restart OpenCode after installing. See <a href="https://github.com/umputun/revdiff/tree/master/plugins/opencode">plugins/opencode/README.md</a> for manual installation.</p>
+
+        <h2 id="opencode-usage">Usage</h2>
+        <p>The integration provides two components:</p>
+        <ul>
+            <li><code>/revdiff</code> slash command &mdash; launches the diff review TUI with optional ref argument</li>
+            <li>Plan-review plugin &mdash; automatically launches revdiff when the assistant exits plan mode, injecting annotations back as user messages</li>
+        </ul>
+        <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
+/revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
+/revdiff --staged     <span class="code-comment"># review staged changes</span></code></div>
 
         <!-- output -->
         <h2 id="output-format">Output format</h2>

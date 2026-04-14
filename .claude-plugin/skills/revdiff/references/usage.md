@@ -18,6 +18,8 @@ revdiff --only=model.go              # review only files matching model.go
 revdiff --only=ui/model.go --only=README.md  # review specific files
 revdiff --all-files                  # browse all git-tracked files in a project
 revdiff --all-files --exclude vendor # browse all files, excluding vendor directory
+revdiff --include src                # include only src/ files
+revdiff --include src --exclude src/vendor  # include src/ but exclude src/vendor/
 revdiff main --exclude vendor        # diff against main, excluding vendor
 revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
@@ -39,16 +41,18 @@ Use `--all-files` (`-A`) to browse all git-tracked files, not just diffs. Turns 
 
 - Requires a git repository (uses `git ls-files` for file discovery)
 - Mutually exclusive with refs, `--staged`, and `--only`
-- Combine with `--exclude` (`-X`) to filter out paths by prefix matching
+- Combine with `--include` (`-I`) to narrow to specific paths and `--exclude` (`-X`) to filter out unwanted paths
 
 ```bash
 revdiff --all-files                          # all tracked files
+revdiff --all-files --include src            # only src/ files
+revdiff --all-files --include src --exclude src/vendor  # src/ minus src/vendor/
 revdiff --all-files --exclude vendor         # skip vendor/
 revdiff --all-files --exclude vendor --exclude mocks  # skip both
 revdiff main --exclude vendor                # normal diff, excluding vendor
 ```
 
-`--exclude` can be persisted in config file (`exclude = vendor`) or via env var (`REVDIFF_EXCLUDE=vendor,mocks`).
+`--include` and `--exclude` can be persisted in config file (`include = src`, `exclude = vendor`) or via env vars (`REVDIFF_INCLUDE=src`, `REVDIFF_EXCLUDE=vendor,mocks`). Include narrows first, then exclude removes from the included set.
 
 ## Context-Only File Review
 
@@ -63,7 +67,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 
 - `--stdin` is explicit and requires piped or redirected input
 - `--stdin-name` sets the synthetic filename used in annotations and syntax highlighting
-- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, and `--exclude`
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`
 
 ## Key Bindings
 
@@ -73,7 +77,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 |-----|--------|
 | `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
 | `h/l` | Switch between file tree and diff pane |
-| left/right | Horizontal scroll in diff pane |
+| left/right | Horizontal scroll in diff pane (truncated lines show `«` / `»` overflow indicators at the edges) |
 | `Tab` | Switch between file tree and diff pane |
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |
@@ -111,13 +115,34 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
-| `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
-| `B` | Toggle git blame gutter (author name + commit age per line) |
+| `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
+| `B` | Toggle blame gutter (author name + commit age per line) |
+| `W` | Toggle intra-line word-diff highlighting for paired add/remove lines |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
+| `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only |
 | `?` | Toggle help overlay showing all keybindings |
 | `q` / `ZZ` | Quit, output annotations to stdout |
 | `Q` / `ZQ` | Discard all annotations and quit (confirms if annotations exist) |
+
+## Status Bar Icons
+
+The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.
+
+| Icon | Toggle | Meaning |
+|------|--------|---------|
+| `▼` | `v` | Collapsed diff mode |
+| `◉` | `f` | Filter: annotated files only |
+| `↩` | `w` | Word wrap mode |
+| `≋` | `/` | Search active |
+| `⊟` | `t` | Tree/TOC pane hidden (diff uses full width) |
+| `#` | `L` | Line numbers visible in gutter |
+| `b` | `B` | Blame gutter visible |
+| `±` | `W` | Intra-line word-diff highlighting |
+| `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
+| `∅` | `u` | Untracked files visible in tree |
+
+On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
 
 ## Custom Keybindings
 
@@ -158,3 +183,16 @@ Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added
 When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
+
+## Review History
+
+When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
+
+Each history file contains:
+- Header with path, git refs, and commit hash
+- Full annotation output (same format as stdout)
+- Raw git diff for annotated files only
+
+History auto-save is always on and silent — errors are logged to stderr, never fail the process. No history is saved on discard quit (`Q`) or when there are no annotations. For `--stdin` mode, files are saved under `stdin/` subdirectory; for `--only` without git, the parent directory name is used instead of a repo name.
+
+Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env var, or `history-dir` in the config file.

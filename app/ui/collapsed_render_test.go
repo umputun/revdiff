@@ -1,0 +1,807 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/x/ansi"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
+)
+
+func TestModel_CollapsedRenderHidesRemovedLines(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed line", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added line", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "another context", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "context line")
+	assert.NotContains(t, rendered, "removed line", "removed lines should be hidden in collapsed mode")
+	assert.Contains(t, rendered, "added line")
+	assert.Contains(t, rendered, "another context")
+}
+
+func TestModel_CollapsedRenderModifiedVsPureAdd(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},        // hunk 1: mixed
+		{NewNum: 2, Content: "modified line", ChangeType: diff.ChangeAdd}, // modified (paired with remove)
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "pure add line", ChangeType: diff.ChangeAdd}, // hunk 2: pure add
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	// modified lines get ~ gutter
+	assert.Contains(t, rendered, " ~ modified line", "modified add should have ~ gutter")
+	// pure adds get + gutter
+	assert.Contains(t, rendered, " + pure add line", "pure add should have + gutter")
+	// removed lines are hidden
+	assert.NotContains(t, rendered, "old", "removed lines should be hidden")
+}
+
+func TestModel_CollapsedRenderExpandedHunkShowsAllLines(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	// expand the hunk at index 1
+	m.collapsed.expandedHunks = map[int]bool{1: true}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "removed", "removed line should be visible in expanded hunk")
+	assert.Contains(t, rendered, "added", "added line should be visible in expanded hunk")
+	// expanded hunk uses standard styling: + for add, - for remove
+	assert.Contains(t, rendered, " - removed", "expanded hunk should use - gutter for removes")
+	assert.Contains(t, rendered, " + added", "expanded hunk should use + gutter for adds")
+}
+
+func TestModel_CollapsedRenderAnnotationsOnRemovedLinesHidden(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "-", Comment: "annotation on removed"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "annotation on added"})
+
+	rendered := m.renderDiff()
+	assert.NotContains(t, rendered, "annotation on removed", "annotation on removed line should be hidden in collapsed mode")
+	assert.Contains(t, rendered, "annotation on added", "annotation on added line should be visible")
+}
+
+func TestModel_CollapsedRenderAnnotationsVisibleWhenHunkExpanded(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m.collapsed.expandedHunks = map[int]bool{1: true}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "-", Comment: "annotation on removed"})
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "annotation on removed", "annotation on removed line should be visible when hunk expanded")
+}
+
+func TestModel_CollapsedRenderEmptyDiffLines(t *testing.T) {
+	m := testModel(nil, nil)
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = nil
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "no changes")
+}
+
+func TestModel_CollapsedRenderDividerOnlyLines(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{Content: "...", ChangeType: diff.ChangeDivider},
+		{Content: "~~~", ChangeType: diff.ChangeDivider},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "...")
+	assert.Contains(t, rendered, "~~~")
+}
+
+func TestModel_CollapsedRenderAllRemovesShowsPlaceholder(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, Content: "old1", ChangeType: diff.ChangeRemove},
+		{OldNum: 2, Content: "old2", ChangeType: diff.ChangeRemove},
+		{OldNum: 3, Content: "old3", ChangeType: diff.ChangeRemove},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "3 lines deleted", "all-removes file should show delete placeholder in collapsed mode")
+	assert.NotContains(t, rendered, "old1", "removed lines content should be hidden")
+}
+
+func TestModel_CollapsedRenderDeleteOnlyHunkInMixedFile(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // delete-only hunk
+		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{OldNum: 5, Content: "old", ChangeType: diff.ChangeRemove}, // mixed hunk
+		{NewNum: 3, Content: "new", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "2 lines deleted", "delete-only hunk should show placeholder")
+	assert.NotContains(t, rendered, "del1", "removed line content should be hidden")
+	assert.NotContains(t, rendered, "del2", "removed line content should be hidden")
+	assert.Contains(t, rendered, "new", "add line from mixed hunk should be visible")
+}
+
+func TestModel_CollapsedRenderMultipleExpandedHunks(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove}, // hunk at 1
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{OldNum: 4, Content: "old2", ChangeType: diff.ChangeRemove}, // hunk at 4
+		{NewNum: 4, Content: "new2", ChangeType: diff.ChangeAdd},
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
+	}
+	// expand both hunks
+	m.collapsed.expandedHunks = map[int]bool{1: true, 4: true}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "old1", "first expanded hunk should show removed line")
+	assert.Contains(t, rendered, "old2", "second expanded hunk should show removed line")
+	assert.Contains(t, rendered, "new1")
+	assert.Contains(t, rendered, "new2")
+}
+
+func TestModel_CollapsedRenderMixedExpandedAndCollapsedHunks(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove}, // hunk at 1
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		{OldNum: 4, Content: "old2", ChangeType: diff.ChangeRemove}, // hunk at 4
+		{NewNum: 4, Content: "new2", ChangeType: diff.ChangeAdd},
+		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
+	}
+	// expand only first hunk
+	m.collapsed.expandedHunks = map[int]bool{1: true}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "old1", "expanded hunk should show removed line")
+	assert.NotContains(t, rendered, "old2", "collapsed hunk should hide removed line")
+	assert.Contains(t, rendered, " ~ new2", "collapsed mixed hunk should use ~ gutter")
+}
+
+func TestModel_CollapsedWrapAddLine(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "this is a very long modified line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, " ~ ", "modified line should have ~ gutter")
+	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
+	assert.NotContains(t, rendered, "old", "removed lines should be hidden")
+}
+
+func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "this is a very long pure add line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, " + ", "pure add line should have + gutter")
+	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
+}
+
+func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
+	t.Run("wrapping", func(t *testing.T) {
+		m := testModel(nil, nil)
+		res := style.PlainResolver()
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.wrapMode = true
+		m.width = 15 // narrow width to force placeholder wrapping (wrapWidth=7, text ~17 chars)
+		m.treeWidth = 0
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
+		}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, " - ", "placeholder should have - gutter on first line")
+		assert.Contains(t, rendered, " ↪ ", "long placeholder should have continuation markers")
+		assert.Contains(t, rendered, "deleted", "placeholder should contain deletion text")
+	})
+
+	t.Run("no wrapping needed", func(t *testing.T) {
+		m := testModel(nil, nil)
+		res := style.PlainResolver()
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.wrapMode = true
+		m.width = 80
+		m.treeWidth = 0
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
+		}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, "3 lines deleted", "placeholder should show line count")
+		assert.NotContains(t, rendered, "↪", "short placeholder should not wrap")
+	})
+
+	t.Run("singular line deleted", func(t *testing.T) {
+		m := testModel(nil, nil)
+		res := style.PlainResolver()
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		m.wrapMode = true
+		m.width = 80
+		m.treeWidth = 0
+		m.diffLines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+		}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, "1 line deleted", "singular placeholder text")
+		assert.NotContains(t, rendered, "lines deleted", "should not use plural form")
+	})
+}
+
+func TestModel_CollapsedWrapShortLinesUnchanged(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 120
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	// short lines should not have continuation markers
+	assert.NotContains(t, rendered, "↪", "short lines should not have continuation markers")
+	assert.Contains(t, rendered, " + add", "short add should render normally")
+}
+
+func TestModel_CollapsedWrapNoScrollX(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.scrollX = 10 // should be ignored in wrap mode
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "this is a long added line that needs wrapping at boundary", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	// content should not be cut by scrollX when wrapping is on
+	assert.Contains(t, rendered, "this is a long", "full content should be visible, scrollX should be ignored")
+}
+
+func TestModel_CollapsedWrapCursorOnFirstLine(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.focus = paneDiff
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "this is a very long line that will wrap into multiple visual rows when rendered", ChangeType: diff.ChangeAdd},
+	}
+	m.diffCursor = 0
+
+	rendered := m.renderDiff()
+	lines := strings.Split(rendered, "\n")
+
+	// cursor marker should only be on first visual line
+	cursorCount := 0
+	for _, line := range lines {
+		if strings.Contains(line, "▶") {
+			cursorCount++
+		}
+	}
+	assert.Equal(t, 1, cursorCount, "cursor should appear only on first visual line of wrapped content")
+}
+
+func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.wrapMode = true
+	m.width = 50
+	m.treeWidth = 0
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "this is a very long removed line that should be wrapped when expanded", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "this is a very long added line that should also be wrapped when expanded", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	// expand the hunk
+	m.collapsed.expandedHunks = map[int]bool{1: true}
+
+	rendered := m.renderDiff()
+	// expanded hunk uses renderDiffLine which handles wrapping via renderWrappedDiffLine
+	assert.Contains(t, rendered, " - ", "expanded remove should use standard - gutter")
+	assert.Contains(t, rendered, " + ", "expanded add should use standard + gutter")
+	assert.Contains(t, rendered, " ↪ ", "expanded long lines should have continuation markers")
+}
+
+func TestModel_CollapsedRenderWithLineNumbers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.lineNumbers = true
+	m.lineNumWidth = 2
+	m.focus = paneDiff
+	m.collapsed.enabled = true
+	m.diffLines = []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 0, NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+
+	rendered := m.renderDiff()
+	stripped := ansi.Strip(rendered)
+
+	assert.Contains(t, stripped, " 1  1")
+	assert.Contains(t, stripped, "    2")
+}
+
+func TestModel_CollapsedDeleteOnlyPlaceholderHidesAnnotations(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.currFile = "a.go"
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // placeholder line
+		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "-", Comment: "note on deleted line"})
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "2 lines deleted", "placeholder should be shown")
+	assert.NotContains(t, rendered, "note on deleted line", "annotation on placeholder should be hidden")
+
+	// expand hunk, annotation should appear
+	m.collapsed.expandedHunks[1] = true
+	rendered = m.renderDiff()
+	assert.Contains(t, rendered, "note on deleted line", "annotation should be visible when hunk is expanded")
+}
+
+func TestModel_CollapsedExpandDeleteOnlyHunkWithDot(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // delete-only hunk start
+		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m.diffCursor = 1 // on placeholder
+
+	// verify placeholder is shown and content is hidden
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "2 lines deleted")
+	assert.NotContains(t, rendered, "del1")
+
+	// expand the hunk with '.'
+	m.toggleHunkExpansion()
+	assert.True(t, m.collapsed.expandedHunks[1], "hunk should be expanded")
+
+	// after expansion, removed lines should be visible
+	rendered = m.renderDiff()
+	assert.Contains(t, rendered, "del1", "expanded hunk should show removed lines")
+	assert.Contains(t, rendered, "del2", "expanded hunk should show all removed lines")
+	assert.NotContains(t, rendered, "lines deleted", "placeholder should not appear when expanded")
+}
+
+func TestModel_ExpandedModeUnchangedRegression(t *testing.T) {
+	m := testModel(nil, nil)
+	res := style.PlainResolver()
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.sgr = style.SGR{}
+	m.collapsed.enabled = false
+	m.diffLines = []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "new", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+
+	rendered := m.renderDiff()
+	// in expanded mode, all lines are visible
+	assert.Contains(t, rendered, "old", "removed lines should be visible in expanded mode")
+	assert.Contains(t, rendered, "new", "added lines should be visible in expanded mode")
+	assert.Contains(t, rendered, " - old", "expanded mode should use - gutter for removes")
+	assert.Contains(t, rendered, " + new", "expanded mode should use + gutter for adds")
+}
+
+func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
+	t.Run("removed lines not counted", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // idx 0
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},  // idx 1 - hidden
+			{OldNum: 3, Content: "old2", ChangeType: diff.ChangeRemove},  // idx 2 - hidden
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},     // idx 3
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // idx 4
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.collapsed.enabled = true
+
+		m.diffCursor = 0
+		assert.Equal(t, 0, m.cursorViewportY(), "ctx1 at Y=0")
+
+		// cursor at idx 3 (add line), but removed lines at 1,2 are hidden, so Y=1
+		m.diffCursor = 3
+		assert.Equal(t, 1, m.cursorViewportY(), "add line should be at Y=1, removed lines skipped")
+
+		m.diffCursor = 4
+		assert.Equal(t, 2, m.cursorViewportY(), "ctx2 should be at Y=2, removed lines skipped")
+	})
+
+	t.Run("expanded mode counts all lines", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "old2", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+
+		// expanded mode (default) counts all lines
+		m.diffCursor = 3
+		assert.Equal(t, 3, m.cursorViewportY(), "expanded mode should count all lines including removes")
+
+		m.diffCursor = 4
+		assert.Equal(t, 4, m.cursorViewportY(), "expanded mode Y=4 for idx 4")
+	})
+
+	t.Run("collapsed with annotations on visible lines", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.collapsed.enabled = true
+
+		// add annotation on ctx1 (line 1, context type)
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"})
+
+		// cursor at idx 2 (add): ctx1(1 row) + annotation(1 row) = 2 preceding visual rows
+		m.diffCursor = 2
+		assert.Equal(t, 2, m.cursorViewportY(), "annotation on ctx1 adds a visual row")
+
+		// cursor at idx 3 (ctx2): ctx1(1) + annotation(1) + add(1) = 3
+		m.diffCursor = 3
+		assert.Equal(t, 3, m.cursorViewportY(), "ctx2 after annotated ctx1 and add line")
+	})
+
+	t.Run("collapsed with annotation on removed line hidden", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.collapsed.enabled = true
+
+		// annotation on the removed line - both line and annotation are hidden
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: string(diff.ChangeRemove), Comment: "old note"})
+
+		// cursor at idx 2 (add): only ctx1 visible before it, removed line+annotation skipped
+		m.diffCursor = 2
+		assert.Equal(t, 1, m.cursorViewportY(), "removed line and its annotation should not count")
+	})
+}
+
+func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
+	t.Run("expanded hunk shows all lines in Y calculation", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "old2", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = map[int]bool{1: true} // hunk starts at index 1
+
+		// all lines are now visible because the hunk is expanded
+		m.diffCursor = 3
+		assert.Equal(t, 3, m.cursorViewportY(), "expanded hunk: Y=3 counting all lines")
+
+		m.diffCursor = 4
+		assert.Equal(t, 4, m.cursorViewportY(), "expanded hunk: Y=4 for ctx2")
+	})
+
+	t.Run("mixed expanded and collapsed hunks", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // idx 0
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},  // idx 1 - hunk1 (expanded)
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},     // idx 2
+			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // idx 3
+			{OldNum: 4, Content: "old2", ChangeType: diff.ChangeRemove},  // idx 4 - hunk2 (collapsed)
+			{NewNum: 4, Content: "new2", ChangeType: diff.ChangeAdd},     // idx 5
+			{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext}, // idx 6
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = map[int]bool{1: true} // only hunk1 expanded
+
+		// hunk1 expanded: ctx1(0), old1(1), new1(2), ctx2(3) all visible
+		m.diffCursor = 3
+		assert.Equal(t, 3, m.cursorViewportY(), "hunk1 expanded: ctx2 at Y=3")
+
+		// hunk2 collapsed: old2 at idx 4 hidden, so idx 5 (new2) is at Y=4
+		m.diffCursor = 5
+		assert.Equal(t, 4, m.cursorViewportY(), "hunk2 collapsed: new2 at Y=4, old2 hidden")
+
+		// ctx3 at idx 6: Y=5
+		m.diffCursor = 6
+		assert.Equal(t, 5, m.cursorViewportY(), "ctx3 at Y=5")
+	})
+
+	t.Run("expanded hunk with annotation on removed line", func(t *testing.T) {
+		lines := []diff.DiffLine{
+			{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		}
+		m := testModel(nil, nil)
+		m.currFile = "a.go"
+		m.diffLines = lines
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = map[int]bool{1: true}
+
+		// annotation on the removed line - visible because hunk is expanded
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: string(diff.ChangeRemove), Comment: "old note"})
+
+		// cursor at idx 2 (add): ctx1(1) + old1(1) + annotation(1) = 3
+		m.diffCursor = 2
+		assert.Equal(t, 3, m.cursorViewportY(), "expanded hunk: annotation on removed line is counted")
+	})
+}
+
+func TestModel_StatusBarCollapsedIndicator(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.width = 200
+
+	t.Run("collapsed indicator always present", func(t *testing.T) {
+		m.collapsed.enabled = false
+		status := m.statusBarText()
+		assert.Contains(t, status, "▼", "indicator always shown, muted when inactive")
+	})
+
+	t.Run("collapsed mode shows indicator", func(t *testing.T) {
+		m.collapsed.enabled = true
+		m.collapsed.expandedHunks = make(map[int]bool)
+		status := m.statusBarText()
+		assert.Contains(t, status, "▼")
+	})
+}
+
+func TestModel_StatusBarNoShortcutHints(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel(nil, nil)
+	m.diffLines = lines
+	m.currFile = "a.go"
+	m.focus = paneDiff
+	m.width = 200
+	m.collapsed.enabled = true
+	m.collapsed.expandedHunks = make(map[int]bool)
+	m.diffCursor = 2
+
+	status := m.statusBarText()
+	// shortcut hints are moved to help overlay, not in status line
+	assert.NotContains(t, status, "[.]")
+	assert.NotContains(t, status, "[v]")
+}
+
+func TestModel_ExpandedModeCursorMovementUnchanged(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.focus = paneDiff
+
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model := result.(Model)
+	assert.False(t, model.collapsed.enabled, "should be in expanded mode by default")
+	assert.Equal(t, 0, model.diffCursor)
+
+	// move down lands on removed line in expanded mode
+	model.moveDiffCursorDown()
+	assert.Equal(t, 1, model.diffCursor, "expanded mode should visit removed line")
+
+	model.moveDiffCursorDown()
+	assert.Equal(t, 2, model.diffCursor, "expanded mode should visit add line")
+
+	model.moveDiffCursorDown()
+	assert.Equal(t, 3, model.diffCursor, "expanded mode should visit ctx2")
+
+	// move back up visits all lines
+	model.moveDiffCursorUp()
+	assert.Equal(t, 2, model.diffCursor)
+
+	model.moveDiffCursorUp()
+	assert.Equal(t, 1, model.diffCursor)
+
+	model.moveDiffCursorUp()
+	assert.Equal(t, 0, model.diffCursor)
+}

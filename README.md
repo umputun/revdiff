@@ -8,10 +8,13 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
 - Full-file diff view with syntax highlighting
+- Intra-line word-diff: highlights the specific changed words within paired add/remove lines using a brighter background overlay, off by default — enable with `--word-diff` or toggle with `W`
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
-- Line numbers: side-by-side old/new line number gutter, toggle with `L`
-- Git blame gutter: shows author name and commit age per line, toggle with `B`
+- Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
+- Line numbers: side-by-side old/new line number gutter for diffs, single column for full-context files, toggle with `L`
+- Mercurial support: auto-detects hg repos, translates git-style refs (HEAD, HEAD~N) to Mercurial revsets
+- Blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
 - Two-pane TUI: file tree (left) + colorized diff viewport (right)
@@ -22,10 +25,11 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Status line with filename, diff stats, hunk position, line number, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
-- All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--exclude`
+- All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--include` and `--exclude`
 - No-git file review: `--only` files outside a git repo (or not in any diff) are shown as context-only with full annotation support
 - Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
 - Pi package: launch revdiff from pi, capture annotations, and keep them visible in a widget and right-side panel until you apply or clear them
+- Review history: auto-saves annotations and diffs to `~/.config/revdiff/history/` on quit as a safety net
 - Fully customizable colors via environment variables, CLI flags, or config file
 - Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
 
@@ -33,7 +37,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 ## Requirements
 
-- `git` (used to generate diffs; optional when using `--only` or `--stdin`)
+- `git` or `hg` (used to generate diffs; optional when using `--only` or `--stdin`)
 
 ## Installation
 
@@ -41,6 +45,26 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 ```bash
 brew install umputun/apps/revdiff
+```
+
+**Arch Linux (AUR):**
+
+```bash
+paru -S revdiff
+```
+
+**Debian/Ubuntu (.deb):**
+
+```bash
+# download the latest .deb for your architecture from GitHub Releases
+sudo dpkg -i revdiff_*.deb
+```
+
+**RPM-based (Fedora, RHEL, etc.):**
+
+```bash
+# download the latest .rpm for your architecture from GitHub Releases
+sudo rpm -i revdiff_*.rpm
 ```
 
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
@@ -68,6 +92,18 @@ Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iT
 > **Note:** cmux is detected before ghostty because cmux also sets `$TERM_PROGRAM=ghostty`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 
 > **Note:** iTerm2 uses a split pane (vertical or horizontal, auto-detected from terminal dimensions) rather than a full-screen overlay. The iTerm2 AppleScript API does not expose a zoom command, so the split view shares screen space with the invoking session.
+
+> **Note:** Ghostty and iTerm2 launchers use `osascript` (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add the launcher to `excludedCommands` in your Claude Code `settings.json`:
+>
+> ```json
+> {
+>   "permissions": {
+>     "excludedCommands": ["*/launch-revdiff.sh*"]
+>   }
+> }
+> ```
+>
+> Terminals that use CLI tools instead of AppleScript (tmux, Zellij, kitty, wezterm, cmux) are not affected.
 
 **Install:**
 
@@ -159,7 +195,63 @@ pi install https://github.com/umputun/revdiff
 - Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
+## Codex Plugin
+
+revdiff ships with a [Codex CLI](https://github.com/openai/codex) plugin for interactive diff review and plan annotation directly from a Codex session. The plugin provides two skills:
+
+- `/revdiff` — same diff review workflow as the Claude Code plugin (detect ref, launch overlay, capture annotations, feedback loop)
+- `/revdiff-plan` — extracts the last Codex assistant message from session rollout files, opens it in revdiff for annotation, and feeds feedback back
+
+The plugin uses the same terminal overlay mechanism (tmux, Zellij, kitty, wezterm, etc.) as the Claude Code plugin.
+
+**Install:**
+
+```bash
+# clone the repo first
+git clone https://github.com/umputun/revdiff.git
+cd revdiff
+
+# copy skills to Codex skills directory
+cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
+cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
+```
+
+**Requirements:**
+
+- `revdiff` binary on `PATH`
+- `jq` (required for `/revdiff-plan` session extraction)
+- One of the supported terminal multiplexers for overlay mode
+
+**Notes:**
+
+- Codex has no hook system — plan review requires manually invoking `/revdiff-plan` after Codex generates a plan
+- Scripts are portable copies from the Claude Code plugin, not symlinks
+- Plugin source lives under `plugins/codex/` in the repository
+
 ### Integration with Other Tools
+
+#### OpenCode
+
+revdiff integrates with [OpenCode](https://github.com/opencode-ai/opencode) via a tool, slash command, and plan-review plugin. The tool wraps the existing `launch-revdiff.sh` launcher, so terminal detection stays in sync automatically.
+
+**Install:**
+
+```bash
+cd plugins/opencode && bash setup.sh
+```
+
+The setup script copies files to `~/.config/opencode/` and registers the plan-review plugin. See [plugins/opencode/README.md](plugins/opencode/README.md) for manual installation and details.
+
+**Commands inside OpenCode:**
+
+```text
+/revdiff                         -- review git diff with revdiff TUI
+/revdiff HEAD~3                  -- review last 3 commits
+```
+
+The plan-review plugin automatically launches revdiff when the assistant exits plan mode, letting you annotate before approval.
+
+#### General
 
 The structured stdout output works with any tool that can read text:
 
@@ -199,19 +291,24 @@ Positional arguments support several forms:
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
-| `--blame` | Show git blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
+| `--blame` | Show blame gutter on startup, env: `REVDIFF_BLAME` | `false` |
+| `--word-diff` | Highlight intra-line word-level changes in paired add/remove lines, env: `REVDIFF_WORD_DIFF` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
 | `--dump-theme` | Print currently resolved colors as theme file to stdout and exit | |
 | `--list-themes` | Print available theme names to stdout and exit | |
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
-| `-A`, `--all-files` | Browse all git-tracked files, not just diffs | `false` |
+| `--init-all-themes` | Write all gallery themes (bundled + community) to themes dir and exit | |
+| `--install-theme` | Install theme(s) from gallery or local file path and exit (repeatable) | |
+| `-A`, `--all-files` | Browse all git-tracked files, not just diffs (git only) | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
+| `-I`, `--include` | Include only files matching prefix, may be repeated, env: `REVDIFF_INCLUDE` (comma-separated) | |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
+| `--history-dir` | Directory for review history auto-saves, env: `REVDIFF_HISTORY_DIR` | `~/.config/revdiff/history/` |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
 | `--keys` | Path to keybindings file, env: `REVDIFF_KEYS` | `~/.config/revdiff/keybindings` |
 | `--dump-keys` | Print effective keybindings to stdout and exit | |
@@ -233,7 +330,9 @@ Then uncomment and edit the values you want to change.
 
 ### Themes
 
-revdiff ships with five bundled color themes: **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
+revdiff ships with seven bundled color themes: **catppuccin-latte**, **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **revdiff**, and **solarized-dark**. Themes are stored in `~/.config/revdiff/themes/` and are automatically created on first run.
+
+Press `T` inside revdiff to open the interactive theme selector with live preview — browse themes, see colors applied instantly, and persist your choice to the config file on confirm.
 
 ```bash
 # apply a theme
@@ -245,6 +344,12 @@ revdiff --list-themes
 # re-create bundled theme files (overwrites bundled, keeps custom themes)
 revdiff --init-themes
 
+# install a specific theme from the gallery
+revdiff --install-theme catppuccin-latte
+
+# install all gallery themes (bundled + community)
+revdiff --init-all-themes
+
 # export current colors as a custom theme
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
 ```
@@ -252,7 +357,7 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
 **Creating custom themes** — two approaches:
 
 1. **From current colors:** customize individual colors in your config file or via `--color-*` flags, then dump the resolved result as a theme: `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`
-2. **From scratch:** copy a bundled theme and edit it directly — each file defines all 21 color keys plus `chroma-style` in INI format:
+2. **From scratch:** copy a bundled theme and edit it directly — each file defines all 23 color keys plus `chroma-style` in INI format:
 
 ```ini
 # name: my-custom
@@ -260,7 +365,7 @@ revdiff --dump-theme > ~/.config/revdiff/themes/my-custom
 chroma-style = dracula
 color-accent = #bd93f9
 color-border = #6272a4
-...all 21 color keys...
+...all 23 color keys...
 ```
 
 Set a default theme in the config file:
@@ -271,7 +376,9 @@ theme = dracula
 
 Or via environment variable: `REVDIFF_THEME=dracula`.
 
-**Precedence:** When `--theme` is set, it takes over completely — all 21 color fields and chroma-style are overwritten by the theme, ignoring any `--color-*` flags or env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints a warning and applies the theme.
+**Contributing themes** — community themes live in the `themes/gallery/` directory. See [themes/README.md](themes/README.md) for the contribution guide, format requirements, and validation instructions.
+
+**Precedence:** When `--theme` is set, it takes over completely — all 23 color fields and chroma-style are overwritten by the theme, ignoring any `--color-*` flags or env vars. Without `--theme`: built-in defaults → config file → env vars → CLI flags. `--theme` + `--no-colors` prints a warning and applies the theme.
 
 <details>
 <summary>Color customization flags (click to expand)</summary>
@@ -293,6 +400,8 @@ All color options accept hex values (`#rrggbb`) and have corresponding `REVDIFF_
 | `--color-add-bg` | Added line background | `#123800` |
 | `--color-remove-fg` | Removed line text | `#ff8787` |
 | `--color-remove-bg` | Removed line background | `#4D1100` |
+| `--color-word-add-bg` | Intra-line word-diff add background | auto-derived from add-bg |
+| `--color-word-remove-bg` | Intra-line word-diff remove background | auto-derived from remove-bg |
 | `--color-modify-fg` | Modified line text (collapsed mode) | `#f5c542` |
 | `--color-modify-bg` | Modified line background (collapsed mode) | `#3D2E00` |
 | `--color-tree-bg` | File tree pane background | terminal default |
@@ -345,6 +454,12 @@ revdiff --all-files
 # browse all files, excluding vendor and mocks directories
 revdiff --all-files --exclude vendor --exclude mocks
 
+# include only src/ files
+revdiff --include src
+
+# include src/ but exclude src/vendor/
+revdiff --include src --exclude src/vendor
+
 # exclude paths in normal diff mode
 revdiff main --exclude vendor
 
@@ -367,20 +482,25 @@ Use `--all-files` (or `-A`) to browse all git-tracked files in a project, not ju
 
 `--all-files` requires a git repository (uses `git ls-files` for file discovery) and is mutually exclusive with refs, `--staged`, and `--only`.
 
-Combine with `--exclude` (or `-X`) to filter out unwanted paths:
+Combine with `--include` (or `-I`) to narrow to specific paths and `--exclude` (or `-X`) to filter out unwanted paths:
 
 ```bash
+revdiff --all-files --include src
+revdiff --all-files --include src --exclude src/vendor
 revdiff --all-files --exclude vendor --exclude mocks
 ```
 
-`--exclude` uses prefix matching: `--exclude vendor` skips `vendor/`, `vendor/foo.go`, etc. It works in both `--all-files` and normal diff modes. The exclude option can be persisted in the config file:
+`--include` and `--exclude` both use prefix matching: `--include src` keeps only `src/`, `src/foo.go`, etc. `--exclude vendor` skips `vendor/`, `vendor/foo.go`, etc. Both work in `--all-files` and normal diff modes and are composable: include narrows first, then exclude removes from the included set.
+
+Both options can be persisted in the config file:
 
 ```ini
+include = src
 exclude = vendor
 exclude = mocks
 ```
 
-Or via environment variable (comma-separated): `REVDIFF_EXCLUDE=vendor,mocks`.
+Or via environment variables (comma-separated): `REVDIFF_INCLUDE=src`, `REVDIFF_EXCLUDE=vendor,mocks`.
 
 ### Context-Only File Review
 
@@ -395,7 +515,7 @@ Two scenarios trigger this mode:
 
 Use `--stdin` to review arbitrary piped or redirected text as a single synthetic file. All lines are shown as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.
 
-`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, and `--exclude`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
+`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
 
 Use `--stdin-name` to control the synthetic filename. This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
 
@@ -426,6 +546,27 @@ revdiff --only=/tmp/draft-comment.md
 
 **Reviewing generated output** — CI configs, Terraform plans, generated migrations, or command output. Load files with `--only` or stream ephemeral output with `--stdin`, annotate what needs fixing, feed annotations back to the generator.
 
+### Zed Integration
+
+Zed's [custom tasks](https://zed.dev/docs/tasks) can launch revdiff directly in an editor terminal tab.
+
+See the [Zed integration guide](https://revdiff.com/docs.html#zed-integration) for ready-to-use task definitions, keybinding setup, and platform-specific clipboard notes.
+
+### Review History
+
+When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
+
+Each history file contains:
+- Header with path, git refs, and commit hash
+- Full annotation output (same format as stdout)
+- Raw git diff for annotated files only
+
+History auto-save is always on and silent — errors are logged to stderr, never fail the process. No history is saved on discard quit (`Q`) or when there are no annotations. For `--stdin` mode, files are saved under `stdin/` subdirectory; for `--only` without git, the parent directory name is used instead of a repo name.
+
+Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env var, or `history-dir` in the config file.
+
+In the Claude Code and Codex plugins, you can also tell the agent to use a past review by saying things like "locate my latest revdiff review" or "use the annotations from the review I just did in another terminal". The plugin reads the newest history file for the current repo via the helper script `read-latest-history.sh` and processes the annotations as if they had come from a fresh launcher call. This is useful for standalone revdiff runs outside the plugin, or when the live launcher output is unavailable (e.g., a broken custom launcher or a crashed agent).
+
 ### Key Bindings
 
 **Navigation:**
@@ -434,7 +575,7 @@ revdiff --only=/tmp/draft-comment.md
 |-----|--------|
 | `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
 | `h/l` | Switch between file tree and diff pane |
-| left/right | Horizontal scroll in diff pane |
+| left/right | Horizontal scroll in diff pane (truncated lines show `«` / `»` overflow indicators at the edges) |
 | `Tab` | Switch between file tree and diff pane |
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |
@@ -472,13 +613,34 @@ revdiff --only=/tmp/draft-comment.md
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
-| `L` | Toggle line numbers (side-by-side old/new numbers in gutter) |
-| `B` | Toggle git blame gutter (author name + commit age per line) |
+| `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
+| `B` | Toggle blame gutter (author name + commit age per line) |
+| `W` | Toggle intra-line word-diff highlighting for paired add/remove lines |
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
+| `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
 | `q` / `ZZ` | Quit, output annotations to stdout |
 | `Q` / `ZQ` | Discard all annotations and quit (confirms if annotations exist) |
+
+### Status Bar Icons
+
+The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.
+
+| Icon | Toggle | Meaning |
+|------|--------|---------|
+| `▼` | `v` | Collapsed diff mode |
+| `◉` | `f` | Filter: annotated files only |
+| `↩` | `w` | Word wrap mode |
+| `≋` | `/` | Search active |
+| `⊟` | `t` | Tree/TOC pane hidden (diff uses full width) |
+| `#` | `L` | Line numbers visible in gutter |
+| `b` | `B` | Blame gutter visible |
+| `±` | `W` | Intra-line word-diff highlighting |
+| `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
+| `∅` | `u` | Untracked files visible in tree |
+
+On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
 
 ### Custom Keybindings
 
@@ -519,7 +681,7 @@ Then edit to taste. Modal keys (annotation input, search input, confirm discard)
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
 
-**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_hunk`, `filter`
+**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 

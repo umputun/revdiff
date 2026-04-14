@@ -3,10 +3,13 @@ package ui
 //go:generate moq -out mocks/renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
 //go:generate moq -out mocks/syntax_highlighter.go -pkg mocks -skip-ensure -fmt goimports . SyntaxHighlighter
 //go:generate moq -out mocks/blamer.go -pkg mocks -skip-ensure -fmt goimports . Blamer
+//go:generate moq -out mocks/style_resolver.go -pkg mocks -skip-ensure -fmt goimports . styleResolver
+//go:generate moq -out mocks/style_renderer.go -pkg mocks -skip-ensure -fmt goimports . styleRenderer
+//go:generate moq -out mocks/sgr_processor.go -pkg mocks -skip-ensure -fmt goimports . sgrProcessor
+//go:generate moq -out mocks/word_differ.go -pkg mocks -skip-ensure -fmt goimports . wordDiffer
 
 import (
-	"fmt"
-	"path/filepath"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -15,12 +18,14 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/overlay"
+	"github.com/umputun/revdiff/app/ui/sidepane"
+	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // Renderer provides methods to extract changed files and build full-file diff views.
@@ -32,11 +37,139 @@ type Renderer interface {
 // SyntaxHighlighter provides syntax highlighting for diff lines.
 type SyntaxHighlighter interface {
 	HighlightLines(filename string, lines []diff.DiffLine) []string
+	SetStyle(styleName string) bool
+	StyleName() string
 }
 
-// Blamer provides git blame information for files.
+// Blamer provides blame information for files.
 type Blamer interface {
 	FileBlame(ref, file string, staged bool) (map[int]diff.BlameLine, error)
+}
+
+// styleResolver is what Model needs for static and runtime style/color lookups.
+// Implemented by style.Resolver.
+type styleResolver interface {
+	Color(k style.ColorKey) style.Color
+	Style(k style.StyleKey) lipgloss.Style
+	LineBg(change diff.ChangeType) style.Color
+	LineStyle(change diff.ChangeType, highlighted bool) lipgloss.Style
+	WordDiffBg(change diff.ChangeType) style.Color
+	IndicatorBg(change diff.ChangeType) style.Color
+}
+
+// styleRenderer is what Model needs for compound ANSI rendering operations.
+// Implemented by style.Renderer.
+type styleRenderer interface {
+	AnnotationInline(text string) string
+	DiffCursor(noColors bool) string
+	StatusBarSeparator() string
+	FileStatusMark(status diff.FileStatus) string
+	FileReviewedMark() string
+	FileAnnotationMark() string
+}
+
+// sgrProcessor is what Model needs for ANSI SGR stream processing.
+// Implemented by style.SGR.
+type sgrProcessor interface {
+	Reemit(lines []string) []string
+}
+
+// wordDiffer is what Model needs for intra-line word-diff and highlight insertion.
+// Implemented by *worddiff.Differ.
+type wordDiffer interface {
+	ComputeIntraRanges(minusLine, plusLine string) ([]worddiff.Range, []worddiff.Range)
+	PairLines(lines []worddiff.LinePair) []worddiff.Pair
+	InsertHighlightMarkers(s string, matches []worddiff.Range, hlOn, hlOff string) string
+}
+
+// overlayManager is what Model needs for overlay popup coordination.
+// Implemented by *overlay.Manager.
+type overlayManager interface {
+	Active() bool
+	Kind() overlay.Kind
+	OpenHelp(spec overlay.HelpSpec)
+	OpenAnnotList(spec overlay.AnnotListSpec)
+	OpenThemeSelect(spec overlay.ThemeSelectSpec)
+	Close()
+	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
+	Compose(base string, ctx overlay.RenderCtx) string
+}
+
+// compile-time assertions — enforce that the concrete package types
+// satisfy the consumer-side interfaces.
+var (
+	_ styleResolver  = (*style.Resolver)(nil)
+	_ styleRenderer  = (*style.Renderer)(nil)
+	_ sgrProcessor   = (*style.SGR)(nil)
+	_ wordDiffer     = (*worddiff.Differ)(nil)
+	_ overlayManager = (*overlay.Manager)(nil)
+)
+
+// FileTreeComponent is what Model needs from a file-tree navigation component.
+// Implemented by *sidepane.FileTree. Exported so main.go can spell it in the
+// factory closure's return type.
+type FileTreeComponent interface {
+	// SelectedFile returns the full path of the currently selected file.
+	SelectedFile() string
+	// TotalFiles returns the count of original file paths (before filtering).
+	TotalFiles() int
+	// FileStatus returns the git change status for the given file path.
+	FileStatus(path string) diff.FileStatus
+	// FilterActive returns true when the file tree is showing only annotated files.
+	FilterActive() bool
+	// ReviewedCount returns the number of files marked as reviewed.
+	ReviewedCount() int
+	// HasFile returns true if there is a file entry in the given direction.
+	HasFile(dir sidepane.Direction) bool
+	// Move navigates the cursor according to the given motion.
+	Move(m sidepane.Motion, count ...int)
+	// StepFile moves to the next or previous file entry, wrapping around at ends.
+	StepFile(dir sidepane.Direction)
+	// SelectByPath sets the cursor to the file entry matching the given path.
+	SelectByPath(path string) bool
+	// EnsureVisible adjusts offset so the cursor is within the visible range.
+	EnsureVisible(height int)
+	// ScrollToCenter scrolls the viewport so the cursor appears in the middle.
+	ScrollToCenter(height int)
+	// ScrollToTop scrolls the viewport so the cursor appears at the top.
+	ScrollToTop()
+	// ScrollToBottom scrolls the viewport so the cursor appears at the bottom.
+	ScrollToBottom(height int)
+	// Rebuild rebuilds the file tree from new entries in-place.
+	Rebuild(entries []diff.FileEntry)
+	// ToggleFilter toggles between showing all files and only annotated files.
+	ToggleFilter(annotated map[string]bool)
+	// RefreshFilter updates the filtered view with the current annotation state.
+	RefreshFilter(annotated map[string]bool)
+	// ToggleReviewed toggles the reviewed mark for the given file path.
+	ToggleReviewed(path string)
+	// Render renders the file tree into a string for display.
+	Render(r sidepane.FileTreeRender) string
+}
+
+// TOCComponent is what Model needs from a table-of-contents navigation component.
+// Implemented by *sidepane.TOC. Exported so main.go can spell it in the factory closure.
+type TOCComponent interface {
+	// CurrentLineIdx returns the diff line index for the current TOC cursor entry.
+	CurrentLineIdx() (int, bool)
+	// NumEntries returns the number of TOC entries.
+	NumEntries() int
+	// Move navigates the cursor according to the given motion.
+	Move(m sidepane.Motion, count ...int)
+	// EnsureVisible adjusts offset so the cursor is within the visible range.
+	EnsureVisible(height int)
+	// ScrollToCenter scrolls the viewport so the cursor appears in the middle.
+	ScrollToCenter(height int)
+	// ScrollToTop scrolls the viewport so the cursor appears at the top.
+	ScrollToTop()
+	// ScrollToBottom scrolls the viewport so the cursor appears at the bottom.
+	ScrollToBottom(height int)
+	// UpdateActiveSection sets the active section based on the diff cursor position.
+	UpdateActiveSection(diffCursor int)
+	// SyncCursorToActiveSection sets cursor to activeSection when activeSection >= 0.
+	SyncCursorToActiveSection()
+	// Render renders the TOC into a string for display.
+	Render(r sidepane.TOCRender) string
 }
 
 // pane identifies which pane has focus.
@@ -51,17 +184,23 @@ const (
 
 // Model is the top-level bubbletea model for revdiff.
 type Model struct {
-	styles   styles
-	tree     fileTree
-	viewport viewport.Model
-	store    *annotation.Store
-	renderer Renderer
-	keymap   *keymap.Keymap
+	resolver     styleResolver
+	renderer     styleRenderer
+	sgr          sgrProcessor
+	differ       wordDiffer
+	overlay      overlayManager
+	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
+	viewport     viewport.Model
+	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
+	store        *annotation.Store
+	diffRenderer Renderer
+	keymap       *keymap.Keymap
 
 	ref            string
 	staged         bool
 	only           []string // filter to show only matching files
 	workDir        string   // working directory for resolving absolute --only paths
+	noColors       bool     // keep monochrome output when previewing or applying themes
 	noStatusBar    bool
 	focus          pane
 	treeHidden     bool // user toggled tree/TOC pane off
@@ -73,33 +212,37 @@ type Model struct {
 	diffCursor     int    // index into diffLines for current cursor line
 	scrollX        int    // horizontal scroll offset for diff pane
 
-	highlighter        SyntaxHighlighter // syntax highlighter
-	highlightedLines   []string          // pre-computed highlighted content, parallel to diffLines
-	diffLines          []diff.DiffLine   // current file's parsed diff lines
-	currFile           string            // currently displayed file
-	loadSeq            uint64            // monotonic counter to identify the latest load request
-	ready              bool              // true after first WindowSizeMsg
-	annotating         bool              // true when annotation text input is active
-	fileAnnotating     bool              // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool              // true when cursor is on the annotation sub-line (not the diff line)
-	annotateInput      textinput.Model   // text input for annotations
+	highlighter        SyntaxHighlighter  // syntax highlighter
+	highlightedLines   []string           // pre-computed highlighted content, parallel to diffLines
+	intraRanges        [][]worddiff.Range // per-line intra-line word-diff ranges, parallel to diffLines (nil for unpaired lines)
+	diffLines          []diff.DiffLine    // current file's parsed diff lines
+	currFile           string             // currently displayed file
+	loadSeq            uint64             // monotonic counter to identify the latest load request
+	ready              bool               // true after first WindowSizeMsg
+	annotating         bool               // true when annotation text input is active
+	fileAnnotating     bool               // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool               // true when cursor is on the annotation sub-line (not the diff line)
+	annotateInput      textinput.Model    // text input for annotations
 
 	collapsed collapsedState // collapsed diff view state
 
 	fileAdds    int // cached count of added lines in current file
 	fileRemoves int // cached count of removed lines in current file
 
-	showHelp       bool // true when help overlay is visible
-	wrapMode       bool // true when line wrapping is enabled
-	crossFileHunks bool // allow [ and ] to jump across file boundaries
-	lineNumbers    bool // true when line numbers are shown in gutter
-	lineNumWidth   int  // digit width for line number columns (max digits across old/new nums)
+	wrapMode         bool // true when line wrapping is enabled
+	crossFileHunks   bool // allow [ and ] to jump across file boundaries
+	lineNumbers      bool // true when line numbers are shown in gutter
+	lineNumWidth     int  // digit width for line number columns (max digits across old/new nums)
+	singleColLineNum bool // true for full-context files: render one line-number column instead of two
 
-	blamer         Blamer                 // optional blame provider (nil when git unavailable)
-	showBlame      bool                   // true when blame gutter is shown
-	blameData      map[int]diff.BlameLine // blame info keyed by 1-based new line number
-	blameAuthorLen int                    // max author display width for blame gutter
-	blameNow       time.Time              // snapshot of time.Now() set once per render pass for blame age
+	wordDiff       bool                     // true when intra-line word-diff highlighting is enabled
+	blamer         Blamer                   // optional blame provider (nil when git unavailable)
+	showBlame      bool                     // true when blame gutter is shown
+	blameData      map[int]diff.BlameLine   // blame info keyed by 1-based new line number
+	showUntracked  bool                     // true when untracked files are shown in tree
+	loadUntracked  func() ([]string, error) // fetches untracked files; nil when unavailable
+	blameAuthorLen int                      // max author display width for blame gutter
+	blameNow       time.Time                // snapshot of time.Now() set once per render pass for blame age
 
 	searching      bool            // true when search textinput is active (typing)
 	searchTerm     string          // last submitted search query
@@ -113,14 +256,16 @@ type Model struct {
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
 	singleFile       bool // true when diff contains exactly one file, hides tree pane
 
-	showAnnotList    bool                    // true when annotation list popup is visible
-	annotListCursor  int                     // selected item in the flat list
-	annotListOffset  int                     // scroll offset for the annotation list
-	annotListItems   []annotation.Annotation // flat sorted list of all annotations
-	pendingAnnotJump *annotation.Annotation  // pending jump target after cross-file annotation list jump
-	pendingHunkJump  *bool                   // pending hunk jump after cross-file hunk navigation (true=first, false=last)
+	pendingAnnotJump *annotation.Annotation // pending jump target after cross-file annotation list jump
+	pendingHunkJump  *bool                  // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
-	mdTOC *mdTOC // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
+	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
+
+	themesDir  string // path to themes directory for theme selector
+	configPath string // path to config file for persisting theme choice
+
+	activeThemeName string               // name of currently applied theme (for cursor positioning)
+	themePreview    *themePreviewSession // non-nil while theme selector is open
 
 	pendingKey string // buffered first key of a multi-key sequence (e.g., "z" for zz/zt/zb)
 }
@@ -143,33 +288,105 @@ type blameLoadedMsg struct {
 
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
-	entries []diff.FileEntry
-	err     error
+	entries  []diff.FileEntry
+	err      error
+	warnings []string // non-fatal issues (staged/untracked fetch failures)
 }
 
-// ModelConfig holds configuration options for NewModel.
+// ModelConfig holds all dependencies and configuration for NewModel.
+// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer, Overlay)
+// are required and must be constructed by the caller. Blamer is optional.
 type ModelConfig struct {
+	// --- UI dependencies (required, caller-constructed) ---
+	Renderer    Renderer          // diff renderer: ChangedFiles, FileDiff
+	Store       *annotation.Store // annotation store
+	Highlighter SyntaxHighlighter // syntax highlighter
+
+	// --- Style dependencies (required, caller-constructed) ---
+	StyleResolver styleResolver // color/style lookups
+	StyleRenderer styleRenderer // compound ANSI rendering
+	SGR           sgrProcessor  // SGR stream reemit
+
+	// --- Word-diff dependency (required, caller-constructed) ---
+	WordDiffer wordDiffer // intra-line diff and highlight insertion
+
+	// --- Overlay dependency (required, caller-constructed) ---
+	Overlay overlayManager // overlay popup coordinator
+
+	// --- Sidepane factories (required, wired from main.go) ---
+
+	// NewFileTree constructs a fresh FileTreeComponent from the file list.
+	// Injected by main.go (typically a closure wrapping sidepane.NewFileTree).
+	// Required — NewModel returns an error when nil.
+	NewFileTree func(entries []diff.FileEntry) FileTreeComponent
+
+	// ParseTOC parses markdown headers from diff lines into a TOCComponent.
+	// Returns nil when no headers are found. The closure must collapse typed-nil
+	// to interface-nil for empty TOCs to avoid the typed-nil trap.
+	// Injected by main.go (typically a closure wrapping sidepane.ParseTOC).
+	// Required — NewModel returns an error when nil.
+	ParseTOC func(lines []diff.DiffLine, filename string) TOCComponent
+
+	// --- Optional dependencies ---
+	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
+	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
+	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
+
+	// --- Configuration values ---
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TabWidth         int            // number of spaces per tab character
-	NoColors         bool           // disable all colors including syntax highlighting
-	NoStatusBar      bool           // hide the status bar
-	NoConfirmDiscard bool           // skip confirmation prompt when discarding annotations
-	Wrap             bool           // enable line wrapping
-	Collapsed        bool           // start in collapsed diff mode
-	CrossFileHunks   bool           // allow [ and ] to jump across file boundaries
-	LineNumbers      bool           // show line numbers in diff gutter
-	ShowBlame        bool           // show blame gutter on startup when available
-	Only             []string       // show only these files (match by exact path or path suffix)
-	WorkDir          string         // working directory for resolving absolute --only paths
-	Keymap           *keymap.Keymap // custom key bindings (nil uses defaults)
-	Blamer           Blamer         // optional blame provider (nil when git unavailable)
-	Colors           Colors
+	TabWidth         int      // number of spaces per tab character
+	NoColors         bool     // disable all colors including syntax highlighting
+	NoStatusBar      bool     // hide the status bar
+	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
+	Wrap             bool     // enable line wrapping
+	Collapsed        bool     // start in collapsed diff mode
+	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
+	LineNumbers      bool     // show line numbers in diff gutter
+	ShowBlame        bool     // show blame gutter on startup when available
+	WordDiff         bool     // enable intra-line word-diff highlighting on startup
+	Only             []string // show only these files (match by exact path or path suffix)
+	WorkDir          string   // working directory for resolving absolute --only paths
+	ThemesDir        string   // path to themes directory for theme selector
+	ConfigPath       string   // path to config file for persisting theme choice
+	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
 }
 
-// NewModel creates a new Model with the given renderer, store, highlighter and configuration.
-func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHighlighter, cfg ModelConfig) Model {
+// NewModel creates a new Model from the given configuration. All dependencies
+// must be provided by the caller — there is no fallback construction.
+// Returns an error if any required dependency is missing from the config.
+func NewModel(cfg ModelConfig) (Model, error) {
+	if cfg.Renderer == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Renderer is required")
+	}
+	if cfg.Store == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Store is required")
+	}
+	if cfg.Highlighter == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Highlighter is required")
+	}
+	if cfg.StyleResolver == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.StyleResolver is required")
+	}
+	if cfg.StyleRenderer == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.StyleRenderer is required")
+	}
+	if cfg.SGR == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.SGR is required")
+	}
+	if cfg.WordDiffer == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.WordDiffer is required")
+	}
+	if cfg.Overlay == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Overlay is required")
+	}
+	if cfg.NewFileTree == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.NewFileTree is required")
+	}
+	if cfg.ParseTOC == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.ParseTOC is required")
+	}
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
 		cfg.TreeWidthRatio = 2
 	}
@@ -180,32 +397,42 @@ func NewModel(renderer Renderer, store *annotation.Store, highlighter SyntaxHigh
 	if km == nil {
 		km = keymap.Default()
 	}
-	s := newStyles(cfg.Colors)
-	if cfg.NoColors {
-		s = plainStyles()
-	}
+
 	return Model{
-		styles:           s,
+		resolver:         cfg.StyleResolver,
+		renderer:         cfg.StyleRenderer,
+		sgr:              cfg.SGR,
+		differ:           cfg.WordDiffer,
+		overlay:          cfg.Overlay,
 		keymap:           km,
-		store:            store,
-		renderer:         renderer,
-		highlighter:      highlighter,
+		store:            cfg.Store,
+		diffRenderer:     cfg.Renderer,
+		highlighter:      cfg.Highlighter,
 		blamer:           cfg.Blamer,
+		tree:             cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
+		parseTOC:         cfg.ParseTOC,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
 		only:             cfg.Only,
 		workDir:          cfg.WorkDir,
+		noColors:         cfg.NoColors,
 		noStatusBar:      cfg.NoStatusBar,
 		noConfirmDiscard: cfg.NoConfirmDiscard,
 		wrapMode:         cfg.Wrap,
 		crossFileHunks:   cfg.CrossFileHunks,
 		lineNumbers:      cfg.LineNumbers,
 		collapsed:        collapsedState{enabled: cfg.Collapsed},
+		wordDiff:         cfg.WordDiff,
 		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
+		showUntracked:    false,
+		loadUntracked:    cfg.LoadUntracked,
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
-	}
+		themesDir:        cfg.ThemesDir,
+		configPath:       cfg.ConfigPath,
+		activeThemeName:  cfg.ActiveThemeName,
+	}, nil
 }
 
 // Store returns the annotation store for reading results after quit.
@@ -221,34 +448,6 @@ func (m Model) Discarded() bool {
 // Init initializes the model by loading changed files.
 func (m Model) Init() tea.Cmd {
 	return m.loadFiles()
-}
-
-func (m Model) loadFiles() tea.Cmd {
-	return func() tea.Msg {
-		entries, err := m.renderer.ChangedFiles(m.ref, m.staged)
-		return filesLoadedMsg{entries: entries, err: err}
-	}
-}
-
-func (m Model) loadFileDiff(file string) tea.Cmd {
-	seq := m.loadSeq
-	return func() tea.Msg {
-		lines, err := m.renderer.FileDiff(m.ref, file, m.staged)
-		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
-	}
-}
-
-func (m Model) loadBlame(file string) tea.Cmd {
-	if m.blamer == nil {
-		return nil
-	}
-	seq := m.loadSeq
-	ref := m.ref
-	staged := m.staged
-	return func() tea.Msg {
-		data, err := m.blamer.FileBlame(ref, file, staged)
-		return blameLoadedMsg{file: file, seq: seq, data: data, err: err}
-	}
 }
 
 // Update handles messages and updates the model state.
@@ -311,18 +510,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	action := m.keymap.Resolve(key)
 
-	// help overlay: toggle with help action, dismiss with esc, block everything else
-	if action == keymap.ActionHelp || m.showHelp {
-		return m.handleHelpKey(msg)
+	if model, ok := m.handleOverlayOpen(action); ok {
+		return model, nil
 	}
 
 	switch action {
-	case keymap.ActionAnnotList:
-		m.annotListItems = m.buildAnnotListItems()
-		m.annotListCursor = 0
-		m.annotListOffset = 0
-		m.showAnnotList = true
-		return m, nil
 	case keymap.ActionDismiss:
 		return m.handleEscKey()
 	case keymap.ActionDiscardQuit:
@@ -344,7 +536,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums, keymap.ActionToggleBlame:
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleWrap, keymap.ActionToggleTree, keymap.ActionToggleLineNums,
+		keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -361,6 +554,21 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
+	switch action { //nolint:exhaustive // only overlay-open actions handled here
+	case keymap.ActionHelp:
+		m.overlay.OpenHelp(m.buildHelpSpec())
+		return m, true
+	case keymap.ActionAnnotList:
+		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
+		return m, true
+	case keymap.ActionThemeSelect:
+		m.openThemeSelector()
+		return m, true
+	}
+	return m, false
+}
+
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	// annotation input mode takes priority
 	if m.annotating {
@@ -374,20 +582,44 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 		return true, model, cmd
 	}
 
-	// annotation list popup: handle keys when already open
-	if m.showAnnotList {
-		model, cmd := m.handleAnnotListKey(msg)
-		return true, model, cmd
+	// overlay popup dispatch (help, annotation list, theme selector)
+	if m.overlay.Active() {
+		action := m.keymap.Resolve(msg.String())
+		out := m.overlay.HandleKey(msg, action)
+		switch out.Kind {
+		case overlay.OutcomeAnnotationChosen:
+			model, cmd := m.jumpToAnnotationTarget(out.AnnotationTarget)
+			return true, model, cmd
+		case overlay.OutcomeThemePreview:
+			m.previewThemeByName(out.ThemeChoice.Name)
+		case overlay.OutcomeThemeConfirmed:
+			m.confirmThemeByName(out.ThemeChoice.Name)
+		case overlay.OutcomeThemeCanceled:
+			m.cancelThemeSelect()
+		case overlay.OutcomeClosed, overlay.OutcomeNone:
+		}
+		return true, m, nil
 	}
 
 	return false, m, nil
+}
+
+// treePaneHidden returns true when the tree/TOC pane should be hidden.
+// true when user toggled it off, or in single-file mode without a markdown TOC.
+func (m Model) treePaneHidden() bool {
+	return m.treeHidden || (m.singleFile && m.mdTOC == nil)
+}
+
+// isCursorLine returns true when the diff line at idx is the active cursor line.
+func (m Model) isCursorLine(idx int) bool {
+	return idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
 }
 
 // togglePane switches focus between tree and diff panes.
 // only switches to diff pane when a file is loaded.
 // no-op in single-file mode unless mdTOC is active (TOC uses paneTree slot).
 func (m *Model) togglePane() {
-	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+	if m.treePaneHidden() {
 		return
 	}
 	if m.focus != paneTree {
@@ -466,6 +698,25 @@ func (m *Model) toggleBlame() tea.Cmd {
 	return nil
 }
 
+// toggleWordDiff toggles intra-line word-diff highlighting on/off.
+// recomputeIntraRanges honors the new wordDiff state: it populates ranges
+// when enabling and clears them when disabling.
+// no-op when the diff pane is not focused or no file is loaded.
+func (m *Model) toggleWordDiff() {
+	if m.focus != paneDiff || m.currFile == "" {
+		return
+	}
+	m.wordDiff = !m.wordDiff
+	m.recomputeIntraRanges()
+	m.viewport.SetContent(m.renderDiff())
+}
+
+// toggleUntracked toggles visibility of untracked files in the tree.
+func (m *Model) toggleUntracked() tea.Cmd {
+	m.showUntracked = !m.showUntracked
+	return m.loadFiles()
+}
+
 // handleViewToggle dispatches view mode toggle actions.
 func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action { //nolint:exhaustive // only toggle actions are dispatched here
@@ -480,49 +731,13 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleBlame:
 		cmd := m.toggleBlame()
 		return m, cmd
+	case keymap.ActionToggleWordDiff:
+		m.toggleWordDiff()
+	case keymap.ActionToggleUntracked:
+		cmd := m.toggleUntracked()
+		return m, cmd
 	}
 	return m, nil
-}
-
-// handleSwitchToTree switches focus to tree pane from diff.
-// no-op in single-file mode unless mdTOC is active, or when tree is hidden.
-func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
-	if m.treeHidden {
-		return m, nil
-	}
-	if !m.singleFile || m.mdTOC != nil {
-		m.focus = paneTree
-		m.syncTOCCursorToActive()
-	}
-	return m, nil
-}
-
-// jumpTOCEntry moves the TOC cursor by delta (+1 next, -1 prev) and jumps the diff viewport.
-func (m Model) jumpTOCEntry(delta int) Model {
-	if m.mdTOC == nil {
-		return m
-	}
-	m.mdTOC.cursor = max(0, min(m.mdTOC.cursor+delta, len(m.mdTOC.entries)-1))
-	m.syncDiffToTOCCursor()
-	return m
-}
-
-// syncTOCCursorToActive sets the TOC cursor to the current active section.
-func (m *Model) syncTOCCursorToActive() {
-	if m.mdTOC != nil && m.mdTOC.activeSection >= 0 {
-		m.mdTOC.cursor = m.mdTOC.activeSection
-	}
-}
-
-// syncDiffToTOCCursor jumps the diff viewport to the TOC entry at the current cursor position.
-func (m *Model) syncDiffToTOCCursor() {
-	if m.mdTOC == nil || m.mdTOC.cursor >= len(m.mdTOC.entries) {
-		return
-	}
-	m.diffCursor = m.mdTOC.entries[m.mdTOC.cursor].lineIdx
-	m.cursorOnAnnotation = false
-	m.mdTOC.updateActiveSection(m.diffCursor)
-	m.topAlignViewportOnCursor()
 }
 
 // toggleWrapMode toggles line wrapping on/off.
@@ -538,182 +753,12 @@ func (m *Model) toggleWrapMode() {
 	m.syncViewportToCursor()
 }
 
-// loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
-func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
-	m.tree.ensureVisible(m.treePageSize())
-	if f := m.tree.selectedFile(); f != "" && f != m.currFile {
-		m.loadSeq++
-		return m, m.loadFileDiff(f)
-	}
-	return m, nil
-}
-
-func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// when mdTOC is active, route navigation to TOC instead of file tree
-	if m.mdTOC != nil {
-		return m.handleTOCNav(msg)
-	}
-
-	action := m.keymap.Resolve(msg.String())
-	switch action {
-	case keymap.ActionDown:
-		m.tree.moveDown()
-	case keymap.ActionUp:
-		m.tree.moveUp()
-	case keymap.ActionPageDown:
-		m.tree.pageDown(m.treePageSize())
-	case keymap.ActionHalfPageDown:
-		m.tree.pageDown(max(1, m.treePageSize()/2))
-	case keymap.ActionPageUp:
-		m.tree.pageUp(m.treePageSize())
-	case keymap.ActionHalfPageUp:
-		m.tree.pageUp(max(1, m.treePageSize()/2))
-	case keymap.ActionHome:
-		m.tree.moveToFirst()
-	case keymap.ActionEnd:
-		m.tree.moveToLast()
-	case keymap.ActionScrollCenter:
-		height := m.treePageSize()
-		m.tree.offset = max(0, m.tree.cursor-height/2)
-		return m, nil
-	case keymap.ActionScrollTop:
-		m.tree.offset = max(0, m.tree.cursor)
-		return m, nil
-	case keymap.ActionScrollBottom:
-		m.tree.offset = max(0, m.tree.cursor-m.treePageSize()+1)
-		return m, nil
-	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
-		if m.currFile != "" {
-			m.focus = paneDiff
-		}
-	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
-	}
-	m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-	m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
-	m.tree.ensureVisible(m.treePageSize())
-	return m.loadSelectedIfChanged()
-}
-
-// handleTOCNav handles navigation keys when the TOC pane is focused.
-func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	action := m.keymap.Resolve(msg.String())
-	switch action {
-	case keymap.ActionDown:
-		m.mdTOC.moveDown()
-	case keymap.ActionUp:
-		m.mdTOC.moveUp()
-	case keymap.ActionPageDown:
-		for range m.treePageSize() {
-			m.mdTOC.moveDown()
-		}
-	case keymap.ActionHalfPageDown:
-		for range max(1, m.treePageSize()/2) {
-			m.mdTOC.moveDown()
-		}
-	case keymap.ActionPageUp:
-		for range m.treePageSize() {
-			m.mdTOC.moveUp()
-		}
-	case keymap.ActionHalfPageUp:
-		for range max(1, m.treePageSize()/2) {
-			m.mdTOC.moveUp()
-		}
-	case keymap.ActionHome:
-		m.mdTOC.cursor = 0
-	case keymap.ActionEnd:
-		m.mdTOC.cursor = max(0, len(m.mdTOC.entries)-1)
-	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
-		if m.currFile != "" {
-			m.focus = paneDiff
-		}
-		return m, nil // switch pane without re-jumping viewport
-	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
-	}
-	m.mdTOC.ensureVisible(m.treePageSize())
-	m.syncDiffToTOCCursor()
-	return m, nil
-}
-
-// treePageSize returns the number of visible lines in the tree pane.
-func (m Model) treePageSize() int {
-	return max(1, m.paneHeight())
-}
-
-// paneHeight returns the content height for panes (total minus borders and status bar).
-func (m Model) paneHeight() int {
-	h := m.height - 2 // borders
-	if !m.noStatusBar {
-		h-- // status bar
-	}
-	return max(1, h)
-}
-
-func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	action := m.keymap.Resolve(msg.String())
-	switch action {
-	case keymap.ActionFocusTree:
-		return m.handleSwitchToTree()
-	case keymap.ActionScrollLeft:
-		m.handleHorizontalScroll(-1)
-		return m, nil
-	case keymap.ActionScrollRight:
-		m.handleHorizontalScroll(1)
-		return m, nil
-	case keymap.ActionDown:
-		m.moveDiffCursorDown()
-		m.syncViewportToCursor()
-	case keymap.ActionUp:
-		m.moveDiffCursorUp()
-		m.syncViewportToCursor()
-	case keymap.ActionPageDown:
-		m.moveDiffCursorPageDown()
-	case keymap.ActionHalfPageDown:
-		m.moveDiffCursorHalfPageDown()
-	case keymap.ActionPageUp:
-		m.moveDiffCursorPageUp()
-	case keymap.ActionHalfPageUp:
-		m.moveDiffCursorHalfPageUp()
-	case keymap.ActionHome:
-		m.moveDiffCursorToStart()
-	case keymap.ActionEnd:
-		m.moveDiffCursorToEnd()
-	case keymap.ActionScrollCenter:
-		m.centerViewportOnCursor()
-		return m, nil
-	case keymap.ActionScrollTop:
-		m.topAlignViewportOnCursor()
-		return m, nil
-	case keymap.ActionScrollBottom:
-		m.bottomAlignViewportOnCursor()
-		return m, nil
-	case keymap.ActionDeleteAnnotation:
-		cmd := m.deleteAnnotation()
-		return m, cmd
-	case keymap.ActionToggleHunk:
-		m.toggleHunkExpansion()
-		return m, nil
-	case keymap.ActionSearch:
-		cmd := m.startSearch()
-		return m, cmd
-	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
-	}
-	m.syncTOCActiveSection()
-	return m, nil
-}
-
-// syncTOCActiveSection updates the TOC active section to match the current diff cursor position.
-func (m *Model) syncTOCActiveSection() {
-	if m.mdTOC != nil {
-		m.mdTOC.updateActiveSection(m.diffCursor)
-	}
-}
-
 func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 
 	var diffWidth int
-	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+	if m.treePaneHidden() {
 		m.treeWidth = 0
 		diffWidth = m.width - 2 // diff pane borders only
 	} else {
@@ -732,1034 +777,11 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 		m.viewport.Height = diffHeight
 	}
 
-	m.tree.ensureVisible(m.treePageSize())
+	m.tree.EnsureVisible(m.treePageSize())
 
 	if m.currFile != "" {
 		m.syncViewportToCursor()
 	}
 
 	return m, nil
-}
-
-// filterOnly returns only files matching the --only patterns, or all files if no filter is set.
-// matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
-// when a pattern is an absolute path, it is also resolved relative to workDir for matching
-// (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
-func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
-	if len(m.only) == 0 {
-		return entries
-	}
-	var filtered []diff.FileEntry
-	for _, e := range entries {
-		for _, pattern := range m.only {
-			if e.Path == pattern || strings.HasSuffix(e.Path, "/"+pattern) {
-				filtered = append(filtered, e)
-				break
-			}
-			// resolve absolute pattern relative to workDir for matching against repo-relative files
-			if m.workDir != "" && filepath.IsAbs(pattern) {
-				rel, err := filepath.Rel(m.workDir, pattern)
-				if err == nil && !strings.HasPrefix(rel, "..") && (e.Path == rel || strings.HasSuffix(e.Path, "/"+rel)) {
-					filtered = append(filtered, e)
-					break
-				}
-			}
-		}
-	}
-	return filtered
-}
-
-func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil {
-		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
-		return m, nil
-	}
-	entries := m.filterOnly(msg.entries)
-	if len(entries) == 0 && len(m.only) > 0 {
-		m.viewport.SetContent("no files match --only filter")
-		return m, nil
-	}
-	m.tree = newFileTreeFromEntries(entries)
-	m.singleFile = len(m.tree.allFiles) == 1
-	if m.singleFile {
-		m.focus = paneDiff
-		m.treeWidth = 0
-		if m.ready {
-			m.viewport.Width = m.width - 2
-		}
-	}
-
-	// auto-select first file
-	if f := m.tree.selectedFile(); f != "" {
-		m.loadSeq++
-		return m, m.loadFileDiff(f)
-	}
-	return m, nil
-}
-
-func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
-	// discard stale responses; only the latest load request (by sequence) is accepted
-	if msg.seq != m.loadSeq {
-		return m, nil
-	}
-	if msg.err != nil {
-		m.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
-		return m, nil
-	}
-	m.currFile = msg.file
-	m.diffLines = msg.lines
-	m.clearSearch()
-	m.computeFileStats()
-	m.highlightedLines = m.highlighter.HighlightLines(msg.file, msg.lines)
-	if m.lineNumbers {
-		m.lineNumWidth = m.computeLineNumWidth()
-	}
-	m.cursorOnAnnotation = false
-	m.scrollX = 0
-	m.collapsed.expandedHunks = make(map[int]bool)
-
-	// detect markdown full-context mode and build TOC
-	if m.singleFile && m.isMarkdownFile(msg.file) && m.isFullContext(msg.lines) {
-		m.mdTOC = parseTOC(msg.lines, msg.file)
-	} else {
-		m.mdTOC = nil
-	}
-	switch {
-	case m.mdTOC != nil && !m.treeHidden:
-		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
-		m.viewport.Width = m.width - m.treeWidth - 4
-	case m.singleFile || m.treeHidden:
-		m.treeWidth = 0
-		m.viewport.Width = m.width - 2
-	}
-
-	m.skipInitialDividers()
-	m.syncTOCActiveSection()
-
-	// clear stale blame data; reload if blame is active
-	var blameCmd tea.Cmd
-	if m.showBlame {
-		m.blameData = nil
-		m.blameAuthorLen = 0
-		blameCmd = m.loadBlame(msg.file)
-	}
-
-	// handle pending annotation list jump
-	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
-		a := *m.pendingAnnotJump
-		m.pendingAnnotJump = nil
-		m.pendingHunkJump = nil
-		m.positionOnAnnotation(a)
-		return m, blameCmd
-	}
-
-	// handle pending hunk jump after cross-file hunk navigation
-	if m.pendingHunkJump != nil {
-		m.applyPendingHunkJump()
-		m.centerViewportOnCursor()
-		return m, blameCmd
-	}
-
-	m.viewport.SetContent(m.renderDiff())
-	m.viewport.GotoTop()
-	return m, blameCmd
-}
-
-func (m *Model) applyPendingHunkJump() {
-	forward := *m.pendingHunkJump
-	m.pendingHunkJump = nil
-	if forward {
-		m.diffCursor = -1
-		m.moveToNextHunk()
-		if m.diffCursor != -1 {
-			return
-		}
-		m.skipInitialDividers()
-		return
-	}
-
-	m.diffCursor = len(m.diffLines)
-	m.moveToPrevHunk()
-	if m.diffCursor == len(m.diffLines) {
-		m.skipInitialDividers()
-	}
-}
-
-// handleBlameLoaded processes asynchronously loaded blame data for a file.
-func (m Model) handleBlameLoaded(msg blameLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.seq != m.loadSeq || msg.file != m.currFile || !m.showBlame {
-		return m, nil
-	}
-	if msg.err != nil {
-		// blame unavailable for this file (e.g. new untracked file); silently ignore
-		return m, nil
-	}
-	m.blameData = msg.data
-	m.blameAuthorLen = m.computeBlameAuthorLen()
-	m.syncViewportToCursor()
-	return m, nil
-}
-
-// maxBlameAuthor is the maximum display width for author names in the blame gutter.
-const maxBlameAuthor = 8
-
-// computeBlameAuthorLen returns the display width of the longest author name in blame data.
-// caps at maxBlameAuthor characters to keep the gutter compact.
-func (m Model) computeBlameAuthorLen() int {
-	maxLen := 0
-	for _, bl := range m.blameData {
-		if l := runewidth.StringWidth(bl.Author); l > maxLen {
-			maxLen = l
-		}
-	}
-	if maxLen > maxBlameAuthor {
-		maxLen = maxBlameAuthor
-	}
-	if maxLen == 0 {
-		maxLen = 1
-	}
-	return maxLen
-}
-
-// computeFileStats counts added and removed lines in the current diffLines.
-func (m *Model) computeFileStats() {
-	m.fileAdds, m.fileRemoves = 0, 0
-	for _, dl := range m.diffLines {
-		switch dl.ChangeType {
-		case diff.ChangeAdd:
-			m.fileAdds++
-		case diff.ChangeRemove:
-			m.fileRemoves++
-		case diff.ChangeContext, diff.ChangeDivider:
-			// not counted in stats
-		}
-	}
-}
-
-// fileStatsText returns the stats segment for the status bar.
-// shows total line count for context-only files, or +adds/-removes for diffs.
-func (m Model) fileStatsText() string {
-	if m.fileAdds == 0 && m.fileRemoves == 0 && len(m.diffLines) > 0 {
-		return fmt.Sprintf("%d lines", len(m.diffLines))
-	}
-	return fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
-}
-
-// skipInitialDividers positions diffCursor on the first visible line.
-// skips divider lines, and in collapsed mode also skips removed lines
-// unless their hunk is expanded.
-func (m *Model) skipInitialDividers() {
-	m.diffCursor = 0
-	hunks := m.findHunks()
-	for i, dl := range m.diffLines {
-		if dl.ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
-			continue
-		}
-		m.diffCursor = i
-		return
-	}
-}
-
-// View renders the full TUI.
-func (m Model) View() string {
-	if !m.ready {
-		return "loading..."
-	}
-
-	ph := m.paneHeight()
-
-	// diff pane title
-	diffTitle := "no file selected"
-	if m.currFile != "" {
-		diffTitle = m.currFile
-	}
-	diffHeader := m.styles.DirEntry.Render(" " + diffTitle)
-	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
-
-	var mainView string
-	switch {
-	case m.treeHidden || (m.singleFile && m.mdTOC == nil):
-		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
-		paneW := m.width - 2
-		diffContent = m.padContentBg(diffContent, paneW, m.styles.colors.DiffBg)
-		diffPane := m.styles.DiffPaneActive.
-			Width(paneW).
-			Height(ph).
-			Render(diffContent)
-		mainView = diffPane
-
-	case m.singleFile && m.mdTOC != nil:
-		// single-file markdown with TOC: two-pane layout with TOC in left pane
-		tocContent := m.mdTOC.render(m.treeWidth, ph, m.focus, m.styles)
-
-		treeStyle := m.styles.TreePane
-		diffStyle := m.styles.DiffPane
-		if m.focus == paneTree {
-			treeStyle = m.styles.TreePaneActive
-		} else {
-			diffStyle = m.styles.DiffPaneActive
-		}
-
-		diffW := m.width - m.treeWidth - 4
-		tocContent = m.padContentBg(tocContent, m.treeWidth, m.styles.colors.TreeBg)
-		diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
-
-		tocPane := treeStyle.
-			Width(m.treeWidth).
-			Height(ph).
-			Render(tocContent)
-
-		diffPane := diffStyle.
-			Width(diffW).
-			Height(ph).
-			Render(diffContent)
-
-		mainView = lipgloss.JoinHorizontal(lipgloss.Top, tocPane, diffPane)
-
-	default:
-		annotated := m.annotatedFiles()
-		treeContent := m.tree.render(m.treeWidth, ph, annotated, m.styles)
-
-		// apply pane borders based on focus
-		treeStyle := m.styles.TreePane
-		diffStyle := m.styles.DiffPane
-		if m.focus == paneTree {
-			treeStyle = m.styles.TreePaneActive
-		} else {
-			diffStyle = m.styles.DiffPaneActive
-		}
-
-		diffW := m.width - m.treeWidth - 4
-		treeContent = m.padContentBg(treeContent, m.treeWidth, m.styles.colors.TreeBg)
-		diffContent = m.padContentBg(diffContent, diffW, m.styles.colors.DiffBg)
-
-		treePane := treeStyle.
-			Width(m.treeWidth).
-			Height(ph).
-			Render(treeContent)
-
-		diffPane := diffStyle.
-			Width(diffW).
-			Height(ph).
-			Render(diffContent)
-
-		mainView = lipgloss.JoinHorizontal(lipgloss.Top, treePane, diffPane)
-	}
-
-	switch {
-	case m.showAnnotList:
-		mainView = m.overlayCenter(mainView, m.annotListOverlay())
-	case m.showHelp:
-		mainView = m.overlayCenter(mainView, m.helpOverlay())
-	}
-
-	if m.noStatusBar {
-		return mainView
-	}
-
-	status := m.styles.StatusBar.Width(m.width).Render(m.statusBarText())
-	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
-}
-
-// statusBarText returns context-sensitive status line content.
-// shows search input (when typing), or filename, diff stats, hunk position,
-// search match position, mode indicators, and right-aligned annotation count + help hint.
-func (m Model) statusBarText() string {
-	if m.searching {
-		return m.searchBarText()
-	}
-
-	if m.inConfirmDiscard {
-		return fmt.Sprintf("discard %d annotations? [y/n]", m.store.Count())
-	}
-
-	if m.annotating {
-		return "[enter] save  [esc] cancel"
-	}
-
-	// build left-side segments
-	var segments []string
-
-	// filename and diff stats segments
-	if m.currFile != "" {
-		segments = append(segments, m.currFile, m.fileStatsText())
-	}
-
-	// hunk position (always shown in diff pane when there are hunks)
-	if hs := m.hunkSegment(); hs != "" {
-		segments = append(segments, hs)
-	}
-
-	// line number position
-	if ls := m.lineNumberSegment(); ls != "" {
-		segments = append(segments, ls)
-	}
-
-	// search match position
-	if ss := m.searchSegment(); ss != "" {
-		segments = append(segments, ss)
-	}
-
-	// build right-side segments
-	var rightParts []string
-	if rc := m.tree.reviewedCount(); rc > 0 {
-		rightParts = append(rightParts, fmt.Sprintf("✓ %d/%d", rc, len(m.tree.allFiles)))
-	}
-	if cnt := m.store.Count(); cnt > 0 {
-		suffix := "annotations"
-		if cnt == 1 {
-			suffix = "annotation"
-		}
-		rightParts = append(rightParts, fmt.Sprintf("%d %s", cnt, suffix))
-	}
-	rightParts = append(rightParts, m.statusModeIcons(), "? help")
-
-	// build separator with muted foreground using raw ANSI (not lipgloss.Render)
-	// to avoid full reset that would break the status bar background
-	statusFg := m.styles.colors.Muted
-	if m.styles.colors.StatusFg != "" {
-		statusFg = m.styles.colors.StatusFg
-	}
-	sep := " " + m.ansiFg(m.styles.colors.Muted) + "|" + m.ansiFg(statusFg) + " "
-	left := strings.Join(segments, sep)
-	right := strings.Join(rightParts, sep)
-
-	// truncate filename from left with … if status line is too wide
-	minRight := lipgloss.Width(right) + 5 // 2 for status bar padding + 3 for separator
-	available := max(m.width-minRight, 0)
-
-	// graceful degradation: drop left segments when too narrow
-	if lipgloss.Width(left) > available {
-		// rebuild without search position
-		segments = m.statusSegmentsNoSearch()
-		left = strings.Join(segments, sep)
-	}
-	if lipgloss.Width(left) > available {
-		// rebuild without hunk info and line number
-		segments = m.statusSegmentsMinimal()
-		left = strings.Join(segments, sep)
-	}
-	if lipgloss.Width(left) > available && m.currFile != "" {
-		// truncate filename from left, keeping end of path.
-		// uses display-width measurement to handle wide characters (CJK, emoji)
-		statsStr := m.fileStatsText()
-		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
-		name := m.currFile
-		if lipgloss.Width(name) > nameMax {
-			budget := nameMax - 1 // reserve 1 cell for "…"
-			runes := []rune(name)
-			w, cutIdx := 0, len(runes)
-			for i := len(runes) - 1; i >= 0; i-- {
-				rw := runewidth.RuneWidth(runes[i])
-				if w+rw > budget {
-					break
-				}
-				w += rw
-				cutIdx = i
-			}
-			name = "…" + string(runes[cutIdx:])
-		}
-		left = name + sep + statsStr
-	}
-
-	return m.joinStatusSections(left, right, sep)
-}
-
-// hunkSegment returns a formatted hunk position string for the status line.
-// returns "hunk X/Y" when cursor is on a changed line, "N hunks"/"1 hunk" otherwise, or empty if not in diff pane.
-func (m Model) hunkSegment() string {
-	if m.focus != paneDiff {
-		return ""
-	}
-	cur, total := m.currentHunk()
-	if total == 0 {
-		return ""
-	}
-	if cur > 0 {
-		return fmt.Sprintf("hunk %d/%d", cur, total)
-	}
-	if total == 1 {
-		return "1 hunk"
-	}
-	return fmt.Sprintf("%d hunks", total)
-}
-
-// lineNumberSegment returns a formatted line number string like "L:42/380" for the status line.
-// The denominator is dynamic: on removed lines it shows the old file's max line number,
-// on context/added lines it shows the new file's max line number.
-// Returns empty string when focus is not on diff pane, cursor is out of range, or on a divider line.
-func (m Model) lineNumberSegment() string {
-	if m.focus != paneDiff {
-		return ""
-	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
-		return ""
-	}
-	dl := m.diffLines[m.diffCursor]
-	if dl.ChangeType == diff.ChangeDivider {
-		return ""
-	}
-	lineNum := m.diffLineNum(dl)
-	if lineNum == 0 {
-		return ""
-	}
-	var maxOld, maxNew int
-	for _, l := range m.diffLines {
-		if l.OldNum > maxOld {
-			maxOld = l.OldNum
-		}
-		if l.NewNum > maxNew {
-			maxNew = l.NewNum
-		}
-	}
-	total := maxNew
-	if dl.ChangeType == diff.ChangeRemove {
-		total = maxOld
-	}
-	if total == 0 {
-		return ""
-	}
-	return fmt.Sprintf("L:%d/%d", lineNum, total)
-}
-
-// joinStatusSections joins left and right status sections with padding and separators.
-func (m Model) joinStatusSections(left, right, sep string) string {
-	sepWidth := lipgloss.Width(sep)
-	padding := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2 // 2 for status bar padding
-	if left != "" && padding > sepWidth {
-		return left + sep + strings.Repeat(" ", padding-sepWidth) + right
-	}
-	if padding > 0 {
-		return left + strings.Repeat(" ", padding) + right
-	}
-	if left != "" {
-		return left + sep + right
-	}
-	return right
-}
-
-// searchBarText returns the status bar content during search input mode.
-func (m Model) searchBarText() string {
-	return "/" + m.searchInput.Value()
-}
-
-// searchSegment returns a formatted search position string like "X/Y" for the status line.
-// returns empty string when no search matches exist. shows 0/N when all matches are hidden
-// in collapsed mode (e.g. matches only on removed lines).
-func (m Model) searchSegment() string {
-	if len(m.searchMatches) == 0 {
-		return ""
-	}
-	pos := m.searchCursor + 1
-	if m.collapsed.enabled && m.searchCursor < len(m.searchMatches) {
-		hunks := m.findHunks()
-		if m.isCollapsedHidden(m.searchMatches[m.searchCursor], hunks) {
-			pos = 0
-		}
-	}
-	return fmt.Sprintf("%d/%d", pos, len(m.searchMatches))
-}
-
-// padContentBg pads every line in content to targetWidth using raw ANSI background.
-// strips trailing plain spaces first (left by viewport/lipgloss padding after \033[0m reset),
-// then re-pads with bg-colored spaces. this ensures the background fills the entire pane
-// interior, working around lipgloss full-reset that kills outer pane backgrounds.
-// no-op when bgHex is empty.
-func (m Model) padContentBg(content string, targetWidth int, bgHex string) string {
-	if bgHex == "" || targetWidth <= 0 {
-		return content
-	}
-	bg := m.ansiBg(bgHex)
-	if bg == "" {
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	for i, line := range lines {
-		// strip trailing plain spaces left by viewport/lipgloss padding after ANSI reset
-		trimmed := strings.TrimRight(line, " ")
-		w := lipgloss.Width(trimmed)
-		pad := targetWidth - w
-		if pad > 0 {
-			lines[i] = trimmed + bg + strings.Repeat(" ", pad) + "\033[49m"
-		} else {
-			lines[i] = trimmed
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-// ansiColor returns an ANSI 24-bit color escape sequence for a hex color.
-// code 38 = foreground, 48 = background. uses raw ANSI instead of lipgloss.Render
-// to avoid full reset that breaks outer backgrounds.
-func (m Model) ansiColor(hex string, code int) string {
-	hex = strings.TrimPrefix(hex, "#")
-	if len(hex) != 6 {
-		return ""
-	}
-	r, _ := strconv.ParseUint(hex[0:2], 16, 8)
-	g, _ := strconv.ParseUint(hex[2:4], 16, 8)
-	b, _ := strconv.ParseUint(hex[4:6], 16, 8)
-	return fmt.Sprintf("\033[%d;2;%d;%d;%dm", code, r, g, b)
-}
-
-// ansiFg returns an ANSI 24-bit foreground escape sequence for a hex color.
-func (m Model) ansiFg(hex string) string { return m.ansiColor(hex, 38) }
-
-// ansiBg returns an ANSI 24-bit background escape sequence for a hex color.
-func (m Model) ansiBg(hex string) string { return m.ansiColor(hex, 48) }
-
-// statusModeIcons returns combined mode indicator icons (▼ collapsed, ◉ filter, ↩ wrap, ≋ search).
-// all icons are always shown; active modes use status foreground, inactive use muted color.
-func (m Model) statusModeIcons() string {
-	type indicator struct {
-		icon   string
-		active bool
-	}
-	indicators := []indicator{
-		{"▼", m.collapsed.enabled},
-		{"◉", m.tree.filter},
-		{"↩", m.wrapMode},
-		{"≋", len(m.searchMatches) > 0},
-		{"⊟", m.treeHidden},
-		{"#", m.lineNumbers},
-		{"b", m.showBlame},
-		{"✓", m.tree.reviewedCount() > 0},
-	}
-
-	statusFg := m.styles.colors.Muted
-	if m.styles.colors.StatusFg != "" {
-		statusFg = m.styles.colors.StatusFg
-	}
-	mutedSeq := m.ansiFg(m.styles.colors.Muted)
-	activeSeq := m.ansiFg(statusFg)
-
-	var icons []string
-	for _, ind := range indicators {
-		if ind.active {
-			icons = append(icons, activeSeq+ind.icon)
-		} else {
-			icons = append(icons, mutedSeq+ind.icon)
-		}
-	}
-	return strings.Join(icons, " ") + activeSeq
-}
-
-// statusSegmentsNoSearch returns left segments without search position (for narrow terminals).
-func (m Model) statusSegmentsNoSearch() []string {
-	var segments []string
-	if m.currFile != "" {
-		segments = append(segments, m.currFile, m.fileStatsText())
-	}
-	if hs := m.hunkSegment(); hs != "" {
-		segments = append(segments, hs)
-	}
-	if ls := m.lineNumberSegment(); ls != "" {
-		segments = append(segments, ls)
-	}
-	return segments
-}
-
-// statusSegmentsMinimal returns left segments with only filename and stats.
-func (m Model) statusSegmentsMinimal() []string {
-	var segments []string
-	if m.currFile != "" {
-		segments = append(segments, m.currFile, m.fileStatsText())
-	}
-	return segments
-}
-
-// helpKeyDisplay maps bubbletea key names to user-friendly display names.
-var helpKeyDisplay = map[string]string{
-	"pgdown": "PgDn",
-	"pgup":   "PgUp",
-	"left":   "←",
-	"right":  "→",
-	"home":   "Home",
-	"end":    "End",
-	"enter":  "Enter",
-	"esc":    "Esc",
-	"tab":    "Tab",
-	"up":     "↑",
-	"down":   "↓",
-	" ":      "Space",
-}
-
-// displayKeyName returns a user-friendly display name for a bubbletea key.
-func displayKeyName(key string) string {
-	if d, ok := helpKeyDisplay[key]; ok {
-		return d
-	}
-	if strings.HasPrefix(key, "ctrl+") {
-		return "Ctrl+" + key[5:]
-	}
-	return key
-}
-
-// formatKeysForHelp returns a formatted key string for a given action using display names.
-func (m Model) formatKeysForHelp(action keymap.Action) string {
-	keys := m.keymap.KeysFor(action)
-	display := make([]string, len(keys))
-	for i, k := range keys {
-		display[i] = displayKeyName(k)
-	}
-	return strings.Join(display, " / ")
-}
-
-// helpOverlay returns a bordered help popup with keybinding sections arranged in two columns.
-// sections and key bindings are rendered dynamically from the keymap.
-func (m Model) helpOverlay() string {
-	sections := m.keymap.HelpSections()
-
-	// render each section into a block of lines
-	type sectionBlock struct {
-		lines []string
-	}
-	var blocks []sectionBlock
-
-	reset := "\033[0m"
-	headerColor := m.ansiFg(m.styles.colors.Accent)
-	keyColor := m.ansiFg(m.styles.colors.Annotation)
-
-	for _, sec := range sections {
-		var block sectionBlock
-		block.lines = append(block.lines, headerColor+sec.Name+reset)
-
-		type helpLine struct{ keys, desc string }
-		lines := make([]helpLine, 0, len(sec.Entries))
-		maxW := 0
-		for _, e := range sec.Entries {
-			keys := m.formatKeysForHelp(e.Action)
-			lines = append(lines, helpLine{keys, e.Description})
-			if w := runewidth.StringWidth(keys); w > maxW {
-				maxW = w
-			}
-		}
-		for _, l := range lines {
-			pad := max(maxW-runewidth.StringWidth(l.keys), 0)
-			block.lines = append(block.lines, fmt.Sprintf("  %s%s%s%s  %s",
-				keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc))
-		}
-		blocks = append(blocks, block)
-
-		// add Markdown TOC section after Pane
-		if sec.Name == "Pane" {
-			var tocBuf strings.Builder
-			m.writeTOCHelpSection(&tocBuf)
-			tocLines := strings.Split(strings.TrimRight(tocBuf.String(), "\n"), "\n")
-			blocks = append(blocks, sectionBlock{lines: tocLines})
-		}
-	}
-
-	// count total lines (with blank line separators between sections)
-	totalLines := 0
-	for _, b := range blocks {
-		totalLines += len(b.lines) + 1 // +1 for separator
-	}
-
-	// assign sections to left/right columns, keeping sections intact
-	var leftBlocks, rightBlocks []sectionBlock
-	leftLines := 0
-	half := totalLines / 2
-	for _, b := range blocks {
-		blockSize := len(b.lines) + 1
-		if leftLines < half {
-			leftBlocks = append(leftBlocks, b)
-			leftLines += blockSize
-		} else {
-			rightBlocks = append(rightBlocks, b)
-		}
-	}
-
-	// render column from blocks
-	renderColumn := func(colBlocks []sectionBlock) []string {
-		var result []string
-		for i, b := range colBlocks {
-			if i > 0 {
-				result = append(result, "")
-			}
-			result = append(result, b.lines...)
-		}
-		return result
-	}
-
-	left := renderColumn(leftBlocks)
-	right := renderColumn(rightBlocks)
-
-	// find max visible width of left column for padding (ANSI-aware)
-	leftWidth := 0
-	for _, line := range left {
-		if w := lipgloss.Width(line); w > leftWidth {
-			leftWidth = w
-		}
-	}
-
-	gap := 4
-	// join columns side by side
-	maxRows := max(len(left), len(right))
-	var buf strings.Builder
-	for i := range maxRows {
-		l := ""
-		if i < len(left) {
-			l = left[i]
-		}
-		// pad left column to fixed width (ANSI-aware width)
-		pad := max(leftWidth-lipgloss.Width(l), 0)
-		buf.WriteString(l)
-		buf.WriteString(strings.Repeat(" ", pad))
-
-		if i < len(right) {
-			buf.WriteString(strings.Repeat(" ", gap))
-			buf.WriteString(right[i])
-		}
-		if i < maxRows-1 {
-			buf.WriteString("\n")
-		}
-	}
-
-	border := lipgloss.NormalBorder()
-	boxStyle := lipgloss.NewStyle().
-		Border(border).
-		BorderForeground(lipgloss.Color(m.styles.colors.Accent)).
-		Padding(1, 2)
-
-	return boxStyle.Render(buf.String())
-}
-
-// writeTOCHelpSection writes the Markdown TOC contextual help section.
-// keys are resolved dynamically from the keymap.
-func (m Model) writeTOCHelpSection(buf *strings.Builder) {
-	// collect display keys for multiple actions combined
-	mergedKeys := func(actions ...keymap.Action) string {
-		var all []string
-		seen := map[string]bool{}
-		for _, a := range actions {
-			for _, k := range m.keymap.KeysFor(a) {
-				dk := displayKeyName(k)
-				if !seen[dk] {
-					all = append(all, dk)
-					seen[dk] = true
-				}
-			}
-		}
-		return strings.Join(all, " / ")
-	}
-
-	type helpLine struct{ keys, desc string }
-	lines := []helpLine{
-		{mergedKeys(keymap.ActionTogglePane), "switch between TOC and diff"},
-		{mergedKeys(keymap.ActionDown, keymap.ActionUp), "navigate TOC entries"},
-		{mergedKeys(keymap.ActionNextItem, keymap.ActionPrevItem), "next / prev header"},
-		{mergedKeys(keymap.ActionConfirm), "jump to header in diff"},
-	}
-
-	maxW := 0
-	for _, l := range lines {
-		if w := runewidth.StringWidth(l.keys); w > maxW {
-			maxW = w
-		}
-	}
-
-	reset := "\033[0m"
-	headerColor := m.ansiFg(m.styles.colors.Accent)
-	keyColor := m.ansiFg(m.styles.colors.Annotation)
-
-	buf.WriteString(headerColor + "Markdown TOC (single-file full-context mode)" + reset + "\n")
-	for _, l := range lines {
-		pad := max(maxW-runewidth.StringWidth(l.keys), 0)
-		fmt.Fprintf(buf, "  %s%s%s%s  %s\n", keyColor, l.keys, reset, strings.Repeat(" ", pad), l.desc)
-	}
-}
-
-// overlayCenter composites fg on top of bg, centered horizontally and vertically.
-// uses ANSI-aware string cutting to preserve styling in both layers.
-func (m Model) overlayCenter(bg, fg string) string {
-	bgLines := strings.Split(bg, "\n")
-	fgLines := strings.Split(fg, "\n")
-
-	fgWidth := lipgloss.Width(fg)
-	fgHeight := len(fgLines)
-	bgHeight := len(bgLines)
-
-	startY := (bgHeight - fgHeight) / 2
-	startX := max((m.width-fgWidth)/2, 0)
-
-	for i, fgLine := range fgLines {
-		bgIdx := startY + i
-		if bgIdx < 0 || bgIdx >= bgHeight {
-			continue
-		}
-		bgLine := bgLines[bgIdx]
-		// pad bg line to full width so right part is always available
-		bgW := lipgloss.Width(bgLine)
-		if bgW < m.width {
-			bgLine += strings.Repeat(" ", m.width-bgW)
-		}
-
-		left := ansi.Cut(bgLine, 0, startX)
-		right := ansi.Cut(bgLine, startX+fgWidth, m.width)
-		bgLines[bgIdx] = left + fgLine + right
-	}
-
-	return strings.Join(bgLines, "\n")
-}
-
-// handleDiscardQuit handles the Q key press for discard-and-quit.
-func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
-	if m.store.Count() == 0 || m.noConfirmDiscard || m.noStatusBar {
-		m.discarded = true
-		return m, tea.Quit
-	}
-	m.inConfirmDiscard = true
-	return m, nil
-}
-
-// handleFileAnnotateKey starts file-level annotation from diff pane only.
-func (m Model) handleFileAnnotateKey() (tea.Model, tea.Cmd) {
-	if m.focus == paneDiff && m.currFile != "" {
-		cmd := m.startFileAnnotation()
-		m.viewport.SetContent(m.renderDiff())
-		return m, cmd
-	}
-	return m, nil
-}
-
-// handleEscKey clears active search results on esc.
-func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
-	if len(m.searchMatches) > 0 {
-		m.clearSearch()
-		m.viewport.SetContent(m.renderDiff())
-	}
-	return m, nil
-}
-
-// handleEnterKey handles enter key based on current pane focus.
-func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
-	switch m.focus {
-	case paneTree:
-		if m.mdTOC != nil && m.mdTOC.cursor < len(m.mdTOC.entries) {
-			// jump to selected header in diff
-			entry := m.mdTOC.entries[m.mdTOC.cursor]
-			m.diffCursor = entry.lineIdx
-			m.cursorOnAnnotation = false
-			m.mdTOC.updateActiveSection(m.diffCursor)
-			m.focus = paneDiff
-			m.topAlignViewportOnCursor()
-			return m, nil
-		}
-		if m.currFile != "" {
-			m.focus = paneDiff
-		}
-		return m, nil
-	case paneDiff:
-		var cmd tea.Cmd
-		if m.cursorOnFileAnnotationLine() {
-			cmd = m.startFileAnnotation()
-		} else {
-			cmd = m.startAnnotation()
-		}
-		m.viewport.SetContent(m.renderDiff())
-		return m, cmd
-	}
-	return m, nil
-}
-
-// handleHelpKey handles help overlay keys.
-// help action toggles the overlay, dismiss/esc closes it, all other keys are blocked while showing.
-func (m Model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	action := m.keymap.Resolve(msg.String())
-	if action == keymap.ActionHelp {
-		m.showHelp = !m.showHelp
-		return m, nil
-	}
-	if action == keymap.ActionDismiss || msg.Type == tea.KeyEsc {
-		m.showHelp = false
-	}
-	return m, nil
-}
-
-// handleConfirmDiscardKey handles keys during discard confirmation prompt.
-func (m Model) handleConfirmDiscardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "y", "Q":
-		m.discarded = true
-		return m, tea.Quit
-	case "n", "esc":
-		m.inConfirmDiscard = false
-		return m, nil
-	}
-	return m, nil
-}
-
-// handleFilterToggle toggles the annotated files filter.
-// no-op in single-file mode (tree pane is hidden).
-func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
-	if m.singleFile {
-		return m, nil
-	}
-	annotated := m.annotatedFiles()
-	if len(annotated) > 0 {
-		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
-		m.tree.toggleFilter(annotated)
-		m.tree.ensureVisible(m.treePageSize())
-		return m.loadSelectedIfChanged()
-	}
-	return m, nil
-}
-
-// handleMarkReviewed toggles the reviewed state of the focused file.
-// tree focus uses the selected row; diff/TOC focus uses the displayed file.
-func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
-	file := m.currFile
-	if m.focus == paneTree && m.mdTOC == nil {
-		file = m.tree.selectedFile()
-	}
-	if file == "" {
-		file = m.tree.selectedFile()
-	}
-	m.tree.toggleReviewed(file)
-	return m, nil
-}
-
-// handleFileOrSearchNav handles next/prev item navigation: navigates search matches when a search
-// is active, otherwise navigates files or TOC entries (no-op in single-file mode without TOC).
-func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
-	if len(m.searchMatches) > 0 {
-		if forward {
-			m.nextSearchMatch()
-		} else {
-			m.prevSearchMatch()
-		}
-		m.syncTOCActiveSection()
-		m.viewport.SetContent(m.renderDiff())
-		return m, nil
-	}
-	dir := 1
-	if !forward {
-		dir = -1
-	}
-	if m.singleFile && m.mdTOC != nil {
-		return m.jumpTOCEntry(dir), nil
-	}
-	if !m.singleFile {
-		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
-		if forward {
-			m.tree.nextFile()
-		} else {
-			m.tree.prevFile()
-		}
-		return m.loadSelectedIfChanged()
-	}
-	return m, nil
-}
-
-// annotatedFiles returns a set of files that have annotations.
-func (m Model) annotatedFiles() map[string]bool {
-	result := make(map[string]bool)
-	for _, f := range m.store.Files() {
-		result[f] = true
-	}
-	return result
 }

@@ -24,6 +24,16 @@ If the user asks a question about revdiff (configuration, themes, keybindings, i
 - `references/config.md` — config file, options, colors, chroma themes
 - `references/usage.md` — examples, key bindings, output format
 
+## Using Existing Review History
+
+If the user says things like "locate my review", "use my latest revdiff annotations", "pull up the review I just did in another terminal", or "what did I annotate earlier" — the user ran revdiff outside this plugin flow and wants Claude to process the stored annotations. Read the most recent file from the persistent history directory via the helper script, then process the annotations through Step 3.5 classification as if they had come from a fresh launcher call:
+
+```bash
+${CLAUDE_SKILL_DIR}/scripts/read-latest-history.sh
+```
+
+The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via `git rev-parse --show-toplevel` basename, and prints the newest `.md` file found. Each history file contains a header (path, refs, commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
+
 ## How It Works
 
 1. Launch revdiff in a terminal overlay (tmux popup, Zellij floating pane, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
@@ -63,13 +73,16 @@ If not found, guide installation:
 **Auto-detect**: If no ref provided, run the smart detection script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/detect-ref.sh
+${CLAUDE_SKILL_DIR}/scripts/detect-ref.sh
 ```
 
 The script outputs structured fields:
-- `branch`, `main_branch`, `is_main`, `has_uncommitted`
+- `branch`, `main_branch`, `is_main`, `has_uncommitted`, `has_staged_only`
 - `suggested_ref` — the ref to pass to revdiff (empty = uncommitted changes)
+- `use_staged` — if `true`, pass `--staged` to the launcher (staged-only changes detected)
 - `needs_ask` — if `true`, ask the user before proceeding
+
+**When `use_staged: true`**, pass `--staged` to the launcher. This means all changes are in the index (staged) with nothing unstaged — without `--staged`, revdiff would show an empty diff.
 
 **When `needs_ask: true`** (on a feature branch with uncommitted changes), use AskUserQuestion:
 - **"Uncommitted only"** — pass no ref (review just working changes)
@@ -77,6 +90,7 @@ The script outputs structured fields:
 
 **When `needs_ask: false`**, use `suggested_ref` directly:
 - On main + uncommitted → no ref (uncommitted changes)
+- On main + staged only → no ref + `--staged` (staged changes)
 - On main + clean → `HEAD~1` (last commit)
 - On feature branch + clean → main branch name (full branch diff)
 
@@ -85,8 +99,10 @@ The script outputs structured fields:
 Run the launcher script:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
+${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]
 ```
+
+**IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on many harnesses. Set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher on OpenCode). Do NOT use `run_in_background` for this — background-task handling is unreliable for interactive TUI launchers (processes may be killed unprompted, and polling loops can leave the session idle after the review finishes). If the review outlasts the timeout cap, the fallback in Step 3 handles it.
 
 The script:
 - Detects available terminal (tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
@@ -95,6 +111,21 @@ The script:
 - Prints captured annotations to stdout
 
 ### Step 3: Process Annotations
+
+**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool instead reports a timeout (on Claude Code the task keeps running in the background after the 10-minute cap; on other harnesses it may be killed outright), revdiff is almost certainly still open in the overlay. Do NOT retry the launcher. Use the fallback:
+
+1. Tell the user: "The bash tool timed out, but revdiff may still be open. Let me know when you're done reviewing."
+2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply confirms revdiff has exited.
+3. Read the most recent output file (the launcher writes to `$TMPDIR` when set, falling back to `/tmp`):
+   ```bash
+   output_file="$(ls -t "${TMPDIR:-/tmp}"/revdiff-output-* 2>/dev/null | head -1)"
+   if [ -n "$output_file" ] && [ -f "$output_file" ]; then
+     cat "$output_file"
+   fi
+   ```
+4. If it has content, process as annotations below. If empty or no file, the user quit without annotating.
+
+This fallback is safe because revdiff writes the output file atomically on exit — there is never a partial read.
 
 If the script produces output, the user made annotations. The output format is:
 
@@ -110,9 +141,34 @@ Each annotation block has:
 - `## filename:line (type)` — which file and line, `(+)` = added, `(-)` = removed, `(file-level)` = file note
 - Comment text below — what the user wants changed
 
+### Step 3.5: Classify Annotations
+
+Split annotations into two categories:
+
+**Explanation requests** — annotation text starts with (case-insensitive): `explain`, `remind`, `describe`, `what is`, `what are`, `how does`, `how do`, `clarify`. These are questions the user wants answered, not code changes.
+
+**Code-change directives** — everything else. These are instructions to modify code.
+
+**If explanation requests are found:**
+
+1. Answer each explanation request — read the referenced code, generate a clear markdown explanation
+2. If there are also code-change directives in the same batch, note them as pending (they carry over to Step 4 after the explanation loop)
+3. Enter the **explanation loop**:
+
+   a. Write the explanation to a temp markdown file (e.g., `/tmp/revdiff-explain-XXXXXX.md`)
+   b. Launch revdiff with `--only=/tmp/revdiff-explain-XXXXXX.md` via the launcher script — this opens the explanation as a scrollable markdown view with TOC sidebar
+   c. **If user quits without annotations** → explanation accepted, clean up temp file, proceed:
+      - If pending code-change directives exist → go to Step 4
+      - Otherwise → go to Step 6 (re-launch revdiff with the original diff ref)
+   d. **If user annotates the explanation** → these are follow-up questions or clarification requests. Read the annotations, refine/extend the explanation markdown, write updated temp file, go back to step (b)
+
+The explanation loop continues until the user quits without annotating. This allows a natural back-and-forth dialogue where the user can ask for more detail or corrections on specific parts of the explanation.
+
+**If no explanation requests** — all annotations are code-change directives, proceed directly to Step 4.
+
 ### Step 4: Plan Changes
 
-Enter plan mode (EnterPlanMode) to analyze annotations:
+Enter plan mode (EnterPlanMode) to analyze code-change annotations:
 - List each annotation with file and line reference
 - Describe the planned change for each
 - Get user approval before modifying code
@@ -123,7 +179,7 @@ After plan approval, fix the actual source code. Each annotation is a directive.
 
 ### Step 6: Loop
 
-After fixing, run the launcher script again with the same ref. The user can:
+After fixing (or after "Continue review" from Step 3.5), run the launcher script again with the same ref. The user can:
 - Add more annotations → go back to Step 3
 - Quit without annotations → review complete (no output)
 
@@ -144,6 +200,25 @@ User: "revdiff HEAD~1"
 → fix applied
 → re-launch revdiff HEAD~1
 → user sees fix, quits without annotations
+→ "review complete"
+```
+
+```
+User: "revdiff HEAD~3"
+→ launch revdiff in tmux popup with HEAD~3 diff
+→ user annotates: "server.go:72 - explain what this mutex protects"
+→ user quits
+→ annotation classified as explanation request (starts with "explain")
+→ Claude reads server.go:72, generates markdown explanation
+→ writes to /tmp/revdiff-explain-XXXXXX.md
+→ launch revdiff --only=/tmp/revdiff-explain-XXXXXX.md (explanation view with TOC)
+→ user reads explanation, annotates: "what about the race condition on line 80?"
+→ Claude refines explanation, rewrites temp file
+→ re-launch revdiff --only=/tmp/revdiff-explain-XXXXXX.md
+→ user reads updated explanation, quits without annotations
+→ explanation accepted, clean up temp file
+→ re-launch revdiff HEAD~3 (back to diff review)
+→ user quits without annotations
 → "review complete"
 ```
 

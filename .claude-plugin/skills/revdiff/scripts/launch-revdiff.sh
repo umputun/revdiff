@@ -18,11 +18,17 @@ TMPBASE="${TMPDIR:-/tmp}"
 OUTPUT_FILE=$(mktemp "$TMPBASE/revdiff-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-CONFIG_FLAG=""
+# shell-quote a single argument for safe embedding in sh -c strings.
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+REVDIFF_CMD="$(sq "$REVDIFF_BIN")"
 if [ -n "${REVDIFF_CONFIG:-}" ] && [ -f "$REVDIFF_CONFIG" ]; then
-    CONFIG_FLAG="--config=$REVDIFF_CONFIG"
+    REVDIFF_CMD="$REVDIFF_CMD $(sq "--config=$REVDIFF_CONFIG")"
 fi
-REVDIFF_CMD="$REVDIFF_BIN $CONFIG_FLAG --output=$OUTPUT_FILE $*"
+REVDIFF_CMD="$REVDIFF_CMD $(sq "--output=$OUTPUT_FILE")"
+for arg in "$@"; do
+    REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
+done
 CWD="$(pwd)"
 
 # build descriptive title: "rd: dirname [ref]"
@@ -95,9 +101,9 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd="$CWD")
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
-        KITTY_ARGS+=(--match "id:${KITTY_WINDOW_ID}")
+        KITTY_ARGS+=(--match "window_id:${KITTY_WINDOW_ID}")
     fi
-    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch '$SENTINEL'")
+    KITTY_ARGS+=(sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")")
 
     "${KITTY_ARGS[@]}" >/dev/null 2>&1
 
@@ -125,7 +131,7 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
         WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
         WEZTERM_PCT="${WEZTERM_PCT%%%}"
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
-            --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch '$SENTINEL'" >/dev/null 2>&1
+            --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")" >/dev/null 2>&1
 
         while [ ! -f "$SENTINEL" ]; do
             sleep 0.3
@@ -145,7 +151,7 @@ if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch '$SENTINEL'
+$REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -156,9 +162,9 @@ LAUNCHER
     # send exec command immediately — the pty input buffer holds the text
     # until the new pane's shell finishes initializing and reads it
     if [ -n "$CMUX_SURF" ]; then
-        cmux send --surface "$CMUX_SURF" "exec $LAUNCH_SCRIPT\n"
+        cmux send --surface "$CMUX_SURF" "exec $(sq "$LAUNCH_SCRIPT")\n" >/dev/null 2>&1
     else
-        cmux send "exec $LAUNCH_SCRIPT\n"
+        cmux send "exec $(sq "$LAUNCH_SCRIPT")\n" >/dev/null 2>&1
     fi
 
     while [ ! -f "$SENTINEL" ]; do
@@ -183,11 +189,11 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch '$SENTINEL'
+$REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" "$CWD" <<'APPLESCRIPT'
+    if ! GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" "$CWD" <<'APPLESCRIPT'
 on run argv
     set launchScript to item 1 of argv
     set cwd to item 2 of argv
@@ -203,8 +209,7 @@ on run argv
     end tell
 end run
 APPLESCRIPT
-    )
-    if [ $? -ne 0 ]; then
+    ); then
         rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
         exit 1
     fi
@@ -247,7 +252,7 @@ on run argv
     set launchScript to item 2 of argv
     set cwd to item 3 of argv
     set sentinel to item 4 of argv
-    set cmd to launchScript & " " & quoted form of cwd & " " & quoted form of sentinel
+    set cmd to quoted form of launchScript & " " & quoted form of cwd & " " & quoted form of sentinel
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
             repeat with t in tabs of w
@@ -314,7 +319,7 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-cd $(printf '%q' "$CWD") && $REVDIFF_CMD; echo d > $(printf '%q' "$SENTINEL"); exit
+cd $(sq "$CWD") && $REVDIFF_CMD; echo d > $(sq "$SENTINEL"); exit
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 

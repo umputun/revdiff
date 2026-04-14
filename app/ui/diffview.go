@@ -5,31 +5,44 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
-// matchRange represents a range of visible character positions for search match highlighting.
-type matchRange struct{ start, end int }
-
 // lineNumGutterWidth returns the total character width of the line number gutter.
-// layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
+// two-column layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
+// single-column layout: " " + num(W) = W + 1
 func (m Model) lineNumGutterWidth() int {
+	if m.singleColLineNum {
+		return m.lineNumWidth + 1
+	}
 	return m.lineNumWidth*2 + 2
 }
 
 // lineNumGutter returns the formatted line number gutter string for a diff line.
-// uses muted color via lipgloss style (m.styles.LineNumber); safe here because the gutter
+// uses muted color via lipgloss style (StyleKeyLineNumber); safe here because the gutter
 // is concatenated before content, so the lipgloss reset doesn't break outer backgrounds.
-// layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
+// two-column layout: " OOO NNN" where OOO is right-aligned old num, NNN is right-aligned new num.
 // blank columns for adds (no old), removes (no new), and dividers (both blank).
+// single-column layout: " NNN" — used for full-context files where OldNum == NewNum.
 func (m Model) lineNumGutter(dl diff.DiffLine) string {
 	w := m.lineNumWidth
 	blank := strings.Repeat(" ", w)
+
+	if m.singleColLineNum {
+		var col string
+		if dl.ChangeType == diff.ChangeDivider {
+			col = blank
+		} else {
+			col = fmt.Sprintf("%*d", w, dl.NewNum)
+		}
+		return m.resolver.Style(style.StyleKeyLineNumber).Render(" " + col)
+	}
 
 	var oldCol, newCol string
 	switch dl.ChangeType {
@@ -47,7 +60,7 @@ func (m Model) lineNumGutter(dl diff.DiffLine) string {
 	}
 
 	gutter := " " + oldCol + " " + newCol
-	return m.styles.LineNumber.Render(gutter)
+	return m.resolver.Style(style.StyleKeyLineNumber).Render(gutter)
 }
 
 // blameGutterWidth returns the total character width of the blame gutter.
@@ -58,19 +71,20 @@ func (m Model) blameGutterWidth() int {
 
 // blameGutter returns the formatted blame gutter string for a diff line.
 // shows author name (truncated) and relative age for lines with NewNum; blank for removed lines and dividers.
-func (m Model) blameGutter(dl diff.DiffLine) string {
+// now is the reference time for computing relative age, passed from the render entry point.
+func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 	w := m.blameAuthorLen
 	totalW := m.blameGutterWidth()
 	blank := strings.Repeat(" ", totalW)
 
 	lineNum := dl.NewNum
 	if lineNum == 0 || dl.ChangeType == diff.ChangeDivider {
-		return m.styles.LineNumber.Render(blank)
+		return m.resolver.Style(style.StyleKeyLineNumber).Render(blank)
 	}
 
 	bl, ok := m.blameData[lineNum]
 	if !ok {
-		return m.styles.LineNumber.Render(blank)
+		return m.resolver.Style(style.StyleKeyLineNumber).Render(blank)
 	}
 
 	author := runewidth.Truncate(bl.Author, w, "…")
@@ -79,9 +93,9 @@ func (m Model) blameGutter(dl diff.DiffLine) string {
 		author += strings.Repeat(" ", pad)
 	}
 
-	age := diff.RelativeAge(bl.Time, m.blameNow)
+	age := diff.RelativeAge(bl.Time, now)
 	gutter := " " + author + " " + age
-	return m.styles.LineNumber.Render(gutter)
+	return m.resolver.Style(style.StyleKeyLineNumber).Render(gutter)
 }
 
 // hasBlameGutter returns true when the blame gutter should be rendered.
@@ -96,7 +110,7 @@ func (m Model) lineGutters(dl diff.DiffLine) (numGutter, blameGutter string) {
 		numGutter = m.lineNumGutter(dl)
 	}
 	if m.hasBlameGutter() {
-		blameGutter = m.blameGutter(dl)
+		blameGutter = m.blameGutter(dl, m.blameNow)
 	}
 	return numGutter, blameGutter
 }
@@ -125,17 +139,133 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 	return numBlank, blameBlank
 }
 
-// applyHorizontalScroll applies horizontal scroll offset to content, subtracting gutter widths.
-// no-op when scroll offset is zero.
-func (m Model) applyHorizontalScroll(content string) string {
-	if m.scrollX <= 0 {
+// applyHorizontalScroll truncates content to the diff content width and applies horizontal scroll offset.
+// when content overflows the viewport, shows double-angle overflow indicators («/») at the edges so
+// the user can see more content exists in that direction. the left indicator replaces the first
+// visible column; the right indicator reserves the last content column for a space separator and
+// extends one column beyond cutWidth into the pane's right padding so the glyph sits flush against
+// the right border. when the viewport is too narrow to fit both indicators plus inner content
+// (cutWidth ≤ 2 with dual overflow, cutWidth ≤ 1 with single-side overflow), falls back to a plain
+// cut without indicators. indicatorBg is the line background used for the left glyph and for the
+// right indicator's leading space separator (so the colored line extends naturally through the
+// content area); the right glyph itself is always drawn on DiffBg by rightScrollIndicator so it
+// reads as pane chrome, not as part of the line. the returned width may equal cutWidth+1 when
+// right overflow is present, which extendLineBg treats as a no-op (current > target).
+// truncates whenever the viewport has room (cutWidth > 0), even when scroll offset is zero, to
+// prevent long lines from overflowing the right padding. when cutWidth ≤ 0 (pathologically narrow
+// terminal with wide gutters), returns the content unchanged.
+func (m Model) applyHorizontalScroll(content string, indicatorBg style.Color) string {
+	cutWidth := m.diffContentWidth() - m.gutterExtra()
+	if cutWidth <= 0 {
 		return content
 	}
-	cutWidth := m.diffContentWidth() - m.gutterExtra()
-	if cutWidth > 0 {
-		return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+	origWidth := lipgloss.Width(content)
+	start := m.scrollX
+	end := m.scrollX + cutWidth
+
+	hasLeftOverflow := start > 0 && origWidth > start
+	hasRightOverflow := origWidth > end
+
+	if !hasLeftOverflow && !hasRightOverflow {
+		return ansi.Cut(content, start, end)
 	}
-	return content
+
+	// reserve columns for indicators: left takes 1 visible col (replaces first col),
+	// right reserves 1 col for a space separator and then extends 1 col beyond cutWidth
+	// into the pane's right padding so the arrow sits flush against the border.
+	innerStart := start
+	innerEnd := end
+	if hasLeftOverflow {
+		innerStart++
+	}
+	if hasRightOverflow {
+		innerEnd--
+	}
+	if innerEnd <= innerStart {
+		// viewport too narrow to fit inner content plus indicators; fall back to plain cut
+		return ansi.Cut(content, start, end)
+	}
+
+	var b strings.Builder
+	if hasLeftOverflow {
+		b.WriteString(m.leftScrollIndicator(indicatorBg))
+	}
+	b.WriteString(ansi.Cut(content, innerStart, innerEnd))
+	if hasRightOverflow {
+		b.WriteString(m.rightScrollIndicator(indicatorBg))
+	}
+	return b.String()
+}
+
+// plainHorizontalCut truncates content to the diff content width and applies horizontal scroll
+// offset without emitting any overflow indicators. used for wrap-mode divider lines where
+// indicators would contradict the "unwrapped mode only" design intent.
+func (m Model) plainHorizontalCut(content string) string {
+	cutWidth := m.diffContentWidth() - m.gutterExtra()
+	if cutWidth <= 0 {
+		return content
+	}
+	return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+}
+
+// leftScrollIndicator renders the left-side scroll overflow glyph («) using raw ANSI sequences
+// so it doesn't break outer lipgloss backgrounds. the « replaces the first visible content column,
+// so it belongs to the line and uses lineBg for its background; empty string emits foreground only.
+// in no-colors mode, falls back to reverse video.
+func (m Model) leftScrollIndicator(lineBg style.Color) string {
+	return m.scrollIndicatorANSI("«", lineBg, lineBg, false)
+}
+
+// rightScrollIndicator renders the right-side scroll overflow glyph (») prefixed with a space
+// separator so the glyph doesn't touch the last content character. uses raw ANSI sequences so it
+// doesn't break outer lipgloss backgrounds. the leading space carries lineBg so the colored line
+// extends contiguously through the content area, while the » glyph itself is drawn on DiffBg so it
+// visually sits on pane chrome (matching the surrounding right-padding column) rather than on the
+// line's colored bg. in no-colors mode, falls back to reverse video.
+func (m Model) rightScrollIndicator(lineBg style.Color) string {
+	return m.scrollIndicatorANSI("»", lineBg, m.resolver.Color(style.ColorKeyDiffPaneBg), true)
+}
+
+// scrollIndicatorANSI builds the ANSI-encoded indicator string shared by left and right variants.
+// leadingSpace controls whether a separator space is emitted before the glyph (drawn on spaceBg);
+// glyphBg is the background for the glyph itself. the two can differ so the right indicator can
+// keep its separator on the line bg (letting the colored content area extend naturally) while
+// drawing its glyph on DiffBg to read as pane chrome. only emits the fg/bg reset sequences we
+// actually set, so callers that pass an empty bg (or a theme with empty Muted) don't accidentally
+// trash inherited pane background or foreground.
+func (m Model) scrollIndicatorANSI(glyph string, spaceBg, glyphBg style.Color, leadingSpace bool) string {
+	if m.noColors {
+		prefix := ""
+		if leadingSpace {
+			prefix = " "
+		}
+		return prefix + "\033[7m" + glyph + "\033[27m"
+	}
+	var b strings.Builder
+	if leadingSpace {
+		if spaceBg != "" {
+			b.WriteString(string(spaceBg))
+		}
+		b.WriteString(" ")
+		if spaceBg != "" {
+			b.WriteString("\033[49m")
+		}
+	}
+	if glyphBg != "" {
+		b.WriteString(string(glyphBg))
+	}
+	fg := m.resolver.Color(style.ColorKeyMutedFg)
+	if fg != "" {
+		b.WriteString(string(fg))
+	}
+	b.WriteString(glyph)
+	if fg != "" {
+		b.WriteString("\033[39m")
+	}
+	if glyphBg != "" {
+		b.WriteString("\033[49m")
+	}
+	return b.String()
 }
 
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
@@ -151,7 +281,7 @@ func (m Model) renderDiff() string {
 		return m.renderCollapsedDiff()
 	}
 
-	m.buildSearchMatchSet()
+	m.searchMatchSet = m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
 	var b strings.Builder
@@ -183,15 +313,17 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annotating && m.fileAnnotating {
-		line := " " + m.styles.AnnotationLine.Render("\U0001f4ac file: ") + m.annotateInput.View()
-		b.WriteString(line + "\n")
+		line := " " + m.renderer.AnnotationInline("\U0001f4ac file: ") + m.annotateInput.View()
+		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
+		line = strings.TrimRight(line, " ")
+		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
 		return
 	}
 
 	if fileComment != "" {
 		cursor := " "
 		if m.diffCursor == -1 && m.focus == paneDiff {
-			cursor = m.styles.DiffCursorLine.Render("▶")
+			cursor = m.renderer.DiffCursor(m.noColors)
 		}
 		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
 	}
@@ -201,9 +333,10 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 // when wrap mode is active, long lines are broken at word boundaries with ↪ continuation markers.
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
+	textContent = m.applyIntraLineHighlight(idx, dl.ChangeType, textContent)
 	isSearchMatch := m.searchMatchSet[idx]
 
-	isCursor := idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	isCursor := m.isCursorLine(idx)
 
 	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
 	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
@@ -215,16 +348,24 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 	var content string
 	if dl.ChangeType == diff.ChangeDivider {
-		content = m.styles.LineNumber.Render(" " + lineContent)
+		content = m.resolver.Style(style.StyleKeyLineNumber).Render(" " + lineContent)
 	} else {
 		content = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), textContent, hasHighlight, isSearchMatch)
 	}
 
-	content = m.applyHorizontalScroll(content)
+	lineBg := m.resolver.LineBg(dl.ChangeType)
+	// wrap mode divider fallthrough: dividers are unwrapped even in wrap mode, but indicators
+	// only belong in unwrapped mode globally, so skip them for this edge case.
+	if m.wrapMode && dl.ChangeType == diff.ChangeDivider {
+		content = m.plainHorizontalCut(content)
+	} else {
+		content = m.applyHorizontalScroll(content, m.resolver.IndicatorBg(dl.ChangeType))
+	}
+	content = m.extendLineBg(content, lineBg)
 
 	cursor := " "
 	if isCursor {
-		cursor = m.styles.DiffCursorLine.Render("▶")
+		cursor = m.renderer.DiffCursor(m.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -233,9 +374,8 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textContent string, hasHighlight, isCursor, isSearchMatch bool) {
 	numGutter, blGutter := m.lineGutters(dl)
 	numBlank, blBlank := m.gutterBlanks()
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 
-	visualLines := m.wrapContent(textContent, wrapWidth)
+	visualLines := m.wrapContent(textContent, m.wrapWidth())
 	for i, vl := range visualLines {
 		prefix := " ↪ "
 		ng := numBlank
@@ -247,10 +387,11 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 		}
 
 		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
+		styled = m.extendLineBg(styled, m.resolver.LineBg(dl.ChangeType))
 
 		cursor := " "
 		if i == 0 && isCursor {
-			cursor = m.styles.DiffCursorLine.Render("▶")
+			cursor = m.renderer.DiffCursor(m.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -269,18 +410,23 @@ func (m Model) wrappedLineCount(idx int) int {
 	}
 
 	_, textContent, _ := m.prepareLineContent(idx, dl)
-	wrapWidth := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
-	return len(m.wrapContent(textContent, wrapWidth))
+	return len(m.wrapContent(textContent, m.wrapWidth()))
 }
 
 // wrapContent wraps text content at the given width using word boundaries.
 // returns a slice of visual lines (at least one). handles ANSI escape sequences.
+// re-emits active SGR state (foreground, bold, italic) at the start of each continuation line
+// because ansi.Wrap does not preserve ANSI state across inserted newlines.
 func (m Model) wrapContent(content string, width int) []string {
 	if width <= 0 {
 		return []string{content}
 	}
 	wrapped := ansi.Wrap(content, width, "")
-	return strings.Split(wrapped, "\n")
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) <= 1 {
+		return lines
+	}
+	return m.sgr.Reemit(lines)
 }
 
 // prepareLineContent returns the display-ready content for a diff line with tabs replaced.
@@ -293,6 +439,44 @@ func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textC
 		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
 	}
 	return lineContent, textContent, hasHighlight
+}
+
+// applyIntraLineHighlight inserts ANSI background markers for intra-line word-diff ranges.
+// returns textContent unchanged when no intra-line ranges are available for the given line.
+// uses WordAddBg/WordRemoveBg for color mode and reverse-video for no-color mode.
+func (m Model) applyIntraLineHighlight(idx int, changeType diff.ChangeType, textContent string) string {
+	if idx >= len(m.intraRanges) || m.intraRanges[idx] == nil {
+		return textContent
+	}
+	if changeType != diff.ChangeAdd && changeType != diff.ChangeRemove {
+		return textContent
+	}
+
+	ranges := m.intraRanges[idx]
+	if len(ranges) == 0 {
+		return textContent
+	}
+
+	var hlOn, hlOff string
+	if m.noColors {
+		hlOn = "\033[7m"   // reverse video
+		hlOff = "\033[27m" // reverse video off
+	} else {
+		switch changeType { //nolint:exhaustive // only add/remove relevant
+		case diff.ChangeAdd:
+			hlOn = string(m.resolver.WordDiffBg(diff.ChangeAdd))
+			hlOff = string(m.resolver.LineBg(diff.ChangeAdd)) // restore line bg
+		case diff.ChangeRemove:
+			hlOn = string(m.resolver.WordDiffBg(diff.ChangeRemove))
+			hlOff = string(m.resolver.LineBg(diff.ChangeRemove)) // restore line bg
+		}
+	}
+
+	if hlOn == "" {
+		return textContent
+	}
+
+	return m.differ.InsertHighlightMarkers(textContent, ranges, hlOn, hlOff)
 }
 
 // linePrefix returns the 3-character gutter prefix for a given change type.
@@ -310,7 +494,9 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 // highlightSearchMatches wraps each occurrence of the search term in the visible text
 // with ANSI background color sequence (preserving syntax foreground within matches).
 // works with both plain text and ANSI-coded content by stripping ANSI to find match positions.
-func (m Model) highlightSearchMatches(s string) string {
+// changeType is used to restore the correct line background after each match (add/remove bg)
+// instead of resetting to terminal default, which would break word-diff and line bg overlays.
+func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) string {
 	if m.searchTerm == "" {
 		return s
 	}
@@ -323,8 +509,8 @@ func (m Model) highlightSearchMatches(s string) string {
 		return s
 	}
 
-	// collect all match ranges in visible-character positions
-	var matches []matchRange
+	// collect all match ranges as byte offsets in ANSI-stripped text
+	var matches []worddiff.Range
 	offset := 0
 	for {
 		idx := strings.Index(plainLower[offset:], term)
@@ -332,105 +518,46 @@ func (m Model) highlightSearchMatches(s string) string {
 			break
 		}
 		start := offset + idx
-		matches = append(matches, matchRange{start, start + len(term)})
+		matches = append(matches, worddiff.Range{Start: start, End: start + len(term)})
 		offset = start + len(term)
 	}
 	if len(matches) == 0 {
 		return s
 	}
 
-	// background-only highlight preserves syntax foreground colors within matches
-	hlOn := m.ansiBg(m.styles.colors.SearchBg)
+	// background-only highlight preserves syntax foreground colors within matches.
+	// restore to line bg (add/remove) after each match instead of terminal default (\033[49m]),
+	// so word-diff and line bg overlays are not broken by search highlights.
+	searchBg := m.resolver.Color(style.ColorKeySearchBg)
+	hlOn := string(searchBg)
 	hlOff := "\033[49m"
 	if hlOn == "" {
 		// no-colors mode: fall back to reverse video so matches remain visible
 		hlOn = "\033[7m"
 		hlOff = "\033[27m"
+	} else if bg := m.resolver.LineBg(changeType); bg != "" {
+		hlOff = string(bg)
 	}
 
-	return m.insertHighlightMarkers(s, matches, hlOn, hlOff)
-}
-
-// insertHighlightMarkers walks the string inserting hlOn/hlOff ANSI sequences at match positions,
-// skipping over existing ANSI escape sequences to preserve them.
-func (m Model) insertHighlightMarkers(s string, matches []matchRange, hlOn, hlOff string) string {
-	var b strings.Builder
-	visPos := 0   // current position in visible text
-	matchIdx := 0 // current match we're processing
-	i := 0
-
-	for i < len(s) {
-		// skip ANSI escape sequences (copy them as-is)
-		if s[i] == '\033' {
-			j := i + 1
-			for j < len(s) && s[j] != 'm' {
-				j++
-			}
-			if j < len(s) {
-				j++ // include the 'm'
-			}
-			b.WriteString(s[i:j])
-			i = j
-			continue
-		}
-
-		// insert highlight start/end at match boundaries
-		if matchIdx < len(matches) && visPos == matches[matchIdx].start {
-			b.WriteString(hlOn)
-		}
-		if matchIdx < len(matches) && visPos == matches[matchIdx].end {
-			b.WriteString(hlOff)
-			matchIdx++
-			if matchIdx < len(matches) && visPos == matches[matchIdx].start {
-				b.WriteString(hlOn)
-			}
-		}
-
-		b.WriteByte(s[i])
-		visPos++
-		i++
-	}
-
-	// close any unclosed highlight
-	if matchIdx < len(matches) && visPos >= matches[matchIdx].start && visPos <= matches[matchIdx].end {
-		b.WriteString(hlOff)
-	}
-
-	return b.String()
+	return m.differ.InsertHighlightMarkers(s, matches, hlOn, hlOff)
 }
 
 // styleDiffContent applies the appropriate line style based on change type.
-// for add/remove lines, extends the background to the full content width so padContentBg
-// at the View level doesn't replace it with DiffBg.
+// does NOT extend backgrounds — callers must apply extendLineBg after applyHorizontalScroll
+// (non-wrap paths) or directly after styling (wrap paths where scroll is not used).
 func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
 	if isSearchMatch && m.searchTerm != "" {
-		content = m.highlightSearchMatches(content)
+		content = m.highlightSearchMatches(content, changeType)
 	}
 
-	switch changeType {
-	case diff.ChangeAdd:
-		if hasHighlight {
-			return m.extendLineBg(m.styles.LineAddHighlight.Render(prefix+content), m.styles.colors.AddBg)
-		}
-		return m.extendLineBg(m.styles.LineAdd.Render(prefix+content), m.styles.colors.AddBg)
-	case diff.ChangeRemove:
-		if hasHighlight {
-			return m.extendLineBg(m.styles.LineRemoveHighlight.Render(prefix+content), m.styles.colors.RemoveBg)
-		}
-		return m.extendLineBg(m.styles.LineRemove.Render(prefix+content), m.styles.colors.RemoveBg)
-	default:
-		if hasHighlight {
-			return m.styles.LineContextHighlight.Render(prefix + content)
-		}
-		return m.styles.LineContext.Render(prefix + content)
-	}
+	return m.resolver.LineStyle(changeType, hasHighlight).Render(prefix + content)
 }
 
 // extendLineBg extends a styled line's background to the full diff content width
 // using raw ANSI sequences. this ensures add/remove/modify backgrounds fill the entire line.
 // subtracts line number gutter width when line numbers are enabled.
-func (m Model) extendLineBg(styled, bgColor string) string {
-	if bgColor == "" {
+func (m Model) extendLineBg(styled string, bg style.Color) string {
+	if bg == "" {
 		return styled
 	}
 	// target = content area minus cursor bar (1) minus gutters (if on)
@@ -439,7 +566,7 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 	targetWidth := m.diffContentWidth() - m.gutterExtra()
 	currentWidth := lipgloss.Width(styled)
 	if pad := targetWidth - currentWidth; pad > 0 {
-		return styled + m.ansiBg(bgColor) + strings.Repeat(" ", pad) + "\033[49m"
+		return styled + string(bg) + strings.Repeat(" ", pad) + "\033[49m"
 	}
 	return styled
 }
@@ -447,7 +574,10 @@ func (m Model) extendLineBg(styled, bgColor string) string {
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
-		b.WriteString(" " + m.styles.AnnotationLine.Render("\U0001f4ac ") + m.annotateInput.View() + "\n")
+		line := " " + m.renderer.AnnotationInline("\U0001f4ac ") + m.annotateInput.View()
+		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
+		line = strings.TrimRight(line, " ")
+		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
 		return
 	}
 	dl := m.diffLines[idx]
@@ -456,7 +586,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
 			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
-				cursor = m.styles.DiffCursorLine.Render("▶")
+				cursor = m.renderer.DiffCursor(m.noColors)
 			}
 			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
 		}
@@ -475,379 +605,25 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) 
 			if i == 0 {
 				c = cursor
 			}
-			b.WriteString(c + m.styles.AnnotationLine.Render(line) + "\n")
+			b.WriteString(c + m.renderer.AnnotationInline(line) + "\n")
 		}
 		return
 	}
 
-	b.WriteString(cursor + m.styles.AnnotationLine.Render(text) + "\n")
-}
-
-// cursorDiffLine returns the DiffLine at the current cursor position, if valid.
-func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
-		return diff.DiffLine{}, false
-	}
-	return m.diffLines[m.diffCursor], true
-}
-
-// moveDiffCursorDown moves the diff cursor to the next non-divider line.
-// if the current line has an annotation and cursor is on the diff line, stops on the annotation first.
-// in collapsed mode, also skips removed lines unless their hunk is expanded.
-func (m *Model) moveDiffCursorDown() {
-	hunks := m.findHunks()
-
-	// if currently on annotation sub-line, move to the next diff line
-	if m.cursorOnAnnotation {
-		m.cursorOnAnnotation = false
-		for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
-			if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
-				m.diffCursor = i
-				return
-			}
-		}
-		return
-	}
-
-	// if current line has an annotation, stop on it first.
-	// skip for delete-only placeholders — their annotations are only visible when expanded.
-	if m.diffCursor >= 0 && m.diffCursor < len(m.diffLines) {
-		dl := m.diffLines[m.diffCursor]
-		if dl.ChangeType != diff.ChangeDivider && !m.isDeleteOnlyPlaceholder(m.diffCursor, hunks) {
-			lineNum := m.diffLineNum(dl)
-			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
-				m.cursorOnAnnotation = true
-				return
-			}
-		}
-	}
-
-	// move to next non-divider diff line, skipping collapsed hidden lines
-	start := m.diffCursor + 1
-	if m.diffCursor == -1 {
-		start = 0
-	}
-	for i := start; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
-			m.diffCursor = i
-			return
-		}
-	}
-}
-
-// moveDiffCursorUp moves the diff cursor to the previous non-divider line.
-// when moving up from a diff line, if the previous line has an annotation, lands on the annotation first.
-// in collapsed mode, also skips removed lines unless their hunk is expanded.
-func (m *Model) moveDiffCursorUp() {
-	// if currently on annotation sub-line, move up to the diff line itself
-	if m.cursorOnAnnotation {
-		m.cursorOnAnnotation = false
-		return
-	}
-
-	hunks := m.findHunks()
-	for i := m.diffCursor - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
-			continue
-		}
-		m.diffCursor = i
-		// if this line has an annotation, land on it (skip for delete-only placeholders)
-		dl := m.diffLines[i]
-		lineNum := m.diffLineNum(dl)
-		if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) && !m.isDeleteOnlyPlaceholder(i, hunks) {
-			m.cursorOnAnnotation = true
-		}
-		return
-	}
-	// if we're at the first line and there's a file-level annotation, go to it
-	if m.diffCursor >= 0 && m.hasFileAnnotation() {
-		m.diffCursor = -1
-	}
-}
-
-// moveDiffCursorPageDown moves the diff cursor down by one visual page.
-// accounts for divider lines and annotation rows that occupy rendered space.
-// scrolls the viewport so cursor appears near the top of the new page.
-func (m *Model) moveDiffCursorPageDown() {
-	startY := m.cursorViewportY()
-	for {
-		prev := m.diffCursor
-		m.moveDiffCursorDown()
-		if m.diffCursor == prev {
-			break
-		}
-		if m.cursorViewportY()-startY >= m.viewport.Height {
-			break
-		}
-	}
-	// place cursor at the top of the viewport for a true page-scroll feel
-	m.viewport.SetYOffset(m.cursorViewportY())
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// moveDiffCursorPageUp moves the diff cursor up by one visual page.
-// accounts for divider lines and annotation rows that occupy rendered space.
-// scrolls the viewport so cursor appears near the bottom of the new page.
-func (m *Model) moveDiffCursorPageUp() {
-	startY := m.cursorViewportY()
-	for {
-		prev := m.diffCursor
-		m.moveDiffCursorUp()
-		if m.diffCursor == prev {
-			break
-		}
-		if startY-m.cursorViewportY() >= m.viewport.Height {
-			break
-		}
-	}
-	// place cursor at the bottom of the viewport for a true page-scroll feel
-	m.viewport.SetYOffset(max(0, m.cursorViewportY()-m.viewport.Height+1))
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// moveDiffCursorHalfPageDown moves the diff cursor down by half a visual page.
-// scrolls viewport by half page explicitly, matching vim/less ctrl+d behavior.
-func (m *Model) moveDiffCursorHalfPageDown() {
-	halfPage := max(1, m.viewport.Height/2)
-	startY := m.cursorViewportY()
-	for {
-		prev := m.diffCursor
-		m.moveDiffCursorDown()
-		if m.diffCursor == prev {
-			break
-		}
-		if m.cursorViewportY()-startY >= halfPage {
-			break
-		}
-	}
-	maxOffset := max(0, m.viewport.TotalLineCount()-m.viewport.Height)
-	m.viewport.SetYOffset(min(m.viewport.YOffset+halfPage, maxOffset))
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// moveDiffCursorHalfPageUp moves the diff cursor up by half a visual page.
-// scrolls viewport by half page explicitly, matching vim/less ctrl+u behavior.
-func (m *Model) moveDiffCursorHalfPageUp() {
-	halfPage := max(1, m.viewport.Height/2)
-	startY := m.cursorViewportY()
-	for {
-		prev := m.diffCursor
-		m.moveDiffCursorUp()
-		if m.diffCursor == prev {
-			break
-		}
-		if startY-m.cursorViewportY() >= halfPage {
-			break
-		}
-	}
-	m.viewport.SetYOffset(max(0, m.viewport.YOffset-halfPage))
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// moveDiffCursorToStart moves the diff cursor to the first selectable position.
-// if a file-level annotation exists, the cursor goes to -1 (file annotation line).
-func (m *Model) moveDiffCursorToStart() {
-	m.cursorOnAnnotation = false
-	if m.hasFileAnnotation() {
-		m.diffCursor = -1
-		m.syncViewportToCursor()
-		return
-	}
-
-	m.skipInitialDividers()
-	m.syncViewportToCursor()
-}
-
-// moveDiffCursorToEnd moves the diff cursor to the last visible non-divider line.
-// in collapsed mode, skips hidden removed lines.
-func (m *Model) moveDiffCursorToEnd() {
-	m.cursorOnAnnotation = false
-	hunks := m.findHunks()
-	for i := len(m.diffLines) - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
-			m.diffCursor = i
-			break
-		}
-	}
-	m.syncViewportToCursor()
-}
-
-// syncViewportToCursor adjusts viewport scroll to keep cursor visible and re-renders content.
-// accounts for annotation lines injected between diff lines.
-func (m *Model) syncViewportToCursor() {
-	cursorY := m.cursorViewportY()
-	if cursorY < m.viewport.YOffset {
-		m.viewport.SetYOffset(cursorY)
-	} else if cursorY >= m.viewport.YOffset+m.viewport.Height {
-		m.viewport.SetYOffset(cursorY - m.viewport.Height + 1)
-	}
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// findHunks scans diffLines and returns a slice of hunk start indices.
-// a hunk is a contiguous group of added/removed lines. the returned index
-// is the first line of each such group.
-func (m Model) findHunks() []int {
-	var hunks []int
-	inHunk := false
-	for i, dl := range m.diffLines {
-		isChange := dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove
-		if isChange && !inHunk {
-			hunks = append(hunks, i)
-			inHunk = true
-		} else if !isChange {
-			inHunk = false
-		}
-	}
-	return hunks
-}
-
-// currentHunk returns the 1-based hunk index and total hunk count.
-// returns non-zero hunk index only when the cursor is on a changed line (add/remove).
-// returns (0, total) when cursor is not inside any hunk.
-func (m Model) currentHunk() (int, int) {
-	hunks := m.findHunks()
-	if len(hunks) == 0 {
-		return 0, 0
-	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
-		return 0, len(hunks)
-	}
-	dl := m.diffLines[m.diffCursor]
-	if dl.ChangeType != diff.ChangeAdd && dl.ChangeType != diff.ChangeRemove {
-		return 0, len(hunks)
-	}
-	// cursor is on a changed line, find which hunk
-	cur := 0
-	for i, start := range hunks {
-		if m.diffCursor >= start {
-			cur = i + 1
-		}
-	}
-	return cur, len(hunks)
-}
-
-// moveToNextHunk moves the diff cursor to the start of the next change hunk.
-// in collapsed mode, advances past hidden removed lines to the first visible line in the hunk.
-func (m *Model) moveToNextHunk() {
-	m.cursorOnAnnotation = false
-	hunks := m.findHunks()
-	for _, start := range hunks {
-		if start <= m.diffCursor {
-			continue
-		}
-		target := m.firstVisibleInHunk(start, hunks)
-		if target < 0 {
-			continue // skip delete-only hunks in collapsed mode
-		}
-		m.diffCursor = target
-		m.centerViewportOnCursor()
-		return
-	}
-}
-
-// moveToPrevHunk moves the diff cursor to the start of the previous change hunk.
-// in collapsed mode, advances past hidden removed lines to the first visible line in the hunk.
-func (m *Model) moveToPrevHunk() {
-	m.cursorOnAnnotation = false
-	hunks := m.findHunks()
-	for i := len(hunks) - 1; i >= 0; i-- {
-		target := m.firstVisibleInHunk(hunks[i], hunks)
-		if target < 0 {
-			continue // skip delete-only hunks in collapsed mode
-		}
-		if target < m.diffCursor {
-			m.diffCursor = target
-			m.centerViewportOnCursor()
-			return
-		}
-	}
-}
-
-// handleHunkNav moves to the next or previous hunk, crossing file boundaries when needed.
-// when cross-file hunk navigation is enabled, forward at the last hunk navigates to the next file
-// and lands on its first hunk, and backward at the first hunk navigates to the previous file and
-// lands on its last hunk.
-// always shifts focus to the diff pane. no-op when no file is loaded.
-func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
-	if m.currFile == "" {
-		return m, nil
-	}
-	m.focus = paneDiff
-	prevCursor := m.diffCursor
-	if forward {
-		m.moveToNextHunk()
-	} else {
-		m.moveToPrevHunk()
-	}
-	if m.diffCursor != prevCursor || m.singleFile || !m.crossFileHunks {
-		m.syncTOCActiveSection()
-		return m, nil
-	}
-	// cursor did not move — we are at the boundary; try to cross to adjacent file
-	if forward {
-		if m.tree.hasNextFile() {
-			fwd := true
-			m.pendingHunkJump = &fwd
-			m.tree.nextFile()
-			return m.loadSelectedIfChanged()
-		}
-	} else {
-		if m.tree.hasPrevFile() {
-			bwd := false
-			m.pendingHunkJump = &bwd
-			m.tree.prevFile()
-			return m.loadSelectedIfChanged()
-		}
-	}
-	m.syncTOCActiveSection()
-	return m, nil
-}
-
-// centerViewportOnCursor scrolls the viewport to place the cursor in the middle of the page.
-func (m *Model) centerViewportOnCursor() {
-	cursorY := m.cursorViewportY()
-	offset := max(0, cursorY-m.viewport.Height/2)
-	m.viewport.SetYOffset(offset)
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// topAlignViewportOnCursor scrolls the viewport to place the cursor at the top of the page.
-func (m *Model) topAlignViewportOnCursor() {
-	cursorY := m.cursorViewportY()
-	m.viewport.SetYOffset(max(0, cursorY))
-	m.viewport.SetContent(m.renderDiff())
-}
-
-// bottomAlignViewportOnCursor scrolls the viewport to place the cursor at the bottom of the page.
-func (m *Model) bottomAlignViewportOnCursor() {
-	cursorY := m.cursorViewportY()
-	m.viewport.SetYOffset(max(0, cursorY-m.viewport.Height+1))
-	m.viewport.SetContent(m.renderDiff())
+	b.WriteString(cursor + m.renderer.AnnotationInline(text) + "\n")
 }
 
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
-const scrollStep = 4      // horizontal scroll step in characters
 
-// handleHorizontalScroll processes left/right scroll keys.
-// direction < 0 scrolls left, direction > 0 scrolls right.
-// no-op when wrap mode is active (content is already fully visible).
-func (m *Model) handleHorizontalScroll(direction int) {
-	if m.wrapMode {
-		return
-	}
-	if direction < 0 {
-		m.scrollX = max(0, m.scrollX-scrollStep)
-	} else {
-		m.scrollX += scrollStep
-	}
-	m.viewport.SetContent(m.renderDiff())
+// wrapWidth returns the available width for wrapped content (diff content minus gutter prefix and extra gutters).
+func (m Model) wrapWidth() int {
+	return m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
 }
 
 // diffContentWidth returns the available width for diff line content.
 // accounts for borders, cursor bar, and 1 char right padding to prevent text from touching the pane border.
 func (m Model) diffContentWidth() int {
-	if m.treeHidden || (m.singleFile && m.mdTOC == nil) {
+	if m.treePaneHidden() {
 		// tree hidden or single-file without TOC: diff pane borders (2) + cursor bar (1) + right padding (1)
 		return max(10, m.width-4)
 	}

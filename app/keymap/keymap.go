@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Action represents a named action that a key can trigger.
@@ -44,7 +45,9 @@ const (
 	ActionToggleTree       Action = "toggle_tree"
 	ActionToggleLineNums   Action = "toggle_line_numbers"
 	ActionToggleBlame      Action = "toggle_blame"
+	ActionToggleWordDiff   Action = "toggle_word_diff"
 	ActionToggleHunk       Action = "toggle_hunk"
+	ActionToggleUntracked  Action = "toggle_untracked"
 	ActionMarkReviewed     Action = "mark_reviewed"
 	ActionFilter           Action = "filter"
 	ActionScrollCenter     Action = "scroll_center"
@@ -54,7 +57,11 @@ const (
 	ActionDiscardQuit      Action = "discard_quit"
 	ActionHelp             Action = "help"
 	ActionDismiss          Action = "dismiss"
+	ActionThemeSelect      Action = "theme_select"
 )
+
+// SectionPane is the help section name for pane-related keybindings.
+const SectionPane = "Pane"
 
 // validActions contains all known action names for validation.
 var validActions = map[Action]bool{
@@ -66,9 +73,10 @@ var validActions = map[Action]bool{
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionToggleCollapsed: true, ActionToggleWrap: true, ActionToggleTree: true,
-	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleHunk: true, ActionMarkReviewed: true, ActionFilter: true,
+	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
+	ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionScrollCenter: true, ActionScrollTop: true, ActionScrollBottom: true,
-	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true,
+	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
 }
 
 // IsValidAction returns true if the action name is recognized.
@@ -125,9 +133,9 @@ func defaultDescriptions() []HelpEntry {
 		{ActionPrevHunk, "prev hunk", "File/Hunk"},
 
 		// pane
-		{ActionTogglePane, "toggle pane focus", "Pane"},
-		{ActionFocusTree, "focus tree pane", "Pane"},
-		{ActionFocusDiff, "focus diff pane", "Pane"},
+		{ActionTogglePane, "toggle pane focus", SectionPane},
+		{ActionFocusTree, "focus tree pane", SectionPane},
+		{ActionFocusDiff, "focus diff pane", SectionPane},
 
 		// search
 		{ActionSearch, "search in diff", "Search"},
@@ -144,9 +152,12 @@ func defaultDescriptions() []HelpEntry {
 		{ActionToggleTree, "toggle tree pane", "View"},
 		{ActionToggleLineNums, "toggle line numbers", "View"},
 		{ActionToggleBlame, "toggle blame gutter", "View"},
+		{ActionToggleWordDiff, "toggle word-diff highlighting", "View"},
 		{ActionToggleHunk, "toggle hunk in collapsed", "View"},
+		{ActionToggleUntracked, "show/hide untracked files", "View"},
 		{ActionMarkReviewed, "mark file as reviewed", "View"},
 		{ActionFilter, "filter files", "View"},
+		{ActionThemeSelect, "theme selector", "View"},
 
 		// viewport scroll
 		{ActionScrollCenter, "center cursor in viewport", "Navigation"},
@@ -195,8 +206,10 @@ func defaultBindings() map[string]Action {
 		"t":      ActionToggleTree,
 		"L":      ActionToggleLineNums,
 		"B":      ActionToggleBlame,
+		"W":      ActionToggleWordDiff,
 		".":      ActionToggleHunk,
 		" ":      ActionMarkReviewed,
+		"u":      ActionToggleUntracked,
 		"f":      ActionFilter,
 		"zz":     ActionScrollCenter,
 		"zt":     ActionScrollTop,
@@ -206,6 +219,7 @@ func defaultBindings() map[string]Action {
 		"Q":      ActionDiscardQuit,
 		"ZQ":     ActionDiscardQuit,
 		"?":      ActionHelp,
+		"T":      ActionThemeSelect,
 		"esc":    ActionDismiss,
 	}
 }
@@ -219,8 +233,21 @@ func Default() *Keymap {
 }
 
 // Resolve returns the action bound to the given key, or empty Action if unbound.
+// For non-Latin keyboard layouts, if the key has no direct binding, it is
+// translated to its Latin QWERTY equivalent and looked up again.
 func (km *Keymap) Resolve(key string) Action {
-	return km.bindings[key]
+	if a, ok := km.bindings[key]; ok {
+		return a
+	}
+	// fallback: translate non-Latin character to Latin equivalent
+	if r, size := utf8.DecodeRuneInString(key); size == len(key) {
+		if alias, ok := layoutResolve(r); ok {
+			if a, ok := km.bindings[string(alias)]; ok {
+				return a
+			}
+		}
+	}
+	return ""
 }
 
 // KeysFor returns all keys bound to the given action, sorted alphabetically.
