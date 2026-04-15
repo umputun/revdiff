@@ -329,6 +329,9 @@ func (c *Catalog) parse(r io.Reader) (Theme, error) {
 // list returns sorted names of theme files in the themes directory.
 // returns an empty list if the directory does not exist.
 func (c *Catalog) list() ([]string, error) {
+	if c.themesDir == "" {
+		return nil, nil
+	}
 	entries, err := os.ReadDir(c.themesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
