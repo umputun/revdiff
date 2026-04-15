@@ -13,7 +13,8 @@ import (
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
-// testThemeCatalog is a test-only ThemeCatalog with configurable entries and themes.
+// testThemeCatalog is a manual ThemeCatalog fake with configurable entries and themes.
+// moq can't be used here because ThemeEntry/ThemeSpec are defined in this package (import cycle).
 type testThemeCatalog struct {
 	entries   []ThemeEntry
 	themes    map[string]ThemeSpec
@@ -32,59 +33,58 @@ func (tc *testThemeCatalog) Persist(name string) error {
 	return nil
 }
 
-// newTestThemeCatalog returns a catalog pre-populated with dracula and nord themes.
+// newTestThemeCatalog returns a catalog pre-populated with revdiff, dracula, and nord themes.
 func newTestThemeCatalog() *testThemeCatalog {
-	return &testThemeCatalog{
-		entries: []ThemeEntry{
-			{Name: "revdiff", Local: false, AccentColor: "#61afef"},
-			{Name: "dracula", Local: false, AccentColor: "#bd93f9"},
-			{Name: "nord", Local: false, AccentColor: "#88c0d0"},
+	entries := []ThemeEntry{
+		{Name: "revdiff", Local: false, AccentColor: "#61afef"},
+		{Name: "dracula", Local: false, AccentColor: "#bd93f9"},
+		{Name: "nord", Local: false, AccentColor: "#88c0d0"},
+	}
+	themes := map[string]ThemeSpec{
+		"revdiff": {
+			Colors: style.Colors{
+				Accent: "#61afef", Border: "#3e4451", Normal: "#abb2bf", Muted: "#5c6370",
+				SelectedFg: "#282c34", SelectedBg: "#61afef", Annotation: "#e5c07b",
+				CursorFg: "#282c34", CursorBg: "#abb2bf",
+				AddFg: "#98c379", AddBg: "#2a4a2a", RemoveFg: "#e06c75", RemoveBg: "#4a2a2a",
+				WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
+				ModifyFg: "#d19a66", ModifyBg: "#3a3a2a",
+				TreeBg: "#21252b", DiffBg: "#282c34",
+				StatusFg: "#abb2bf", StatusBg: "#3e4451",
+				SearchFg: "#282c34", SearchBg: "#e5c07b",
+			},
+			ChromaStyle: "onedark",
 		},
-		themes: map[string]ThemeSpec{
-			"revdiff": {
-				Colors: style.Colors{
-					Accent: "#61afef", Border: "#3e4451", Normal: "#abb2bf", Muted: "#5c6370",
-					SelectedFg: "#282c34", SelectedBg: "#61afef", Annotation: "#e5c07b",
-					CursorFg: "#282c34", CursorBg: "#abb2bf",
-					AddFg: "#98c379", AddBg: "#2a4a2a", RemoveFg: "#e06c75", RemoveBg: "#4a2a2a",
-					WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
-					ModifyFg: "#d19a66", ModifyBg: "#3a3a2a",
-					TreeBg: "#21252b", DiffBg: "#282c34",
-					StatusFg: "#abb2bf", StatusBg: "#3e4451",
-					SearchFg: "#282c34", SearchBg: "#e5c07b",
-				},
-				ChromaStyle: "onedark",
+		"dracula": {
+			Colors: style.Colors{
+				Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
+				SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
+				CursorFg: "#282a36", CursorBg: "#f8f8f2",
+				AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
+				WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
+				ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
+				TreeBg: "#21222c", DiffBg: "#282a36",
+				StatusFg: "#f8f8f2", StatusBg: "#44475a",
+				SearchFg: "#282a36", SearchBg: "#f1fa8c",
 			},
-			"dracula": {
-				Colors: style.Colors{
-					Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
-					SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
-					CursorFg: "#282a36", CursorBg: "#f8f8f2",
-					AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
-					WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
-					ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
-					TreeBg: "#21222c", DiffBg: "#282a36",
-					StatusFg: "#f8f8f2", StatusBg: "#44475a",
-					SearchFg: "#282a36", SearchBg: "#f1fa8c",
-				},
-				ChromaStyle: "dracula",
+			ChromaStyle: "dracula",
+		},
+		"nord": {
+			Colors: style.Colors{
+				Accent: "#88c0d0", Border: "#4c566a", Normal: "#d8dee9", Muted: "#4c566a",
+				SelectedFg: "#2e3440", SelectedBg: "#88c0d0", Annotation: "#ebcb8b",
+				CursorFg: "#2e3440", CursorBg: "#d8dee9",
+				AddFg: "#a3be8c", AddBg: "#2a4a2a", RemoveFg: "#bf616a", RemoveBg: "#4a2a2a",
+				WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
+				ModifyFg: "#d08770", ModifyBg: "#3a3a2a",
+				TreeBg: "#242933", DiffBg: "#2e3440",
+				StatusFg: "#d8dee9", StatusBg: "#4c566a",
+				SearchFg: "#2e3440", SearchBg: "#ebcb8b",
 			},
-			"nord": {
-				Colors: style.Colors{
-					Accent: "#88c0d0", Border: "#4c566a", Normal: "#d8dee9", Muted: "#4c566a",
-					SelectedFg: "#2e3440", SelectedBg: "#88c0d0", Annotation: "#ebcb8b",
-					CursorFg: "#2e3440", CursorBg: "#d8dee9",
-					AddFg: "#a3be8c", AddBg: "#2a4a2a", RemoveFg: "#bf616a", RemoveBg: "#4a2a2a",
-					WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
-					ModifyFg: "#d08770", ModifyBg: "#3a3a2a",
-					TreeBg: "#242933", DiffBg: "#2e3440",
-					StatusFg: "#d8dee9", StatusBg: "#4c566a",
-					SearchFg: "#2e3440", SearchBg: "#ebcb8b",
-				},
-				ChromaStyle: "nord",
-			},
+			ChromaStyle: "nord",
 		},
 	}
+	return &testThemeCatalog{entries: entries, themes: themes}
 }
 
 func TestOpenThemeSelector_savesOriginalState(t *testing.T) {

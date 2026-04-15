@@ -38,74 +38,53 @@ func handleThemes(opts *options, cat *theme.Catalog, stdout, stderr io.Writer) (
 		}
 	}
 
-	if opts.InitThemes {
-		if themesDir == "" {
-			return false, errors.New("cannot determine home directory for themes")
-		}
+	// no theme-related flags set — nothing to do
+	if !opts.InitThemes && !opts.InitAllThemes && len(opts.InstallTheme) == 0 && !opts.ListThemes && opts.Theme == "" {
+		return false, nil
+	}
+
+	// all theme operations below require a valid themes directory
+	if themesDir == "" {
+		return false, errors.New("cannot determine home directory for themes")
+	}
+
+	switch {
+	case opts.InitThemes:
 		if err := cat.InitBundled(); err != nil {
 			return false, fmt.Errorf("init themes: %w", err)
 		}
 		_, _ = fmt.Fprintf(stdout, "bundled themes written to %s\n", themesDir)
 		return true, nil
-	}
-
-	if opts.InitAllThemes {
-		if themesDir == "" {
-			return false, errors.New("cannot determine home directory for themes")
-		}
+	case opts.InitAllThemes:
 		if err := cat.InitAll(); err != nil {
 			return false, fmt.Errorf("init all themes: %w", err)
 		}
 		_, _ = fmt.Fprintf(stdout, "all gallery themes written to %s\n", themesDir)
 		return true, nil
-	}
-
-	if len(opts.InstallTheme) > 0 {
-		if themesDir == "" {
-			return false, errors.New("cannot determine home directory for themes")
-		}
+	case len(opts.InstallTheme) > 0:
 		if err := cat.Install(opts.InstallTheme, highlight.IsValidStyle, stdout); err != nil {
 			return false, fmt.Errorf("install theme: %w", err)
 		}
 		return true, nil
-	}
-
-	if opts.ListThemes {
-		if themesDir == "" {
-			return false, errors.New("cannot determine home directory for themes")
-		}
+	case opts.ListThemes:
 		if err := cat.PrintList(stdout); err != nil {
 			return false, fmt.Errorf("list themes: %w", err)
 		}
 		return true, nil
 	}
 
-	if opts.Theme == "" {
-		return false, nil
-	}
-
 	// apply theme — overwrites present color fields and clears absent optional ones.
 	// theme takes over completely, ignoring any --color-* flags, env vars, or --no-colors.
 	if opts.NoColors {
 		_, _ = fmt.Fprintln(stderr, "warning: --no-colors ignored when --theme is set")
-	}
-	resolveThemeConflicts(opts)
-	if themesDir == "" {
-		return false, errors.New("cannot determine home directory for themes")
+		opts.NoColors = false
 	}
 	th, err := cat.Load(opts.Theme)
 	if err != nil {
 		return false, fmt.Errorf("load theme: %w", err)
 	}
-	applyTheme(opts, th, cat)
+	applyTheme(opts, th, cat.OptionalColorKeys())
 	return false, nil
-}
-
-// resolveThemeConflicts clears NoColors when a theme is set, since theme takes over completely.
-func resolveThemeConflicts(opts *options) {
-	if opts.Theme != "" && opts.NoColors {
-		opts.NoColors = false
-	}
 }
 
 // colorFieldPtrs maps color key names (matching ini-name tags) to pointers into opts.Colors fields.
@@ -142,9 +121,8 @@ func colorFieldPtrs(opts *options) map[string]*string {
 // applyTheme applies theme colors and chroma-style to opts, overwriting all matching fields unconditionally.
 // optional color keys absent from the theme are cleared to empty (terminal background) so that
 // prior config/env values don't leak through when a theme intentionally omits them.
-func applyTheme(opts *options, th theme.Theme, cat *theme.Catalog) {
+func applyTheme(opts *options, th theme.Theme, optional map[string]bool) {
 	opts.ChromaStyle = th.ChromaStyle
-	optional := cat.OptionalColorKeys()
 	for key, ptr := range colorFieldPtrs(opts) {
 		if v, ok := th.Colors[key]; ok {
 			*ptr = v
@@ -221,32 +199,35 @@ func (tc *themeCatalog) Persist(name string) error {
 	return patchConfigTheme(tc.configPath, name)
 }
 
+// optsToStyleColors converts opts.Colors fields to a style.Colors struct.
+func optsToStyleColors(opts options) style.Colors {
+	c := opts.Colors
+	return style.Colors{
+		Accent: c.Accent, Border: c.Border, Normal: c.Normal, Muted: c.Muted,
+		SelectedFg: c.SelectedFg, SelectedBg: c.SelectedBg, Annotation: c.Annotation,
+		CursorFg: c.CursorFg, CursorBg: c.CursorBg,
+		AddFg: c.AddFg, AddBg: c.AddBg, RemoveFg: c.RemoveFg, RemoveBg: c.RemoveBg,
+		WordAddBg: c.WordAddBg, WordRemoveBg: c.WordRemoveBg,
+		ModifyFg: c.ModifyFg, ModifyBg: c.ModifyBg,
+		TreeBg: c.TreeBg, DiffBg: c.DiffBg,
+		StatusFg: c.StatusFg, StatusBg: c.StatusBg,
+		SearchFg: c.SearchFg, SearchBg: c.SearchBg,
+	}
+}
+
 // colorsFromTheme converts a theme.Theme color map to a style.Colors struct.
 func colorsFromTheme(th theme.Theme) style.Colors {
+	m := th.Colors
 	return style.Colors{
-		Accent:       th.Colors["color-accent"],
-		Border:       th.Colors["color-border"],
-		Normal:       th.Colors["color-normal"],
-		Muted:        th.Colors["color-muted"],
-		SelectedFg:   th.Colors["color-selected-fg"],
-		SelectedBg:   th.Colors["color-selected-bg"],
-		Annotation:   th.Colors["color-annotation"],
-		CursorFg:     th.Colors["color-cursor-fg"],
-		CursorBg:     th.Colors["color-cursor-bg"],
-		AddFg:        th.Colors["color-add-fg"],
-		AddBg:        th.Colors["color-add-bg"],
-		RemoveFg:     th.Colors["color-remove-fg"],
-		RemoveBg:     th.Colors["color-remove-bg"],
-		WordAddBg:    th.Colors["color-word-add-bg"],
-		WordRemoveBg: th.Colors["color-word-remove-bg"],
-		ModifyFg:     th.Colors["color-modify-fg"],
-		ModifyBg:     th.Colors["color-modify-bg"],
-		TreeBg:       th.Colors["color-tree-bg"],
-		DiffBg:       th.Colors["color-diff-bg"],
-		StatusFg:     th.Colors["color-status-fg"],
-		StatusBg:     th.Colors["color-status-bg"],
-		SearchFg:     th.Colors["color-search-fg"],
-		SearchBg:     th.Colors["color-search-bg"],
+		Accent: m["color-accent"], Border: m["color-border"], Normal: m["color-normal"], Muted: m["color-muted"],
+		SelectedFg: m["color-selected-fg"], SelectedBg: m["color-selected-bg"], Annotation: m["color-annotation"],
+		CursorFg: m["color-cursor-fg"], CursorBg: m["color-cursor-bg"],
+		AddFg: m["color-add-fg"], AddBg: m["color-add-bg"], RemoveFg: m["color-remove-fg"], RemoveBg: m["color-remove-bg"],
+		WordAddBg: m["color-word-add-bg"], WordRemoveBg: m["color-word-remove-bg"],
+		ModifyFg: m["color-modify-fg"], ModifyBg: m["color-modify-bg"],
+		TreeBg: m["color-tree-bg"], DiffBg: m["color-diff-bg"],
+		StatusFg: m["color-status-fg"], StatusBg: m["color-status-bg"],
+		SearchFg: m["color-search-fg"], SearchBg: m["color-search-bg"],
 	}
 }
 

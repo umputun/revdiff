@@ -46,7 +46,7 @@ func testListThemeFiles(t *testing.T, dir string) []string {
 }
 
 func TestApplyTheme(t *testing.T) {
-	cat := theme.NewCatalog("")
+	optional := theme.NewCatalog("").OptionalColorKeys()
 
 	t.Run("overwrites all 23 fields and chroma-style", func(t *testing.T) {
 		opts := options{}
@@ -66,7 +66,7 @@ func TestApplyTheme(t *testing.T) {
 				"color-status-bg": "#bd93f9", "color-search-fg": "#282a36", "color-search-bg": "#f1fa8c",
 			},
 		}
-		applyTheme(&opts, th, cat)
+		applyTheme(&opts, th, optional)
 
 		// verify chroma-style
 		assert.Equal(t, "dracula", opts.ChromaStyle)
@@ -101,7 +101,7 @@ func TestApplyTheme(t *testing.T) {
 		opts := options{}
 		opts.ChromaStyle = "original-style"
 		th := theme.Theme{ChromaStyle: "new-style", Colors: map[string]string{}}
-		applyTheme(&opts, th, cat)
+		applyTheme(&opts, th, optional)
 		assert.Equal(t, "new-style", opts.ChromaStyle)
 	})
 
@@ -110,7 +110,7 @@ func TestApplyTheme(t *testing.T) {
 		opts.Colors.Accent = "#original-accent"
 		opts.Colors.Border = "#original-border"
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
-		applyTheme(&opts, th, cat)
+		applyTheme(&opts, th, optional)
 		assert.Equal(t, "#new-accent", opts.Colors.Accent)
 		assert.Equal(t, "#original-border", opts.Colors.Border, "unset required key should not change opts")
 	})
@@ -126,7 +126,7 @@ func TestApplyTheme(t *testing.T) {
 
 		// theme has accent but omits all optional keys
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
-		applyTheme(&opts, th, cat)
+		applyTheme(&opts, th, optional)
 
 		assert.Equal(t, "#new-accent", opts.Colors.Accent)
 		assert.Empty(t, opts.Colors.CursorBg, "optional cursor-bg should be cleared when theme omits it")
@@ -141,7 +141,7 @@ func TestApplyTheme(t *testing.T) {
 		opts.Colors.TreeBg = "#old-value"
 
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-tree-bg": "#new-tree-bg"}}
-		applyTheme(&opts, th, cat)
+		applyTheme(&opts, th, optional)
 
 		assert.Equal(t, "#new-tree-bg", opts.Colors.TreeBg, "optional key present in theme should overwrite")
 	})
@@ -210,7 +210,6 @@ func TestColorFieldPtrs(t *testing.T) {
 	t.Run("applyTheme and collectColors round-trip", func(t *testing.T) {
 		// set all colors via applyTheme, then collectColors should return same values
 		opts := options{}
-		cat := theme.NewCatalog("")
 		ptrs := colorFieldPtrs(&opts)
 		th := theme.Theme{ChromaStyle: "test-style", Colors: map[string]string{}}
 		keys := make([]string, 0, len(ptrs))
@@ -221,7 +220,7 @@ func TestColorFieldPtrs(t *testing.T) {
 		for i, key := range keys {
 			th.Colors[key] = fmt.Sprintf("#%02x%02x%02x", i*10, i*11, i*12)
 		}
-		applyTheme(&opts, th, cat)
+		applyTheme(&opts, th, theme.NewCatalog("").OptionalColorKeys())
 		collected := collectColors(opts)
 		for _, key := range keys {
 			assert.Equal(t, th.Colors[key], collected[key], "round-trip mismatch for %q", key)
@@ -244,29 +243,9 @@ func TestThemeOverridesColorFlags(t *testing.T) {
 	// load theme and overwrite — theme wins unconditionally
 	th, err := cat.Load("dracula")
 	require.NoError(t, err)
-	applyTheme(&opts, th, cat)
+	applyTheme(&opts, th, cat.OptionalColorKeys())
 	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme should override CLI --color-accent")
 	assert.Equal(t, "dracula", opts.ChromaStyle, "theme should set chroma-style")
-}
-
-func TestResolveThemeConflicts(t *testing.T) {
-	t.Run("theme with no-colors clears no-colors", func(t *testing.T) {
-		opts := options{Theme: "dracula", NoColors: true}
-		resolveThemeConflicts(&opts)
-		assert.False(t, opts.NoColors, "--no-colors should be cleared when --theme is set")
-	})
-
-	t.Run("no theme keeps no-colors", func(t *testing.T) {
-		opts := options{NoColors: true}
-		resolveThemeConflicts(&opts)
-		assert.True(t, opts.NoColors, "--no-colors should remain when no theme is set")
-	})
-
-	t.Run("theme without no-colors is noop", func(t *testing.T) {
-		opts := options{Theme: "dracula"}
-		resolveThemeConflicts(&opts)
-		assert.False(t, opts.NoColors)
-	})
 }
 
 func TestHandleThemes_InitThemes(t *testing.T) {

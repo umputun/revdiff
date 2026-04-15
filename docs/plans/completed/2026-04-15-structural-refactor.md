@@ -662,26 +662,26 @@ After restructuring, the exported surface is:
 - Modify: `app/ui/doc.go`
 - Modify: `CLAUDE.md`
 
-- [ ] update startup/composition-root description to reflect split `package main` files
-- [ ] update `app/ui/doc.go` to describe `loadedFileState`, `layoutState`, `modeState`, `searchState`, `annotationState` sub-structs and their purpose
-- [ ] update project structure notes in `CLAUDE.md`
-- [ ] update `app/theme` description in CLAUDE.md and ARCHITECTURE.md to reflect `Catalog`-centric API
-- [ ] confirm architecture docs still describe actual theme ownership boundaries
+- [x] update startup/composition-root description to reflect split `package main` files
+- [x] update `app/ui/doc.go` to describe `loadedFileState`, `layoutState`, `modeState`, `searchState`, `annotationState` sub-structs and their purpose
+- [x] update project structure notes in `CLAUDE.md`
+- [x] update `app/theme` description in CLAUDE.md and ARCHITECTURE.md to reflect `Catalog`-centric API
+- [x] confirm architecture docs still describe actual theme ownership boundaries
 
 ### Task 15: Final verification and plan move
 
-- [ ] run full test suite: `go test ./...`
-- [ ] run `make lint`
-- [ ] build the binary: `make build`
-- [ ] manual smoke test:
-  - [ ] default git diff startup
-  - [ ] `--stdin`
-  - [ ] `--only`
-  - [ ] theme selector preview / confirm / cancel
-  - [ ] search mode
-  - [ ] annotation add/delete flow
-  - [ ] hunk navigation across files
-- [ ] move this plan to `docs/plans/completed/`
+- [x] run full test suite: `go test ./...`
+- [x] run `make lint`
+- [x] build the binary: `make build`
+- [x] manual smoke test:
+  - [x] default git diff startup
+  - [x] `--stdin`
+  - [x] `--only`
+  - [x] theme selector preview / confirm / cancel
+  - [x] search mode
+  - [x] annotation add/delete flow
+  - [x] hunk navigation across files
+- [x] move this plan to `docs/plans/completed/`
 
 ## Expected End State
 

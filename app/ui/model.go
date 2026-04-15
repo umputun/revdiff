@@ -8,6 +8,9 @@ package ui
 //go:generate moq -out mocks/sgr_processor.go -pkg mocks -skip-ensure -fmt goimports . sgrProcessor
 //go:generate moq -out mocks/word_differ.go -pkg mocks -skip-ensure -fmt goimports . wordDiffer
 
+// note: ThemeCatalog is not moq-generated because ThemeEntry/ThemeSpec are defined in this package,
+// creating an import cycle (ui -> mocks -> ui). Tests use manual fakes instead.
+
 import (
 	"errors"
 	"strconv"
@@ -341,8 +344,9 @@ type filesLoadedMsg struct {
 }
 
 // ModelConfig holds all dependencies and configuration for NewModel.
-// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer, Overlay)
-// are required and must be constructed by the caller. Blamer is optional.
+// All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer, Overlay,
+// NewFileTree, ParseTOC, Themes) are required and must be constructed by the caller.
+// Blamer, LoadUntracked, and Keymap are optional.
 type ModelConfig struct {
 	// --- UI dependencies (required, caller-constructed) ---
 	Renderer    Renderer          // diff renderer: ChangedFiles, FileDiff

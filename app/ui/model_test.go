@@ -77,14 +77,13 @@ func testNewFileTree(files []string) *sidepane.FileTree {
 	return sidepane.NewFileTree(entries)
 }
 
-// fakeThemeCatalog is a test-only ThemeCatalog that returns no entries and no-ops on persist.
+// fakeThemeCatalog is a no-op ThemeCatalog for tests that don't exercise theme selection.
+// moq can't be used here because ThemeEntry/ThemeSpec are defined in this package (import cycle).
 type fakeThemeCatalog struct{}
 
-func (fakeThemeCatalog) Entries() ([]ThemeEntry, error) { return nil, nil }
-func (fakeThemeCatalog) Resolve(string) (ThemeSpec, bool) {
-	return ThemeSpec{}, false
-}
-func (fakeThemeCatalog) Persist(string) error { return nil }
+func (fakeThemeCatalog) Entries() ([]ThemeEntry, error)   { return nil, nil }
+func (fakeThemeCatalog) Resolve(string) (ThemeSpec, bool) { return ThemeSpec{}, false }
+func (fakeThemeCatalog) Persist(string) error             { return nil }
 
 // testNewModel is a test-only helper that preserves the old 4-arg NewModel
 // shape while the production NewModel takes a single ModelConfig. It accepts

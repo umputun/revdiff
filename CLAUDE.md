@@ -13,16 +13,16 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Vendor after adding deps: `go mod vendor`
 
 ## Project Structure
-- `app/` - entry point (`main.go`), CLI flags, wiring
+- `app/` - composition root (`package main`), split by concern: `main.go` (entrypoint + `run()`), `config.go` (options/parsing), `stdin.go` (stdin mode), `renderer_setup.go` (VCS wiring), `themes.go` (theme CLI + adapter), `history_save.go` (session save)
 - `app/diff/` - VCS interaction (git + hg), unified diff parsing, VCS detection, Mercurial support
-- `app/ui/` - bubbletea TUI package. Single `Model` struct, methods split across files by concern (~500 lines each). Each source file has a matching `_test.go`. See `app/ui/doc.go` for package docs, `docs/ARCHITECTURE.md` for file-by-file breakdown
+- `app/ui/` - bubbletea TUI package. Single `Model` struct with state grouped into sub-structs (`cfg`, `layout`, `file`, `modes`, `nav`, `search`, `annot`), methods split across files by concern (~500 lines each). Each source file has a matching `_test.go`. See `app/ui/doc.go` for package docs, `docs/ARCHITECTURE.md` for file-by-file breakdown. Does not import `app/theme` or `app/fsutil` — theme operations go through the `ThemeCatalog` interface
 - `app/ui/style/` - color/style resolution: hex-to-ANSI, lipgloss styles, SGR tracking, HSL math. Types: `Resolver`, `Renderer`, `SGR`
 - `app/ui/sidepane/` - file tree + markdown TOC components with cursor/offset management
 - `app/ui/worddiff/` - intra-line word-diff: tokenizer, LCS, line pairing, highlight insertion
 - `app/ui/overlay/` - layered popups: help, annotation list, theme selector. Manager enforces one-at-a-time
 - `app/highlight/` - chroma syntax highlighting, foreground-only ANSI
 - `app/keymap/` - configurable keybindings (`Action` constants, parser, defaults, dump)
-- `app/theme/` - theme parse/load/dump/list (7 bundled + community gallery)
+- `app/theme/` - Catalog-centric theme system: `Theme` (data + serialization) and `Catalog` (discovery, loading, installation, gallery). Zero standalone functions — all logic as methods. Files: `theme.go` (Theme struct), `catalog.go` (Catalog struct + all operations). 7 bundled + community gallery
 - `app/annotation/` - in-memory annotation store and structured output
 - `app/history/` - review session auto-save to `~/.config/revdiff/history/`
 - `app/fsutil/` - filesystem utilities
@@ -36,7 +36,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Themes dir: `~/.config/revdiff/themes/` with 7 bundled themes, auto-created on first run
 - `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
 - Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*` flags or env vars
-- Theme values applied via `applyTheme()` in `main.go` which overwrites `opts.Colors.*` after `parseArgs()`. `colorFieldPtrs(opts)` is the single source of truth for color key → struct field mapping — adding a new color requires changes in `theme.go` colorKeys + options struct + `colorFieldPtrs()`
+- Theme values applied via `applyTheme()` in `themes.go` which overwrites `opts.Colors.*` after `parseArgs()`. `colorFieldPtrs(opts)` is the single source of truth for color key → struct field mapping — adding a new color requires changes in `theme.go` colorKeys + options struct + `colorFieldPtrs()` in `themes.go`
+- Theme ownership split: `app/theme.Catalog` owns discovery/loading, `app/ui.ThemeCatalog` interface consumed by UI, `app/themes.go` wires adapter composing catalog + config persistence
 - `ini-name` tags ensure config keys match CLI long flag names
 - Keybindings file: `~/.config/revdiff/keybindings` (`map <key> <action>` / `unmap <key>` format)
 - `--keys` overrides keybindings path, `--dump-keys` prints effective bindings
@@ -77,7 +78,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Highlighted lines are pre-computed once per file load, stored parallel to `diffLines`
 - `DiffLine.Content` has no `+`/`-` prefix - prefix is re-added at render time
 - Tab replacement happens at render time in `renderDiffLine`, not in diff parsing
-- `run()` detects VCS via `diff.DetectVCS()` (walks up looking for `.git`/`.hg`); if no VCS is found and `--only` is set, uses `FileReader` for standalone file review. `--stdin` skips VCS lookup entirely, validates non-TTY stdin, reads payload before starting Bubble Tea, and reopens `/dev/tty` for interactive key input. `--all-files` is git-only (not supported in hg repos).
+- `setupVCSRenderer()` (in `renderer_setup.go`) detects VCS via `diff.DetectVCS()` (walks up looking for `.git`/`.hg`); if no VCS is found and `--only` is set, uses `FileReader` for standalone file review. `--stdin` skips VCS lookup entirely, validates non-TTY stdin, reads payload before starting Bubble Tea, and reopens `/dev/tty` for interactive key input. `--all-files` is git-only (not supported in hg repos).
 - `--all-files` mode uses `DirectoryReader` (git ls-files) to list all tracked files; `--include` wraps any renderer with `IncludeFilter` for prefix-based inclusion, `--exclude` wraps with `ExcludeFilter` for prefix-based exclusion (include narrows first, then exclude removes). `--include` is mutually exclusive with `--only`. `--all-files` is mutually exclusive with refs, `--staged`, and `--only`. `--stdin` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`.
 - `diff.readReaderAsContext()` is the shared parser for file-backed and stdin-backed context-only views. Preserve its behavior if you change binary detection, line-length handling, or line numbering.
 - Overlay popups managed by `overlay.Manager`. `Compose()` uses ANSI-aware compositing via `charmbracelet/x/ansi.Cut`. `HandleKey()` returns `Outcome` — Model switches on `OutcomeKind` for side effects (file jumps, theme apply/persist)
@@ -86,8 +87,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Horizontal scroll indicators (`«`/`»`): see `applyHorizontalScroll()` in `diffview.go`. `«` replaces first visible column when scrolled past hidden content. `»` extends 1 col into right padding. Bg split: `«` and separator space use line bg via `indicatorBg()`, `»` glyph uses `DiffBg`. Only in unwrapped mode.
 - Status bar mode icons: `▼◉↩≋⊟#b±✓∅` rendered via `statusModeIcons()`. Graceful degradation drops segments on narrow terminals.
 - Search and hunk navigation use `centerViewportOnCursor()`. Use `syncViewportToCursor()` only for j/k scrolling.
-- Single-file mode (`m.singleFile`): one file → tree hidden, diff full width. Exception: markdown full-context gets TOC pane.
-- Tree pane toggle (`t` key): `m.treeHidden` orthogonal to `singleFile`.
+- Single-file mode (`m.file.singleFile`): one file → tree hidden, diff full width. Exception: markdown full-context gets TOC pane.
+- Tree pane toggle (`t` key): `m.layout.treeHidden` orthogonal to `singleFile`.
 - Markdown TOC: activated when `singleFile && isMarkdownFile && isFullContext`. Uses `paneTree` slot.
 - Annotation list popup (`@` key): cross-file jumps via `pendingAnnotJump` field with stale-jump guard.
 - **Typed-nil trap**: `ParseTOC` factory MUST guard `if toc == nil { return nil }` to collapse typed-nil `*sidepane.TOC` into interface-nil.

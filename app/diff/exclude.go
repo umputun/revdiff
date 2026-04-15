@@ -4,7 +4,7 @@ import "fmt"
 
 //go:generate moq -out mocks/Renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
 
-// Renderer is a consumer-side interface for diff rendering (mirrors ui.Renderer).
+// Renderer is the local interface mirroring ui.Renderer, exported for moq generation.
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
 	FileDiff(ref, file string, staged bool) ([]DiffLine, error)

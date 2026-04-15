@@ -123,31 +123,7 @@ func run(opts options) error {
 	}
 
 	// construct the three style types per D15: Resolver first, Renderer from Resolver, SGR is zero-value
-	styleColors := style.Colors{
-		Accent:       opts.Colors.Accent,
-		Border:       opts.Colors.Border,
-		Normal:       opts.Colors.Normal,
-		Muted:        opts.Colors.Muted,
-		SelectedFg:   opts.Colors.SelectedFg,
-		SelectedBg:   opts.Colors.SelectedBg,
-		Annotation:   opts.Colors.Annotation,
-		CursorFg:     opts.Colors.CursorFg,
-		CursorBg:     opts.Colors.CursorBg,
-		AddFg:        opts.Colors.AddFg,
-		AddBg:        opts.Colors.AddBg,
-		RemoveFg:     opts.Colors.RemoveFg,
-		RemoveBg:     opts.Colors.RemoveBg,
-		WordAddBg:    opts.Colors.WordAddBg,
-		WordRemoveBg: opts.Colors.WordRemoveBg,
-		ModifyFg:     opts.Colors.ModifyFg,
-		ModifyBg:     opts.Colors.ModifyBg,
-		TreeBg:       opts.Colors.TreeBg,
-		DiffBg:       opts.Colors.DiffBg,
-		StatusFg:     opts.Colors.StatusFg,
-		StatusBg:     opts.Colors.StatusBg,
-		SearchFg:     opts.Colors.SearchFg,
-		SearchBg:     opts.Colors.SearchBg,
-	}
+	styleColors := optsToStyleColors(opts)
 	var res style.Resolver
 	if opts.NoColors {
 		res = style.PlainResolver()
@@ -190,7 +166,7 @@ func run(opts options) error {
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
 		WorkDir:          workDir,
-		ActiveThemeName:  theme.NewCatalog("").ActiveName(opts.Theme),
+		ActiveThemeName:  themes.catalog.ActiveName(opts.Theme),
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},

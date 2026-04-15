@@ -7,25 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/mocks"
 )
-
-// mockDiffRenderer implements ui.Renderer for composition tests.
-type mockDiffRenderer struct {
-	files []diff.FileEntry
-}
-
-func (m *mockDiffRenderer) ChangedFiles(string, bool) ([]diff.FileEntry, error) {
-	return m.files, nil
-}
-
-func (m *mockDiffRenderer) FileDiff(string, string, bool) ([]diff.DiffLine, error) {
-	return nil, nil
-}
 
 func TestMakeGitRenderer_WithOnly(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, []string{"file.md"}, nil, nil, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{Only: []string{"file.md"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
@@ -35,7 +23,7 @@ func TestMakeGitRenderer_WithOnly(t *testing.T) {
 func TestMakeGitRenderer_WithoutOnly(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, nil, nil, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// with no --only, returns *diff.Git directly without FallbackRenderer wrapper
@@ -64,7 +52,7 @@ func TestMakeNoVCSRenderer_NoOnly(t *testing.T) {
 func TestMakeGitRenderer_AllFiles(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, nil, nil, true, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{AllFiles: true}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.DirectoryReader{}, renderer)
@@ -72,7 +60,7 @@ func TestMakeGitRenderer_AllFiles(t *testing.T) {
 }
 
 func TestMakeHgRenderer_AllFilesUnsupported(t *testing.T) {
-	_, _, err := makeHgRenderer(diff.NewHg(""), nil, nil, nil, true, "")
+	_, _, err := makeHgRenderer(diff.NewHg(""), options{AllFiles: true}, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--all-files is not supported in mercurial")
 }
@@ -80,7 +68,7 @@ func TestMakeHgRenderer_AllFilesUnsupported(t *testing.T) {
 func TestMakeHgRenderer_Default(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, nil, nil, nil, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, options{}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.Hg{}, renderer)
@@ -90,7 +78,7 @@ func TestMakeHgRenderer_Default(t *testing.T) {
 func TestMakeHgRenderer_WithOnly(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, []string{"file.go"}, nil, nil, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, options{Only: []string{"file.go"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
@@ -100,7 +88,7 @@ func TestMakeHgRenderer_WithOnly(t *testing.T) {
 func TestMakeHgRenderer_WithExclude(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, nil, nil, []string{"vendor"}, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, options{Exclude: []string{"vendor"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
@@ -110,7 +98,7 @@ func TestMakeHgRenderer_WithExclude(t *testing.T) {
 func TestMakeGitRenderer_WithExclude(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, nil, []string{"vendor"}, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{Exclude: []string{"vendor"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
@@ -120,7 +108,7 @@ func TestMakeGitRenderer_WithExclude(t *testing.T) {
 func TestMakeGitRenderer_AllFilesWithExclude(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, nil, []string{"vendor", "mocks"}, true, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{AllFiles: true, Exclude: []string{"vendor", "mocks"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// should be ExcludeFilter wrapping DirectoryReader
@@ -131,7 +119,7 @@ func TestMakeGitRenderer_AllFilesWithExclude(t *testing.T) {
 func TestMakeGitRenderer_WithInclude(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, []string{"src"}, nil, false, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{Include: []string{"src"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.IncludeFilter{}, renderer)
@@ -141,7 +129,7 @@ func TestMakeGitRenderer_WithInclude(t *testing.T) {
 func TestMakeHgRenderer_WithInclude(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
-	renderer, workDir, err := makeHgRenderer(h, nil, []string{"src"}, nil, false, dir)
+	renderer, workDir, err := makeHgRenderer(h, options{Include: []string{"src"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.IncludeFilter{}, renderer)
@@ -151,7 +139,7 @@ func TestMakeHgRenderer_WithInclude(t *testing.T) {
 func TestMakeGitRenderer_AllFilesWithInclude(t *testing.T) {
 	dir := t.TempDir()
 	g := diff.NewGit(dir)
-	renderer, workDir, err := makeGitRenderer(g, nil, []string{"src"}, nil, true, dir)
+	renderer, workDir, err := makeGitRenderer(g, options{AllFiles: true, Include: []string{"src"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	// should be IncludeFilter wrapping DirectoryReader
@@ -161,11 +149,13 @@ func TestMakeGitRenderer_AllFilesWithInclude(t *testing.T) {
 
 func TestIncludeExcludeComposition(t *testing.T) {
 	// functional composition test: IncludeFilter + ExcludeFilter working together
-	inner := &mockDiffRenderer{
-		files: []diff.FileEntry{
-			{Path: "src/app.go"}, {Path: "src/vendor/lib.go"}, {Path: "src/main.go"},
-			{Path: "pkg/util.go"}, {Path: "vendor/dep.go"},
-		},
+	files := []diff.FileEntry{
+		{Path: "src/app.go"}, {Path: "src/vendor/lib.go"}, {Path: "src/main.go"},
+		{Path: "pkg/util.go"}, {Path: "vendor/dep.go"},
+	}
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return files, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 
 	// include narrows to src/, then exclude removes src/vendor/
