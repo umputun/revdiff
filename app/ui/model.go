@@ -608,8 +608,9 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 	case keymap.ActionThemeSelect:
 		m.openThemeSelector()
 		return m, true
+	default:
+		return m, false
 	}
-	return m, false
 }
 
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
@@ -779,6 +780,8 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleUntracked:
 		cmd := m.toggleUntracked()
 		return m, cmd
+	default:
+		return m, nil
 	}
 	return m, nil
 }
