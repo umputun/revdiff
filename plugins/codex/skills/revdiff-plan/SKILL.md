@@ -90,7 +90,9 @@ Capture the output and write it to a temp file:
 
 ```bash
 TMPBASE="${TMPDIR:-/tmp}"
-PLAN_FILE=$(mktemp "$TMPBASE/revdiff-plan-XXXXXX.md")
+PLAN_FILE=$(mktemp "$TMPBASE/revdiff-plan-XXXXXX")
+mv "$PLAN_FILE" "${PLAN_FILE}.md"
+PLAN_FILE="${PLAN_FILE}.md"
 $SCRIPT_DIR/extract-last-message.sh --skip-current > "$PLAN_FILE"
 ```
 
