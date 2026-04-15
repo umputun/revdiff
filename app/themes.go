@@ -6,9 +6,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
+	"github.com/umputun/revdiff/app/fsutil"
 	"github.com/umputun/revdiff/app/highlight"
 	"github.com/umputun/revdiff/app/theme"
+	"github.com/umputun/revdiff/app/ui"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 // defaultThemesDir returns ~/.config/revdiff/themes.
@@ -162,4 +167,139 @@ func collectColors(opts options) map[string]string {
 		}
 	}
 	return result
+}
+
+// compile-time check: *themeCatalog satisfies ui.ThemeCatalog.
+var _ ui.ThemeCatalog = (*themeCatalog)(nil)
+
+// themeCatalog adapts theme.Catalog + config-patching persistence into the ui.ThemeCatalog interface.
+// it composes theme discovery (from app/theme) with selected-theme persistence (config file patching).
+type themeCatalog struct {
+	catalog    *theme.Catalog
+	configPath string
+}
+
+// Entries returns the ordered list of available themes as UI-facing ThemeEntry values.
+func (tc *themeCatalog) Entries() ([]ui.ThemeEntry, error) {
+	infos, err := tc.catalog.Entries()
+	if err != nil {
+		return nil, fmt.Errorf("theme catalog entries: %w", err)
+	}
+	entries := make([]ui.ThemeEntry, 0, len(infos))
+	for _, info := range infos {
+		th, ok := tc.catalog.Resolve(info.Name)
+		if !ok {
+			continue
+		}
+		entries = append(entries, ui.ThemeEntry{
+			Name:        info.Name,
+			Local:       info.Local,
+			AccentColor: th.Colors["color-accent"],
+		})
+	}
+	return entries, nil
+}
+
+// Resolve loads a theme by name and returns it as a UI-facing ThemeSpec.
+func (tc *themeCatalog) Resolve(name string) (ui.ThemeSpec, bool) {
+	th, ok := tc.catalog.Resolve(name)
+	if !ok {
+		return ui.ThemeSpec{}, false
+	}
+	return ui.ThemeSpec{
+		Colors:      colorsFromTheme(th),
+		ChromaStyle: th.ChromaStyle,
+	}, true
+}
+
+// Persist saves the theme choice to the config file.
+func (tc *themeCatalog) Persist(name string) error {
+	if tc.configPath == "" {
+		return nil
+	}
+	return patchConfigTheme(tc.configPath, name)
+}
+
+// colorsFromTheme converts a theme.Theme color map to a style.Colors struct.
+func colorsFromTheme(th theme.Theme) style.Colors {
+	return style.Colors{
+		Accent:       th.Colors["color-accent"],
+		Border:       th.Colors["color-border"],
+		Normal:       th.Colors["color-normal"],
+		Muted:        th.Colors["color-muted"],
+		SelectedFg:   th.Colors["color-selected-fg"],
+		SelectedBg:   th.Colors["color-selected-bg"],
+		Annotation:   th.Colors["color-annotation"],
+		CursorFg:     th.Colors["color-cursor-fg"],
+		CursorBg:     th.Colors["color-cursor-bg"],
+		AddFg:        th.Colors["color-add-fg"],
+		AddBg:        th.Colors["color-add-bg"],
+		RemoveFg:     th.Colors["color-remove-fg"],
+		RemoveBg:     th.Colors["color-remove-bg"],
+		WordAddBg:    th.Colors["color-word-add-bg"],
+		WordRemoveBg: th.Colors["color-word-remove-bg"],
+		ModifyFg:     th.Colors["color-modify-fg"],
+		ModifyBg:     th.Colors["color-modify-bg"],
+		TreeBg:       th.Colors["color-tree-bg"],
+		DiffBg:       th.Colors["color-diff-bg"],
+		StatusFg:     th.Colors["color-status-fg"],
+		StatusBg:     th.Colors["color-status-bg"],
+		SearchFg:     th.Colors["color-search-fg"],
+		SearchBg:     th.Colors["color-search-bg"],
+	}
+}
+
+// patchConfigTheme updates the theme setting in the INI config file.
+// if a "theme = " line exists, it replaces the value. Otherwise appends it.
+func patchConfigTheme(configPath, themeName string) error {
+	if strings.ContainsAny(themeName, "\r\n") {
+		return fmt.Errorf("invalid theme name %q: must not contain newlines", themeName)
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+		return fmt.Errorf("creating config dir: %w", err)
+	}
+
+	data, err := os.ReadFile(configPath) //nolint:gosec // path from user's config
+	if err != nil {
+		if os.IsNotExist(err) {
+			if writeErr := fsutil.AtomicWriteFile(configPath, []byte("theme = "+themeName+"\n")); writeErr != nil {
+				return fmt.Errorf("writing config: %w", writeErr)
+			}
+			return nil
+		}
+		return fmt.Errorf("reading config: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	found := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// match "theme = ..." or "theme=..." but not commented-out lines
+		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+			continue
+		}
+		key, _, ok := strings.Cut(trimmed, "=")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(key) == "theme" {
+			lines[i] = "theme = " + themeName
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// append before trailing empty lines
+		insertIdx := len(lines)
+		for insertIdx > 0 && strings.TrimSpace(lines[insertIdx-1]) == "" {
+			insertIdx--
+		}
+		lines = slices.Insert(lines, insertIdx, "theme = "+themeName)
+	}
+
+	if err := fsutil.AtomicWriteFile(configPath, []byte(strings.Join(lines, "\n"))); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+	return nil
 }

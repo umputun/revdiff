@@ -152,6 +152,13 @@ func run(opts options) error {
 		res = style.NewResolver(styleColors)
 	}
 
+	themesDir := defaultThemesDir()
+	configPath := resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath)
+	themes := &themeCatalog{
+		catalog:    theme.NewCatalog(themesDir),
+		configPath: configPath,
+	}
+
 	model, err := ui.NewModel(ui.ModelConfig{
 		Renderer:         renderer,
 		Store:            store,
@@ -161,6 +168,7 @@ func run(opts options) error {
 		SGR:              style.SGR{},
 		WordDiffer:       worddiff.New(),
 		Overlay:          overlay.NewManager(),
+		Themes:           themes,
 		Blamer:           blamer,
 		LoadUntracked:    untrackedFn,
 		Keymap:           km,
@@ -179,8 +187,6 @@ func run(opts options) error {
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
 		WorkDir:          workDir,
-		ThemesDir:        defaultThemesDir(),
-		ConfigPath:       resolveFlagPath(os.Args[1:], "config", "REVDIFF_CONFIG", defaultConfigPath),
 		ActiveThemeName:  theme.ActiveName(opts.Theme),
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)

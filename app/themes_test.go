@@ -505,3 +505,179 @@ func TestDefaultThemesDir(t *testing.T) {
 	assert.Contains(t, dir, "revdiff")
 	assert.Contains(t, dir, "themes")
 }
+
+func TestThemeCatalog_Entries(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+
+	tc := &themeCatalog{catalog: theme.NewCatalog(themesDir), configPath: ""}
+	entries, err := tc.Entries()
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+
+	assert.Equal(t, theme.DefaultThemeName, entries[0].Name, "default theme should be first")
+	for _, e := range entries {
+		assert.NotEmpty(t, e.AccentColor, "every entry should have an accent color")
+	}
+}
+
+func TestThemeCatalog_Resolve(t *testing.T) {
+	themesDir := filepath.Join(t.TempDir(), "themes")
+	require.NoError(t, theme.InitBundled(themesDir))
+
+	tc := &themeCatalog{catalog: theme.NewCatalog(themesDir), configPath: ""}
+
+	t.Run("found", func(t *testing.T) {
+		spec, ok := tc.Resolve("dracula")
+		assert.True(t, ok)
+		assert.Equal(t, "dracula", spec.ChromaStyle)
+		assert.Equal(t, "#bd93f9", spec.Colors.Accent)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		_, ok := tc.Resolve("no-such-theme-xyz")
+		assert.False(t, ok)
+	})
+}
+
+func TestThemeCatalog_Persist(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config")
+	tc := &themeCatalog{catalog: theme.NewCatalog(t.TempDir()), configPath: configPath}
+
+	require.NoError(t, tc.Persist("dracula"))
+
+	data, err := os.ReadFile(configPath) //nolint:gosec // test-only path from t.TempDir()
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "theme = dracula")
+}
+
+func TestThemeCatalog_PersistEmptyPath(t *testing.T) {
+	tc := &themeCatalog{catalog: theme.NewCatalog(t.TempDir()), configPath: ""}
+	require.NoError(t, tc.Persist("dracula"), "empty config path should be a no-op")
+}
+
+func TestColorsFromTheme(t *testing.T) {
+	th := theme.Theme{
+		ChromaStyle: "dracula",
+		Colors: map[string]string{
+			"color-accent": "#bd93f9", "color-border": "#6272a4", "color-normal": "#f8f8f2",
+			"color-muted": "#6272a4", "color-selected-fg": "#f8f8f2", "color-selected-bg": "#44475a",
+			"color-annotation": "#f1fa8c", "color-cursor-fg": "#282a36", "color-cursor-bg": "#f8f8f2",
+			"color-add-fg": "#50fa7b", "color-add-bg": "#2a4a2a", "color-remove-fg": "#ff5555",
+			"color-remove-bg": "#4a2a2a", "color-word-add-bg": "#3a5a3a", "color-word-remove-bg": "#5a3a3a",
+			"color-modify-fg": "#ffb86c", "color-modify-bg": "#3a3a2a", "color-tree-bg": "#21222c",
+			"color-diff-bg": "#282a36", "color-status-fg": "#f8f8f2", "color-status-bg": "#44475a",
+			"color-search-fg": "#282a36", "color-search-bg": "#f1fa8c",
+		},
+	}
+	colors := colorsFromTheme(th)
+	assert.Equal(t, "#bd93f9", colors.Accent)
+	assert.Equal(t, "#6272a4", colors.Border)
+	assert.Equal(t, "#f8f8f2", colors.Normal)
+	assert.Equal(t, "#50fa7b", colors.AddFg)
+	assert.Equal(t, "#282a36", colors.DiffBg)
+	assert.Equal(t, "#3a5a3a", colors.WordAddBg)
+	assert.Equal(t, "#5a3a3a", colors.WordRemoveBg)
+}
+
+func TestPatchConfigTheme_existingKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte("wrap = true\ntheme = dracula\nblame = false\n"), 0o600))
+
+	require.NoError(t, patchConfigTheme(path, "nord"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "theme = nord")
+	assert.NotContains(t, string(data), "dracula")
+	assert.Contains(t, string(data), "wrap = true")
+	assert.Contains(t, string(data), "blame = false")
+}
+
+func TestPatchConfigTheme_noExistingKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte("wrap = true\nblame = false\n"), 0o600))
+
+	require.NoError(t, patchConfigTheme(path, "nord"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "theme = nord")
+	assert.Contains(t, string(data), "wrap = true")
+}
+
+func TestPatchConfigTheme_createsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+
+	require.NoError(t, patchConfigTheme(path, "dracula"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Equal(t, "theme = dracula\n", string(data))
+}
+
+func TestPatchConfigTheme_createsParentDir(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "config")
+
+	require.NoError(t, patchConfigTheme(path, "dracula"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Equal(t, "theme = dracula\n", string(data))
+}
+
+func TestPatchConfigTheme_skipsCommentedOut(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte("# theme = dracula\nwrap = true\n"), 0o600))
+
+	require.NoError(t, patchConfigTheme(path, "nord"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "# theme = dracula", "commented line should be preserved")
+	assert.Contains(t, string(data), "theme = nord", "new theme line should be appended")
+}
+
+func TestPatchConfigTheme_semicolonComment(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	require.NoError(t, os.WriteFile(path, []byte("; theme = dracula\n"), 0o600))
+
+	require.NoError(t, patchConfigTheme(path, "nord"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "; theme = dracula")
+	assert.Contains(t, string(data), "theme = nord")
+}
+
+func TestPatchConfigTheme_rejectsNewlines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	tests := []struct {
+		name, themeName string
+	}{
+		{name: "newline", themeName: "bad\ntheme"},
+		{name: "carriage return", themeName: "bad\rtheme"},
+		{name: "crlf", themeName: "bad\r\ntheme"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := patchConfigTheme(path, tc.themeName)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "must not contain newlines")
+		})
+	}
+}
+
+func TestPatchConfigTheme_preservesFormatting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	content := "wrap = true\n\n# Colors\ncolor-accent = #ff0000\ntheme = old\n\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	require.NoError(t, patchConfigTheme(path, "new"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "theme = new")
+	assert.Contains(t, string(data), "# Colors")
+	assert.Contains(t, string(data), "color-accent = #ff0000")
+}

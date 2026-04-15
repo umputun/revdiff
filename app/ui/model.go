@@ -95,6 +95,31 @@ type overlayManager interface {
 	Compose(base string, ctx overlay.RenderCtx) string
 }
 
+// ThemeCatalog is what Model needs for theme discovery and persistence.
+// The UI calls Entries() to populate the theme selector overlay, Resolve() to
+// preview or apply a chosen theme, and Persist() to save the user's choice.
+// Implemented by a concrete type in app/theme, wired through ModelConfig.
+type ThemeCatalog interface {
+	Entries() ([]ThemeEntry, error)
+	Resolve(name string) (ThemeSpec, bool)
+	Persist(name string) error
+}
+
+// ThemeEntry is minimal list-view data for one theme in the selector overlay.
+type ThemeEntry struct {
+	Name        string
+	Local       bool
+	AccentColor string
+}
+
+// ThemeSpec holds the runtime-ready representation of a theme for preview/apply.
+// UI should not import app/theme — this struct carries everything needed to
+// rebuild style.Resolver / style.Renderer / chroma style from a theme choice.
+type ThemeSpec struct {
+	Colors      style.Colors
+	ChromaStyle string
+}
+
 // compile-time assertions — enforce that the concrete package types
 // satisfy the consumer-side interfaces.
 var (
@@ -183,6 +208,7 @@ type Model struct {
 	store        *annotation.Store
 	diffRenderer Renderer
 	keymap       *keymap.Keymap
+	themes       ThemeCatalog // theme catalog for discovery, resolve, and persistence
 
 	ref            string
 	staged         bool
@@ -249,9 +275,6 @@ type Model struct {
 
 	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 
-	themesDir  string // path to themes directory for theme selector
-	configPath string // path to config file for persisting theme choice
-
 	activeThemeName string               // name of currently applied theme (for cursor positioning)
 	themePreview    *themePreviewSession // non-nil while theme selector is open
 }
@@ -313,6 +336,9 @@ type ModelConfig struct {
 	// Required — NewModel returns an error when nil.
 	ParseTOC func(lines []diff.DiffLine, filename string) TOCComponent
 
+	// --- Theme catalog (required, wired from main.go) ---
+	Themes ThemeCatalog // theme discovery, resolve, and persistence
+
 	// --- Optional dependencies ---
 	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
@@ -334,9 +360,7 @@ type ModelConfig struct {
 	WordDiff         bool     // enable intra-line word-diff highlighting on startup
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
-	ThemesDir        string   // path to themes directory for theme selector
-	ConfigPath       string   // path to config file for persisting theme choice
-	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
+	ActiveThemeName string // name of theme currently applied (for theme selector cursor positioning)
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -373,6 +397,9 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.ParseTOC == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.ParseTOC is required")
 	}
+	if cfg.Themes == nil {
+		return Model{}, errors.New("ui.NewModel: cfg.Themes is required")
+	}
 	if cfg.TreeWidthRatio < 1 || cfg.TreeWidthRatio > 10 {
 		cfg.TreeWidthRatio = 2
 	}
@@ -397,6 +424,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		blamer:           cfg.Blamer,
 		tree:             cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
 		parseTOC:         cfg.ParseTOC,
+		themes:           cfg.Themes,
 		ref:              cfg.Ref,
 		staged:           cfg.Staged,
 		only:             cfg.Only,
@@ -415,8 +443,6 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		focus:            paneTree,
 		treeWidthRatio:   cfg.TreeWidthRatio,
 		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
-		themesDir:        cfg.ThemesDir,
-		configPath:       cfg.ConfigPath,
 		activeThemeName:  cfg.ActiveThemeName,
 	}, nil
 }

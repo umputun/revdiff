@@ -452,16 +452,16 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/themes.go`
 - Modify: `app/theme/theme.go` (or add a new file in `app/theme/`)
 
-- [ ] add `ThemeCatalog`, `ThemeEntry`, and `ThemeSpec` types to `app/ui/model.go`
-- [ ] add `ThemeCatalog` to `ui.ModelConfig` as a required dependency
-- [ ] add constructor validation for missing `ThemeCatalog`
-- [ ] add a concrete catalog/repository type to `app/theme` backed by the existing list/load functions
-- [ ] convert theme loading from `theme.Theme` to UI-facing `ThemeSpec`
-- [ ] keep `package main` adapter/wiring thin — compose `app/theme` catalog + selected-theme persistence
-- [ ] wire the catalog into `ui.NewModel(...)` in `run()`
-- [ ] add compile-time satisfaction checks where appropriate
-- [ ] add tests for the concrete `ThemeCatalog` implementation in `app/theme/`
-- [ ] verify the resulting ownership split is still obvious at a glance: `ui` consumes, `theme` implements, `main` wires
+- [x] add `ThemeCatalog`, `ThemeEntry`, and `ThemeSpec` types to `app/ui/model.go`
+- [x] add `ThemeCatalog` to `ui.ModelConfig` as a required dependency
+- [x] add constructor validation for missing `ThemeCatalog`
+- [x] add a concrete catalog/repository type to `app/theme` backed by the existing list/load functions
+- [x] convert theme loading from `theme.Theme` to UI-facing `ThemeSpec`
+- [x] keep `package main` adapter/wiring thin — compose `app/theme` catalog + selected-theme persistence
+- [x] wire the catalog into `ui.NewModel(...)` in `run()`
+- [x] add compile-time satisfaction checks where appropriate
+- [x] add tests for the concrete `ThemeCatalog` implementation in `app/theme/`
+- [x] verify the resulting ownership split is still obvious at a glance: `ui` consumes, `theme` implements, `main` wires
 
 ### Task 4: Move theme discovery out of `app/ui/themeselect.go`
 
@@ -469,12 +469,12 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/themeselect.go`
 - Modify: `app/ui/themeselect_test.go`
 
-- [ ] replace `buildThemeEntries()` disk-loading logic with `m.themes.Entries()`
-- [ ] replace preview/confirm lookup against `theme.Theme` entries with `ThemeCatalog.Resolve(name)`
-- [ ] keep preview-session state in UI, but make it store `ThemeSpec` instead of `theme.Theme`
-- [ ] keep `applyTheme(...)` in UI, but make it accept `ThemeSpec`
-- [ ] update `themeselect_test.go` to use a fake/mock catalog instead of filesystem/theme package coupling
-- [ ] verify theme selector behavior is unchanged
+- [x] replace `buildThemeEntries()` disk-loading logic with `m.themes.Entries()`
+- [x] replace preview/confirm lookup against `theme.Theme` entries with `ThemeCatalog.Resolve(name)`
+- [x] keep preview-session state in UI, but make it store `ThemeSpec` instead of `theme.Theme`
+- [x] keep `applyTheme(...)` in UI, but make it accept `ThemeSpec`
+- [x] update `themeselect_test.go` to use a fake/mock catalog instead of filesystem/theme package coupling
+- [x] verify theme selector behavior is unchanged
 
 ### Task 5: Move theme persistence out of `app/ui`
 
@@ -485,14 +485,14 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/themes.go`
 - Add: tests in `app/themes_test.go` or equivalent
 
-- [ ] remove `patchConfigTheme()` from `app/ui`
-- [ ] move config-patching helper out of `ui` and keep it as a thin startup/config persistence adapter
-- [ ] replace direct config file patching in `confirmThemeByName()` with `m.themes.Persist(name)`
-- [ ] add focused tests for theme persistence in `app/`
-- [ ] confirm `app/ui` no longer imports `app/fsutil`
-- [ ] confirm `app/ui` no longer imports `app/theme`
-- [ ] run `go test ./...`
-- [ ] run `make lint`
+- [x] remove `patchConfigTheme()` from `app/ui`
+- [x] move config-patching helper out of `ui` and keep it as a thin startup/config persistence adapter
+- [x] replace direct config file patching in `confirmThemeByName()` with `m.themes.Persist(name)`
+- [x] add focused tests for theme persistence in `app/`
+- [x] confirm `app/ui` no longer imports `app/fsutil`
+- [x] confirm `app/ui` no longer imports `app/theme`
+- [x] run `go test ./...`
+- [x] run `make lint`
 
 ### Task 6: Introduce `loadedFileState` struct and migrate loaders
 

@@ -1,9 +1,6 @@
 package ui
 
 import (
-	"bytes"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,111 +8,83 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
-	"github.com/umputun/revdiff/app/theme"
 	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
-func TestColorsFromTheme(t *testing.T) {
-	th := theme.Theme{
-		ChromaStyle: "dracula",
-		Colors: map[string]string{
-			"color-accent":         "#bd93f9",
-			"color-border":         "#6272a4",
-			"color-normal":         "#f8f8f2",
-			"color-muted":          "#6272a4",
-			"color-selected-fg":    "#f8f8f2",
-			"color-selected-bg":    "#44475a",
-			"color-annotation":     "#f1fa8c",
-			"color-cursor-fg":      "#282a36",
-			"color-cursor-bg":      "#f8f8f2",
-			"color-add-fg":         "#50fa7b",
-			"color-add-bg":         "#2a4a2a",
-			"color-remove-fg":      "#ff5555",
-			"color-remove-bg":      "#4a2a2a",
-			"color-word-add-bg":    "#3a5a3a",
-			"color-word-remove-bg": "#5a3a3a",
-			"color-modify-fg":      "#ffb86c",
-			"color-modify-bg":      "#3a3a2a",
-			"color-tree-bg":        "#21222c",
-			"color-diff-bg":        "#282a36",
-			"color-status-fg":      "#f8f8f2",
-			"color-status-bg":      "#44475a",
-			"color-search-fg":      "#282a36",
-			"color-search-bg":      "#f1fa8c",
+// testThemeCatalog is a test-only ThemeCatalog with configurable entries and themes.
+type testThemeCatalog struct {
+	entries   []ThemeEntry
+	themes    map[string]ThemeSpec
+	persisted []string
+}
+
+func (tc *testThemeCatalog) Entries() ([]ThemeEntry, error) { return tc.entries, nil }
+
+func (tc *testThemeCatalog) Resolve(name string) (ThemeSpec, bool) {
+	spec, ok := tc.themes[name]
+	return spec, ok
+}
+
+func (tc *testThemeCatalog) Persist(name string) error {
+	tc.persisted = append(tc.persisted, name)
+	return nil
+}
+
+// newTestThemeCatalog returns a catalog pre-populated with dracula and nord themes.
+func newTestThemeCatalog() *testThemeCatalog {
+	return &testThemeCatalog{
+		entries: []ThemeEntry{
+			{Name: "revdiff", Local: false, AccentColor: "#61afef"},
+			{Name: "dracula", Local: false, AccentColor: "#bd93f9"},
+			{Name: "nord", Local: false, AccentColor: "#88c0d0"},
+		},
+		themes: map[string]ThemeSpec{
+			"revdiff": {
+				Colors: style.Colors{
+					Accent: "#61afef", Border: "#3e4451", Normal: "#abb2bf", Muted: "#5c6370",
+					SelectedFg: "#282c34", SelectedBg: "#61afef", Annotation: "#e5c07b",
+					CursorFg: "#282c34", CursorBg: "#abb2bf",
+					AddFg: "#98c379", AddBg: "#2a4a2a", RemoveFg: "#e06c75", RemoveBg: "#4a2a2a",
+					WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
+					ModifyFg: "#d19a66", ModifyBg: "#3a3a2a",
+					TreeBg: "#21252b", DiffBg: "#282c34",
+					StatusFg: "#abb2bf", StatusBg: "#3e4451",
+					SearchFg: "#282c34", SearchBg: "#e5c07b",
+				},
+				ChromaStyle: "onedark",
+			},
+			"dracula": {
+				Colors: style.Colors{
+					Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
+					SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
+					CursorFg: "#282a36", CursorBg: "#f8f8f2",
+					AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
+					WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
+					ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
+					TreeBg: "#21222c", DiffBg: "#282a36",
+					StatusFg: "#f8f8f2", StatusBg: "#44475a",
+					SearchFg: "#282a36", SearchBg: "#f1fa8c",
+				},
+				ChromaStyle: "dracula",
+			},
+			"nord": {
+				Colors: style.Colors{
+					Accent: "#88c0d0", Border: "#4c566a", Normal: "#d8dee9", Muted: "#4c566a",
+					SelectedFg: "#2e3440", SelectedBg: "#88c0d0", Annotation: "#ebcb8b",
+					CursorFg: "#2e3440", CursorBg: "#d8dee9",
+					AddFg: "#a3be8c", AddBg: "#2a4a2a", RemoveFg: "#bf616a", RemoveBg: "#4a2a2a",
+					WordAddBg: "#3a5a3a", WordRemoveBg: "#5a3a3a",
+					ModifyFg: "#d08770", ModifyBg: "#3a3a2a",
+					TreeBg: "#242933", DiffBg: "#2e3440",
+					StatusFg: "#d8dee9", StatusBg: "#4c566a",
+					SearchFg: "#2e3440", SearchBg: "#ebcb8b",
+				},
+				ChromaStyle: "nord",
+			},
 		},
 	}
-
-	colors := colorsFromTheme(th)
-	assert.Equal(t, "#bd93f9", colors.Accent)
-	assert.Equal(t, "#6272a4", colors.Border)
-	assert.Equal(t, "#f8f8f2", colors.Normal)
-	assert.Equal(t, "#50fa7b", colors.AddFg)
-	assert.Equal(t, "#282a36", colors.DiffBg)
-	assert.Equal(t, "#3a5a3a", colors.WordAddBg)
-	assert.Equal(t, "#5a3a3a", colors.WordRemoveBg)
-}
-
-func TestBuildThemeEntries(t *testing.T) {
-	m := Model{themesDir: t.TempDir()}
-	entries, err := m.buildThemeEntries()
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, len(entries), 5, "should have at least gallery themes")
-
-	found := make(map[string]bool)
-	for _, e := range entries {
-		found[e.name] = e.local
-	}
-	assert.False(t, found["dracula"], "dracula should not be local")
-	assert.False(t, found["nord"], "nord should not be local")
-}
-
-func TestBuildThemeEntries_ordering(t *testing.T) {
-	m := Model{themesDir: t.TempDir()}
-	entries, err := m.buildThemeEntries()
-	require.NoError(t, err)
-
-	require.NotEmpty(t, entries)
-	assert.Equal(t, theme.DefaultThemeName, entries[0].name, "default theme should be first")
-
-	names := make([]string, len(entries))
-	for i, e := range entries {
-		names[i] = e.name
-	}
-	assert.Contains(t, names, "dracula")
-	assert.Contains(t, names, "nord")
-	assert.Contains(t, names, "catppuccin-latte")
-}
-
-func TestBuildThemeEntries_prefersInstalledThemeOverride(t *testing.T) {
-	themesDir := t.TempDir()
-	custom, err := theme.GalleryTheme("dracula")
-	require.NoError(t, err)
-	custom.ChromaStyle = "monokai"
-	custom.Colors["color-accent"] = "#010203"
-
-	var buf bytes.Buffer
-	require.NoError(t, theme.Dump(custom, &buf))
-	require.NoError(t, os.WriteFile(filepath.Join(themesDir, "dracula"), buf.Bytes(), 0o600))
-
-	m := Model{themesDir: themesDir}
-	entries, err := m.buildThemeEntries()
-	require.NoError(t, err)
-
-	var dracula themeEntry
-	found := false
-	for _, e := range entries {
-		if e.name == "dracula" {
-			dracula = e
-			found = true
-			break
-		}
-	}
-	require.True(t, found, "dracula entry should be present")
-	assert.False(t, dracula.local, "gallery themes with local overrides should keep their gallery classification")
-	assert.Equal(t, "#010203", dracula.theme.Colors["color-accent"])
-	assert.Equal(t, "monokai", dracula.theme.ChromaStyle)
 }
 
 func TestOpenThemeSelector_savesOriginalState(t *testing.T) {
@@ -130,12 +99,11 @@ func TestOpenThemeSelector_savesOriginalState(t *testing.T) {
 	}
 
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
-		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
 	m.width = 80
 	m.height = 24
 	m.ready = true
-	m.themesDir = t.TempDir()
 
 	origResolver := m.resolver
 	m.openThemeSelector()
@@ -163,12 +131,11 @@ func TestCancelThemeSelect_restoresOriginalTheme(t *testing.T) {
 	}
 
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
-		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
 	m.width = 80
 	m.height = 24
 	m.ready = true
-	m.themesDir = t.TempDir()
 
 	origAccent := m.resolver.Color(style.ColorKeyAccentFg)
 	m.openThemeSelector()
@@ -200,12 +167,11 @@ func TestPreviewThemeByName_appliesTheme(t *testing.T) {
 	}
 
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
-		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
 	m.width = 80
 	m.height = 24
 	m.ready = true
-	m.themesDir = t.TempDir()
 
 	m.openThemeSelector()
 	m.previewThemeByName("dracula")
@@ -216,6 +182,31 @@ func TestPreviewThemeByName_appliesTheme(t *testing.T) {
 func TestPreviewThemeByName_nilSessionNoOp(t *testing.T) {
 	m := testModel(nil, nil)
 	m.previewThemeByName("dracula") // should not panic
+}
+
+func TestPreviewThemeByName_unknownThemeNoOp(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	highlighter := &mocks.SyntaxHighlighterMock{
+		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
+		SetStyleFunc:       func(string) bool { return true },
+		StyleNameFunc:      func() string { return "orig-style" },
+	}
+
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
+	})
+	m.width = 80
+	m.height = 24
+	m.ready = true
+
+	m.openThemeSelector()
+	origResolver := m.resolver
+	m.previewThemeByName("nonexistent")
+
+	assert.Equal(t, origResolver, m.resolver, "unknown theme should not change resolver")
 }
 
 func TestConfirmThemeByName_appliesAndPersists(t *testing.T) {
@@ -233,13 +224,13 @@ func TestConfirmThemeByName_appliesAndPersists(t *testing.T) {
 		StyleNameFunc: func() string { return currentStyle },
 	}
 
+	catalog := newTestThemeCatalog()
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
-		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: catalog,
 	})
 	m.width = 80
 	m.height = 24
 	m.ready = true
-	m.themesDir = t.TempDir()
 
 	m.openThemeSelector()
 	m.confirmThemeByName("dracula")
@@ -247,6 +238,7 @@ func TestConfirmThemeByName_appliesAndPersists(t *testing.T) {
 	assert.Equal(t, "dracula", m.activeThemeName)
 	assert.Equal(t, "dracula", currentStyle)
 	assert.Nil(t, m.themePreview, "preview session should be cleared after confirm")
+	assert.Equal(t, []string{"dracula"}, catalog.persisted, "theme should be persisted via catalog")
 }
 
 func TestThemeSelectPreviewAndConfirmPreserveNoColors(t *testing.T) {
@@ -261,12 +253,11 @@ func TestThemeSelectPreviewAndConfirmPreserveNoColors(t *testing.T) {
 	}
 
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
-		NoColors: true, TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+		NoColors: true, TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
 	m.width = 80
 	m.height = 24
 	m.ready = true
-	m.themesDir = t.TempDir()
 	m.openThemeSelector()
 
 	m.previewThemeByName("dracula")
@@ -306,31 +297,18 @@ func TestApplyTheme_invalidChromaStyleKeepsPreviousHighlightingStyle(t *testing.
 	m.diffLines = []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "package main"}}
 	m.highlightedLines = []string{"existing"}
 
-	m.applyTheme(theme.Theme{
-		ChromaStyle: "bad-style",
-		Colors: map[string]string{
-			"color-accent":      "#bd93f9",
-			"color-border":      "#6272a4",
-			"color-normal":      "#f8f8f2",
-			"color-muted":       "#6272a4",
-			"color-selected-fg": "#f8f8f2",
-			"color-selected-bg": "#44475a",
-			"color-annotation":  "#f1fa8c",
-			"color-cursor-fg":   "#282a36",
-			"color-cursor-bg":   "#f8f8f2",
-			"color-add-fg":      "#50fa7b",
-			"color-add-bg":      "#2a4a2a",
-			"color-remove-fg":   "#ff5555",
-			"color-remove-bg":   "#4a2a2a",
-			"color-modify-fg":   "#ffb86c",
-			"color-modify-bg":   "#3a3a2a",
-			"color-tree-bg":     "#21222c",
-			"color-diff-bg":     "#282a36",
-			"color-status-fg":   "#f8f8f2",
-			"color-status-bg":   "#44475a",
-			"color-search-fg":   "#282a36",
-			"color-search-bg":   "#f1fa8c",
+	m.applyTheme(ThemeSpec{
+		Colors: style.Colors{
+			Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
+			SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
+			CursorFg: "#282a36", CursorBg: "#f8f8f2",
+			AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
+			ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
+			TreeBg: "#21222c", DiffBg: "#282a36",
+			StatusFg: "#f8f8f2", StatusBg: "#44475a",
+			SearchFg: "#282a36", SearchBg: "#f1fa8c",
 		},
+		ChromaStyle: "bad-style",
 	})
 
 	assert.Equal(t, "orig-style", currentStyle)

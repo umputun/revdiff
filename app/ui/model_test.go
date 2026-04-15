@@ -77,6 +77,15 @@ func testNewFileTree(files []string) *sidepane.FileTree {
 	return sidepane.NewFileTree(entries)
 }
 
+// fakeThemeCatalog is a test-only ThemeCatalog that returns no entries and no-ops on persist.
+type fakeThemeCatalog struct{}
+
+func (fakeThemeCatalog) Entries() ([]ThemeEntry, error) { return nil, nil }
+func (fakeThemeCatalog) Resolve(string) (ThemeSpec, bool) {
+	return ThemeSpec{}, false
+}
+func (fakeThemeCatalog) Persist(string) error { return nil }
+
 // testNewModel is a test-only helper that preserves the old 4-arg NewModel
 // shape while the production NewModel takes a single ModelConfig. It accepts
 // the diff renderer, store, and highlighter as explicit args (so tests can
@@ -106,6 +115,9 @@ func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, high
 	if cfg.Overlay == nil {
 		cfg.Overlay = overlay.NewManager()
 	}
+	if cfg.Themes == nil {
+		cfg.Themes = fakeThemeCatalog{}
+	}
 	m, err := NewModel(cfg)
 	require.NoError(t, err)
 	return m
@@ -134,6 +146,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		SGR:            style.SGR{},
 		WordDiffer:     worddiff.New(),
 		Overlay:        overlay.NewManager(),
+		Themes:         fakeThemeCatalog{},
 		TreeWidthRatio: 3,
 		NewFileTree:    testFileTreeFactory(),
 		ParseTOC:       testParseTOCFactory(),
