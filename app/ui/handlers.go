@@ -109,7 +109,7 @@ func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
 
 // handleFileAnnotateKey starts file-level annotation from diff pane only.
 func (m Model) handleFileAnnotateKey() (tea.Model, tea.Cmd) {
-	if m.focus != paneDiff || m.currFile == "" {
+	if m.focus != paneDiff || m.file.name == "" {
 		return m, nil
 	}
 	cmd := m.startFileAnnotation()
@@ -130,18 +130,18 @@ func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
 func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	switch m.focus {
 	case paneTree:
-		if m.mdTOC != nil {
-			if idx, ok := m.mdTOC.CurrentLineIdx(); ok {
+		if m.file.mdTOC != nil {
+			if idx, ok := m.file.mdTOC.CurrentLineIdx(); ok {
 				// jump to selected header in diff
 				m.diffCursor = idx
 				m.cursorOnAnnotation = false
-				m.mdTOC.UpdateActiveSection(m.diffCursor)
+				m.file.mdTOC.UpdateActiveSection(m.diffCursor)
 				m.focus = paneDiff
 				m.topAlignViewportOnCursor()
 				return m, nil
 			}
 		}
-		if m.currFile != "" {
+		if m.file.name != "" {
 			m.focus = paneDiff
 		}
 		return m, nil
@@ -174,7 +174,7 @@ func (m Model) handleConfirmDiscardKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleFilterToggle toggles the annotated files filter.
 // no-op in single-file mode (tree pane is hidden).
 func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
-	if m.singleFile {
+	if m.file.singleFile {
 		return m, nil
 	}
 	annotated := m.annotatedFiles()
@@ -191,8 +191,8 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 // handleMarkReviewed toggles the reviewed state of the focused file.
 // tree focus uses the selected row; diff/TOC focus uses the displayed file.
 func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
-	file := m.currFile
-	if m.focus == paneTree && m.mdTOC == nil {
+	file := m.file.name
+	if m.focus == paneTree && m.file.mdTOC == nil {
 		file = m.tree.SelectedFile()
 	}
 	if file == "" {
@@ -219,10 +219,10 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 	if !forward {
 		dir = -1
 	}
-	if m.singleFile && m.mdTOC != nil {
+	if m.file.singleFile && m.file.mdTOC != nil {
 		return m.jumpTOCEntry(dir)
 	}
-	if !m.singleFile {
+	if !m.file.singleFile {
 		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
 		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
 		if forward {

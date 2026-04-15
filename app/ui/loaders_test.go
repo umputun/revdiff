@@ -45,7 +45,7 @@ func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
 	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}}})
 	model := result.(Model)
 
-	assert.False(t, model.singleFile, "singleFile should be false for multiple files")
+	assert.False(t, model.file.singleFile, "singleFile should be false for multiple files")
 }
 
 func TestModel_FileLoaded(t *testing.T) {
@@ -60,8 +60,8 @@ func TestModel_FileLoaded(t *testing.T) {
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
 
-	assert.Equal(t, "a.go", model.currFile)
-	assert.Len(t, model.diffLines, 2)
+	assert.Equal(t, "a.go", model.file.name)
+	assert.Len(t, model.file.lines, 2)
 }
 
 func TestModel_ComputeFileStats(t *testing.T) {
@@ -102,10 +102,10 @@ func TestModel_ComputeFileStats(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = tt.lines
+			m.file.lines = tt.lines
 			m.computeFileStats()
-			assert.Equal(t, tt.adds, m.fileAdds, "fileAdds")
-			assert.Equal(t, tt.removes, m.fileRemoves, "fileRemoves")
+			assert.Equal(t, tt.adds, m.file.adds, "fileAdds")
+			assert.Equal(t, tt.removes, m.file.removes, "fileRemoves")
 		})
 	}
 }
@@ -132,9 +132,9 @@ func TestModel_FileStatsText(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = tt.lines
-			m.fileAdds = tt.adds
-			m.fileRemoves = tt.removes
+			m.file.lines = tt.lines
+			m.file.adds = tt.adds
+			m.file.removes = tt.removes
 			assert.Equal(t, tt.want, m.fileStatsText())
 		})
 	}
@@ -149,12 +149,12 @@ func TestModel_FileLoadedComputesStats(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.loadSeq = 1
+	m.file.loadSeq = 1
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: 1, lines: lines})
 	model := result.(Model)
-	assert.Equal(t, 2, model.fileAdds)
-	assert.Equal(t, 1, model.fileRemoves)
+	assert.Equal(t, 2, model.file.adds)
+	assert.Equal(t, 1, model.file.removes)
 }
 
 func TestModel_FilterOnly(t *testing.T) {
@@ -489,7 +489,7 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 		m = result.(Model)
 		// reaching here without panic means the fallback path handled the untracked file correctly.
 		// if testdata/newfile.go doesn't exist on disk, diffLines stays nil — that's expected
-		assert.Equal(t, "newfile.go", m.currFile)
+		assert.Equal(t, "newfile.go", m.file.name)
 	})
 
 	t.Run("non-untracked file with empty diff does not trigger fallback", func(t *testing.T) {
@@ -515,7 +515,7 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 		msg2 := cmd()
 		result, _ = m.Update(msg2)
 		m = result.(Model)
-		assert.Nil(t, m.diffLines, "non-untracked empty diff should not trigger disk fallback")
+		assert.Nil(t, m.file.lines, "non-untracked empty diff should not trigger disk fallback")
 	})
 }
 
@@ -549,7 +549,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 		result, _ = m.Update(msg2)
 		m = result.(Model)
 
-		assert.Equal(t, cachedLines, m.diffLines, "staged-only file should show --cached diff content")
+		assert.Equal(t, cachedLines, m.file.lines, "staged-only file should show --cached diff content")
 	})
 
 	t.Run("staged mode does not retry --cached", func(t *testing.T) {
@@ -577,7 +577,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 		result, _ = m.Update(msg2)
 		m = result.(Model)
 
-		assert.Nil(t, m.diffLines, "staged mode should not retry with --cached")
+		assert.Nil(t, m.file.lines, "staged mode should not retry with --cached")
 	})
 
 	t.Run("FileModified with empty diff does not trigger staged retry", func(t *testing.T) {
@@ -607,7 +607,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 		result, _ = m.Update(msg2)
 		m = result.(Model)
 
-		assert.Nil(t, m.diffLines, "FileModified should not trigger staged retry even with empty diff")
+		assert.Nil(t, m.file.lines, "FileModified should not trigger staged retry even with empty diff")
 	})
 }
 
@@ -616,7 +616,7 @@ func TestModel_FilesLoadedSingleFile(t *testing.T) {
 	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
 	model := result.(Model)
 
-	assert.True(t, model.singleFile, "singleFile should be true for one file")
+	assert.True(t, model.file.singleFile, "singleFile should be true for one file")
 	assert.Equal(t, paneDiff, model.focus, "focus should be on diff pane in single-file mode")
 	assert.NotNil(t, cmd) // should auto-select first file
 }
@@ -631,7 +631,7 @@ func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
 	// now load single file — viewport width should be recalculated
 	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
 	model := result.(Model)
-	assert.True(t, model.singleFile)
+	assert.True(t, model.file.singleFile)
 	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in single-file mode")
 	assert.Equal(t, 98, model.viewport.Width, "viewport width should be width - 2 (borders only)")
 }
@@ -646,15 +646,15 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 
 	t.Run("markdown full-context triggers TOC", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0
 		m.focus = paneDiff
 
 		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
 		model := result.(Model)
 
-		require.NotNil(t, model.mdTOC, "mdTOC should be set for markdown full-context")
-		assert.Equal(t, 3, model.mdTOC.NumEntries()) // top + 2 headers
+		require.NotNil(t, model.file.mdTOC, "mdTOC should be set for markdown full-context")
+		assert.Equal(t, 3, model.file.mdTOC.NumEntries()) // top + 2 headers
 		assert.Positive(t, model.treeWidth, "treeWidth should be set when TOC is active")
 	})
 
@@ -663,12 +663,12 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 			{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
 		}
 		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": goLines})
-		m.singleFile = true
+		m.file.singleFile = true
 
 		result, _ := m.Update(fileLoadedMsg{file: "main.go", lines: goLines})
 		model := result.(Model)
 
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil for non-markdown file")
+		assert.Nil(t, model.file.mdTOC, "mdTOC should be nil for non-markdown file")
 	})
 
 	t.Run("markdown with diff changes does not trigger TOC", func(t *testing.T) {
@@ -677,12 +677,12 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 			{NewNum: 2, Content: "added line", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mixedLines})
-		m.singleFile = true
+		m.file.singleFile = true
 
 		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mixedLines})
 		model := result.(Model)
 
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil when file has diff changes")
+		assert.Nil(t, model.file.mdTOC, "mdTOC should be nil when file has diff changes")
 	})
 
 	t.Run("markdown with no headers produces nil TOC", func(t *testing.T) {
@@ -691,38 +691,38 @@ func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 			{NewNum: 2, Content: "more text", ChangeType: diff.ChangeContext},
 		}
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": noHeaders})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0 // single-file mode starts with treeWidth=0
 
 		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: noHeaders})
 		model := result.(Model)
 
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil when no headers found")
+		assert.Nil(t, model.file.mdTOC, "mdTOC should be nil when no headers found")
 		assert.Equal(t, 0, model.treeWidth, "treeWidth should stay 0 when no TOC")
 	})
 
 	t.Run("multi-file mode does not trigger TOC", func(t *testing.T) {
 		m := testModel([]string{"README.md", "main.go"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = false
+		m.file.singleFile = false
 
 		result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
 		model := result.(Model)
 
-		assert.Nil(t, model.mdTOC, "mdTOC should be nil in multi-file mode")
+		assert.Nil(t, model.file.mdTOC, "mdTOC should be nil in multi-file mode")
 	})
 
 	t.Run("switching to non-markdown clears existing TOC", func(t *testing.T) {
 		goLines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
 		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": goLines})
-		m.singleFile = true
+		m.file.singleFile = true
 		// pre-existing TOC from previous markdown file
 		staleMdLines := []diff.DiffLine{{NewNum: 1, Content: "# Stale", ChangeType: diff.ChangeContext}}
-		m.mdTOC = sidepane.ParseTOC(staleMdLines, "old.md")
+		m.file.mdTOC = sidepane.ParseTOC(staleMdLines, "old.md")
 
 		result, _ := m.Update(fileLoadedMsg{file: "main.go", lines: goLines})
 		model := result.(Model)
 
-		assert.Nil(t, model.mdTOC, "mdTOC should be cleared when switching to non-markdown file")
+		assert.Nil(t, model.file.mdTOC, "mdTOC should be cleared when switching to non-markdown file")
 	})
 }
 
@@ -738,14 +738,14 @@ func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
 	m = resized.(Model)
 	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "README.md"}}})
 	m = loaded.(Model)
-	require.True(t, m.singleFile)
+	require.True(t, m.file.singleFile)
 	require.Equal(t, 0, m.treeWidth, "treeWidth starts at 0 in single-file mode")
 
 	// loading the markdown file should set up TOC and adjust widths
-	result, _ := m.Update(fileLoadedMsg{file: "README.md", seq: m.loadSeq, lines: mdLines})
+	result, _ := m.Update(fileLoadedMsg{file: "README.md", seq: m.file.loadSeq, lines: mdLines})
 	model := result.(Model)
 
-	require.NotNil(t, model.mdTOC)
+	require.NotNil(t, model.file.mdTOC)
 	assert.Positive(t, model.treeWidth, "treeWidth should be set for TOC pane")
 	expectedTreeWidth := max(minTreeWidth, 100*model.treeWidthRatio/10)
 	assert.Equal(t, expectedTreeWidth, model.treeWidth)
@@ -754,8 +754,8 @@ func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
 
 func TestModel_HandleBlameLoadedSyncsViewportForWrap(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "tail", ChangeType: diff.ChangeContext},
 	}
@@ -772,7 +772,7 @@ func TestModel_HandleBlameLoadedSyncsViewportForWrap(t *testing.T) {
 
 	result, _ := m.handleBlameLoaded(blameLoadedMsg{
 		file: "a.go",
-		seq:  m.loadSeq,
+		seq:  m.file.loadSeq,
 		data: map[int]diff.BlameLine{
 			1: {Author: "LongAuthor", Time: time.Now()},
 			2: {Author: "LongAuthor", Time: time.Now()},
@@ -809,7 +809,7 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	m.tree = testNewFileTree(files)
 
 	// user presses n to load b.go
-	m.loadSeq = 1
+	m.file.loadSeq = 1
 	m.tree.StepFile(sidepane.DirectionNext) // cursor -> b.go
 
 	// then j/k moves cursor to c.go (without triggering a load)
@@ -820,15 +820,15 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	bLines := []diff.DiffLine{{NewNum: 1, Content: "package b", ChangeType: diff.ChangeContext}}
 	result, _ := m.Update(fileLoadedMsg{file: "b.go", seq: 1, lines: bLines})
 	model := result.(Model)
-	assert.Equal(t, "b.go", model.currFile, "response should be accepted despite cursor being on c.go")
-	assert.Equal(t, bLines, model.diffLines)
+	assert.Equal(t, "b.go", model.file.name, "response should be accepted despite cursor being on c.go")
+	assert.Equal(t, bLines, model.file.lines)
 }
 
 func TestModel_RecomputeIntraRanges(t *testing.T) {
 	m := testModel(nil, nil)
 	m.wordDiff = true
 	m.tabSpaces = "    "
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "context before", ChangeType: diff.ChangeContext},
 		{Content: "return foo(bar)", ChangeType: diff.ChangeRemove},
 		{Content: "return foo(baz)", ChangeType: diff.ChangeAdd},
@@ -837,24 +837,24 @@ func TestModel_RecomputeIntraRanges(t *testing.T) {
 
 	m.recomputeIntraRanges()
 
-	require.Len(t, m.intraRanges, 4)
-	assert.Nil(t, m.intraRanges[0], "context line should have no ranges")
-	assert.NotNil(t, m.intraRanges[1], "remove line should have ranges")
-	assert.NotNil(t, m.intraRanges[2], "add line should have ranges")
-	assert.Nil(t, m.intraRanges[3], "context line should have no ranges")
+	require.Len(t, m.file.intraRanges, 4)
+	assert.Nil(t, m.file.intraRanges[0], "context line should have no ranges")
+	assert.NotNil(t, m.file.intraRanges[1], "remove line should have ranges")
+	assert.NotNil(t, m.file.intraRanges[2], "add line should have ranges")
+	assert.Nil(t, m.file.intraRanges[3], "context line should have no ranges")
 
 	// verify the ranges point to "bar" and "baz"
-	require.Len(t, m.intraRanges[1], 1)
-	assert.Equal(t, worddiff.Range{Start: 11, End: 14}, m.intraRanges[1][0])
-	require.Len(t, m.intraRanges[2], 1)
-	assert.Equal(t, worddiff.Range{Start: 11, End: 14}, m.intraRanges[2][0])
+	require.Len(t, m.file.intraRanges[1], 1)
+	assert.Equal(t, worddiff.Range{Start: 11, End: 14}, m.file.intraRanges[1][0])
+	require.Len(t, m.file.intraRanges[2], 1)
+	assert.Equal(t, worddiff.Range{Start: 11, End: 14}, m.file.intraRanges[2][0])
 }
 
 func TestModel_RecomputeIntraRanges_IdenticalPair(t *testing.T) {
 	m := testModel(nil, nil)
 	m.wordDiff = true
 	m.tabSpaces = "    "
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "same line content", ChangeType: diff.ChangeRemove},
 		{Content: "same line content", ChangeType: diff.ChangeAdd},
 	}
@@ -862,15 +862,15 @@ func TestModel_RecomputeIntraRanges_IdenticalPair(t *testing.T) {
 	m.recomputeIntraRanges()
 
 	// identical lines produce no changed ranges, so intra-line ranges remain nil
-	assert.Nil(t, m.intraRanges[0], "identical remove should have no ranges")
-	assert.Nil(t, m.intraRanges[1], "identical add should have no ranges")
+	assert.Nil(t, m.file.intraRanges[0], "identical remove should have no ranges")
+	assert.Nil(t, m.file.intraRanges[1], "identical add should have no ranges")
 }
 
 func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {
 	m := testModel(nil, nil)
 	m.wordDiff = true
 	m.tabSpaces = "    "
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "context", ChangeType: diff.ChangeContext},
 		{Content: "new line 1", ChangeType: diff.ChangeAdd},
 		{Content: "new line 2", ChangeType: diff.ChangeAdd},
@@ -879,7 +879,7 @@ func TestModel_RecomputeIntraRanges_PureAddBlock(t *testing.T) {
 	m.recomputeIntraRanges()
 
 	// pure add block has no pairs, so no intra-line ranges
-	for i, r := range m.intraRanges {
+	for i, r := range m.file.intraRanges {
 		assert.Nil(t, r, "line %d should have no ranges", i)
 	}
 }
@@ -888,7 +888,7 @@ func TestModel_RecomputeIntraRanges_DissimilarPair(t *testing.T) {
 	m := testModel(nil, nil)
 	m.wordDiff = true
 	m.tabSpaces = "    "
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "alpha bravo charlie delta echo foxtrot golf hotel india juliet", ChangeType: diff.ChangeRemove},
 		{Content: "xxx yyy zzz aaa bbb ccc ddd eee fff ggg", ChangeType: diff.ChangeAdd},
 	}
@@ -896,15 +896,15 @@ func TestModel_RecomputeIntraRanges_DissimilarPair(t *testing.T) {
 	m.recomputeIntraRanges()
 
 	// dissimilar pair should have no ranges due to similarity gate
-	assert.Nil(t, m.intraRanges[0])
-	assert.Nil(t, m.intraRanges[1])
+	assert.Nil(t, m.file.intraRanges[0])
+	assert.Nil(t, m.file.intraRanges[1])
 }
 
 func TestModel_RecomputeIntraRanges_TabContent(t *testing.T) {
 	m := testModel(nil, nil)
 	m.wordDiff = true
 	m.tabSpaces = "    "
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "\treturn foo(bar)", ChangeType: diff.ChangeRemove},
 		{Content: "\treturn foo(baz)", ChangeType: diff.ChangeAdd},
 	}
@@ -912,13 +912,13 @@ func TestModel_RecomputeIntraRanges_TabContent(t *testing.T) {
 	m.recomputeIntraRanges()
 
 	// ranges should be on tab-replaced content
-	require.NotNil(t, m.intraRanges[0])
-	require.NotNil(t, m.intraRanges[1])
+	require.NotNil(t, m.file.intraRanges[0])
+	require.NotNil(t, m.file.intraRanges[1])
 
 	// after tab replacement, "\t" becomes "    " (4 spaces), so "bar" starts at 4+11=15
-	tabReplaced := strings.ReplaceAll(m.diffLines[0].Content, "\t", m.tabSpaces)
-	require.Len(t, m.intraRanges[0], 1)
-	changed := tabReplaced[m.intraRanges[0][0].Start:m.intraRanges[0][0].End]
+	tabReplaced := strings.ReplaceAll(m.file.lines[0].Content, "\t", m.tabSpaces)
+	require.Len(t, m.file.intraRanges[0], 1)
+	changed := tabReplaced[m.file.intraRanges[0][0].Start:m.file.intraRanges[0][0].End]
 	assert.Equal(t, "bar", changed)
 }
 
@@ -926,7 +926,7 @@ func TestModel_RecomputeIntraRanges_MultipleBlocks(t *testing.T) {
 	m := testModel(nil, nil)
 	m.wordDiff = true
 	m.tabSpaces = "    "
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "old first", ChangeType: diff.ChangeRemove},
 		{Content: "new first", ChangeType: diff.ChangeAdd},
 		{Content: "context between", ChangeType: diff.ChangeContext},
@@ -937,11 +937,11 @@ func TestModel_RecomputeIntraRanges_MultipleBlocks(t *testing.T) {
 	m.recomputeIntraRanges()
 
 	// both blocks should have ranges
-	assert.NotNil(t, m.intraRanges[0], "first block remove")
-	assert.NotNil(t, m.intraRanges[1], "first block add")
-	assert.Nil(t, m.intraRanges[2], "context line")
-	assert.NotNil(t, m.intraRanges[3], "second block remove")
-	assert.NotNil(t, m.intraRanges[4], "second block add")
+	assert.NotNil(t, m.file.intraRanges[0], "first block remove")
+	assert.NotNil(t, m.file.intraRanges[1], "first block add")
+	assert.Nil(t, m.file.intraRanges[2], "context line")
+	assert.NotNil(t, m.file.intraRanges[3], "second block remove")
+	assert.NotNil(t, m.file.intraRanges[4], "second block add")
 }
 
 func TestHandleFileLoaded_SingleColLineNum_FullContext(t *testing.T) {
@@ -956,8 +956,8 @@ func TestHandleFileLoaded_SingleColLineNum_FullContext(t *testing.T) {
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
 
-	assert.True(t, model.singleColLineNum, "full-context file should set singleColLineNum to true")
-	assert.Equal(t, model.lineNumWidth+1, model.lineNumGutterWidth(), "full-context should use single-column gutter width")
+	assert.True(t, model.file.singleColLineNum, "full-context file should set singleColLineNum to true")
+	assert.Equal(t, model.file.lineNumWidth+1, model.lineNumGutterWidth(), "full-context should use single-column gutter width")
 }
 
 func TestHandleFileLoaded_SingleColLineNum_RealDiff(t *testing.T) {
@@ -973,5 +973,5 @@ func TestHandleFileLoaded_SingleColLineNum_RealDiff(t *testing.T) {
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
 
-	assert.False(t, model.singleColLineNum, "file with add/remove lines should set singleColLineNum to false")
+	assert.False(t, model.file.singleColLineNum, "file with add/remove lines should set singleColLineNum to false")
 }

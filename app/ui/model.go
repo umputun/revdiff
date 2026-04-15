@@ -195,6 +195,26 @@ const (
 	minTreeWidth = 20
 )
 
+// loadedFileState holds all state related to the currently loaded file.
+// it groups parallel arrays (lines, highlighted, intraRanges) and derived
+// metadata (adds/removes, blame, line numbering) into a single coherent
+// object, making the synchronization invariant explicit.
+type loadedFileState struct {
+	name             string                 // currently displayed file path
+	lines            []diff.DiffLine        // parsed diff lines
+	highlighted      []string               // pre-computed highlighted content, parallel to lines
+	intraRanges      [][]worddiff.Range     // per-line intra-line word-diff ranges, parallel to lines
+	adds             int                    // cached count of added lines
+	removes          int                    // cached count of removed lines
+	blameData        map[int]diff.BlameLine // blame info keyed by 1-based new line number
+	blameAuthorLen   int                    // max author display width for blame gutter
+	lineNumWidth     int                    // digit width for line number columns
+	singleColLineNum bool                   // true for full-context files: one line-number column
+	loadSeq          uint64                 // monotonic counter to identify the latest load request
+	mdTOC            TOCComponent           // markdown table-of-contents (nil when not applicable)
+	singleFile       bool                   // true when diff contains exactly one file
+}
+
 // Model is the top-level bubbletea model for revdiff.
 type Model struct {
 	resolver     styleResolver
@@ -223,57 +243,44 @@ type Model struct {
 	treeWidth      int
 	treeWidthRatio int    // 1-10 units for file tree panel
 	tabSpaces      string // spaces to replace tabs with
-	diffCursor     int    // index into diffLines for current cursor line
+	diffCursor     int    // index into file.lines for current cursor line
 	scrollX        int    // horizontal scroll offset for diff pane
 
-	highlighter        SyntaxHighlighter  // syntax highlighter
-	highlightedLines   []string           // pre-computed highlighted content, parallel to diffLines
-	intraRanges        [][]worddiff.Range // per-line intra-line word-diff ranges, parallel to diffLines (nil for unpaired lines)
-	diffLines          []diff.DiffLine    // current file's parsed diff lines
-	currFile           string             // currently displayed file
-	loadSeq            uint64             // monotonic counter to identify the latest load request
-	ready              bool               // true after first WindowSizeMsg
-	annotating         bool               // true when annotation text input is active
-	fileAnnotating     bool               // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool               // true when cursor is on the annotation sub-line (not the diff line)
-	annotateInput      textinput.Model    // text input for annotations
+	highlighter SyntaxHighlighter // syntax highlighter
+	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
+
+	ready              bool            // true after first WindowSizeMsg
+	annotating         bool            // true when annotation text input is active
+	fileAnnotating     bool            // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
+	annotateInput      textinput.Model // text input for annotations
 
 	collapsed collapsedState // collapsed diff view state
 
-	fileAdds    int // cached count of added lines in current file
-	fileRemoves int // cached count of removed lines in current file
+	wrapMode       bool // true when line wrapping is enabled
+	crossFileHunks bool // allow [ and ] to jump across file boundaries
+	lineNumbers    bool // true when line numbers are shown in gutter
 
-	wrapMode         bool // true when line wrapping is enabled
-	crossFileHunks   bool // allow [ and ] to jump across file boundaries
-	lineNumbers      bool // true when line numbers are shown in gutter
-	lineNumWidth     int  // digit width for line number columns (max digits across old/new nums)
-	singleColLineNum bool // true for full-context files: render one line-number column instead of two
-
-	wordDiff       bool                     // true when intra-line word-diff highlighting is enabled
-	blamer         Blamer                   // optional blame provider (nil when git unavailable)
-	showBlame      bool                     // true when blame gutter is shown
-	blameData      map[int]diff.BlameLine   // blame info keyed by 1-based new line number
-	showUntracked  bool                     // true when untracked files are shown in tree
-	loadUntracked  func() ([]string, error) // fetches untracked files; nil when unavailable
-	blameAuthorLen int                      // max author display width for blame gutter
-	blameNow       time.Time                // snapshot of time.Now() set once per render pass for blame age
+	wordDiff      bool                     // true when intra-line word-diff highlighting is enabled
+	blamer        Blamer                   // optional blame provider (nil when git unavailable)
+	showBlame     bool                     // true when blame gutter is shown
+	showUntracked bool                     // true when untracked files are shown in tree
+	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
+	blameNow      time.Time                // snapshot of time.Now() set once per render pass for blame age
 
 	searching      bool            // true when search textinput is active (typing)
 	searchTerm     string          // last submitted search query
-	searchMatches  []int           // indices into diffLines that match
+	searchMatches  []int           // indices into file.lines that match
 	searchCursor   int             // current position in searchMatches (0-based)
 	searchInput    textinput.Model // dedicated textinput for search
-	searchMatchSet map[int]bool    // set of diffLines indices that match search, computed per render
+	searchMatchSet map[int]bool    // set of file.lines indices that match search, computed per render
 
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 	noConfirmDiscard bool // skip confirmation prompt on discard quit
-	singleFile       bool // true when diff contains exactly one file, hides tree pane
 
 	pendingAnnotJump *annotation.Annotation // pending jump target after cross-file annotation list jump
 	pendingHunkJump  *bool                  // pending hunk jump after cross-file hunk navigation (true=first, false=last)
-
-	mdTOC TOCComponent // markdown table-of-contents for single-file full-context markdown mode (nil when not applicable)
 
 	activeThemeName string               // name of currently applied theme (for cursor positioning)
 	themePreview    *themePreviewSession // non-nil while theme selector is open
@@ -360,7 +367,7 @@ type ModelConfig struct {
 	WordDiff         bool     // enable intra-line word-diff highlighting on startup
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
-	ActiveThemeName string // name of theme currently applied (for theme selector cursor positioning)
+	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -602,7 +609,7 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 // treePaneHidden returns true when the tree/TOC pane should be hidden.
 // true when user toggled it off, or in single-file mode without a markdown TOC.
 func (m Model) treePaneHidden() bool {
-	return m.treeHidden || (m.singleFile && m.mdTOC == nil)
+	return m.treeHidden || (m.file.singleFile && m.file.mdTOC == nil)
 }
 
 // isCursorLine returns true when the diff line at idx is the active cursor line.
@@ -622,7 +629,7 @@ func (m *Model) togglePane() {
 		m.syncTOCCursorToActive()
 		return
 	}
-	if m.currFile != "" {
+	if m.file.name != "" {
 		m.focus = paneDiff
 	}
 }
@@ -630,7 +637,7 @@ func (m *Model) togglePane() {
 // toggleTreePane hides or shows the tree/TOC pane.
 // no-op in single-file mode without TOC (already no tree).
 func (m *Model) toggleTreePane() {
-	if m.singleFile && m.mdTOC == nil {
+	if m.file.singleFile && m.file.mdTOC == nil {
 		return
 	}
 	m.treeHidden = !m.treeHidden
@@ -648,21 +655,21 @@ func (m *Model) toggleTreePane() {
 
 // toggleLineNumbers toggles line number display on/off and recomputes gutter width.
 func (m *Model) toggleLineNumbers() {
-	if m.focus != paneDiff || m.currFile == "" {
+	if m.focus != paneDiff || m.file.name == "" {
 		return
 	}
 	m.lineNumbers = !m.lineNumbers
 	if m.lineNumbers {
-		m.lineNumWidth = m.computeLineNumWidth()
+		m.file.lineNumWidth = m.computeLineNumWidth()
 	}
 	m.syncViewportToCursor()
 }
 
 // computeLineNumWidth returns the digit width needed for line number columns.
-// scans all diffLines to find the maximum old or new line number.
+// scans all file lines to find the maximum old or new line number.
 func (m Model) computeLineNumWidth() int {
 	maxNum := 0
-	for _, dl := range m.diffLines {
+	for _, dl := range m.file.lines {
 		if dl.OldNum > maxNum {
 			maxNum = dl.OldNum
 		}
@@ -678,17 +685,17 @@ func (m Model) computeLineNumWidth() int {
 
 // toggleBlame toggles the blame gutter on/off. returns a tea.Cmd to load blame data async.
 func (m *Model) toggleBlame() tea.Cmd {
-	if m.focus != paneDiff || m.currFile == "" || m.blamer == nil {
+	if m.focus != paneDiff || m.file.name == "" || m.blamer == nil {
 		return nil
 	}
 	m.showBlame = !m.showBlame
 	if m.showBlame {
-		m.blameData = nil
-		m.blameAuthorLen = 0
-		return m.loadBlame(m.currFile)
+		m.file.blameData = nil
+		m.file.blameAuthorLen = 0
+		return m.loadBlame(m.file.name)
 	}
-	m.blameData = nil
-	m.blameAuthorLen = 0
+	m.file.blameData = nil
+	m.file.blameAuthorLen = 0
 	m.syncViewportToCursor()
 	return nil
 }
@@ -698,7 +705,7 @@ func (m *Model) toggleBlame() tea.Cmd {
 // when enabling and clears them when disabling.
 // no-op when the diff pane is not focused or no file is loaded.
 func (m *Model) toggleWordDiff() {
-	if m.focus != paneDiff || m.currFile == "" {
+	if m.focus != paneDiff || m.file.name == "" {
 		return
 	}
 	m.wordDiff = !m.wordDiff
@@ -738,7 +745,7 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 // toggleWrapMode toggles line wrapping on/off.
 // resets horizontal scroll when enabling wrap and re-renders the diff.
 func (m *Model) toggleWrapMode() {
-	if m.focus != paneDiff || m.currFile == "" {
+	if m.focus != paneDiff || m.file.name == "" {
 		return
 	}
 	m.wrapMode = !m.wrapMode
@@ -774,7 +781,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 	m.tree.EnsureVisible(m.treePageSize())
 
-	if m.currFile != "" {
+	if m.file.name != "" {
 		m.syncViewportToCursor()
 	}
 

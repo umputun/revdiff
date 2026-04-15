@@ -199,7 +199,7 @@ func TestModel_TabPaneSwitching(t *testing.T) {
 
 	t.Run("tree to diff when file loaded", func(t *testing.T) {
 		m.focus = paneTree
-		m.currFile = "a.go"
+		m.file.name = "a.go"
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
 		assert.Equal(t, paneDiff, model.focus)
@@ -207,7 +207,7 @@ func TestModel_TabPaneSwitching(t *testing.T) {
 
 	t.Run("diff to tree", func(t *testing.T) {
 		m.focus = paneDiff
-		m.currFile = "a.go"
+		m.file.name = "a.go"
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.focus)
@@ -215,7 +215,7 @@ func TestModel_TabPaneSwitching(t *testing.T) {
 
 	t.Run("stays on tree when no file loaded", func(t *testing.T) {
 		m.focus = paneTree
-		m.currFile = ""
+		m.file.name = ""
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.focus)
@@ -325,7 +325,7 @@ func TestModel_TreeNavigation(t *testing.T) {
 func TestModel_FocusSwitching(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.currFile = "a.go" // pretend a file is loaded
+	m.file.name = "a.go" // pretend a file is loaded
 	m.focus = paneTree
 
 	// l switches to diff pane
@@ -410,8 +410,8 @@ func TestModel_CustomKeymapViewToggle(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.keymap = km
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 
 	assert.False(t, m.wrapMode)
 
@@ -456,7 +456,7 @@ func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
 	files := []string{"a.go"}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneTree
 
 	// right key maps to scroll_right by default, should focus diff in tree pane

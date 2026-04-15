@@ -18,10 +18,10 @@ import (
 // two-column layout: " " + oldNum(W) + " " + newNum(W) = 2*W + 2
 // single-column layout: " " + num(W) = W + 1
 func (m Model) lineNumGutterWidth() int {
-	if m.singleColLineNum {
-		return m.lineNumWidth + 1
+	if m.file.singleColLineNum {
+		return m.file.lineNumWidth + 1
 	}
-	return m.lineNumWidth*2 + 2
+	return m.file.lineNumWidth*2 + 2
 }
 
 // lineNumGutter returns the formatted line number gutter string for a diff line.
@@ -31,10 +31,10 @@ func (m Model) lineNumGutterWidth() int {
 // blank columns for adds (no old), removes (no new), and dividers (both blank).
 // single-column layout: " NNN" — used for full-context files where OldNum == NewNum.
 func (m Model) lineNumGutter(dl diff.DiffLine) string {
-	w := m.lineNumWidth
+	w := m.file.lineNumWidth
 	blank := strings.Repeat(" ", w)
 
-	if m.singleColLineNum {
+	if m.file.singleColLineNum {
 		var col string
 		if dl.ChangeType == diff.ChangeDivider {
 			col = blank
@@ -66,14 +66,14 @@ func (m Model) lineNumGutter(dl diff.DiffLine) string {
 // blameGutterWidth returns the total character width of the blame gutter.
 // layout: " " + author(W) + " " + age(3) = W + 5
 func (m Model) blameGutterWidth() int {
-	return m.blameAuthorLen + 5
+	return m.file.blameAuthorLen + 5
 }
 
 // blameGutter returns the formatted blame gutter string for a diff line.
 // shows author name (truncated) and relative age for lines with NewNum; blank for removed lines and dividers.
 // now is the reference time for computing relative age, passed from the render entry point.
 func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
-	w := m.blameAuthorLen
+	w := m.file.blameAuthorLen
 	totalW := m.blameGutterWidth()
 	blank := strings.Repeat(" ", totalW)
 
@@ -82,7 +82,7 @@ func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 		return m.resolver.Style(style.StyleKeyLineNumber).Render(blank)
 	}
 
-	bl, ok := m.blameData[lineNum]
+	bl, ok := m.file.blameData[lineNum]
 	if !ok {
 		return m.resolver.Style(style.StyleKeyLineNumber).Render(blank)
 	}
@@ -100,7 +100,7 @@ func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 
 // hasBlameGutter returns true when the blame gutter should be rendered.
 func (m Model) hasBlameGutter() bool {
-	return m.showBlame && len(m.blameData) > 0
+	return m.showBlame && len(m.file.blameData) > 0
 }
 
 // lineGutters returns the formatted line number and blame gutter strings for a diff line.
@@ -271,7 +271,7 @@ func (m Model) scrollIndicatorANSI(glyph string, spaceBg, glyphBg style.Color, l
 // renderDiff renders the current file's diff lines with styling, cursor highlight,
 // and injected annotation lines.
 func (m Model) renderDiff() string {
-	if len(m.diffLines) == 0 {
+	if len(m.file.lines) == 0 {
 		return "  no changes"
 	}
 
@@ -287,7 +287,7 @@ func (m Model) renderDiff() string {
 	var b strings.Builder
 	m.renderFileAnnotationHeader(&b, fileComment)
 
-	for i, dl := range m.diffLines {
+	for i, dl := range m.file.lines {
 		m.renderDiffLine(&b, i, dl)
 		m.renderAnnotationOrInput(&b, i, annotationMap)
 	}
@@ -297,7 +297,7 @@ func (m Model) renderDiff() string {
 // buildAnnotationMap creates a lookup map of line annotations for the current file.
 // returns the annotation map and the file-level comment (empty if none).
 func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment string) {
-	all := m.store.Get(m.currFile)
+	all := m.store.Get(m.file.name)
 	annotations = make(map[string]string, len(all))
 	for _, a := range all {
 		if a.Line == 0 {
@@ -401,10 +401,10 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 // returns 1 when wrap mode is off or for divider lines.
 // stays in sync with renderWrappedDiffLine by using the same wrapContent method and width calculation.
 func (m Model) wrappedLineCount(idx int) int {
-	if !m.wrapMode || idx < 0 || idx >= len(m.diffLines) {
+	if !m.wrapMode || idx < 0 || idx >= len(m.file.lines) {
 		return 1
 	}
-	dl := m.diffLines[idx]
+	dl := m.file.lines[idx]
 	if dl.ChangeType == diff.ChangeDivider {
 		return 1
 	}
@@ -433,10 +433,10 @@ func (m Model) wrapContent(content string, width int) []string {
 // returns the raw line content, the best available content (highlighted if available), and whether highlight was used.
 func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textContent string, hasHighlight bool) {
 	lineContent = strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
-	hasHighlight = idx < len(m.highlightedLines)
+	hasHighlight = idx < len(m.file.highlighted)
 	textContent = lineContent
 	if hasHighlight {
-		textContent = strings.ReplaceAll(m.highlightedLines[idx], "\t", m.tabSpaces)
+		textContent = strings.ReplaceAll(m.file.highlighted[idx], "\t", m.tabSpaces)
 	}
 	return lineContent, textContent, hasHighlight
 }
@@ -445,14 +445,14 @@ func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textC
 // returns textContent unchanged when no intra-line ranges are available for the given line.
 // uses WordAddBg/WordRemoveBg for color mode and reverse-video for no-color mode.
 func (m Model) applyIntraLineHighlight(idx int, changeType diff.ChangeType, textContent string) string {
-	if idx >= len(m.intraRanges) || m.intraRanges[idx] == nil {
+	if idx >= len(m.file.intraRanges) || m.file.intraRanges[idx] == nil {
 		return textContent
 	}
 	if changeType != diff.ChangeAdd && changeType != diff.ChangeRemove {
 		return textContent
 	}
 
-	ranges := m.intraRanges[idx]
+	ranges := m.file.intraRanges[idx]
 	if len(ranges) == 0 {
 		return textContent
 	}
@@ -580,7 +580,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
 		return
 	}
-	dl := m.diffLines[idx]
+	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
 		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 		if comment, ok := annotationMap[key]; ok {

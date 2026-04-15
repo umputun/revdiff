@@ -19,7 +19,7 @@ func TestModel_MarkReviewedFromTreePane(t *testing.T) {
 		"a.go": lines, "b.go": lines,
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneTree
 
 	// space bar toggles reviewed
@@ -39,7 +39,7 @@ func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
 		"a.go": lines, "b.go": lines,
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneTree
 	m.tree.Move(sidepane.MotionDown) // cursor -> b.go while the diff pane still shows a.go
 
@@ -57,7 +57,7 @@ func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
 		"a.go": lines, "b.go": lines,
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.currFile = "b.go"
+	m.file.name = "b.go"
 	m.focus = paneDiff
 
 	// space from diff pane marks currFile
@@ -113,8 +113,8 @@ func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
 	}
 	m := testModel([]string{"a.go", "b.go"}, lines)
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.currFile = "b.go"
-	m.diffLines = lines["b.go"]
+	m.file.name = "b.go"
+	m.file.lines = lines["b.go"]
 	m.focus = paneTree
 
 	// annotate only a.go
@@ -291,8 +291,8 @@ func TestModel_HandleEscKeyClearsSearch(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "hello world"}},
 	})
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "hello world"}}
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "hello world"}}
 	m.searchTerm = "hello"
 	m.searchMatches = []int{0}
 	m.searchCursor = 0
@@ -319,8 +319,8 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 
 	t.Run("starts annotation when focus is diff and file is set", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.focus = paneDiff
 
 		result, cmd := m.handleFileAnnotateKey()
@@ -331,8 +331,8 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 
 	t.Run("no-op when focus is tree pane", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.focus = paneTree
 
 		result, cmd := m.handleFileAnnotateKey()
@@ -343,7 +343,7 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 
 	t.Run("no-op when currFile is empty", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.currFile = ""
+		m.file.name = ""
 		m.focus = paneDiff
 
 		result, cmd := m.handleFileAnnotateKey()

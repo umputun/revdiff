@@ -38,13 +38,13 @@ func (m Model) jumpToAnnotationTarget(target *overlay.AnnotationTarget) (tea.Mod
 	}
 	a := annotation.Annotation{File: target.File, Line: target.Line, Type: target.ChangeType}
 
-	if a.File == m.currFile {
+	if a.File == m.file.name {
 		m.positionOnAnnotation(a)
 		return m, nil
 	}
 
 	m.pendingAnnotJump = &a
-	if !m.singleFile {
+	if !m.file.singleFile {
 		if !m.tree.SelectByPath(a.File) {
 			m.pendingAnnotJump = nil
 			return m, nil
@@ -92,7 +92,7 @@ func (m *Model) ensureHunkExpanded(idx int) {
 // uses diffLineNum() semantics: compares against OldNum for removes, NewNum for adds/context.
 // returns -1 if not found.
 func (m Model) findDiffLineIndex(line int, changeType string) int {
-	for i, dl := range m.diffLines {
+	for i, dl := range m.file.lines {
 		if string(dl.ChangeType) != changeType {
 			continue
 		}

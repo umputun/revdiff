@@ -23,8 +23,8 @@ func (m Model) View() string {
 
 	// diff pane title
 	diffTitle := "no file selected"
-	if m.currFile != "" {
-		diffTitle = m.currFile
+	if m.file.name != "" {
+		diffTitle = m.file.name
 	}
 	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(" " + diffTitle)
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
@@ -41,9 +41,9 @@ func (m Model) View() string {
 			Render(diffContent)
 		mainView = diffPane
 
-	case m.singleFile && m.mdTOC != nil:
+	case m.file.singleFile && m.file.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
-		tocContent := m.mdTOC.Render(sidepane.TOCRender{Width: m.treeWidth, Height: ph, Focused: m.focus == paneTree, Resolver: m.resolver})
+		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.treeWidth, Height: ph, Focused: m.focus == paneTree, Resolver: m.resolver})
 		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph)
 
 	default:
@@ -110,8 +110,8 @@ func (m Model) statusBarText() string {
 	var segments []string
 
 	// filename and diff stats segments
-	if m.currFile != "" {
-		segments = append(segments, m.currFile, m.fileStatsText())
+	if m.file.name != "" {
+		segments = append(segments, m.file.name, m.fileStatsText())
 	}
 
 	// hunk position (always shown in diff pane when there are hunks)
@@ -164,12 +164,12 @@ func (m Model) statusBarText() string {
 		segments = m.statusSegmentsMinimal()
 		left = strings.Join(segments, sep)
 	}
-	if lipgloss.Width(left) > available && m.currFile != "" {
+	if lipgloss.Width(left) > available && m.file.name != "" {
 		// truncate filename from left, keeping end of path.
 		// uses display-width measurement to handle wide characters (CJK, emoji)
 		statsStr := m.fileStatsText()
 		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
-		name := m.currFile
+		name := m.file.name
 		if lipgloss.Width(name) > nameMax {
 			budget := nameMax - 1 // reserve 1 cell for "…"
 			runes := []rune(name)
@@ -217,10 +217,10 @@ func (m Model) lineNumberSegment() string {
 	if m.focus != paneDiff {
 		return ""
 	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
 		return ""
 	}
-	dl := m.diffLines[m.diffCursor]
+	dl := m.file.lines[m.diffCursor]
 	if dl.ChangeType == diff.ChangeDivider {
 		return ""
 	}
@@ -229,7 +229,7 @@ func (m Model) lineNumberSegment() string {
 		return ""
 	}
 	var maxOld, maxNew int
-	for _, l := range m.diffLines {
+	for _, l := range m.file.lines {
 		if l.OldNum > maxOld {
 			maxOld = l.OldNum
 		}
@@ -347,8 +347,8 @@ func (m Model) statusModeIcons() string {
 // statusSegmentsNoSearch returns left segments without search position (for narrow terminals).
 func (m Model) statusSegmentsNoSearch() []string {
 	var segments []string
-	if m.currFile != "" {
-		segments = append(segments, m.currFile, m.fileStatsText())
+	if m.file.name != "" {
+		segments = append(segments, m.file.name, m.fileStatsText())
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
@@ -362,8 +362,8 @@ func (m Model) statusSegmentsNoSearch() []string {
 // statusSegmentsMinimal returns left segments with only filename and stats.
 func (m Model) statusSegmentsMinimal() []string {
 	var segments []string
-	if m.currFile != "" {
-		segments = append(segments, m.currFile, m.fileStatsText())
+	if m.file.name != "" {
+		segments = append(segments, m.file.name, m.fileStatsText())
 	}
 	return segments
 }

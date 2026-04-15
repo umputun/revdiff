@@ -109,7 +109,8 @@ Intermediate tasks inside a milestone may temporarily break build/tests while st
 | **M2: Theme boundary cleanup** | 3–5 | `ui` stops owning theme discovery/persistence | `go test ./...` green + `make lint` green + theme selector manual smoke test |
 | **M3: `loadedFileState`** | 6–8 | loaded-file parallel arrays → single struct | `go test ./...` green + `make lint` green |
 | **M4: Remaining state grouping** | 9–12 | config/layout/mode/search/annotation sub-structs | `go test ./...` green + `make lint` green + manual smoke test for search/annotate/navigation |
-| **M5: Docs/cleanup** | 13–14 | docs updated, plan moved to completed | same as M4 |
+| **M5: `app/theme` package cleanup** | 13 | unexport dead symbols, restructure around structs | `go test ./...` green + `make lint` green |
+| **M6: Docs/cleanup** | 14–15 | docs updated, plan moved to completed | same as M5 |
 
 **Commit structure**: one commit per milestone.
 
@@ -500,9 +501,9 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/loaders.go`
 
-- [ ] add private `loadedFileState` to `app/ui/model.go` with all fields listed in Part D (including `lineNumWidth`, `singleColLineNum`)
-- [ ] replace old top-level fields with `file loadedFileState` in `Model`
-- [ ] migrate `loaders.go` to populate `m.file` instead of top-level fields
+- [x] add private `loadedFileState` to `app/ui/model.go` with all fields listed in Part D (including `lineNumWidth`, `singleColLineNum`)
+- [x] replace old top-level fields with `file loadedFileState` in `Model`
+- [x] migrate `loaders.go` to populate `m.file` instead of top-level fields
 
 ### Task 7: Migrate rendering and navigation to `loadedFileState`
 
@@ -512,10 +513,10 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/view.go`
 - Modify: `app/ui/collapsed.go`
 
-- [ ] migrate `diffview.go` to read `m.file.lines`, `m.file.highlighted`, `m.file.intraRanges`, etc.
-- [ ] migrate `diffnav.go` to use `m.file`
-- [ ] migrate `view.go` to use `m.file`
-- [ ] migrate `collapsed.go` to use `m.file`
+- [x] migrate `diffview.go` to read `m.file.lines`, `m.file.highlighted`, `m.file.intraRanges`, etc.
+- [x] migrate `diffnav.go` to use `m.file`
+- [x] migrate `view.go` to use `m.file`
+- [x] migrate `collapsed.go` to use `m.file`
 
 ### Task 8: Migrate search, annotation, and remaining callers to `loadedFileState`
 
@@ -525,12 +526,12 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/handlers.go`
 - Modify: remaining `app/ui/*.go` with stale references
 
-- [ ] migrate `search.go` to use `m.file`
-- [ ] migrate `annotate.go` to use `m.file`
-- [ ] migrate any remaining files with direct references to old field names
-- [ ] grep for old field names (`m.diffLines`, `m.highlightedLines`, `m.intraRanges`, etc.) to verify no remaining references
-- [ ] run `go test ./...`
-- [ ] run `make lint`
+- [x] migrate `search.go` to use `m.file`
+- [x] migrate `annotate.go` to use `m.file`
+- [x] migrate any remaining files with direct references to old field names
+- [x] grep for old field names (`m.diffLines`, `m.highlightedLines`, `m.intraRanges`, etc.) to verify no remaining references
+- [x] run `go test ./...`
+- [x] run `make lint`
 
 ### Task 9: Group `modelConfigState` and `layoutState`
 
@@ -582,7 +583,62 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - [ ] run `go test ./...`
 - [ ] run `make lint`
 
-### Task 13: Documentation updates
+### Task 13: Restructure `app/theme` package — unexport dead symbols, group by struct
+
+**Discovered during review:** `app/theme` exports 16+ standalone functions with no struct ownership. 6 have zero external callers, 4 are test-only. Exported functions called only from tests is a code smell — tests outside the package should use public API, tests inside the package can use unexported symbols.
+
+**Files:**
+- Modify: `app/theme/theme.go`
+- Modify: `app/theme/bundled.go`
+- Modify: `app/theme/catalog.go`
+- Modify: `app/theme/theme_test.go`
+- Modify: `app/theme/catalog_test.go`
+- Modify: `app/themes.go` (callers in `package main`)
+- Modify: `app/main.go` (callers in `package main`)
+
+**Step 1 — Unexport dead symbols (zero external production callers):**
+
+- [ ] unexport `ListOrdered` → `listOrdered` (wrapped by `Catalog.Entries`)
+- [ ] unexport `ThemeInfo` → `themeInfo`, add re-export via `Catalog` if needed by UI contract (or define a UI-facing type)
+- [ ] unexport `InitNames` → `initNames` (only used internally by `Install`)
+- [ ] unexport `Gallery` → `gallery` (only used internally)
+- [ ] unexport `GalleryTheme` → `galleryTheme` (only used internally by `Install`)
+- [ ] unexport `Theme.Clone` → `Theme.clone` (only used in `bundled.go`)
+
+**Step 2 — Eliminate test-only exports:**
+
+Test-only exported functions indicate the tests are using internals through the public API instead of testing from inside the package. Move these tests to `package theme` (internal) or restructure so the public API covers the test needs.
+
+- [ ] `Parse` — used in `themes_test.go` roundtrip test. Move that test into `app/theme/theme_test.go` or make the roundtrip test use `Load`/`Dump` instead. Then unexport `Parse` → `parse`
+- [ ] `List` — used in `themes_test.go` to verify installs. Replace with `Catalog.Entries` in those tests or move the tests into `app/theme/`. Then unexport `List` → `list`
+- [ ] `ColorKeys` — used in `themes_test.go` for validation. Move those tests into `app/theme/` or pass keys through `Catalog`. Then unexport `ColorKeys` → `colorKeysList` (avoids collision with `colorKeys` var)
+- [ ] `DefaultThemeName` — used in `themes_test.go`. Inline the string or move the test. Then unexport → `defaultThemeName`
+
+**Step 3 — Move standalone functions to `Catalog` methods:**
+
+CLI-command functions that operate on a themes directory should become methods on `Catalog` (which already holds `themesDir`):
+
+- [ ] `InitBundled(themesDir)` → `Catalog.InitBundled()`
+- [ ] `InitAll(themesDir)` → `Catalog.InitAll()`
+- [ ] `Install(args, themesDir, ...)` → `Catalog.Install(args, ...)`
+- [ ] `PrintList(themesDir, w)` → `Catalog.PrintList(w)`
+- [ ] `GalleryNames()` → `Catalog.GalleryNames()` (or unexport if only used internally after restructuring)
+- [ ] `Load(name, themesDir)` → `Catalog.Load(name)` (if not already covered by `Resolve`)
+- [ ] update all callers in `app/themes.go` and `app/main.go`
+
+**Step 4 — Keep only genuinely package-level exports:**
+
+After restructuring, the public API should be approximately:
+- `Theme` struct + `Dump` (used by `--dump-theme` in `main.go`)
+- `Catalog` struct + `NewCatalog` + methods for discovery/install/list
+- `OptionalColorKeys` (used by `themes.go` color mapping)
+- `ActiveName` (trivial helper, used by `main.go`)
+
+- [ ] verify final exported symbol count is ≤10
+- [ ] run `go test ./...`
+- [ ] run `make lint`
+
+### Task 14: Documentation updates
 
 **Files:**
 - Modify: `docs/ARCHITECTURE.md`
@@ -592,9 +648,10 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - [ ] update startup/composition-root description to reflect split `package main` files
 - [ ] update `app/ui/doc.go` to describe `loadedFileState`, `layoutState`, `modeState`, `searchState`, `annotationState` sub-structs and their purpose
 - [ ] update project structure notes in `CLAUDE.md`
+- [ ] update `app/theme` description in CLAUDE.md and ARCHITECTURE.md to reflect `Catalog`-centric API
 - [ ] confirm architecture docs still describe actual theme ownership boundaries
 
-### Task 14: Final verification and plan move
+### Task 15: Final verification and plan move
 
 - [ ] run full test suite: `go test ./...`
 - [ ] run `make lint`
@@ -618,6 +675,7 @@ After this plan:
 - `app/ui` no longer owns theme discovery or config persistence
 - `Model` remains single and idiomatic for Bubble Tea, but its state is explicitly grouped
 - current-file rendering state is held in one dedicated object instead of parallel top-level arrays
+- `app/theme` has a clean `Catalog`-centric API with ≤10 exports instead of 16+ standalone functions
 - the project keeps its current architecture, but with lower structural risk and clearer boundaries
 
 ## Post-Completion Review Checklist
@@ -626,4 +684,6 @@ After this plan:
 - Can a new contributor find startup/config/theme wiring without reading a 700+ line `main.go`?
 - Can theme selector behavior be understood without knowing config file patch details?
 - Are current-file render invariants explicit in one place?
+- Does `app/theme` expose only what external callers actually need?
+- Are there any exported functions with zero production callers outside the package?
 - Did we reduce complexity concentration without adding needless package churn?

@@ -24,7 +24,7 @@ func TestModel_NextPrevFile(t *testing.T) {
 		"c.go": {{NewNum: 1, Content: "c", ChangeType: diff.ChangeContext}},
 	})
 	m.tree = testNewFileTree(files)
-	m.currFile = "a.go" // pretend first file is already loaded
+	m.file.name = "a.go" // pretend first file is already loaded
 
 	// starts on first file (a.go)
 	assert.Equal(t, "a.go", m.tree.SelectedFile())
@@ -125,7 +125,7 @@ func TestModel_CursorDiffLine(t *testing.T) {
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 0
 
 	dl, ok := m.cursorDiffLine()
@@ -157,7 +157,7 @@ func TestModel_HunkEndLine(t *testing.T) {
 		{OldNum: 3, NewNum: 4, Content: "ctx", ChangeType: diff.ChangeContext},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 
 	t.Run("remove line stops at same type boundary", func(t *testing.T) {
 		assert.Equal(t, 2, m.hunkEndLine(1), "single remove stays in old-file number space")
@@ -187,7 +187,7 @@ func TestModel_HunkEndLine(t *testing.T) {
 			{NewNum: 12, Content: "new line 2", ChangeType: diff.ChangeAdd},
 			{OldNum: 14, NewNum: 13, Content: "ctx", ChangeType: diff.ChangeContext},
 		}
-		m.diffLines = mixedLines
+		m.file.lines = mixedLines
 
 		// cursor on first remove: end should be last remove (OldNum=13), not any add line
 		assert.Equal(t, 13, m.hunkEndLine(1), "remove hunk end stays in old-file space")
@@ -204,8 +204,8 @@ func TestModel_HunkEndLine(t *testing.T) {
 }
 func TestModel_CursorViewportY(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
 		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
@@ -236,12 +236,12 @@ func TestModel_NextPrevFileWrapAround(t *testing.T) {
 		"b.go": {{NewNum: 1, Content: "b", ChangeType: diff.ChangeContext}},
 	})
 	m.tree = testNewFileTree(files)
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 
 	// move to last file
 	m.tree.StepFile(sidepane.DirectionNext)
 	assert.Equal(t, "b.go", m.tree.SelectedFile())
-	m.currFile = "b.go"
+	m.file.name = "b.go"
 
 	// n should wrap to first
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
@@ -249,7 +249,7 @@ func TestModel_NextPrevFileWrapAround(t *testing.T) {
 	assert.Equal(t, "a.go", model.tree.SelectedFile())
 
 	// p should wrap to last
-	model.currFile = "a.go"
+	model.file.name = "a.go"
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model = result.(Model)
 	assert.Equal(t, "b.go", model.tree.SelectedFile())
@@ -830,7 +830,7 @@ func TestModel_FindHunks(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = tc.lines
+			m.file.lines = tc.lines
 			assert.Equal(t, tc.expect, m.findHunks())
 		})
 	}
@@ -864,7 +864,7 @@ func TestModel_CurrentHunk(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = lines
+			m.file.lines = lines
 			m.diffCursor = tc.cursor
 			hunk, total := m.currentHunk()
 			assert.Equal(t, tc.wantHunk, hunk)
@@ -874,7 +874,7 @@ func TestModel_CurrentHunk(t *testing.T) {
 }
 func TestModel_CurrentHunkNoChanges(t *testing.T) {
 	m := testModel(nil, nil)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 	}
 	hunk, total := m.currentHunk()
@@ -891,9 +891,9 @@ func TestModel_MoveToNextHunk(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 0
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.viewport.Height = 20
 
 	m.moveToNextHunk()
@@ -916,9 +916,9 @@ func TestModel_MoveToPrevHunk(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 4
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.viewport.Height = 20
 
 	m.moveToPrevHunk()
@@ -1101,7 +1101,7 @@ func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
 	m.wrapMode = true
 	// force single-file mode so tree pane is hidden and wrap width is deterministic:
 	// diffContentWidth = 80 - 4 = 76, wrapWidth = 76 - 3 (wrap gutter) = 73
-	m.singleFile = true
+	m.file.singleFile = true
 	m.treeWidth = 0
 	vpHeight := m.viewport.Height
 	require.Positive(t, vpHeight)
@@ -1246,9 +1246,9 @@ func TestModel_HunkNavigationViaKeys(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 0
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.viewport.Height = 20
 
@@ -1487,8 +1487,8 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 }
 func TestModel_WrappedLineCount(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: strings.Repeat("x", 200), ChangeType: diff.ChangeAdd},
 		{Content: "@@ -1,3 +1,3 @@", ChangeType: diff.ChangeDivider},
@@ -1533,7 +1533,7 @@ func TestModel_WrappedLineCount(t *testing.T) {
 }
 func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.wrapMode = true
 	// use a narrow width so wrapping is predictable
 	m.width = 60
@@ -1542,7 +1542,7 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	// diffContentWidth = 60 - 20 - 4 - 1 = 35
 	// wrapWidth = 35 - 3 (gutter) = 32
 
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "short line", ChangeType: diff.ChangeContext},                                             // idx 0, fits in 1 row
 		{NewNum: 2, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeAdd},                                      // idx 1, wraps to ~2 rows
 		{NewNum: 3, Content: "another short line", ChangeType: diff.ChangeContext},                                     // idx 2, fits in 1 row
@@ -1604,7 +1604,7 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 }
 func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.wrapMode = true
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
@@ -1612,7 +1612,7 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	m.treeWidth = 20
 
 	// diffContentWidth = 60 - 20 - 4 - 1 = 35, wrapWidth = 35 - 3 = 32
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
 		{OldNum: 1, Content: strings.Repeat("x", 80), ChangeType: diff.ChangeRemove}, // long remove, hunk start
 		{OldNum: 2, Content: strings.Repeat("y", 80), ChangeType: diff.ChangeRemove}, // long remove
@@ -1634,19 +1634,19 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 }
 func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.wrapMode = true
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.showBlame = true
-	m.blameData = map[int]diff.BlameLine{
+	m.file.blameData = map[int]diff.BlameLine{
 		1: {Author: "LongName", Time: time.Now()},
 	}
-	m.blameAuthorLen = m.computeBlameAuthorLen()
+	m.file.blameAuthorLen = m.computeBlameAuthorLen()
 	m.width = 25
 	m.treeHidden = true
 
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
 		{OldNum: 1, Content: strings.Repeat("x", 40), ChangeType: diff.ChangeRemove},
 		{OldNum: 2, Content: strings.Repeat("y", 40), ChangeType: diff.ChangeRemove},
@@ -1667,9 +1667,9 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
 func TestModel_WrapToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
 	m.focus = paneDiff
 	m.viewport.Width = 80
 	m.viewport.Height = 20
@@ -1688,9 +1688,9 @@ func TestModel_WrapToggle(t *testing.T) {
 func TestModel_WrapToggleResetsScrollX(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
 	m.focus = paneDiff
 	m.viewport.Width = 80
 	m.viewport.Height = 20
@@ -1705,7 +1705,7 @@ func TestModel_WrapToggleResetsScrollX(t *testing.T) {
 func TestModel_WrapToggleNoOpWithoutFile(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.focus = paneDiff
-	m.currFile = ""
+	m.file.name = ""
 	assert.False(t, m.wrapMode)
 
 	// w should be no-op without a loaded file
@@ -1716,8 +1716,8 @@ func TestModel_WrapToggleNoOpWithoutFile(t *testing.T) {
 func TestModel_WrapToggleNoOpInTreePane(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.focus = paneTree
 	assert.False(t, m.wrapMode)
 
@@ -1728,9 +1728,9 @@ func TestModel_WrapToggleNoOpInTreePane(t *testing.T) {
 func TestModel_ScrollBlockedInWrapMode(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
 	m.focus = paneDiff
 	m.viewport.Width = 80
 	m.viewport.Height = 20
@@ -1751,9 +1751,9 @@ func TestModel_ScrollBlockedInWrapMode(t *testing.T) {
 func TestModel_ScrollWorksWithoutWrapMode(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
 	m.focus = paneDiff
 	m.viewport.Width = 80
 	m.viewport.Height = 20
@@ -1777,12 +1777,12 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 
 	t.Run("scrolling diff updates TOC active section", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
-		m.diffLines = mdLines
-		m.highlightedLines = make([]string, len(mdLines))
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
+		m.file.highlighted = make([]string, len(mdLines))
 		m.focus = paneDiff
 		m.diffCursor = 0
 
@@ -1791,16 +1791,16 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
 		// after scrolling to line 1 (under # First), sync cursor and check
-		model.mdTOC.SyncCursorToActiveSection()
-		idx, ok := model.mdTOC.CurrentLineIdx()
+		model.file.mdTOC.SyncCursorToActiveSection()
+		idx, ok := model.file.mdTOC.CurrentLineIdx()
 		assert.True(t, ok, "active section should be set")
 		assert.Equal(t, 0, idx, "cursor at line 1 should be in First section (lineIdx=0)")
 
 		// move to line 2 (## Second)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
-		model.mdTOC.SyncCursorToActiveSection()
-		idx, ok = model.mdTOC.CurrentLineIdx()
+		model.file.mdTOC.SyncCursorToActiveSection()
+		idx, ok = model.file.mdTOC.CurrentLineIdx()
 		assert.True(t, ok)
 		assert.Equal(t, 2, idx, "cursor at line 2 should be in Second section (lineIdx=2)")
 
@@ -1809,26 +1809,26 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 		model = result.(Model)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
-		model.mdTOC.SyncCursorToActiveSection()
-		idx, ok = model.mdTOC.CurrentLineIdx()
+		model.file.mdTOC.SyncCursorToActiveSection()
+		idx, ok = model.file.mdTOC.CurrentLineIdx()
 		assert.True(t, ok)
 		assert.Equal(t, 4, idx, "cursor at line 4 should be in Third section (lineIdx=4)")
 	})
 
 	t.Run("no TOC does not crash on scroll", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
-		m.mdTOC = nil
-		m.currFile = "main.go"
-		m.diffLines = []diff.DiffLine{{Content: "package main", ChangeType: diff.ChangeContext}}
-		m.highlightedLines = []string{"package main"}
+		m.file.singleFile = true
+		m.file.mdTOC = nil
+		m.file.name = "main.go"
+		m.file.lines = []diff.DiffLine{{Content: "package main", ChangeType: diff.ChangeContext}}
+		m.file.highlighted = []string{"package main"}
 		m.focus = paneDiff
 		m.diffCursor = 0
 
 		// should not panic
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Nil(t, model.mdTOC)
+		assert.Nil(t, model.file.mdTOC)
 	})
 }
 func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
@@ -1846,9 +1846,9 @@ func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
 
 	m := testModel(nil, nil)
 	m.keymap = km
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 0
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.viewport.Height = 20
 
@@ -1886,8 +1886,8 @@ func TestModel_PendingHunkJump_FirstHunk(t *testing.T) {
 	// set pendingHunkJump = true (first hunk)
 	fwd := true
 	m.pendingHunkJump = &fwd
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: bLines}
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: bLines}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
@@ -1917,8 +1917,8 @@ func TestModel_PendingHunkJump_LastHunk(t *testing.T) {
 	// set pendingHunkJump = false (last hunk)
 	bwd := false
 	m.pendingHunkJump = &bwd
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: bLines}
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: bLines}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
@@ -2028,7 +2028,7 @@ func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
 	m.crossFileHunks = true
 	// select b.go in tree (index 0 = dir entry, index 1 = a.go, index 2 = b.go)
 	m.tree.SelectByPath("b.go")
-	m.loadSeq++
+	m.file.loadSeq++
 	bLoad := m.loadFileDiff("b.go")()
 	result, _ := m.Update(bLoad)
 	m = result.(Model)
@@ -2058,7 +2058,7 @@ func TestModel_HunkNav_NextAtLastFileNoOp(t *testing.T) {
 
 	assert.Nil(t, model.pendingHunkJump, "no pendingHunkJump when no next file")
 	assert.Equal(t, 0, model.diffCursor, "cursor should stay at last hunk")
-	assert.Equal(t, "a.go", model.currFile, "should remain on a.go")
+	assert.Equal(t, "a.go", model.file.name, "should remain on a.go")
 }
 func TestModel_HunkNav_PrevAtFirstFileNoOp(t *testing.T) {
 	// pressing [ at the first hunk of the first file: no-op
@@ -2074,7 +2074,7 @@ func TestModel_HunkNav_PrevAtFirstFileNoOp(t *testing.T) {
 
 	assert.Nil(t, model.pendingHunkJump, "no pendingHunkJump when no prev file")
 	assert.Equal(t, 0, model.diffCursor, "cursor should stay at first hunk")
-	assert.Equal(t, "a.go", model.currFile, "should remain on a.go")
+	assert.Equal(t, "a.go", model.file.name, "should remain on a.go")
 }
 func TestModel_HunkNav_SingleFileNoCrossFile(t *testing.T) {
 	// in single-file mode, ] at last hunk should not cross to other files
@@ -2083,7 +2083,7 @@ func TestModel_HunkNav_SingleFileNoCrossFile(t *testing.T) {
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
 	m.crossFileHunks = true
-	m.singleFile = true
+	m.file.singleFile = true
 	m.treeWidth = 0
 	m.focus = paneDiff
 	m.diffCursor = 0
@@ -2123,7 +2123,7 @@ func TestModel_HunkNav_CrossFile_LandsOnFirstHunk(t *testing.T) {
 	model := result.(Model)
 
 	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
-	assert.Equal(t, "b.go", model.currFile, "should have navigated to b.go")
+	assert.Equal(t, "b.go", model.file.name, "should have navigated to b.go")
 	assert.Equal(t, 2, model.diffCursor, "should land on first hunk of b.go (index 2)")
 }
 func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
@@ -2141,7 +2141,7 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	m.crossFileHunks = true
 	// select b.go in tree (index 0 = dir entry, index 1 = a.go, index 2 = b.go)
 	m.tree.SelectByPath("b.go")
-	m.loadSeq++
+	m.file.loadSeq++
 	loadMsg := m.loadFileDiff("b.go")()
 	result, _ := m.Update(loadMsg)
 	m = result.(Model)
@@ -2160,7 +2160,7 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	model := result.(Model)
 
 	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
-	assert.Equal(t, "a.go", model.currFile, "should have navigated to a.go")
+	assert.Equal(t, "a.go", model.file.name, "should have navigated to a.go")
 	assert.Equal(t, 2, model.diffCursor, "should land on last hunk of a.go (index 2)")
 }
 func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
@@ -2177,7 +2177,7 @@ func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
 
 	assert.Nil(t, cmd)
 	assert.Nil(t, model.pendingHunkJump)
-	assert.Equal(t, "a.go", model.currFile)
+	assert.Equal(t, "a.go", model.file.name)
 	assert.Equal(t, "a.go", model.tree.SelectedFile())
 	assert.Equal(t, 0, model.diffCursor)
 }
@@ -2200,8 +2200,8 @@ func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testin
 
 	fwd := true
 	m.pendingHunkJump = &fwd
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: lines}
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: lines}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
@@ -2223,8 +2223,8 @@ func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
 	fwd := true
 	m.pendingHunkJump = &fwd
 	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+", Comment: "note"}
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: diffs["b.go"]}
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: diffs["b.go"]}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
@@ -2241,8 +2241,8 @@ func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 0 // on divider line
 
 	// press enter on divider - should not enter annotation mode

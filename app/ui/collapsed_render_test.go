@@ -20,7 +20,7 @@ func TestModel_CollapsedRenderHidesRemovedLines(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed line", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "added line", ChangeType: diff.ChangeAdd},
@@ -42,7 +42,7 @@ func TestModel_CollapsedRenderModifiedVsPureAdd(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},        // hunk 1: mixed
 		{NewNum: 2, Content: "modified line", ChangeType: diff.ChangeAdd}, // modified (paired with remove)
@@ -67,7 +67,7 @@ func TestModel_CollapsedRenderExpandedHunkShowsAllLines(t *testing.T) {
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
@@ -92,8 +92,8 @@ func TestModel_CollapsedRenderAnnotationsOnRemovedLinesHidden(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
@@ -113,8 +113,8 @@ func TestModel_CollapsedRenderAnnotationsVisibleWhenHunkExpanded(t *testing.T) {
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
@@ -130,7 +130,7 @@ func TestModel_CollapsedRenderEmptyDiffLines(t *testing.T) {
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = nil
+	m.file.lines = nil
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "no changes")
@@ -144,7 +144,7 @@ func TestModel_CollapsedRenderDividerOnlyLines(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{Content: "...", ChangeType: diff.ChangeDivider},
 		{Content: "~~~", ChangeType: diff.ChangeDivider},
 	}
@@ -162,7 +162,7 @@ func TestModel_CollapsedRenderAllRemovesShowsPlaceholder(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{OldNum: 1, Content: "old1", ChangeType: diff.ChangeRemove},
 		{OldNum: 2, Content: "old2", ChangeType: diff.ChangeRemove},
 		{OldNum: 3, Content: "old3", ChangeType: diff.ChangeRemove},
@@ -181,7 +181,7 @@ func TestModel_CollapsedRenderDeleteOnlyHunkInMixedFile(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // delete-only hunk
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -204,7 +204,7 @@ func TestModel_CollapsedRenderMultipleExpandedHunks(t *testing.T) {
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove}, // hunk at 1
 		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
@@ -230,7 +230,7 @@ func TestModel_CollapsedRenderMixedExpandedAndCollapsedHunks(t *testing.T) {
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove}, // hunk at 1
 		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
@@ -259,7 +259,7 @@ func TestModel_CollapsedWrapAddLine(t *testing.T) {
 	m.wrapMode = true
 	m.width = 50
 	m.treeWidth = 0
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "this is a very long modified line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
@@ -283,7 +283,7 @@ func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
 	m.wrapMode = true
 	m.width = 50
 	m.treeWidth = 0
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "this is a very long pure add line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
@@ -306,7 +306,7 @@ func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 		m.wrapMode = true
 		m.width = 15 // narrow width to force placeholder wrapping (wrapWidth=7, text ~17 chars)
 		m.treeWidth = 0
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
 			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
 			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
@@ -329,7 +329,7 @@ func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 		m.wrapMode = true
 		m.width = 80
 		m.treeWidth = 0
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
 			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
 			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
@@ -351,7 +351,7 @@ func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 		m.wrapMode = true
 		m.width = 80
 		m.treeWidth = 0
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
 		}
 
@@ -372,7 +372,7 @@ func TestModel_CollapsedWrapShortLinesUnchanged(t *testing.T) {
 	m.wrapMode = true
 	m.width = 120
 	m.treeWidth = 0
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
@@ -395,7 +395,7 @@ func TestModel_CollapsedWrapNoScrollX(t *testing.T) {
 	m.scrollX = 10 // should be ignored in wrap mode
 	m.width = 50
 	m.treeWidth = 0
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "this is a long added line that needs wrapping at boundary", ChangeType: diff.ChangeAdd},
 	}
@@ -417,7 +417,7 @@ func TestModel_CollapsedWrapCursorOnFirstLine(t *testing.T) {
 	m.width = 50
 	m.treeWidth = 0
 	m.focus = paneDiff
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "this is a very long line that will wrap into multiple visual rows when rendered", ChangeType: diff.ChangeAdd},
 	}
 	m.diffCursor = 0
@@ -445,7 +445,7 @@ func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
 	m.wrapMode = true
 	m.width = 50
 	m.treeWidth = 0
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "this is a very long removed line that should be wrapped when expanded", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "this is a very long added line that should also be wrapped when expanded", ChangeType: diff.ChangeAdd},
@@ -464,10 +464,10 @@ func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
 func TestModel_CollapsedRenderWithLineNumbers(t *testing.T) {
 	m := testModel(nil, nil)
 	m.lineNumbers = true
-	m.lineNumWidth = 2
+	m.file.lineNumWidth = 2
 	m.focus = paneDiff
 	m.collapsed.enabled = true
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 0, NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
@@ -487,8 +487,8 @@ func TestModel_CollapsedDeleteOnlyPlaceholderHidesAnnotations(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // placeholder line
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -514,7 +514,7 @@ func TestModel_CollapsedExpandDeleteOnlyHunkWithDot(t *testing.T) {
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // delete-only hunk start
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -545,7 +545,7 @@ func TestModel_ExpandedModeUnchangedRegression(t *testing.T) {
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
 	m.collapsed.enabled = false
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "new", ChangeType: diff.ChangeAdd},
@@ -570,8 +570,8 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // idx 4
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.collapsed.enabled = true
 
 		m.diffCursor = 0
@@ -594,8 +594,8 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 
 		// expanded mode (default) counts all lines
 		m.diffCursor = 3
@@ -613,8 +613,8 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.collapsed.enabled = true
 
 		// add annotation on ctx1 (line 1, context type)
@@ -636,8 +636,8 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.collapsed.enabled = true
 
 		// annotation on the removed line - both line and annotation are hidden
@@ -659,8 +659,8 @@ func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
 			{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.collapsed.enabled = true
 		m.collapsed.expandedHunks = map[int]bool{1: true} // hunk starts at index 1
 
@@ -683,8 +683,8 @@ func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
 			{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext}, // idx 6
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.collapsed.enabled = true
 		m.collapsed.expandedHunks = map[int]bool{1: true} // only hunk1 expanded
 
@@ -708,8 +708,8 @@ func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
 			{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.collapsed.enabled = true
 		m.collapsed.expandedHunks = map[int]bool{1: true}
 
@@ -728,8 +728,8 @@ func TestModel_StatusBarCollapsedIndicator(t *testing.T) {
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.width = 200
 
@@ -755,8 +755,8 @@ func TestModel_StatusBarNoShortcutHints(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.width = 200
 	m.collapsed.enabled = true

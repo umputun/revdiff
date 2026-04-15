@@ -293,9 +293,9 @@ func TestApplyTheme_invalidChromaStyleKeepsPreviousHighlightingStyle(t *testing.
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
 	})
-	m.currFile = "main.go"
-	m.diffLines = []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "package main"}}
-	m.highlightedLines = []string{"existing"}
+	m.file.name = "main.go"
+	m.file.lines = []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "package main"}}
+	m.file.highlighted = []string{"existing"}
 
 	m.applyTheme(ThemeSpec{
 		Colors: style.Colors{
@@ -313,5 +313,5 @@ func TestApplyTheme_invalidChromaStyleKeepsPreviousHighlightingStyle(t *testing.
 
 	assert.Equal(t, "orig-style", currentStyle)
 	assert.Equal(t, 0, highlightCalls, "invalid chroma style should not trigger re-highlighting")
-	assert.Equal(t, []string{"existing"}, m.highlightedLines)
+	assert.Equal(t, []string{"existing"}, m.file.highlighted)
 }

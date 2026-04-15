@@ -63,7 +63,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 
 	// pre-fill with existing annotation if one exists
 	lineNum := m.diffLineNum(dl)
-	for _, a := range m.store.Get(m.currFile) {
+	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == lineNum && a.Type == string(dl.ChangeType) {
 			ti.SetValue(a.Comment)
 			break
@@ -85,7 +85,7 @@ func (m *Model) ensureLineAnnotationInputVisible() {
 	if !m.annotating || m.fileAnnotating || m.viewport.Height <= 0 {
 		return
 	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
 		return
 	}
 
@@ -100,14 +100,14 @@ func (m *Model) ensureLineAnnotationInputVisible() {
 
 // startFileAnnotation enters annotation input mode for a file-level annotation (Line=0).
 func (m *Model) startFileAnnotation() tea.Cmd {
-	if m.currFile == "" {
+	if m.file.name == "" {
 		return nil
 	}
 
 	ti, cmd := m.newAnnotationInput("file-level annotation...", 12) // cursor col + "💬 file: " prefix + border margin
 
 	// pre-fill with existing file-level annotation if one exists
-	for _, a := range m.store.Get(m.currFile) {
+	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == 0 {
 			ti.SetValue(a.Comment)
 			break
@@ -131,7 +131,7 @@ func (m *Model) saveAnnotation() {
 	}
 
 	if m.fileAnnotating {
-		m.store.Add(annotation.Annotation{File: m.currFile, Line: 0, Type: "", Comment: text})
+		m.store.Add(annotation.Annotation{File: m.file.name, Line: 0, Type: "", Comment: text})
 		m.annotating = false
 		m.fileAnnotating = false
 		m.diffCursor = -1 // position cursor on the file annotation line
@@ -148,7 +148,7 @@ func (m *Model) saveAnnotation() {
 	}
 
 	lineNum := m.diffLineNum(dl)
-	a := annotation.Annotation{File: m.currFile, Line: lineNum, Type: string(dl.ChangeType), Comment: text}
+	a := annotation.Annotation{File: m.file.name, Line: lineNum, Type: string(dl.ChangeType), Comment: text}
 	if hunkKeywordRe.MatchString(text) {
 		if endLine := m.hunkEndLine(m.diffCursor); endLine > lineNum {
 			a.EndLine = endLine
@@ -169,7 +169,7 @@ func (m *Model) cancelAnnotation() {
 
 // deleteFileAnnotation removes the file-level annotation and adjusts cursor position.
 func (m *Model) deleteFileAnnotation() tea.Cmd {
-	if !m.store.Delete(m.currFile, 0, "") {
+	if !m.store.Delete(m.file.name, 0, "") {
 		return nil
 	}
 	m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
@@ -178,8 +178,8 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 
 	m.tree.RefreshFilter(m.annotatedFiles())
 
-	if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.currFile {
-		m.loadSeq++
+	if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.file.name {
+		m.file.loadSeq++
 		return m.loadFileDiff(newFile)
 	}
 
@@ -206,15 +206,15 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 	}
 
 	lineNum := m.diffLineNum(dl)
-	if m.store.Delete(m.currFile, lineNum, string(dl.ChangeType)) {
+	if m.store.Delete(m.file.name, lineNum, string(dl.ChangeType)) {
 		m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
 		m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
 		m.cursorOnAnnotation = false
 		m.tree.RefreshFilter(m.annotatedFiles())
 
 		// if filter moved cursor to a different file, load the new selection
-		if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.currFile {
-			m.loadSeq++
+		if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.file.name {
+			m.file.loadSeq++
 			return m.loadFileDiff(newFile)
 		}
 
@@ -248,7 +248,7 @@ func (m Model) cursorLineHasAnnotation() bool {
 
 // hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
 func (m Model) hasFileAnnotation() bool {
-	for _, a := range m.store.Get(m.currFile) {
+	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == 0 {
 			return true
 		}
@@ -274,10 +274,10 @@ func (m Model) diffLineNum(dl diff.DiffLine) int {
 // as the starting line, so both start and end use the same number space (old or new).
 // returns 0 if idx is not inside a change hunk.
 func (m Model) hunkEndLine(idx int) int {
-	if idx < 0 || idx >= len(m.diffLines) {
+	if idx < 0 || idx >= len(m.file.lines) {
 		return 0
 	}
-	dl := m.diffLines[idx]
+	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeAdd && dl.ChangeType != diff.ChangeRemove {
 		return 0
 	}
@@ -285,20 +285,20 @@ func (m Model) hunkEndLine(idx int) int {
 	// walk forward from idx to find the last contiguous line of the same change type
 	startType := dl.ChangeType
 	last := idx
-	for i := idx + 1; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType != startType {
+	for i := idx + 1; i < len(m.file.lines); i++ {
+		if m.file.lines[i].ChangeType != startType {
 			break
 		}
 		last = i
 	}
-	return m.diffLineNum(m.diffLines[last])
+	return m.diffLineNum(m.file.lines[last])
 }
 
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
 // annotations always wrap at the pane width regardless of wrapMode.
 func (m Model) wrappedAnnotationLineCount(key string) int {
 	var comment string
-	for _, a := range m.store.Get(m.currFile) {
+	for _, a := range m.store.Get(m.file.name) {
 		if key == annotKeyFile && a.Line == 0 {
 			comment = "\U0001f4ac file: " + a.Comment
 			break
@@ -328,7 +328,7 @@ func (m Model) hunkLineHeight(idx int, hunks []int, annotationSet map[string]boo
 		return m.deletePlaceholderVisualHeight(idx)
 	}
 	h := m.wrappedLineCount(idx)
-	dl := m.diffLines[idx]
+	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
 		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 		if annotationSet[key] {
@@ -353,7 +353,7 @@ func (m Model) cursorViewportY() int {
 // hunks and annotationSet to avoid redundant computation when the caller
 // already has them (e.g. centerHunkInViewport).
 func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) int {
-	if m.currFile == "" || len(m.diffLines) == 0 {
+	if m.file.name == "" || len(m.file.lines) == 0 {
 		return max(0, m.diffCursor)
 	}
 
@@ -367,7 +367,7 @@ func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) 
 	}
 
 	y := fileAnnotationOffset
-	for i := 0; i < m.diffCursor && i < len(m.diffLines); i++ {
+	for i := 0; i < m.diffCursor && i < len(m.file.lines); i++ {
 		y += m.hunkLineHeight(i, hunks, annotationSet)
 	}
 	if m.cursorOnAnnotation {
@@ -379,7 +379,7 @@ func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) 
 // buildAnnotationSet returns a set of annotation keys for the current file.
 // excludes file-level annotations (Line=0) since they are rendered separately.
 func (m Model) buildAnnotationSet() map[string]bool {
-	annotations := m.store.Get(m.currFile)
+	annotations := m.store.Get(m.file.name)
 	set := make(map[string]bool, len(annotations))
 	for _, a := range annotations {
 		if a.Line == 0 {

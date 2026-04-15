@@ -34,7 +34,7 @@ func (m *Model) submitSearch() {
 	m.searchMatches = nil
 	m.searchCursor = 0
 
-	for i, dl := range m.diffLines {
+	for i, dl := range m.file.lines {
 		if strings.Contains(strings.ToLower(dl.Content), m.searchTerm) {
 			m.searchMatches = append(m.searchMatches, i)
 		}

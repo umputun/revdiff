@@ -12,10 +12,10 @@ const scrollStep = 4 // horizontal scroll step in characters
 
 // cursorDiffLine returns the DiffLine at the current cursor position, if valid.
 func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
 		return diff.DiffLine{}, false
 	}
-	return m.diffLines[m.diffCursor], true
+	return m.file.lines[m.diffCursor], true
 }
 
 // moveDiffCursorDown moves the diff cursor to the next non-divider line.
@@ -27,8 +27,8 @@ func (m *Model) moveDiffCursorDown() {
 	// if currently on annotation sub-line, move to the next diff line
 	if m.cursorOnAnnotation {
 		m.cursorOnAnnotation = false
-		for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
-			if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+		for i := m.diffCursor + 1; i < len(m.file.lines); i++ {
+			if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
 				m.diffCursor = i
 				return
 			}
@@ -38,11 +38,11 @@ func (m *Model) moveDiffCursorDown() {
 
 	// if current line has an annotation, stop on it first.
 	// skip for delete-only placeholders — their annotations are only visible when expanded.
-	if m.diffCursor >= 0 && m.diffCursor < len(m.diffLines) {
-		dl := m.diffLines[m.diffCursor]
+	if m.diffCursor >= 0 && m.diffCursor < len(m.file.lines) {
+		dl := m.file.lines[m.diffCursor]
 		if dl.ChangeType != diff.ChangeDivider && !m.isDeleteOnlyPlaceholder(m.diffCursor, hunks) {
 			lineNum := m.diffLineNum(dl)
-			if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) {
+			if m.store.Has(m.file.name, lineNum, string(dl.ChangeType)) {
 				m.cursorOnAnnotation = true
 				return
 			}
@@ -54,8 +54,8 @@ func (m *Model) moveDiffCursorDown() {
 	if m.diffCursor == -1 {
 		start = 0
 	}
-	for i := start; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+	for i := start; i < len(m.file.lines); i++ {
+		if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
 			m.diffCursor = i
 			return
 		}
@@ -74,14 +74,14 @@ func (m *Model) moveDiffCursorUp() {
 
 	hunks := m.findHunks()
 	for i := m.diffCursor - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
+		if m.file.lines[i].ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
 			continue
 		}
 		m.diffCursor = i
 		// if this line has an annotation, land on it (skip for delete-only placeholders)
-		dl := m.diffLines[i]
+		dl := m.file.lines[i]
 		lineNum := m.diffLineNum(dl)
-		if m.store.Has(m.currFile, lineNum, string(dl.ChangeType)) && !m.isDeleteOnlyPlaceholder(i, hunks) {
+		if m.store.Has(m.file.name, lineNum, string(dl.ChangeType)) && !m.isDeleteOnlyPlaceholder(i, hunks) {
 			m.cursorOnAnnotation = true
 		}
 		return
@@ -190,8 +190,8 @@ func (m *Model) moveDiffCursorToStart() {
 func (m *Model) moveDiffCursorToEnd() {
 	m.cursorOnAnnotation = false
 	hunks := m.findHunks()
-	for i := len(m.diffLines) - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+	for i := len(m.file.lines) - 1; i >= 0; i-- {
+		if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
 			m.diffCursor = i
 			break
 		}
@@ -225,10 +225,10 @@ func (m *Model) centerViewportOnCursor() {
 // the viewport height, the first line is placed near the top with a small context margin.
 // No-op if the cursor is not on a changed line (ChangeAdd/ChangeRemove).
 func (m *Model) centerHunkInViewport() {
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
 		return
 	}
-	ct := m.diffLines[m.diffCursor].ChangeType
+	ct := m.file.lines[m.diffCursor].ChangeType
 	if ct != diff.ChangeAdd && ct != diff.ChangeRemove {
 		return
 	}
@@ -246,8 +246,8 @@ func (m *Model) centerHunkInViewport() {
 	// hidden ChangeRemove lines (collapsed mode) are included in the range because
 	// hunkLineHeight returns 0 for them, so over-extending hunkEnd is harmless.
 	hunkEnd := m.diffCursor
-	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
-		ct := m.diffLines[i].ChangeType
+	for i := m.diffCursor + 1; i < len(m.file.lines); i++ {
+		ct := m.file.lines[i].ChangeType
 		if ct != diff.ChangeAdd && ct != diff.ChangeRemove {
 			break
 		}
@@ -286,7 +286,7 @@ func (m *Model) topAlignViewportOnCursor() {
 func (m Model) findHunks() []int {
 	var hunks []int
 	inHunk := false
-	for i, dl := range m.diffLines {
+	for i, dl := range m.file.lines {
 		isChange := dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove
 		switch {
 		case isChange && !inHunk:
@@ -307,10 +307,10 @@ func (m Model) currentHunk() (int, int) {
 	if len(hunks) == 0 {
 		return 0, 0
 	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
 		return 0, len(hunks)
 	}
-	dl := m.diffLines[m.diffCursor]
+	dl := m.file.lines[m.diffCursor]
 	if dl.ChangeType != diff.ChangeAdd && dl.ChangeType != diff.ChangeRemove {
 		return 0, len(hunks)
 	}
@@ -367,7 +367,7 @@ func (m *Model) moveToPrevHunk() {
 // lands on its last hunk.
 // always shifts focus to the diff pane. no-op when no file is loaded.
 func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
-	if m.currFile == "" {
+	if m.file.name == "" {
 		return m, nil
 	}
 	m.focus = paneDiff
@@ -377,7 +377,7 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	} else {
 		m.moveToPrevHunk()
 	}
-	if m.diffCursor != prevCursor || m.singleFile || !m.crossFileHunks {
+	if m.diffCursor != prevCursor || m.file.singleFile || !m.crossFileHunks {
 		m.syncTOCActiveSection()
 		return m, nil
 	}
@@ -464,7 +464,7 @@ func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleTreeNav handles navigation keys when the tree pane is focused.
 func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// when mdTOC is active, route navigation to TOC instead of file tree
-	if m.mdTOC != nil {
+	if m.file.mdTOC != nil {
 		return m.handleTOCNav(msg)
 	}
 
@@ -487,7 +487,7 @@ func (m Model) handleTreeNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case keymap.ActionEnd:
 		m.tree.Move(sidepane.MotionLast)
 	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
-		if m.currFile != "" {
+		if m.file.name != "" {
 			m.focus = paneDiff
 		}
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
@@ -503,29 +503,29 @@ func (m Model) handleTOCNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	action := m.keymap.Resolve(msg.String())
 	switch action {
 	case keymap.ActionDown:
-		m.mdTOC.Move(sidepane.MotionDown)
+		m.file.mdTOC.Move(sidepane.MotionDown)
 	case keymap.ActionUp:
-		m.mdTOC.Move(sidepane.MotionUp)
+		m.file.mdTOC.Move(sidepane.MotionUp)
 	case keymap.ActionPageDown:
-		m.mdTOC.Move(sidepane.MotionPageDown, m.treePageSize())
+		m.file.mdTOC.Move(sidepane.MotionPageDown, m.treePageSize())
 	case keymap.ActionHalfPageDown:
-		m.mdTOC.Move(sidepane.MotionPageDown, max(1, m.treePageSize()/2))
+		m.file.mdTOC.Move(sidepane.MotionPageDown, max(1, m.treePageSize()/2))
 	case keymap.ActionPageUp:
-		m.mdTOC.Move(sidepane.MotionPageUp, m.treePageSize())
+		m.file.mdTOC.Move(sidepane.MotionPageUp, m.treePageSize())
 	case keymap.ActionHalfPageUp:
-		m.mdTOC.Move(sidepane.MotionPageUp, max(1, m.treePageSize()/2))
+		m.file.mdTOC.Move(sidepane.MotionPageUp, max(1, m.treePageSize()/2))
 	case keymap.ActionHome:
-		m.mdTOC.Move(sidepane.MotionFirst)
+		m.file.mdTOC.Move(sidepane.MotionFirst)
 	case keymap.ActionEnd:
-		m.mdTOC.Move(sidepane.MotionLast)
+		m.file.mdTOC.Move(sidepane.MotionLast)
 	case keymap.ActionFocusDiff, keymap.ActionScrollRight:
-		if m.currFile != "" {
+		if m.file.name != "" {
 			m.focus = paneDiff
 		}
 		return m, nil // switch pane without re-jumping viewport
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
-	m.mdTOC.EnsureVisible(m.treePageSize())
+	m.file.mdTOC.EnsureVisible(m.treePageSize())
 	m.syncDiffToTOCCursor()
 	return m, nil
 }
@@ -537,7 +537,7 @@ func (m Model) handleSwitchToTree() (tea.Model, tea.Cmd) {
 	if m.treeHidden {
 		return m, nil
 	}
-	if !m.singleFile || m.mdTOC != nil {
+	if !m.file.singleFile || m.file.mdTOC != nil {
 		m.focus = paneTree
 		m.syncTOCCursorToActive()
 	}
@@ -561,13 +561,13 @@ func (m Model) paneHeight() int {
 // jumpTOCEntry moves the TOC cursor by delta (+1 next, -1 prev) and jumps the diff viewport.
 // jumpTOCEntry always passes delta +/-1; if that ever changes, extend here
 func (m Model) jumpTOCEntry(delta int) (tea.Model, tea.Cmd) {
-	if m.mdTOC == nil {
+	if m.file.mdTOC == nil {
 		return m, nil
 	}
 	if delta > 0 {
-		m.mdTOC.Move(sidepane.MotionDown)
+		m.file.mdTOC.Move(sidepane.MotionDown)
 	} else {
-		m.mdTOC.Move(sidepane.MotionUp)
+		m.file.mdTOC.Move(sidepane.MotionUp)
 	}
 	m.syncDiffToTOCCursor()
 	return m, nil
@@ -575,30 +575,30 @@ func (m Model) jumpTOCEntry(delta int) (tea.Model, tea.Cmd) {
 
 // syncTOCCursorToActive sets the TOC cursor to the current active section.
 func (m *Model) syncTOCCursorToActive() {
-	if m.mdTOC != nil {
-		m.mdTOC.SyncCursorToActiveSection()
+	if m.file.mdTOC != nil {
+		m.file.mdTOC.SyncCursorToActiveSection()
 	}
 }
 
 // syncDiffToTOCCursor jumps the diff viewport to the TOC entry at the current cursor position.
 func (m *Model) syncDiffToTOCCursor() {
-	if m.mdTOC == nil {
+	if m.file.mdTOC == nil {
 		return
 	}
-	idx, ok := m.mdTOC.CurrentLineIdx()
+	idx, ok := m.file.mdTOC.CurrentLineIdx()
 	if !ok {
 		return
 	}
 	m.diffCursor = idx
 	m.cursorOnAnnotation = false
-	m.mdTOC.UpdateActiveSection(m.diffCursor)
+	m.file.mdTOC.UpdateActiveSection(m.diffCursor)
 	m.topAlignViewportOnCursor()
 }
 
 // syncTOCActiveSection updates the TOC active section to match the current diff cursor position.
 func (m *Model) syncTOCActiveSection() {
-	if m.mdTOC != nil {
-		m.mdTOC.UpdateActiveSection(m.diffCursor)
+	if m.file.mdTOC != nil {
+		m.file.mdTOC.UpdateActiveSection(m.diffCursor)
 	}
 }
 
@@ -616,9 +616,9 @@ func (m *Model) applyPendingHunkJump() {
 		return
 	}
 
-	m.diffCursor = len(m.diffLines)
+	m.diffCursor = len(m.file.lines)
 	m.moveToPrevHunk()
-	if m.diffCursor == len(m.diffLines) {
+	if m.diffCursor == len(m.file.lines) {
 		m.skipInitialDividers()
 	}
 }

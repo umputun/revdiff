@@ -64,7 +64,7 @@ func (m Model) loadFiles() tea.Cmd {
 
 // loadFileDiff returns a command that fetches the diff lines for the given file.
 func (m Model) loadFileDiff(file string) tea.Cmd {
-	seq := m.loadSeq
+	seq := m.file.loadSeq
 	return func() tea.Msg {
 		lines, err := m.diffRenderer.FileDiff(m.ref, file, m.staged)
 		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
@@ -77,7 +77,7 @@ func (m Model) loadBlame(file string) tea.Cmd {
 	if m.blamer == nil {
 		return nil
 	}
-	seq := m.loadSeq
+	seq := m.file.loadSeq
 	ref := m.ref
 	staged := m.staged
 	return func() tea.Msg {
@@ -89,8 +89,8 @@ func (m Model) loadBlame(file string) tea.Cmd {
 // loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
 func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	m.tree.EnsureVisible(m.treePageSize())
-	if f := m.tree.SelectedFile(); f != "" && f != m.currFile {
-		m.loadSeq++
+	if f := m.tree.SelectedFile(); f != "" && f != m.file.name {
+		m.file.loadSeq++
 		return m, m.loadFileDiff(f)
 	}
 	return m, nil
@@ -115,18 +115,18 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.tree.FilterActive() {
 		m.tree.RefreshFilter(m.annotatedFiles())
 	}
-	if m.currFile != "" {
-		m.tree.SelectByPath(m.currFile)
+	if m.file.name != "" {
+		m.tree.SelectByPath(m.file.name)
 	}
-	m.singleFile = m.tree.TotalFiles() == 1
+	m.file.singleFile = m.tree.TotalFiles() == 1
 	if len(entries) == 0 {
-		m.currFile = ""
-		m.diffLines = nil
-		m.highlightedLines = nil
+		m.file.name = ""
+		m.file.lines = nil
+		m.file.highlighted = nil
 		m.viewport.SetContent("")
 		return m, nil
 	}
-	if m.singleFile {
+	if m.file.singleFile {
 		m.focus = paneDiff
 		m.treeWidth = 0
 		if m.ready {
@@ -136,7 +136,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 
 	// auto-select first file
 	if f := m.tree.SelectedFile(); f != "" {
-		m.loadSeq++
+		m.file.loadSeq++
 		return m, m.loadFileDiff(f)
 	}
 	return m, nil
@@ -144,39 +144,39 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	// discard stale responses; only the latest load request (by sequence) is accepted
-	if msg.seq != m.loadSeq {
+	if msg.seq != m.file.loadSeq {
 		return m, nil
 	}
 	if msg.err != nil {
 		m.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
 		return m, nil
 	}
-	m.currFile = msg.file
-	m.diffLines = msg.lines
+	m.file.name = msg.file
+	m.file.lines = msg.lines
 	m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
 	m.clearSearch()
 	m.computeFileStats()
-	m.highlightedLines = m.highlighter.HighlightLines(msg.file, m.diffLines)
+	m.file.highlighted = m.highlighter.HighlightLines(msg.file, m.file.lines)
 	m.recomputeIntraRanges()
 	if m.lineNumbers {
-		m.lineNumWidth = m.computeLineNumWidth()
+		m.file.lineNumWidth = m.computeLineNumWidth()
 	}
 	m.cursorOnAnnotation = false
 	m.scrollX = 0
 	m.collapsed.expandedHunks = make(map[int]bool)
 
-	m.singleColLineNum = m.isFullContext(msg.lines)
+	m.file.singleColLineNum = m.isFullContext(msg.lines)
 
 	// detect markdown full-context mode and build TOC
-	m.mdTOC = nil
-	if m.singleFile && m.isMarkdownFile(msg.file) && m.singleColLineNum {
-		m.mdTOC = m.parseTOC(msg.lines, msg.file)
+	m.file.mdTOC = nil
+	if m.file.singleFile && m.isMarkdownFile(msg.file) && m.file.singleColLineNum {
+		m.file.mdTOC = m.parseTOC(msg.lines, msg.file)
 	}
 	switch {
-	case m.mdTOC != nil && !m.treeHidden:
+	case m.file.mdTOC != nil && !m.treeHidden:
 		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
 		m.viewport.Width = m.width - m.treeWidth - 4
-	case m.singleFile || m.treeHidden:
+	case m.file.singleFile || m.treeHidden:
 		m.treeWidth = 0
 		m.viewport.Width = m.width - 2
 	}
@@ -187,8 +187,8 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	// clear stale blame data; reload if blame is active
 	var blameCmd tea.Cmd
 	if m.showBlame {
-		m.blameData = nil
-		m.blameAuthorLen = 0
+		m.file.blameData = nil
+		m.file.blameAuthorLen = 0
 		blameCmd = m.loadBlame(msg.file)
 	}
 
@@ -213,17 +213,17 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, blameCmd
 }
 
-// resolveEmptyDiff populates m.diffLines when git diff returns empty.
+// resolveEmptyDiff populates m.file.lines when git diff returns empty.
 // For staged-only FileAdded files (new files in the index), retries with --cached.
 // For untracked files, reads from disk as all-added lines.
 func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
-	if len(m.diffLines) > 0 {
+	if len(m.file.lines) > 0 {
 		return
 	}
 	// staged-only files: retry with git diff --cached
 	if !m.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
 		if cachedLines, err := m.diffRenderer.FileDiff(m.ref, file, true); err == nil && len(cachedLines) > 0 {
-			m.diffLines = cachedLines
+			m.file.lines = cachedLines
 			return
 		}
 	}
@@ -234,22 +234,22 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 			log.Printf("[WARN] read untracked file %s: %v", file, err)
 		}
 		if len(added) > 0 {
-			m.diffLines = added
+			m.file.lines = added
 		}
 	}
 }
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.
 func (m Model) handleBlameLoaded(msg blameLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.seq != m.loadSeq || msg.file != m.currFile || !m.showBlame {
+	if msg.seq != m.file.loadSeq || msg.file != m.file.name || !m.showBlame {
 		return m, nil
 	}
 	if msg.err != nil {
 		// blame unavailable for this file (e.g. new untracked file); silently ignore
 		return m, nil
 	}
-	m.blameData = msg.data
-	m.blameAuthorLen = m.computeBlameAuthorLen()
+	m.file.blameData = msg.data
+	m.file.blameAuthorLen = m.computeBlameAuthorLen()
 	m.syncViewportToCursor()
 	return m, nil
 }
@@ -261,7 +261,7 @@ const maxBlameAuthor = 8
 // caps at maxBlameAuthor characters to keep the gutter compact.
 func (m Model) computeBlameAuthorLen() int {
 	maxLen := 0
-	for _, bl := range m.blameData {
+	for _, bl := range m.file.blameData {
 		if l := runewidth.StringWidth(bl.Author); l > maxLen {
 			maxLen = l
 		}
@@ -303,15 +303,15 @@ func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
 	return filtered
 }
 
-// computeFileStats counts added and removed lines in the current diffLines.
+// computeFileStats counts added and removed lines in the current file.
 func (m *Model) computeFileStats() {
-	m.fileAdds, m.fileRemoves = 0, 0
-	for _, dl := range m.diffLines {
+	m.file.adds, m.file.removes = 0, 0
+	for _, dl := range m.file.lines {
 		switch dl.ChangeType {
 		case diff.ChangeAdd:
-			m.fileAdds++
+			m.file.adds++
 		case diff.ChangeRemove:
-			m.fileRemoves++
+			m.file.removes++
 		case diff.ChangeContext, diff.ChangeDivider:
 			// not counted in stats
 		}
@@ -321,10 +321,10 @@ func (m *Model) computeFileStats() {
 // fileStatsText returns the stats segment for the status bar.
 // shows total line count for context-only files, or +adds/-removes for diffs.
 func (m Model) fileStatsText() string {
-	if m.fileAdds == 0 && m.fileRemoves == 0 && len(m.diffLines) > 0 {
-		return fmt.Sprintf("%d lines", len(m.diffLines))
+	if m.file.adds == 0 && m.file.removes == 0 && len(m.file.lines) > 0 {
+		return fmt.Sprintf("%d lines", len(m.file.lines))
 	}
-	return fmt.Sprintf("+%d/-%d", m.fileAdds, m.fileRemoves)
+	return fmt.Sprintf("+%d/-%d", m.file.adds, m.file.removes)
 }
 
 // skipInitialDividers positions diffCursor on the first visible line.
@@ -333,7 +333,7 @@ func (m Model) fileStatsText() string {
 func (m *Model) skipInitialDividers() {
 	m.diffCursor = 0
 	hunks := m.findHunks()
-	for i, dl := range m.diffLines {
+	for i, dl := range m.file.lines {
 		if dl.ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
 			continue
 		}
@@ -363,26 +363,26 @@ func (m Model) isMarkdownFile(filename string) bool {
 	return ext == ".md" || ext == ".markdown"
 }
 
-// recomputeIntraRanges walks m.diffLines, finds contiguous change blocks,
-// pairs remove/add lines, runs word-diff, and stores results in m.intraRanges.
-// no-op when m.wordDiff is off: clears m.intraRanges to nil so callers don't
+// recomputeIntraRanges walks m.file.lines, finds contiguous change blocks,
+// pairs remove/add lines, runs word-diff, and stores results in m.file.intraRanges.
+// no-op when m.wordDiff is off: clears m.file.intraRanges to nil so callers don't
 // need to duplicate the guard at each call site.
 func (m *Model) recomputeIntraRanges() {
 	if !m.wordDiff {
-		m.intraRanges = nil
+		m.file.intraRanges = nil
 		return
 	}
-	n := len(m.diffLines)
-	m.intraRanges = make([][]worddiff.Range, n)
+	n := len(m.file.lines)
+	m.file.intraRanges = make([][]worddiff.Range, n)
 
 	i := 0
 	for i < n {
-		if m.diffLines[i].ChangeType != diff.ChangeAdd && m.diffLines[i].ChangeType != diff.ChangeRemove {
+		if m.file.lines[i].ChangeType != diff.ChangeAdd && m.file.lines[i].ChangeType != diff.ChangeRemove {
 			i++
 			continue
 		}
 		blockStart := i
-		for i < n && (m.diffLines[i].ChangeType == diff.ChangeAdd || m.diffLines[i].ChangeType == diff.ChangeRemove) {
+		for i < n && (m.file.lines[i].ChangeType == diff.ChangeAdd || m.file.lines[i].ChangeType == diff.ChangeRemove) {
 			i++
 		}
 
@@ -390,16 +390,16 @@ func (m *Model) recomputeIntraRanges() {
 		block := make([]worddiff.LinePair, i-blockStart)
 		for j := blockStart; j < i; j++ {
 			block[j-blockStart] = worddiff.LinePair{
-				Content:  strings.ReplaceAll(m.diffLines[j].Content, "\t", m.tabSpaces),
-				IsRemove: m.diffLines[j].ChangeType == diff.ChangeRemove,
+				Content:  strings.ReplaceAll(m.file.lines[j].Content, "\t", m.tabSpaces),
+				IsRemove: m.file.lines[j].ChangeType == diff.ChangeRemove,
 			}
 		}
 
 		pairs := m.differ.PairLines(block)
 		for _, p := range pairs {
 			minusRanges, plusRanges := m.differ.ComputeIntraRanges(block[p.RemoveIdx].Content, block[p.AddIdx].Content)
-			m.intraRanges[blockStart+p.RemoveIdx] = minusRanges
-			m.intraRanges[blockStart+p.AddIdx] = plusRanges
+			m.file.intraRanges[blockStart+p.RemoveIdx] = minusRanges
+			m.file.intraRanges[blockStart+p.AddIdx] = plusRanges
 		}
 	}
 }

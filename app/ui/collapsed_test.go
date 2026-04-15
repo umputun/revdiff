@@ -17,8 +17,8 @@ func TestModel_VKeyTogglesCollapsedMode(t *testing.T) {
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.viewport.Height = 20
 
@@ -49,7 +49,7 @@ func TestModel_VKeyTogglesCollapsedMode(t *testing.T) {
 
 	t.Run("no-op when no file loaded", func(t *testing.T) {
 		m.focus = paneDiff
-		m.currFile = ""
+		m.file.name = ""
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
 		model := result.(Model)
 		assert.False(t, model.collapsed.enabled, "v should be no-op when no file loaded")
@@ -65,8 +65,8 @@ func TestModel_DotKeyExpandsHunkInCollapsedMode(t *testing.T) {
 		{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},     // 4 - hunk 2 start
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
@@ -110,8 +110,8 @@ func TestModel_DotKeyNoOpInExpandedMode(t *testing.T) {
 		{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.focus = paneDiff
 	m.collapsed.enabled = false
 	m.collapsed.expandedHunks = make(map[int]bool)
@@ -144,12 +144,12 @@ func TestModel_FileSwitchResetsExpandedHunksPreservesCollapsed(t *testing.T) {
 	model.collapsed.expandedHunks = map[int]bool{1: true}
 
 	// load second file
-	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.loadSeq, lines: linesB})
+	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.file.loadSeq, lines: linesB})
 	model = result.(Model)
 
 	assert.True(t, model.collapsed.enabled, "collapsed should persist across file switches")
 	assert.Empty(t, model.collapsed.expandedHunks, "expandedHunks should be reset on file switch")
-	assert.Equal(t, "b.go", model.currFile)
+	assert.Equal(t, "b.go", model.file.name)
 }
 
 func TestModel_BuildModifiedSet(t *testing.T) {
@@ -227,7 +227,7 @@ func TestModel_BuildModifiedSet(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = tc.lines
+			m.file.lines = tc.lines
 			assert.Equal(t, tc.expect, m.buildModifiedSet(m.findHunks()))
 		})
 	}
@@ -237,8 +237,8 @@ func TestModel_CollapsedDeleteOnlyPlaceholderBlocksAnnotation(t *testing.T) {
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -255,7 +255,7 @@ func TestModel_IsDeleteOnlyPlaceholder(t *testing.T) {
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // idx 1
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove}, // idx 2
@@ -281,7 +281,7 @@ func TestModel_CollapsedCursorMovementIncludesDeleteOnlyPlaceholder(t *testing.T
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // 0
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},  // 1 - placeholder
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},  // 2 - hidden
@@ -306,7 +306,7 @@ func TestModel_IsDeleteOnlyHunk(t *testing.T) {
 	m := testModel(nil, nil)
 
 	t.Run("delete-only hunk", func(t *testing.T) {
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 			{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},
 			{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -317,7 +317,7 @@ func TestModel_IsDeleteOnlyHunk(t *testing.T) {
 	})
 
 	t.Run("mixed hunk", func(t *testing.T) {
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 			{OldNum: 2, Content: "del", ChangeType: diff.ChangeRemove},
 			{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
@@ -328,7 +328,7 @@ func TestModel_IsDeleteOnlyHunk(t *testing.T) {
 	})
 
 	t.Run("add-only hunk", func(t *testing.T) {
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 			{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 			{NewNum: 3, Content: "ctx", ChangeType: diff.ChangeContext},
@@ -340,7 +340,7 @@ func TestModel_IsDeleteOnlyHunk(t *testing.T) {
 
 func TestModel_HunkStartFor(t *testing.T) {
 	m := testModel(nil, nil)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},   // 1
 		{NewNum: 2, Content: "new", ChangeType: diff.ChangeAdd},      // 2
@@ -470,7 +470,7 @@ func TestModel_CollapsedSkipInitialDividers(t *testing.T) {
 		}
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.collapsed.enabled = true
-		m.diffLines = lines
+		m.file.lines = lines
 		m.skipInitialDividers()
 		assert.Equal(t, 2, m.diffCursor, "should skip divider and removed line, land on add")
 	})
@@ -482,7 +482,7 @@ func TestModel_CollapsedSkipInitialDividers(t *testing.T) {
 			{NewNum: 1, Content: "new1", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m.diffLines = lines
+		m.file.lines = lines
 		m.skipInitialDividers()
 		assert.Equal(t, 1, m.diffCursor, "expanded mode should land on removed line after divider")
 	})
@@ -496,7 +496,7 @@ func TestModel_CollapsedSkipInitialDividers(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.collapsed.enabled = true
 		m.collapsed.expandedHunks = map[int]bool{1: true} // hunk starts at index 1
-		m.diffLines = lines
+		m.file.lines = lines
 		m.skipInitialDividers()
 		assert.Equal(t, 1, m.diffCursor, "expanded hunk should allow landing on removed line")
 	})
@@ -570,7 +570,7 @@ func TestModel_CollapsedPageDownSkipsRemovedLines(t *testing.T) {
 	assert.GreaterOrEqual(t, model.cursorViewportY()-startY, pageHeight, "should move at least one page")
 
 	// verify cursor did not land on a hidden removed line
-	dl := model.diffLines[model.diffCursor]
+	dl := model.file.lines[model.diffCursor]
 	assert.NotEqual(t, diff.ChangeRemove, dl.ChangeType, "cursor should not land on hidden removed line")
 }
 
@@ -605,7 +605,7 @@ func TestModel_CollapsedPageUpSkipsRemovedLines(t *testing.T) {
 	assert.GreaterOrEqual(t, startY-model.cursorViewportY(), model.viewport.Height, "should move at least one page up")
 
 	// verify cursor did not land on a hidden removed line
-	dl := model.diffLines[model.diffCursor]
+	dl := model.file.lines[model.diffCursor]
 	assert.NotEqual(t, diff.ChangeRemove, dl.ChangeType, "cursor should not land on hidden removed line")
 }
 
@@ -618,8 +618,8 @@ func TestModel_CollapsedCursorToEndSkipsRemovedLines(t *testing.T) {
 		{OldNum: 4, Content: "old3", ChangeType: diff.ChangeRemove},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.diffCursor = 0
@@ -640,8 +640,8 @@ func TestModel_CollapsedHunkNavigationSkipsRemovedLines(t *testing.T) {
 		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext}, // 7
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.diffCursor = 0
@@ -667,8 +667,8 @@ func TestModel_CollapsedHunkNavigationExpandedHunk(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // 3
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = map[int]bool{1: true} // hunk at index 1 is expanded
 	m.diffCursor = 0
@@ -690,8 +690,8 @@ func TestModel_CollapsedHunkNavigationDeleteOnly(t *testing.T) {
 		{NewNum: 4, Content: "ctx3", ChangeType: diff.ChangeContext}, // 6
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.currFile = "a.go"
+	m.file.lines = lines
+	m.file.name = "a.go"
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
 	m.diffCursor = 0
@@ -719,7 +719,7 @@ func TestModel_FirstVisibleInHunk(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	hunks := m.findHunks() // [1]
 
 	// expanded mode: returns start unchanged
@@ -743,7 +743,7 @@ func TestModel_FirstVisibleInHunk_AllRemoves(t *testing.T) {
 		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext}, // idx 3
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.collapsed.enabled = true
 	hunks := m.findHunks() // [1]
 
@@ -766,7 +766,7 @@ func TestModel_AdjustCursorIfHidden(t *testing.T) {
 
 	t.Run("cursor on hidden line moves forward", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.collapsed.enabled = true
 		m.diffCursor = 1 // on hidden removed line
 		m.adjustCursorIfHidden()
@@ -775,7 +775,7 @@ func TestModel_AdjustCursorIfHidden(t *testing.T) {
 
 	t.Run("cursor on visible line stays put", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.collapsed.enabled = true
 		m.diffCursor = 0 // on context line
 		m.adjustCursorIfHidden()
@@ -784,7 +784,7 @@ func TestModel_AdjustCursorIfHidden(t *testing.T) {
 
 	t.Run("not collapsed mode is no-op", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.collapsed.enabled = false
 		m.diffCursor = 1
 		m.adjustCursorIfHidden()
@@ -798,7 +798,7 @@ func TestModel_AdjustCursorIfHidden(t *testing.T) {
 			{OldNum: 3, Content: "old2", ChangeType: diff.ChangeRemove},  // idx 2 - hidden
 		}
 		m := testModel(nil, nil)
-		m.diffLines = onlyRemoves
+		m.file.lines = onlyRemoves
 		m.collapsed.enabled = true
 		m.diffCursor = 2 // on hidden removed line (not placeholder)
 		m.adjustCursorIfHidden()
@@ -814,7 +814,7 @@ func TestModel_AdjustCursorIfHidden(t *testing.T) {
 			{OldNum: 3, Content: "old3", ChangeType: diff.ChangeRemove}, // idx 3 - hidden
 		}
 		m := testModel(nil, nil)
-		m.diffLines = deleteOnly
+		m.file.lines = deleteOnly
 		m.collapsed.enabled = true
 		m.diffCursor = 1 // on placeholder (not hidden)
 		m.adjustCursorIfHidden()
@@ -829,7 +829,7 @@ func TestModel_AdjustCursorIfHidden(t *testing.T) {
 			{OldNum: 3, Content: "old3", ChangeType: diff.ChangeRemove}, // idx 2 - hidden
 		}
 		m := testModel(nil, nil)
-		m.diffLines = allRemoves
+		m.file.lines = allRemoves
 		m.collapsed.enabled = true
 		m.diffCursor = 0 // on placeholder, not hidden
 		m.adjustCursorIfHidden()
@@ -847,8 +847,8 @@ func TestModel_ToggleCollapsedModeAdjustsCursor(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 1 // on removed line
 
 	// toggle to collapsed mode
@@ -867,8 +867,8 @@ func TestModel_ToggleHunkExpansionAdjustsCursor(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = map[int]bool{1: true} // hunk expanded
 	m.diffCursor = 1                                  // on removed line (visible because expanded)
@@ -885,8 +885,8 @@ func TestModel_CollapsedCursorDownSkipsPlaceholderAnnotation(t *testing.T) {
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // 0
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},  // 1 - placeholder
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},  // 2 - hidden
@@ -913,8 +913,8 @@ func TestModel_CollapsedCursorUpSkipsPlaceholderAnnotation(t *testing.T) {
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // 0
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},  // 1 - placeholder
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},  // 2 - hidden
@@ -934,8 +934,8 @@ func TestModel_CollapsedToggleClearsAnnotationState(t *testing.T) {
 	// toggling collapsed mode should clear cursorOnAnnotation
 	m := testModel(nil, nil)
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -954,8 +954,8 @@ func TestModel_CollapsedHunkCollapseClearsAnnotationState(t *testing.T) {
 	// collapsing a hunk should clear cursorOnAnnotation for annotations on removed lines
 	m := testModel(nil, nil)
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},
@@ -976,8 +976,8 @@ func TestModel_CollapsedDeleteAnnotationBlockedOnPlaceholder(t *testing.T) {
 	m := testModel(nil, nil)
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},

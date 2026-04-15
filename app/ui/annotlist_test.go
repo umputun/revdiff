@@ -107,7 +107,7 @@ func TestModel_FindDiffLineIndex(t *testing.T) {
 		},
 	}
 	m := testModel([]string{"a.go"}, diffs)
-	m.diffLines = diffs["a.go"]
+	m.file.lines = diffs["a.go"]
 
 	t.Run("find add line by NewNum", func(t *testing.T) {
 		idx := m.findDiffLineIndex(2, "+")
@@ -190,7 +190,7 @@ func TestModel_JumpToAnnotationTarget_CrossFile(t *testing.T) {
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
 	m = result.(Model)
-	assert.Equal(t, "a.go", m.currFile)
+	assert.Equal(t, "a.go", m.file.name)
 
 	t.Run("cross-file jump sets pending and triggers load", func(t *testing.T) {
 		target := &overlay.AnnotationTarget{File: "b.go", ChangeType: "+", Line: 2}
@@ -204,7 +204,7 @@ func TestModel_JumpToAnnotationTarget_CrossFile(t *testing.T) {
 		loadMsg := cmd()
 		result, _ = model.Update(loadMsg)
 		model = result.(Model)
-		assert.Equal(t, "b.go", model.currFile)
+		assert.Equal(t, "b.go", model.file.name)
 		assert.Nil(t, model.pendingAnnotJump)
 		assert.Equal(t, 1, model.diffCursor)
 		assert.Equal(t, paneDiff, model.focus)
@@ -228,8 +228,8 @@ func TestModel_JumpToAnnotation_StalePendingGuard(t *testing.T) {
 	t.Run("stale pending jump is ignored when file does not match", func(t *testing.T) {
 		// set pending for b.go but simulate a.go being loaded
 		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
-		m.loadSeq++
-		loadMsg := fileLoadedMsg{file: "a.go", seq: m.loadSeq, lines: diffs["a.go"]}
+		m.file.loadSeq++
+		loadMsg := fileLoadedMsg{file: "a.go", seq: m.file.loadSeq, lines: diffs["a.go"]}
 		result, _ := m.Update(loadMsg)
 		model := result.(Model)
 		// pending should not be cleared (file mismatch)

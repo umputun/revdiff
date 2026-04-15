@@ -109,9 +109,9 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 			log.Printf("[WARN] failed to apply chroma style %q, keeping %q", spec.ChromaStyle, prevStyle)
 		}
 	}
-	if m.currFile != "" && len(m.diffLines) > 0 {
+	if m.file.name != "" && len(m.file.lines) > 0 {
 		if chromaChanged {
-			m.highlightedLines = m.highlighter.HighlightLines(m.currFile, m.diffLines)
+			m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)
 		}
 		m.viewport.SetContent(m.renderDiff())
 	}
@@ -119,8 +119,8 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 
 // refreshDiff re-highlights and re-renders the current diff if one is loaded.
 func (m *Model) refreshDiff() {
-	if m.currFile != "" && len(m.diffLines) > 0 {
-		m.highlightedLines = m.highlighter.HighlightLines(m.currFile, m.diffLines)
+	if m.file.name != "" && len(m.file.lines) > 0 {
+		m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)
 		m.viewport.SetContent(m.renderDiff())
 	}
 }

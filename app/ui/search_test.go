@@ -593,7 +593,7 @@ func TestModel_NKeyFallsThroughToNextFileWhenNoSearch(t *testing.T) {
 		"a.go": lines, "b.go": lines,
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := result.(Model)
 
@@ -633,7 +633,7 @@ func TestModel_ShiftNNavigatesPrevFileWithoutSearch(t *testing.T) {
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.tree.SelectByPath("b.go") // start at second file
-	m.currFile = "b.go"
+	m.file.name = "b.go"
 
 	// no search active, N (prev_item) should navigate to previous file
 	assert.Empty(t, m.searchMatches)
@@ -651,9 +651,9 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = noopHighlighter().HighlightLines("a.go", lines)
 	m.focus = paneDiff
 	m.diffCursor = 0
 	pRes := style.PlainResolver()
@@ -725,9 +725,9 @@ func TestModel_SearchHighlightWithWrap(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = noopHighlighter().HighlightLines("a.go", lines)
 	m.focus = paneDiff
 	m.diffCursor = 0
 	m.wrapMode = true
@@ -767,9 +767,9 @@ func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = noopHighlighter().HighlightLines("a.go", lines)
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = noopHighlighter().HighlightLines("a.go", lines)
 	m.focus = paneDiff
 	m.diffCursor = 0
 	pRes := style.PlainResolver()
@@ -874,7 +874,7 @@ func TestModel_ClearSearchResetsMatchSet(t *testing.T) {
 func TestModel_StatusBarShowsSearchInput(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.width = 120
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.searching = true
 	m.searchInput = textinput.New()
 	m.searchInput.SetValue("hello")
@@ -887,7 +887,7 @@ func TestModel_StatusBarShowsSearchInput(t *testing.T) {
 func TestModel_StatusBarSearchInputTakesPriority(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.width = 120
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.searching = true
 	m.searchInput = textinput.New()
 	m.inConfirmDiscard = true // should not show discard prompt
@@ -915,8 +915,8 @@ func TestModel_StatusBarSearchMatchPosition(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.currFile = "a.go"
-			m.diffLines = []diff.DiffLine{
+			m.file.name = "a.go"
+			m.file.lines = []diff.DiffLine{
 				{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 				{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 				{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
@@ -956,8 +956,8 @@ func TestModel_SearchSegment(t *testing.T) {
 		{NewNum: 3, Content: "ctx end", ChangeType: diff.ChangeContext},
 	}
 	m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m2.diffLines = lines
-	m2.currFile = "a.go"
+	m2.file.lines = lines
+	m2.file.name = "a.go"
 	m2.collapsed.enabled = true
 	m2.collapsed.expandedHunks = make(map[int]bool)
 	m2.searchMatches = []int{1} // only on hidden removed line
@@ -971,10 +971,10 @@ func TestModel_StatusBarSearchPositionBetweenHunkAndIcons(t *testing.T) {
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 1
-	m.fileAdds = 1
+	m.file.adds = 1
 	m.focus = paneDiff
 	m.width = 200
 	m.searchMatches = []int{1}
@@ -1007,7 +1007,7 @@ func TestModel_ClearSearchOnFileLoad(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines1, "b.go": lines2})
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := result.(Model)
-	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: model.loadSeq, lines: lines1})
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: model.file.loadSeq, lines: lines1})
 	model = result.(Model)
 	model.focus = paneDiff
 
@@ -1018,8 +1018,8 @@ func TestModel_ClearSearchOnFileLoad(t *testing.T) {
 	model.searchMatchSet = map[int]bool{0: true, 1: true}
 
 	// load a different file
-	model.loadSeq++
-	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.loadSeq, lines: lines2})
+	model.file.loadSeq++
+	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.file.loadSeq, lines: lines2})
 	model = result.(Model)
 
 	assert.Empty(t, model.searchTerm, "search term should be cleared on file load")
@@ -1034,10 +1034,10 @@ func TestModel_StatusBarNarrowDropsSearchSegment(t *testing.T) {
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 1
-	m.fileAdds = 1
+	m.file.adds = 1
 	m.focus = paneDiff
 	m.searchMatches = []int{1}
 	m.searchCursor = 0
@@ -1254,14 +1254,14 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 
 	t.Run("start search from diff pane with TOC", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		model := result.(Model)
 		result, _ = model.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
 		model = result.(Model)
-		require.NotNil(t, model.mdTOC)
+		require.NotNil(t, model.file.mdTOC)
 
 		model.focus = paneDiff
 
@@ -1273,14 +1273,14 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 
 	t.Run("search not started from TOC pane", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		model := result.(Model)
 		result, _ = model.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
 		model = result.(Model)
-		require.NotNil(t, model.mdTOC)
+		require.NotNil(t, model.file.mdTOC)
 
 		model.focus = paneTree // TOC pane
 
@@ -1292,14 +1292,14 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 
 	t.Run("TOC active section updates after search navigation", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		model := result.(Model)
 		result, _ = model.Update(fileLoadedMsg{file: "README.md", lines: mdLines})
 		model = result.(Model)
-		require.NotNil(t, model.mdTOC)
+		require.NotNil(t, model.file.mdTOC)
 
 		model.focus = paneDiff
 		model.searchMatches = []int{3} // match on line 3
@@ -1309,6 +1309,6 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model = result.(Model)
 		// active section should reflect the cursor position after search nav (Section entry at lineIdx=2)
-		assert.Equal(t, 2, tocActiveLineIdx(t, model.mdTOC), "TOC should track active section after search jump (lineIdx=2)")
+		assert.Equal(t, 2, tocActiveLineIdx(t, model.file.mdTOC), "TOC should track active section after search jump (lineIdx=2)")
 	})
 }

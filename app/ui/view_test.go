@@ -24,7 +24,7 @@ func TestModel_ResizeInSingleFileMode(t *testing.T) {
 	m = resized.(Model)
 	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
 	m = loaded.(Model)
-	require.True(t, m.singleFile)
+	require.True(t, m.file.singleFile)
 
 	// resize while in single-file mode
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
@@ -42,8 +42,8 @@ func TestModel_StatusBarFilterIndicator(t *testing.T) {
 		m.tree = testNewFileTree([]string{"a.go"})
 		m.tree.ToggleFilter(map[string]bool{"a.go": true})
 		m.ready = true
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.width = 200
 
 		status := m.statusBarText()
@@ -54,8 +54,8 @@ func TestModel_StatusBarFilterIndicator(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = testNewFileTree([]string{"a.go"})
 		m.ready = true
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.width = 200
 
 		status := m.statusBarText()
@@ -96,8 +96,8 @@ func TestModel_StatusBarWrapIndicator(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = testNewFileTree([]string{"a.go"})
 		m.ready = true
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.wrapMode = true
 		m.width = 200
 
@@ -109,8 +109,8 @@ func TestModel_StatusBarWrapIndicator(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.tree = testNewFileTree([]string{"a.go"})
 		m.ready = true
-		m.currFile = "a.go"
-		m.diffLines = lines
+		m.file.name = "a.go"
+		m.file.lines = lines
 		m.width = 200
 
 		status := m.statusBarText()
@@ -126,9 +126,9 @@ func TestModel_StatusBarShowsFilenameAndStats(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.ready = true
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.fileAdds = 1
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.adds = 1
 	m.focus = paneDiff
 
 	status := m.statusBarText()
@@ -140,9 +140,9 @@ func TestModel_StatusBarShowsFilenameAndStats(t *testing.T) {
 func TestModel_StatusBarFilenameTruncation(t *testing.T) {
 	longFile := "very/long/path/to/some/deeply/nested/file/in/the/project/structure.go"
 	m := testModel(nil, nil)
-	m.currFile = longFile
-	m.fileAdds = 3
-	m.fileRemoves = 1
+	m.file.name = longFile
+	m.file.adds = 3
+	m.file.removes = 1
 	m.focus = paneDiff
 	m.width = 40 // narrow terminal forces truncation
 
@@ -157,9 +157,9 @@ func TestModel_StatusBarFilenameTruncationWideChars(t *testing.T) {
 	// display-width measurement, not rune count, to avoid overflowing the status line
 	wideFile := "path/to/日本語のファイル名/テスト.go"
 	m := testModel(nil, nil)
-	m.currFile = wideFile
-	m.fileAdds = 1
-	m.fileRemoves = 0
+	m.file.name = wideFile
+	m.file.adds = 1
+	m.file.removes = 0
 	m.focus = paneDiff
 	m.width = 45
 
@@ -171,8 +171,8 @@ func TestModel_StatusBarFilenameTruncationWideChars(t *testing.T) {
 
 func TestModel_StatusBarModeIndicators(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
 	m.diffCursor = 0
 	m.focus = paneDiff
 	m.width = 200
@@ -205,10 +205,10 @@ func TestModel_StatusBarNarrowTerminalDegradation(t *testing.T) {
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 1
-	m.fileAdds = 1
+	m.file.adds = 1
 	m.focus = paneDiff
 	m.collapsed.enabled = true
 	m.collapsed.expandedHunks = make(map[int]bool)
@@ -245,9 +245,9 @@ func TestModel_StatusBarNarrowTerminalDegradation(t *testing.T) {
 
 func TestModel_StatusBarStatsDisplay(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "main.go"
-	m.fileAdds = 10
-	m.fileRemoves = 5
+	m.file.name = "main.go"
+	m.file.adds = 10
+	m.file.removes = 5
 	m.width = 120
 
 	status := m.statusBarText()
@@ -263,8 +263,8 @@ func TestModel_StatusBarNoShortcutHintsInDiffPane(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.ready = true
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 0
 	m.cursorOnAnnotation = true
 	m.focus = paneDiff
@@ -290,8 +290,8 @@ func TestModel_StatusBarShowsHelpHint(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.ready = true
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 
 	m.focus = paneTree
 	status := m.statusBarText()
@@ -306,7 +306,7 @@ func TestModel_StatusBarNoFilenameWithoutFile(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.ready = true
-	m.currFile = ""
+	m.file.name = ""
 	m.focus = paneTree
 
 	status := m.statusBarText()
@@ -323,9 +323,9 @@ func TestModel_StatusBarShowsHunkIndicator(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 1
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneDiff
 
 	status := m.statusBarText()
@@ -343,9 +343,9 @@ func TestModel_StatusBarNoHunkIndicatorWithoutChanges(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 	m.diffCursor = 0
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 	m.focus = paneDiff
 
 	status := m.statusBarText()
@@ -354,8 +354,8 @@ func TestModel_StatusBarNoHunkIndicatorWithoutChanges(t *testing.T) {
 
 func TestModel_StatusBarHunkOnlyInDiffPane(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
 	m.diffCursor = 0
 	m.focus = paneDiff
 
@@ -377,9 +377,9 @@ func TestModel_StatusBarHunkCountOnContextLine(t *testing.T) {
 			{NewNum: 4, Content: "add2", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 0
-		m.currFile = "a.go"
+		m.file.name = "a.go"
 		m.focus = paneDiff
 
 		status := m.statusBarText()
@@ -393,9 +393,9 @@ func TestModel_StatusBarHunkCountOnContextLine(t *testing.T) {
 			{NewNum: 2, Content: "add1", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 0
-		m.currFile = "a.go"
+		m.file.name = "a.go"
 		m.focus = paneDiff
 
 		status := m.statusBarText()
@@ -410,10 +410,10 @@ func TestModel_StatusBarShowsLineNumber(t *testing.T) {
 		{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 0
-	m.fileAdds = 0
+	m.file.adds = 0
 	m.focus = paneDiff
 	m.width = 200
 
@@ -427,10 +427,10 @@ func TestModel_StatusBarLineNumberAfterHunk(t *testing.T) {
 		{OldNum: 0, NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 1
-	m.fileAdds = 1
+	m.file.adds = 1
 	m.focus = paneDiff
 	m.width = 200
 
@@ -448,10 +448,10 @@ func TestModel_StatusBarLineNumberDegradation(t *testing.T) {
 		{OldNum: 0, NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.diffCursor = 1
-	m.fileAdds = 1
+	m.file.adds = 1
 	m.focus = paneDiff
 
 	t.Run("wide terminal shows line number", func(t *testing.T) {
@@ -476,9 +476,9 @@ func TestModel_StatusBarLineNumberDegradation(t *testing.T) {
 func TestModel_StatusBarPipeSeparators(t *testing.T) {
 	t.Run("plain styles", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.currFile = "a.go"
-		m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
-		m.fileAdds = 1
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+		m.file.adds = 1
 		m.diffCursor = 0
 		m.focus = paneDiff
 
@@ -493,9 +493,9 @@ func TestModel_StatusBarPipeSeparators(t *testing.T) {
 		res := style.NewResolver(sc)
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
-		m.currFile = "a.go"
-		m.diffLines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
-		m.fileAdds = 1
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "add", ChangeType: diff.ChangeAdd}}
+		m.file.adds = 1
 		m.diffCursor = 0
 		m.focus = paneDiff
 
@@ -563,10 +563,10 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 	t.Run("single-file mode renders full-width diff without tree pane", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
 		m.tree = testNewFileTree([]string{"main.go"})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0
 		m.focus = paneDiff
-		m.currFile = "main.go"
+		m.file.name = "main.go"
 		m.noStatusBar = true
 		m.ready = true
 
@@ -591,7 +591,7 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 	t.Run("multi-file mode renders tree and diff panes side by side", func(t *testing.T) {
 		m := testModel([]string{"internal/a.go", "internal/b.go"}, nil)
 		m.tree = testNewFileTree([]string{"internal/a.go", "internal/b.go"})
-		m.singleFile = false
+		m.file.singleFile = false
 		m.focus = paneTree
 		m.noStatusBar = true
 		m.ready = true
@@ -609,7 +609,7 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 	t.Run("single-file mode", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
+		m.file.singleFile = true
 		m.width = 100
 		m.treeWidth = 0
 		assert.Equal(t, 96, m.diffContentWidth()) // width - 4 (borders + cursor bar + right padding)
@@ -617,7 +617,7 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 
 	t.Run("multi-file mode", func(t *testing.T) {
 		m := testModel([]string{"a.go", "b.go"}, nil)
-		m.singleFile = false
+		m.file.singleFile = false
 		m.width = 120
 		m.treeWidth = 36
 		assert.Equal(t, 78, m.diffContentWidth()) // 120 - 36 - 4 - 2
@@ -625,7 +625,7 @@ func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 
 	t.Run("single-file mode minimum width", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
+		m.file.singleFile = true
 		m.width = 5
 		m.treeWidth = 0
 		assert.Equal(t, 10, m.diffContentWidth()) // min 10
@@ -640,11 +640,11 @@ func TestModel_SingleFileKeysNoOp(t *testing.T) {
 	setup := func() Model {
 		m := testModel([]string{"main.go"}, map[string][]diff.DiffLine{"main.go": lines})
 		m.tree = testNewFileTree([]string{"main.go"})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.focus = paneDiff
-		m.currFile = "main.go"
-		m.diffLines = lines
-		m.highlightedLines = noopHighlighter().HighlightLines("main.go", lines)
+		m.file.name = "main.go"
+		m.file.lines = lines
+		m.file.highlighted = noopHighlighter().HighlightLines("main.go", lines)
 		plainRes := style.PlainResolver()
 		m.resolver = plainRes
 		m.renderer = style.NewRenderer(plainRes)
@@ -701,7 +701,7 @@ func TestModel_SingleFileSearchNavStillWorks(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
 	model = result.(Model)
-	model.singleFile = true
+	model.file.singleFile = true
 	model.focus = paneDiff
 	model.searchMatches = []int{0, 2}
 	model.searchCursor = 0
@@ -730,7 +730,7 @@ func TestModel_SingleFileWrapModeWorks(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
 	model = result.(Model)
-	model.singleFile = true
+	model.file.singleFile = true
 	model.focus = paneDiff
 
 	assert.False(t, model.wrapMode, "wrap should be off initially")
@@ -758,7 +758,7 @@ func TestModel_SingleFileCollapsedModeWorks(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "main.go", lines: lines})
 	model = result.(Model)
-	model.singleFile = true
+	model.file.singleFile = true
 	model.focus = paneDiff
 
 	assert.False(t, model.collapsed.enabled, "collapsed should be off initially")
@@ -784,12 +784,12 @@ func TestModel_SingleFileMultiFileModeUnchanged(t *testing.T) {
 	result, _ = model.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
 	model = result.(Model)
 
-	assert.False(t, model.singleFile, "multi-file should not be in single-file mode")
+	assert.False(t, model.file.singleFile, "multi-file should not be in single-file mode")
 	assert.Equal(t, paneTree, model.focus, "multi-file should start on tree pane")
 
 	// tab should switch panes
 	model.focus = paneTree
-	model.currFile = "a.go"
+	model.file.name = "a.go"
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyTab})
 	model = result.(Model)
 	assert.Equal(t, paneDiff, model.focus, "tab should switch to diff pane in multi-file mode")
@@ -815,9 +815,9 @@ func TestModel_ResizeWithTOCActive(t *testing.T) {
 
 	t.Run("resize preserves treeWidth when TOC active", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 		model := result.(Model)
@@ -829,8 +829,8 @@ func TestModel_ResizeWithTOCActive(t *testing.T) {
 
 	t.Run("resize sets treeWidth=0 when single-file without TOC", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
-		m.mdTOC = nil
+		m.file.singleFile = true
+		m.file.mdTOC = nil
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 		model := result.(Model)
@@ -842,10 +842,10 @@ func TestModel_ResizeWithTOCActive(t *testing.T) {
 
 func TestModel_DiffContentWidthWithTOC(t *testing.T) {
 	m := testModel([]string{"README.md"}, nil)
-	m.singleFile = true
+	m.file.singleFile = true
 	m.width = 100
 	m.treeWidth = 30
-	m.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext}}, "README.md")
+	m.file.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext}}, "README.md")
 
 	// with TOC active, should use multi-file formula: width - treeWidth - 4 - 2
 	assert.Equal(t, 64, m.diffContentWidth()) // 100 - 30 - 4 - 2
@@ -855,10 +855,10 @@ func TestModel_ViewWithTOCPane(t *testing.T) {
 	t.Run("markdown single-file with TOC renders two-pane layout", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, nil)
 		m.tree = testNewFileTree([]string{"README.md"})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 25
 		m.focus = paneDiff
-		m.currFile = "README.md"
+		m.file.name = "README.md"
 		m.noStatusBar = true
 		m.ready = true
 		tocLines := []diff.DiffLine{
@@ -866,7 +866,7 @@ func TestModel_ViewWithTOCPane(t *testing.T) {
 			{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},
 			{NewNum: 3, Content: "## Section", ChangeType: diff.ChangeContext},
 		}
-		m.mdTOC = sidepane.ParseTOC(tocLines, "README.md")
+		m.file.mdTOC = sidepane.ParseTOC(tocLines, "README.md")
 
 		view := m.View()
 		stripped := ansi.Strip(view)
@@ -882,10 +882,10 @@ func TestModel_ViewWithTOCPane(t *testing.T) {
 	t.Run("non-markdown single-file without TOC renders full width", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
 		m.tree = testNewFileTree([]string{"main.go"})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 0
 		m.focus = paneDiff
-		m.currFile = "main.go"
+		m.file.name = "main.go"
 		m.noStatusBar = true
 		m.ready = true
 
@@ -900,13 +900,13 @@ func TestModel_ViewWithTOCPane(t *testing.T) {
 	t.Run("TOC pane uses active style when focused", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, nil)
 		m.tree = testNewFileTree([]string{"README.md"})
-		m.singleFile = true
+		m.file.singleFile = true
 		m.treeWidth = 25
 		m.focus = paneTree // TOC pane focused
-		m.currFile = "README.md"
+		m.file.name = "README.md"
 		m.noStatusBar = true
 		m.ready = true
-		m.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext}}, "README.md")
+		m.file.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext}}, "README.md")
 
 		view := m.View()
 		stripped := ansi.Strip(view)
@@ -919,7 +919,7 @@ func TestModel_ViewWithTOCPane(t *testing.T) {
 func TestModel_DiffContentWidthWithTOCActive(t *testing.T) {
 	t.Run("single-file without TOC uses full width", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
+		m.file.singleFile = true
 		m.width = 100
 		m.treeWidth = 0
 		assert.Equal(t, 96, m.diffContentWidth()) // width - 4
@@ -927,19 +927,19 @@ func TestModel_DiffContentWidthWithTOCActive(t *testing.T) {
 
 	t.Run("single-file with TOC uses multi-file formula", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, nil)
-		m.singleFile = true
+		m.file.singleFile = true
 		m.width = 100
 		m.treeWidth = 30
-		m.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# T", ChangeType: diff.ChangeContext}}, "t.md")
+		m.file.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# T", ChangeType: diff.ChangeContext}}, "t.md")
 		assert.Equal(t, 64, m.diffContentWidth()) // 100 - 30 - 4 - 2
 	})
 
 	t.Run("minimum width enforced", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, nil)
-		m.singleFile = true
+		m.file.singleFile = true
 		m.width = 20
 		m.treeWidth = 15
-		m.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# T", ChangeType: diff.ChangeContext}}, "t.md")
+		m.file.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# T", ChangeType: diff.ChangeContext}}, "t.md")
 		assert.Equal(t, 10, m.diffContentWidth()) // min 10
 	})
 }
@@ -953,10 +953,10 @@ func TestModel_TabTogglingWithTOC(t *testing.T) {
 
 	t.Run("tab cycles between TOC and diff", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
 		m.focus = paneDiff
 
 		// tab from diff -> TOC (paneTree)
@@ -972,9 +972,9 @@ func TestModel_TabTogglingWithTOC(t *testing.T) {
 
 	t.Run("tab no-op in single-file without TOC", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
-		m.mdTOC = nil
-		m.currFile = "main.go"
+		m.file.singleFile = true
+		m.file.mdTOC = nil
+		m.file.name = "main.go"
 		m.focus = paneDiff
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -991,11 +991,11 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 
 	t.Run("h key in diff pane switches to TOC", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
-		m.diffLines = mdLines
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
 		m.focus = paneDiff
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
@@ -1005,9 +1005,9 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 
 	t.Run("h key no-op in single-file without TOC", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
-		m.mdTOC = nil
-		m.currFile = "main.go"
+		m.file.singleFile = true
+		m.file.mdTOC = nil
+		m.file.name = "main.go"
 		m.focus = paneDiff
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
@@ -1028,11 +1028,11 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	setup := func(t *testing.T) Model {
 		t.Helper()
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
-		m.diffLines = mdLines
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
 		m.focus = paneTree
 		return m
 	}
@@ -1041,60 +1041,60 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 
 	t.Run("j moves cursor down in TOC and auto-jumps diff", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, tocLineIdx(t, m.mdTOC)) // starts on "top" entry (lineIdx=0)
+		assert.Equal(t, 0, tocLineIdx(t, m.file.mdTOC)) // starts on "top" entry (lineIdx=0)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Equal(t, 0, tocLineIdx(t, model.mdTOC)) // First entry also at lineIdx=0
+		assert.Equal(t, 0, tocLineIdx(t, model.file.mdTOC)) // First entry also at lineIdx=0
 		assert.Equal(t, 0, model.diffCursor, "diff cursor should jump to # First at index 0")
 		assert.Equal(t, paneTree, model.focus, "focus should stay on TOC pane")
 	})
 
 	t.Run("k moves cursor up in TOC and auto-jumps diff", func(t *testing.T) {
 		m := setup(t)
-		moveTOCTo(m.mdTOC, 3) // on "Third"
+		moveTOCTo(m.file.mdTOC, 3) // on "Third"
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 		model := result.(Model)
-		assert.Equal(t, 2, tocLineIdx(t, model.mdTOC), "should be on Second (lineIdx=2)")
+		assert.Equal(t, 2, tocLineIdx(t, model.file.mdTOC), "should be on Second (lineIdx=2)")
 		assert.Equal(t, 2, model.diffCursor, "diff cursor should jump to ## Second at index 2")
 		assert.Equal(t, paneTree, model.focus, "focus should stay on TOC pane")
 	})
 
 	t.Run("j clamped at last entry", func(t *testing.T) {
 		m := setup(t)
-		moveTOCTo(m.mdTOC, 3) // last entry (Third)
+		moveTOCTo(m.file.mdTOC, 3) // last entry (Third)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Equal(t, 4, tocLineIdx(t, model.mdTOC), "should stay on Third (lineIdx=4)")
+		assert.Equal(t, 4, tocLineIdx(t, model.file.mdTOC), "should stay on Third (lineIdx=4)")
 	})
 
 	t.Run("k clamped at first entry", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, tocLineIdx(t, m.mdTOC)) // starts at top (lineIdx=0)
+		assert.Equal(t, 0, tocLineIdx(t, m.file.mdTOC)) // starts at top (lineIdx=0)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 		model := result.(Model)
-		assert.Equal(t, 0, tocLineIdx(t, model.mdTOC), "should stay at top (lineIdx=0)")
+		assert.Equal(t, 0, tocLineIdx(t, model.file.mdTOC), "should stay at top (lineIdx=0)")
 	})
 
 	t.Run("home moves to first entry", func(t *testing.T) {
 		m := setup(t)
-		moveTOCTo(m.mdTOC, 3)
+		moveTOCTo(m.file.mdTOC, 3)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyHome})
 		model := result.(Model)
-		assert.Equal(t, 0, tocLineIdx(t, model.mdTOC), "should be at top (lineIdx=0)")
+		assert.Equal(t, 0, tocLineIdx(t, model.file.mdTOC), "should be at top (lineIdx=0)")
 	})
 
 	t.Run("end moves to last entry", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, tocLineIdx(t, m.mdTOC)) // starts at top (lineIdx=0)
+		assert.Equal(t, 0, tocLineIdx(t, m.file.mdTOC)) // starts at top (lineIdx=0)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnd})
 		model := result.(Model)
-		assert.Equal(t, 4, tocLineIdx(t, model.mdTOC), "should be on Third (lineIdx=4)")
+		assert.Equal(t, 4, tocLineIdx(t, model.file.mdTOC), "should be on Third (lineIdx=4)")
 	})
 
 	t.Run("l switches to diff pane", func(t *testing.T) {
@@ -1107,56 +1107,56 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 
 	t.Run("pgdn moves cursor by page size", func(t *testing.T) {
 		m := setup(t)
-		assert.Equal(t, 0, tocLineIdx(t, m.mdTOC)) // starts at top
+		assert.Equal(t, 0, tocLineIdx(t, m.file.mdTOC)) // starts at top
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 		model := result.(Model)
-		assert.Equal(t, 4, tocLineIdx(t, model.mdTOC), "pgdn should move to last entry (lineIdx=4)")
+		assert.Equal(t, 4, tocLineIdx(t, model.file.mdTOC), "pgdn should move to last entry (lineIdx=4)")
 	})
 
 	t.Run("pgup moves cursor by page size", func(t *testing.T) {
 		m := setup(t)
-		moveTOCTo(m.mdTOC, 3)
+		moveTOCTo(m.file.mdTOC, 3)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 		model := result.(Model)
-		assert.Equal(t, 0, tocLineIdx(t, model.mdTOC), "pgup should move to first entry")
+		assert.Equal(t, 0, tocLineIdx(t, model.file.mdTOC), "pgup should move to first entry")
 	})
 
 	t.Run("tab back to TOC syncs cursor to active section", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		moveTOCTo(m.mdTOC, 0)          // cursor was on top entry
-		m.mdTOC.UpdateActiveSection(4) // diff scrolled to Third section (lineIdx=4 → entry 3)
-		m.diffCursor = 4               // cursor on Third header line
+		moveTOCTo(m.file.mdTOC, 0)          // cursor was on top entry
+		m.file.mdTOC.UpdateActiveSection(4) // diff scrolled to Third section (lineIdx=4 → entry 3)
+		m.diffCursor = 4                    // cursor on Third header line
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.focus)
-		assert.Equal(t, 4, tocLineIdx(t, model.mdTOC), "TOC cursor should sync to active section on tab back (lineIdx=4)")
+		assert.Equal(t, 4, tocLineIdx(t, model.file.mdTOC), "TOC cursor should sync to active section on tab back (lineIdx=4)")
 	})
 
 	t.Run("h key syncs TOC cursor to active section", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		moveTOCTo(m.mdTOC, 0)
-		m.mdTOC.UpdateActiveSection(2) // second section (lineIdx=2 → entry 2)
+		moveTOCTo(m.file.mdTOC, 0)
+		m.file.mdTOC.UpdateActiveSection(2) // second section (lineIdx=2 → entry 2)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.focus)
-		assert.Equal(t, 2, tocLineIdx(t, model.mdTOC), "TOC cursor should sync to active section on h key (lineIdx=2)")
+		assert.Equal(t, 2, tocLineIdx(t, model.file.mdTOC), "TOC cursor should sync to active section on h key (lineIdx=2)")
 	})
 
 	t.Run("n jumps to next TOC entry from diff pane", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		moveTOCTo(m.mdTOC, 1)          // on First
-		m.mdTOC.UpdateActiveSection(0) // entry 1 has lineIdx=0; UpdateActiveSection(0) → activeSection=1
+		moveTOCTo(m.file.mdTOC, 1)          // on First
+		m.file.mdTOC.UpdateActiveSection(0) // entry 1 has lineIdx=0; UpdateActiveSection(0) → activeSection=1
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := result.(Model)
-		assert.Equal(t, 2, tocLineIdx(t, model.mdTOC), "n should advance TOC cursor to Second (lineIdx=2)")
+		assert.Equal(t, 2, tocLineIdx(t, model.file.mdTOC), "n should advance TOC cursor to Second (lineIdx=2)")
 		assert.Equal(t, 2, model.diffCursor, "diff cursor should jump to ## Second at index 2")
 		assert.Equal(t, paneDiff, model.focus, "focus should stay on diff pane")
 	})
@@ -1164,12 +1164,12 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	t.Run("p jumps to prev TOC entry from diff pane", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		moveTOCTo(m.mdTOC, 3)          // on Third
-		m.mdTOC.UpdateActiveSection(4) // entry 3 has lineIdx=4
+		moveTOCTo(m.file.mdTOC, 3)          // on Third
+		m.file.mdTOC.UpdateActiveSection(4) // entry 3 has lineIdx=4
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 		model := result.(Model)
-		assert.Equal(t, 2, tocLineIdx(t, model.mdTOC), "p should move TOC cursor to Second (lineIdx=2)")
+		assert.Equal(t, 2, tocLineIdx(t, model.file.mdTOC), "p should move TOC cursor to Second (lineIdx=2)")
 		assert.Equal(t, 2, model.diffCursor, "diff cursor should jump to ## Second at index 2")
 		assert.Equal(t, paneDiff, model.focus, "focus should stay on diff pane")
 	})
@@ -1177,22 +1177,22 @@ func TestModel_TOCPaneNavigation(t *testing.T) {
 	t.Run("n clamped at last TOC entry", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		moveTOCTo(m.mdTOC, 3)          // last entry
-		m.mdTOC.UpdateActiveSection(4) // entry 3 has lineIdx=4
+		moveTOCTo(m.file.mdTOC, 3)          // last entry
+		m.file.mdTOC.UpdateActiveSection(4) // entry 3 has lineIdx=4
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := result.(Model)
-		assert.Equal(t, 4, tocLineIdx(t, model.mdTOC), "should stay on Third (lineIdx=4)")
+		assert.Equal(t, 4, tocLineIdx(t, model.file.mdTOC), "should stay on Third (lineIdx=4)")
 	})
 
 	t.Run("p clamped at first TOC entry", func(t *testing.T) {
 		m := setup(t)
 		m.focus = paneDiff
-		moveTOCTo(m.mdTOC, 0) // cursor at first entry
+		moveTOCTo(m.file.mdTOC, 0) // cursor at first entry
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 		model := result.(Model)
-		assert.Equal(t, 0, tocLineIdx(t, model.mdTOC), "should stay at top (lineIdx=0)")
+		assert.Equal(t, 0, tocLineIdx(t, model.file.mdTOC), "should stay at top (lineIdx=0)")
 	})
 }
 
@@ -1208,34 +1208,34 @@ func TestModel_EnterInTOCPane(t *testing.T) {
 
 	t.Run("enter jumps to header line", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
-		m.diffLines = mdLines
-		m.highlightedLines = make([]string, len(mdLines))
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
+		m.file.highlighted = make([]string, len(mdLines))
 		m.focus = paneTree
 
 		// move cursor to third entry (## Second at lineIdx=3), accounting for top entry at [0]
-		moveTOCTo(m.mdTOC, 2)
+		moveTOCTo(m.file.mdTOC, 2)
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		model := result.(Model)
 
 		assert.Equal(t, 3, model.diffCursor, "diffCursor should jump to Second header at index 3")
 		assert.Equal(t, paneDiff, model.focus, "focus should switch to diff pane after enter")
-		assert.Equal(t, 3, tocActiveLineIdx(t, model.mdTOC), "active section should track jumped entry (lineIdx=3)")
+		assert.Equal(t, 3, tocActiveLineIdx(t, model.file.mdTOC), "active section should track jumped entry (lineIdx=3)")
 	})
 
 	t.Run("enter on last TOC entry", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
-		m.diffLines = mdLines
-		m.highlightedLines = make([]string, len(mdLines))
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
+		m.file.highlighted = make([]string, len(mdLines))
 		m.focus = paneTree
-		moveTOCTo(m.mdTOC, 3) // ### Third at lineIdx=5, accounting for top entry at [0]
+		moveTOCTo(m.file.mdTOC, 3) // ### Third at lineIdx=5, accounting for top entry at [0]
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		model := result.(Model)
@@ -1252,14 +1252,14 @@ func TestModel_MarkdownNoHeadersFallback(t *testing.T) {
 	}
 
 	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": noHeaders})
-	m.singleFile = true
+	m.file.singleFile = true
 	m.treeWidth = 0
 	m.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "README.md", lines: noHeaders})
 	model := result.(Model)
 
-	assert.Nil(t, model.mdTOC, "mdTOC should be nil when no headers")
+	assert.Nil(t, model.file.mdTOC, "mdTOC should be nil when no headers")
 	assert.Equal(t, 0, model.treeWidth, "treeWidth should be 0 in fallback mode")
 
 	// tab should be no-op in single-file mode without TOC
@@ -1303,8 +1303,8 @@ func TestModel_ReviewedStatusBar(t *testing.T) {
 		"a.go": lines, "b.go": lines, "c.go": lines,
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go", "c.go"})
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.width = 200
 
 	// no reviewed count when nothing reviewed
@@ -1367,7 +1367,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 11, NewNum: 11, Content: "ctx2", ChangeType: diff.ChangeContext},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 0
 		m.focus = paneDiff
 		assert.Equal(t, "L:10/11", m.lineNumberSegment())
@@ -1379,7 +1379,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 0, NewNum: 6, Content: "new", ChangeType: diff.ChangeAdd},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 1
 		m.focus = paneDiff
 		assert.Equal(t, "L:6/6", m.lineNumberSegment())
@@ -1391,7 +1391,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 6, NewNum: 0, Content: "old", ChangeType: diff.ChangeRemove},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 1
 		m.focus = paneDiff
 		assert.Equal(t, "L:6/6", m.lineNumberSegment())
@@ -1404,7 +1404,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 1
 		m.focus = paneDiff
 		// on removed line: denominator = maxOld (12), not maxNew (9)
@@ -1418,7 +1418,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 12, NewNum: 0, Content: "removed2", ChangeType: diff.ChangeRemove},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 0
 		m.focus = paneDiff
 		// on context line: denominator = maxNew (9), not maxOld (12)
@@ -1432,7 +1432,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 50, NewNum: 50, Content: "ctx2", ChangeType: diff.ChangeContext},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 1
 		m.focus = paneDiff
 		assert.Empty(t, m.lineNumberSegment())
@@ -1440,7 +1440,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 
 	t.Run("empty diffLines returns empty", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.diffLines = nil
+		m.file.lines = nil
 		m.diffCursor = 0
 		m.focus = paneDiff
 		assert.Empty(t, m.lineNumberSegment())
@@ -1451,7 +1451,7 @@ func TestModel_LineNumberSegment(t *testing.T) {
 			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		}
 		m := testModel(nil, nil)
-		m.diffLines = lines
+		m.file.lines = lines
 		m.diffCursor = 0
 		m.focus = paneTree
 		assert.Empty(t, m.lineNumberSegment())
@@ -1501,8 +1501,8 @@ func TestModel_TreePaneToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 	m.focus = paneTree
 	m.viewport = viewport.New(80, 30)
 	origTreeWidth := m.treeWidth
@@ -1547,7 +1547,7 @@ func TestModel_TreePaneToggle(t *testing.T) {
 
 	t.Run("no-op in single-file mode without TOC", func(t *testing.T) {
 		m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-		m2.singleFile = true
+		m2.file.singleFile = true
 		m2.viewport = viewport.New(80, 30)
 		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
 		model := result.(Model)
@@ -1556,8 +1556,8 @@ func TestModel_TreePaneToggle(t *testing.T) {
 
 	t.Run("toggle works in single-file markdown with TOC", func(t *testing.T) {
 		m2 := testModel([]string{"readme.md"}, map[string][]diff.DiffLine{"readme.md": lines})
-		m2.singleFile = true
-		m2.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Header", ChangeType: diff.ChangeContext}}, "readme.md")
+		m2.file.singleFile = true
+		m2.file.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Header", ChangeType: diff.ChangeContext}}, "readme.md")
 		m2.treeWidth = max(minTreeWidth, m2.width*m2.treeWidthRatio/10)
 		m2.viewport = viewport.New(80, 30)
 		m2.focus = paneTree
@@ -1593,8 +1593,8 @@ func TestModel_ToggleLineNumbers(t *testing.T) {
 		},
 	})
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
 
 	assert.False(t, m.lineNumbers)
 	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
@@ -1628,7 +1628,7 @@ func TestModel_ComputeLineNumWidth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = tt.lines
+			m.file.lines = tt.lines
 			assert.Equal(t, tt.want, m.computeLineNumWidth())
 		})
 	}
@@ -1643,14 +1643,14 @@ func TestModel_LineNumbersEndToEnd(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.file.name = "a.go"
+	m.file.lines = lines
 
 	// toggle on
 	result, _ := m.handleViewToggle(keymap.ActionToggleLineNums)
 	m = result.(Model)
 	assert.True(t, m.lineNumbers)
-	assert.Equal(t, 2, m.lineNumWidth)
+	assert.Equal(t, 2, m.file.lineNumWidth)
 
 	rendered := m.renderDiff()
 	stripped := ansi.Strip(rendered)
