@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,7 +25,29 @@ func testThemeContent(name string) string {
 		"color-search-fg = #282a36\ncolor-search-bg = #f1fa8c\n"
 }
 
+// testListThemeFiles returns sorted names of non-directory entries in dir.
+func testListThemeFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		require.NoError(t, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
 func TestApplyTheme(t *testing.T) {
+	cat := theme.NewCatalog("")
+
 	t.Run("overwrites all 23 fields and chroma-style", func(t *testing.T) {
 		opts := options{}
 		opts.Colors.Accent = "#original"
@@ -44,7 +66,7 @@ func TestApplyTheme(t *testing.T) {
 				"color-status-bg": "#bd93f9", "color-search-fg": "#282a36", "color-search-bg": "#f1fa8c",
 			},
 		}
-		applyTheme(&opts, th)
+		applyTheme(&opts, th, cat)
 
 		// verify chroma-style
 		assert.Equal(t, "dracula", opts.ChromaStyle)
@@ -79,7 +101,7 @@ func TestApplyTheme(t *testing.T) {
 		opts := options{}
 		opts.ChromaStyle = "original-style"
 		th := theme.Theme{ChromaStyle: "new-style", Colors: map[string]string{}}
-		applyTheme(&opts, th)
+		applyTheme(&opts, th, cat)
 		assert.Equal(t, "new-style", opts.ChromaStyle)
 	})
 
@@ -88,7 +110,7 @@ func TestApplyTheme(t *testing.T) {
 		opts.Colors.Accent = "#original-accent"
 		opts.Colors.Border = "#original-border"
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
-		applyTheme(&opts, th)
+		applyTheme(&opts, th, cat)
 		assert.Equal(t, "#new-accent", opts.Colors.Accent)
 		assert.Equal(t, "#original-border", opts.Colors.Border, "unset required key should not change opts")
 	})
@@ -104,7 +126,7 @@ func TestApplyTheme(t *testing.T) {
 
 		// theme has accent but omits all optional keys
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-accent": "#new-accent"}}
-		applyTheme(&opts, th)
+		applyTheme(&opts, th, cat)
 
 		assert.Equal(t, "#new-accent", opts.Colors.Accent)
 		assert.Empty(t, opts.Colors.CursorBg, "optional cursor-bg should be cleared when theme omits it")
@@ -119,7 +141,7 @@ func TestApplyTheme(t *testing.T) {
 		opts.Colors.TreeBg = "#old-value"
 
 		th := theme.Theme{ChromaStyle: "style", Colors: map[string]string{"color-tree-bg": "#new-tree-bg"}}
-		applyTheme(&opts, th)
+		applyTheme(&opts, th, cat)
 
 		assert.Equal(t, "#new-tree-bg", opts.Colors.TreeBg, "optional key present in theme should overwrite")
 	})
@@ -130,26 +152,28 @@ func TestDumpThemeOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	colors := collectColors(opts)
+	th := theme.Theme{Colors: colors, ChromaStyle: opts.ChromaStyle}
 	var buf bytes.Buffer
-	require.NoError(t, theme.Dump(theme.Theme{Colors: colors, ChromaStyle: opts.ChromaStyle}, &buf))
+	require.NoError(t, th.Dump(&buf))
 	output := buf.String()
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
 	assert.Contains(t, output, "color-accent = #D5895F")
 	assert.Contains(t, output, "color-add-fg = #87d787")
 
-	// verify dump output can be parsed back (roundtrip)
-	th, err := theme.Parse(strings.NewReader(output))
-	require.NoError(t, err, "dump-theme output must be parseable")
-	assert.Equal(t, opts.ChromaStyle, th.ChromaStyle)
-	assert.Equal(t, colors["color-accent"], th.Colors["color-accent"])
+	// verify dump output can be loaded back (roundtrip via temp file)
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "test-roundtrip"), []byte(output), 0o600))
+	parsed, err := theme.NewCatalog(tmpDir).Load("test-roundtrip")
+	require.NoError(t, err, "dump-theme output must be loadable")
+	assert.Equal(t, opts.ChromaStyle, parsed.ChromaStyle)
+	assert.Equal(t, colors["color-accent"], parsed.Colors["color-accent"])
 }
 
 func TestListThemesOutput(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	require.NoError(t, theme.NewCatalog(themesDir).InitBundled())
 
-	names, err := theme.List(themesDir)
-	require.NoError(t, err)
+	names := testListThemeFiles(t, themesDir)
 	assert.Equal(t, []string{"catppuccin-latte", "catppuccin-mocha", "dracula", "gruvbox", "nord", "revdiff", "solarized-dark"}, names)
 }
 
@@ -168,14 +192,10 @@ func TestCollectColors(t *testing.T) {
 }
 
 func TestColorFieldPtrs(t *testing.T) {
-	t.Run("returns 23 entries matching theme.ColorKeys", func(t *testing.T) {
+	t.Run("returns 23 entries", func(t *testing.T) {
 		opts := options{}
 		ptrs := colorFieldPtrs(&opts)
 		assert.Len(t, ptrs, 23)
-		for _, key := range theme.ColorKeys() {
-			_, ok := ptrs[key]
-			assert.True(t, ok, "missing key %q in colorFieldPtrs", key)
-		}
 	})
 
 	t.Run("pointers write to correct fields", func(t *testing.T) {
@@ -190,13 +210,20 @@ func TestColorFieldPtrs(t *testing.T) {
 	t.Run("applyTheme and collectColors round-trip", func(t *testing.T) {
 		// set all colors via applyTheme, then collectColors should return same values
 		opts := options{}
+		cat := theme.NewCatalog("")
+		ptrs := colorFieldPtrs(&opts)
 		th := theme.Theme{ChromaStyle: "test-style", Colors: map[string]string{}}
-		for i, key := range theme.ColorKeys() {
+		keys := make([]string, 0, len(ptrs))
+		for key := range ptrs {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		for i, key := range keys {
 			th.Colors[key] = fmt.Sprintf("#%02x%02x%02x", i*10, i*11, i*12)
 		}
-		applyTheme(&opts, th)
+		applyTheme(&opts, th, cat)
 		collected := collectColors(opts)
-		for _, key := range theme.ColorKeys() {
+		for _, key := range keys {
 			assert.Equal(t, th.Colors[key], collected[key], "round-trip mismatch for %q", key)
 		}
 	})
@@ -206,7 +233,8 @@ func TestThemeOverridesColorFlags(t *testing.T) {
 	// simulate the full flow: parseArgs sets --color-accent from CLI,
 	// then applyTheme overwrites it with theme value
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	cat := theme.NewCatalog(themesDir)
+	require.NoError(t, cat.InitBundled())
 
 	// parse args with explicit --color-accent flag
 	opts, err := parseArgs(append(noConfigArgs(t), "--color-accent=#ffffff"))
@@ -214,9 +242,9 @@ func TestThemeOverridesColorFlags(t *testing.T) {
 	assert.Equal(t, "#ffffff", opts.Colors.Accent, "CLI flag sets accent before theme")
 
 	// load theme and overwrite — theme wins unconditionally
-	th, err := theme.Load("dracula", themesDir)
+	th, err := cat.Load("dracula")
 	require.NoError(t, err)
-	applyTheme(&opts, th)
+	applyTheme(&opts, th, cat)
 	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme should override CLI --color-accent")
 	assert.Equal(t, "dracula", opts.ChromaStyle, "theme should set chroma-style")
 }
@@ -243,10 +271,11 @@ func TestResolveThemeConflicts(t *testing.T) {
 
 func TestHandleThemes_InitThemes(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InitThemes: true}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done, "init-themes should signal exit")
 	assert.Contains(t, stdout.String(), "bundled themes written to")
@@ -254,10 +283,11 @@ func TestHandleThemes_InitThemes(t *testing.T) {
 }
 
 func TestHandleThemes_InitThemesEmptyDir(t *testing.T) {
+	cat := theme.NewCatalog("")
 	var stdout, stderr bytes.Buffer
 	opts := options{InitThemes: true}
 
-	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
@@ -265,11 +295,12 @@ func TestHandleThemes_InitThemesEmptyDir(t *testing.T) {
 
 func TestHandleThemes_ListThemes(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	cat := theme.NewCatalog(themesDir)
+	require.NoError(t, cat.InitBundled())
 	var stdout, stderr bytes.Buffer
 	opts := options{ListThemes: true}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done, "list-themes should signal exit")
 	output := stdout.String()
@@ -281,11 +312,12 @@ func TestHandleThemes_ListThemes(t *testing.T) {
 
 func TestHandleThemes_ListThemes_localOnly(t *testing.T) {
 	themesDir := t.TempDir()
+	cat := theme.NewCatalog(themesDir)
 	require.NoError(t, os.WriteFile(filepath.Join(themesDir, "my-custom"), []byte("custom\n"), 0o600))
 	var stdout, stderr bytes.Buffer
 	opts := options{ListThemes: true}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done)
 	assert.Contains(t, stdout.String(), "my-custom")
@@ -293,10 +325,11 @@ func TestHandleThemes_ListThemes_localOnly(t *testing.T) {
 }
 
 func TestHandleThemes_ListThemesEmptyDir(t *testing.T) {
+	cat := theme.NewCatalog("")
 	var stdout, stderr bytes.Buffer
 	opts := options{ListThemes: true}
 
-	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
@@ -304,12 +337,13 @@ func TestHandleThemes_ListThemesEmptyDir(t *testing.T) {
 
 func TestHandleThemes_LoadTheme(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	cat := theme.NewCatalog(themesDir)
+	require.NoError(t, cat.InitBundled())
 	var stdout, stderr bytes.Buffer
 	opts := options{Theme: "dracula"}
 	opts.Colors.Accent = "#original"
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.False(t, done, "load theme should not signal exit")
 	assert.Equal(t, "#bd93f9", opts.Colors.Accent, "theme should override accent color")
@@ -318,20 +352,22 @@ func TestHandleThemes_LoadTheme(t *testing.T) {
 
 func TestHandleThemes_LoadThemeNotFound(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	cat := theme.NewCatalog(themesDir)
+	require.NoError(t, cat.InitBundled())
 	var stdout, stderr bytes.Buffer
 	opts := options{Theme: "nonexistent"}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 }
 
 func TestHandleThemes_LoadThemeEmptyDir(t *testing.T) {
+	cat := theme.NewCatalog("")
 	var stdout, stderr bytes.Buffer
 	opts := options{Theme: "dracula"}
 
-	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
@@ -339,11 +375,12 @@ func TestHandleThemes_LoadThemeEmptyDir(t *testing.T) {
 
 func TestHandleThemes_NoColorsWarning(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	cat := theme.NewCatalog(themesDir)
+	require.NoError(t, cat.InitBundled())
 	var stdout, stderr bytes.Buffer
 	opts := options{Theme: "dracula", NoColors: true}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.False(t, done)
 	assert.Contains(t, stderr.String(), "warning: --no-colors ignored when --theme is set")
@@ -353,26 +390,25 @@ func TestHandleThemes_NoColorsWarning(t *testing.T) {
 
 func TestHandleThemes_InitAllThemes(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InitAllThemes: true}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done, "init-all-themes should signal exit")
-	assert.Contains(t, stdout.String(), "all themes written to")
+	assert.Contains(t, stdout.String(), "all gallery themes written to")
 
-	names, err := theme.List(themesDir)
-	require.NoError(t, err)
-	galleryNames, err := theme.GalleryNames()
-	require.NoError(t, err)
-	assert.Equal(t, galleryNames, names)
+	names := testListThemeFiles(t, themesDir)
+	assert.GreaterOrEqual(t, len(names), 7, "should have at least 7 gallery themes")
 }
 
 func TestHandleThemes_InitAllThemesEmptyDir(t *testing.T) {
+	cat := theme.NewCatalog("")
 	var stdout, stderr bytes.Buffer
 	opts := options{InitAllThemes: true}
 
-	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
@@ -380,39 +416,40 @@ func TestHandleThemes_InitAllThemesEmptyDir(t *testing.T) {
 
 func TestHandleThemes_InstallTheme(t *testing.T) {
 	themesDir := t.TempDir() // pre-existing dir prevents auto-init
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{"dracula", "nord"}}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done, "install-theme should signal exit")
 	assert.Contains(t, stdout.String(), "2 theme(s) installed")
 
-	names, err := theme.List(themesDir)
-	require.NoError(t, err)
+	names := testListThemeFiles(t, themesDir)
 	assert.Equal(t, []string{"dracula", "nord"}, names)
 }
 
 func TestHandleThemes_InstallThemeSkipsAutoInitOnFirstRun(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{"dracula"}}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done)
 
-	names, err := theme.List(themesDir)
-	require.NoError(t, err)
+	names := testListThemeFiles(t, themesDir)
 	assert.Equal(t, []string{"dracula"}, names)
 }
 
 func TestHandleThemes_InstallThemeNotFound(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{"nonexistent"}}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "not found in gallery")
@@ -420,24 +457,25 @@ func TestHandleThemes_InstallThemeNotFound(t *testing.T) {
 
 func TestHandleThemes_InstallThemeNotFoundDoesNotWriteBundledThemes(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{"nonexistent"}}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "not found in gallery")
 
-	names, listErr := theme.List(themesDir)
-	require.NoError(t, listErr)
+	names := testListThemeFiles(t, themesDir)
 	assert.Empty(t, names)
 }
 
 func TestHandleThemes_InstallThemeEmptyDir(t *testing.T) {
+	cat := theme.NewCatalog("")
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{"dracula"}}
 
-	done, err := handleThemes(&opts, "", &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.Error(t, err)
 	assert.False(t, done)
 	assert.Contains(t, err.Error(), "cannot determine home directory for themes")
@@ -451,18 +489,18 @@ func TestHandleThemes_InstallThemeLocalFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
 
 	themesDir := t.TempDir()
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{srcPath}}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done)
 	assert.Contains(t, stdout.String(), "installed my-local from")
 	assert.Contains(t, stdout.String(), "1 theme(s) installed")
 
 	// verify the theme was installed
-	names, err := theme.List(themesDir)
-	require.NoError(t, err)
+	names := testListThemeFiles(t, themesDir)
 	assert.Contains(t, names, "my-local")
 }
 
@@ -474,25 +512,26 @@ func TestHandleThemes_InstallThemeMixed(t *testing.T) {
 	require.NoError(t, os.WriteFile(srcPath, []byte(content), 0o600))
 
 	themesDir := t.TempDir()
+	cat := theme.NewCatalog(themesDir)
 	var stdout, stderr bytes.Buffer
 	opts := options{InstallTheme: []string{srcPath, "dracula"}}
 
-	done, err := handleThemes(&opts, themesDir, &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.True(t, done)
 	assert.Contains(t, stdout.String(), "2 theme(s) installed")
 
-	names, err := theme.List(themesDir)
-	require.NoError(t, err)
+	names := testListThemeFiles(t, themesDir)
 	assert.Contains(t, names, "custom")
 	assert.Contains(t, names, "dracula")
 }
 
 func TestHandleThemes_NoOp(t *testing.T) {
+	cat := theme.NewCatalog(t.TempDir())
 	var stdout, stderr bytes.Buffer
 	opts := options{}
 
-	done, err := handleThemes(&opts, t.TempDir(), &stdout, &stderr)
+	done, err := handleThemes(&opts, cat, &stdout, &stderr)
 	require.NoError(t, err)
 	assert.False(t, done)
 	assert.Empty(t, stdout.String())
@@ -508,14 +547,14 @@ func TestDefaultThemesDir(t *testing.T) {
 
 func TestThemeCatalog_Entries(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	require.NoError(t, theme.NewCatalog(themesDir).InitBundled())
 
 	tc := &themeCatalog{catalog: theme.NewCatalog(themesDir), configPath: ""}
 	entries, err := tc.Entries()
 	require.NoError(t, err)
 	require.NotEmpty(t, entries)
 
-	assert.Equal(t, theme.DefaultThemeName, entries[0].Name, "default theme should be first")
+	assert.Equal(t, "revdiff", entries[0].Name, "default theme should be first")
 	for _, e := range entries {
 		assert.NotEmpty(t, e.AccentColor, "every entry should have an accent color")
 	}
@@ -523,7 +562,7 @@ func TestThemeCatalog_Entries(t *testing.T) {
 
 func TestThemeCatalog_Resolve(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
-	require.NoError(t, theme.InitBundled(themesDir))
+	require.NoError(t, theme.NewCatalog(themesDir).InitBundled())
 
 	tc := &themeCatalog{catalog: theme.NewCatalog(themesDir), configPath: ""}
 

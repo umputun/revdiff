@@ -55,7 +55,9 @@ func main() {
 		os.Exit(0)
 	}
 
-	done, thErr := handleThemes(&opts, defaultThemesDir(), os.Stdout, os.Stderr)
+	themesDir := defaultThemesDir()
+	cat := theme.NewCatalog(themesDir)
+	done, thErr := handleThemes(&opts, cat, os.Stdout, os.Stderr)
 	if thErr != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", thErr)
 		os.Exit(1)
@@ -66,7 +68,8 @@ func main() {
 
 	if opts.DumpTheme {
 		colors := collectColors(opts)
-		if err := theme.Dump(theme.Theme{Colors: colors, ChromaStyle: opts.ChromaStyle}, os.Stdout); err != nil {
+		th := theme.Theme{Colors: colors, ChromaStyle: opts.ChromaStyle}
+		if err := th.Dump(os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
@@ -187,7 +190,7 @@ func run(opts options) error {
 		TreeWidthRatio:   opts.TreeWidth,
 		Only:             opts.Only,
 		WorkDir:          workDir,
-		ActiveThemeName:  theme.ActiveName(opts.Theme),
+		ActiveThemeName:  theme.NewCatalog("").ActiveName(opts.Theme),
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},

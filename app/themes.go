@@ -28,11 +28,13 @@ func defaultThemesDir() string {
 // handleThemes processes theme-related flags: auto-init on first run, --init-themes, --init-all-themes,
 // --install-theme, --list-themes, and --theme.
 // returns (true, nil) when the caller should exit successfully, (false, error) on failure, (false, nil) to continue.
-func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bool, error) {
+func handleThemes(opts *options, cat *theme.Catalog, stdout, stderr io.Writer) (bool, error) {
+	themesDir := cat.Dir()
+
 	// auto-init bundled themes on first run (silent, no error on failure)
 	if themesDir != "" && len(opts.InstallTheme) == 0 {
 		if _, err := os.Stat(themesDir); os.IsNotExist(err) {
-			_ = theme.InitBundled(themesDir)
+			_ = cat.InitBundled()
 		}
 	}
 
@@ -40,7 +42,7 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 		if themesDir == "" {
 			return false, errors.New("cannot determine home directory for themes")
 		}
-		if err := theme.InitBundled(themesDir); err != nil {
+		if err := cat.InitBundled(); err != nil {
 			return false, fmt.Errorf("init themes: %w", err)
 		}
 		_, _ = fmt.Fprintf(stdout, "bundled themes written to %s\n", themesDir)
@@ -51,11 +53,10 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 		if themesDir == "" {
 			return false, errors.New("cannot determine home directory for themes")
 		}
-		if err := theme.InitAll(themesDir); err != nil {
+		if err := cat.InitAll(); err != nil {
 			return false, fmt.Errorf("init all themes: %w", err)
 		}
-		galleryNames, _ := theme.GalleryNames()
-		_, _ = fmt.Fprintf(stdout, "all themes written to %s (%d themes)\n", themesDir, len(galleryNames))
+		_, _ = fmt.Fprintf(stdout, "all gallery themes written to %s\n", themesDir)
 		return true, nil
 	}
 
@@ -63,7 +64,7 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 		if themesDir == "" {
 			return false, errors.New("cannot determine home directory for themes")
 		}
-		if err := theme.Install(opts.InstallTheme, themesDir, highlight.IsValidStyle, stdout); err != nil {
+		if err := cat.Install(opts.InstallTheme, highlight.IsValidStyle, stdout); err != nil {
 			return false, fmt.Errorf("install theme: %w", err)
 		}
 		return true, nil
@@ -73,7 +74,7 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 		if themesDir == "" {
 			return false, errors.New("cannot determine home directory for themes")
 		}
-		if err := theme.PrintList(themesDir, stdout); err != nil {
+		if err := cat.PrintList(stdout); err != nil {
 			return false, fmt.Errorf("list themes: %w", err)
 		}
 		return true, nil
@@ -92,11 +93,11 @@ func handleThemes(opts *options, themesDir string, stdout, stderr io.Writer) (bo
 	if themesDir == "" {
 		return false, errors.New("cannot determine home directory for themes")
 	}
-	th, err := theme.Load(opts.Theme, themesDir)
+	th, err := cat.Load(opts.Theme)
 	if err != nil {
 		return false, fmt.Errorf("load theme: %w", err)
 	}
-	applyTheme(opts, th)
+	applyTheme(opts, th, cat)
 	return false, nil
 }
 
@@ -141,9 +142,9 @@ func colorFieldPtrs(opts *options) map[string]*string {
 // applyTheme applies theme colors and chroma-style to opts, overwriting all matching fields unconditionally.
 // optional color keys absent from the theme are cleared to empty (terminal background) so that
 // prior config/env values don't leak through when a theme intentionally omits them.
-func applyTheme(opts *options, th theme.Theme) {
+func applyTheme(opts *options, th theme.Theme, cat *theme.Catalog) {
 	opts.ChromaStyle = th.ChromaStyle
-	optional := theme.OptionalColorKeys()
+	optional := cat.OptionalColorKeys()
 	for key, ptr := range colorFieldPtrs(opts) {
 		if v, ok := th.Colors[key]; ok {
 			*ptr = v

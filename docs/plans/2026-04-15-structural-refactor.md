@@ -587,56 +587,73 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 
 **Discovered during review:** `app/theme` exports 16+ standalone functions with no struct ownership. 6 have zero external callers, 4 are test-only. Exported functions called only from tests is a code smell — tests outside the package should use public API, tests inside the package can use unexported symbols.
 
-**Files:**
-- Modify: `app/theme/theme.go`
-- Modify: `app/theme/bundled.go`
-- Modify: `app/theme/catalog.go`
-- Modify: `app/theme/theme_test.go`
-- Modify: `app/theme/catalog_test.go`
-- Modify: `app/themes.go` (callers in `package main`)
-- Modify: `app/main.go` (callers in `package main`)
+**File ownership after refactor:**
+- `app/theme/theme.go` — `Theme` struct, `Theme.Dump`, `Theme.isCanonicalKey`, `Theme.clone`, package-level vars (`colorKeys`, `optionalColorKeys`)
+- `app/theme/catalog.go` — `Catalog` struct, `NewCatalog`, all `Catalog` public and private methods (discovery, loading, installation, gallery access, helpers)
+- `app/theme/bundled.go` — embedded gallery FS access (`galleryLoad` sync.Once cache, `galleryDir` const)
+- `app/theme/theme_test.go` — tests for `Theme` methods
+- `app/theme/catalog_test.go` — tests for `Catalog` methods
+- `app/themes.go` — callers updated to use `Catalog` methods
+- `app/main.go` — callers updated to use `Catalog` methods
 
-**Step 1 — Unexport dead symbols (zero external production callers):**
+All standalone functions currently in `theme.go` that become `Catalog` methods move to `catalog.go`. `theme.go` keeps only `Theme`-owned code.
 
-- [ ] unexport `ListOrdered` → `listOrdered` (wrapped by `Catalog.Entries`)
-- [ ] unexport `ThemeInfo` → `themeInfo`, add re-export via `Catalog` if needed by UI contract (or define a UI-facing type)
-- [ ] unexport `InitNames` → `initNames` (only used internally by `Install`)
-- [ ] unexport `Gallery` → `gallery` (only used internally)
-- [ ] unexport `GalleryTheme` → `galleryTheme` (only used internally by `Install`)
-- [ ] unexport `Theme.Clone` → `Theme.clone` (only used in `bundled.go`)
+**Principle: zero standalone functions.** All logic lives as methods on `Theme` or `Catalog`. The struct is for logical grouping, not just state — functions called from methods must be methods, and utility functions related to a struct must be methods.
 
-**Step 2 — Eliminate test-only exports:**
+**Step 1 — Move everything into `Theme` methods:**
 
-Test-only exported functions indicate the tests are using internals through the public API instead of testing from inside the package. Move these tests to `package theme` (internal) or restructure so the public API covers the test needs.
+`Theme` owns serialization, validation, and its own metadata queries.
 
-- [ ] `Parse` — used in `themes_test.go` roundtrip test. Move that test into `app/theme/theme_test.go` or make the roundtrip test use `Load`/`Dump` instead. Then unexport `Parse` → `parse`
-- [ ] `List` — used in `themes_test.go` to verify installs. Replace with `Catalog.Entries` in those tests or move the tests into `app/theme/`. Then unexport `List` → `list`
-- [ ] `ColorKeys` — used in `themes_test.go` for validation. Move those tests into `app/theme/` or pass keys through `Catalog`. Then unexport `ColorKeys` → `colorKeysList` (avoids collision with `colorKeys` var)
-- [ ] `DefaultThemeName` — used in `themes_test.go`. Inline the string or move the test. Then unexport → `defaultThemeName`
+- [x] `Dump(Theme, io.Writer)` → `Theme.Dump(io.Writer)` method
+- [x] `isCanonicalKey()` → `Theme.isCanonicalKey()` private method (called from `Dump`)
+- [x] `Clone()` stays as `Theme.clone()` private method (called from `cloneGallery` in `bundled.go`)
 
-**Step 3 — Move standalone functions to `Catalog` methods:**
+**Step 2 — Move everything into `Catalog` methods:**
 
-CLI-command functions that operate on a themes directory should become methods on `Catalog` (which already holds `themesDir`):
+`Catalog` owns all directory-aware operations, discovery, loading, installation, and gallery access. No standalone functions remain.
 
-- [ ] `InitBundled(themesDir)` → `Catalog.InitBundled()`
-- [ ] `InitAll(themesDir)` → `Catalog.InitAll()`
-- [ ] `Install(args, themesDir, ...)` → `Catalog.Install(args, ...)`
-- [ ] `PrintList(themesDir, w)` → `Catalog.PrintList(w)`
-- [ ] `GalleryNames()` → `Catalog.GalleryNames()` (or unexport if only used internally after restructuring)
-- [ ] `Load(name, themesDir)` → `Catalog.Load(name)` (if not already covered by `Resolve`)
-- [ ] update all callers in `app/themes.go` and `app/main.go`
+- [x] `parse(io.Reader)` → `Catalog.parse(io.Reader)` private method (called from `Load`, `installFile`, `loadGallery`)
+- [x] `validateHexColor()` → `Catalog.validateHexColor()` private method (called from `parse`)
+- [x] `Load(name, themesDir)` → `Catalog.Load(name)` public method
+- [x] `List(themesDir)` → `Catalog.list()` private method
+- [x] `ListOrdered(themesDir)` → `Catalog.Entries()` public method
+- [x] `InitBundled(themesDir)` → `Catalog.InitBundled()` public method
+- [x] `InitAll(themesDir)` → `Catalog.InitAll()` public method
+- [x] `InitNames(themesDir, names)` → `Catalog.initNames(names)` private method
+- [x] `Install(args, themesDir, ...)` → `Catalog.Install(args, validateChroma, stdout)` public method
+- [x] `installFile(themesDir, ...)` → `Catalog.installFile(filePath, validateChroma)` private method
+- [x] `PrintList(themesDir, w)` → `Catalog.PrintList(w)` public method
+- [x] `initThemes(themesDir, ...)` → `Catalog.initThemes(gallery, filter)` private method
+- [x] `writeThemeFile(themesDir, ...)` → `Catalog.writeThemeFile(name, th)` private method
+- [x] `isLocalPath()` → `Catalog.isLocalPath()` private method (called from `Install`)
+- [x] `Gallery()` → `Catalog.gallery()` private method (loads embedded themes)
+- [x] `GalleryTheme(name)` → `Catalog.galleryTheme(name)` private method
+- [x] `GalleryNames()` → `Catalog.galleryNames()` private method
+- [x] `loadGallery()` → `Catalog.loadGallery()` private method
+- [x] `cloneGallery()` → `Catalog.cloneGallery()` private method
+- [x] `bundledNames()` → `Catalog.bundledNames()` private method
+- [x] `ActiveName(name)` → `Catalog.ActiveName(name)` public method
+- [x] `OptionalColorKeys()` → `Catalog.OptionalColorKeys()` public method
+- [x] `ColorKeys()` → `Catalog.colorKeys()` private method (test-only export eliminated)
+- [x] update all callers in `app/themes.go` and `app/main.go`
 
-**Step 4 — Keep only genuinely package-level exports:**
+**Step 3 — Unexport remaining dead symbols:**
 
-After restructuring, the public API should be approximately:
-- `Theme` struct + `Dump` (used by `--dump-theme` in `main.go`)
-- `Catalog` struct + `NewCatalog` + methods for discovery/install/list
-- `OptionalColorKeys` (used by `themes.go` color mapping)
-- `ActiveName` (trivial helper, used by `main.go`)
+- [x] `ThemeInfo` → `themeInfo` (surfaced through `Catalog.Entries` return; if UI contract needs it, define a UI-facing type in `app/ui/model.go`)
+- [x] `DefaultThemeName` → `defaultThemeName` (used only internally by `ActiveName`)
+- [x] verify zero exported standalone functions remain in the package
 
-- [ ] verify final exported symbol count is ≤10
-- [ ] run `go test ./...`
-- [ ] run `make lint`
+**Step 4 — Verify final public API:**
+
+After restructuring, the exported surface is:
+- `Theme` struct + `Theme.Dump(io.Writer)` method
+- `Catalog` struct + `NewCatalog(themesDir)`
+- `Catalog` public methods: `Entries`, `Load`, `Resolve`, `InitBundled`, `InitAll`, `Install`, `PrintList`, `ActiveName`, `OptionalColorKeys`
+- zero standalone functions
+
+- [x] verify zero standalone functions in the package (only methods and package-level vars/consts)
+- [x] run `go test ./...`
+- [x] run `make lint`
 
 ### Task 14: Documentation updates
 
