@@ -29,13 +29,36 @@ func TestDetectVCS_Hg(t *testing.T) {
 	assert.Equal(t, dir, root)
 }
 
-func TestDetectVCS_GitTakesPrecedence(t *testing.T) {
+func TestDetectVCS_Jj(t *testing.T) {
+	dir := t.TempDir()
+	err := os.Mkdir(filepath.Join(dir, ".jj"), 0o750)
+	require.NoError(t, err)
+
+	vcs, root := DetectVCS(dir)
+	assert.Equal(t, VCSJJ, vcs)
+	assert.Equal(t, dir, root)
+}
+
+func TestDetectVCS_GitTakesPrecedenceOverHg(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o750))
 	require.NoError(t, os.Mkdir(filepath.Join(dir, ".hg"), 0o750))
 
 	vcs, root := DetectVCS(dir)
 	assert.Equal(t, VCSGit, vcs)
+	assert.Equal(t, dir, root)
+}
+
+// TestDetectVCS_JjTakesPrecedenceOverGit covers colocated jj+git repos.
+// Jujutsu often coexists with .git (colocated mode); treat it as jj to avoid
+// jj-unsafe git diff operations and to surface the actual working-copy model.
+func TestDetectVCS_JjTakesPrecedenceOverGit(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".jj"), 0o750))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o750))
+
+	vcs, root := DetectVCS(dir)
+	assert.Equal(t, VCSJJ, vcs)
 	assert.Equal(t, dir, root)
 }
 

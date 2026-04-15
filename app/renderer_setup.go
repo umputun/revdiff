@@ -43,6 +43,16 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 			return vcsSetup{}, err
 		}
 		return vcsSetup{renderer: r, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles}, nil
+	case diff.VCSJJ:
+		if opts.Staged {
+			fmt.Fprintln(os.Stderr, "warning: --staged ignored in jujutsu repository (no staging area)")
+		}
+		jj := diff.NewJj(vcsRoot)
+		r, workDir, err := makeJjRenderer(jj, opts, vcsRoot)
+		if err != nil {
+			return vcsSetup{}, err
+		}
+		return vcsSetup{renderer: r, workDir: workDir, blamer: jj, untrackedFn: jj.UntrackedFiles}, nil
 	default:
 		r, workDir, err := makeNoVCSRenderer(opts.Only, cwd)
 		if err != nil {
@@ -82,6 +92,21 @@ func makeHgRenderer(h *diff.Hg, opts options, repoRoot string) (ui.Renderer, str
 	return wrapFilters(r, opts), repoRoot, nil
 }
 
+// makeJjRenderer selects the appropriate jujutsu renderer based on flags.
+// reuses the provided *Jj instance as the default renderer to avoid double allocation.
+func makeJjRenderer(j *diff.Jj, opts options, repoRoot string) (ui.Renderer, string, error) { //nolint:unparam // error kept for consistency with makeGitRenderer/makeHgRenderer
+	var r ui.Renderer
+	switch {
+	case opts.AllFiles:
+		r = diff.NewJjDirectoryReader(repoRoot)
+	case len(opts.Only) > 0:
+		r = diff.NewFallbackRenderer(j, opts.Only, repoRoot)
+	default:
+		r = j
+	}
+	return wrapFilters(r, opts), repoRoot, nil
+}
+
 // wrapFilters applies include/exclude filters to a renderer based on opts.
 func wrapFilters(r ui.Renderer, opts options) ui.Renderer {
 	if len(opts.Include) > 0 {
@@ -98,7 +123,7 @@ func wrapFilters(r ui.Renderer, opts options) ui.Renderer {
 // --exclude is a no-op here (FileReader only returns the --only files).
 func makeNoVCSRenderer(only []string, cwd string) (ui.Renderer, string, error) {
 	if len(only) == 0 {
-		return nil, "", errors.New("no git or mercurial repository found (use --only to review standalone files)")
+		return nil, "", errors.New("no git, mercurial, or jujutsu repository found (use --only to review standalone files)")
 	}
 	return diff.NewFileReader(only, cwd), cwd, nil
 }

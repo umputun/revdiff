@@ -108,7 +108,7 @@
         <p>Complete reference for revdiff usage, configuration, themes, keybindings, the pi package, the Claude Code plugin, the Codex plugin, and the OpenCode integration.</p>
 
         <h2 id="requirements">Requirements</h2>
-        <p><code>git</code> or <code>hg</code> (Mercurial) is used to generate diffs. VCS is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review.</p>
+        <p><code>git</code>, <code>hg</code> (Mercurial), or <code>jj</code> (Jujutsu) is used to generate diffs. VCS is optional when using <code>--only</code> for standalone file review or <code>--stdin</code> for scratch-buffer review. In colocated <code>git</code>+<code>jj</code> repositories, revdiff uses the <code>jj</code> working-copy model.</p>
 
         <h2 id="installation">Installation</h2>
         <h3>Homebrew (macOS/Linux)</h3>
@@ -203,8 +203,8 @@ printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
 some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
 
         <h2 id="all-files">All-files mode</h2>
-        <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all git-tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
-        <p><code>--all-files</code> requires a git repository (uses <code>git ls-files</code>) and is mutually exclusive with refs, <code>--staged</code>, and <code>--only</code>. Combine with <code>--include</code> (or <code>-I</code>) to narrow to specific paths and <code>--exclude</code> (or <code>-X</code>) to filter out unwanted paths.</p>
+        <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
+        <p><code>--all-files</code> requires a git or jj repository (uses <code>git ls-files</code> or <code>jj file list</code>; Mercurial is not supported) and is mutually exclusive with refs, <code>--staged</code>, and <code>--only</code>. Combine with <code>--include</code> (or <code>-I</code>) to narrow to specific paths and <code>--exclude</code> (or <code>-X</code>) to filter out unwanted paths.</p>
         <p><code>--include</code> and <code>--exclude</code> both use prefix matching. They are composable: include narrows first, then exclude removes from the included set. Both work in <code>--all-files</code> and normal diff modes.</p>
         <div class="code-block"><code>revdiff --all-files --include src
 revdiff --all-files --include src --exclude src/vendor
@@ -340,7 +340,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--init-themes</code></td><td>Write bundled theme files to themes dir and exit</td><td></td></tr>
                 <tr><td><code>--init-all-themes</code></td><td>Write all gallery themes (bundled + community) to themes dir and exit</td><td></td></tr>
                 <tr><td><code>--install-theme</code></td><td>Install theme(s) from gallery or local file (repeatable)</td><td></td></tr>
-                <tr><td><code>-A, --all-files</code></td><td>Browse all git-tracked files</td><td><code>false</code></td></tr>
+                <tr><td><code>-A, --all-files</code></td><td>Browse all tracked files (git and jj only)</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
                 <tr><td><code>-I, --include</code></td><td>Include only files matching prefix (repeatable)</td><td></td></tr>

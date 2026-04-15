@@ -14,7 +14,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Project Structure
 - `app/` - composition root (`package main`), split by concern: `main.go` (entrypoint + `run()`), `config.go` (options/parsing), `stdin.go` (stdin mode), `renderer_setup.go` (VCS wiring), `themes.go` (theme CLI + adapter), `history_save.go` (session save)
-- `app/diff/` - VCS interaction (git + hg), unified diff parsing, VCS detection, Mercurial support
+- `app/diff/` - VCS interaction (git + hg + jj), unified diff parsing, VCS detection, Mercurial + Jujutsu support
 - `app/ui/` - bubbletea TUI package. Single `Model` struct with state grouped into sub-structs (`cfg`, `layout`, `file`, `modes`, `nav`, `search`, `annot`), methods split across files by concern (~500 lines each). Each source file has a matching `_test.go`. See `app/ui/doc.go` for package docs, `docs/ARCHITECTURE.md` for file-by-file breakdown. Does not import `app/theme` or `app/fsutil` — theme operations go through the `ThemeCatalog` interface
 - `app/ui/style/` - color/style resolution: hex-to-ANSI, lipgloss styles, SGR tracking, HSL math. Types: `Resolver`, `Renderer`, `SGR`
 - `app/ui/sidepane/` - file tree + markdown TOC components with cursor/offset management
@@ -78,7 +78,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Highlighted lines are pre-computed once per file load, stored parallel to `diffLines`
 - `DiffLine.Content` has no `+`/`-` prefix - prefix is re-added at render time
 - Tab replacement happens at render time in `renderDiffLine`, not in diff parsing
-- `setupVCSRenderer()` (in `renderer_setup.go`) detects VCS via `diff.DetectVCS()` (walks up looking for `.git`/`.hg`); if no VCS is found and `--only` is set, uses `FileReader` for standalone file review. `--stdin` skips VCS lookup entirely, validates non-TTY stdin, reads payload before starting Bubble Tea, and reopens `/dev/tty` for interactive key input. `--all-files` is git-only (not supported in hg repos).
+- `setupVCSRenderer()` (in `renderer_setup.go`) detects VCS via `diff.DetectVCS()` (walks up looking for `.jj`, `.git`, `.hg` — in that precedence order; `.jj` wins over `.git` in colocated repos); if no VCS is found and `--only` is set, uses `FileReader` for standalone file review. `--stdin` skips VCS lookup entirely, validates non-TTY stdin, reads payload before starting Bubble Tea, and reopens `/dev/tty` for interactive key input. `--all-files` is supported for git and jj; not supported in hg.
 - `--all-files` mode uses `DirectoryReader` (git ls-files) to list all tracked files; `--include` wraps any renderer with `IncludeFilter` for prefix-based inclusion, `--exclude` wraps with `ExcludeFilter` for prefix-based exclusion (include narrows first, then exclude removes). `--include` is mutually exclusive with `--only`. `--all-files` is mutually exclusive with refs, `--staged`, and `--only`. `--stdin` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`.
 - `diff.readReaderAsContext()` is the shared parser for file-backed and stdin-backed context-only views. Preserve its behavior if you change binary detection, line-length handling, or line numbering.
 - Overlay popups managed by `overlay.Manager`. `Compose()` uses ANSI-aware compositing via `charmbracelet/x/ansi.Cut`. `HandleKey()` returns `Outcome` — Model switches on `OutcomeKind` for side effects (file jumps, theme apply/persist)

@@ -14,6 +14,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
 - Line numbers: side-by-side old/new line number gutter for diffs, single column for full-context files, toggle with `L`
 - Mercurial support: auto-detects hg repos, translates git-style refs (HEAD, HEAD~N) to Mercurial revsets
+- Jujutsu support: auto-detects jj repos (including colocated git+jj), translates git-style refs to jj revsets (`HEAD` → `@-`, `HEAD~N` → `@` plus N+1 dashes); `--all-files` supported
 - Blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
@@ -37,7 +38,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 
 ## Requirements
 
-- `git` or `hg` (used to generate diffs; optional when using `--only` or `--stdin`)
+- `git`, `hg`, or `jj` (used to generate diffs; optional when using `--only` or `--stdin`)
 
 ## Installation
 

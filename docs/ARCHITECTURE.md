@@ -42,7 +42,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 | `main.go` | `main()`, early-exit commands (version, dump-config, dump-keys), `run()` orchestration |
 | `config.go` | `options` struct, `parseArgs`, `dumpConfig`, `loadConfigFile`, config-path helpers |
 | `stdin.go` | stdin validation, `/dev/tty` reopen, stdin renderer prep |
-| `renderer_setup.go` | `DetectVCS` wiring, `setupVCSRenderer` (git/hg/no-VCS/all-files) |
+| `renderer_setup.go` | `DetectVCS` wiring, `setupVCSRenderer` (git/hg/jj/no-VCS/all-files) |
 | `themes.go` | theme CLI commands (`--init-themes`, `--install-theme`, `--list-themes`, `--theme`), `applyTheme()`, `themeCatalog` adapter (composes `theme.Catalog` + config persistence for `ui.ThemeCatalog` interface) |
 | `history_save.go` | `histReq` struct and `saveHistory` |
 
@@ -68,13 +68,14 @@ ModelConfig{
 
 Handles all interaction with version control systems and diff parsing.
 
-**VCS detection** (`vcs.go`): `DetectVCS()` walks up directory tree looking for `.git`/`.hg` markers, returns `VCSGit`, `VCSHg`, or `VCSNone`.
+**VCS detection** (`vcs.go`): `DetectVCS()` walks up directory tree looking for `.jj`/`.git`/`.hg` markers, returns `VCSJJ`, `VCSGit`, `VCSHg`, or `VCSNone`. `.jj` is checked before `.git` so colocated jj+git repositories resolve as jj (reads go through the jj working-copy model instead of bypassing it via git).
 
 **Renderer implementations** — all implement the `ui.Renderer` interface (`ChangedFiles()` + `FileDiff()`):
 - `Git` — runs `git diff`, parses unified diff output
 - `Hg` — runs `hg diff --git`, parses unified diff output
+- `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `jjSynthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
 - `FileReader` — reads standalone files as full-context (no VCS needed)
-- `DirectoryReader` — lists all tracked files via `git ls-files` (for `--all-files` mode)
+- `DirectoryReader` — lists all tracked files via a pluggable lister (`git ls-files` by default; `NewJjDirectoryReader` uses `jj file list`) for `--all-files` mode
 - `StdinReader` — reads from stdin as scratch buffer
 - `FallbackRenderer` — wraps a primary renderer with fallback for files not in diff
 - `ExcludeFilter` / `IncludeFilter` — decorators for prefix-based file filtering
@@ -84,7 +85,7 @@ Handles all interaction with version control systems and diff parsing.
 - `Change` — `ChangeAdd`, `ChangeRemove`, `ChangeContext`, or `ChangeDivider`
 - `OldNum` / `NewNum` — original and new line numbers (0 for non-applicable)
 
-**Blame** (`blame.go`, `hgblame.go`): `Blamer` interface provides `FileBlame()` returning `map[int]BlameLine` keyed by new line number.
+**Blame** (`blame.go`, `hgblame.go`, `jjblame.go`): `Blamer` interface provides `FileBlame()` returning `map[int]BlameLine` keyed by new line number. jj blame uses `jj file annotate -T <template>` with a tab-separated template.
 
 ### app/ui/ — TUI package
 

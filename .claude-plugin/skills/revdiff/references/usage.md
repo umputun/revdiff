@@ -16,7 +16,7 @@ revdiff main..feature  # same as above, git dot-dot syntax
 revdiff main...feature # changes since feature diverged from main
 revdiff --only=model.go              # review only files matching model.go
 revdiff --only=ui/model.go --only=README.md  # review specific files
-revdiff --all-files                  # browse all git-tracked files in a project
+revdiff --all-files                  # browse all tracked files (git or jj)
 revdiff --all-files --exclude vendor # browse all files, excluding vendor directory
 revdiff --include src                # include only src/ files
 revdiff --include src --exclude src/vendor  # include src/ but exclude src/vendor/
@@ -37,9 +37,9 @@ When reviewing a single markdown file in context-only mode (e.g., `revdiff --onl
 
 ## All-Files Mode
 
-Use `--all-files` (`-A`) to browse all git-tracked files, not just diffs. Turns revdiff into a general-purpose code annotation tool. All files shown in context-only mode with full annotation and syntax highlighting support.
+Use `--all-files` (`-A`) to browse all tracked files, not just diffs. Turns revdiff into a general-purpose code annotation tool. All files shown in context-only mode with full annotation and syntax highlighting support.
 
-- Requires a git repository (uses `git ls-files` for file discovery)
+- Requires a git or jj repository (uses `git ls-files` / `jj file list` for file discovery; Mercurial is not supported)
 - Mutually exclusive with refs, `--staged`, and `--only`
 - Combine with `--include` (`-I`) to narrow to specific paths and `--exclude` (`-X`) to filter out unwanted paths
 

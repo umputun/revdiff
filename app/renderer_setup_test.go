@@ -46,7 +46,7 @@ func TestMakeNoVCSRenderer_NoOnly(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, renderer)
 	assert.Empty(t, workDir)
-	assert.Contains(t, err.Error(), "no git or mercurial repository found")
+	assert.Contains(t, err.Error(), "no git, mercurial, or jujutsu repository found")
 }
 
 func TestMakeGitRenderer_AllFiles(t *testing.T) {
@@ -130,6 +130,56 @@ func TestMakeHgRenderer_WithInclude(t *testing.T) {
 	dir := t.TempDir()
 	h := diff.NewHg(dir)
 	renderer, workDir, err := makeHgRenderer(h, options{Include: []string{"src"}}, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.IncludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeJjRenderer_Default(t *testing.T) {
+	dir := t.TempDir()
+	j := diff.NewJj(dir)
+	renderer, workDir, err := makeJjRenderer(j, options{}, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.Jj{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeJjRenderer_WithOnly(t *testing.T) {
+	dir := t.TempDir()
+	j := diff.NewJj(dir)
+	renderer, workDir, err := makeJjRenderer(j, options{Only: []string{"file.go"}}, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.FallbackRenderer{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeJjRenderer_AllFiles(t *testing.T) {
+	dir := t.TempDir()
+	j := diff.NewJj(dir)
+	renderer, workDir, err := makeJjRenderer(j, options{AllFiles: true}, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.DirectoryReader{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeJjRenderer_WithExclude(t *testing.T) {
+	dir := t.TempDir()
+	j := diff.NewJj(dir)
+	renderer, workDir, err := makeJjRenderer(j, options{Exclude: []string{"vendor"}}, dir)
+	require.NoError(t, err)
+	require.NotNil(t, renderer)
+	assert.IsType(t, &diff.ExcludeFilter{}, renderer)
+	assert.Equal(t, dir, workDir)
+}
+
+func TestMakeJjRenderer_WithInclude(t *testing.T) {
+	dir := t.TempDir()
+	j := diff.NewJj(dir)
+	renderer, workDir, err := makeJjRenderer(j, options{Include: []string{"src"}}, dir)
 	require.NoError(t, err)
 	require.NotNil(t, renderer)
 	assert.IsType(t, &diff.IncludeFilter{}, renderer)
