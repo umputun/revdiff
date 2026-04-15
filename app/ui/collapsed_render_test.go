@@ -18,8 +18,8 @@ func TestModel_CollapsedRenderHidesRemovedLines(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed line", ChangeType: diff.ChangeRemove},
@@ -40,8 +40,8 @@ func TestModel_CollapsedRenderModifiedVsPureAdd(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},        // hunk 1: mixed
@@ -66,7 +66,7 @@ func TestModel_CollapsedRenderExpandedHunkShowsAllLines(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
+	m.modes.collapsed.enabled = true
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
@@ -74,7 +74,7 @@ func TestModel_CollapsedRenderExpandedHunkShowsAllLines(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	// expand the hunk at index 1
-	m.collapsed.expandedHunks = map[int]bool{1: true}
+	m.modes.collapsed.expandedHunks = map[int]bool{1: true}
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "removed", "removed line should be visible in expanded hunk")
@@ -90,8 +90,8 @@ func TestModel_CollapsedRenderAnnotationsOnRemovedLinesHidden(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.name = "a.go"
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
@@ -112,14 +112,14 @@ func TestModel_CollapsedRenderAnnotationsVisibleWhenHunkExpanded(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
+	m.modes.collapsed.enabled = true
 	m.file.name = "a.go"
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
-	m.collapsed.expandedHunks = map[int]bool{1: true}
+	m.modes.collapsed.expandedHunks = map[int]bool{1: true}
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "-", Comment: "annotation on removed"})
 
 	rendered := m.renderDiff()
@@ -128,8 +128,8 @@ func TestModel_CollapsedRenderAnnotationsVisibleWhenHunkExpanded(t *testing.T) {
 
 func TestModel_CollapsedRenderEmptyDiffLines(t *testing.T) {
 	m := testModel(nil, nil)
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = nil
 
 	rendered := m.renderDiff()
@@ -142,8 +142,8 @@ func TestModel_CollapsedRenderDividerOnlyLines(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = []diff.DiffLine{
 		{Content: "...", ChangeType: diff.ChangeDivider},
 		{Content: "~~~", ChangeType: diff.ChangeDivider},
@@ -160,8 +160,8 @@ func TestModel_CollapsedRenderAllRemovesShowsPlaceholder(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = []diff.DiffLine{
 		{OldNum: 1, Content: "old1", ChangeType: diff.ChangeRemove},
 		{OldNum: 2, Content: "old2", ChangeType: diff.ChangeRemove},
@@ -179,8 +179,8 @@ func TestModel_CollapsedRenderDeleteOnlyHunkInMixedFile(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // delete-only hunk
@@ -203,7 +203,7 @@ func TestModel_CollapsedRenderMultipleExpandedHunks(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
+	m.modes.collapsed.enabled = true
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove}, // hunk at 1
@@ -214,7 +214,7 @@ func TestModel_CollapsedRenderMultipleExpandedHunks(t *testing.T) {
 		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
 	}
 	// expand both hunks
-	m.collapsed.expandedHunks = map[int]bool{1: true, 4: true}
+	m.modes.collapsed.expandedHunks = map[int]bool{1: true, 4: true}
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "old1", "first expanded hunk should show removed line")
@@ -229,7 +229,7 @@ func TestModel_CollapsedRenderMixedExpandedAndCollapsedHunks(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
+	m.modes.collapsed.enabled = true
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove}, // hunk at 1
@@ -240,7 +240,7 @@ func TestModel_CollapsedRenderMixedExpandedAndCollapsedHunks(t *testing.T) {
 		{NewNum: 5, Content: "ctx3", ChangeType: diff.ChangeContext},
 	}
 	// expand only first hunk
-	m.collapsed.expandedHunks = map[int]bool{1: true}
+	m.modes.collapsed.expandedHunks = map[int]bool{1: true}
 
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "old1", "expanded hunk should show removed line")
@@ -254,11 +254,11 @@ func TestModel_CollapsedWrapAddLine(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.wrapMode = true
-	m.width = 50
-	m.treeWidth = 0
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.wrap = true
+	m.layout.width = 50
+	m.layout.treeWidth = 0
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
@@ -278,11 +278,11 @@ func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.wrapMode = true
-	m.width = 50
-	m.treeWidth = 0
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.wrap = true
+	m.layout.width = 50
+	m.layout.treeWidth = 0
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "this is a very long pure add line that should be wrapped at word boundaries for readability", ChangeType: diff.ChangeAdd},
@@ -301,11 +301,11 @@ func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = make(map[int]bool)
-		m.wrapMode = true
-		m.width = 15 // narrow width to force placeholder wrapping (wrapWidth=7, text ~17 chars)
-		m.treeWidth = 0
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = make(map[int]bool)
+		m.modes.wrap = true
+		m.layout.width = 15 // narrow width to force placeholder wrapping (wrapWidth=7, text ~17 chars)
+		m.layout.treeWidth = 0
 		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
 			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -324,11 +324,11 @@ func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = make(map[int]bool)
-		m.wrapMode = true
-		m.width = 80
-		m.treeWidth = 0
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = make(map[int]bool)
+		m.modes.wrap = true
+		m.layout.width = 80
+		m.layout.treeWidth = 0
 		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
 			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
@@ -346,11 +346,11 @@ func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = make(map[int]bool)
-		m.wrapMode = true
-		m.width = 80
-		m.treeWidth = 0
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = make(map[int]bool)
+		m.modes.wrap = true
+		m.layout.width = 80
+		m.layout.treeWidth = 0
 		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
 		}
@@ -367,11 +367,11 @@ func TestModel_CollapsedWrapShortLinesUnchanged(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.wrapMode = true
-	m.width = 120
-	m.treeWidth = 0
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.wrap = true
+	m.layout.width = 120
+	m.layout.treeWidth = 0
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
@@ -389,12 +389,12 @@ func TestModel_CollapsedWrapNoScrollX(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.wrapMode = true
-	m.scrollX = 10 // should be ignored in wrap mode
-	m.width = 50
-	m.treeWidth = 0
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.wrap = true
+	m.layout.scrollX = 10 // should be ignored in wrap mode
+	m.layout.width = 50
+	m.layout.treeWidth = 0
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "this is a long added line that needs wrapping at boundary", ChangeType: diff.ChangeAdd},
@@ -411,16 +411,16 @@ func TestModel_CollapsedWrapCursorOnFirstLine(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.wrapMode = true
-	m.width = 50
-	m.treeWidth = 0
-	m.focus = paneDiff
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.wrap = true
+	m.layout.width = 50
+	m.layout.treeWidth = 0
+	m.layout.focus = paneDiff
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "this is a very long line that will wrap into multiple visual rows when rendered", ChangeType: diff.ChangeAdd},
 	}
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 
 	rendered := m.renderDiff()
 	lines := strings.Split(rendered, "\n")
@@ -441,10 +441,10 @@ func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.wrapMode = true
-	m.width = 50
-	m.treeWidth = 0
+	m.modes.collapsed.enabled = true
+	m.modes.wrap = true
+	m.layout.width = 50
+	m.layout.treeWidth = 0
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "this is a very long removed line that should be wrapped when expanded", ChangeType: diff.ChangeRemove},
@@ -452,7 +452,7 @@ func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
 		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
 	// expand the hunk
-	m.collapsed.expandedHunks = map[int]bool{1: true}
+	m.modes.collapsed.expandedHunks = map[int]bool{1: true}
 
 	rendered := m.renderDiff()
 	// expanded hunk uses renderDiffLine which handles wrapping via renderWrappedDiffLine
@@ -463,10 +463,10 @@ func TestModel_CollapsedWrapExpandedHunkUsesStandardWrap(t *testing.T) {
 
 func TestModel_CollapsedRenderWithLineNumbers(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = true
+	m.modes.lineNumbers = true
 	m.file.lineNumWidth = 2
-	m.focus = paneDiff
-	m.collapsed.enabled = true
+	m.layout.focus = paneDiff
+	m.modes.collapsed.enabled = true
 	m.file.lines = []diff.DiffLine{
 		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 0, NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
@@ -485,8 +485,8 @@ func TestModel_CollapsedDeleteOnlyPlaceholderHidesAnnotations(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.name = "a.go"
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
@@ -501,7 +501,7 @@ func TestModel_CollapsedDeleteOnlyPlaceholderHidesAnnotations(t *testing.T) {
 	assert.NotContains(t, rendered, "note on deleted line", "annotation on placeholder should be hidden")
 
 	// expand hunk, annotation should appear
-	m.collapsed.expandedHunks[1] = true
+	m.modes.collapsed.expandedHunks[1] = true
 	rendered = m.renderDiff()
 	assert.Contains(t, rendered, "note on deleted line", "annotation should be visible when hunk is expanded")
 }
@@ -512,15 +512,15 @@ func TestModel_CollapsedExpandDeleteOnlyHunkWithDot(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove}, // delete-only hunk start
 		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},
 		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
 	}
-	m.diffCursor = 1 // on placeholder
+	m.nav.diffCursor = 1 // on placeholder
 
 	// verify placeholder is shown and content is hidden
 	rendered := m.renderDiff()
@@ -529,7 +529,7 @@ func TestModel_CollapsedExpandDeleteOnlyHunkWithDot(t *testing.T) {
 
 	// expand the hunk with '.'
 	m.toggleHunkExpansion()
-	assert.True(t, m.collapsed.expandedHunks[1], "hunk should be expanded")
+	assert.True(t, m.modes.collapsed.expandedHunks[1], "hunk should be expanded")
 
 	// after expansion, removed lines should be visible
 	rendered = m.renderDiff()
@@ -544,7 +544,7 @@ func TestModel_ExpandedModeUnchangedRegression(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.collapsed.enabled = false
+	m.modes.collapsed.enabled = false
 	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 		{OldNum: 2, Content: "old", ChangeType: diff.ChangeRemove},
@@ -572,16 +572,16 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 		m := testModel(nil, nil)
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.collapsed.enabled = true
+		m.modes.collapsed.enabled = true
 
-		m.diffCursor = 0
+		m.nav.diffCursor = 0
 		assert.Equal(t, 0, m.cursorViewportY(), "ctx1 at Y=0")
 
 		// cursor at idx 3 (add line), but removed lines at 1,2 are hidden, so Y=1
-		m.diffCursor = 3
+		m.nav.diffCursor = 3
 		assert.Equal(t, 1, m.cursorViewportY(), "add line should be at Y=1, removed lines skipped")
 
-		m.diffCursor = 4
+		m.nav.diffCursor = 4
 		assert.Equal(t, 2, m.cursorViewportY(), "ctx2 should be at Y=2, removed lines skipped")
 	})
 
@@ -598,10 +598,10 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 		m.file.lines = lines
 
 		// expanded mode (default) counts all lines
-		m.diffCursor = 3
+		m.nav.diffCursor = 3
 		assert.Equal(t, 3, m.cursorViewportY(), "expanded mode should count all lines including removes")
 
-		m.diffCursor = 4
+		m.nav.diffCursor = 4
 		assert.Equal(t, 4, m.cursorViewportY(), "expanded mode Y=4 for idx 4")
 	})
 
@@ -615,17 +615,17 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 		m := testModel(nil, nil)
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.collapsed.enabled = true
+		m.modes.collapsed.enabled = true
 
 		// add annotation on ctx1 (line 1, context type)
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"})
 
 		// cursor at idx 2 (add): ctx1(1 row) + annotation(1 row) = 2 preceding visual rows
-		m.diffCursor = 2
+		m.nav.diffCursor = 2
 		assert.Equal(t, 2, m.cursorViewportY(), "annotation on ctx1 adds a visual row")
 
 		// cursor at idx 3 (ctx2): ctx1(1) + annotation(1) + add(1) = 3
-		m.diffCursor = 3
+		m.nav.diffCursor = 3
 		assert.Equal(t, 3, m.cursorViewportY(), "ctx2 after annotated ctx1 and add line")
 	})
 
@@ -638,13 +638,13 @@ func TestModel_CursorViewportYCollapsedMode(t *testing.T) {
 		m := testModel(nil, nil)
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.collapsed.enabled = true
+		m.modes.collapsed.enabled = true
 
 		// annotation on the removed line - both line and annotation are hidden
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: string(diff.ChangeRemove), Comment: "old note"})
 
 		// cursor at idx 2 (add): only ctx1 visible before it, removed line+annotation skipped
-		m.diffCursor = 2
+		m.nav.diffCursor = 2
 		assert.Equal(t, 1, m.cursorViewportY(), "removed line and its annotation should not count")
 	})
 }
@@ -661,14 +661,14 @@ func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
 		m := testModel(nil, nil)
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = map[int]bool{1: true} // hunk starts at index 1
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = map[int]bool{1: true} // hunk starts at index 1
 
 		// all lines are now visible because the hunk is expanded
-		m.diffCursor = 3
+		m.nav.diffCursor = 3
 		assert.Equal(t, 3, m.cursorViewportY(), "expanded hunk: Y=3 counting all lines")
 
-		m.diffCursor = 4
+		m.nav.diffCursor = 4
 		assert.Equal(t, 4, m.cursorViewportY(), "expanded hunk: Y=4 for ctx2")
 	})
 
@@ -685,19 +685,19 @@ func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
 		m := testModel(nil, nil)
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = map[int]bool{1: true} // only hunk1 expanded
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = map[int]bool{1: true} // only hunk1 expanded
 
 		// hunk1 expanded: ctx1(0), old1(1), new1(2), ctx2(3) all visible
-		m.diffCursor = 3
+		m.nav.diffCursor = 3
 		assert.Equal(t, 3, m.cursorViewportY(), "hunk1 expanded: ctx2 at Y=3")
 
 		// hunk2 collapsed: old2 at idx 4 hidden, so idx 5 (new2) is at Y=4
-		m.diffCursor = 5
+		m.nav.diffCursor = 5
 		assert.Equal(t, 4, m.cursorViewportY(), "hunk2 collapsed: new2 at Y=4, old2 hidden")
 
 		// ctx3 at idx 6: Y=5
-		m.diffCursor = 6
+		m.nav.diffCursor = 6
 		assert.Equal(t, 5, m.cursorViewportY(), "ctx3 at Y=5")
 	})
 
@@ -710,14 +710,14 @@ func TestModel_CursorViewportYCollapsedExpandedHunks(t *testing.T) {
 		m := testModel(nil, nil)
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = map[int]bool{1: true}
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = map[int]bool{1: true}
 
 		// annotation on the removed line - visible because hunk is expanded
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: string(diff.ChangeRemove), Comment: "old note"})
 
 		// cursor at idx 2 (add): ctx1(1) + old1(1) + annotation(1) = 3
-		m.diffCursor = 2
+		m.nav.diffCursor = 2
 		assert.Equal(t, 3, m.cursorViewportY(), "expanded hunk: annotation on removed line is counted")
 	})
 }
@@ -730,18 +730,18 @@ func TestModel_StatusBarCollapsedIndicator(t *testing.T) {
 	m := testModel(nil, nil)
 	m.file.lines = lines
 	m.file.name = "a.go"
-	m.focus = paneDiff
-	m.width = 200
+	m.layout.focus = paneDiff
+	m.layout.width = 200
 
 	t.Run("collapsed indicator always present", func(t *testing.T) {
-		m.collapsed.enabled = false
+		m.modes.collapsed.enabled = false
 		status := m.statusBarText()
 		assert.Contains(t, status, "▼", "indicator always shown, muted when inactive")
 	})
 
 	t.Run("collapsed mode shows indicator", func(t *testing.T) {
-		m.collapsed.enabled = true
-		m.collapsed.expandedHunks = make(map[int]bool)
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = make(map[int]bool)
 		status := m.statusBarText()
 		assert.Contains(t, status, "▼")
 	})
@@ -757,11 +757,11 @@ func TestModel_StatusBarNoShortcutHints(t *testing.T) {
 	m := testModel(nil, nil)
 	m.file.lines = lines
 	m.file.name = "a.go"
-	m.focus = paneDiff
-	m.width = 200
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.diffCursor = 2
+	m.layout.focus = paneDiff
+	m.layout.width = 200
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.nav.diffCursor = 2
 
 	status := m.statusBarText()
 	// shortcut hints are moved to help overlay, not in status line
@@ -778,30 +778,30 @@ func TestModel_ExpandedModeCursorMovementUnchanged(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
-	assert.False(t, model.collapsed.enabled, "should be in expanded mode by default")
-	assert.Equal(t, 0, model.diffCursor)
+	assert.False(t, model.modes.collapsed.enabled, "should be in expanded mode by default")
+	assert.Equal(t, 0, model.nav.diffCursor)
 
 	// move down lands on removed line in expanded mode
 	model.moveDiffCursorDown()
-	assert.Equal(t, 1, model.diffCursor, "expanded mode should visit removed line")
+	assert.Equal(t, 1, model.nav.diffCursor, "expanded mode should visit removed line")
 
 	model.moveDiffCursorDown()
-	assert.Equal(t, 2, model.diffCursor, "expanded mode should visit add line")
+	assert.Equal(t, 2, model.nav.diffCursor, "expanded mode should visit add line")
 
 	model.moveDiffCursorDown()
-	assert.Equal(t, 3, model.diffCursor, "expanded mode should visit ctx2")
+	assert.Equal(t, 3, model.nav.diffCursor, "expanded mode should visit ctx2")
 
 	// move back up visits all lines
 	model.moveDiffCursorUp()
-	assert.Equal(t, 2, model.diffCursor)
+	assert.Equal(t, 2, model.nav.diffCursor)
 
 	model.moveDiffCursorUp()
-	assert.Equal(t, 1, model.diffCursor)
+	assert.Equal(t, 1, model.nav.diffCursor)
 
 	model.moveDiffCursorUp()
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor)
 }

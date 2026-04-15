@@ -100,13 +100,13 @@ func (m Model) blameGutter(dl diff.DiffLine, now time.Time) string {
 
 // hasBlameGutter returns true when the blame gutter should be rendered.
 func (m Model) hasBlameGutter() bool {
-	return m.showBlame && len(m.file.blameData) > 0
+	return m.modes.showBlame && len(m.file.blameData) > 0
 }
 
 // lineGutters returns the formatted line number and blame gutter strings for a diff line.
 // returns empty strings for disabled gutters.
 func (m Model) lineGutters(dl diff.DiffLine) (numGutter, blameGutter string) {
-	if m.lineNumbers {
+	if m.modes.lineNumbers {
 		numGutter = m.lineNumGutter(dl)
 	}
 	if m.hasBlameGutter() {
@@ -118,7 +118,7 @@ func (m Model) lineGutters(dl diff.DiffLine) (numGutter, blameGutter string) {
 // gutterExtra returns the total character width consumed by enabled gutters (line numbers + blame).
 func (m Model) gutterExtra() int {
 	w := 0
-	if m.lineNumbers {
+	if m.modes.lineNumbers {
 		w += m.lineNumGutterWidth()
 	}
 	if m.hasBlameGutter() {
@@ -130,7 +130,7 @@ func (m Model) gutterExtra() int {
 // gutterBlanks returns blank strings matching the widths of enabled gutters,
 // used as padding for wrap continuation lines.
 func (m Model) gutterBlanks() (numBlank, blameBlank string) {
-	if m.lineNumbers {
+	if m.modes.lineNumbers {
 		numBlank = strings.Repeat(" ", m.lineNumGutterWidth())
 	}
 	if m.hasBlameGutter() {
@@ -160,8 +160,8 @@ func (m Model) applyHorizontalScroll(content string, indicatorBg style.Color) st
 		return content
 	}
 	origWidth := lipgloss.Width(content)
-	start := m.scrollX
-	end := m.scrollX + cutWidth
+	start := m.layout.scrollX
+	end := m.layout.scrollX + cutWidth
 
 	hasLeftOverflow := start > 0 && origWidth > start
 	hasRightOverflow := origWidth > end
@@ -205,7 +205,7 @@ func (m Model) plainHorizontalCut(content string) string {
 	if cutWidth <= 0 {
 		return content
 	}
-	return ansi.Cut(content, m.scrollX, m.scrollX+cutWidth)
+	return ansi.Cut(content, m.layout.scrollX, m.layout.scrollX+cutWidth)
 }
 
 // leftScrollIndicator renders the left-side scroll overflow glyph («) using raw ANSI sequences
@@ -234,7 +234,7 @@ func (m Model) rightScrollIndicator(lineBg style.Color) string {
 // actually set, so callers that pass an empty bg (or a theme with empty Muted) don't accidentally
 // trash inherited pane background or foreground.
 func (m Model) scrollIndicatorANSI(glyph string, spaceBg, glyphBg style.Color, leadingSpace bool) string {
-	if m.noColors {
+	if m.cfg.noColors {
 		prefix := ""
 		if leadingSpace {
 			prefix = " "
@@ -277,11 +277,11 @@ func (m Model) renderDiff() string {
 
 	m.blameNow = time.Now()
 
-	if m.collapsed.enabled {
+	if m.modes.collapsed.enabled {
 		return m.renderCollapsedDiff()
 	}
 
-	m.searchMatchSet = m.buildSearchMatchSet()
+	m.search.matchSet = m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
 	var b strings.Builder
@@ -312,8 +312,8 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 // renderFileAnnotationHeader writes the file-level annotation or input to the builder.
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
-	if m.annotating && m.fileAnnotating {
-		line := " " + m.renderer.AnnotationInline("\U0001f4ac file: ") + m.annotateInput.View()
+	if m.annot.annotating && m.annot.fileAnnotating {
+		line := " " + m.renderer.AnnotationInline("\U0001f4ac file: ") + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
@@ -322,8 +322,8 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 
 	if fileComment != "" {
 		cursor := " "
-		if m.diffCursor == -1 && m.focus == paneDiff {
-			cursor = m.renderer.DiffCursor(m.noColors)
+		if m.nav.diffCursor == -1 && m.layout.focus == paneDiff {
+			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
 		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
 	}
@@ -334,12 +334,12 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
 	textContent = m.applyIntraLineHighlight(idx, dl.ChangeType, textContent)
-	isSearchMatch := m.searchMatchSet[idx]
+	isSearchMatch := m.search.matchSet[idx]
 
 	isCursor := m.isCursorLine(idx)
 
 	// wrap mode: break long lines at word boundaries (dividers are short, skip them)
-	if m.wrapMode && dl.ChangeType != diff.ChangeDivider {
+	if m.modes.wrap && dl.ChangeType != diff.ChangeDivider {
 		m.renderWrappedDiffLine(b, dl, textContent, hasHighlight, isCursor, isSearchMatch)
 		return
 	}
@@ -356,7 +356,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 	lineBg := m.resolver.LineBg(dl.ChangeType)
 	// wrap mode divider fallthrough: dividers are unwrapped even in wrap mode, but indicators
 	// only belong in unwrapped mode globally, so skip them for this edge case.
-	if m.wrapMode && dl.ChangeType == diff.ChangeDivider {
+	if m.modes.wrap && dl.ChangeType == diff.ChangeDivider {
 		content = m.plainHorizontalCut(content)
 	} else {
 		content = m.applyHorizontalScroll(content, m.resolver.IndicatorBg(dl.ChangeType))
@@ -365,7 +365,7 @@ func (m Model) renderDiffLine(b *strings.Builder, idx int, dl diff.DiffLine) {
 
 	cursor := " "
 	if isCursor {
-		cursor = m.renderer.DiffCursor(m.noColors)
+		cursor = m.renderer.DiffCursor(m.cfg.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -391,7 +391,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 
 		cursor := " "
 		if i == 0 && isCursor {
-			cursor = m.renderer.DiffCursor(m.noColors)
+			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -401,7 +401,7 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 // returns 1 when wrap mode is off or for divider lines.
 // stays in sync with renderWrappedDiffLine by using the same wrapContent method and width calculation.
 func (m Model) wrappedLineCount(idx int) int {
-	if !m.wrapMode || idx < 0 || idx >= len(m.file.lines) {
+	if !m.modes.wrap || idx < 0 || idx >= len(m.file.lines) {
 		return 1
 	}
 	dl := m.file.lines[idx]
@@ -432,11 +432,11 @@ func (m Model) wrapContent(content string, width int) []string {
 // prepareLineContent returns the display-ready content for a diff line with tabs replaced.
 // returns the raw line content, the best available content (highlighted if available), and whether highlight was used.
 func (m Model) prepareLineContent(idx int, dl diff.DiffLine) (lineContent, textContent string, hasHighlight bool) {
-	lineContent = strings.ReplaceAll(dl.Content, "\t", m.tabSpaces)
+	lineContent = strings.ReplaceAll(dl.Content, "\t", m.cfg.tabSpaces)
 	hasHighlight = idx < len(m.file.highlighted)
 	textContent = lineContent
 	if hasHighlight {
-		textContent = strings.ReplaceAll(m.file.highlighted[idx], "\t", m.tabSpaces)
+		textContent = strings.ReplaceAll(m.file.highlighted[idx], "\t", m.cfg.tabSpaces)
 	}
 	return lineContent, textContent, hasHighlight
 }
@@ -458,7 +458,7 @@ func (m Model) applyIntraLineHighlight(idx int, changeType diff.ChangeType, text
 	}
 
 	var hlOn, hlOff string
-	if m.noColors {
+	if m.cfg.noColors {
 		hlOn = "\033[7m"   // reverse video
 		hlOff = "\033[27m" // reverse video off
 	} else {
@@ -497,14 +497,14 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 // changeType is used to restore the correct line background after each match (add/remove bg)
 // instead of resetting to terminal default, which would break word-diff and line bg overlays.
 func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) string {
-	if m.searchTerm == "" {
+	if m.search.term == "" {
 		return s
 	}
 
 	// find match positions in visible (ANSI-stripped) text
 	plain := ansi.Strip(s)
 	plainLower := strings.ToLower(plain)
-	term := strings.ToLower(m.searchTerm)
+	term := strings.ToLower(m.search.term)
 	if !strings.Contains(plainLower, term) {
 		return s
 	}
@@ -546,7 +546,7 @@ func (m Model) highlightSearchMatches(s string, changeType diff.ChangeType) stri
 // does NOT extend backgrounds — callers must apply extendLineBg after applyHorizontalScroll
 // (non-wrap paths) or directly after styling (wrap paths where scroll is not used).
 func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content string, hasHighlight, isSearchMatch bool) string {
-	if isSearchMatch && m.searchTerm != "" {
+	if isSearchMatch && m.search.term != "" {
 		content = m.highlightSearchMatches(content, changeType)
 	}
 
@@ -573,8 +573,8 @@ func (m Model) extendLineBg(styled string, bg style.Color) string {
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
-	if m.annotating && !m.fileAnnotating && idx == m.diffCursor {
-		line := " " + m.renderer.AnnotationInline("\U0001f4ac ") + m.annotateInput.View()
+	if m.annot.annotating && !m.annot.fileAnnotating && idx == m.nav.diffCursor {
+		line := " " + m.renderer.AnnotationInline("\U0001f4ac ") + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
@@ -585,8 +585,8 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
-			if idx == m.diffCursor && m.cursorOnAnnotation && m.focus == paneDiff {
-				cursor = m.renderer.DiffCursor(m.noColors)
+			if idx == m.nav.diffCursor && m.annot.cursorOnAnnotation && m.layout.focus == paneDiff {
+				cursor = m.renderer.DiffCursor(m.cfg.noColors)
 			}
 			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
 		}
@@ -625,8 +625,8 @@ func (m Model) wrapWidth() int {
 func (m Model) diffContentWidth() int {
 	if m.treePaneHidden() {
 		// tree hidden or single-file without TOC: diff pane borders (2) + cursor bar (1) + right padding (1)
-		return max(10, m.width-4)
+		return max(10, m.layout.width-4)
 	}
 	// multi-file or single-file with TOC: diff pane width minus borders (4) minus tree width, minus bar (1), minus right padding (1)
-	return max(10, m.width-m.treeWidth-4-2)
+	return max(10, m.layout.width-m.layout.treeWidth-4-2)
 }

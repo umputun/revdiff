@@ -101,8 +101,8 @@ func TestOpenThemeSelector_savesOriginalState(t *testing.T) {
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
-	m.width = 80
-	m.height = 24
+	m.layout.width = 80
+	m.layout.height = 24
 	m.ready = true
 
 	origResolver := m.resolver
@@ -133,8 +133,8 @@ func TestCancelThemeSelect_restoresOriginalTheme(t *testing.T) {
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
-	m.width = 80
-	m.height = 24
+	m.layout.width = 80
+	m.layout.height = 24
 	m.ready = true
 
 	origAccent := m.resolver.Color(style.ColorKeyAccentFg)
@@ -169,8 +169,8 @@ func TestPreviewThemeByName_appliesTheme(t *testing.T) {
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
-	m.width = 80
-	m.height = 24
+	m.layout.width = 80
+	m.layout.height = 24
 	m.ready = true
 
 	m.openThemeSelector()
@@ -198,8 +198,8 @@ func TestPreviewThemeByName_unknownThemeNoOp(t *testing.T) {
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
-	m.width = 80
-	m.height = 24
+	m.layout.width = 80
+	m.layout.height = 24
 	m.ready = true
 
 	m.openThemeSelector()
@@ -228,8 +228,8 @@ func TestConfirmThemeByName_appliesAndPersists(t *testing.T) {
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: catalog,
 	})
-	m.width = 80
-	m.height = 24
+	m.layout.width = 80
+	m.layout.height = 24
 	m.ready = true
 
 	m.openThemeSelector()
@@ -255,8 +255,8 @@ func TestThemeSelectPreviewAndConfirmPreserveNoColors(t *testing.T) {
 	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
 		NoColors: true, TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
 	})
-	m.width = 80
-	m.height = 24
+	m.layout.width = 80
+	m.layout.height = 24
 	m.ready = true
 	m.openThemeSelector()
 

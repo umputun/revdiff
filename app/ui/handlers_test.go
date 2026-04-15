@@ -20,7 +20,7 @@ func TestModel_MarkReviewedFromTreePane(t *testing.T) {
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.file.name = "a.go"
-	m.focus = paneTree
+	m.layout.focus = paneTree
 
 	// space bar toggles reviewed
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -40,7 +40,7 @@ func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.file.name = "a.go"
-	m.focus = paneTree
+	m.layout.focus = paneTree
 	m.tree.Move(sidepane.MotionDown) // cursor -> b.go while the diff pane still shows a.go
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -58,7 +58,7 @@ func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
 	})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.file.name = "b.go"
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	// space from diff pane marks currFile
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -72,7 +72,7 @@ func TestModel_FKeyFilterToggle(t *testing.T) {
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test annotation"})
 
 	t.Run("toggle filter on and off from tree pane", func(t *testing.T) {
-		m.focus = paneTree
+		m.layout.focus = paneTree
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 		model := result.(Model)
 		assert.True(t, model.tree.FilterActive())
@@ -88,7 +88,7 @@ func TestModel_FKeyFilterToggle(t *testing.T) {
 	})
 
 	t.Run("works from diff pane", func(t *testing.T) {
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 		// filter should be off after previous subtest toggled it off
 		require.False(t, m.tree.FilterActive(), "precondition: filter must be off")
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
@@ -115,7 +115,7 @@ func TestModel_FilterToggleLoadsDiffForNewSelection(t *testing.T) {
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
 	m.file.name = "b.go"
 	m.file.lines = lines["b.go"]
-	m.focus = paneTree
+	m.layout.focus = paneTree
 
 	// annotate only a.go
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note on a"})
@@ -182,7 +182,7 @@ func TestModel_NoConfirmDiscardWired(t *testing.T) {
 	}
 	store := annotation.NewStore()
 	m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{NoConfirmDiscard: true, TreeWidthRatio: 3})
-	assert.True(t, m.noConfirmDiscard, "noConfirmDiscard should be wired from ModelConfig")
+	assert.True(t, m.cfg.noConfirmDiscard, "noConfirmDiscard should be wired from ModelConfig")
 }
 
 func TestModel_ConfirmDiscardY(t *testing.T) {
@@ -243,7 +243,7 @@ func TestModel_ConfirmDiscardSecondQ(t *testing.T) {
 
 func TestModel_QKeyNoConfirmDiscardWithAnnotations(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.noConfirmDiscard = true
+	m.cfg.noConfirmDiscard = true
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "test"})
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'Q'}})
@@ -283,7 +283,7 @@ func TestModel_ConfirmDiscardAllowsNonKeyMessages(t *testing.T) {
 	// WindowSizeMsg should still be handled
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	model := result.(Model)
-	assert.Equal(t, 100, model.width, "resize should be handled during confirmation")
+	assert.Equal(t, 100, model.layout.width, "resize should be handled during confirmation")
 	assert.True(t, model.inConfirmDiscard, "should still be confirming after resize")
 }
 
@@ -293,25 +293,25 @@ func TestModel_HandleEscKeyClearsSearch(t *testing.T) {
 	})
 	m.file.name = "a.go"
 	m.file.lines = []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "hello world"}}
-	m.searchTerm = "hello"
-	m.searchMatches = []int{0}
-	m.searchCursor = 0
-	m.focus = paneDiff
+	m.search.term = "hello"
+	m.search.matches = []int{0}
+	m.search.cursor = 0
+	m.layout.focus = paneDiff
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := result.(Model)
-	assert.Empty(t, model.searchTerm, "esc should clear search term")
-	assert.Nil(t, model.searchMatches, "esc should clear search matches")
+	assert.Empty(t, model.search.term, "esc should clear search term")
+	assert.Nil(t, model.search.matches, "esc should clear search matches")
 }
 
 func TestModel_HandleEscKeyNoopWithoutSearch(t *testing.T) {
 	m := testModel(nil, nil)
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model := result.(Model)
-	assert.Empty(t, model.searchTerm)
-	assert.Nil(t, model.searchMatches)
+	assert.Empty(t, model.search.term)
+	assert.Nil(t, model.search.matches)
 }
 
 func TestModel_HandleFileAnnotateKey(t *testing.T) {
@@ -321,11 +321,11 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 
 		result, cmd := m.handleFileAnnotateKey()
 		model := result.(Model)
-		assert.True(t, model.annotating, "should start annotation mode")
+		assert.True(t, model.annot.annotating, "should start annotation mode")
 		assert.NotNil(t, cmd, "should return a command")
 	})
 
@@ -333,22 +333,22 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.file.name = "a.go"
 		m.file.lines = lines
-		m.focus = paneTree
+		m.layout.focus = paneTree
 
 		result, cmd := m.handleFileAnnotateKey()
 		model := result.(Model)
-		assert.False(t, model.annotating, "should not start annotation")
+		assert.False(t, model.annot.annotating, "should not start annotation")
 		assert.Nil(t, cmd, "should return nil command")
 	})
 
 	t.Run("no-op when currFile is empty", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m.file.name = ""
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 
 		result, cmd := m.handleFileAnnotateKey()
 		model := result.(Model)
-		assert.False(t, model.annotating, "should not start annotation")
+		assert.False(t, model.annot.annotating, "should not start annotation")
 		assert.Nil(t, cmd, "should return nil command")
 	})
 }

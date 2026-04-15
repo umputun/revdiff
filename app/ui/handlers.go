@@ -99,7 +99,7 @@ func (m Model) buildTOCHelpSection() overlay.HelpSection {
 
 // handleDiscardQuit handles the Q key press for discard-and-quit.
 func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
-	if m.store.Count() == 0 || m.noConfirmDiscard || m.noStatusBar {
+	if m.store.Count() == 0 || m.cfg.noConfirmDiscard || m.cfg.noStatusBar {
 		m.discarded = true
 		return m, tea.Quit
 	}
@@ -109,40 +109,40 @@ func (m Model) handleDiscardQuit() (tea.Model, tea.Cmd) {
 
 // handleFileAnnotateKey starts file-level annotation from diff pane only.
 func (m Model) handleFileAnnotateKey() (tea.Model, tea.Cmd) {
-	if m.focus != paneDiff || m.file.name == "" {
+	if m.layout.focus != paneDiff || m.file.name == "" {
 		return m, nil
 	}
 	cmd := m.startFileAnnotation()
-	m.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetContent(m.renderDiff())
 	return m, cmd
 }
 
 // handleEscKey clears active search results on esc.
 func (m Model) handleEscKey() (tea.Model, tea.Cmd) {
-	if len(m.searchMatches) > 0 {
+	if len(m.search.matches) > 0 {
 		m.clearSearch()
-		m.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.SetContent(m.renderDiff())
 	}
 	return m, nil
 }
 
 // handleEnterKey handles enter key based on current pane focus.
 func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
-	switch m.focus {
+	switch m.layout.focus {
 	case paneTree:
 		if m.file.mdTOC != nil {
 			if idx, ok := m.file.mdTOC.CurrentLineIdx(); ok {
 				// jump to selected header in diff
-				m.diffCursor = idx
-				m.cursorOnAnnotation = false
-				m.file.mdTOC.UpdateActiveSection(m.diffCursor)
-				m.focus = paneDiff
+				m.nav.diffCursor = idx
+				m.annot.cursorOnAnnotation = false
+				m.file.mdTOC.UpdateActiveSection(m.nav.diffCursor)
+				m.layout.focus = paneDiff
 				m.topAlignViewportOnCursor()
 				return m, nil
 			}
 		}
 		if m.file.name != "" {
-			m.focus = paneDiff
+			m.layout.focus = paneDiff
 		}
 		return m, nil
 	case paneDiff:
@@ -152,7 +152,7 @@ func (m Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		} else {
 			cmd = m.startAnnotation()
 		}
-		m.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.SetContent(m.renderDiff())
 		return m, cmd
 	}
 	return m, nil
@@ -179,8 +179,8 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	}
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 {
-		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
+		m.pendingAnnotJump = nil    // clear pending annotation jump on manual navigation
+		m.nav.pendingHunkJump = nil // clear pending hunk jump on manual navigation
 		m.tree.ToggleFilter(annotated)
 		m.tree.EnsureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
@@ -192,7 +192,7 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 // tree focus uses the selected row; diff/TOC focus uses the displayed file.
 func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 	file := m.file.name
-	if m.focus == paneTree && m.file.mdTOC == nil {
+	if m.layout.focus == paneTree && m.file.mdTOC == nil {
 		file = m.tree.SelectedFile()
 	}
 	if file == "" {
@@ -205,14 +205,14 @@ func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 // handleFileOrSearchNav handles next/prev item navigation: navigates search matches when a search
 // is active, otherwise navigates files or TOC entries (no-op in single-file mode without TOC).
 func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
-	if len(m.searchMatches) > 0 {
+	if len(m.search.matches) > 0 {
 		if forward {
 			m.nextSearchMatch()
 		} else {
 			m.prevSearchMatch()
 		}
 		m.syncTOCActiveSection()
-		m.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.SetContent(m.renderDiff())
 		return m, nil
 	}
 	dir := 1
@@ -223,8 +223,8 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 		return m.jumpTOCEntry(dir)
 	}
 	if !m.file.singleFile {
-		m.pendingAnnotJump = nil // clear pending annotation jump on manual navigation
-		m.pendingHunkJump = nil  // clear pending hunk jump on manual navigation
+		m.pendingAnnotJump = nil    // clear pending annotation jump on manual navigation
+		m.nav.pendingHunkJump = nil // clear pending hunk jump on manual navigation
 		if forward {
 			m.tree.StepFile(sidepane.DirectionNext)
 		} else {

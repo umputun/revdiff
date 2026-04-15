@@ -541,9 +541,9 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/view.go`, `app/ui/handlers.go`, `app/ui/diffview.go`, and other files referencing layout/config fields
 
-- [ ] add `modelConfigState` struct and move `ref`, `staged`, `only`, `workDir`, `noColors`, `noStatusBar`, `noConfirmDiscard`, `crossFileHunks`, `treeWidthRatio`, `tabSpaces` into `m.cfg`
-- [ ] add `layoutState` struct and move `viewport`, `focus`, `treeHidden`, `width`, `height`, `treeWidth`, `scrollX` into `m.layout`
-- [ ] update all call sites for config and layout fields
+- [x] add `modelConfigState` struct and move `ref`, `staged`, `only`, `workDir`, `noColors`, `noStatusBar`, `noConfirmDiscard`, `crossFileHunks`, `treeWidthRatio`, `tabSpaces` into `m.cfg`
+- [x] add `layoutState` struct and move `viewport`, `focus`, `treeHidden`, `width`, `height`, `treeWidth`, `scrollX` into `m.layout`
+- [x] update all call sites for config and layout fields
 
 ### Task 10: Group `modeState` and `navigationState`
 
@@ -551,10 +551,10 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/*.go` as needed
 
-- [ ] add `modeState` struct with view-mode toggles only: `wrap`, `collapsed`, `lineNumbers`, `wordDiff`, `showBlame`, `showUntracked`
-- [ ] keep `ready`, `discarded`, `inConfirmDiscard` at `Model` top level (lifecycle/quit flags, not view modes)
-- [ ] add `navigationState` struct with `diffCursor`, `pendingHunkJump`
-- [ ] update all call sites
+- [x] add `modeState` struct with view-mode toggles only: `wrap`, `collapsed`, `lineNumbers`, `wordDiff`, `showBlame`, `showUntracked`
+- [x] keep `ready`, `discarded`, `inConfirmDiscard` at `Model` top level (lifecycle/quit flags, not view modes)
+- [x] add `navigationState` struct with `diffCursor`, `pendingHunkJump`
+- [x] update all call sites
 
 ### Task 11: Group `searchState` and `annotationState`
 
@@ -562,13 +562,13 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/search.go`, `app/ui/annotate.go`, and other referencing files
 
-- [ ] add `searchState` struct with `active`, `term`, `matches`, `cursor`, `input`, `matchSet`
-- [ ] add `annotationState` struct with `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input`
-- [ ] update all call sites
-- [ ] remove old top-level fields
-- [ ] verify `Model` field list is materially shorter and visually grouped
-- [ ] run `go test ./...`
-- [ ] run `make lint`
+- [x] add `searchState` struct with `active`, `term`, `matches`, `cursor`, `input`, `matchSet`
+- [x] add `annotationState` struct with `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input`
+- [x] update all call sites
+- [x] remove old top-level fields
+- [x] verify `Model` field list is materially shorter and visually grouped
+- [x] run `go test ./...`
+- [x] run `make lint`
 
 ### Task 12: Tighten constructor and test helpers around grouped state
 
@@ -576,12 +576,12 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/*_test.go`
 
-- [ ] keep `NewModel` strict on required dependencies
-- [ ] move any test-only defaulting into test helpers, not production constructor logic
-- [ ] update tests to construct models through helpers that match the new `ModelConfig`
-- [ ] ensure no production fallback logic was introduced just to ease tests
-- [ ] run `go test ./...`
-- [ ] run `make lint`
+- [x] keep `NewModel` strict on required dependencies
+- [x] move any test-only defaulting into test helpers, not production constructor logic
+- [x] update tests to construct models through helpers that match the new `ModelConfig`
+- [x] ensure no production fallback logic was introduced just to ease tests
+- [x] run `go test ./...`
+- [x] run `make lint`
 
 ### Task 13: Restructure `app/theme` package — unexport dead symbols, group by struct
 

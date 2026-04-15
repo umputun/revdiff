@@ -52,10 +52,10 @@ func (m *Model) startAnnotation() tea.Cmd {
 	}
 	// prevent annotating hidden or placeholder removed lines in collapsed mode
 	hunks := m.findHunks()
-	if m.isCollapsedHidden(m.diffCursor, hunks) {
+	if m.isCollapsedHidden(m.nav.diffCursor, hunks) {
 		return nil
 	}
-	if m.isDeleteOnlyPlaceholder(m.diffCursor, hunks) {
+	if m.isDeleteOnlyPlaceholder(m.nav.diffCursor, hunks) {
 		return nil
 	}
 
@@ -70,9 +70,9 @@ func (m *Model) startAnnotation() tea.Cmd {
 		}
 	}
 
-	m.annotateInput = ti
-	m.annotating = true
-	m.fileAnnotating = false
+	m.annot.input = ti
+	m.annot.annotating = true
+	m.annot.fileAnnotating = false
 	m.ensureLineAnnotationInputVisible()
 	return cmd
 }
@@ -82,19 +82,19 @@ func (m *Model) startAnnotation() tea.Cmd {
 // the cursor line visible is not always sufficient when cursor is on the last
 // visible row.
 func (m *Model) ensureLineAnnotationInputVisible() {
-	if !m.annotating || m.fileAnnotating || m.viewport.Height <= 0 {
+	if !m.annot.annotating || m.annot.fileAnnotating || m.layout.viewport.Height <= 0 {
 		return
 	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
+	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
 		return
 	}
 
-	inputY := m.cursorViewportY() + m.wrappedLineCount(m.diffCursor)
+	inputY := m.cursorViewportY() + m.wrappedLineCount(m.nav.diffCursor)
 	switch {
-	case inputY < m.viewport.YOffset:
-		m.viewport.SetYOffset(inputY)
-	case inputY >= m.viewport.YOffset+m.viewport.Height:
-		m.viewport.SetYOffset(inputY - m.viewport.Height + 1)
+	case inputY < m.layout.viewport.YOffset:
+		m.layout.viewport.SetYOffset(inputY)
+	case inputY >= m.layout.viewport.YOffset+m.layout.viewport.Height:
+		m.layout.viewport.SetYOffset(inputY - m.layout.viewport.Height + 1)
 	}
 }
 
@@ -114,30 +114,30 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		}
 	}
 
-	m.annotateInput = ti
-	m.annotating = true
-	m.fileAnnotating = true
-	m.diffCursor = -1 // position cursor on the file annotation line
-	m.viewport.GotoTop()
+	m.annot.input = ti
+	m.annot.annotating = true
+	m.annot.fileAnnotating = true
+	m.nav.diffCursor = -1 // position cursor on the file annotation line
+	m.layout.viewport.GotoTop()
 	return cmd
 }
 
 // saveAnnotation saves the current text input as an annotation on the cursor line.
 func (m *Model) saveAnnotation() {
-	text := m.annotateInput.Value()
+	text := m.annot.input.Value()
 	if text == "" {
 		m.cancelAnnotation()
 		return
 	}
 
-	if m.fileAnnotating {
+	if m.annot.fileAnnotating {
 		m.store.Add(annotation.Annotation{File: m.file.name, Line: 0, Type: "", Comment: text})
-		m.annotating = false
-		m.fileAnnotating = false
-		m.diffCursor = -1 // position cursor on the file annotation line
+		m.annot.annotating = false
+		m.annot.fileAnnotating = false
+		m.nav.diffCursor = -1 // position cursor on the file annotation line
 		m.tree.RefreshFilter(m.annotatedFiles())
-		m.viewport.SetContent(m.renderDiff())
-		m.viewport.GotoTop()
+		m.layout.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.GotoTop()
 		return
 	}
 
@@ -150,21 +150,21 @@ func (m *Model) saveAnnotation() {
 	lineNum := m.diffLineNum(dl)
 	a := annotation.Annotation{File: m.file.name, Line: lineNum, Type: string(dl.ChangeType), Comment: text}
 	if hunkKeywordRe.MatchString(text) {
-		if endLine := m.hunkEndLine(m.diffCursor); endLine > lineNum {
+		if endLine := m.hunkEndLine(m.nav.diffCursor); endLine > lineNum {
 			a.EndLine = endLine
 		}
 	}
 	m.store.Add(a)
-	m.annotating = false
+	m.annot.annotating = false
 	m.tree.RefreshFilter(m.annotatedFiles())
-	m.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetContent(m.renderDiff())
 }
 
 // cancelAnnotation exits annotation input mode without saving.
 func (m *Model) cancelAnnotation() {
-	m.annotating = false
-	m.fileAnnotating = false
-	m.viewport.SetContent(m.renderDiff())
+	m.annot.annotating = false
+	m.annot.fileAnnotating = false
+	m.layout.viewport.SetContent(m.renderDiff())
 }
 
 // deleteFileAnnotation removes the file-level annotation and adjusts cursor position.
@@ -172,8 +172,8 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 	if !m.store.Delete(m.file.name, 0, "") {
 		return nil
 	}
-	m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
-	m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
+	m.pendingAnnotJump = nil    // clear before refreshFilter which may trigger file load
+	m.nav.pendingHunkJump = nil // clear before refreshFilter which may trigger file load
 	m.skipInitialDividers()
 
 	m.tree.RefreshFilter(m.annotatedFiles())
@@ -196,7 +196,7 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 		return m.deleteFileAnnotation()
 	}
 
-	if !m.cursorOnAnnotation {
+	if !m.annot.cursorOnAnnotation {
 		return nil
 	}
 
@@ -207,9 +207,9 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 
 	lineNum := m.diffLineNum(dl)
 	if m.store.Delete(m.file.name, lineNum, string(dl.ChangeType)) {
-		m.pendingAnnotJump = nil // clear before refreshFilter which may trigger file load
-		m.pendingHunkJump = nil  // clear before refreshFilter which may trigger file load
-		m.cursorOnAnnotation = false
+		m.pendingAnnotJump = nil    // clear before refreshFilter which may trigger file load
+		m.nav.pendingHunkJump = nil // clear before refreshFilter which may trigger file load
+		m.annot.cursorOnAnnotation = false
 		m.tree.RefreshFilter(m.annotatedFiles())
 
 		// if filter moved cursor to a different file, load the new selection
@@ -234,8 +234,8 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	default:
 		var cmd tea.Cmd
-		m.annotateInput, cmd = m.annotateInput.Update(msg)
-		m.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately
+		m.annot.input, cmd = m.annot.input.Update(msg)
+		m.layout.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately
 		return m, cmd
 	}
 }
@@ -243,7 +243,7 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // cursorLineHasAnnotation checks if the cursor is on a deletable annotation line.
 // returns true only when cursor is on the file annotation line or on an annotation sub-line.
 func (m Model) cursorLineHasAnnotation() bool {
-	return m.cursorOnFileAnnotationLine() || m.cursorOnAnnotation
+	return m.cursorOnFileAnnotationLine() || m.annot.cursorOnAnnotation
 }
 
 // hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
@@ -258,7 +258,7 @@ func (m Model) hasFileAnnotation() bool {
 
 // cursorOnFileAnnotationLine returns true if the diff cursor is on the file-level annotation line.
 func (m Model) cursorOnFileAnnotationLine() bool {
-	return m.diffCursor == -1 && m.hasFileAnnotation()
+	return m.nav.diffCursor == -1 && m.hasFileAnnotation()
 }
 
 // diffLineNum returns the display line number for a diff line.
@@ -343,7 +343,7 @@ func (m Model) hunkLineHeight(idx int, hunks []int, annotationSet map[string]boo
 // in collapsed mode, hidden removed lines (those in non-expanded hunks) are not counted.
 func (m Model) cursorViewportY() int {
 	var hunks []int
-	if m.collapsed.enabled {
+	if m.modes.collapsed.enabled {
 		hunks = m.findHunks()
 	}
 	return m.cursorViewportYUsing(hunks, m.buildAnnotationSet())
@@ -354,7 +354,7 @@ func (m Model) cursorViewportY() int {
 // already has them (e.g. centerHunkInViewport).
 func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) int {
 	if m.file.name == "" || len(m.file.lines) == 0 {
-		return max(0, m.diffCursor)
+		return max(0, m.nav.diffCursor)
 	}
 
 	fileAnnotationOffset := 0
@@ -362,16 +362,16 @@ func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) 
 		fileAnnotationOffset = m.wrappedAnnotationLineCount(annotKeyFile)
 	}
 
-	if m.diffCursor == -1 {
+	if m.nav.diffCursor == -1 {
 		return 0
 	}
 
 	y := fileAnnotationOffset
-	for i := 0; i < m.diffCursor && i < len(m.file.lines); i++ {
+	for i := 0; i < m.nav.diffCursor && i < len(m.file.lines); i++ {
 		y += m.hunkLineHeight(i, hunks, annotationSet)
 	}
-	if m.cursorOnAnnotation {
-		y += m.wrappedLineCount(m.diffCursor)
+	if m.annot.cursorOnAnnotation {
+		y += m.wrappedLineCount(m.nav.diffCursor)
 	}
 	return y
 }

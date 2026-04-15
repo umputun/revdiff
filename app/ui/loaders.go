@@ -18,14 +18,14 @@ import (
 func (m Model) loadFiles() tea.Cmd {
 	return func() tea.Msg {
 		var warnings []string
-		entries, err := m.diffRenderer.ChangedFiles(m.ref, m.staged)
+		entries, err := m.diffRenderer.ChangedFiles(m.cfg.ref, m.cfg.staged)
 		if err != nil {
 			return filesLoadedMsg{entries: entries, err: err}
 		}
 		// include staged-only files (new files added to index but not yet committed)
 		// only when there are no unstaged entries; otherwise unstaged review should stay focused
 		// on actual unstaged changes.
-		if m.ref == "" && !m.staged && len(entries) == 0 {
+		if m.cfg.ref == "" && !m.cfg.staged && len(entries) == 0 {
 			stagedEntries, stagedErr := m.diffRenderer.ChangedFiles("", true)
 			if stagedErr != nil {
 				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
@@ -42,7 +42,7 @@ func (m Model) loadFiles() tea.Cmd {
 			}
 		}
 		// append untracked files when toggle is on (skip files already in entries to avoid dupes)
-		if m.showUntracked && m.loadUntracked != nil {
+		if m.modes.showUntracked && m.loadUntracked != nil {
 			ut, utErr := m.loadUntracked()
 			if utErr != nil {
 				warnings = append(warnings, fmt.Sprintf("untracked files: %v", utErr))
@@ -66,7 +66,7 @@ func (m Model) loadFiles() tea.Cmd {
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
 	return func() tea.Msg {
-		lines, err := m.diffRenderer.FileDiff(m.ref, file, m.staged)
+		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged)
 		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
 	}
 }
@@ -78,8 +78,8 @@ func (m Model) loadBlame(file string) tea.Cmd {
 		return nil
 	}
 	seq := m.file.loadSeq
-	ref := m.ref
-	staged := m.staged
+	ref := m.cfg.ref
+	staged := m.cfg.staged
 	return func() tea.Msg {
 		data, err := m.blamer.FileBlame(ref, file, staged)
 		return blameLoadedMsg{file: file, seq: seq, data: data, err: err}
@@ -100,15 +100,15 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 // and triggering the initial file diff load.
 func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
+		m.layout.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
 	}
 	for _, w := range msg.warnings {
 		log.Printf("[WARN] %s", w)
 	}
 	entries := m.filterOnly(msg.entries)
-	if len(entries) == 0 && len(m.only) > 0 {
-		m.viewport.SetContent("no files match --only filter")
+	if len(entries) == 0 && len(m.cfg.only) > 0 {
+		m.layout.viewport.SetContent("no files match --only filter")
 		return m, nil
 	}
 	m.tree.Rebuild(entries)
@@ -123,14 +123,14 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.file.name = ""
 		m.file.lines = nil
 		m.file.highlighted = nil
-		m.viewport.SetContent("")
+		m.layout.viewport.SetContent("")
 		return m, nil
 	}
 	if m.file.singleFile {
-		m.focus = paneDiff
-		m.treeWidth = 0
+		m.layout.focus = paneDiff
+		m.layout.treeWidth = 0
 		if m.ready {
-			m.viewport.Width = m.width - 2
+			m.layout.viewport.Width = m.layout.width - 2
 		}
 	}
 
@@ -148,7 +148,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		m.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
+		m.layout.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
 		return m, nil
 	}
 	m.file.name = msg.file
@@ -158,12 +158,12 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.computeFileStats()
 	m.file.highlighted = m.highlighter.HighlightLines(msg.file, m.file.lines)
 	m.recomputeIntraRanges()
-	if m.lineNumbers {
+	if m.modes.lineNumbers {
 		m.file.lineNumWidth = m.computeLineNumWidth()
 	}
-	m.cursorOnAnnotation = false
-	m.scrollX = 0
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.annot.cursorOnAnnotation = false
+	m.layout.scrollX = 0
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 
 	m.file.singleColLineNum = m.isFullContext(msg.lines)
 
@@ -173,12 +173,12 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		m.file.mdTOC = m.parseTOC(msg.lines, msg.file)
 	}
 	switch {
-	case m.file.mdTOC != nil && !m.treeHidden:
-		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
-		m.viewport.Width = m.width - m.treeWidth - 4
-	case m.file.singleFile || m.treeHidden:
-		m.treeWidth = 0
-		m.viewport.Width = m.width - 2
+	case m.file.mdTOC != nil && !m.layout.treeHidden:
+		m.layout.treeWidth = max(minTreeWidth, m.layout.width*m.cfg.treeWidthRatio/10)
+		m.layout.viewport.Width = m.layout.width - m.layout.treeWidth - 4
+	case m.file.singleFile || m.layout.treeHidden:
+		m.layout.treeWidth = 0
+		m.layout.viewport.Width = m.layout.width - 2
 	}
 
 	m.skipInitialDividers()
@@ -186,7 +186,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 
 	// clear stale blame data; reload if blame is active
 	var blameCmd tea.Cmd
-	if m.showBlame {
+	if m.modes.showBlame {
 		m.file.blameData = nil
 		m.file.blameAuthorLen = 0
 		blameCmd = m.loadBlame(msg.file)
@@ -196,20 +196,20 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
 		a := *m.pendingAnnotJump
 		m.pendingAnnotJump = nil
-		m.pendingHunkJump = nil
+		m.nav.pendingHunkJump = nil
 		m.positionOnAnnotation(a)
 		return m, blameCmd
 	}
 
 	// handle pending hunk jump after cross-file hunk navigation
-	if m.pendingHunkJump != nil {
+	if m.nav.pendingHunkJump != nil {
 		m.applyPendingHunkJump()
 		m.centerViewportOnCursor()
 		return m, blameCmd
 	}
 
-	m.viewport.SetContent(m.renderDiff())
-	m.viewport.GotoTop()
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.GotoTop()
 	return m, blameCmd
 }
 
@@ -221,15 +221,15 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 		return
 	}
 	// staged-only files: retry with git diff --cached
-	if !m.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
-		if cachedLines, err := m.diffRenderer.FileDiff(m.ref, file, true); err == nil && len(cachedLines) > 0 {
+	if !m.cfg.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
+		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true); err == nil && len(cachedLines) > 0 {
 			m.file.lines = cachedLines
 			return
 		}
 	}
 	// untracked files: read from disk as all-added lines
-	if m.workDir != "" && fileStatus == diff.FileUntracked {
-		added, err := diff.ReadFileAsAdded(filepath.Join(m.workDir, file))
+	if m.cfg.workDir != "" && fileStatus == diff.FileUntracked {
+		added, err := diff.ReadFileAsAdded(filepath.Join(m.cfg.workDir, file))
 		if err != nil {
 			log.Printf("[WARN] read untracked file %s: %v", file, err)
 		}
@@ -241,7 +241,7 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.
 func (m Model) handleBlameLoaded(msg blameLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.seq != m.file.loadSeq || msg.file != m.file.name || !m.showBlame {
+	if msg.seq != m.file.loadSeq || msg.file != m.file.name || !m.modes.showBlame {
 		return m, nil
 	}
 	if msg.err != nil {
@@ -280,19 +280,19 @@ func (m Model) computeBlameAuthorLen() int {
 // when a pattern is an absolute path, it is also resolved relative to workDir for matching
 // (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
 func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
-	if len(m.only) == 0 {
+	if len(m.cfg.only) == 0 {
 		return entries
 	}
 	var filtered []diff.FileEntry
 	for _, e := range entries {
-		for _, pattern := range m.only {
+		for _, pattern := range m.cfg.only {
 			if e.Path == pattern || strings.HasSuffix(e.Path, "/"+pattern) {
 				filtered = append(filtered, e)
 				break
 			}
 			// resolve absolute pattern relative to workDir for matching against repo-relative files
-			if m.workDir != "" && filepath.IsAbs(pattern) {
-				rel, err := filepath.Rel(m.workDir, pattern)
+			if m.cfg.workDir != "" && filepath.IsAbs(pattern) {
+				rel, err := filepath.Rel(m.cfg.workDir, pattern)
 				if err == nil && !strings.HasPrefix(rel, "..") && (e.Path == rel || strings.HasSuffix(e.Path, "/"+rel)) {
 					filtered = append(filtered, e)
 					break
@@ -331,13 +331,13 @@ func (m Model) fileStatsText() string {
 // skips divider lines, and in collapsed mode also skips removed lines
 // unless their hunk is expanded.
 func (m *Model) skipInitialDividers() {
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	hunks := m.findHunks()
 	for i, dl := range m.file.lines {
 		if dl.ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
 			continue
 		}
-		m.diffCursor = i
+		m.nav.diffCursor = i
 		return
 	}
 }
@@ -365,10 +365,10 @@ func (m Model) isMarkdownFile(filename string) bool {
 
 // recomputeIntraRanges walks m.file.lines, finds contiguous change blocks,
 // pairs remove/add lines, runs word-diff, and stores results in m.file.intraRanges.
-// no-op when m.wordDiff is off: clears m.file.intraRanges to nil so callers don't
+// no-op when m.modes.wordDiff is off: clears m.file.intraRanges to nil so callers don't
 // need to duplicate the guard at each call site.
 func (m *Model) recomputeIntraRanges() {
-	if !m.wordDiff {
+	if !m.modes.wordDiff {
 		m.file.intraRanges = nil
 		return
 	}
@@ -390,7 +390,7 @@ func (m *Model) recomputeIntraRanges() {
 		block := make([]worddiff.LinePair, i-blockStart)
 		for j := blockStart; j < i; j++ {
 			block[j-blockStart] = worddiff.LinePair{
-				Content:  strings.ReplaceAll(m.file.lines[j].Content, "\t", m.tabSpaces),
+				Content:  strings.ReplaceAll(m.file.lines[j].Content, "\t", m.cfg.tabSpaces),
 				IsRemove: m.file.lines[j].ChangeType == diff.ChangeRemove,
 			}
 		}

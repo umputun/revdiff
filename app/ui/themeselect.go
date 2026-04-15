@@ -92,7 +92,7 @@ func (m *Model) cancelThemeSelect() {
 // applyTheme rebuilds styles from ThemeSpec and re-highlights the current file.
 func (m *Model) applyTheme(spec ThemeSpec) {
 	var res style.Resolver
-	if m.noColors {
+	if m.cfg.noColors {
 		res = style.PlainResolver()
 	} else {
 		res = style.NewResolver(spec.Colors)
@@ -113,7 +113,7 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 		if chromaChanged {
 			m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)
 		}
-		m.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.SetContent(m.renderDiff())
 	}
 }
 
@@ -121,6 +121,6 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 func (m *Model) refreshDiff() {
 	if m.file.name != "" && len(m.file.lines) > 0 {
 		m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)
-		m.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.SetContent(m.renderDiff())
 	}
 }

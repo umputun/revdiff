@@ -20,7 +20,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 	m.resolver = style.NewResolver(colors)
 
 	t.Run("plain text single match", func(t *testing.T) {
-		m.searchTerm = "hello"
+		m.search.term = "hello"
 		result := m.highlightSearchMatches("say hello world", diff.ChangeContext)
 		assert.NotContains(t, result, "\033[38;2;", "should not set foreground (bg-only highlight)")
 		assert.Contains(t, result, "\033[48;2;215;215;0m") // search bg
@@ -29,31 +29,31 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 	})
 
 	t.Run("multiple matches", func(t *testing.T) {
-		m.searchTerm = "ab"
+		m.search.term = "ab"
 		result := m.highlightSearchMatches("ab cd ab", diff.ChangeContext)
 		assert.Equal(t, 2, strings.Count(result, "\033[48;2;215;215;0m"), "should highlight both occurrences")
 	})
 
 	t.Run("no match", func(t *testing.T) {
-		m.searchTerm = "xyz"
+		m.search.term = "xyz"
 		result := m.highlightSearchMatches("hello world", diff.ChangeContext)
 		assert.Equal(t, "hello world", result)
 	})
 
 	t.Run("empty search term", func(t *testing.T) {
-		m.searchTerm = ""
+		m.search.term = ""
 		result := m.highlightSearchMatches("hello world", diff.ChangeContext)
 		assert.Equal(t, "hello world", result)
 	})
 
 	t.Run("case insensitive", func(t *testing.T) {
-		m.searchTerm = "hello"
+		m.search.term = "hello"
 		result := m.highlightSearchMatches("say HELLO world", diff.ChangeContext)
 		assert.Contains(t, result, "\033[48;2;215;215;0m")
 	})
 
 	t.Run("with ansi codes", func(t *testing.T) {
-		m.searchTerm = "world"
+		m.search.term = "world"
 		result := m.highlightSearchMatches("\033[32mhello world\033[0m", diff.ChangeContext)
 		assert.Contains(t, result, "\033[48;2;215;215;0m") // search bg on
 		assert.Contains(t, result, "\033[49m")             // search bg reset for context
@@ -62,7 +62,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 
 	t.Run("no-colors fallback", func(t *testing.T) {
 		noColorModel := testModel(nil, nil)
-		noColorModel.searchTerm = "hello"
+		noColorModel.search.term = "hello"
 		result := noColorModel.highlightSearchMatches("say hello world", diff.ChangeContext)
 		assert.Contains(t, result, "\033[7m", "should use reverse video in no-colors mode")
 		assert.Contains(t, result, "\033[27m", "should reset reverse video")
@@ -72,7 +72,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200"}
 		am := testModel(nil, nil)
 		am.resolver = style.NewResolver(c)
-		am.searchTerm = "hello"
+		am.search.term = "hello"
 		result := am.highlightSearchMatches("say hello world", diff.ChangeAdd)
 		assert.Contains(t, result, "\033[48;2;215;215;0m", "should have search bg on")
 		assert.NotContains(t, result, "\033[49m", "should not reset to terminal default")
@@ -83,7 +83,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", RemoveFg: "#ff0000", RemoveBg: "#220000"}
 		rm := testModel(nil, nil)
 		rm.resolver = style.NewResolver(c)
-		rm.searchTerm = "hello"
+		rm.search.term = "hello"
 		result := rm.highlightSearchMatches("say hello world", diff.ChangeRemove)
 		assert.Contains(t, result, "\033[48;2;215;215;0m", "should have search bg on")
 		assert.NotContains(t, result, "\033[49m", "should not reset to terminal default")
@@ -94,7 +94,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
 		am := testModel(nil, nil)
 		am.resolver = style.NewResolver(c)
-		am.searchTerm = "foo"
+		am.search.term = "foo"
 		// simulate input with word-diff markers: [WordAddBg]foobar[AddBg]rest
 		wordBg := string(am.resolver.Color(style.ColorKeyWordAddBg))
 		lineBg := string(am.resolver.Color(style.ColorKeyAddLineBg))
@@ -110,7 +110,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 		c := style.Colors{SearchFg: "#1a1a1a", SearchBg: "#d7d700", AddFg: "#00ff00", AddBg: "#002200", WordAddBg: "#2d5a3a"}
 		am := testModel(nil, nil)
 		am.resolver = style.NewResolver(c)
-		am.searchTerm = "foobar rest"
+		am.search.term = "foobar rest"
 		// simulate input with word-diff markers: [WordAddBg]foobar[AddBg] rest
 		wordBg := string(am.resolver.Color(style.ColorKeyWordAddBg))
 		lineBg := string(am.resolver.Color(style.ColorKeyAddLineBg))
@@ -123,7 +123,7 @@ func TestModel_HighlightSearchMatches(t *testing.T) {
 
 	t.Run("no-colors search inside word-diff reverse restores reverse", func(t *testing.T) {
 		am := testModel(nil, nil) // no colors → noColors=true
-		am.searchTerm = "foo"
+		am.search.term = "foo"
 		// simulate input with word-diff reverse: \033[7mfoobar\033[27mrest
 		input := "\033[7m" + "foobar" + "\033[27m" + "rest"
 		result := am.highlightSearchMatches(input, diff.ChangeAdd)
@@ -142,14 +142,14 @@ func TestModel_StartSearch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// press / to start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = result.(Model)
 
-	assert.True(t, model.searching, "should be in searching mode")
-	assert.True(t, model.searchInput.Focused(), "search input should be focused")
+	assert.True(t, model.search.active, "should be in searching mode")
+	assert.True(t, model.search.input.Focused(), "search input should be focused")
 }
 
 func TestModel_StartSearchOnlyFromDiffPane(t *testing.T) {
@@ -159,12 +159,12 @@ func TestModel_StartSearchOnlyFromDiffPane(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneTree
+	model.layout.focus = paneTree
 
 	// press / in tree pane - should not start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = result.(Model)
-	assert.False(t, model.searching, "should not search from tree pane")
+	assert.False(t, model.search.active, "should not search from tree pane")
 }
 
 func TestModel_SubmitSearchFindsMatches(t *testing.T) {
@@ -178,8 +178,8 @@ func TestModel_SubmitSearchFindsMatches(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.diffCursor = 0
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 0
 
 	// start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -195,11 +195,11 @@ func TestModel_SubmitSearchFindsMatches(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.False(t, model.searching, "should exit searching mode")
-	assert.Equal(t, "hello", model.searchTerm)
-	assert.Equal(t, []int{0, 2}, model.searchMatches)
-	assert.Equal(t, 0, model.searchCursor)
-	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match")
+	assert.False(t, model.search.active, "should exit searching mode")
+	assert.Equal(t, "hello", model.search.term)
+	assert.Equal(t, []int{0, 2}, model.search.matches)
+	assert.Equal(t, 0, model.search.cursor)
+	assert.Equal(t, 0, model.nav.diffCursor, "cursor should be on first match")
 }
 
 func TestModel_SubmitSearchCaseInsensitive(t *testing.T) {
@@ -212,16 +212,16 @@ func TestModel_SubmitSearchCaseInsensitive(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
-	model.searching = true
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("hello")
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue("hello")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.Equal(t, []int{0, 1}, model.searchMatches, "should match case-insensitively")
+	assert.Equal(t, []int{0, 1}, model.search.matches, "should match case-insensitively")
 }
 
 func TestModel_SubmitSearchJumpsForwardFromCursor(t *testing.T) {
@@ -235,18 +235,18 @@ func TestModel_SubmitSearchJumpsForwardFromCursor(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.diffCursor = 1 // cursor past first match
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 1 // cursor past first match
 
-	model.searching = true
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("match")
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue("match")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.Equal(t, 1, model.searchCursor, "should jump to second match (index 1)")
-	assert.Equal(t, 2, model.diffCursor, "cursor should be on second match line")
+	assert.Equal(t, 1, model.search.cursor, "should jump to second match (index 1)")
+	assert.Equal(t, 2, model.nav.diffCursor, "cursor should be on second match line")
 }
 
 func TestModel_SubmitSearchWrapsToFirstMatch(t *testing.T) {
@@ -259,18 +259,18 @@ func TestModel_SubmitSearchWrapsToFirstMatch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.diffCursor = 1 // cursor past all matches
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 1 // cursor past all matches
 
-	model.searching = true
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("match")
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue("match")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.Equal(t, 0, model.searchCursor, "should wrap to first match")
-	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match line")
+	assert.Equal(t, 0, model.search.cursor, "should wrap to first match")
+	assert.Equal(t, 0, model.nav.diffCursor, "cursor should be on first match line")
 }
 
 func TestModel_SubmitSearchNoMatches(t *testing.T) {
@@ -282,18 +282,18 @@ func TestModel_SubmitSearchNoMatches(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
-	model.searching = true
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("xyz")
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue("xyz")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.False(t, model.searching)
-	assert.Equal(t, "xyz", model.searchTerm)
-	assert.Empty(t, model.searchMatches)
+	assert.False(t, model.search.active)
+	assert.Equal(t, "xyz", model.search.term)
+	assert.Empty(t, model.search.matches)
 }
 
 func TestModel_SubmitEmptySearchClearsMatches(t *testing.T) {
@@ -305,24 +305,24 @@ func TestModel_SubmitEmptySearchClearsMatches(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// set up existing search state
-	model.searchTerm = "hello"
-	model.searchMatches = []int{0}
-	model.searchCursor = 0
+	model.search.term = "hello"
+	model.search.matches = []int{0}
+	model.search.cursor = 0
 
 	// start search with empty input
-	model.searching = true
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("")
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue("")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.False(t, model.searching)
-	assert.Empty(t, model.searchTerm)
-	assert.Empty(t, model.searchMatches)
+	assert.False(t, model.search.active)
+	assert.Empty(t, model.search.term)
+	assert.Empty(t, model.search.matches)
 }
 
 func TestModel_CancelSearch(t *testing.T) {
@@ -334,18 +334,18 @@ func TestModel_CancelSearch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = result.(Model)
-	require.True(t, model.searching)
+	require.True(t, model.search.active)
 
 	// cancel with esc
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model = result.(Model)
 
-	assert.False(t, model.searching, "should exit searching mode on esc")
+	assert.False(t, model.search.active, "should exit searching mode on esc")
 }
 
 func TestModel_CancelSearchPreservesExistingMatches(t *testing.T) {
@@ -357,11 +357,11 @@ func TestModel_CancelSearchPreservesExistingMatches(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// set up existing search state
-	model.searchTerm = "hello"
-	model.searchMatches = []int{0}
+	model.search.term = "hello"
+	model.search.matches = []int{0}
 
 	// start and cancel new search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -369,8 +369,8 @@ func TestModel_CancelSearchPreservesExistingMatches(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	model = result.(Model)
 
-	assert.Equal(t, "hello", model.searchTerm, "existing search term should be preserved on cancel")
-	assert.Equal(t, []int{0}, model.searchMatches, "existing matches should be preserved on cancel")
+	assert.Equal(t, "hello", model.search.term, "existing search term should be preserved on cancel")
+	assert.Equal(t, []int{0}, model.search.matches, "existing matches should be preserved on cancel")
 }
 
 func TestModel_SearchInputForwardsCharacters(t *testing.T) {
@@ -380,7 +380,7 @@ func TestModel_SearchInputForwardsCharacters(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -392,7 +392,7 @@ func TestModel_SearchInputForwardsCharacters(t *testing.T) {
 		model = result.(Model)
 	}
 
-	assert.Equal(t, "test", model.searchInput.Value(), "characters should be forwarded to search input")
+	assert.Equal(t, "test", model.search.input.Value(), "characters should be forwarded to search input")
 }
 
 func TestModel_SearchBlocksOtherKeysWhileActive(t *testing.T) {
@@ -402,7 +402,7 @@ func TestModel_SearchBlocksOtherKeysWhileActive(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -412,8 +412,8 @@ func TestModel_SearchBlocksOtherKeysWhileActive(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	model = result.(Model)
 
-	assert.True(t, model.searching, "should still be searching")
-	assert.Contains(t, model.searchInput.Value(), "q")
+	assert.True(t, model.search.active, "should still be searching")
+	assert.Contains(t, model.search.input.Value(), "q")
 }
 
 func TestModel_SearchForwardsNonKeyMessages(t *testing.T) {
@@ -423,18 +423,18 @@ func TestModel_SearchForwardsNonKeyMessages(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// start search
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = result.(Model)
-	require.True(t, model.searching)
+	require.True(t, model.search.active)
 
 	// send a non-key message; should not panic and model stays searching
 	type customMsg struct{}
 	result, _ = model.Update(customMsg{})
 	model = result.(Model)
-	assert.True(t, model.searching, "searching should remain true after non-key message")
+	assert.True(t, model.search.active, "searching should remain true after non-key message")
 }
 
 func TestModel_NextSearchMatch(t *testing.T) {
@@ -449,22 +449,22 @@ func TestModel_NextSearchMatch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.searchMatches = []int{0, 2, 3}
-	model.searchCursor = 0
-	model.diffCursor = 0
+	model.layout.focus = paneDiff
+	model.search.matches = []int{0, 2, 3}
+	model.search.cursor = 0
+	model.nav.diffCursor = 0
 
 	// press n to go to next match
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model = result.(Model)
-	assert.Equal(t, 1, model.searchCursor, "search cursor should advance to 1")
-	assert.Equal(t, 2, model.diffCursor, "diff cursor should move to second match")
+	assert.Equal(t, 1, model.search.cursor, "search cursor should advance to 1")
+	assert.Equal(t, 2, model.nav.diffCursor, "diff cursor should move to second match")
 
 	// press n again
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model = result.(Model)
-	assert.Equal(t, 2, model.searchCursor, "search cursor should advance to 2")
-	assert.Equal(t, 3, model.diffCursor, "diff cursor should move to third match")
+	assert.Equal(t, 2, model.search.cursor, "search cursor should advance to 2")
+	assert.Equal(t, 3, model.nav.diffCursor, "diff cursor should move to third match")
 }
 
 func TestModel_NextSearchMatchWrapsAround(t *testing.T) {
@@ -478,16 +478,16 @@ func TestModel_NextSearchMatchWrapsAround(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.searchMatches = []int{0, 2}
-	model.searchCursor = 1 // on last match
-	model.diffCursor = 2
+	model.layout.focus = paneDiff
+	model.search.matches = []int{0, 2}
+	model.search.cursor = 1 // on last match
+	model.nav.diffCursor = 2
 
 	// press n should wrap to first match
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model = result.(Model)
-	assert.Equal(t, 0, model.searchCursor, "search cursor should wrap to 0")
-	assert.Equal(t, 0, model.diffCursor, "diff cursor should wrap to first match")
+	assert.Equal(t, 0, model.search.cursor, "search cursor should wrap to 0")
+	assert.Equal(t, 0, model.nav.diffCursor, "diff cursor should wrap to first match")
 }
 
 func TestModel_PrevSearchMatch(t *testing.T) {
@@ -502,16 +502,16 @@ func TestModel_PrevSearchMatch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.searchMatches = []int{0, 2, 3}
-	model.searchCursor = 2
-	model.diffCursor = 3
+	model.layout.focus = paneDiff
+	model.search.matches = []int{0, 2, 3}
+	model.search.cursor = 2
+	model.nav.diffCursor = 3
 
 	// press N to go to prev match
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model = result.(Model)
-	assert.Equal(t, 1, model.searchCursor, "search cursor should go back to 1")
-	assert.Equal(t, 2, model.diffCursor, "diff cursor should move to second match")
+	assert.Equal(t, 1, model.search.cursor, "search cursor should go back to 1")
+	assert.Equal(t, 2, model.nav.diffCursor, "diff cursor should move to second match")
 }
 
 func TestModel_PrevSearchMatchWrapsAround(t *testing.T) {
@@ -525,16 +525,16 @@ func TestModel_PrevSearchMatchWrapsAround(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.searchMatches = []int{0, 2}
-	model.searchCursor = 0 // on first match
-	model.diffCursor = 0
+	model.layout.focus = paneDiff
+	model.search.matches = []int{0, 2}
+	model.search.cursor = 0 // on first match
+	model.nav.diffCursor = 0
 
 	// press N should wrap to last match
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model = result.(Model)
-	assert.Equal(t, 1, model.searchCursor, "search cursor should wrap to last")
-	assert.Equal(t, 2, model.diffCursor, "diff cursor should wrap to last match")
+	assert.Equal(t, 1, model.search.cursor, "search cursor should wrap to last")
+	assert.Equal(t, 2, model.nav.diffCursor, "diff cursor should wrap to last match")
 }
 
 func TestModel_SearchNavigationSkipsCollapsedHiddenLines(t *testing.T) {
@@ -550,40 +550,40 @@ func TestModel_SearchNavigationSkipsCollapsedHiddenLines(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.collapsed.enabled = true
-	model.collapsed.expandedHunks = make(map[int]bool)
+	model.layout.focus = paneDiff
+	model.modes.collapsed.enabled = true
+	model.modes.collapsed.expandedHunks = make(map[int]bool)
 	// matches on indices 0 (ctx), 1 (hidden remove), 2 (add), 3 (ctx)
-	model.searchMatches = []int{0, 1, 2, 3}
-	model.searchCursor = 0
-	model.diffCursor = 0
+	model.search.matches = []int{0, 1, 2, 3}
+	model.search.cursor = 0
+	model.nav.diffCursor = 0
 
 	t.Run("nextSearchMatch skips hidden removed line", func(t *testing.T) {
 		m := model
 		m.nextSearchMatch()
-		assert.Equal(t, 2, m.searchCursor, "should skip hidden index 1, land on index 2")
-		assert.Equal(t, 2, m.diffCursor, "cursor should be on visible add line")
+		assert.Equal(t, 2, m.search.cursor, "should skip hidden index 1, land on index 2")
+		assert.Equal(t, 2, m.nav.diffCursor, "cursor should be on visible add line")
 	})
 
 	t.Run("prevSearchMatch skips hidden removed line", func(t *testing.T) {
 		m := model
-		m.searchCursor = 2 // on index 2 (add line)
-		m.diffCursor = 2
+		m.search.cursor = 2 // on index 2 (add line)
+		m.nav.diffCursor = 2
 		m.prevSearchMatch()
-		assert.Equal(t, 0, m.searchCursor, "should skip hidden index 1, land on index 0")
-		assert.Equal(t, 0, m.diffCursor, "cursor should be on visible context line")
+		assert.Equal(t, 0, m.search.cursor, "should skip hidden index 1, land on index 0")
+		assert.Equal(t, 0, m.nav.diffCursor, "cursor should be on visible context line")
 	})
 
 	t.Run("submitSearch skips hidden match for initial jump", func(t *testing.T) {
 		m := model
-		m.diffCursor = 1 // cursor on hidden line
-		m.searchTerm = ""
-		m.searchMatches = nil
-		m.searchInput = textinput.New()
-		m.searchInput.SetValue("match")
+		m.nav.diffCursor = 1 // cursor on hidden line
+		m.search.term = ""
+		m.search.matches = nil
+		m.search.input = textinput.New()
+		m.search.input.SetValue("match")
 		m.submitSearch()
 		// should jump to index 2 (visible add) not index 1 (hidden remove)
-		assert.Equal(t, 2, m.diffCursor, "should skip hidden remove and land on visible add")
+		assert.Equal(t, 2, m.nav.diffCursor, "should skip hidden remove and land on visible add")
 	})
 }
 
@@ -598,7 +598,7 @@ func TestModel_NKeyFallsThroughToNextFileWhenNoSearch(t *testing.T) {
 	model := result.(Model)
 
 	// no search active, n should advance to next file
-	assert.Empty(t, model.searchMatches)
+	assert.Empty(t, model.search.matches)
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	model = result.(Model)
 	assert.Equal(t, "b.go", model.tree.SelectedFile(), "n should go to next file when no search active")
@@ -614,16 +614,16 @@ func TestModel_ShiftNDoesPrevMatchWhenSearchActive(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.searchMatches = []int{0, 1}
-	model.searchCursor = 1
-	model.diffCursor = 1
+	model.layout.focus = paneDiff
+	model.search.matches = []int{0, 1}
+	model.search.cursor = 1
+	model.nav.diffCursor = 1
 
 	// press N (shift-n)
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model = result.(Model)
-	assert.Equal(t, 0, model.searchCursor, "N should go to prev match")
-	assert.Equal(t, 0, model.diffCursor, "cursor should be on first match")
+	assert.Equal(t, 0, model.search.cursor, "N should go to prev match")
+	assert.Equal(t, 0, model.nav.diffCursor, "cursor should be on first match")
 }
 
 func TestModel_ShiftNNavigatesPrevFileWithoutSearch(t *testing.T) {
@@ -636,7 +636,7 @@ func TestModel_ShiftNNavigatesPrevFileWithoutSearch(t *testing.T) {
 	m.file.name = "b.go"
 
 	// no search active, N (prev_item) should navigate to previous file
-	assert.Empty(t, m.searchMatches)
+	assert.Empty(t, m.search.matches)
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'N'}})
 	model := result.(Model)
 	assert.Equal(t, "a.go", model.tree.SelectedFile(), "N should navigate to previous file")
@@ -654,15 +654,15 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 	m.file.name = "a.go"
 	m.file.lines = lines
 	m.file.highlighted = noopHighlighter().HighlightLines("a.go", lines)
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 	pRes := style.PlainResolver()
 	m.resolver = pRes
 	m.renderer = style.NewRenderer(pRes)
 
 	t.Run("no search, renderDiff succeeds with all lines", func(t *testing.T) {
-		m.searchMatches = nil
-		m.searchMatchSet = nil
+		m.search.matches = nil
+		m.search.matchSet = nil
 		rendered := m.renderDiff()
 		assert.Contains(t, rendered, "package main")
 		assert.Contains(t, ansi.Strip(rendered), "func hello")
@@ -671,9 +671,9 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 	})
 
 	t.Run("search active, renderDiff includes matched content", func(t *testing.T) {
-		m.searchTerm = "hello"
-		m.searchMatches = []int{1}
-		m.searchCursor = 0
+		m.search.term = "hello"
+		m.search.matches = []int{1}
+		m.search.cursor = 0
 		rendered := m.renderDiff()
 		// matched and non-matched lines should both be rendered
 		assert.Contains(t, ansi.Strip(rendered), "func hello")
@@ -682,12 +682,12 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 	})
 
 	t.Run("search vs no search both render content correctly", func(t *testing.T) {
-		m.searchTerm = "hello"
-		m.searchMatches = []int{1}
-		m.searchCursor = 0
+		m.search.term = "hello"
+		m.search.matches = []int{1}
+		m.search.cursor = 0
 		renderedWithSearch := m.renderDiff()
 
-		m.searchMatches = nil
+		m.search.matches = nil
 		renderedWithout := m.renderDiff()
 
 		// both should contain the same text content
@@ -698,10 +698,10 @@ func TestModel_SearchHighlightInRenderDiff(t *testing.T) {
 	})
 
 	t.Run("cursor coexists with search highlight", func(t *testing.T) {
-		m.searchTerm = "hello"
-		m.searchMatches = []int{1}
-		m.searchCursor = 0
-		m.diffCursor = 1
+		m.search.term = "hello"
+		m.search.matches = []int{1}
+		m.search.cursor = 0
+		m.nav.diffCursor = 1
 		rendered := m.renderDiff()
 
 		outputLines := strings.Split(rendered, "\n")
@@ -728,18 +728,18 @@ func TestModel_SearchHighlightWithWrap(t *testing.T) {
 	m.file.name = "a.go"
 	m.file.lines = lines
 	m.file.highlighted = noopHighlighter().HighlightLines("a.go", lines)
-	m.focus = paneDiff
-	m.diffCursor = 0
-	m.wrapMode = true
-	m.width = 60
-	m.treeWidth = 12
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+	m.modes.wrap = true
+	m.layout.width = 60
+	m.layout.treeWidth = 12
 	pRes := style.PlainResolver()
 	m.resolver = pRes
 	m.renderer = style.NewRenderer(pRes)
 
-	m.searchTerm = "hello"
-	m.searchMatches = []int{0}
-	m.searchCursor = 0
+	m.search.term = "hello"
+	m.search.matches = []int{0}
+	m.search.cursor = 0
 
 	rendered := m.renderDiff()
 	outputLines := strings.Split(strings.TrimSuffix(rendered, "\n"), "\n")
@@ -770,18 +770,18 @@ func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
 	m.file.name = "a.go"
 	m.file.lines = lines
 	m.file.highlighted = noopHighlighter().HighlightLines("a.go", lines)
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 	pRes := style.PlainResolver()
 	m.resolver = pRes
 	m.renderer = style.NewRenderer(pRes)
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 
 	t.Run("collapsed renders with search matches", func(t *testing.T) {
-		m.searchTerm = "hello"
-		m.searchMatches = []int{2}
-		m.searchCursor = 0
+		m.search.term = "hello"
+		m.search.matches = []int{2}
+		m.search.cursor = 0
 		rendered := m.renderDiff()
 
 		assert.Contains(t, rendered, "added hello line")
@@ -789,12 +789,12 @@ func TestModel_SearchHighlightInCollapsedMode(t *testing.T) {
 	})
 
 	t.Run("collapsed without search has no match set", func(t *testing.T) {
-		m.searchMatches = nil
-		m.searchMatchSet = nil
+		m.search.matches = nil
+		m.search.matchSet = nil
 		rendered := m.renderDiff()
 
 		assert.Contains(t, rendered, "added hello line")
-		assert.Nil(t, m.searchMatchSet, "no search should produce nil match set")
+		assert.Nil(t, m.search.matchSet, "no search should produce nil match set")
 	})
 }
 
@@ -840,13 +840,13 @@ func TestModel_BuildSearchMatchSet(t *testing.T) {
 	m := testModel(nil, nil)
 
 	t.Run("empty matches produces nil set", func(t *testing.T) {
-		m.searchMatches = nil
+		m.search.matches = nil
 		result := m.buildSearchMatchSet()
 		assert.Nil(t, result)
 	})
 
 	t.Run("matches produce correct set", func(t *testing.T) {
-		m.searchMatches = []int{1, 5, 10}
+		m.search.matches = []int{1, 5, 10}
 		result := m.buildSearchMatchSet()
 		assert.True(t, result[1])
 		assert.True(t, result[5])
@@ -858,26 +858,26 @@ func TestModel_BuildSearchMatchSet(t *testing.T) {
 
 func TestModel_ClearSearchResetsMatchSet(t *testing.T) {
 	m := testModel(nil, nil)
-	m.searchTerm = "test"
-	m.searchMatches = []int{1, 2}
-	m.searchCursor = 1
-	m.searchMatchSet = map[int]bool{1: true, 2: true}
+	m.search.term = "test"
+	m.search.matches = []int{1, 2}
+	m.search.cursor = 1
+	m.search.matchSet = map[int]bool{1: true, 2: true}
 
 	m.clearSearch()
 
-	assert.Empty(t, m.searchTerm)
-	assert.Nil(t, m.searchMatches)
-	assert.Equal(t, 0, m.searchCursor)
-	assert.Nil(t, m.searchMatchSet)
+	assert.Empty(t, m.search.term)
+	assert.Nil(t, m.search.matches)
+	assert.Equal(t, 0, m.search.cursor)
+	assert.Nil(t, m.search.matchSet)
 }
 
 func TestModel_StatusBarShowsSearchInput(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.width = 120
+	m.layout.width = 120
 	m.file.name = "a.go"
-	m.searching = true
-	m.searchInput = textinput.New()
-	m.searchInput.SetValue("hello")
+	m.search.active = true
+	m.search.input = textinput.New()
+	m.search.input.SetValue("hello")
 
 	status := m.statusBarText()
 	assert.Contains(t, status, "/hello", "should show search prompt with value")
@@ -886,10 +886,10 @@ func TestModel_StatusBarShowsSearchInput(t *testing.T) {
 
 func TestModel_StatusBarSearchInputTakesPriority(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.width = 120
+	m.layout.width = 120
 	m.file.name = "a.go"
-	m.searching = true
-	m.searchInput = textinput.New()
+	m.search.active = true
+	m.search.input = textinput.New()
 	m.inConfirmDiscard = true // should not show discard prompt
 
 	status := m.statusBarText()
@@ -921,10 +921,10 @@ func TestModel_StatusBarSearchMatchPosition(t *testing.T) {
 				{NewNum: 2, Content: "add", ChangeType: diff.ChangeAdd},
 				{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
 			}
-			m.focus = paneDiff
-			m.width = 200
-			m.searchMatches = tt.matches
-			m.searchCursor = tt.cursor
+			m.layout.focus = paneDiff
+			m.layout.width = 200
+			m.search.matches = tt.matches
+			m.search.cursor = tt.cursor
 
 			status := m.statusBarText()
 			if tt.wantContains != "" {
@@ -944,8 +944,8 @@ func TestModel_SearchSegment(t *testing.T) {
 	assert.Empty(t, m.searchSegment())
 
 	// with matches
-	m.searchMatches = []int{0, 3, 7}
-	m.searchCursor = 1
+	m.search.matches = []int{0, 3, 7}
+	m.search.cursor = 1
 	assert.Equal(t, "2/3", m.searchSegment())
 
 	// all matches on hidden removed lines in collapsed mode shows [0/N]
@@ -958,10 +958,10 @@ func TestModel_SearchSegment(t *testing.T) {
 	m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m2.file.lines = lines
 	m2.file.name = "a.go"
-	m2.collapsed.enabled = true
-	m2.collapsed.expandedHunks = make(map[int]bool)
-	m2.searchMatches = []int{1} // only on hidden removed line
-	m2.searchCursor = 0
+	m2.modes.collapsed.enabled = true
+	m2.modes.collapsed.expandedHunks = make(map[int]bool)
+	m2.search.matches = []int{1} // only on hidden removed line
+	m2.search.cursor = 0
 	assert.Equal(t, "0/1", m2.searchSegment(), "should show [0/N] when all matches are hidden")
 }
 
@@ -973,14 +973,14 @@ func TestModel_StatusBarSearchPositionBetweenHunkAndIcons(t *testing.T) {
 	m := testModel(nil, nil)
 	m.file.name = "a.go"
 	m.file.lines = lines
-	m.diffCursor = 1
+	m.nav.diffCursor = 1
 	m.file.adds = 1
-	m.focus = paneDiff
-	m.width = 200
-	m.searchMatches = []int{1}
-	m.searchCursor = 0
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.layout.focus = paneDiff
+	m.layout.width = 200
+	m.search.matches = []int{1}
+	m.search.cursor = 0
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 
 	status := m.statusBarText()
 	// all three should be present
@@ -1009,23 +1009,23 @@ func TestModel_ClearSearchOnFileLoad(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", seq: model.file.loadSeq, lines: lines1})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// set up search state as if user searched for "hello"
-	model.searchTerm = "hello"
-	model.searchMatches = []int{0, 1}
-	model.searchCursor = 1
-	model.searchMatchSet = map[int]bool{0: true, 1: true}
+	model.search.term = "hello"
+	model.search.matches = []int{0, 1}
+	model.search.cursor = 1
+	model.search.matchSet = map[int]bool{0: true, 1: true}
 
 	// load a different file
 	model.file.loadSeq++
 	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.file.loadSeq, lines: lines2})
 	model = result.(Model)
 
-	assert.Empty(t, model.searchTerm, "search term should be cleared on file load")
-	assert.Nil(t, model.searchMatches, "search matches should be cleared on file load")
-	assert.Equal(t, 0, model.searchCursor, "search cursor should be reset on file load")
-	assert.Nil(t, model.searchMatchSet, "search match set should be cleared on file load")
+	assert.Empty(t, model.search.term, "search term should be cleared on file load")
+	assert.Nil(t, model.search.matches, "search matches should be cleared on file load")
+	assert.Equal(t, 0, model.search.cursor, "search cursor should be reset on file load")
+	assert.Nil(t, model.search.matchSet, "search match set should be cleared on file load")
 }
 
 func TestModel_StatusBarNarrowDropsSearchSegment(t *testing.T) {
@@ -1036,20 +1036,20 @@ func TestModel_StatusBarNarrowDropsSearchSegment(t *testing.T) {
 	m := testModel(nil, nil)
 	m.file.name = "a.go"
 	m.file.lines = lines
-	m.diffCursor = 1
+	m.nav.diffCursor = 1
 	m.file.adds = 1
-	m.focus = paneDiff
-	m.searchMatches = []int{1}
-	m.searchCursor = 0
+	m.layout.focus = paneDiff
+	m.search.matches = []int{1}
+	m.search.cursor = 0
 
 	t.Run("wide terminal shows search segment", func(t *testing.T) {
-		m.width = 200
+		m.layout.width = 200
 		status := m.statusBarText()
 		assert.Contains(t, status, "1/1")
 	})
 
 	t.Run("very narrow terminal drops search with hunk", func(t *testing.T) {
-		m.width = 28
+		m.layout.width = 28
 		status := m.statusBarText()
 		assert.NotContains(t, status, "1/1", "search segment should be dropped on very narrow terminal")
 		assert.Contains(t, status, "? help")
@@ -1069,22 +1069,22 @@ func TestModel_RealignSearchCursorOnCollapsedToggle(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// set up search with cursor on the removed line (index 1)
-	model.searchMatches = []int{0, 1, 2, 3}
-	model.searchCursor = 1
-	model.diffCursor = 1
+	model.search.matches = []int{0, 1, 2, 3}
+	model.search.cursor = 1
+	model.nav.diffCursor = 1
 
 	// toggle collapsed mode, which hides removed lines
 	model.toggleCollapsedMode()
 
-	assert.True(t, model.collapsed.enabled)
-	assert.NotEqual(t, 1, model.diffCursor, "cursor should have moved off hidden removed line")
-	assert.NotEqual(t, 1, model.searchCursor, "searchCursor should realign away from hidden match")
+	assert.True(t, model.modes.collapsed.enabled)
+	assert.NotEqual(t, 1, model.nav.diffCursor, "cursor should have moved off hidden removed line")
+	assert.NotEqual(t, 1, model.search.cursor, "searchCursor should realign away from hidden match")
 	// searchCursor should point to a visible match
-	if model.searchCursor < len(model.searchMatches) {
-		matchIdx := model.searchMatches[model.searchCursor]
+	if model.search.cursor < len(model.search.matches) {
+		matchIdx := model.search.matches[model.search.cursor]
 		hunks := model.findHunks()
 		assert.False(t, model.isCollapsedHidden(matchIdx, hunks), "realigned searchCursor should point to a visible match")
 	}
@@ -1103,22 +1103,22 @@ func TestModel_RealignSearchCursorOnHunkCollapse(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// start in collapsed mode with hunk expanded (hunk starts at index 1, first change line)
-	model.collapsed.enabled = true
-	model.collapsed.expandedHunks = map[int]bool{1: true}
-	model.searchMatches = []int{0, 1, 2, 3}
-	model.searchCursor = 1 // on removed line (visible because hunk is expanded)
-	model.diffCursor = 1
+	model.modes.collapsed.enabled = true
+	model.modes.collapsed.expandedHunks = map[int]bool{1: true}
+	model.search.matches = []int{0, 1, 2, 3}
+	model.search.cursor = 1 // on removed line (visible because hunk is expanded)
+	model.nav.diffCursor = 1
 
 	// collapse the hunk — removed line becomes hidden
 	model.toggleHunkExpansion()
 
-	assert.NotContains(t, model.collapsed.expandedHunks, 1, "hunk should be collapsed")
+	assert.NotContains(t, model.modes.collapsed.expandedHunks, 1, "hunk should be collapsed")
 	// searchCursor should have realigned to a visible match
-	if len(model.searchMatches) > 0 && model.searchCursor < len(model.searchMatches) {
-		matchIdx := model.searchMatches[model.searchCursor]
+	if len(model.search.matches) > 0 && model.search.cursor < len(model.search.matches) {
+		matchIdx := model.search.matches[model.search.cursor]
 		hunks := model.findHunks()
 		assert.False(t, model.isCollapsedHidden(matchIdx, hunks), "searchCursor should point to visible match after hunk collapse")
 	}
@@ -1135,13 +1135,13 @@ func TestModel_RealignSearchCursorNoopWithoutSearch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.searchMatches = nil
-	model.searchCursor = 0
+	model.layout.focus = paneDiff
+	model.search.matches = nil
+	model.search.cursor = 0
 
 	// should not panic or change anything
 	model.realignSearchCursor()
-	assert.Equal(t, 0, model.searchCursor)
+	assert.Equal(t, 0, model.search.cursor)
 }
 
 func TestModel_SubmitSearchPreservesLeadingWhitespace(t *testing.T) {
@@ -1155,14 +1155,14 @@ func TestModel_SubmitSearchPreservesLeadingWhitespace(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("  indented")
+	model.search.input = textinput.New()
+	model.search.input.SetValue("  indented")
 	model.submitSearch()
 
-	assert.Equal(t, "  indented", model.searchTerm, "leading whitespace should be preserved in search term")
-	assert.Equal(t, []int{0}, model.searchMatches, "should match the indented line")
+	assert.Equal(t, "  indented", model.search.term, "leading whitespace should be preserved in search term")
+	assert.Equal(t, []int{0}, model.search.matches, "should match the indented line")
 }
 
 func TestModel_SubmitSearchWhitespaceOnlyClearsSearch(t *testing.T) {
@@ -1175,19 +1175,19 @@ func TestModel_SubmitSearchWhitespaceOnlyClearsSearch(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// pre-populate search state
-	model.searchTerm = "old"
-	model.searchMatches = []int{0}
-	model.searchCursor = 0
+	model.search.term = "old"
+	model.search.matches = []int{0}
+	model.search.cursor = 0
 
-	model.searchInput = textinput.New()
-	model.searchInput.SetValue("   ")
+	model.search.input = textinput.New()
+	model.search.input.SetValue("   ")
 	model.submitSearch()
 
-	assert.Empty(t, model.searchTerm, "whitespace-only query should clear search")
-	assert.Nil(t, model.searchMatches)
+	assert.Empty(t, model.search.term, "whitespace-only query should clear search")
+	assert.Nil(t, model.search.matches)
 }
 
 func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
@@ -1205,16 +1205,16 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 	plainRes := style.PlainResolver()
 	model.resolver = plainRes
 	model.renderer = style.NewRenderer(plainRes)
-	model.collapsed.enabled = true
-	model.collapsed.expandedHunks = make(map[int]bool)
-	model.diffCursor = 1
+	model.modes.collapsed.enabled = true
+	model.modes.collapsed.expandedHunks = make(map[int]bool)
+	model.nav.diffCursor = 1
 
 	t.Run("with search match", func(t *testing.T) {
-		model.searchMatchSet = map[int]bool{1: true}
+		model.search.matchSet = map[int]bool{1: true}
 		var b strings.Builder
 		model.renderDeletePlaceholder(&b, 1, 1)
 		rendered := b.String()
@@ -1223,7 +1223,7 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 	})
 
 	t.Run("without search match", func(t *testing.T) {
-		model.searchMatchSet = nil
+		model.search.matchSet = nil
 		var b strings.Builder
 		model.renderDeletePlaceholder(&b, 1, 1)
 		rendered := b.String()
@@ -1232,15 +1232,15 @@ func TestModel_DeletePlaceholderSearchHighlight(t *testing.T) {
 	})
 
 	t.Run("with wrap mode and search match", func(t *testing.T) {
-		model.searchMatchSet = map[int]bool{1: true}
-		model.wrapMode = true
-		model.width = 120
-		model.treeWidth = 30
+		model.search.matchSet = map[int]bool{1: true}
+		model.modes.wrap = true
+		model.layout.width = 120
+		model.layout.treeWidth = 30
 		var b strings.Builder
 		model.renderDeletePlaceholder(&b, 1, 1)
 		rendered := b.String()
 		assert.Contains(t, rendered, "2 lines deleted")
-		model.wrapMode = false
+		model.modes.wrap = false
 	})
 }
 
@@ -1255,7 +1255,7 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 	t.Run("start search from diff pane with TOC", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
 		m.file.singleFile = true
-		m.treeWidth = 0
+		m.layout.treeWidth = 0
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		model := result.(Model)
@@ -1263,18 +1263,18 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		model = result.(Model)
 		require.NotNil(t, model.file.mdTOC)
 
-		model.focus = paneDiff
+		model.layout.focus = paneDiff
 
 		// press '/' to start search
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		model = result.(Model)
-		assert.True(t, model.searching, "should enter search mode in diff pane with TOC")
+		assert.True(t, model.search.active, "should enter search mode in diff pane with TOC")
 	})
 
 	t.Run("search not started from TOC pane", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
 		m.file.singleFile = true
-		m.treeWidth = 0
+		m.layout.treeWidth = 0
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		model := result.(Model)
@@ -1282,18 +1282,18 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		model = result.(Model)
 		require.NotNil(t, model.file.mdTOC)
 
-		model.focus = paneTree // TOC pane
+		model.layout.focus = paneTree // TOC pane
 
 		// press '/' in TOC pane - should not start search
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 		model = result.(Model)
-		assert.False(t, model.searching, "search should not start from TOC pane")
+		assert.False(t, model.search.active, "search should not start from TOC pane")
 	})
 
 	t.Run("TOC active section updates after search navigation", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
 		m.file.singleFile = true
-		m.treeWidth = 0
+		m.layout.treeWidth = 0
 
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 		model := result.(Model)
@@ -1301,9 +1301,9 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		model = result.(Model)
 		require.NotNil(t, model.file.mdTOC)
 
-		model.focus = paneDiff
-		model.searchMatches = []int{3} // match on line 3
-		model.searchCursor = 0
+		model.layout.focus = paneDiff
+		model.search.matches = []int{3} // match on line 3
+		model.search.cursor = 0
 
 		// navigate to search match via 'n' key
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})

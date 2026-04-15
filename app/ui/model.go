@@ -215,72 +215,103 @@ type loadedFileState struct {
 	singleFile       bool                   // true when diff contains exactly one file
 }
 
+// modelConfigState holds immutable or near-immutable session configuration.
+// these values are set once at startup and not changed during runtime.
+type modelConfigState struct {
+	ref              string   // git ref for diff
+	staged           bool     // show staged changes
+	only             []string // filter to show only matching files
+	workDir          string   // working directory for resolving absolute --only paths
+	noColors         bool     // keep monochrome output when previewing or applying themes
+	noStatusBar      bool     // hide the status bar
+	noConfirmDiscard bool     // skip confirmation prompt on discard quit
+	crossFileHunks   bool     // allow [ and ] to jump across file boundaries
+	treeWidthRatio   int      // 1-10 units for file tree panel
+	tabSpaces        string   // spaces to replace tabs with
+}
+
+// layoutState holds viewport and layout concerns that change on resize and pane toggles.
+type layoutState struct {
+	viewport   viewport.Model // scrollable diff viewport
+	focus      pane           // which pane has focus
+	treeHidden bool           // user toggled tree/TOC pane off
+	width      int            // terminal width
+	height     int            // terminal height
+	treeWidth  int            // current tree pane width in columns
+	scrollX    int            // horizontal scroll offset for diff pane
+}
+
+// modeState holds user-togglable view-mode flags.
+// these are display modes that the user can switch at runtime via keybindings.
+type modeState struct {
+	wrap          bool           // true when line wrapping is enabled
+	collapsed     collapsedState // collapsed diff view state
+	lineNumbers   bool           // true when line numbers are shown in gutter
+	wordDiff      bool           // true when intra-line word-diff highlighting is enabled
+	showBlame     bool           // true when blame gutter is shown
+	showUntracked bool           // true when untracked files are shown in tree
+}
+
+// navigationState holds cursor and navigation-adjacent state.
+type navigationState struct {
+	diffCursor      int   // index into file.lines for current cursor line
+	pendingHunkJump *bool // pending hunk jump after cross-file hunk navigation (true=first, false=last)
+}
+
+// searchState holds all search lifecycle state.
+type searchState struct {
+	active   bool            // true when search textinput is active (typing)
+	term     string          // last submitted search query
+	matches  []int           // indices into file.lines that match
+	cursor   int             // current position in matches (0-based)
+	input    textinput.Model // dedicated textinput for search
+	matchSet map[int]bool    // set of file.lines indices that match, computed per render
+}
+
+// annotationState holds annotation input lifecycle state.
+type annotationState struct {
+	annotating         bool            // true when annotation text input is active
+	fileAnnotating     bool            // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
+	input              textinput.Model // text input for annotations
+}
+
 // Model is the top-level bubbletea model for revdiff.
 type Model struct {
+	// injected dependencies
 	resolver     styleResolver
 	renderer     styleRenderer
 	sgr          sgrProcessor
 	differ       wordDiffer
 	overlay      overlayManager
 	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
-	viewport     viewport.Model
 	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
 	store        *annotation.Store
 	diffRenderer Renderer
 	keymap       *keymap.Keymap
 	themes       ThemeCatalog // theme catalog for discovery, resolve, and persistence
 
-	ref            string
-	staged         bool
-	only           []string // filter to show only matching files
-	workDir        string   // working directory for resolving absolute --only paths
-	noColors       bool     // keep monochrome output when previewing or applying themes
-	noStatusBar    bool
-	focus          pane
-	treeHidden     bool // user toggled tree/TOC pane off
-	width          int
-	height         int
-	treeWidth      int
-	treeWidthRatio int    // 1-10 units for file tree panel
-	tabSpaces      string // spaces to replace tabs with
-	diffCursor     int    // index into file.lines for current cursor line
-	scrollX        int    // horizontal scroll offset for diff pane
+	// grouped state
+	cfg    modelConfigState // immutable session config
+	layout layoutState      // viewport and layout
+	modes  modeState        // user-togglable view modes
+	nav    navigationState  // cursor and navigation
 
 	highlighter SyntaxHighlighter // syntax highlighter
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
+	search      searchState       // search lifecycle state
+	annot       annotationState   // annotation input lifecycle state
 
-	ready              bool            // true after first WindowSizeMsg
-	annotating         bool            // true when annotation text input is active
-	fileAnnotating     bool            // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
-	annotateInput      textinput.Model // text input for annotations
+	ready bool // true after first WindowSizeMsg
 
-	collapsed collapsedState // collapsed diff view state
-
-	wrapMode       bool // true when line wrapping is enabled
-	crossFileHunks bool // allow [ and ] to jump across file boundaries
-	lineNumbers    bool // true when line numbers are shown in gutter
-
-	wordDiff      bool                     // true when intra-line word-diff highlighting is enabled
 	blamer        Blamer                   // optional blame provider (nil when git unavailable)
-	showBlame     bool                     // true when blame gutter is shown
-	showUntracked bool                     // true when untracked files are shown in tree
 	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
 	blameNow      time.Time                // snapshot of time.Now() set once per render pass for blame age
 
-	searching      bool            // true when search textinput is active (typing)
-	searchTerm     string          // last submitted search query
-	searchMatches  []int           // indices into file.lines that match
-	searchCursor   int             // current position in searchMatches (0-based)
-	searchInput    textinput.Model // dedicated textinput for search
-	searchMatchSet map[int]bool    // set of file.lines indices that match search, computed per render
-
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
-	noConfirmDiscard bool // skip confirmation prompt on discard quit
 
 	pendingAnnotJump *annotation.Annotation // pending jump target after cross-file annotation list jump
-	pendingHunkJump  *bool                  // pending hunk jump after cross-file hunk navigation (true=first, false=last)
 
 	activeThemeName string               // name of currently applied theme (for cursor positioning)
 	themePreview    *themePreviewSession // non-nil while theme selector is open
@@ -419,38 +450,44 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	}
 
 	return Model{
-		resolver:         cfg.StyleResolver,
-		renderer:         cfg.StyleRenderer,
-		sgr:              cfg.SGR,
-		differ:           cfg.WordDiffer,
-		overlay:          cfg.Overlay,
-		keymap:           km,
-		store:            cfg.Store,
-		diffRenderer:     cfg.Renderer,
-		highlighter:      cfg.Highlighter,
-		blamer:           cfg.Blamer,
-		tree:             cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
-		parseTOC:         cfg.ParseTOC,
-		themes:           cfg.Themes,
-		ref:              cfg.Ref,
-		staged:           cfg.Staged,
-		only:             cfg.Only,
-		workDir:          cfg.WorkDir,
-		noColors:         cfg.NoColors,
-		noStatusBar:      cfg.NoStatusBar,
-		noConfirmDiscard: cfg.NoConfirmDiscard,
-		wrapMode:         cfg.Wrap,
-		crossFileHunks:   cfg.CrossFileHunks,
-		lineNumbers:      cfg.LineNumbers,
-		collapsed:        collapsedState{enabled: cfg.Collapsed},
-		wordDiff:         cfg.WordDiff,
-		showBlame:        cfg.ShowBlame && cfg.Blamer != nil,
-		showUntracked:    false,
-		loadUntracked:    cfg.LoadUntracked,
-		focus:            paneTree,
-		treeWidthRatio:   cfg.TreeWidthRatio,
-		tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
-		activeThemeName:  cfg.ActiveThemeName,
+		resolver:     cfg.StyleResolver,
+		renderer:     cfg.StyleRenderer,
+		sgr:          cfg.SGR,
+		differ:       cfg.WordDiffer,
+		overlay:      cfg.Overlay,
+		keymap:       km,
+		store:        cfg.Store,
+		diffRenderer: cfg.Renderer,
+		highlighter:  cfg.Highlighter,
+		blamer:       cfg.Blamer,
+		tree:         cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
+		parseTOC:     cfg.ParseTOC,
+		themes:       cfg.Themes,
+		cfg: modelConfigState{
+			ref:              cfg.Ref,
+			staged:           cfg.Staged,
+			only:             cfg.Only,
+			workDir:          cfg.WorkDir,
+			noColors:         cfg.NoColors,
+			noStatusBar:      cfg.NoStatusBar,
+			noConfirmDiscard: cfg.NoConfirmDiscard,
+			crossFileHunks:   cfg.CrossFileHunks,
+			treeWidthRatio:   cfg.TreeWidthRatio,
+			tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
+		},
+		layout: layoutState{
+			focus: paneTree,
+		},
+		modes: modeState{
+			wrap:          cfg.Wrap,
+			lineNumbers:   cfg.LineNumbers,
+			collapsed:     collapsedState{enabled: cfg.Collapsed},
+			wordDiff:      cfg.WordDiff,
+			showBlame:     cfg.ShowBlame && cfg.Blamer != nil,
+			showUntracked: false,
+		},
+		loadUntracked:   cfg.LoadUntracked,
+		activeThemeName: cfg.ActiveThemeName,
 	}, nil
 }
 
@@ -488,17 +525,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)
-	if m.annotating {
+	if m.annot.annotating {
 		var cmd tea.Cmd
-		m.annotateInput, cmd = m.annotateInput.Update(msg)
-		m.viewport.SetContent(m.renderDiff()) // re-render so cursor blink updates are visible
+		m.annot.input, cmd = m.annot.input.Update(msg)
+		m.layout.viewport.SetContent(m.renderDiff()) // re-render so cursor blink updates are visible
 		return m, cmd
 	}
 
 	// forward other messages to search textinput when searching (e.g. cursor blink)
-	if m.searching {
+	if m.search.active {
 		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.search.input, cmd = m.search.input.Update(msg)
 		return m, cmd
 	}
 
@@ -547,7 +584,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// pane-specific navigation
-	switch m.focus {
+	switch m.layout.focus {
 	case paneTree:
 		return m.handleTreeNav(msg)
 	case paneDiff:
@@ -573,13 +610,13 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	// annotation input mode takes priority
-	if m.annotating {
+	if m.annot.annotating {
 		model, cmd := m.handleAnnotateKey(msg)
 		return true, model, cmd
 	}
 
 	// search input mode takes priority after annotation
-	if m.searching {
+	if m.search.active {
 		model, cmd := m.handleSearchKey(msg)
 		return true, model, cmd
 	}
@@ -609,12 +646,12 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 // treePaneHidden returns true when the tree/TOC pane should be hidden.
 // true when user toggled it off, or in single-file mode without a markdown TOC.
 func (m Model) treePaneHidden() bool {
-	return m.treeHidden || (m.file.singleFile && m.file.mdTOC == nil)
+	return m.layout.treeHidden || (m.file.singleFile && m.file.mdTOC == nil)
 }
 
 // isCursorLine returns true when the diff line at idx is the active cursor line.
 func (m Model) isCursorLine(idx int) bool {
-	return idx == m.diffCursor && m.focus == paneDiff && !m.cursorOnAnnotation
+	return idx == m.nav.diffCursor && m.layout.focus == paneDiff && !m.annot.cursorOnAnnotation
 }
 
 // togglePane switches focus between tree and diff panes.
@@ -624,13 +661,13 @@ func (m *Model) togglePane() {
 	if m.treePaneHidden() {
 		return
 	}
-	if m.focus != paneTree {
-		m.focus = paneTree
+	if m.layout.focus != paneTree {
+		m.layout.focus = paneTree
 		m.syncTOCCursorToActive()
 		return
 	}
 	if m.file.name != "" {
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 	}
 }
 
@@ -640,26 +677,26 @@ func (m *Model) toggleTreePane() {
 	if m.file.singleFile && m.file.mdTOC == nil {
 		return
 	}
-	m.treeHidden = !m.treeHidden
-	if m.treeHidden {
-		m.treeWidth = 0
-		m.focus = paneDiff
-		m.viewport.Width = m.width - 2
+	m.layout.treeHidden = !m.layout.treeHidden
+	if m.layout.treeHidden {
+		m.layout.treeWidth = 0
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = m.layout.width - 2
 	} else {
-		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
-		m.viewport.Width = m.width - m.treeWidth - 4
+		m.layout.treeWidth = max(minTreeWidth, m.layout.width*m.cfg.treeWidthRatio/10)
+		m.layout.viewport.Width = m.layout.width - m.layout.treeWidth - 4
 	}
-	m.viewport.Height = m.paneHeight() - 1
+	m.layout.viewport.Height = m.paneHeight() - 1
 	m.syncViewportToCursor()
 }
 
 // toggleLineNumbers toggles line number display on/off and recomputes gutter width.
 func (m *Model) toggleLineNumbers() {
-	if m.focus != paneDiff || m.file.name == "" {
+	if m.layout.focus != paneDiff || m.file.name == "" {
 		return
 	}
-	m.lineNumbers = !m.lineNumbers
-	if m.lineNumbers {
+	m.modes.lineNumbers = !m.modes.lineNumbers
+	if m.modes.lineNumbers {
 		m.file.lineNumWidth = m.computeLineNumWidth()
 	}
 	m.syncViewportToCursor()
@@ -685,11 +722,11 @@ func (m Model) computeLineNumWidth() int {
 
 // toggleBlame toggles the blame gutter on/off. returns a tea.Cmd to load blame data async.
 func (m *Model) toggleBlame() tea.Cmd {
-	if m.focus != paneDiff || m.file.name == "" || m.blamer == nil {
+	if m.layout.focus != paneDiff || m.file.name == "" || m.blamer == nil {
 		return nil
 	}
-	m.showBlame = !m.showBlame
-	if m.showBlame {
+	m.modes.showBlame = !m.modes.showBlame
+	if m.modes.showBlame {
 		m.file.blameData = nil
 		m.file.blameAuthorLen = 0
 		return m.loadBlame(m.file.name)
@@ -705,17 +742,17 @@ func (m *Model) toggleBlame() tea.Cmd {
 // when enabling and clears them when disabling.
 // no-op when the diff pane is not focused or no file is loaded.
 func (m *Model) toggleWordDiff() {
-	if m.focus != paneDiff || m.file.name == "" {
+	if m.layout.focus != paneDiff || m.file.name == "" {
 		return
 	}
-	m.wordDiff = !m.wordDiff
+	m.modes.wordDiff = !m.modes.wordDiff
 	m.recomputeIntraRanges()
-	m.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetContent(m.renderDiff())
 }
 
 // toggleUntracked toggles visibility of untracked files in the tree.
 func (m *Model) toggleUntracked() tea.Cmd {
-	m.showUntracked = !m.showUntracked
+	m.modes.showUntracked = !m.modes.showUntracked
 	return m.loadFiles()
 }
 
@@ -745,38 +782,38 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 // toggleWrapMode toggles line wrapping on/off.
 // resets horizontal scroll when enabling wrap and re-renders the diff.
 func (m *Model) toggleWrapMode() {
-	if m.focus != paneDiff || m.file.name == "" {
+	if m.layout.focus != paneDiff || m.file.name == "" {
 		return
 	}
-	m.wrapMode = !m.wrapMode
-	if m.wrapMode {
-		m.scrollX = 0
+	m.modes.wrap = !m.modes.wrap
+	if m.modes.wrap {
+		m.layout.scrollX = 0
 	}
 	m.syncViewportToCursor()
 }
 
 func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
-	m.width = msg.Width
-	m.height = msg.Height
+	m.layout.width = msg.Width
+	m.layout.height = msg.Height
 
 	var diffWidth int
 	if m.treePaneHidden() {
-		m.treeWidth = 0
-		diffWidth = m.width - 2 // diff pane borders only
+		m.layout.treeWidth = 0
+		diffWidth = m.layout.width - 2 // diff pane borders only
 	} else {
 		// adjust tree width based on ratio (N out of 10 units);
 		// applies to multi-file mode and single-file markdown with TOC
-		m.treeWidth = max(minTreeWidth, m.width*m.treeWidthRatio/10)
-		diffWidth = m.width - m.treeWidth - 4 // borders
+		m.layout.treeWidth = max(minTreeWidth, m.layout.width*m.cfg.treeWidthRatio/10)
+		diffWidth = m.layout.width - m.layout.treeWidth - 4 // borders
 	}
 	diffHeight := m.paneHeight() - 1 // pane height minus diff header
 
 	if !m.ready {
-		m.viewport = viewport.New(diffWidth, diffHeight)
+		m.layout.viewport = viewport.New(diffWidth, diffHeight)
 		m.ready = true
 	} else {
-		m.viewport.Width = diffWidth
-		m.viewport.Height = diffHeight
+		m.layout.viewport.Width = diffWidth
+		m.layout.viewport.Height = diffHeight
 	}
 
 	m.tree.EnsureVisible(m.treePageSize())

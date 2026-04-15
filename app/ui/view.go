@@ -27,13 +27,13 @@ func (m Model) View() string {
 		diffTitle = m.file.name
 	}
 	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(" " + diffTitle)
-	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.viewport.View())
+	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.layout.viewport.View())
 
 	var mainView string
 	switch {
 	case m.treePaneHidden():
 		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
-		paneW := m.width - 2
+		paneW := m.layout.width - 2
 		diffContent = m.padContentBg(diffContent, paneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 		diffPane := m.resolver.Style(style.StyleKeyDiffPaneActive).
 			Width(paneW).
@@ -43,22 +43,22 @@ func (m Model) View() string {
 
 	case m.file.singleFile && m.file.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
-		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.treeWidth, Height: ph, Focused: m.focus == paneTree, Resolver: m.resolver})
+		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
 		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph)
 
 	default:
 		annotated := m.annotatedFiles()
-		treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
+		treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.layout.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
 		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph)
 	}
 
-	mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.width, Height: m.height, Resolver: m.resolver})
+	mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver})
 
-	if m.noStatusBar {
+	if m.cfg.noStatusBar {
 		return mainView
 	}
 
-	status := m.resolver.Style(style.StyleKeyStatusBar).Width(m.width).Render(m.statusBarText())
+	status := m.resolver.Style(style.StyleKeyStatusBar).Width(m.layout.width).Render(m.statusBarText())
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
 
@@ -67,18 +67,18 @@ func (m Model) View() string {
 func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) string {
 	treeStyle := m.resolver.Style(style.StyleKeyTreePane)
 	diffStyle := m.resolver.Style(style.StyleKeyDiffPane)
-	if m.focus == paneTree {
+	if m.layout.focus == paneTree {
 		treeStyle = m.resolver.Style(style.StyleKeyTreePaneActive)
 	} else {
 		diffStyle = m.resolver.Style(style.StyleKeyDiffPaneActive)
 	}
 
-	diffW := m.width - m.treeWidth - 4
-	leftContent = m.padContentBg(leftContent, m.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
+	diffW := m.layout.width - m.layout.treeWidth - 4
+	leftContent = m.padContentBg(leftContent, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
 	diffContent = m.padContentBg(diffContent, diffW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 
 	leftPane := treeStyle.
-		Width(m.treeWidth).
+		Width(m.layout.treeWidth).
 		Height(ph).
 		Render(leftContent)
 
@@ -94,7 +94,7 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 // shows search input (when typing), or filename, diff stats, hunk position,
 // search match position, mode indicators, and right-aligned annotation count + help hint.
 func (m Model) statusBarText() string {
-	if m.searching {
+	if m.search.active {
 		return m.searchBarText()
 	}
 
@@ -102,7 +102,7 @@ func (m Model) statusBarText() string {
 		return fmt.Sprintf("discard %d annotations? [y/n]", m.store.Count())
 	}
 
-	if m.annotating {
+	if m.annot.annotating {
 		return "[enter] save  [esc] cancel"
 	}
 
@@ -151,7 +151,7 @@ func (m Model) statusBarText() string {
 
 	// truncate filename from left with … if status line is too wide
 	minRight := lipgloss.Width(right) + 5 // 2 for status bar padding + 3 for separator
-	available := max(m.width-minRight, 0)
+	available := max(m.layout.width-minRight, 0)
 
 	// graceful degradation: drop left segments when too narrow
 	if lipgloss.Width(left) > available {
@@ -193,7 +193,7 @@ func (m Model) statusBarText() string {
 // hunkSegment returns a formatted hunk position string for the status line.
 // returns "hunk X/Y" when cursor is on a changed line, "N hunks"/"1 hunk" otherwise, or empty if not in diff pane.
 func (m Model) hunkSegment() string {
-	if m.focus != paneDiff {
+	if m.layout.focus != paneDiff {
 		return ""
 	}
 	cur, total := m.currentHunk()
@@ -214,13 +214,13 @@ func (m Model) hunkSegment() string {
 // on context/added lines it shows the new file's max line number.
 // Returns empty string when focus is not on diff pane, cursor is out of range, or on a divider line.
 func (m Model) lineNumberSegment() string {
-	if m.focus != paneDiff {
+	if m.layout.focus != paneDiff {
 		return ""
 	}
-	if m.diffCursor < 0 || m.diffCursor >= len(m.file.lines) {
+	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
 		return ""
 	}
-	dl := m.file.lines[m.diffCursor]
+	dl := m.file.lines[m.nav.diffCursor]
 	if dl.ChangeType == diff.ChangeDivider {
 		return ""
 	}
@@ -250,7 +250,7 @@ func (m Model) lineNumberSegment() string {
 // joinStatusSections joins left and right status sections with padding and separators.
 func (m Model) joinStatusSections(left, right, sep string) string {
 	sepWidth := lipgloss.Width(sep)
-	padding := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 2 // 2 for status bar padding
+	padding := m.layout.width - lipgloss.Width(left) - lipgloss.Width(right) - 2 // 2 for status bar padding
 	if left != "" && padding > sepWidth {
 		return left + sep + strings.Repeat(" ", padding-sepWidth) + right
 	}
@@ -265,24 +265,24 @@ func (m Model) joinStatusSections(left, right, sep string) string {
 
 // searchBarText returns the status bar content during search input mode.
 func (m Model) searchBarText() string {
-	return "/" + m.searchInput.Value()
+	return "/" + m.search.input.Value()
 }
 
 // searchSegment returns a formatted search position string like "X/Y" for the status line.
 // returns empty string when no search matches exist. shows 0/N when all matches are hidden
 // in collapsed mode (e.g. matches only on removed lines).
 func (m Model) searchSegment() string {
-	if len(m.searchMatches) == 0 {
+	if len(m.search.matches) == 0 {
 		return ""
 	}
-	pos := m.searchCursor + 1
-	if m.collapsed.enabled && m.searchCursor < len(m.searchMatches) {
+	pos := m.search.cursor + 1
+	if m.modes.collapsed.enabled && m.search.cursor < len(m.search.matches) {
 		hunks := m.findHunks()
-		if m.isCollapsedHidden(m.searchMatches[m.searchCursor], hunks) {
+		if m.isCollapsedHidden(m.search.matches[m.search.cursor], hunks) {
 			pos = 0
 		}
 	}
-	return fmt.Sprintf("%d/%d", pos, len(m.searchMatches))
+	return fmt.Sprintf("%d/%d", pos, len(m.search.matches))
 }
 
 // padContentBg pads every line in content to targetWidth using the given ANSI background color.
@@ -318,16 +318,16 @@ func (m Model) statusModeIcons() string {
 		active bool
 	}
 	indicators := []indicator{
-		{"▼", m.collapsed.enabled},
+		{"▼", m.modes.collapsed.enabled},
 		{"◉", m.tree.FilterActive()},
-		{"↩", m.wrapMode},
-		{"≋", len(m.searchMatches) > 0},
-		{"⊟", m.treeHidden},
-		{"#", m.lineNumbers},
-		{"b", m.showBlame},
-		{"±", m.wordDiff},
+		{"↩", m.modes.wrap},
+		{"≋", len(m.search.matches) > 0},
+		{"⊟", m.layout.treeHidden},
+		{"#", m.modes.lineNumbers},
+		{"b", m.modes.showBlame},
+		{"±", m.modes.wordDiff},
 		{"✓", m.tree.ReviewedCount() > 0},
-		{"∅", m.showUntracked},
+		{"∅", m.modes.showUntracked},
 	}
 
 	mutedSeq := string(m.resolver.Color(style.ColorKeyMutedFg))

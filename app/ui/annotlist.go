@@ -57,17 +57,17 @@ func (m Model) jumpToAnnotationTarget(target *overlay.AnnotationTarget) (tea.Mod
 // in collapsed mode, expands the hunk containing the target line so removed lines are visible.
 func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 	if a.Line == 0 {
-		m.diffCursor = -1
+		m.nav.diffCursor = -1
 	} else {
 		idx := m.findDiffLineIndex(a.Line, a.Type)
 		if idx >= 0 {
-			m.diffCursor = idx
+			m.nav.diffCursor = idx
 			m.ensureHunkExpanded(idx)
 		}
 	}
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 	m.syncTOCActiveSection()
-	m.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetContent(m.renderDiff())
 	m.centerViewportOnCursor()
 }
 
@@ -76,14 +76,14 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 // also expands delete-only placeholder hunks where the first line is "visible" as a synthetic
 // placeholder but annotations are not rendered (renderCollapsedDiff skips them).
 func (m *Model) ensureHunkExpanded(idx int) {
-	if !m.collapsed.enabled {
+	if !m.modes.collapsed.enabled {
 		return
 	}
 	hunks := m.findHunks()
 	if m.isCollapsedHidden(idx, hunks) || m.isDeleteOnlyPlaceholder(idx, hunks) {
 		hunkStart := m.hunkStartFor(idx, hunks)
 		if hunkStart >= 0 {
-			m.collapsed.expandedHunks[hunkStart] = true
+			m.modes.collapsed.expandedHunks[hunkStart] = true
 		}
 	}
 }
