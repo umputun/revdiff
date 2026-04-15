@@ -151,7 +151,7 @@ func (a *annotListOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outco
 		return Outcome{Kind: OutcomeClosed}
 	}
 
-	switch action { //nolint:exhaustive // only navigation actions relevant
+	switch action {
 	case keymap.ActionUp:
 		if a.cursor > 0 {
 			a.cursor--

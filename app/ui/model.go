@@ -598,7 +598,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
-	switch action { //nolint:exhaustive // only overlay-open actions handled here
+	switch action {
 	case keymap.ActionHelp:
 		m.overlay.OpenHelp(m.buildHelpSpec())
 		return m, true
@@ -762,7 +762,7 @@ func (m *Model) toggleUntracked() tea.Cmd {
 
 // handleViewToggle dispatches view mode toggle actions.
 func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
-	switch action { //nolint:exhaustive // only toggle actions are dispatched here
+	switch action {
 	case keymap.ActionToggleCollapsed:
 		m.toggleCollapsedMode()
 	case keymap.ActionToggleWrap:
