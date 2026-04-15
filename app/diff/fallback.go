@@ -15,14 +15,14 @@ import (
 // it delegates to the inner renderer, falling back to disk read for --only files
 // that are not present in the diff.
 type FallbackRenderer struct {
-	inner   renderer
+	inner   Renderer
 	only    []string
 	workDir string
 }
 
 // NewFallbackRenderer creates a FallbackRenderer that delegates to inner and falls back
 // to reading files from disk for --only patterns not found in the diff.
-func NewFallbackRenderer(inner renderer, only []string, workDir string) *FallbackRenderer {
+func NewFallbackRenderer(inner Renderer, only []string, workDir string) *FallbackRenderer {
 	return &FallbackRenderer{inner: inner, only: only, workDir: workDir}
 }
 

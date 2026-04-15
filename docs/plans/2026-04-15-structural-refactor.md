@@ -432,16 +432,16 @@ Do not combine this refactor with UX tweaks, keybinding changes, search semantic
 - Create: `app/history_save.go`
 - Modify: `app/main.go`
 
-- [ ] move `options`, `parseArgs`, `dumpConfig`, `loadConfigFile`, `resolveFlagPath`, `defaultConfigPath`, `defaultKeysPath` into `config.go`
-- [ ] move stdin helpers into `stdin.go`
-- [ ] move VCS/renderer selection helpers into `renderer_setup.go`
-- [ ] move history-save code into `history_save.go`
-- [ ] move theme command handling, color mapping helpers, and `defaultThemesDir` into `themes.go`
-- [ ] leave `main.go` with only top-level command flow and `run()` orchestration
-- [ ] verify `app/main.go` is reduced to a thin entrypoint file
-- [ ] split `app/main_test.go` to match source files: `config_test.go`, `stdin_test.go`, `renderer_setup_test.go`, `themes_test.go`, `history_save_test.go`
-- [ ] run `go test ./...`
-- [ ] run `make lint`
+- [x] move `options`, `parseArgs`, `dumpConfig`, `loadConfigFile`, `resolveFlagPath`, `defaultConfigPath`, `defaultKeysPath` into `config.go`
+- [x] move stdin helpers into `stdin.go`
+- [x] move VCS/renderer selection helpers into `renderer_setup.go`
+- [x] move history-save code into `history_save.go`
+- [x] move theme command handling, color mapping helpers, and `defaultThemesDir` into `themes.go`
+- [x] leave `main.go` with only top-level command flow and `run()` orchestration
+- [x] verify `app/main.go` is reduced to a thin entrypoint file
+- [x] split `app/main_test.go` to match source files: `config_test.go`, `stdin_test.go`, `renderer_setup_test.go`, `themes_test.go`, `history_save_test.go`
+- [x] run `go test ./...`
+- [x] run `make lint`
 
 ### Task 3: Introduce a UI-side `ThemeCatalog` dependency
 
