@@ -41,3 +41,4 @@ __debug_bin*
 
 # ralphex progress logs
 .ralphex/progress/
+.pi/
