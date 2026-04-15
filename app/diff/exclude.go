@@ -2,21 +2,23 @@ package diff
 
 import "fmt"
 
-// renderer is a local interface matching ui.Renderer to avoid import cycle.
-type renderer interface {
+//go:generate moq -out mocks/Renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
+
+// Renderer is the local interface mirroring ui.Renderer, exported for moq generation.
+type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
 	FileDiff(ref, file string, staged bool) ([]DiffLine, error)
 }
 
 // ExcludeFilter wraps a renderer and filters out files matching any of the given prefixes.
-// filtering is applied only at the file list level (ChangedFiles); FileDiff delegates directly.
+// Filtering is applied only at the file list level (ChangedFiles); FileDiff delegates directly.
 type ExcludeFilter struct {
-	inner    renderer
+	inner    Renderer
 	prefixes []string
 }
 
 // NewExcludeFilter creates an ExcludeFilter that removes files matching any prefix from results.
-func NewExcludeFilter(inner renderer, prefixes []string) *ExcludeFilter {
+func NewExcludeFilter(inner Renderer, prefixes []string) *ExcludeFilter {
 	return &ExcludeFilter{inner: inner, prefixes: normalizePrefixes(prefixes)}
 }
 

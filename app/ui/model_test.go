@@ -77,6 +77,14 @@ func testNewFileTree(files []string) *sidepane.FileTree {
 	return sidepane.NewFileTree(entries)
 }
 
+// fakeThemeCatalog is a no-op ThemeCatalog for tests that don't exercise theme selection.
+// moq can't be used here because ThemeEntry/ThemeSpec are defined in this package (import cycle).
+type fakeThemeCatalog struct{}
+
+func (fakeThemeCatalog) Entries() ([]ThemeEntry, error)   { return nil, nil }
+func (fakeThemeCatalog) Resolve(string) (ThemeSpec, bool) { return ThemeSpec{}, false }
+func (fakeThemeCatalog) Persist(string) error             { return nil }
+
 // testNewModel is a test-only helper that preserves the old 4-arg NewModel
 // shape while the production NewModel takes a single ModelConfig. It accepts
 // the diff renderer, store, and highlighter as explicit args (so tests can
@@ -106,6 +114,9 @@ func testNewModel(t *testing.T, renderer Renderer, store *annotation.Store, high
 	if cfg.Overlay == nil {
 		cfg.Overlay = overlay.NewManager()
 	}
+	if cfg.Themes == nil {
+		cfg.Themes = fakeThemeCatalog{}
+	}
 	m, err := NewModel(cfg)
 	require.NoError(t, err)
 	return m
@@ -134,6 +145,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		SGR:            style.SGR{},
 		WordDiffer:     worddiff.New(),
 		Overlay:        overlay.NewManager(),
+		Themes:         fakeThemeCatalog{},
 		TreeWidthRatio: 3,
 		NewFileTree:    testFileTreeFactory(),
 		ParseTOC:       testParseTOCFactory(),
@@ -143,11 +155,100 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		panic("testModel: " + err.Error())
 	}
 	// simulate window size
-	m.width = 120
-	m.height = 40
-	m.treeWidth = m.width * m.treeWidthRatio / 10
+	m.layout.width = 120
+	m.layout.height = 40
+	m.layout.treeWidth = m.layout.width * m.cfg.treeWidthRatio / 10
 	m.ready = true
 	return m
+}
+
+func TestNewModel_RequiredDependencies(t *testing.T) {
+	// build a fully valid config, then zero out one required dep at a time
+	validCfg := func() ModelConfig {
+		return ModelConfig{
+			Renderer:      &mocks.RendererMock{},
+			Store:         annotation.NewStore(),
+			Highlighter:   noopHighlighter(),
+			StyleResolver: style.PlainResolver(),
+			StyleRenderer: style.NewRenderer(style.PlainResolver()),
+			SGR:           style.SGR{},
+			WordDiffer:    worddiff.New(),
+			Overlay:       overlay.NewManager(),
+			NewFileTree:   testFileTreeFactory(),
+			ParseTOC:      testParseTOCFactory(),
+			Themes:        fakeThemeCatalog{},
+		}
+	}
+
+	tests := []struct {
+		name  string
+		patch func(c *ModelConfig)
+	}{
+		{name: "nil Renderer", patch: func(c *ModelConfig) { c.Renderer = nil }},
+		{name: "nil Store", patch: func(c *ModelConfig) { c.Store = nil }},
+		{name: "nil Highlighter", patch: func(c *ModelConfig) { c.Highlighter = nil }},
+		{name: "nil StyleResolver", patch: func(c *ModelConfig) { c.StyleResolver = nil }},
+		{name: "nil StyleRenderer", patch: func(c *ModelConfig) { c.StyleRenderer = nil }},
+		{name: "nil SGR", patch: func(c *ModelConfig) { c.SGR = nil }},
+		{name: "nil WordDiffer", patch: func(c *ModelConfig) { c.WordDiffer = nil }},
+		{name: "nil Overlay", patch: func(c *ModelConfig) { c.Overlay = nil }},
+		{name: "nil NewFileTree", patch: func(c *ModelConfig) { c.NewFileTree = nil }},
+		{name: "nil ParseTOC", patch: func(c *ModelConfig) { c.ParseTOC = nil }},
+		{name: "nil Themes", patch: func(c *ModelConfig) { c.Themes = nil }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validCfg()
+			tc.patch(&cfg)
+			_, err := NewModel(cfg)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "is required")
+		})
+	}
+
+	t.Run("all required deps present succeeds", func(t *testing.T) {
+		cfg := validCfg()
+		_, err := NewModel(cfg)
+		require.NoError(t, err)
+	})
+}
+
+func TestNewModel_OptionalDefaults(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+
+	t.Run("nil keymap defaults to keymap.Default()", func(t *testing.T) {
+		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{})
+		require.NotNil(t, m.keymap)
+		// verify a known default binding works
+		action := m.keymap.Resolve("q")
+		assert.Equal(t, keymap.ActionQuit, action)
+	})
+
+	t.Run("custom keymap is used when provided", func(t *testing.T) {
+		km := keymap.Default()
+		km.Unbind("q")
+		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{Keymap: km})
+		action := m.keymap.Resolve("q")
+		assert.Equal(t, keymap.Action(""), action)
+	})
+
+	t.Run("TreeWidthRatio below range defaults to 2", func(t *testing.T) {
+		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: 0})
+		assert.Equal(t, 2, m.cfg.treeWidthRatio)
+	})
+
+	t.Run("TreeWidthRatio above range defaults to 2", func(t *testing.T) {
+		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: 15})
+		assert.Equal(t, 2, m.cfg.treeWidthRatio)
+	})
+
+	t.Run("TreeWidthRatio in range is kept", func(t *testing.T) {
+		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: 5})
+		assert.Equal(t, 5, m.cfg.treeWidthRatio)
+	})
 }
 
 func TestModel_Init(t *testing.T) {
@@ -167,16 +268,16 @@ func TestModel_EnterSwitchesToDiffPane(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.focus = paneTree
+	m.layout.focus = paneTree
 	// simulate file already loaded (tree nav auto-loads)
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneTree // reset focus after file load
+	m.layout.focus = paneTree // reset focus after file load
 
 	// enter should switch to diff pane
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := result.(Model)
-	assert.Equal(t, paneDiff, model.focus)
+	assert.Equal(t, paneDiff, model.layout.focus)
 }
 
 func TestModel_TabPaneSwitching(t *testing.T) {
@@ -185,27 +286,27 @@ func TestModel_TabPaneSwitching(t *testing.T) {
 	m.tree = testNewFileTree([]string{"a.go"})
 
 	t.Run("tree to diff when file loaded", func(t *testing.T) {
-		m.focus = paneTree
-		m.currFile = "a.go"
+		m.layout.focus = paneTree
+		m.file.name = "a.go"
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
-		assert.Equal(t, paneDiff, model.focus)
+		assert.Equal(t, paneDiff, model.layout.focus)
 	})
 
 	t.Run("diff to tree", func(t *testing.T) {
-		m.focus = paneDiff
-		m.currFile = "a.go"
+		m.layout.focus = paneDiff
+		m.file.name = "a.go"
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
-		assert.Equal(t, paneTree, model.focus)
+		assert.Equal(t, paneTree, model.layout.focus)
 	})
 
 	t.Run("stays on tree when no file loaded", func(t *testing.T) {
-		m.focus = paneTree
-		m.currFile = ""
+		m.layout.focus = paneTree
+		m.file.name = ""
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 		model := result.(Model)
-		assert.Equal(t, paneTree, model.focus)
+		assert.Equal(t, paneTree, model.layout.focus)
 	})
 }
 
@@ -218,12 +319,12 @@ func TestModel_WrapModeFromConfig(t *testing.T) {
 
 	t.Run("wrap enabled via config", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{Wrap: true, TreeWidthRatio: 2})
-		assert.True(t, m.wrapMode)
+		assert.True(t, m.modes.wrap)
 	})
 
 	t.Run("wrap disabled by default", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
-		assert.False(t, m.wrapMode)
+		assert.False(t, m.modes.wrap)
 	})
 }
 
@@ -236,12 +337,12 @@ func TestModel_CollapsedModeFromConfig(t *testing.T) {
 
 	t.Run("collapsed enabled via config", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{Collapsed: true, TreeWidthRatio: 2})
-		assert.True(t, m.collapsed.enabled)
+		assert.True(t, m.modes.collapsed.enabled)
 	})
 
 	t.Run("collapsed disabled by default", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
-		assert.False(t, m.collapsed.enabled)
+		assert.False(t, m.modes.collapsed.enabled)
 	})
 }
 
@@ -254,12 +355,12 @@ func TestModel_LineNumbersFromConfig(t *testing.T) {
 
 	t.Run("line numbers enabled via config", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{LineNumbers: true, TreeWidthRatio: 2})
-		assert.True(t, m.lineNumbers)
+		assert.True(t, m.modes.lineNumbers)
 	})
 
 	t.Run("line numbers disabled by default", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
-		assert.False(t, m.lineNumbers)
+		assert.False(t, m.modes.lineNumbers)
 	})
 }
 
@@ -275,17 +376,17 @@ func TestModel_BlameFromConfig(t *testing.T) {
 
 	t.Run("blame enabled via config when blamer is available", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, Blamer: blamer, TreeWidthRatio: 2})
-		assert.True(t, m.showBlame)
+		assert.True(t, m.modes.showBlame)
 	})
 
 	t.Run("blame disabled without blamer even if requested", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{ShowBlame: true, TreeWidthRatio: 2})
-		assert.False(t, m.showBlame)
+		assert.False(t, m.modes.showBlame)
 	})
 
 	t.Run("blame disabled by default", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{Blamer: blamer, TreeWidthRatio: 2})
-		assert.False(t, m.showBlame)
+		assert.False(t, m.modes.showBlame)
 	})
 }
 
@@ -293,7 +394,7 @@ func TestModel_TreeNavigation(t *testing.T) {
 	files := []string{"a.go", "b.go"}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
+	m.layout.focus = paneTree
 
 	// cursor starts on first file (a.go)
 	assert.Equal(t, "a.go", m.tree.SelectedFile())
@@ -312,18 +413,18 @@ func TestModel_TreeNavigation(t *testing.T) {
 func TestModel_FocusSwitching(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.currFile = "a.go" // pretend a file is loaded
-	m.focus = paneTree
+	m.file.name = "a.go" // pretend a file is loaded
+	m.layout.focus = paneTree
 
 	// l switches to diff pane
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	model := result.(Model)
-	assert.Equal(t, paneDiff, model.focus)
+	assert.Equal(t, paneDiff, model.layout.focus)
 
 	// h switches back to tree
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	model = result.(Model)
-	assert.Equal(t, paneTree, model.focus)
+	assert.Equal(t, paneTree, model.layout.focus)
 }
 
 func TestModel_WindowResize(t *testing.T) {
@@ -334,9 +435,9 @@ func TestModel_WindowResize(t *testing.T) {
 	model := result.(Model)
 
 	assert.True(t, model.ready)
-	assert.Equal(t, 100, model.width)
-	assert.Equal(t, 50, model.height)
-	assert.Equal(t, 30, model.treeWidth) // 100 * 3 / 10 = 30
+	assert.Equal(t, 100, model.layout.width)
+	assert.Equal(t, 50, model.layout.height)
+	assert.Equal(t, 30, model.layout.treeWidth) // 100 * 3 / 10 = 30
 }
 
 func TestModel_TreeWidthRatio(t *testing.T) {
@@ -362,7 +463,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 			m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: tc.ratio})
 			result, _ := m.Update(tea.WindowSizeMsg{Width: tc.termWidth, Height: 40})
 			model := result.(Model)
-			assert.Equal(t, tc.wantTreeWidth, model.treeWidth)
+			assert.Equal(t, tc.wantTreeWidth, model.layout.treeWidth)
 		})
 	}
 }
@@ -396,21 +497,21 @@ func TestModel_CustomKeymapViewToggle(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.keymap = km
-	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
 
-	assert.False(t, m.wrapMode)
+	assert.False(t, m.modes.wrap)
 
 	// "x" should toggle wrap
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	model := result.(Model)
-	assert.True(t, model.wrapMode, "x should toggle wrap mode on")
+	assert.True(t, model.modes.wrap, "x should toggle wrap mode on")
 
 	// "w" should also toggle wrap (still bound by default)
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	model = result.(Model)
-	assert.False(t, model.wrapMode, "w should toggle wrap mode off")
+	assert.False(t, model.modes.wrap, "w should toggle wrap mode off")
 }
 
 func TestModel_CustomKeymapTreeNav(t *testing.T) {
@@ -423,7 +524,7 @@ func TestModel_CustomKeymapTreeNav(t *testing.T) {
 	m := testModel(files, nil)
 	m.keymap = km
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
+	m.layout.focus = paneTree
 
 	assert.Equal(t, "a.go", m.tree.SelectedFile())
 
@@ -443,13 +544,13 @@ func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
 	files := []string{"a.go"}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.currFile = "a.go"
-	m.focus = paneTree
+	m.file.name = "a.go"
+	m.layout.focus = paneTree
 
 	// right key maps to scroll_right by default, should focus diff in tree pane
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	model := result.(Model)
-	assert.Equal(t, paneDiff, model.focus, "right key (scroll_right) should focus diff in tree pane")
+	assert.Equal(t, paneDiff, model.layout.focus, "right key (scroll_right) should focus diff in tree pane")
 }
 
 func TestModel_AcceptanceAdditiveQuitBinding(t *testing.T) {

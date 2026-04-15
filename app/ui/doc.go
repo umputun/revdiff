@@ -3,7 +3,8 @@
 // The package centers on a single [Model] struct that implements bubbletea's Model interface.
 // Model methods are split across multiple files by concern area, all operating on the same struct:
 //
-//   - model.go — struct definition, [NewModel], Init, Update, handleKey dispatch, view toggles
+//   - model.go — struct definition, sub-state structs, [NewModel], Init, Update, handleKey
+//     dispatch, view toggles, consumer-side interfaces
 //   - view.go — View rendering, status bar, ANSI color helpers
 //   - handlers.go — modal key handlers: enter/esc dispatch, discard confirmation,
 //     filter toggle, mark-reviewed, file-or-search navigation, help spec building
@@ -18,9 +19,28 @@
 //   - annotate.go — annotation input lifecycle: start, save, cancel, delete (line and file level),
 //     cursor-viewport coordination, annotation key map
 //   - annotlist.go — annotation list spec building, cross-file jump logic
-//   - themeselect.go — app-side theme operations: open selector, build entries,
-//     preview/confirm/cancel, apply theme, color conversion
+//   - themeselect.go — theme selector operations: open, preview/confirm/cancel, apply theme
+//     (delegates to injected [ThemeCatalog] for discovery and persistence)
 //   - search.go — incremental search: input handling, match computation, navigation
+//
+// Model mutable state is organized into explicit sub-structs by concern:
+//
+//   - modelConfigState (m.cfg) — immutable session config (ref, staged, noColors, tabSpaces, etc.)
+//   - layoutState (m.layout) — viewport, pane focus, dimensions, scroll offset
+//   - loadedFileState (m.file) — current file's lines, highlighted content, intra-line ranges,
+//     blame data, line numbering, TOC, and single-file flag. groups parallel arrays and derived
+//     metadata to make the synchronization invariant explicit
+//   - modeState (m.modes) — user-togglable view modes (wrap, collapsed, lineNumbers, wordDiff,
+//     showBlame, showUntracked)
+//   - navigationState (m.nav) — diff cursor position and pending hunk jump
+//   - searchState (m.search) — search input, term, matches, cursor, match set
+//   - annotationState (m.annot) — annotation input lifecycle (annotating, file-level, cursor state)
+//
+// Methods remain on Model — sub-structs group state for clarity, not to create mini-models.
+//
+// Theme discovery and persistence are accessed through the [ThemeCatalog] interface defined
+// in model.go. This package does not import app/theme or app/fsutil — the concrete adapter
+// is wired in app/themes.go, composing theme.Catalog with config file persistence.
 //
 // Intra-line word-diff algorithms and the shared highlight marker insertion engine live
 // in the [worddiff] sub-package (app/ui/worddiff/). It owns the tokenizer, LCS algorithm,
@@ -53,6 +73,7 @@
 // concrete *overlay.Manager is injected via ModelConfig.Overlay wired in app/main.go.
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
-// [SyntaxHighlighter] (provides ANSI-highlighted lines), and [Blamer] (provides blame data).
-// All three are defined in this package and implemented externally.
+// [SyntaxHighlighter] (provides ANSI-highlighted lines), [Blamer] (provides blame data),
+// and [ThemeCatalog] (provides theme discovery, resolution, and persistence).
+// All are defined in this package and implemented externally.
 package ui

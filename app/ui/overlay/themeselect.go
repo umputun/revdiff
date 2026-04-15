@@ -174,7 +174,7 @@ func (t *themeSelectOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Out
 		return Outcome{Kind: OutcomeThemeCanceled}
 	}
 
-	switch msg.Type { //nolint:exhaustive // only handling relevant key types
+	switch msg.Type {
 	case tea.KeyEnter:
 		if len(t.entries) == 0 {
 			t.filter = ""
@@ -224,9 +224,10 @@ func (t *themeSelectOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Out
 		t.filter += string(msg.Runes)
 		t.applyFilter()
 		return t.previewOutcome()
-	}
 
-	return Outcome{Kind: OutcomeNone}
+	default:
+		return Outcome{Kind: OutcomeNone}
+	}
 }
 
 // previewOutcome returns a theme preview outcome with dedup — if the current

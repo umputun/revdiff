@@ -24,7 +24,7 @@ func TestModel_NextPrevFile(t *testing.T) {
 		"c.go": {{NewNum: 1, Content: "c", ChangeType: diff.ChangeContext}},
 	})
 	m.tree = testNewFileTree(files)
-	m.currFile = "a.go" // pretend first file is already loaded
+	m.file.name = "a.go" // pretend first file is already loaded
 
 	// starts on first file (a.go)
 	assert.Equal(t, "a.go", m.tree.SelectedFile())
@@ -55,22 +55,22 @@ func TestModel_DiffScrolling(t *testing.T) {
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	// load file
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor)
 
 	// j moves cursor down
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model = result.(Model)
-	assert.Equal(t, 1, model.diffCursor)
+	assert.Equal(t, 1, model.nav.diffCursor)
 
 	// k moves cursor back up
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	model = result.(Model)
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor)
 }
 func TestModel_DiffCursorSkipsDividers(t *testing.T) {
 	lines := []diff.DiffLine{
@@ -81,21 +81,21 @@ func TestModel_DiffCursorSkipsDividers(t *testing.T) {
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor)
 
 	// j should skip divider and land on line10
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model = result.(Model)
-	assert.Equal(t, 2, model.diffCursor)
+	assert.Equal(t, 2, model.nav.diffCursor)
 
 	// k should skip divider and go back to line1
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
 	model = result.(Model)
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor)
 }
 func TestModel_DiffCursorAutoScrolls(t *testing.T) {
 	// create more lines than viewport height
@@ -106,7 +106,7 @@ func TestModel_DiffCursorAutoScrolls(t *testing.T) {
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model := result.(Model)
@@ -116,8 +116,8 @@ func TestModel_DiffCursorAutoScrolls(t *testing.T) {
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
 	}
-	assert.Equal(t, 50, model.diffCursor)
-	assert.Positive(t, model.viewport.YOffset, "viewport should have scrolled")
+	assert.Equal(t, 50, model.nav.diffCursor)
+	assert.Positive(t, model.layout.viewport.YOffset, "viewport should have scrolled")
 }
 func TestModel_CursorDiffLine(t *testing.T) {
 	lines := []diff.DiffLine{
@@ -125,26 +125,26 @@ func TestModel_CursorDiffLine(t *testing.T) {
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.diffCursor = 0
+	m.file.lines = lines
+	m.nav.diffCursor = 0
 
 	dl, ok := m.cursorDiffLine()
 	assert.True(t, ok)
 	assert.Equal(t, "line1", dl.Content)
 	assert.Equal(t, diff.ChangeContext, dl.ChangeType)
 
-	m.diffCursor = 1
+	m.nav.diffCursor = 1
 	dl, ok = m.cursorDiffLine()
 	assert.True(t, ok)
 	assert.Equal(t, "added", dl.Content)
 	assert.Equal(t, diff.ChangeAdd, dl.ChangeType)
 
 	// out of bounds
-	m.diffCursor = -1
+	m.nav.diffCursor = -1
 	_, ok = m.cursorDiffLine()
 	assert.False(t, ok)
 
-	m.diffCursor = 10
+	m.nav.diffCursor = 10
 	_, ok = m.cursorDiffLine()
 	assert.False(t, ok)
 }
@@ -157,7 +157,7 @@ func TestModel_HunkEndLine(t *testing.T) {
 		{OldNum: 3, NewNum: 4, Content: "ctx", ChangeType: diff.ChangeContext},
 	}
 	m := testModel(nil, nil)
-	m.diffLines = lines
+	m.file.lines = lines
 
 	t.Run("remove line stops at same type boundary", func(t *testing.T) {
 		assert.Equal(t, 2, m.hunkEndLine(1), "single remove stays in old-file number space")
@@ -187,7 +187,7 @@ func TestModel_HunkEndLine(t *testing.T) {
 			{NewNum: 12, Content: "new line 2", ChangeType: diff.ChangeAdd},
 			{OldNum: 14, NewNum: 13, Content: "ctx", ChangeType: diff.ChangeContext},
 		}
-		m.diffLines = mixedLines
+		m.file.lines = mixedLines
 
 		// cursor on first remove: end should be last remove (OldNum=13), not any add line
 		assert.Equal(t, 13, m.hunkEndLine(1), "remove hunk end stays in old-file space")
@@ -204,29 +204,29 @@ func TestModel_HunkEndLine(t *testing.T) {
 }
 func TestModel_CursorViewportY(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
 		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
 	}
 
 	// no annotations, cursor at 0 -> viewport Y = 0
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	assert.Equal(t, 0, m.cursorViewportY())
 
 	// no annotations, cursor at 2 -> viewport Y = 2
-	m.diffCursor = 2
+	m.nav.diffCursor = 2
 	assert.Equal(t, 2, m.cursorViewportY())
 
 	// add annotation on line 1 (index 0), cursor at 2 -> viewport Y = 3 (line0 + annotation + line1)
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "comment"})
-	m.diffCursor = 2
+	m.nav.diffCursor = 2
 	assert.Equal(t, 3, m.cursorViewportY())
 
 	// empty file with non-zero cursor returns cursor value directly
 	empty := testModel(nil, nil)
-	empty.diffCursor = 5
+	empty.nav.diffCursor = 5
 	assert.Equal(t, 5, empty.cursorViewportY(), "empty state returns diffCursor as-is")
 }
 func TestModel_NextPrevFileWrapAround(t *testing.T) {
@@ -236,12 +236,12 @@ func TestModel_NextPrevFileWrapAround(t *testing.T) {
 		"b.go": {{NewNum: 1, Content: "b", ChangeType: diff.ChangeContext}},
 	})
 	m.tree = testNewFileTree(files)
-	m.currFile = "a.go"
+	m.file.name = "a.go"
 
 	// move to last file
 	m.tree.StepFile(sidepane.DirectionNext)
 	assert.Equal(t, "b.go", m.tree.SelectedFile())
-	m.currFile = "b.go"
+	m.file.name = "b.go"
 
 	// n should wrap to first
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
@@ -249,7 +249,7 @@ func TestModel_NextPrevFileWrapAround(t *testing.T) {
 	assert.Equal(t, "a.go", model.tree.SelectedFile())
 
 	// p should wrap to last
-	model.currFile = "a.go"
+	model.file.name = "a.go"
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
 	model = result.(Model)
 	assert.Equal(t, "b.go", model.tree.SelectedFile())
@@ -269,23 +269,23 @@ func TestModel_PgDownMovesCursorByPageHeight(t *testing.T) {
 	// load file
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	assert.Equal(t, 0, model.diffCursor)
+	model.layout.focus = paneDiff
+	assert.Equal(t, 0, model.nav.diffCursor)
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	require.Positive(t, pageHeight, "viewport height must be positive")
 
 	// pgdown should move cursor by page height
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	assert.Equal(t, pageHeight, model.diffCursor, "PgDown should move cursor by viewport height")
+	assert.Equal(t, pageHeight, model.nav.diffCursor, "PgDown should move cursor by viewport height")
 
 	// ctrl+d should move by half page height from current position
-	prevCursor := model.diffCursor
+	prevCursor := model.nav.diffCursor
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model = result.(Model)
 	halfPage := pageHeight / 2
-	assert.Equal(t, prevCursor+halfPage, model.diffCursor, "ctrl+d should move cursor by half viewport height")
+	assert.Equal(t, prevCursor+halfPage, model.nav.diffCursor, "ctrl+d should move cursor by half viewport height")
 }
 func TestModel_PgUpMovesCursorByPageHeight(t *testing.T) {
 	lines := make([]diff.DiffLine, 100)
@@ -302,25 +302,25 @@ func TestModel_PgUpMovesCursorByPageHeight(t *testing.T) {
 	// load file
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	require.Positive(t, pageHeight, "viewport height must be positive")
 
 	// move cursor to line 80 first
-	model.diffCursor = 80
+	model.nav.diffCursor = 80
 
 	// pgup should move cursor up by page height
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model = result.(Model)
-	assert.Equal(t, 80-pageHeight, model.diffCursor, "PgUp should move cursor up by viewport height")
+	assert.Equal(t, 80-pageHeight, model.nav.diffCursor, "PgUp should move cursor up by viewport height")
 
 	// ctrl+u should move up by half page height
-	model.diffCursor = 80
+	model.nav.diffCursor = 80
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model = result.(Model)
 	halfPage := pageHeight / 2
-	assert.Equal(t, 80-halfPage, model.diffCursor, "ctrl+u should move cursor up by half viewport height")
+	assert.Equal(t, 80-halfPage, model.nav.diffCursor, "ctrl+u should move cursor up by half viewport height")
 }
 func TestModel_CtrlDMovesHalfPageDown(t *testing.T) {
 	lines := make([]diff.DiffLine, 100)
@@ -335,26 +335,26 @@ func TestModel_CtrlDMovesHalfPageDown(t *testing.T) {
 
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	assert.Equal(t, 0, model.diffCursor)
+	model.layout.focus = paneDiff
+	assert.Equal(t, 0, model.nav.diffCursor)
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	halfPage := pageHeight / 2
 	require.Positive(t, halfPage, "half page must be positive")
 
 	// ctrl+d moves cursor and viewport by half page
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
 	model = result.(Model)
-	assert.Equal(t, halfPage, model.diffCursor, "ctrl+d should move cursor by half viewport height")
-	assert.Equal(t, halfPage, model.viewport.YOffset, "ctrl+d should scroll viewport by half page")
+	assert.Equal(t, halfPage, model.nav.diffCursor, "ctrl+d should move cursor by half viewport height")
+	assert.Equal(t, halfPage, model.layout.viewport.YOffset, "ctrl+d should scroll viewport by half page")
 
 	// PgDn moves full page from start for comparison
-	model.diffCursor = 0
-	model.viewport.SetYOffset(0)
-	model.viewport.SetContent(model.renderDiff())
+	model.nav.diffCursor = 0
+	model.layout.viewport.SetYOffset(0)
+	model.layout.viewport.SetContent(model.renderDiff())
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	assert.Equal(t, pageHeight, model.diffCursor, "PgDown should move cursor by full viewport height")
+	assert.Equal(t, pageHeight, model.nav.diffCursor, "PgDown should move cursor by full viewport height")
 }
 func TestModel_CtrlUMovesHalfPageUp(t *testing.T) {
 	lines := make([]diff.DiffLine, 100)
@@ -369,31 +369,31 @@ func TestModel_CtrlUMovesHalfPageUp(t *testing.T) {
 
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	halfPage := pageHeight / 2
 	require.Positive(t, halfPage, "half page must be positive")
 
 	// start at line 80 with viewport scrolled to match
-	model.diffCursor = 80
-	model.viewport.SetYOffset(80)
-	model.viewport.SetContent(model.renderDiff())
-	prevOffset := model.viewport.YOffset
+	model.nav.diffCursor = 80
+	model.layout.viewport.SetYOffset(80)
+	model.layout.viewport.SetContent(model.renderDiff())
+	prevOffset := model.layout.viewport.YOffset
 
 	// ctrl+u moves cursor and viewport by half page up
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	model = result.(Model)
-	assert.Equal(t, 80-halfPage, model.diffCursor, "ctrl+u should move cursor up by half viewport height")
-	assert.Equal(t, prevOffset-halfPage, model.viewport.YOffset, "ctrl+u should scroll viewport up by half page")
+	assert.Equal(t, 80-halfPage, model.nav.diffCursor, "ctrl+u should move cursor up by half viewport height")
+	assert.Equal(t, prevOffset-halfPage, model.layout.viewport.YOffset, "ctrl+u should scroll viewport up by half page")
 
 	// PgUp moves full page up from 80 for comparison
-	model.diffCursor = 80
-	model.viewport.SetYOffset(80)
-	model.viewport.SetContent(model.renderDiff())
+	model.nav.diffCursor = 80
+	model.layout.viewport.SetYOffset(80)
+	model.layout.viewport.SetContent(model.renderDiff())
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model = result.(Model)
-	assert.Equal(t, 80-pageHeight, model.diffCursor, "PgUp should move cursor up by full viewport height")
+	assert.Equal(t, 80-pageHeight, model.nav.diffCursor, "PgUp should move cursor up by full viewport height")
 }
 func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	files := make([]string, 50)
@@ -402,8 +402,8 @@ func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
-	m.height = 20
+	m.layout.focus = paneTree
+	m.layout.height = 20
 
 	pageSize := m.treePageSize()
 	halfPage := max(1, pageSize/2)
@@ -417,8 +417,8 @@ func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	// ctrl+u from end area
 	m3 := testModel(files, nil)
 	m3.tree = testNewFileTree(files)
-	m3.focus = paneTree
-	m3.height = 20
+	m3.layout.focus = paneTree
+	m3.layout.height = 20
 	// move to file 39
 	m3.tree.Move(sidepane.MotionLast)
 	for range 10 {
@@ -434,8 +434,8 @@ func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	// PgDn from start should move full page
 	m2 := testModel(files, nil)
 	m2.tree = testNewFileTree(files)
-	m2.focus = paneTree
-	m2.height = 20
+	m2.layout.focus = paneTree
+	m2.layout.height = 20
 
 	result, _ = m2.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model2 := result.(Model)
@@ -457,20 +457,20 @@ func TestModel_HomeEndMoveCursorToBoundaries(t *testing.T) {
 	// load file
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// move to middle
-	model.diffCursor = 25
+	model.nav.diffCursor = 25
 
 	// end should move to last line
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	model = result.(Model)
-	assert.Equal(t, 49, model.diffCursor, "End should move cursor to last line")
+	assert.Equal(t, 49, model.nav.diffCursor, "End should move cursor to last line")
 
 	// home should move to first line
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyHome})
 	model = result.(Model)
-	assert.Equal(t, 0, model.diffCursor, "Home should move cursor to first line")
+	assert.Equal(t, 0, model.nav.diffCursor, "Home should move cursor to first line")
 }
 func TestModel_HomeEndSkipDividers(t *testing.T) {
 	lines := []diff.DiffLine{
@@ -489,17 +489,17 @@ func TestModel_HomeEndSkipDividers(t *testing.T) {
 	// load file
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// home should skip leading divider
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyHome})
 	model = result.(Model)
-	assert.Equal(t, 1, model.diffCursor, "Home should skip leading divider")
+	assert.Equal(t, 1, model.nav.diffCursor, "Home should skip leading divider")
 
 	// end should skip trailing divider
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnd})
 	model = result.(Model)
-	assert.Equal(t, 2, model.diffCursor, "End should skip trailing divider")
+	assert.Equal(t, 2, model.nav.diffCursor, "End should skip trailing divider")
 }
 func TestModel_PgDownClampsAtEnd(t *testing.T) {
 	lines := make([]diff.DiffLine, 10)
@@ -516,12 +516,12 @@ func TestModel_PgDownClampsAtEnd(t *testing.T) {
 	// load file - viewport height is much larger than 10 lines
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
 	// pgdown when there are fewer lines than page height should clamp at last line
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	assert.Equal(t, 9, model.diffCursor, "PgDown should clamp at last line")
+	assert.Equal(t, 9, model.nav.diffCursor, "PgDown should clamp at last line")
 }
 func TestModel_PgUpClampsAtStart(t *testing.T) {
 	lines := make([]diff.DiffLine, 10)
@@ -538,13 +538,13 @@ func TestModel_PgUpClampsAtStart(t *testing.T) {
 	// load file
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	model.diffCursor = 3
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 3
 
 	// pgup from line 3 with large page height should clamp at first line
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model = result.(Model)
-	assert.Equal(t, 0, model.diffCursor, "PgUp should clamp at first line")
+	assert.Equal(t, 0, model.nav.diffCursor, "PgUp should clamp at first line")
 }
 func TestModel_PgDownAccountsForDividers(t *testing.T) {
 	// create diff lines with dividers every 5 lines (simulating hunk boundaries)
@@ -561,20 +561,20 @@ func TestModel_PgDownAccountsForDividers(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	assert.Equal(t, 0, model.diffCursor)
+	model.layout.focus = paneDiff
+	assert.Equal(t, 0, model.nav.diffCursor)
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	require.Positive(t, pageHeight)
 
 	// pgdown with dividers: cursor traverses fewer non-divider lines than viewport height
 	// because divider rows consume visual space without being cursor-selectable
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	assert.Positive(t, model.diffCursor, "cursor should have moved forward")
+	assert.Positive(t, model.nav.diffCursor, "cursor should have moved forward")
 
 	nonDividerCount := 0
-	for i := range model.diffCursor {
+	for i := range model.nav.diffCursor {
 		if lines[i].ChangeType != diff.ChangeDivider {
 			nonDividerCount++
 		}
@@ -593,22 +593,22 @@ func TestModel_PgDownScrollsViewportByPage(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
-	assert.Equal(t, 0, model.viewport.YOffset)
+	model.layout.focus = paneDiff
+	assert.Equal(t, 0, model.layout.viewport.YOffset)
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	require.Positive(t, pageHeight)
 
 	// pgdown should scroll viewport by approximately a full page (not just 1 line)
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	assert.Equal(t, pageHeight, model.viewport.YOffset,
+	assert.Equal(t, pageHeight, model.layout.viewport.YOffset,
 		"viewport should scroll to cursor position (full page), not just 1 line")
 
 	// second pgdown should scroll another full page
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	assert.Equal(t, 2*pageHeight, model.viewport.YOffset,
+	assert.Equal(t, 2*pageHeight, model.layout.viewport.YOffset,
 		"viewport should advance by another full page")
 }
 func TestModel_PgUpScrollsViewportByPage(t *testing.T) {
@@ -622,22 +622,22 @@ func TestModel_PgUpScrollsViewportByPage(t *testing.T) {
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
-	model.focus = paneDiff
+	model.layout.focus = paneDiff
 
-	pageHeight := model.viewport.Height
+	pageHeight := model.layout.viewport.Height
 	require.Positive(t, pageHeight)
 
 	// move cursor to line 100
-	model.diffCursor = 100
+	model.nav.diffCursor = 100
 	model.syncViewportToCursor()
 
 	// pgup should scroll viewport back by approximately a full page
-	prevOffset := model.viewport.YOffset
+	prevOffset := model.layout.viewport.YOffset
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model = result.(Model)
 
 	// viewport should scroll back significantly, not just 1 line
-	scrolled := prevOffset - model.viewport.YOffset
+	scrolled := prevOffset - model.layout.viewport.YOffset
 	assert.GreaterOrEqual(t, scrolled, pageHeight-1,
 		"viewport should scroll back by approximately a full page")
 }
@@ -648,8 +648,8 @@ func TestModel_TreePgDownMovesCursorByPage(t *testing.T) {
 	}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
-	m.height = 20
+	m.layout.focus = paneTree
+	m.layout.height = 20
 
 	// cursor starts on first file
 	assert.Equal(t, "pkg/file00.go", m.tree.SelectedFile())
@@ -670,8 +670,8 @@ func TestModel_TreePgUpMovesCursorByPage(t *testing.T) {
 	}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
-	m.height = 20
+	m.layout.focus = paneTree
+	m.layout.height = 20
 
 	pageSize := m.treePageSize()
 	require.Positive(t, pageSize)
@@ -696,8 +696,8 @@ func TestModel_TreeCtrlDMovesCursorByHalfPage(t *testing.T) {
 	}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
-	m.height = 20
+	m.layout.focus = paneTree
+	m.layout.height = 20
 
 	assert.Equal(t, "pkg/file00.go", m.tree.SelectedFile())
 
@@ -717,8 +717,8 @@ func TestModel_TreeCtrlUMovesCursorByHalfPage(t *testing.T) {
 	}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
-	m.height = 20
+	m.layout.focus = paneTree
+	m.layout.height = 20
 
 	pageSize := m.treePageSize()
 	require.Positive(t, pageSize)
@@ -739,7 +739,7 @@ func TestModel_TreeHomeEndMoveToBoundaries(t *testing.T) {
 	files := []string{"cmd/main.go", "internal/a.go", "internal/b.go", "internal/c.go", "pkg/util.go"}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
+	m.layout.focus = paneTree
 
 	// move to middle
 	m.tree.Move(sidepane.MotionDown)
@@ -764,8 +764,8 @@ func TestModel_TreeScrollOffsetPersistsAcrossUpdates(t *testing.T) {
 	}
 	m := testModel(files, nil)
 	m.tree = testNewFileTree(files)
-	m.focus = paneTree
-	m.height = 10 // visible tree height = 10-3 = 7 rows
+	m.layout.focus = paneTree
+	m.layout.height = 10 // visible tree height = 10-3 = 7 rows
 
 	// scroll down past the visible window via repeated Update calls
 	var result tea.Model
@@ -830,7 +830,7 @@ func TestModel_FindHunks(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = tc.lines
+			m.file.lines = tc.lines
 			assert.Equal(t, tc.expect, m.findHunks())
 		})
 	}
@@ -864,8 +864,8 @@ func TestModel_CurrentHunk(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.diffLines = lines
-			m.diffCursor = tc.cursor
+			m.file.lines = lines
+			m.nav.diffCursor = tc.cursor
 			hunk, total := m.currentHunk()
 			assert.Equal(t, tc.wantHunk, hunk)
 			assert.Equal(t, tc.wantTotal, total)
@@ -874,7 +874,7 @@ func TestModel_CurrentHunk(t *testing.T) {
 }
 func TestModel_CurrentHunkNoChanges(t *testing.T) {
 	m := testModel(nil, nil)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
 	}
 	hunk, total := m.currentHunk()
@@ -891,20 +891,20 @@ func TestModel_MoveToNextHunk(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.diffCursor = 0
-	m.currFile = "a.go"
-	m.viewport.Height = 20
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.file.name = "a.go"
+	m.layout.viewport.Height = 20
 
 	m.moveToNextHunk()
-	assert.Equal(t, 1, m.diffCursor, "should jump to hunk 1")
+	assert.Equal(t, 1, m.nav.diffCursor, "should jump to hunk 1")
 
 	m.moveToNextHunk()
-	assert.Equal(t, 3, m.diffCursor, "should jump to hunk 2")
+	assert.Equal(t, 3, m.nav.diffCursor, "should jump to hunk 2")
 
 	// at last chunk, should not move
 	m.moveToNextHunk()
-	assert.Equal(t, 3, m.diffCursor, "should stay at last chunk")
+	assert.Equal(t, 3, m.nav.diffCursor, "should stay at last chunk")
 }
 func TestModel_MoveToPrevHunk(t *testing.T) {
 	lines := []diff.DiffLine{
@@ -916,20 +916,20 @@ func TestModel_MoveToPrevHunk(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.diffCursor = 4
-	m.currFile = "a.go"
-	m.viewport.Height = 20
+	m.file.lines = lines
+	m.nav.diffCursor = 4
+	m.file.name = "a.go"
+	m.layout.viewport.Height = 20
 
 	m.moveToPrevHunk()
-	assert.Equal(t, 3, m.diffCursor, "should jump to hunk 2")
+	assert.Equal(t, 3, m.nav.diffCursor, "should jump to hunk 2")
 
 	m.moveToPrevHunk()
-	assert.Equal(t, 1, m.diffCursor, "should jump to hunk 1")
+	assert.Equal(t, 1, m.nav.diffCursor, "should jump to hunk 1")
 
 	// at first chunk, should not move
 	m.moveToPrevHunk()
-	assert.Equal(t, 1, m.diffCursor, "should stay at first chunk")
+	assert.Equal(t, 1, m.nav.diffCursor, "should stay at first chunk")
 }
 func TestModel_CenterHunkInViewport_SmallHunk(t *testing.T) {
 	// build a file with context, a small 3-line hunk, and more context
@@ -952,18 +952,18 @@ func TestModel_CenterHunkInViewport_SmallHunk(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	vpHeight := m.viewport.Height
+	m.layout.focus = paneDiff
+	vpHeight := m.layout.viewport.Height
 	require.Positive(t, vpHeight)
 
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	m.moveToNextHunk()
-	assert.Equal(t, 20, m.diffCursor, "cursor should land on first line of hunk")
+	assert.Equal(t, 20, m.nav.diffCursor, "cursor should land on first line of hunk")
 
 	// hunk midpoint: cursorY + hunkHeight/2 = 20 + 1 = 21
 	// offset: midY - vpHeight/2
 	expectedOffset := 21 - vpHeight/2
-	assert.Equal(t, expectedOffset, m.viewport.YOffset, "small hunk should be centered by its midpoint")
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset, "small hunk should be centered by its midpoint")
 }
 
 func TestModel_CenterHunkInViewport_LargeHunk(t *testing.T) {
@@ -982,14 +982,14 @@ func TestModel_CenterHunkInViewport_LargeHunk(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	m.moveToNextHunk()
-	assert.Equal(t, 10, m.diffCursor, "cursor should land on first line of hunk")
+	assert.Equal(t, 10, m.nav.diffCursor, "cursor should land on first line of hunk")
 
 	// hunk is 100 lines >> viewport, so offset = cursorY - 2 = 10 - 2 = 8
-	assert.Equal(t, 8, m.viewport.YOffset, "large hunk should place first line near top with context margin")
+	assert.Equal(t, 8, m.layout.viewport.YOffset, "large hunk should place first line near top with context margin")
 }
 
 func TestModel_CenterHunkInViewport_HunkAtStart(t *testing.T) {
@@ -1008,12 +1008,12 @@ func TestModel_CenterHunkInViewport_HunkAtStart(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
-	m.diffCursor = 10
+	m.nav.diffCursor = 10
 	m.moveToPrevHunk()
-	assert.Equal(t, 0, m.diffCursor, "cursor should land on first line")
-	assert.Equal(t, 0, m.viewport.YOffset, "offset should be clamped to 0 when hunk is near top")
+	assert.Equal(t, 0, m.nav.diffCursor, "cursor should land on first line")
+	assert.Equal(t, 0, m.layout.viewport.YOffset, "offset should be clamped to 0 when hunk is near top")
 }
 
 func TestModel_CenterHunkInViewport_PrevHunkCenters(t *testing.T) {
@@ -1035,17 +1035,17 @@ func TestModel_CenterHunkInViewport_PrevHunkCenters(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	vpHeight := m.viewport.Height
+	m.layout.focus = paneDiff
+	vpHeight := m.layout.viewport.Height
 
-	m.diffCursor = 40
+	m.nav.diffCursor = 40
 	m.syncViewportToCursor()
 	m.moveToPrevHunk()
-	assert.Equal(t, 25, m.diffCursor, "cursor should land on first line of hunk")
+	assert.Equal(t, 25, m.nav.diffCursor, "cursor should land on first line of hunk")
 
 	// hunk midpoint: 25 + 2/2 = 26, offset: 26 - vpHeight/2
 	expectedOffset := 26 - vpHeight/2
-	assert.Equal(t, expectedOffset, m.viewport.YOffset, "prevHunk should center the hunk by its midpoint")
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset, "prevHunk should center the hunk by its midpoint")
 }
 
 func TestModel_CenterHunkInViewport_SingleLineHunk(t *testing.T) {
@@ -1064,16 +1064,16 @@ func TestModel_CenterHunkInViewport_SingleLineHunk(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	vpHeight := m.viewport.Height
+	m.layout.focus = paneDiff
+	vpHeight := m.layout.viewport.Height
 
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	m.moveToNextHunk()
-	assert.Equal(t, 25, m.diffCursor)
+	assert.Equal(t, 25, m.nav.diffCursor)
 
 	// single-line hunk: midY = 25 + 0 = 25, offset = 25 - vpHeight/2
 	expectedOffset := 25 - vpHeight/2
-	assert.Equal(t, expectedOffset, m.viewport.YOffset, "single-line hunk midpoint centered in viewport")
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset, "single-line hunk midpoint centered in viewport")
 }
 
 func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
@@ -1097,18 +1097,18 @@ func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	m.wrapMode = true
+	m.layout.focus = paneDiff
+	m.modes.wrap = true
 	// force single-file mode so tree pane is hidden and wrap width is deterministic:
 	// diffContentWidth = 80 - 4 = 76, wrapWidth = 76 - 3 (wrap gutter) = 73
-	m.singleFile = true
-	m.treeWidth = 0
-	vpHeight := m.viewport.Height
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	vpHeight := m.layout.viewport.Height
 	require.Positive(t, vpHeight)
 
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	m.moveToNextHunk()
-	assert.Equal(t, 20, m.diffCursor, "cursor should land on first line of hunk")
+	assert.Equal(t, 20, m.nav.diffCursor, "cursor should land on first line of hunk")
 
 	// pinned literals independent of production helpers:
 	// - 20 context lines above hunk, each 1 visual row → cursorY = 20
@@ -1118,7 +1118,7 @@ func TestModel_CenterHunkInViewport_WrapMode(t *testing.T) {
 	const cursorY = 20
 	const hunkVisualHeight = 4
 	expectedOffset := max(0, cursorY+hunkVisualHeight/2-vpHeight/2)
-	assert.Equal(t, expectedOffset, m.viewport.YOffset, "wrap mode: offset should account for wrapped line height")
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset, "wrap mode: offset should account for wrapped line height")
 }
 
 func TestModel_CenterHunkInViewport_WithAnnotation(t *testing.T) {
@@ -1141,16 +1141,16 @@ func TestModel_CenterHunkInViewport_WithAnnotation(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	vpHeight := m.viewport.Height
+	m.layout.focus = paneDiff
+	vpHeight := m.layout.viewport.Height
 
 	// add an annotation on the first changed line
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 26, Type: "+", Comment: "review note"})
 	defer m.store.Delete("a.go", 26, "+")
 
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	m.moveToNextHunk()
-	assert.Equal(t, 25, m.diffCursor, "cursor should land on first line of hunk")
+	assert.Equal(t, 25, m.nav.diffCursor, "cursor should land on first line of hunk")
 
 	// pinned literals independent of production helpers:
 	// - 25 context lines above hunk, each 1 visual row → cursorY = 25
@@ -1160,7 +1160,7 @@ func TestModel_CenterHunkInViewport_WithAnnotation(t *testing.T) {
 	const cursorY = 25
 	const hunkVisualHeight = 3
 	expectedOffset := max(0, cursorY+hunkVisualHeight/2-vpHeight/2)
-	assert.Equal(t, expectedOffset, m.viewport.YOffset, "annotation: offset should include annotation visual rows")
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset, "annotation: offset should include annotation visual rows")
 }
 
 func TestModel_CenterHunkInViewport_NoOpOnContextLine(t *testing.T) {
@@ -1180,16 +1180,16 @@ func TestModel_CenterHunkInViewport_NoOpOnContextLine(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
 	// position cursor on a context line and set a known viewport offset
-	m.diffCursor = 10
-	m.viewport.SetYOffset(5)
-	m.viewport.SetContent(m.renderDiff())
-	beforeOffset := m.viewport.YOffset
+	m.nav.diffCursor = 10
+	m.layout.viewport.SetYOffset(5)
+	m.layout.viewport.SetContent(m.renderDiff())
+	beforeOffset := m.layout.viewport.YOffset
 
 	m.centerHunkInViewport()
-	assert.Equal(t, beforeOffset, m.viewport.YOffset, "should be no-op when cursor is on context line")
+	assert.Equal(t, beforeOffset, m.layout.viewport.YOffset, "should be no-op when cursor is on context line")
 }
 
 func TestModel_CenterHunkInViewport_CollapsedMode(t *testing.T) {
@@ -1217,15 +1217,15 @@ func TestModel_CenterHunkInViewport_CollapsedMode(t *testing.T) {
 	m = result.(Model)
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	vpHeight := m.viewport.Height
+	m.layout.focus = paneDiff
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	vpHeight := m.layout.viewport.Height
 
-	m.diffCursor = 0
+	m.nav.diffCursor = 0
 	m.moveToNextHunk()
 	// in collapsed mode, cursor lands on first visible line (first add, idx 23)
-	assert.Equal(t, 23, m.diffCursor, "cursor should skip hidden removes and land on first add")
+	assert.Equal(t, 23, m.nav.diffCursor, "cursor should skip hidden removes and land on first add")
 
 	// pinned literals independent of production helpers:
 	// - 20 context lines above hunk, each 1 visual row
@@ -1234,7 +1234,7 @@ func TestModel_CenterHunkInViewport_CollapsedMode(t *testing.T) {
 	const cursorY = 20
 	const hunkVisualHeight = 3
 	expectedOffset := max(0, cursorY+hunkVisualHeight/2-vpHeight/2)
-	assert.Equal(t, expectedOffset, m.viewport.YOffset, "collapsed mode: offset should only count visible lines")
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset, "collapsed mode: offset should only count visible lines")
 }
 
 func TestModel_HunkNavigationViaKeys(t *testing.T) {
@@ -1246,25 +1246,25 @@ func TestModel_HunkNavigationViaKeys(t *testing.T) {
 	}
 
 	m := testModel(nil, nil)
-	m.diffLines = lines
-	m.diffCursor = 0
-	m.currFile = "a.go"
-	m.focus = paneDiff
-	m.viewport.Height = 20
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.file.name = "a.go"
+	m.layout.focus = paneDiff
+	m.layout.viewport.Height = 20
 
 	// press ] to go to next chunk
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model := result.(Model)
-	assert.Equal(t, 1, model.diffCursor, "] should jump to first chunk")
+	assert.Equal(t, 1, model.nav.diffCursor, "] should jump to first chunk")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model = result.(Model)
-	assert.Equal(t, 3, model.diffCursor, "] should jump to second chunk")
+	assert.Equal(t, 3, model.nav.diffCursor, "] should jump to second chunk")
 
 	// press [ to go to previous chunk
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	model = result.(Model)
-	assert.Equal(t, 1, model.diffCursor, "[ should jump back to first chunk")
+	assert.Equal(t, 1, model.nav.diffCursor, "[ should jump back to first chunk")
 }
 func TestModel_HorizontalScroll(t *testing.T) {
 	longLine := "package " + strings.Repeat("x", 200)
@@ -1272,36 +1272,36 @@ func TestModel_HorizontalScroll(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 
-	assert.Equal(t, 0, m.scrollX)
+	assert.Equal(t, 0, m.layout.scrollX)
 
 	// scroll right
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = result.(Model)
-	assert.Equal(t, scrollStep, m.scrollX)
+	assert.Equal(t, scrollStep, m.layout.scrollX)
 
 	// scroll left back to 0
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	m = result.(Model)
-	assert.Equal(t, 0, m.scrollX)
+	assert.Equal(t, 0, m.layout.scrollX)
 
 	// scroll left at 0 stays at 0
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	m = result.(Model)
-	assert.Equal(t, 0, m.scrollX)
+	assert.Equal(t, 0, m.layout.scrollX)
 }
 func TestModel_HorizontalScrollResetsOnFileLoad(t *testing.T) {
 	lines := []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.scrollX = 20
+	m.layout.scrollX = 20
 
 	// loading new file should reset scrollX
 	result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	assert.Equal(t, 0, m.scrollX)
+	assert.Equal(t, 0, m.layout.scrollX)
 }
 func TestModel_PaneHeight(t *testing.T) {
 	tests := []struct {
@@ -1317,8 +1317,8 @@ func TestModel_PaneHeight(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.height = tc.height
-			m.noStatusBar = tc.noStatusBar
+			m.layout.height = tc.height
+			m.cfg.noStatusBar = tc.noStatusBar
 			assert.Equal(t, tc.want, m.paneHeight())
 		})
 	}
@@ -1380,9 +1380,9 @@ func TestModel_WrapContent(t *testing.T) {
 }
 func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 	m := testModel(nil, nil)
-	m.wrapMode = true
-	m.width = 60
-	m.treeWidth = 12
+	m.modes.wrap = true
+	m.layout.width = 60
+	m.layout.treeWidth = 12
 
 	t.Run("short line no continuation", func(t *testing.T) {
 		var b strings.Builder
@@ -1452,9 +1452,9 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 	})
 
 	t.Run("cursor only on first visual line", func(t *testing.T) {
-		m.diffCursor = 0
-		m.focus = paneDiff
-		m.cursorOnAnnotation = false
+		m.nav.diffCursor = 0
+		m.layout.focus = paneDiff
+		m.annot.cursorOnAnnotation = false
 
 		var b strings.Builder
 		longContent := "this is a very long line that should definitely be wrapped at word boundaries to test cursor placement"
@@ -1471,8 +1471,8 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 	})
 
 	t.Run("no horizontal scroll in wrap mode", func(t *testing.T) {
-		m.scrollX = 10
-		m.wrapMode = true
+		m.layout.scrollX = 10
+		m.modes.wrap = true
 
 		var b strings.Builder
 		dl := diff.DiffLine{Content: "@@ -1,3 +1,3 @@", ChangeType: diff.ChangeDivider}
@@ -1482,13 +1482,13 @@ func TestModel_RenderDiffLineWithWrap(t *testing.T) {
 		output := b.String()
 		assert.Contains(t, output, "@@", "divider content should not be scrolled in wrap mode")
 
-		m.scrollX = 0 // reset
+		m.layout.scrollX = 0 // reset
 	})
 }
 func TestModel_WrappedLineCount(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.diffLines = []diff.DiffLine{
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: strings.Repeat("x", 200), ChangeType: diff.ChangeAdd},
 		{Content: "@@ -1,3 +1,3 @@", ChangeType: diff.ChangeDivider},
@@ -1496,7 +1496,7 @@ func TestModel_WrappedLineCount(t *testing.T) {
 	}
 
 	t.Run("wrap off returns 1 for all lines", func(t *testing.T) {
-		m.wrapMode = false
+		m.modes.wrap = false
 		assert.Equal(t, 1, m.wrappedLineCount(0))
 		assert.Equal(t, 1, m.wrappedLineCount(1))
 		assert.Equal(t, 1, m.wrappedLineCount(2))
@@ -1504,45 +1504,45 @@ func TestModel_WrappedLineCount(t *testing.T) {
 	})
 
 	t.Run("wrap on, short line returns 1", func(t *testing.T) {
-		m.wrapMode = true
+		m.modes.wrap = true
 		assert.Equal(t, 1, m.wrappedLineCount(0))
 	})
 
 	t.Run("wrap on, long line returns more than 1", func(t *testing.T) {
-		m.wrapMode = true
+		m.modes.wrap = true
 		count := m.wrappedLineCount(1)
 		assert.Greater(t, count, 1, "long add line should wrap to multiple visual rows")
 	})
 
 	t.Run("wrap on, divider always returns 1", func(t *testing.T) {
-		m.wrapMode = true
+		m.modes.wrap = true
 		assert.Equal(t, 1, m.wrappedLineCount(2))
 	})
 
 	t.Run("wrap on, long remove line wraps", func(t *testing.T) {
-		m.wrapMode = true
+		m.modes.wrap = true
 		count := m.wrappedLineCount(3)
 		assert.Greater(t, count, 1, "long remove line should wrap to multiple visual rows")
 	})
 
 	t.Run("out of bounds returns 1", func(t *testing.T) {
-		m.wrapMode = true
+		m.modes.wrap = true
 		assert.Equal(t, 1, m.wrappedLineCount(-1))
 		assert.Equal(t, 1, m.wrappedLineCount(100))
 	})
 }
 func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.wrapMode = true
+	m.file.name = "a.go"
+	m.modes.wrap = true
 	// use a narrow width so wrapping is predictable
-	m.width = 60
-	m.treeWidth = 20
+	m.layout.width = 60
+	m.layout.treeWidth = 20
 
 	// diffContentWidth = 60 - 20 - 4 - 1 = 35
 	// wrapWidth = 35 - 3 (gutter) = 32
 
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "short line", ChangeType: diff.ChangeContext},                                             // idx 0, fits in 1 row
 		{NewNum: 2, Content: strings.Repeat("a", 60), ChangeType: diff.ChangeAdd},                                      // idx 1, wraps to ~2 rows
 		{NewNum: 3, Content: "another short line", ChangeType: diff.ChangeContext},                                     // idx 2, fits in 1 row
@@ -1558,26 +1558,26 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 	assert.Equal(t, 1, count2, "short context line should be 1 row")
 
 	t.Run("cursor at 0, no wrapping before it", func(t *testing.T) {
-		m.diffCursor = 0
-		m.cursorOnAnnotation = false
+		m.nav.diffCursor = 0
+		m.annot.cursorOnAnnotation = false
 		assert.Equal(t, 0, m.cursorViewportY())
 	})
 
 	t.Run("cursor at 1, after short line 0", func(t *testing.T) {
-		m.diffCursor = 1
-		m.cursorOnAnnotation = false
+		m.nav.diffCursor = 1
+		m.annot.cursorOnAnnotation = false
 		assert.Equal(t, count0, m.cursorViewportY())
 	})
 
 	t.Run("cursor at 2, after wrapped line 1", func(t *testing.T) {
-		m.diffCursor = 2
-		m.cursorOnAnnotation = false
+		m.nav.diffCursor = 2
+		m.annot.cursorOnAnnotation = false
 		assert.Equal(t, count0+count1, m.cursorViewportY())
 	})
 
 	t.Run("cursor at 3, after lines 0+1+2", func(t *testing.T) {
-		m.diffCursor = 3
-		m.cursorOnAnnotation = false
+		m.nav.diffCursor = 3
+		m.annot.cursorOnAnnotation = false
 		assert.Equal(t, count0+count1+count2, m.cursorViewportY())
 	})
 
@@ -1586,8 +1586,8 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "note"})
 		defer func() { m.store.Delete("a.go", 2, "+") }()
 
-		m.diffCursor = 2
-		m.cursorOnAnnotation = false
+		m.nav.diffCursor = 2
+		m.annot.cursorOnAnnotation = false
 		// cursor at line 2: count0 + count1 + 1 (annotation row after line 1)
 		assert.Equal(t, count0+count1+1, m.cursorViewportY())
 	})
@@ -1596,23 +1596,23 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 		m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: " ", Comment: "note on ctx"})
 		defer func() { m.store.Delete("a.go", 3, " ") }()
 
-		m.diffCursor = 2
-		m.cursorOnAnnotation = true
+		m.nav.diffCursor = 2
+		m.annot.cursorOnAnnotation = true
 		// on annotation sub-line of line 2: offset is line0 + line1 rows + wrappedLineCount(2)
 		assert.Equal(t, count0+count1+count2, m.cursorViewportY())
 	})
 }
 func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.wrapMode = true
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.width = 60
-	m.treeWidth = 20
+	m.file.name = "a.go"
+	m.modes.wrap = true
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.layout.width = 60
+	m.layout.treeWidth = 20
 
 	// diffContentWidth = 60 - 20 - 4 - 1 = 35, wrapWidth = 35 - 3 = 32
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "context line", ChangeType: diff.ChangeContext},
 		{OldNum: 1, Content: strings.Repeat("x", 80), ChangeType: diff.ChangeRemove}, // long remove, hunk start
 		{OldNum: 2, Content: strings.Repeat("y", 80), ChangeType: diff.ChangeRemove}, // long remove
@@ -1624,9 +1624,9 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	// the original removed lines are 80 chars each and would wrap to ~3 rows.
 	// cursorViewportY must use placeholder text (1 row), not original content (~3 rows).
 
-	m.diffCursor = 4 // cursor on "after context" line
-	m.cursorOnAnnotation = false
-	m.focus = paneDiff
+	m.nav.diffCursor = 4 // cursor on "after context" line
+	m.annot.cursorOnAnnotation = false
+	m.layout.focus = paneDiff
 
 	y := m.cursorViewportY()
 	// expected: 1 (context) + 1 (placeholder = 1 visual row) = 2
@@ -1634,19 +1634,19 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 }
 func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
 	m := testModel(nil, nil)
-	m.currFile = "a.go"
-	m.wrapMode = true
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.showBlame = true
-	m.blameData = map[int]diff.BlameLine{
+	m.file.name = "a.go"
+	m.modes.wrap = true
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.showBlame = true
+	m.file.blameData = map[int]diff.BlameLine{
 		1: {Author: "LongName", Time: time.Now()},
 	}
-	m.blameAuthorLen = m.computeBlameAuthorLen()
-	m.width = 25
-	m.treeHidden = true
+	m.file.blameAuthorLen = m.computeBlameAuthorLen()
+	m.layout.width = 25
+	m.layout.treeHidden = true
 
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
 		{OldNum: 1, Content: strings.Repeat("x", 40), ChangeType: diff.ChangeRemove},
 		{OldNum: 2, Content: strings.Repeat("y", 40), ChangeType: diff.ChangeRemove},
@@ -1659,111 +1659,111 @@ func TestModel_CursorViewportYWithWrapDeletePlaceholderAndBlame(t *testing.T) {
 	require.Greater(t, placeholderRows, 1, "blame gutter should force the placeholder to wrap")
 	contextRows := m.wrappedLineCount(0)
 
-	m.diffCursor = 4
-	m.cursorOnAnnotation = false
+	m.nav.diffCursor = 4
+	m.annot.cursorOnAnnotation = false
 
 	assert.Equal(t, contextRows+placeholderRows, m.cursorViewportY())
 }
 func TestModel_WrapToggle(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
-	m.focus = paneDiff
-	m.viewport.Width = 80
-	m.viewport.Height = 20
-	assert.False(t, m.wrapMode)
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
+	m.layout.focus = paneDiff
+	m.layout.viewport.Width = 80
+	m.layout.viewport.Height = 20
+	assert.False(t, m.modes.wrap)
 
 	// press w to enable wrap
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	model := result.(Model)
-	assert.True(t, model.wrapMode)
+	assert.True(t, model.modes.wrap)
 
 	// press w again to disable wrap
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	model = result.(Model)
-	assert.False(t, model.wrapMode)
+	assert.False(t, model.modes.wrap)
 }
 func TestModel_WrapToggleResetsScrollX(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
-	m.focus = paneDiff
-	m.viewport.Width = 80
-	m.viewport.Height = 20
-	m.scrollX = 10
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
+	m.layout.focus = paneDiff
+	m.layout.viewport.Width = 80
+	m.layout.viewport.Height = 20
+	m.layout.scrollX = 10
 
 	// enable wrap: scrollX should reset to 0
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	model := result.(Model)
-	assert.True(t, model.wrapMode)
-	assert.Equal(t, 0, model.scrollX)
+	assert.True(t, model.modes.wrap)
+	assert.Equal(t, 0, model.layout.scrollX)
 }
 func TestModel_WrapToggleNoOpWithoutFile(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.focus = paneDiff
-	m.currFile = ""
-	assert.False(t, m.wrapMode)
+	m.layout.focus = paneDiff
+	m.file.name = ""
+	assert.False(t, m.modes.wrap)
 
 	// w should be no-op without a loaded file
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	model := result.(Model)
-	assert.False(t, model.wrapMode)
+	assert.False(t, model.modes.wrap)
 }
 func TestModel_WrapToggleNoOpInTreePane(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.focus = paneTree
-	assert.False(t, m.wrapMode)
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.layout.focus = paneTree
+	assert.False(t, m.modes.wrap)
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
 	model := result.(Model)
-	assert.False(t, model.wrapMode)
+	assert.False(t, model.modes.wrap)
 }
 func TestModel_ScrollBlockedInWrapMode(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
-	m.focus = paneDiff
-	m.viewport.Width = 80
-	m.viewport.Height = 20
-	m.wrapMode = true
-	m.scrollX = 0
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
+	m.layout.focus = paneDiff
+	m.layout.viewport.Width = 80
+	m.layout.viewport.Height = 20
+	m.modes.wrap = true
+	m.layout.scrollX = 0
 
 	// right key should not change scrollX in wrap mode
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	model := result.(Model)
-	assert.Equal(t, 0, model.scrollX)
+	assert.Equal(t, 0, model.layout.scrollX)
 
 	// left key should not change scrollX in wrap mode
-	model.scrollX = 0
+	model.layout.scrollX = 0
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	model = result.(Model)
-	assert.Equal(t, 0, model.scrollX)
+	assert.Equal(t, 0, model.layout.scrollX)
 }
 func TestModel_ScrollWorksWithoutWrapMode(t *testing.T) {
 	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.highlightedLines = []string{"x"}
-	m.focus = paneDiff
-	m.viewport.Width = 80
-	m.viewport.Height = 20
-	m.wrapMode = false
-	m.scrollX = 0
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = []string{"x"}
+	m.layout.focus = paneDiff
+	m.layout.viewport.Width = 80
+	m.layout.viewport.Height = 20
+	m.modes.wrap = false
+	m.layout.scrollX = 0
 
 	// right key should scroll in non-wrap mode
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	model := result.(Model)
-	assert.Positive(t, model.scrollX)
+	assert.Positive(t, model.layout.scrollX)
 }
 func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 	mdLines := []diff.DiffLine{
@@ -1777,30 +1777,30 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 
 	t.Run("scrolling diff updates TOC active section", func(t *testing.T) {
 		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
-		m.singleFile = true
-		m.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
-		require.NotNil(t, m.mdTOC)
-		m.currFile = "README.md"
-		m.diffLines = mdLines
-		m.highlightedLines = make([]string, len(mdLines))
-		m.focus = paneDiff
-		m.diffCursor = 0
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
+		m.file.highlighted = make([]string, len(mdLines))
+		m.layout.focus = paneDiff
+		m.nav.diffCursor = 0
 
 		// TOC entries: [0]=README.md(0), [1]=First(0), [2]=Second(2), [3]=Third(4)
 		// move down one line at a time and verify active section via SyncCursorToActiveSection + CurrentLineIdx
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
 		// after scrolling to line 1 (under # First), sync cursor and check
-		model.mdTOC.SyncCursorToActiveSection()
-		idx, ok := model.mdTOC.CurrentLineIdx()
+		model.file.mdTOC.SyncCursorToActiveSection()
+		idx, ok := model.file.mdTOC.CurrentLineIdx()
 		assert.True(t, ok, "active section should be set")
 		assert.Equal(t, 0, idx, "cursor at line 1 should be in First section (lineIdx=0)")
 
 		// move to line 2 (## Second)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
-		model.mdTOC.SyncCursorToActiveSection()
-		idx, ok = model.mdTOC.CurrentLineIdx()
+		model.file.mdTOC.SyncCursorToActiveSection()
+		idx, ok = model.file.mdTOC.CurrentLineIdx()
 		assert.True(t, ok)
 		assert.Equal(t, 2, idx, "cursor at line 2 should be in Second section (lineIdx=2)")
 
@@ -1809,26 +1809,26 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 		model = result.(Model)
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model = result.(Model)
-		model.mdTOC.SyncCursorToActiveSection()
-		idx, ok = model.mdTOC.CurrentLineIdx()
+		model.file.mdTOC.SyncCursorToActiveSection()
+		idx, ok = model.file.mdTOC.CurrentLineIdx()
 		assert.True(t, ok)
 		assert.Equal(t, 4, idx, "cursor at line 4 should be in Third section (lineIdx=4)")
 	})
 
 	t.Run("no TOC does not crash on scroll", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
-		m.singleFile = true
-		m.mdTOC = nil
-		m.currFile = "main.go"
-		m.diffLines = []diff.DiffLine{{Content: "package main", ChangeType: diff.ChangeContext}}
-		m.highlightedLines = []string{"package main"}
-		m.focus = paneDiff
-		m.diffCursor = 0
+		m.file.singleFile = true
+		m.file.mdTOC = nil
+		m.file.name = "main.go"
+		m.file.lines = []diff.DiffLine{{Content: "package main", ChangeType: diff.ChangeContext}}
+		m.file.highlighted = []string{"package main"}
+		m.layout.focus = paneDiff
+		m.nav.diffCursor = 0
 
 		// should not panic
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		model := result.(Model)
-		assert.Nil(t, model.mdTOC)
+		assert.Nil(t, model.file.mdTOC)
 	})
 }
 func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
@@ -1846,22 +1846,22 @@ func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
 
 	m := testModel(nil, nil)
 	m.keymap = km
-	m.diffLines = lines
-	m.diffCursor = 0
-	m.currFile = "a.go"
-	m.focus = paneDiff
-	m.viewport.Height = 20
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.file.name = "a.go"
+	m.layout.focus = paneDiff
+	m.layout.viewport.Height = 20
 
 	// "x" should jump to next hunk
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	model := result.(Model)
-	assert.Equal(t, 1, model.diffCursor, "x should jump to first hunk")
+	assert.Equal(t, 1, model.nav.diffCursor, "x should jump to first hunk")
 
 	// "]" should not jump (unbound)
-	model.diffCursor = 0
+	model.nav.diffCursor = 0
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model = result.(Model)
-	assert.Equal(t, 0, model.diffCursor, "] should not jump when unbound")
+	assert.Equal(t, 0, model.nav.diffCursor, "] should not jump when unbound")
 }
 func TestModel_PendingHunkJump_FirstHunk(t *testing.T) {
 	// File b.go has two hunks: divider, context, add, context, add
@@ -1885,14 +1885,14 @@ func TestModel_PendingHunkJump_FirstHunk(t *testing.T) {
 
 	// set pendingHunkJump = true (first hunk)
 	fwd := true
-	m.pendingHunkJump = &fwd
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: bLines}
+	m.nav.pendingHunkJump = &fwd
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: bLines}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after file load")
-	assert.Equal(t, 2, model.diffCursor, "cursor should land on first hunk (index 2, the add line)")
+	assert.Nil(t, model.nav.pendingHunkJump, "pendingHunkJump should be cleared after file load")
+	assert.Equal(t, 2, model.nav.diffCursor, "cursor should land on first hunk (index 2, the add line)")
 }
 func TestModel_PendingHunkJump_LastHunk(t *testing.T) {
 	// File b.go has two hunks
@@ -1916,14 +1916,14 @@ func TestModel_PendingHunkJump_LastHunk(t *testing.T) {
 
 	// set pendingHunkJump = false (last hunk)
 	bwd := false
-	m.pendingHunkJump = &bwd
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: bLines}
+	m.nav.pendingHunkJump = &bwd
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: bLines}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after file load")
-	assert.Equal(t, 4, model.diffCursor, "cursor should land on last hunk (index 4, the second add line)")
+	assert.Nil(t, model.nav.pendingHunkJump, "pendingHunkJump should be cleared after file load")
+	assert.Equal(t, 4, model.nav.diffCursor, "cursor should land on last hunk (index 4, the second add line)")
 }
 func TestModel_PendingHunkJump_ClearedOnManualNav(t *testing.T) {
 	diffs := map[string][]diff.DiffLine{
@@ -1939,11 +1939,11 @@ func TestModel_PendingHunkJump_ClearedOnManualNav(t *testing.T) {
 
 	// set pendingHunkJump then trigger manual tree navigation (j key from tree pane)
 	fwd := true
-	m.pendingHunkJump = &fwd
-	m.focus = paneTree
+	m.nav.pendingHunkJump = &fwd
+	m.layout.focus = paneTree
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model := result.(Model)
-	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared on manual tree navigation")
+	assert.Nil(t, model.nav.pendingHunkJump, "pendingHunkJump should be cleared on manual tree navigation")
 }
 
 // loadFileIntoModel sets up a model with files loaded and a.go as the current file.
@@ -1959,7 +1959,7 @@ func loadFileIntoModel(t *testing.T, files []string, diffs map[string][]diff.Dif
 	loadMsg := m.loadFileDiff(files[0])()
 	result, _ = m.Update(loadMsg)
 	m = result.(Model)
-	m.viewport.Height = 20
+	m.layout.viewport.Height = 20
 	return m
 }
 func TestModel_HunkNav_FromTreePane_SwitchesFocusToDiff(t *testing.T) {
@@ -1971,14 +1971,14 @@ func TestModel_HunkNav_FromTreePane_SwitchesFocusToDiff(t *testing.T) {
 		},
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
-	m.focus = paneTree
-	m.diffCursor = 0 // on context line
+	m.layout.focus = paneTree
+	m.nav.diffCursor = 0 // on context line
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model := result.(Model)
 
-	assert.Equal(t, paneDiff, model.focus, "] from tree pane should switch focus to diff")
-	assert.Equal(t, 1, model.diffCursor, "] should land on the add line (hunk start)")
+	assert.Equal(t, paneDiff, model.layout.focus, "] from tree pane should switch focus to diff")
+	assert.Equal(t, 1, model.nav.diffCursor, "] should land on the add line (hunk start)")
 }
 func TestModel_HunkNav_PrevFromTreePane_SwitchesFocusToDiff(t *testing.T) {
 	// pressing [ from tree pane should switch focus to diff and jump to prev hunk
@@ -1990,14 +1990,14 @@ func TestModel_HunkNav_PrevFromTreePane_SwitchesFocusToDiff(t *testing.T) {
 		},
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
-	m.focus = paneTree
-	m.diffCursor = 2 // on second add line
+	m.layout.focus = paneTree
+	m.nav.diffCursor = 2 // on second add line
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	model := result.(Model)
 
-	assert.Equal(t, paneDiff, model.focus, "[ from tree pane should switch focus to diff")
-	assert.Equal(t, 0, model.diffCursor, "[ should land on first hunk start (index 0)")
+	assert.Equal(t, paneDiff, model.layout.focus, "[ from tree pane should switch focus to diff")
+	assert.Equal(t, 0, model.nav.diffCursor, "[ should land on first hunk start (index 0)")
 }
 func TestModel_HunkNav_NextCrossesFileForward(t *testing.T) {
 	// pressing ] at the last hunk of a.go should navigate to b.go and set pendingHunkJump=true
@@ -2006,15 +2006,15 @@ func TestModel_HunkNav_NextCrossesFileForward(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
-	m.crossFileHunks = true
-	m.focus = paneDiff
-	m.diffCursor = 0 // at the only (last) hunk
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0 // at the only (last) hunk
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model := result.(Model)
 
-	require.NotNil(t, model.pendingHunkJump, "pendingHunkJump should be set for cross-file forward jump")
-	assert.True(t, *model.pendingHunkJump, "pendingHunkJump should be true (land on first hunk)")
+	require.NotNil(t, model.nav.pendingHunkJump, "pendingHunkJump should be set for cross-file forward jump")
+	assert.True(t, *model.nav.pendingHunkJump, "pendingHunkJump should be true (land on first hunk)")
 	assert.Equal(t, "b.go", model.tree.SelectedFile(), "tree should have advanced to b.go")
 	assert.NotNil(t, cmd, "a load command should be returned")
 }
@@ -2025,22 +2025,22 @@ func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
-	m.crossFileHunks = true
+	m.cfg.crossFileHunks = true
 	// select b.go in tree (index 0 = dir entry, index 1 = a.go, index 2 = b.go)
 	m.tree.SelectByPath("b.go")
-	m.loadSeq++
+	m.file.loadSeq++
 	bLoad := m.loadFileDiff("b.go")()
 	result, _ := m.Update(bLoad)
 	m = result.(Model)
-	m.viewport.Height = 20
-	m.focus = paneDiff
-	m.diffCursor = 0 // at the first (and only) hunk
+	m.layout.viewport.Height = 20
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0 // at the first (and only) hunk
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	model := result.(Model)
 
-	require.NotNil(t, model.pendingHunkJump, "pendingHunkJump should be set for cross-file backward jump")
-	assert.False(t, *model.pendingHunkJump, "pendingHunkJump should be false (land on last hunk)")
+	require.NotNil(t, model.nav.pendingHunkJump, "pendingHunkJump should be set for cross-file backward jump")
+	assert.False(t, *model.nav.pendingHunkJump, "pendingHunkJump should be false (land on last hunk)")
 	assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree should have moved back to a.go")
 	assert.NotNil(t, cmd, "a load command should be returned")
 }
@@ -2050,15 +2050,15 @@ func TestModel_HunkNav_NextAtLastFileNoOp(t *testing.T) {
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "no pendingHunkJump when no next file")
-	assert.Equal(t, 0, model.diffCursor, "cursor should stay at last hunk")
-	assert.Equal(t, "a.go", model.currFile, "should remain on a.go")
+	assert.Nil(t, model.nav.pendingHunkJump, "no pendingHunkJump when no next file")
+	assert.Equal(t, 0, model.nav.diffCursor, "cursor should stay at last hunk")
+	assert.Equal(t, "a.go", model.file.name, "should remain on a.go")
 }
 func TestModel_HunkNav_PrevAtFirstFileNoOp(t *testing.T) {
 	// pressing [ at the first hunk of the first file: no-op
@@ -2066,15 +2066,15 @@ func TestModel_HunkNav_PrevAtFirstFileNoOp(t *testing.T) {
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "no pendingHunkJump when no prev file")
-	assert.Equal(t, 0, model.diffCursor, "cursor should stay at first hunk")
-	assert.Equal(t, "a.go", model.currFile, "should remain on a.go")
+	assert.Nil(t, model.nav.pendingHunkJump, "no pendingHunkJump when no prev file")
+	assert.Equal(t, 0, model.nav.diffCursor, "cursor should stay at first hunk")
+	assert.Equal(t, "a.go", model.file.name, "should remain on a.go")
 }
 func TestModel_HunkNav_SingleFileNoCrossFile(t *testing.T) {
 	// in single-file mode, ] at last hunk should not cross to other files
@@ -2082,17 +2082,17 @@ func TestModel_HunkNav_SingleFileNoCrossFile(t *testing.T) {
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go"}, diffs)
-	m.crossFileHunks = true
-	m.singleFile = true
-	m.treeWidth = 0
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.cfg.crossFileHunks = true
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "single-file mode should not set pendingHunkJump")
-	assert.Equal(t, 0, model.diffCursor, "cursor should not move in single-file mode at last hunk")
+	assert.Nil(t, model.nav.pendingHunkJump, "single-file mode should not set pendingHunkJump")
+	assert.Equal(t, 0, model.nav.diffCursor, "cursor should not move in single-file mode at last hunk")
 }
 func TestModel_HunkNav_CrossFile_LandsOnFirstHunk(t *testing.T) {
 	// end-to-end: ] from last hunk of a.go loads b.go and lands on its first hunk
@@ -2108,9 +2108,9 @@ func TestModel_HunkNav_CrossFile_LandsOnFirstHunk(t *testing.T) {
 		"b.go": bLines,
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
-	m.crossFileHunks = true
-	m.focus = paneDiff
-	m.diffCursor = 0 // at the only hunk of a.go
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0 // at the only hunk of a.go
 
 	// press ] to trigger cross-file jump
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
@@ -2122,9 +2122,9 @@ func TestModel_HunkNav_CrossFile_LandsOnFirstHunk(t *testing.T) {
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
-	assert.Equal(t, "b.go", model.currFile, "should have navigated to b.go")
-	assert.Equal(t, 2, model.diffCursor, "should land on first hunk of b.go (index 2)")
+	assert.Nil(t, model.nav.pendingHunkJump, "pendingHunkJump should be cleared after landing")
+	assert.Equal(t, "b.go", model.file.name, "should have navigated to b.go")
+	assert.Equal(t, 2, model.nav.diffCursor, "should land on first hunk of b.go (index 2)")
 }
 func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	// end-to-end: [ from first hunk of b.go loads a.go and lands on its last hunk
@@ -2138,16 +2138,16 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
-	m.crossFileHunks = true
+	m.cfg.crossFileHunks = true
 	// select b.go in tree (index 0 = dir entry, index 1 = a.go, index 2 = b.go)
 	m.tree.SelectByPath("b.go")
-	m.loadSeq++
+	m.file.loadSeq++
 	loadMsg := m.loadFileDiff("b.go")()
 	result, _ := m.Update(loadMsg)
 	m = result.(Model)
-	m.viewport.Height = 20
-	m.focus = paneDiff
-	m.diffCursor = 0 // at first (only) hunk of b.go
+	m.layout.viewport.Height = 20
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0 // at first (only) hunk of b.go
 
 	// press [ to trigger cross-file backward jump
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
@@ -2159,9 +2159,9 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump, "pendingHunkJump should be cleared after landing")
-	assert.Equal(t, "a.go", model.currFile, "should have navigated to a.go")
-	assert.Equal(t, 2, model.diffCursor, "should land on last hunk of a.go (index 2)")
+	assert.Nil(t, model.nav.pendingHunkJump, "pendingHunkJump should be cleared after landing")
+	assert.Equal(t, "a.go", model.file.name, "should have navigated to a.go")
+	assert.Equal(t, 2, model.nav.diffCursor, "should land on last hunk of a.go (index 2)")
 }
 func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
 	diffs := map[string][]diff.DiffLine{
@@ -2169,17 +2169,17 @@ func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	model := result.(Model)
 
 	assert.Nil(t, cmd)
-	assert.Nil(t, model.pendingHunkJump)
-	assert.Equal(t, "a.go", model.currFile)
+	assert.Nil(t, model.nav.pendingHunkJump)
+	assert.Equal(t, "a.go", model.file.name)
 	assert.Equal(t, "a.go", model.tree.SelectedFile())
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor)
 }
 func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testing.T) {
 	lines := []diff.DiffLine{
@@ -2199,14 +2199,14 @@ func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testin
 	m = result.(Model)
 
 	fwd := true
-	m.pendingHunkJump = &fwd
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: lines}
+	m.nav.pendingHunkJump = &fwd
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: lines}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
-	assert.Nil(t, model.pendingHunkJump)
-	assert.Equal(t, 1, model.diffCursor, "should fall back to first visible context line")
+	assert.Nil(t, model.nav.pendingHunkJump)
+	assert.Equal(t, 1, model.nav.diffCursor, "should fall back to first visible context line")
 }
 func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
 	diffs := map[string][]diff.DiffLine{
@@ -2221,16 +2221,16 @@ func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
 	m = result.(Model)
 
 	fwd := true
-	m.pendingHunkJump = &fwd
+	m.nav.pendingHunkJump = &fwd
 	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+", Comment: "note"}
-	m.loadSeq++
-	loadMsg := fileLoadedMsg{file: "b.go", seq: m.loadSeq, lines: diffs["b.go"]}
+	m.file.loadSeq++
+	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: diffs["b.go"]}
 	result, _ = m.Update(loadMsg)
 	model := result.(Model)
 
 	assert.Nil(t, model.pendingAnnotJump)
-	assert.Nil(t, model.pendingHunkJump)
-	assert.Equal(t, 0, model.diffCursor)
+	assert.Nil(t, model.nav.pendingHunkJump)
+	assert.Equal(t, 0, model.nav.diffCursor)
 }
 
 func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
@@ -2240,15 +2240,15 @@ func TestModel_EnterInDiffPaneOnDividerIgnored(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.tree = testNewFileTree([]string{"a.go"})
-	m.focus = paneDiff
-	m.currFile = "a.go"
-	m.diffLines = lines
-	m.diffCursor = 0 // on divider line
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0 // on divider line
 
 	// press enter on divider - should not enter annotation mode
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := result.(Model)
-	assert.False(t, model.annotating, "enter on divider should not start annotation")
+	assert.False(t, model.annot.annotating, "enter on divider should not start annotation")
 }
 
 func TestModel_DiffLineNum(t *testing.T) {
@@ -2275,9 +2275,9 @@ func TestModel_PrefixKeyScrollReachesDiffPane(t *testing.T) {
 		m = result.(Model)
 		result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
-		m.focus = paneDiff
-		m.diffCursor = 50
-		m.viewport.SetYOffset(0) // start from a known non-centered state
+		m.layout.focus = paneDiff
+		m.nav.diffCursor = 50
+		m.layout.viewport.SetYOffset(0) // start from a known non-centered state
 		return m
 	}
 
@@ -2294,9 +2294,9 @@ func TestModel_PrefixKeyScrollReachesDiffPane(t *testing.T) {
 		m = pressZ(m) // trigger scroll_center
 		assert.Empty(t, m.pendingKey, "prefix should be cleared after combined resolve")
 		// centerViewportOnCursor: offset = max(0, cursorY - viewport.Height/2)
-		expected := max(0, cursorY-m.viewport.Height/2)
-		assert.Equal(t, expected, m.viewport.YOffset, "zz should center viewport on cursor")
-		assert.NotZero(t, m.viewport.YOffset, "sanity: offset must have moved from 0")
+		expected := max(0, cursorY-m.layout.viewport.Height/2)
+		assert.Equal(t, expected, m.layout.viewport.YOffset, "zz should center viewport on cursor")
+		assert.NotZero(t, m.layout.viewport.YOffset, "sanity: offset must have moved from 0")
 	})
 
 	t.Run("zt top-aligns cursor", func(t *testing.T) {
@@ -2306,7 +2306,7 @@ func TestModel_PrefixKeyScrollReachesDiffPane(t *testing.T) {
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
 		m = result.(Model)
 		// topAlignViewportOnCursor: offset = max(0, cursorY)
-		assert.Equal(t, max(0, cursorY), m.viewport.YOffset, "zt should top-align viewport on cursor")
+		assert.Equal(t, max(0, cursorY), m.layout.viewport.YOffset, "zt should top-align viewport on cursor")
 	})
 
 	t.Run("zb bottom-aligns cursor", func(t *testing.T) {
@@ -2316,7 +2316,7 @@ func TestModel_PrefixKeyScrollReachesDiffPane(t *testing.T) {
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
 		m = result.(Model)
 		// bottomAlignViewportOnCursor: offset = max(0, cursorY - Height + 1)
-		expected := max(0, cursorY-m.viewport.Height+1)
-		assert.Equal(t, expected, m.viewport.YOffset, "zb should bottom-align viewport on cursor")
+		expected := max(0, cursorY-m.layout.viewport.Height+1)
+		assert.Equal(t, expected, m.layout.viewport.YOffset, "zb should bottom-align viewport on cursor")
 	})
 }

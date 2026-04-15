@@ -1,4 +1,4 @@
-package diff
+package diff_test
 
 import (
 	"errors"
@@ -6,41 +6,50 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/diff/mocks"
 )
 
 func TestIncludeFilter_ChangedFiles(t *testing.T) {
-	inner := &mockRenderer{
-		changedFiles: []FileEntry{
-			{Path: "cmd/main.go"}, {Path: "src/app.go"}, {Path: "src/lib/util.go"},
-			{Path: "vendor/lib.go"}, {Path: "ui/mocks/m.go"},
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{
+				{Path: "cmd/main.go"}, {Path: "src/app.go"}, {Path: "src/lib/util.go"},
+				{Path: "vendor/lib.go"}, {Path: "ui/mocks/m.go"},
+			}, nil
 		},
 	}
-	f := NewIncludeFilter(inner, []string{"src"})
+	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	files, err := f.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "src/app.go"}, {Path: "src/lib/util.go"}}, files)
+	assert.Equal(t, []diff.FileEntry{{Path: "src/app.go"}, {Path: "src/lib/util.go"}}, files)
 }
 
 func TestIncludeFilter_ChangedFiles_multiplePrefixes(t *testing.T) {
-	inner := &mockRenderer{
-		changedFiles: []FileEntry{
-			{Path: "cmd/main.go"}, {Path: "src/app.go"}, {Path: "pkg/util.go"},
-			{Path: "vendor/lib.go"},
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{
+				{Path: "cmd/main.go"}, {Path: "src/app.go"}, {Path: "pkg/util.go"},
+				{Path: "vendor/lib.go"},
+			}, nil
 		},
 	}
-	f := NewIncludeFilter(inner, []string{"src", "pkg"})
+	f := diff.NewIncludeFilter(inner, []string{"src", "pkg"})
 
 	files, err := f.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "src/app.go"}, {Path: "pkg/util.go"}}, files)
+	assert.Equal(t, []diff.FileEntry{{Path: "src/app.go"}, {Path: "pkg/util.go"}}, files)
 }
 
 func TestIncludeFilter_ChangedFiles_noneMatch(t *testing.T) {
-	inner := &mockRenderer{
-		changedFiles: []FileEntry{{Path: "vendor/a.go"}, {Path: "vendor/b.go"}},
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "vendor/a.go"}, {Path: "vendor/b.go"}}, nil
+		},
 	}
-	f := NewIncludeFilter(inner, []string{"src"})
+	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	files, err := f.ChangedFiles("", false)
 	require.NoError(t, err)
@@ -48,19 +57,23 @@ func TestIncludeFilter_ChangedFiles_noneMatch(t *testing.T) {
 }
 
 func TestIncludeFilter_ChangedFiles_exactMatch(t *testing.T) {
-	inner := &mockRenderer{
-		changedFiles: []FileEntry{{Path: "Makefile"}, {Path: "src/app.go"}},
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "Makefile"}, {Path: "src/app.go"}}, nil
+		},
 	}
-	f := NewIncludeFilter(inner, []string{"Makefile"})
+	f := diff.NewIncludeFilter(inner, []string{"Makefile"})
 
 	files, err := f.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "Makefile"}}, files)
+	assert.Equal(t, []diff.FileEntry{{Path: "Makefile"}}, files)
 }
 
 func TestIncludeFilter_ChangedFiles_innerError(t *testing.T) {
-	inner := &mockRenderer{changedErr: errors.New("git failed")}
-	f := NewIncludeFilter(inner, []string{"src"})
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, errors.New("git failed") },
+	}
+	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	_, err := f.ChangedFiles("", false)
 	require.Error(t, err)
@@ -69,35 +82,39 @@ func TestIncludeFilter_ChangedFiles_innerError(t *testing.T) {
 }
 
 func TestIncludeFilter_ChangedFiles_prefixNormalization(t *testing.T) {
-	inner := &mockRenderer{
-		changedFiles: []FileEntry{{Path: "src/app.go"}, {Path: "vendor/lib.go"}},
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "src/app.go"}, {Path: "vendor/lib.go"}}, nil
+		},
 	}
-	f := NewIncludeFilter(inner, []string{" src/ ", "", "  "})
+	f := diff.NewIncludeFilter(inner, []string{" src/ ", "", "  "})
 
 	files, err := f.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, []FileEntry{{Path: "src/app.go"}}, files)
-	assert.Len(t, f.prefixes, 1, "empty/whitespace prefixes should be skipped")
+	assert.Equal(t, []diff.FileEntry{{Path: "src/app.go"}}, files)
 }
 
 func TestIncludeFilter_ChangedFiles_allPrefixesEmpty(t *testing.T) {
-	inner := &mockRenderer{
-		changedFiles: []FileEntry{{Path: "src/app.go"}, {Path: "vendor/lib.go"}},
+	expected := []diff.FileEntry{{Path: "src/app.go"}, {Path: "vendor/lib.go"}}
+	inner := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return expected, nil },
 	}
-	f := NewIncludeFilter(inner, []string{"", " ", "  "})
+	f := diff.NewIncludeFilter(inner, []string{"", " ", "  "})
 
 	files, err := f.ChangedFiles("", false)
 	require.NoError(t, err)
-	assert.Equal(t, inner.changedFiles, files, "all prefixes normalized to empty should be a no-op")
+	assert.Equal(t, expected, files, "all prefixes normalized to empty should be a no-op")
 }
 
 func TestIncludeFilter_FileDiff_passthrough(t *testing.T) {
-	lines := []DiffLine{
-		{OldNum: 1, NewNum: 1, Content: "line1", ChangeType: ChangeContext},
-		{OldNum: 2, NewNum: 2, Content: "line2", ChangeType: ChangeContext},
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
-	inner := &mockRenderer{fileDiff: lines}
-	f := NewIncludeFilter(inner, []string{"src"})
+	inner := &mocks.RendererMock{
+		FileDiffFunc: func(string, string, bool) ([]diff.DiffLine, error) { return lines, nil },
+	}
+	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	// even a file NOT matching include prefix is passed through — filtering is only at file list level
 	result, err := f.FileDiff("", "vendor/foo.go", false)
@@ -106,12 +123,13 @@ func TestIncludeFilter_FileDiff_passthrough(t *testing.T) {
 }
 
 func TestIncludeFilter_FileDiff_innerError(t *testing.T) {
-	inner := &mockRenderer{fileDiffErr: errors.New("read failed")}
-	f := NewIncludeFilter(inner, []string{"src"})
+	inner := &mocks.RendererMock{
+		FileDiffFunc: func(string, string, bool) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
+	}
+	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	_, err := f.FileDiff("", "foo.go", false)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "include filter, file diff foo.go")
 	assert.Contains(t, err.Error(), "read failed")
 }
-

@@ -107,7 +107,7 @@ func TestModel_FindDiffLineIndex(t *testing.T) {
 		},
 	}
 	m := testModel([]string{"a.go"}, diffs)
-	m.diffLines = diffs["a.go"]
+	m.file.lines = diffs["a.go"]
 
 	t.Run("find add line by NewNum", func(t *testing.T) {
 		idx := m.findDiffLineIndex(2, "+")
@@ -156,21 +156,21 @@ func TestModel_JumpToAnnotationTarget_SameFile(t *testing.T) {
 		target := &overlay.AnnotationTarget{File: "a.go", ChangeType: "+", Line: 2}
 		result, _ := m.jumpToAnnotationTarget(target)
 		model := result.(Model)
-		assert.Equal(t, 1, model.diffCursor)
-		assert.Equal(t, paneDiff, model.focus)
+		assert.Equal(t, 1, model.nav.diffCursor)
+		assert.Equal(t, paneDiff, model.layout.focus)
 	})
 
 	t.Run("file-level annotation sets cursor to -1", func(t *testing.T) {
 		target := &overlay.AnnotationTarget{File: "a.go", ChangeType: "", Line: 0}
 		result, _ := m.jumpToAnnotationTarget(target)
 		model := result.(Model)
-		assert.Equal(t, -1, model.diffCursor)
+		assert.Equal(t, -1, model.nav.diffCursor)
 	})
 
 	t.Run("nil target is no-op", func(t *testing.T) {
 		result, _ := m.jumpToAnnotationTarget(nil)
 		model := result.(Model)
-		assert.Equal(t, m.diffCursor, model.diffCursor)
+		assert.Equal(t, m.nav.diffCursor, model.nav.diffCursor)
 	})
 }
 
@@ -190,7 +190,7 @@ func TestModel_JumpToAnnotationTarget_CrossFile(t *testing.T) {
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
 	m = result.(Model)
-	assert.Equal(t, "a.go", m.currFile)
+	assert.Equal(t, "a.go", m.file.name)
 
 	t.Run("cross-file jump sets pending and triggers load", func(t *testing.T) {
 		target := &overlay.AnnotationTarget{File: "b.go", ChangeType: "+", Line: 2}
@@ -204,10 +204,10 @@ func TestModel_JumpToAnnotationTarget_CrossFile(t *testing.T) {
 		loadMsg := cmd()
 		result, _ = model.Update(loadMsg)
 		model = result.(Model)
-		assert.Equal(t, "b.go", model.currFile)
+		assert.Equal(t, "b.go", model.file.name)
 		assert.Nil(t, model.pendingAnnotJump)
-		assert.Equal(t, 1, model.diffCursor)
-		assert.Equal(t, paneDiff, model.focus)
+		assert.Equal(t, 1, model.nav.diffCursor)
+		assert.Equal(t, paneDiff, model.layout.focus)
 	})
 }
 
@@ -228,8 +228,8 @@ func TestModel_JumpToAnnotation_StalePendingGuard(t *testing.T) {
 	t.Run("stale pending jump is ignored when file does not match", func(t *testing.T) {
 		// set pending for b.go but simulate a.go being loaded
 		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
-		m.loadSeq++
-		loadMsg := fileLoadedMsg{file: "a.go", seq: m.loadSeq, lines: diffs["a.go"]}
+		m.file.loadSeq++
+		loadMsg := fileLoadedMsg{file: "a.go", seq: m.file.loadSeq, lines: diffs["a.go"]}
 		result, _ := m.Update(loadMsg)
 		model := result.(Model)
 		// pending should not be cleared (file mismatch)
@@ -239,7 +239,7 @@ func TestModel_JumpToAnnotation_StalePendingGuard(t *testing.T) {
 
 	t.Run("n key clears pending jump", func(t *testing.T) {
 		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 		model := result.(Model)
 		assert.Nil(t, model.pendingAnnotJump)
@@ -264,7 +264,7 @@ func TestModel_PendingAnnotJump_ClearedByTreeNav(t *testing.T) {
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
 	m = result.(Model)
-	m.focus = paneTree
+	m.layout.focus = paneTree
 
 	t.Run("tree j clears pending jump", func(t *testing.T) {
 		m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
@@ -296,7 +296,7 @@ func TestModel_PendingAnnotJump_ClearedByFilterToggle(t *testing.T) {
 	// add annotation so filter has something to toggle
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
 	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+"}
-	m.focus = paneDiff
+	m.layout.focus = paneDiff
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
 	model := result.(Model)
 	assert.Nil(t, model.pendingAnnotJump)
@@ -320,16 +320,16 @@ func TestModel_PositionOnAnnotation_CollapsedMode(t *testing.T) {
 	m = result.(Model)
 
 	// enable collapsed mode - remove line at index 2 should be hidden
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 
 	a := annotation.Annotation{File: "a.go", Line: 2, Type: "-"}
 	m.positionOnAnnotation(a)
 
 	// hunk should be expanded so the remove line is visible
-	assert.Equal(t, 2, m.diffCursor)
+	assert.Equal(t, 2, m.nav.diffCursor)
 	hunks := m.findHunks()
-	assert.False(t, m.isCollapsedHidden(m.diffCursor, hunks), "target line should be visible after jump")
+	assert.False(t, m.isCollapsedHidden(m.nav.diffCursor, hunks), "target line should be visible after jump")
 }
 
 func TestModel_PositionOnAnnotation_DeleteOnlyHunk(t *testing.T) {
@@ -350,16 +350,16 @@ func TestModel_PositionOnAnnotation_DeleteOnlyHunk(t *testing.T) {
 	m = result.(Model)
 
 	// enable collapsed mode - first remove line is a delete-only placeholder
-	m.collapsed.enabled = true
-	m.collapsed.expandedHunks = make(map[int]bool)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
 
 	a := annotation.Annotation{File: "a.go", Line: 1, Type: "-"}
 	m.positionOnAnnotation(a)
 
 	// hunk must be expanded so the actual line and annotation are visible
-	assert.Equal(t, 1, m.diffCursor)
+	assert.Equal(t, 1, m.nav.diffCursor)
 	hunks := m.findHunks()
-	hunkStart := m.hunkStartFor(m.diffCursor, hunks)
-	assert.True(t, m.collapsed.expandedHunks[hunkStart], "delete-only hunk should be expanded after jump")
-	assert.False(t, m.isDeleteOnlyPlaceholder(m.diffCursor, hunks), "line should not be a placeholder after expansion")
+	hunkStart := m.hunkStartFor(m.nav.diffCursor, hunks)
+	assert.True(t, m.modes.collapsed.expandedHunks[hunkStart], "delete-only hunk should be expanded after jump")
+	assert.False(t, m.isDeleteOnlyPlaceholder(m.nav.diffCursor, hunks), "line should not be a placeholder after expansion")
 }

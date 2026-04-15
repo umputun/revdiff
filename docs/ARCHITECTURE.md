@@ -6,7 +6,13 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  app/main.go — CLI parsing, config, wiring          │
+│  app/ — composition root (package main)             │
+│    main.go          — main(), early-exit flow       │
+│    config.go        — options, parseArgs, config IO │
+│    stdin.go         — stdin validation, /dev/tty    │
+│    renderer_setup.go — VCS detection, renderer pick │
+│    themes.go        — theme CLI commands, wiring    │
+│    history_save.go  — history-save policy           │
 ├─────────────────────────────────────────────────────┤
 │  app/ui/ — bubbletea TUI (single Model struct)      │
 │    ├── overlay/   — popup layers (help, annots,     │
@@ -19,7 +25,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 │  app/highlight/   — chroma syntax coloring          │
 │  app/annotation/  — in-memory annotation store      │
 │  app/keymap/      — configurable keybindings        │
-│  app/theme/       — theme parse/load/dump           │
+│  app/theme/       — Catalog-centric theme system    │
 │  app/history/     — review session auto-save        │
 │  app/fsutil/      — filesystem utilities            │
 └─────────────────────────────────────────────────────┘
@@ -27,15 +33,18 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Package Responsibilities
 
-### app/ (entry point)
+### app/ (composition root)
 
-`main.go` is the composition root. Responsibilities:
-- CLI flag parsing via `go-flags` with INI config file support
-- VCS detection (`diff.DetectVCS()`) and renderer selection
-- Theme resolution and application (`applyTheme()`)
-- Keybinding loading (`keymap.LoadOrDefault()`)
-- Constructing all dependencies and wiring them into `ui.ModelConfig`
-- Starting bubbletea program
+`package main` is the composition root, split across files by concern:
+
+| File | Responsibility |
+|------|---------------|
+| `main.go` | `main()`, early-exit commands (version, dump-config, dump-keys), `run()` orchestration |
+| `config.go` | `options` struct, `parseArgs`, `dumpConfig`, `loadConfigFile`, config-path helpers |
+| `stdin.go` | stdin validation, `/dev/tty` reopen, stdin renderer prep |
+| `renderer_setup.go` | `DetectVCS` wiring, `setupVCSRenderer` (git/hg/no-VCS/all-files) |
+| `themes.go` | theme CLI commands (`--init-themes`, `--install-theme`, `--list-themes`, `--theme`), `applyTheme()`, `themeCatalog` adapter (composes `theme.Catalog` + config persistence for `ui.ThemeCatalog` interface) |
+| `history_save.go` | `histReq` struct and `saveHistory` |
 
 Key wiring pattern — all concrete types constructed here, injected into `ui.Model` through interfaces and factory closures:
 
@@ -48,6 +57,7 @@ ModelConfig{
     SGR:           sgr,                    // style.SGR
     WordDiffer:    &worddiff.Differ{},
     Overlay:       overlay.NewManager(...),
+    Themes:        themes,                 // themeCatalog adapter
     NewFileTree:   func(...) FileTreeComponent { ... },
     ParseTOC:      func(...) TOCComponent { ... },
     // ...flags, store, keymap
@@ -82,7 +92,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 
 | File | Responsibility |
 |------|---------------|
-| `model.go` | Model struct, `NewModel`, `Init`, `Update`, `handleKey`, interfaces |
+| `model.go` | Model struct, sub-state structs, `NewModel`, `Init`, `Update`, `handleKey`, interfaces |
 | `view.go` | `View()`, status bar rendering, ANSI helpers |
 | `handlers.go` | Modal handlers (enter/esc, discard, filter, reviewed), help spec |
 | `loaders.go` | Async file/blame loading, loaded-message handlers, data helpers |
@@ -91,11 +101,26 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
 | `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic |
-| `themeselect.go` | Theme selector operations: open, preview, confirm, apply |
+| `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `search.go` | Search input handling, match computation, navigation |
-| `configpatch.go` | Config file patching for persisting theme choice |
 
 Each source file has a matching `_test.go`.
+
+**Model state grouping** — `Model` fields are organized into explicit sub-structs by concern:
+
+| Sub-struct | Purpose | Key fields |
+|------------|---------|------------|
+| `modelConfigState` (`m.cfg`) | immutable session config | `ref`, `staged`, `only`, `noColors`, `tabSpaces`, etc. |
+| `layoutState` (`m.layout`) | viewport and pane geometry | `viewport`, `focus`, `treeHidden`, `width`, `height`, `scrollX` |
+| `loadedFileState` (`m.file`) | current file's loaded state | `lines`, `highlighted`, `intraRanges`, `blameData`, `mdTOC`, `singleFile` |
+| `modeState` (`m.modes`) | user-togglable view modes | `wrap`, `collapsed`, `lineNumbers`, `wordDiff`, `showBlame` |
+| `navigationState` (`m.nav`) | cursor position | `diffCursor`, `pendingHunkJump` |
+| `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet` |
+| `annotationState` (`m.annot`) | annotation input lifecycle | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input` |
+
+Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create mini-models.
+
+**Theme boundary** — `app/ui` does not import `app/theme` or `app/fsutil`. Theme discovery and persistence are accessed through the `ThemeCatalog` interface (defined in `model.go`), with a concrete adapter wired in `app/themes.go`.
 
 ### app/ui/style/ — color and style resolution
 
@@ -148,11 +173,19 @@ Help overlay dynamically rendered from `m.keymap.HelpSections()`.
 
 ### app/theme/ — theme system
 
-`Parse()` reads theme files (TOML-like format with hex validation), `Load()` from disk, `List()` available themes, `Dump()` to stdout, `InitBundled()` writes bundled themes to disk.
+Catalog-centric API with two types: `Theme` (data + serialization) and `Catalog` (directory-aware operations). Zero standalone functions — all logic lives as methods on `Theme` or `Catalog`.
+
+**`Theme`** — color palette data with metadata. Methods: `Dump(io.Writer)` for serialization.
+
+**`Catalog`** — theme discovery, loading, installation, and gallery access. Created via `NewCatalog(themesDir)`. Public methods: `Entries`, `Load`, `Resolve`, `InitBundled`, `InitAll`, `Install`, `PrintList`, `ActiveName`, `OptionalColorKeys`.
+
+File layout:
+- `theme.go` — `Theme` struct, `Dump`, package-level vars (`colorKeys`, `optionalColorKeys`)
+- `catalog.go` — `Catalog` struct, `NewCatalog`, all catalog methods (discovery, loading, installation, gallery)
 
 Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark. Community themes live in `themes/gallery/`.
 
-23 color keys mapped via `colorFieldPtrs()` in `main.go` — single source of truth for color key to struct field mapping.
+23 color keys mapped via `colorFieldPtrs()` in `app/themes.go` — single source of truth for color key to struct field mapping.
 
 ### app/annotation/ — annotation store
 
@@ -164,32 +197,37 @@ In-memory store for annotations. Each `Annotation` has file, line, text, and opt
 
 ## Key Interfaces
 
-All consumer-side — defined in `app/ui/model.go`, not in implementor packages. This is idiomatic Go: interfaces belong to the consumer.
+All consumer-side — defined in `app/ui/model.go`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
 
 | Interface | Methods | Implementors |
 |-----------|---------|-------------|
 | `Renderer` | `ChangedFiles()`, `FileDiff()` | `diff.Git`, `diff.Hg`, `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.FallbackRenderer`, `diff.ExcludeFilter`, `diff.IncludeFilter` |
 | `SyntaxHighlighter` | `HighlightLines()`, `SetStyle()`, `StyleName()` | `highlight.Highlighter` |
-| `Blamer` | `FileBlame()` | `diff.GitBlamer`, `diff.HgBlamer` |
+| `Blamer` | `FileBlame()` | `diff.Git`, `diff.Hg` |
 | `styleResolver` | `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()` | `style.Resolver` |
 | `styleRenderer` | `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` | `style.Renderer` |
 | `sgrProcessor` | `Reemit()` | `style.SGR` |
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
 | `FileTreeComponent` | 15 methods (navigation, query, mutation, render) | `sidepane.FileTree` |
-| `TOCComponent` | 11 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
+| `TOCComponent` | 7 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `Close()`, `HandleKey()`, `Compose()` | `overlay.Manager` |
+| `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 
 ## Data Flow
 
 ### Startup
 
 ```
-main() → parseArgs() → config file + CLI flags + env vars
-       → handleThemes() → theme resolution
-       → run() → DetectVCS() → select Renderer
-              → construct all dependencies
-              → ui.NewModel(ModelConfig{...})
-              → tea.NewProgram(model).Run()
+main()  [main.go]
+  → parseArgs()          [config.go] → config file + CLI flags + env vars
+  → handleThemes()       [themes.go] → theme resolution, apply
+  → run()                [main.go]
+      → prepareStdinMode [stdin.go]  (if --stdin)
+      → setupVCSRenderer [renderer_setup.go] (otherwise)
+      → construct style, theme catalog adapter, all dependencies
+      → ui.NewModel(ModelConfig{...})
+      → tea.NewProgram(model).Run()
+      → saveHistory()   [history_save.go]
 ```
 
 ### File Loading (async)
@@ -248,10 +286,11 @@ User presses '?' / '@' / 'T'
   → overlay.Manager activates popup, blocks other overlays
   → key events route through Manager.HandleKey() → Outcome
   → Model switches on OutcomeKind:
-      OutcomeJump → load target file, position cursor
-      OutcomeApply → apply theme colors, update resolver
-      OutcomePersist → write theme to config file
-      OutcomeClose → close overlay, resume normal mode
+      OutcomeAnnotationChosen → load target file, position cursor
+      OutcomeThemePreview → preview theme colors, update resolver
+      OutcomeThemeConfirmed → apply theme, persist to config file
+      OutcomeThemeCanceled → restore original theme
+      OutcomeClosed → close overlay, resume normal mode
   → Manager.Compose() renders popup over background content
 ```
 
@@ -264,9 +303,11 @@ User presses '?' / '@' / 'T'
 - **Keybindings**: `~/.config/revdiff/keybindings` (`map`/`unmap` format)
 - **History**: `~/.config/revdiff/history/` (auto-save dir)
 
-Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*` flags or env vars. Applied via `applyTheme()` which directly overwrites `opts.Colors.*` fields after `parseArgs()`.
+Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*` flags or env vars. Applied via `applyTheme()` in `app/themes.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`.
 
-Adding a new color requires changes in three places: `theme.go` colorKeys + options struct + `colorFieldPtrs()`.
+Adding a new color requires changes in three places: `theme.go` colorKeys + options struct + `colorFieldPtrs()` in `app/themes.go`.
+
+Theme ownership is split by concern: `app/theme` owns discovery/loading/installation via `Catalog`, `app/ui` consumes a `ThemeCatalog` interface for selector/preview/apply, and `app/themes.go` wires a thin adapter composing `theme.Catalog` + config file persistence.
 
 ## Input Modes
 
@@ -296,7 +337,9 @@ Filters stack: `--include` narrows first, then `--exclude` removes. Both wrap an
 
 **Foreground-only syntax highlighting** — chroma output limited to foreground colors so diff line backgrounds (add/remove/modify) from the style system are preserved without conflict.
 
-**Parallel data arrays** — `diffLines`, `highlightedLines`, and `intraRanges` are parallel arrays indexed by line position. Simple, cache-friendly, avoids complex data structures.
+**Loaded-file state object** — `diffLines`, `highlightedLines`, `intraRanges`, and related per-file metadata are grouped into a single `loadedFileState` struct (`m.file`). This makes the synchronization invariant explicit — all parallel arrays and derived data for the current file are co-located rather than scattered across top-level Model fields.
+
+**Model state sub-structs** — `Model` fields are grouped into named sub-structs (`cfg`, `layout`, `file`, `modes`, `nav`, `search`, `annot`) by concern. Methods remain on `Model` — the sub-structs make state ownership explicit without splitting into mini-models.
 
 ## Libraries
 

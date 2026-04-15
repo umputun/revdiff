@@ -5,12 +5,12 @@ import "fmt"
 // IncludeFilter wraps a renderer and keeps only files matching any of the given prefixes.
 // Filtering is applied only at the file list level (ChangedFiles); FileDiff delegates directly.
 type IncludeFilter struct {
-	inner    renderer
+	inner    Renderer
 	prefixes []string
 }
 
 // NewIncludeFilter creates an IncludeFilter that keeps only files matching any prefix.
-func NewIncludeFilter(inner renderer, prefixes []string) *IncludeFilter {
+func NewIncludeFilter(inner Renderer, prefixes []string) *IncludeFilter {
 	return &IncludeFilter{inner: inner, prefixes: normalizePrefixes(prefixes)}
 }
 

@@ -23,7 +23,7 @@ type collapsedState struct {
 // removed lines are hidden unless their hunk is expanded. added lines are styled
 // as "modified" (amber ~) when paired with removes, or "pure add" (green +) otherwise.
 func (m Model) renderCollapsedDiff() string {
-	m.searchMatchSet = m.buildSearchMatchSet()
+	m.search.matchSet = m.buildSearchMatchSet()
 
 	annotationMap, fileComment := m.buildAnnotationMap()
 	hunks := m.findHunks()
@@ -34,7 +34,7 @@ func (m Model) renderCollapsedDiff() string {
 
 	hasVisibleContent := false
 	hunkIdx := 0
-	for i, dl := range m.diffLines {
+	for i, dl := range m.file.lines {
 		// advance hunk tracker to the last hunk that starts at or before i
 		for hunkIdx+1 < len(hunks) && hunks[hunkIdx+1] <= i {
 			hunkIdx++
@@ -44,7 +44,7 @@ func (m Model) renderCollapsedDiff() string {
 		if isChange && len(hunks) > 0 && hunks[hunkIdx] <= i {
 			hunkStart = hunks[hunkIdx]
 		}
-		expanded := hunkStart >= 0 && m.collapsed.expandedHunks[hunkStart]
+		expanded := hunkStart >= 0 && m.modes.collapsed.expandedHunks[hunkStart]
 
 		switch dl.ChangeType {
 		case diff.ChangeRemove:
@@ -84,7 +84,7 @@ func (m Model) renderCollapsedDiff() string {
 // when search is active, matching lines use search highlight instead of add/modify styling.
 func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffLine, modified bool) {
 	lineContent, textContent, hasHighlight := m.prepareLineContent(idx, dl)
-	isSearchMatch := m.searchMatchSet[idx]
+	isSearchMatch := m.search.matchSet[idx]
 
 	lineStyle := m.resolver.Style(style.StyleKeyLineAdd)
 	lineHlStyle := m.resolver.Style(style.StyleKeyLineAddHighlight)
@@ -110,7 +110,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	}
 
 	// wrap mode: break long lines at word boundaries with continuation markers
-	if m.wrapMode {
+	if m.modes.wrap {
 		m.renderWrappedCollapsedLine(b, textContent, wrappedLineCtx{
 			gutter: gutter, numGutter: numGutter, blGutter: blGutter,
 			isCursor: isCursor, hasHighlight: hasHighlight,
@@ -128,7 +128,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 
 	cursor := " "
 	if isCursor {
-		cursor = m.renderer.DiffCursor(m.noColors)
+		cursor = m.renderer.DiffCursor(m.cfg.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -166,7 +166,7 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string
 
 		cursor := " "
 		if i == 0 && ctx.isCursor {
-			cursor = m.renderer.DiffCursor(m.noColors)
+			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
@@ -176,8 +176,8 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string
 // used by both renderDeletePlaceholder and cursorViewportY to stay in sync.
 func (m Model) deletePlaceholderText(hunkStart int) string {
 	count := 0
-	for i := hunkStart; i < len(m.diffLines); i++ {
-		ct := m.diffLines[i].ChangeType
+	for i := hunkStart; i < len(m.file.lines); i++ {
+		ct := m.file.lines[i].ChangeType
 		if ct == diff.ChangeContext || ct == diff.ChangeDivider {
 			break
 		}
@@ -194,7 +194,7 @@ func (m Model) deletePlaceholderText(hunkStart int) string {
 // deletePlaceholderVisualHeight returns the number of visual rows a delete-only placeholder
 // occupies, accounting for wrap mode and gutter widths.
 func (m Model) deletePlaceholderVisualHeight(hunkStart int) int {
-	if !m.wrapMode {
+	if !m.modes.wrap {
 		return 1
 	}
 	text := m.deletePlaceholderText(hunkStart)
@@ -208,7 +208,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	text := m.deletePlaceholderText(hunkStart)
 
 	lineStyle := m.resolver.Style(style.StyleKeyLineRemove)
-	if m.searchMatchSet[idx] {
+	if m.search.matchSet[idx] {
 		lineStyle = m.resolver.Style(style.StyleKeySearchMatch)
 	}
 	removeBg := m.resolver.Color(style.ColorKeyRemoveLineBg)
@@ -219,7 +219,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	numGutter, blGutter := m.lineGutters(divider)
 
 	// wrap mode: break long placeholder at word boundaries
-	if m.wrapMode {
+	if m.modes.wrap {
 		numBlank, blBlank := m.gutterBlanks()
 		visualLines := m.wrapContent(text, m.wrapWidth())
 		for i, vl := range visualLines {
@@ -236,7 +236,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 			cursor := " "
 			if i == 0 && isCursor {
-				cursor = m.renderer.DiffCursor(m.noColors)
+				cursor = m.renderer.DiffCursor(m.cfg.noColors)
 			}
 			b.WriteString(cursor + ng + bg + styled + "\n")
 		}
@@ -249,7 +249,7 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 
 	cursor := " "
 	if isCursor {
-		cursor = m.renderer.DiffCursor(m.noColors)
+		cursor = m.renderer.DiffCursor(m.cfg.noColors)
 	}
 	b.WriteString(cursor + numGutter + blGutter + content + "\n")
 }
@@ -257,10 +257,10 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 // hunkStartFor returns the findHunks() start index for the hunk containing diffLines[idx].
 // returns -1 if the index is not inside any hunk (context or divider line).
 func (m Model) hunkStartFor(idx int, hunks []int) int {
-	if len(hunks) == 0 || idx < 0 || idx >= len(m.diffLines) {
+	if len(hunks) == 0 || idx < 0 || idx >= len(m.file.lines) {
 		return -1
 	}
-	dl := m.diffLines[idx]
+	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeAdd && dl.ChangeType != diff.ChangeRemove {
 		return -1
 	}
@@ -277,7 +277,7 @@ func (m Model) hunkStartFor(idx int, hunks []int) int {
 // (paired with removes in the same hunk). pure-add lines (hunk has no removes) are not included.
 func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 	result := make(map[int]bool)
-	n := len(m.diffLines)
+	n := len(m.file.lines)
 
 	for hi, start := range hunks {
 		// find the end of this hunk: next hunk start or first non-change line
@@ -286,8 +286,8 @@ func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 			end = hunks[hi+1]
 		}
 		// scan only contiguous change lines from start
-		for end > start && (m.diffLines[end-1].ChangeType != diff.ChangeAdd &&
-			m.diffLines[end-1].ChangeType != diff.ChangeRemove) {
+		for end > start && (m.file.lines[end-1].ChangeType != diff.ChangeAdd &&
+			m.file.lines[end-1].ChangeType != diff.ChangeRemove) {
 			end--
 		}
 
@@ -296,14 +296,14 @@ func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 		block := make([]worddiff.LinePair, end-start)
 		for j := start; j < end; j++ {
 			block[j-start] = worddiff.LinePair{
-				Content:  m.diffLines[j].Content,
-				IsRemove: m.diffLines[j].ChangeType == diff.ChangeRemove,
+				Content:  m.file.lines[j].Content,
+				IsRemove: m.file.lines[j].ChangeType == diff.ChangeRemove,
 			}
 		}
 		pairs := m.differ.PairLines(block)
 		if len(pairs) > 0 {
 			for i := start; i < end; i++ {
-				if m.diffLines[i].ChangeType == diff.ChangeAdd {
+				if m.file.lines[i].ChangeType == diff.ChangeAdd {
 					result[i] = true
 				}
 			}
@@ -316,7 +316,7 @@ func (m Model) buildModifiedSet(hunks []int) map[int]bool {
 // returns false if the cursor is not inside any hunk.
 func (m Model) cursorHunkStart() (int, bool) {
 	hunks := m.findHunks()
-	best := m.hunkStartFor(m.diffCursor, hunks)
+	best := m.hunkStartFor(m.nav.diffCursor, hunks)
 	if best < 0 {
 		return 0, false
 	}
@@ -326,36 +326,36 @@ func (m Model) cursorHunkStart() (int, bool) {
 // toggleCollapsedMode switches between collapsed and expanded diff view.
 // only operates when the diff pane is focused and a file is loaded.
 func (m *Model) toggleCollapsedMode() {
-	if m.focus != paneDiff || m.currFile == "" {
+	if m.layout.focus != paneDiff || m.file.name == "" {
 		return
 	}
-	m.collapsed.enabled = !m.collapsed.enabled
-	m.collapsed.expandedHunks = make(map[int]bool)
-	m.cursorOnAnnotation = false // visible lines change, reset annotation cursor state
+	m.modes.collapsed.enabled = !m.modes.collapsed.enabled
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.annot.cursorOnAnnotation = false // visible lines change, reset annotation cursor state
 	m.adjustCursorIfHidden()
 	m.realignSearchCursor()
-	m.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetContent(m.renderDiff())
 }
 
 // toggleHunkExpansion toggles the expansion state of the hunk under the cursor.
 // only operates in collapsed mode; no-op in expanded mode or when cursor is not on a hunk.
 func (m *Model) toggleHunkExpansion() {
-	if !m.collapsed.enabled {
+	if !m.modes.collapsed.enabled {
 		return
 	}
 	hunkStart, ok := m.cursorHunkStart()
 	if !ok {
 		return
 	}
-	if m.collapsed.expandedHunks[hunkStart] {
-		delete(m.collapsed.expandedHunks, hunkStart)
-		m.cursorOnAnnotation = false // annotations on removed lines become invisible
+	if m.modes.collapsed.expandedHunks[hunkStart] {
+		delete(m.modes.collapsed.expandedHunks, hunkStart)
+		m.annot.cursorOnAnnotation = false // annotations on removed lines become invisible
 		m.adjustCursorIfHidden()
 		m.realignSearchCursor()
 	} else {
-		m.collapsed.expandedHunks[hunkStart] = true
+		m.modes.collapsed.expandedHunks[hunkStart] = true
 	}
-	m.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetContent(m.renderDiff())
 }
 
 // isCollapsedHidden returns true if the line at idx is hidden in collapsed mode.
@@ -363,17 +363,17 @@ func (m *Model) toggleHunkExpansion() {
 // and its hunk is not expanded. the first line of a delete-only hunk is kept
 // visible as a placeholder so users can navigate to it and expand with '.'.
 func (m Model) isCollapsedHidden(idx int, hunks []int) bool {
-	if !m.collapsed.enabled || idx < 0 || idx >= len(m.diffLines) {
+	if !m.modes.collapsed.enabled || idx < 0 || idx >= len(m.file.lines) {
 		return false
 	}
-	if m.diffLines[idx].ChangeType != diff.ChangeRemove {
+	if m.file.lines[idx].ChangeType != diff.ChangeRemove {
 		return false
 	}
 	hunkStart := m.hunkStartFor(idx, hunks)
 	if hunkStart < 0 {
 		return true
 	}
-	if m.collapsed.expandedHunks[hunkStart] {
+	if m.modes.collapsed.expandedHunks[hunkStart] {
 		return false
 	}
 	// first line of a delete-only hunk serves as the visible placeholder
@@ -387,20 +387,20 @@ func (m Model) isCollapsedHidden(idx int, hunks []int) bool {
 // delete-only placeholder (⋯ N lines deleted) in collapsed mode. these lines should not
 // display or accept annotations — annotations become visible when the hunk is expanded.
 func (m Model) isDeleteOnlyPlaceholder(idx int, hunks []int) bool {
-	if !m.collapsed.enabled {
+	if !m.modes.collapsed.enabled {
 		return false
 	}
-	if idx < 0 || idx >= len(m.diffLines) || m.diffLines[idx].ChangeType != diff.ChangeRemove {
+	if idx < 0 || idx >= len(m.file.lines) || m.file.lines[idx].ChangeType != diff.ChangeRemove {
 		return false
 	}
 	hunkStart := m.hunkStartFor(idx, hunks)
-	return hunkStart >= 0 && idx == hunkStart && !m.collapsed.expandedHunks[hunkStart] && m.isDeleteOnlyHunk(hunkStart)
+	return hunkStart >= 0 && idx == hunkStart && !m.modes.collapsed.expandedHunks[hunkStart] && m.isDeleteOnlyHunk(hunkStart)
 }
 
 // isDeleteOnlyHunk returns true if the hunk starting at hunkStart contains only remove lines.
 func (m Model) isDeleteOnlyHunk(hunkStart int) bool {
-	for i := hunkStart; i < len(m.diffLines); i++ {
-		ct := m.diffLines[i].ChangeType
+	for i := hunkStart; i < len(m.file.lines); i++ {
+		ct := m.file.lines[i].ChangeType
 		if ct == diff.ChangeContext || ct == diff.ChangeDivider {
 			break
 		}
@@ -418,8 +418,8 @@ func (m Model) firstVisibleInHunk(hunkStart int, hunks []int) int {
 	if !m.isCollapsedHidden(hunkStart, hunks) {
 		return hunkStart
 	}
-	for i := hunkStart + 1; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider || m.diffLines[i].ChangeType == diff.ChangeContext {
+	for i := hunkStart + 1; i < len(m.file.lines); i++ {
+		if m.file.lines[i].ChangeType == diff.ChangeDivider || m.file.lines[i].ChangeType == diff.ChangeContext {
 			break // past the hunk boundary
 		}
 		if !m.isCollapsedHidden(i, hunks) {
@@ -433,37 +433,37 @@ func (m Model) firstVisibleInHunk(hunkStart int, hunks []int) int {
 // on a hidden removed line in collapsed mode. searches forward first, then backward.
 // falls back to nearest divider if no content line is visible (delete-only file).
 func (m *Model) adjustCursorIfHidden() {
-	if !m.collapsed.enabled || m.diffCursor < 0 || m.diffCursor >= len(m.diffLines) {
+	if !m.modes.collapsed.enabled || m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
 		return
 	}
 	hunks := m.findHunks()
-	if !m.isCollapsedHidden(m.diffCursor, hunks) {
+	if !m.isCollapsedHidden(m.nav.diffCursor, hunks) {
 		return
 	}
 	// search forward for nearest visible non-divider line
-	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
-			m.diffCursor = i
+	for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
+		if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+			m.nav.diffCursor = i
 			return
 		}
 	}
 	// search backward for nearest visible non-divider line
-	for i := m.diffCursor - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
-			m.diffCursor = i
+	for i := m.nav.diffCursor - 1; i >= 0; i-- {
+		if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+			m.nav.diffCursor = i
 			return
 		}
 	}
 	// no visible content line found (delete-only file); fall back to nearest divider
-	for i := m.diffCursor + 1; i < len(m.diffLines); i++ {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider {
-			m.diffCursor = i
+	for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
+		if m.file.lines[i].ChangeType == diff.ChangeDivider {
+			m.nav.diffCursor = i
 			return
 		}
 	}
-	for i := m.diffCursor - 1; i >= 0; i-- {
-		if m.diffLines[i].ChangeType == diff.ChangeDivider {
-			m.diffCursor = i
+	for i := m.nav.diffCursor - 1; i >= 0; i-- {
+		if m.file.lines[i].ChangeType == diff.ChangeDivider {
+			m.nav.diffCursor = i
 			return
 		}
 	}

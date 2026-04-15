@@ -20,8 +20,8 @@ import (
 
 func TestModel_LineNumGutter(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = true
-	m.lineNumWidth = 3
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 3
 
 	tests := []struct {
 		name string
@@ -60,9 +60,9 @@ func TestModel_LineNumGutter(t *testing.T) {
 
 func TestModel_LineNumGutter_SingleColumn(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = true
-	m.lineNumWidth = 3
-	m.singleColLineNum = true
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 3
+	m.file.singleColLineNum = true
 
 	tests := []struct {
 		name string
@@ -91,9 +91,9 @@ func TestModel_LineNumGutter_SingleColumn(t *testing.T) {
 
 func TestModel_LineNumGutter_TwoColumnUnchanged(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = true
-	m.lineNumWidth = 3
-	m.singleColLineNum = false
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 3
+	m.file.singleColLineNum = false
 
 	tests := []struct {
 		name string
@@ -149,8 +149,8 @@ func TestModel_LineNumGutter_WidthConsistency(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel(nil, nil)
-			m.lineNumWidth = 3
-			m.singleColLineNum = tt.singleCol
+			m.file.lineNumWidth = 3
+			m.file.singleColLineNum = tt.singleCol
 			got := m.lineNumGutter(tt.dl)
 			stripped := ansi.Strip(got)
 			assert.Equal(t, m.lineNumGutterWidth(), runewidth.StringWidth(stripped),
@@ -162,15 +162,15 @@ func TestModel_LineNumGutter_WidthConsistency(t *testing.T) {
 
 func TestModel_RenderDiffLineWithLineNumbers(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = true
-	m.lineNumWidth = 2
-	m.focus = paneDiff
-	m.diffLines = []diff.DiffLine{
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 2
+	m.layout.focus = paneDiff
+	m.file.lines = []diff.DiffLine{
 		{OldNum: 5, NewNum: 5, Content: "hello", ChangeType: diff.ChangeContext},
 		{OldNum: 6, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
 		{OldNum: 0, NewNum: 6, Content: "added", ChangeType: diff.ChangeAdd},
 	}
-	m.highlightedLines = nil
+	m.file.highlighted = nil
 
 	rendered := m.renderDiff()
 	stripped := ansi.Strip(rendered)
@@ -182,8 +182,8 @@ func TestModel_RenderDiffLineWithLineNumbers(t *testing.T) {
 
 func TestModel_RenderDiffLineWithoutLineNumbers(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = false
-	m.diffLines = []diff.DiffLine{
+	m.modes.lineNumbers = false
+	m.file.lines = []diff.DiffLine{
 		{OldNum: 5, NewNum: 5, Content: "hello", ChangeType: diff.ChangeContext},
 	}
 
@@ -197,14 +197,14 @@ func TestModel_RenderDiffLineWithoutLineNumbers(t *testing.T) {
 
 func TestModel_RenderWrappedDiffLineWithLineNumbers(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumbers = true
-	m.lineNumWidth = 2
-	m.wrapMode = true
-	m.focus = paneDiff
-	m.width = 50
-	m.treeWidth = 0
-	m.singleFile = true
-	m.diffLines = []diff.DiffLine{
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 2
+	m.modes.wrap = true
+	m.layout.focus = paneDiff
+	m.layout.width = 50
+	m.layout.treeWidth = 0
+	m.file.singleFile = true
+	m.file.lines = []diff.DiffLine{
 		{OldNum: 5, NewNum: 5, Content: "short", ChangeType: diff.ChangeContext},
 	}
 
@@ -217,50 +217,50 @@ func TestModel_RenderWrappedDiffLineWithLineNumbers(t *testing.T) {
 
 func TestModel_LineNumGutterWidth(t *testing.T) {
 	m := testModel(nil, nil)
-	m.lineNumWidth = 3
+	m.file.lineNumWidth = 3
 	// width = 1 (leading space) + 3 (old) + 1 (space) + 3 (new) = 8
 	assert.Equal(t, 8, m.lineNumGutterWidth())
 
-	m.lineNumWidth = 1
+	m.file.lineNumWidth = 1
 	// width = 1 + 1 + 1 + 1 = 4
 	assert.Equal(t, 4, m.lineNumGutterWidth())
 }
 
 func TestModel_LineNumGutterWidth_SingleColumn(t *testing.T) {
 	m := testModel(nil, nil)
-	m.singleColLineNum = true
+	m.file.singleColLineNum = true
 
-	m.lineNumWidth = 3
+	m.file.lineNumWidth = 3
 	// single-column: " " + num(3) = 4
 	assert.Equal(t, 4, m.lineNumGutterWidth())
 
-	m.lineNumWidth = 1
+	m.file.lineNumWidth = 1
 	// single-column: " " + num(1) = 2
 	assert.Equal(t, 2, m.lineNumGutterWidth())
 }
 
 func TestModel_LineNumGutterWidth_TwoColumnWhenNotSingleCol(t *testing.T) {
 	m := testModel(nil, nil)
-	m.singleColLineNum = false
+	m.file.singleColLineNum = false
 
-	m.lineNumWidth = 3
+	m.file.lineNumWidth = 3
 	// two-column: " " + old(3) + " " + new(3) = 8
 	assert.Equal(t, 8, m.lineNumGutterWidth())
 
-	m.lineNumWidth = 2
+	m.file.lineNumWidth = 2
 	// two-column: " " + old(2) + " " + new(2) = 6
 	assert.Equal(t, 6, m.lineNumGutterWidth())
 }
 
 func TestModel_RenderDiffEmpty(t *testing.T) {
 	m := testModel(nil, nil)
-	m.diffLines = nil
+	m.file.lines = nil
 	assert.Contains(t, m.renderDiff(), "no changes")
 }
 
 func TestModel_RenderDiffLines(t *testing.T) {
 	m := testModel(nil, nil)
-	m.diffLines = []diff.DiffLine{
+	m.file.lines = []diff.DiffLine{
 		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
 		{OldNum: 3, Content: "func bar() {}", ChangeType: diff.ChangeRemove},
@@ -278,13 +278,13 @@ func TestModel_ExtendLineBg(t *testing.T) {
 
 	t.Run("empty bgColor is no-op", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.width = 80
+		m.layout.width = 80
 		assert.Equal(t, "hello", m.extendLineBg("hello", ""))
 	})
 
 	t.Run("pads to content width", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.width = 80
+		m.layout.width = 80
 		result := m.extendLineBg("hi", bg)
 		assert.Contains(t, result, "\033[48;2;46;52;64m")
 		assert.Contains(t, result, "\033[49m")
@@ -294,11 +294,11 @@ func TestModel_ExtendLineBg(t *testing.T) {
 
 	t.Run("with line numbers subtracts gutter", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.width = 80
-		m.lineNumbers = true
-		m.lineNumWidth = 3
+		m.layout.width = 80
+		m.modes.lineNumbers = true
+		m.file.lineNumWidth = 3
 		resultWithNums := m.extendLineBg("hi", bg)
-		m.lineNumbers = false
+		m.modes.lineNumbers = false
 		resultWithout := m.extendLineBg("hi", bg)
 		assert.Less(t, lipgloss.Width(resultWithNums), lipgloss.Width(resultWithout), "line numbers should reduce target width")
 	})
@@ -313,8 +313,8 @@ func TestModel_RenderDiffLineHighlighted(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.highlightedLines = []string{"hl-context", "hl-add", "hl-remove"}
-	m.focus = paneDiff
+	m.file.highlighted = []string{"hl-context", "hl-add", "hl-remove"}
+	m.layout.focus = paneDiff
 	output := m.renderDiff()
 
 	assert.Contains(t, output, "hl-context", "highlighted context line should appear")
@@ -330,8 +330,8 @@ func TestModel_RenderDiffLineCursorHighlight(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.focus = paneDiff
-	m.diffCursor = 0
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
 	output := m.renderDiff()
 	assert.Contains(t, output, "▶", "cursor indicator should appear on active line")
 	assert.Contains(t, output, "line one", "cursor line content should appear")
@@ -344,7 +344,7 @@ func TestModel_RenderDiffLineTabReplacement(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
-	m.tabSpaces = "    " // 4 spaces
+	m.cfg.tabSpaces = "    " // 4 spaces
 	output := m.renderDiff()
 	assert.Contains(t, output, "    foo", "tabs should be replaced with spaces")
 	assert.NotContains(t, output, "\t", "no raw tabs should remain")
@@ -352,10 +352,10 @@ func TestModel_RenderDiffLineTabReplacement(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollTruncatesLongLines(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
 
 	// content wider than diffContentWidth should be truncated
 	longContent := strings.Repeat("x", 200)
@@ -371,10 +371,10 @@ func TestModel_ExtendLineBgAfterScrollFillsWidth(t *testing.T) {
 	bg := style.Color("\033[48;2;46;52;64m")
 	res := style.PlainResolver()
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 10
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 10
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
@@ -394,10 +394,10 @@ func TestModel_ExtendLineBgWithoutOverflowFillsWidth(t *testing.T) {
 	bg := style.Color("\033[48;2;46;52;64m")
 	res := style.PlainResolver()
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
@@ -414,10 +414,10 @@ func TestModel_ExtendLineBgWithoutOverflowFillsWidth(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollShowsRightIndicator(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
 
 	// content wider than viewport should get a right-pointing indicator with a leading space
 	longContent := strings.Repeat("x", 200)
@@ -435,10 +435,10 @@ func TestModel_ApplyHorizontalScrollShowsRightIndicator(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollShowsBothIndicators(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 50
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 50
 
 	// scrolling right with content longer than scrollX+cutWidth triggers both overflows
 	longContent := strings.Repeat("x", 200)
@@ -450,16 +450,16 @@ func TestModel_ApplyHorizontalScrollShowsBothIndicators(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollLeftOnlyOverflow(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 50
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 50
 
 	// content of exactly scrollX+cutWidth (126 chars) at scrollX=50: end=126, origWidth=126
 	// hasLeftOverflow: 126 > 50 = true; hasRightOverflow: 126 > 126 = false
 	// left-only path: total visible width should equal cutWidth (no +1 extension)
 	cutWidth := m.diffContentWidth() - m.gutterExtra()
-	content := strings.Repeat("x", m.scrollX+cutWidth)
+	content := strings.Repeat("x", m.layout.scrollX+cutWidth)
 	result := m.applyHorizontalScroll(content, style.Color("\033[48;2;46;52;64m"))
 	plain := ansi.Strip(result)
 	assert.Contains(t, plain, "«", "left indicator should appear when scrolled past hidden content on the left")
@@ -472,12 +472,12 @@ func TestModel_ApplyHorizontalScrollLeftOnlyOverflow(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollWithLineNumberGutter(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
-	m.lineNumbers = true
-	m.lineNumWidth = 3 // gutter width = 2*3 + 2 = 8
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 3 // gutter width = 2*3 + 2 = 8
 
 	// with gutters enabled, cutWidth = diffContentWidth - gutterExtra = 76 - 8 = 68
 	// right-overflow extends by 1 col into pane padding: total = cutWidth + 1 = 69
@@ -493,12 +493,12 @@ func TestModel_ApplyHorizontalScrollWithLineNumberGutter(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollNarrowViewportFallback(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 14
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 10
-	m.lineNumbers = true
-	m.lineNumWidth = 3 // gutter width = 8, cutWidth = max(10, 14-4) - 8 = 2
+	m.layout.width = 14
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 10
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = 3 // gutter width = 8, cutWidth = max(10, 14-4) - 8 = 2
 
 	// cutWidth=2 with both overflows: innerStart = start+1 = 11, innerEnd = end-1 = 11
 	// innerEnd <= innerStart -> fallback to plain cut (no indicators)
@@ -515,10 +515,10 @@ func TestModel_ApplyHorizontalScrollNarrowViewportFallback(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollNoIndicatorForShortLines(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
 
 	// short content that fits entirely within the viewport should have no indicators
 	result := m.applyHorizontalScroll("short", style.Color("\033[48;2;46;52;64m"))
@@ -529,10 +529,10 @@ func TestModel_ApplyHorizontalScrollNoIndicatorForShortLines(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollNoLeftIndicatorWhenScrolledPastContent(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 100
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 100
 
 	// content shorter than scrollX should not show a left indicator (nothing to the left is visible)
 	result := m.applyHorizontalScroll("short", style.Color("\033[48;2;46;52;64m"))
@@ -545,10 +545,10 @@ func TestModel_ApplyHorizontalScrollRightGlyphAlwaysOnDiffBg(t *testing.T) {
 	colors := style.Colors{DiffBg: "#112233", Muted: "#999999"}
 	res := style.NewResolver(colors)
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
@@ -572,10 +572,10 @@ func TestModel_ApplyHorizontalScrollEmptyLineBgSkipsSpaceBg(t *testing.T) {
 	colors := style.Colors{DiffBg: "#112233", Muted: "#999999"}
 	res := style.NewResolver(colors)
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
@@ -592,11 +592,11 @@ func TestModel_ApplyHorizontalScrollEmptyLineBgSkipsSpaceBg(t *testing.T) {
 
 func TestModel_ApplyHorizontalScrollIndicatorInNoColorsMode(t *testing.T) {
 	m := testModel(nil, nil)
-	m.width = 80
-	m.singleFile = true
-	m.treeWidth = 0
-	m.scrollX = 0
-	m.noColors = true
+	m.layout.width = 80
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+	m.layout.scrollX = 0
+	m.cfg.noColors = true
 
 	longContent := strings.Repeat("x", 200)
 	result := m.applyHorizontalScroll(longContent, style.Color("\033[48;2;46;52;64m"))
@@ -610,9 +610,9 @@ func TestModel_PlainStyles(t *testing.T) {
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{NoColors: true, TreeWidthRatio: 3})
-	m.width = 120
-	m.height = 40
-	m.treeWidth = 36
+	m.layout.width = 120
+	m.layout.height = 40
+	m.layout.treeWidth = 36
 	m.ready = true
 	// plain styles should not panic and should render
 	output := m.View()
@@ -625,10 +625,10 @@ func TestModel_TabWidthDefault(t *testing.T) {
 		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 0})
-	assert.Equal(t, "    ", m.tabSpaces, "tab width 0 should default to 4 spaces")
+	assert.Equal(t, "    ", m.cfg.tabSpaces, "tab width 0 should default to 4 spaces")
 
 	m2 := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 2})
-	assert.Equal(t, "  ", m2.tabSpaces, "tab width 2 should produce 2 spaces")
+	assert.Equal(t, "  ", m2.cfg.tabSpaces, "tab width 2 should produce 2 spaces")
 }
 
 func TestModel_StyleDiffContent(t *testing.T) {
@@ -803,21 +803,21 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.wordDiff = true
-		m.diffLines = []diff.DiffLine{
+		m.modes.wordDiff = true
+		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
 			{NewNum: 1, Content: "hello earth", ChangeType: diff.ChangeAdd},
 		}
-		m.tabSpaces = "    "
+		m.cfg.tabSpaces = "    "
 		m.recomputeIntraRanges()
 
 		// remove line should have word-diff ranges for "world"
-		require.NotNil(t, m.intraRanges[0], "remove line should have intra-line ranges")
+		require.NotNil(t, m.file.intraRanges[0], "remove line should have intra-line ranges")
 		result := m.applyIntraLineHighlight(0, diff.ChangeRemove, "hello world")
 		assert.Contains(t, result, "\033[48;2;", "should contain bg ANSI sequence")
 
 		// add line should have word-diff ranges for "earth"
-		require.NotNil(t, m.intraRanges[1], "add line should have intra-line ranges")
+		require.NotNil(t, m.file.intraRanges[1], "add line should have intra-line ranges")
 		result = m.applyIntraLineHighlight(1, diff.ChangeAdd, "hello earth")
 		assert.Contains(t, result, "\033[48;2;", "should contain bg ANSI sequence")
 	})
@@ -828,16 +828,16 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.wordDiff = true
-		m.diffLines = []diff.DiffLine{
+		m.modes.wordDiff = true
+		m.file.lines = []diff.DiffLine{
 			{NewNum: 1, Content: "new line one", ChangeType: diff.ChangeAdd},
 			{NewNum: 2, Content: "new line two", ChangeType: diff.ChangeAdd},
 		}
-		m.tabSpaces = "    "
+		m.cfg.tabSpaces = "    "
 		m.recomputeIntraRanges()
 
-		assert.Nil(t, m.intraRanges[0], "pure add should have no intra-line ranges")
-		assert.Nil(t, m.intraRanges[1], "pure add should have no intra-line ranges")
+		assert.Nil(t, m.file.intraRanges[0], "pure add should have no intra-line ranges")
+		assert.Nil(t, m.file.intraRanges[1], "pure add should have no intra-line ranges")
 
 		result := m.applyIntraLineHighlight(0, diff.ChangeAdd, "new line one")
 		assert.Equal(t, "new line one", result, "should return unchanged content")
@@ -846,19 +846,19 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 	t.Run("no-color mode uses reverse-video", func(t *testing.T) {
 		res := style.PlainResolver()
 		m := testModel(nil, nil)
-		m.noColors = true
+		m.cfg.noColors = true
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.wordDiff = true
-		m.diffLines = []diff.DiffLine{
+		m.modes.wordDiff = true
+		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, Content: "hello world", ChangeType: diff.ChangeRemove},
 			{NewNum: 1, Content: "hello earth", ChangeType: diff.ChangeAdd},
 		}
-		m.tabSpaces = "    "
+		m.cfg.tabSpaces = "    "
 		m.recomputeIntraRanges()
 
-		require.NotNil(t, m.intraRanges[0])
+		require.NotNil(t, m.file.intraRanges[0])
 		result := m.applyIntraLineHighlight(0, diff.ChangeRemove, "hello world")
 		assert.Contains(t, result, "\033[7m", "no-color should use reverse video on")
 		assert.Contains(t, result, "\033[27m", "no-color should use reverse video off")
@@ -866,10 +866,10 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 
 	t.Run("context lines are not highlighted", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.diffLines = []diff.DiffLine{
+		m.file.lines = []diff.DiffLine{
 			{OldNum: 1, NewNum: 1, Content: "context", ChangeType: diff.ChangeContext},
 		}
-		m.intraRanges = [][]worddiff.Range{{worddiff.Range{Start: 0, End: 3}}} // fake ranges
+		m.file.intraRanges = [][]worddiff.Range{{worddiff.Range{Start: 0, End: 3}}} // fake ranges
 
 		result := m.applyIntraLineHighlight(0, diff.ChangeContext, "context")
 		assert.Equal(t, "context", result, "context lines should not get intra-line markers")
@@ -877,7 +877,7 @@ func TestModel_ApplyIntraLineHighlight(t *testing.T) {
 
 	t.Run("out of range idx returns unchanged", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.intraRanges = nil
+		m.file.intraRanges = nil
 		result := m.applyIntraLineHighlight(5, diff.ChangeAdd, "text")
 		assert.Equal(t, "text", result)
 	})
@@ -899,12 +899,12 @@ func TestModel_RenderDiffWithIntraLine(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.wordDiff = true
+		m.modes.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
 		// intraRanges should be computed by handleFileLoaded
-		require.NotNil(t, m.intraRanges, "intra-line ranges should be computed")
+		require.NotNil(t, m.file.intraRanges, "intra-line ranges should be computed")
 
 		output := m.renderDiff()
 		// "old" vs "new" are the changed words — the bg markers should appear
@@ -924,12 +924,12 @@ func TestModel_RenderDiffWithIntraLine(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.tabSpaces = "    "
-		m.wordDiff = true
+		m.cfg.tabSpaces = "    "
+		m.modes.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
-		require.NotNil(t, m.intraRanges)
+		require.NotNil(t, m.file.intraRanges)
 		output := m.renderDiff()
 		stripped := ansi.Strip(output)
 		// tab should be replaced, and content should be present
@@ -952,16 +952,16 @@ func TestModel_WrapModeWithIntraLine(t *testing.T) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
-	m.wrapMode = true
-	m.width = 50
-	m.treeWidth = 0
-	m.singleFile = true
-	m.wordDiff = true
+	m.modes.wrap = true
+	m.layout.width = 50
+	m.layout.treeWidth = 0
+	m.file.singleFile = true
+	m.modes.wordDiff = true
 
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
 
-	require.NotNil(t, m.intraRanges)
+	require.NotNil(t, m.file.intraRanges)
 	output := m.renderDiff()
 	// verify word-diff markers are present in wrapped output
 	assert.Contains(t, output, "\033[48;2;", "wrapped output should contain word-diff bg markers")
@@ -983,8 +983,8 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
-		assert.False(t, m.wordDiff, "wordDiff should default to false")
-		assert.Nil(t, m.intraRanges, "intraRanges should be nil when wordDiff is off")
+		assert.False(t, m.modes.wordDiff, "wordDiff should default to false")
+		assert.Nil(t, m.file.intraRanges, "intraRanges should be nil when wordDiff is off")
 	})
 
 	t.Run("enabled: ranges computed on file load and bg markers in render", func(t *testing.T) {
@@ -993,11 +993,11 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		m.resolver = res
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
-		m.wordDiff = true
+		m.modes.wordDiff = true
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
 
-		require.NotNil(t, m.intraRanges, "intraRanges should be computed when wordDiff is on")
+		require.NotNil(t, m.file.intraRanges, "intraRanges should be computed when wordDiff is on")
 		assert.Contains(t, m.renderDiff(), "\033[48;2;", "rendered output should contain word-diff bg markers")
 	})
 
@@ -1008,30 +1008,30 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
 		m.ready = true
-		m.width = 200
-		m.height = 30
-		m.viewport.Width = 196
-		m.viewport.Height = 28
+		m.layout.width = 200
+		m.layout.height = 30
+		m.layout.viewport.Width = 196
+		m.layout.viewport.Height = 28
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 
-		assert.Nil(t, m.intraRanges, "initial state: no ranges")
-
-		m.toggleWordDiff()
-		assert.True(t, m.wordDiff, "should be enabled after toggle")
-		assert.NotNil(t, m.intraRanges, "ranges computed after enabling")
+		assert.Nil(t, m.file.intraRanges, "initial state: no ranges")
 
 		m.toggleWordDiff()
-		assert.False(t, m.wordDiff, "should be disabled after second toggle")
-		assert.Nil(t, m.intraRanges, "ranges cleared after disabling")
+		assert.True(t, m.modes.wordDiff, "should be enabled after toggle")
+		assert.NotNil(t, m.file.intraRanges, "ranges computed after enabling")
+
+		m.toggleWordDiff()
+		assert.False(t, m.modes.wordDiff, "should be disabled after second toggle")
+		assert.Nil(t, m.file.intraRanges, "ranges cleared after disabling")
 	})
 
 	t.Run("toggleWordDiff is no-op when no file loaded", func(t *testing.T) {
 		m := testModel(nil, nil)
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 		m.toggleWordDiff()
-		assert.False(t, m.wordDiff, "should stay off with no file")
+		assert.False(t, m.modes.wordDiff, "should stay off with no file")
 	})
 
 	t.Run("W key flips wordDiff through Update dispatch", func(t *testing.T) {
@@ -1041,25 +1041,25 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		m.renderer = style.NewRenderer(res)
 		m.sgr = style.SGR{}
 		m.ready = true
-		m.width = 200
-		m.height = 30
-		m.viewport.Width = 196
-		m.viewport.Height = 28
+		m.layout.width = 200
+		m.layout.height = 30
+		m.layout.viewport.Width = 196
+		m.layout.viewport.Height = 28
 		result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 		m = result.(Model)
-		m.focus = paneDiff
+		m.layout.focus = paneDiff
 
-		require.False(t, m.wordDiff, "initial state: off")
-		require.Nil(t, m.intraRanges, "initial state: no ranges")
-
-		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'W'}})
-		m = result.(Model)
-		assert.True(t, m.wordDiff, "W key should enable wordDiff")
-		assert.NotNil(t, m.intraRanges, "ranges should be computed after W")
+		require.False(t, m.modes.wordDiff, "initial state: off")
+		require.Nil(t, m.file.intraRanges, "initial state: no ranges")
 
 		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'W'}})
 		m = result.(Model)
-		assert.False(t, m.wordDiff, "second W should disable wordDiff")
-		assert.Nil(t, m.intraRanges, "ranges should be cleared after second W")
+		assert.True(t, m.modes.wordDiff, "W key should enable wordDiff")
+		assert.NotNil(t, m.file.intraRanges, "ranges should be computed after W")
+
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'W'}})
+		m = result.(Model)
+		assert.False(t, m.modes.wordDiff, "second W should disable wordDiff")
+		assert.Nil(t, m.file.intraRanges, "ranges should be cleared after second W")
 	})
 }
