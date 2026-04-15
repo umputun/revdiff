@@ -2257,3 +2257,66 @@ func TestModel_DiffLineNum(t *testing.T) {
 	assert.Equal(t, 3, m.diffLineNum(diff.DiffLine{NewNum: 3, ChangeType: diff.ChangeAdd}))
 	assert.Equal(t, 7, m.diffLineNum(diff.DiffLine{OldNum: 7, ChangeType: diff.ChangeRemove}))
 }
+
+// Regression: prefix-buffered keys (zz/zt/zb) must reach the pane handler.
+// Previously handleKey resolved the combined action but then the pane
+// handler re-resolved from msg.String(), seeing only the second 'z' and
+// silently dropping the scroll. See diffnav.go handleDiffNav doc comment.
+func TestModel_PrefixKeyScrollReachesDiffPane(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	setup := func(t *testing.T) Model {
+		t.Helper()
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		m = result.(Model)
+		result, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		m = result.(Model)
+		m.focus = paneDiff
+		m.diffCursor = 50
+		m.viewport.SetYOffset(0) // start from a known non-centered state
+		return m
+	}
+
+	pressZ := func(m Model) Model {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'z'}})
+		return result.(Model)
+	}
+
+	t.Run("zz centers cursor", func(t *testing.T) {
+		m := setup(t)
+		cursorY := m.cursorViewportY()
+		m = pressZ(m) // buffer prefix
+		assert.Equal(t, "z", m.pendingKey, "first z should be buffered as prefix")
+		m = pressZ(m) // trigger scroll_center
+		assert.Empty(t, m.pendingKey, "prefix should be cleared after combined resolve")
+		// centerViewportOnCursor: offset = max(0, cursorY - viewport.Height/2)
+		expected := max(0, cursorY-m.viewport.Height/2)
+		assert.Equal(t, expected, m.viewport.YOffset, "zz should center viewport on cursor")
+		assert.NotZero(t, m.viewport.YOffset, "sanity: offset must have moved from 0")
+	})
+
+	t.Run("zt top-aligns cursor", func(t *testing.T) {
+		m := setup(t)
+		cursorY := m.cursorViewportY()
+		m = pressZ(m)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+		m = result.(Model)
+		// topAlignViewportOnCursor: offset = max(0, cursorY)
+		assert.Equal(t, max(0, cursorY), m.viewport.YOffset, "zt should top-align viewport on cursor")
+	})
+
+	t.Run("zb bottom-aligns cursor", func(t *testing.T) {
+		m := setup(t)
+		cursorY := m.cursorViewportY()
+		m = pressZ(m)
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+		m = result.(Model)
+		// bottomAlignViewportOnCursor: offset = max(0, cursorY - Height + 1)
+		expected := max(0, cursorY-m.viewport.Height+1)
+		assert.Equal(t, expected, m.viewport.YOffset, "zb should bottom-align viewport on cursor")
+	})
+}

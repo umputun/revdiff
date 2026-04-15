@@ -544,12 +544,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
-	// pane-specific navigation
+	// pane-specific navigation. Pass the resolved action, not msg — pane
+	// handlers must operate on the combined-key action (e.g. "zz") rather
+	// than re-resolving msg.String() which would only see the second key.
 	switch m.focus {
 	case paneTree:
-		return m.handleTreeNav(msg)
+		return m.handleTreeNav(action)
 	case paneDiff:
-		return m.handleDiffNav(msg)
+		return m.handleDiffNav(action)
 	}
 	return m, nil
 }
