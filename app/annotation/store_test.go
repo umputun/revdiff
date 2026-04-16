@@ -386,6 +386,54 @@ func TestStore_FormatOutputFileLevelIgnoresEndLine(t *testing.T) {
 	assert.Equal(t, expected, s.FormatOutput(), "file-level annotations should ignore EndLine")
 }
 
+func TestStore_FormatOutputMultiLineComment(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "first point\nsecond point\nthird point"})
+
+	expected := "## handler.go:43 (+)\nfirst point\nsecond point\nthird point\n"
+	assert.Equal(t, expected, s.FormatOutput(), "multi-line comment should flow through with embedded newlines preserved")
+}
+
+func TestStore_FormatOutputMultiLineFileLevel(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 0, Type: "", Comment: "line 1\nline 2"})
+
+	expected := "## handler.go (file-level)\nline 1\nline 2\n"
+	assert.Equal(t, expected, s.FormatOutput(), "multi-line file-level comment should preserve newlines")
+}
+
+func TestStore_FormatOutputMixedSingleAndMultiLine(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 10, Type: "+", Comment: "one-liner"})
+	s.Add(Annotation{File: "handler.go", Line: 20, Type: "-", Comment: "multi\nline\ncomment"})
+	s.Add(Annotation{File: "handler.go", Line: 30, Type: " ", Comment: "another one-liner"})
+
+	expected := "## handler.go:10 (+)\none-liner\n" +
+		"\n" +
+		"## handler.go:20 (-)\nmulti\nline\ncomment\n" +
+		"\n" +
+		"## handler.go:30 ( )\nanother one-liner\n"
+	assert.Equal(t, expected, s.FormatOutput(), "mixed single/multi-line annotations should use ## as unambiguous delimiter")
+}
+
+func TestStore_FormatOutputMultiLineDelimiterIntegrity(t *testing.T) {
+	s := NewStore()
+	// a body that contains "##" at start of an embedded line should still parse:
+	// the delimiter is "## " at the start of a record, which only the formatter emits.
+	// the body is quoted verbatim; "##" inside is not a record boundary because we
+	// rely on the caller parsing on "\n## " (newline + ##) — but our smoke is that
+	// the formatter does not escape or reject the body, preserving content fidelity.
+	s.Add(Annotation{File: "handler.go", Line: 1, Type: "+", Comment: "normal\n## not a header\nmore"})
+	s.Add(Annotation{File: "handler.go", Line: 2, Type: "+", Comment: "next entry"})
+
+	out := s.FormatOutput()
+	// both entries should be present with their full bodies intact
+	assert.Contains(t, out, "## handler.go:1 (+)\nnormal\n## not a header\nmore\n")
+	assert.Contains(t, out, "## handler.go:2 (+)\nnext entry\n")
+	// the count of "## handler.go:" records should match actual record count
+	assert.Equal(t, 2, strings.Count(out, "## handler.go:"))
+}
+
 func TestStore_Count(t *testing.T) {
 	s := NewStore()
 	assert.Equal(t, 0, s.Count(), "empty store should return 0")

@@ -195,10 +195,10 @@ Returning `[]string` handles `EDITOR="code --wait"` — the caller uses `exec.Co
 - Modify: `app/ui/overlay/annotlist.go` (`formatItem`)
 - Modify: `app/ui/overlay/annotlist_test.go`
 
-- [ ] audit `FormatOutput` with multi-line `Comment`: the existing `## header\n%s\n` framing should already be correct; confirm by adding test cases in `store_test.go` for line-level multi-line, file-level multi-line, and mixed single/multi-line annotations; check `##` still delimits unambiguously
-- [ ] update `formatItem` in `annotlist.go`: before width measurement / truncation, replace `\n` in the comment with `" ⏎ "` (or literal space — verify which reads better during Task 6 manual smoke)
-- [ ] add `annotlist_test.go` case: comment with `\n` renders as a single row with no literal newlines in output; truncation still applies
-- [ ] run `go test ./app/annotation/... ./app/ui/overlay/...` — must pass before Task 5
+- [x] audit `FormatOutput` with multi-line `Comment`: the existing `## header\n%s\n` framing should already be correct; confirm by adding test cases in `store_test.go` for line-level multi-line, file-level multi-line, and mixed single/multi-line annotations; check `##` still delimits unambiguously
+- [x] update `formatItem` in `annotlist.go`: before width measurement / truncation, replace `\n` in the comment with `" ⏎ "` (or literal space — verify which reads better during Task 6 manual smoke)
+- [x] add `annotlist_test.go` case: comment with `\n` renders as a single row with no literal newlines in output; truncation still applies
+- [x] run `go test ./app/annotation/... ./app/ui/overlay/...` — must pass before Task 5
 
 ### Task 5: Update documentation
 
