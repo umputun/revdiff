@@ -92,3 +92,4 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Markdown TOC: activated when `singleFile && isMarkdownFile && isFullContext`. Uses `paneTree` slot.
 - Annotation list popup (`@` key): cross-file jumps via `pendingAnnotJump` field with stale-jump guard.
 - **Typed-nil trap**: `ParseTOC` factory MUST guard `if toc == nil { return nil }` to collapse typed-nil `*sidepane.TOC` into interface-nil.
+- **External editor exec (`tea.ExecProcess`)**: long-running external commands (e.g. `$EDITOR` for multi-line annotations in `app/ui/editor.go`) suspend bubbletea and hand over the tty. Capture target state (target line, file-level flag, change type) at spawn time and pass it through the completion message — cursor movement during the exec window otherwise misroutes the result. Temp files are always cleaned up in the completion callback regardless of error path.

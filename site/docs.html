@@ -456,9 +456,11 @@ color-border = #6272a4
                 <tr><td><code>A</code></td><td>Add file-level annotation</td></tr>
                 <tr><td><code>@</code></td><td>Toggle annotation list popup</td></tr>
                 <tr><td><code>d</code></td><td>Delete annotation under cursor</td></tr>
+                <tr><td><code>Ctrl+E</code></td><td>Open <code>$EDITOR</code> for multi-line annotation (during annotation input)</td></tr>
                 <tr><td><code>Esc</code></td><td>Cancel annotation input</td></tr>
             </tbody>
         </table>
+        <p>While the annotation input is active, press <code>Ctrl+E</code> to hand off the current text to an external editor for multi-line comments. Editor resolution: <code>$EDITOR</code> &rarr; <code>$VISUAL</code> &rarr; <code>vi</code>. Values with arguments work (e.g. <code>EDITOR="code --wait"</code>). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (<code>@</code>), and emitted with embedded newlines in the structured output.</p>
 
         <h2 id="view">View toggles</h2>
         <table>

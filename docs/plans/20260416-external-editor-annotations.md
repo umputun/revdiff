@@ -209,12 +209,12 @@ Returning `[]string` handles `EDITOR="code --wait"` — the caller uses `exec.Co
 - Modify: `site/docs.html`
 - Review: `CLAUDE.md` (project) — add note only if a new project convention emerged
 
-- [ ] update README.md annotation section: document `Ctrl+E` opens `$EDITOR`, `$EDITOR`→`$VISUAL`→`vi` resolution, multi-line content is preserved in output, empty editor exit cancels
-- [ ] mirror the README change into `.claude-plugin/skills/revdiff/references/usage.md` (byte-identical wording per CLAUDE.md sync rule)
-- [ ] mirror into `plugins/codex/skills/revdiff/references/usage.md`
-- [ ] update `site/docs.html` annotation section to match README
-- [ ] review `CLAUDE.md` — add a Gotcha entry only if the editor-exec pattern is reusable project knowledge (likely yes: "long-running external commands use `tea.ExecProcess`; capture target state at spawn time so cursor movement during exec doesn't misroute the result")
-- [ ] no test step for this task — documentation-only
+- [x] update README.md annotation section: document `Ctrl+E` opens `$EDITOR`, `$EDITOR`→`$VISUAL`→`vi` resolution, multi-line content is preserved in output, empty editor exit cancels
+- [x] mirror the README change into `.claude-plugin/skills/revdiff/references/usage.md` (byte-identical wording per CLAUDE.md sync rule)
+- [x] mirror into `plugins/codex/skills/revdiff/references/usage.md`
+- [x] update `site/docs.html` annotation section to match README
+- [x] review `CLAUDE.md` — add a Gotcha entry only if the editor-exec pattern is reusable project knowledge (likely yes: "long-running external commands use `tea.ExecProcess`; capture target state at spawn time so cursor movement during exec doesn't misroute the result")
+- [x] no test step for this task — documentation-only
 
 ### Task 6: Acceptance verification
 

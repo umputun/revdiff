@@ -601,7 +601,10 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `A` | Add file-level annotation (stored at top of diff) |
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `d` | Delete annotation under cursor |
+| `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation |
 | `Esc` | Cancel annotation input |
+
+While the annotation input is active, press `Ctrl+E` to hand off the current text to an external editor for multi-line comments. Editor resolution: `$EDITOR` → `$VISUAL` → `vi`. Values with arguments work (e.g. `EDITOR="code --wait"`). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (`@`), and emitted with embedded newlines in the structured output.
 
 **View:**
 
