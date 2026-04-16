@@ -103,7 +103,10 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `A` | Add file-level annotation (stored at top of diff) |
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `d` | Delete annotation under cursor |
+| `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation |
 | `Esc` | Cancel annotation input |
+
+While the annotation input is active, press `Ctrl+E` to hand off the current text to an external editor for multi-line comments. Editor resolution: `$EDITOR` → `$VISUAL` → `vi`. Values with arguments work (e.g. `EDITOR="code --wait"`). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (`@`), and emitted with embedded newlines in the structured output.
 
 **View:**
 
@@ -178,6 +181,8 @@ don't remove this validation
 Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added, `(-)` removed, or `(file-level)`. The `-end` suffix is included when the annotation covers a line range.
 
 When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
+
+Comment body lines starting with `## ` (the record-header form) are prefixed with a single space on output so parsers that split on `## ` record headers cannot confuse a multi-line comment for a new record.
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
 

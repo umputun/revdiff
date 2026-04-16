@@ -595,22 +595,54 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 
 // renderWrappedAnnotation writes an annotation line with word wrapping.
 // annotations always wrap regardless of wrapMode since they contain prose.
+// embedded "\n" in text splits into logical lines; the first logical line carries
+// the emoji prefix baked into text, continuation logical lines receive an indent
+// sized to the emoji prefix so body columns line up.
+// each visual row is padded with DiffPaneBg via extendLineBg so themed pane
+// backgrounds extend across the full width rather than falling back to terminal
+// default on the right portion.
 func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
 	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+	paneBg := m.resolver.Color(style.ColorKeyDiffPaneBg)
 
-	if wrapWidth > 10 && lipgloss.Width(text) > wrapWidth {
-		lines := m.wrapContent(text, wrapWidth)
-		for i, line := range lines {
-			c := " " // continuation lines get space instead of cursor
-			if i == 0 {
-				c = cursor
-			}
-			b.WriteString(c + m.renderer.AnnotationInline(line) + "\n")
+	logical := strings.Split(text, "\n")
+	indent := m.annotationContinuationIndent(logical[0])
+
+	first := true
+	for i, segment := range logical {
+		if i > 0 {
+			segment = indent + segment
 		}
-		return
+		var lines []string
+		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
+			lines = m.wrapContent(segment, wrapWidth)
+		} else {
+			lines = []string{segment}
+		}
+		for _, line := range lines {
+			c := " "
+			if first {
+				c = cursor
+				first = false
+			}
+			styled := c + m.renderer.AnnotationInline(line)
+			b.WriteString(m.extendLineBg(styled, paneBg) + "\n")
+		}
 	}
+}
 
-	b.WriteString(cursor + m.renderer.AnnotationInline(text) + "\n")
+// annotationContinuationIndent returns leading whitespace sized to match the emoji
+// prefix on the first logical line of an annotation so continuation logical lines
+// align under the body. Uses lipgloss.Width because the emoji is double-width.
+func (m Model) annotationContinuationIndent(firstLogicalLine string) string {
+	switch {
+	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac file: "):
+		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac file: "))
+	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac "):
+		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac "))
+	default:
+		return ""
+	}
 }
 
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "

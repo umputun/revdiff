@@ -130,6 +130,40 @@ func TestAnnotListOverlay_FormatItemSelected(t *testing.T) {
 	assert.Contains(t, result, "> ")
 }
 
+func TestAnnotListOverlay_FormatItemMultiLineComment(t *testing.T) {
+	resolver := style.PlainResolver()
+	a := &annotListOverlay{}
+	item := annotItem("a.go", 5, "+", "first line\nsecond line")
+	result := a.formatItem(item, 60, false, resolver)
+	// no literal newlines in the rendered row
+	assert.NotContains(t, result, "\n", "multi-line comment must render as a single row")
+	// both logical lines are present, joined by the newline glyph
+	assert.Contains(t, result, "first line")
+	assert.Contains(t, result, "second line")
+	assert.Contains(t, result, "⏎", "newline glyph should separate flattened lines")
+}
+
+func TestAnnotListOverlay_FormatItemMultiLineSelected(t *testing.T) {
+	c := style.Colors{Accent: "#5f87ff", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", AddFg: "#87d787", RemoveFg: "#ff8787"}
+	resolver := style.NewResolver(c)
+	a := &annotListOverlay{}
+	item := annotItem("a.go", 5, "+", "first line\nsecond line")
+	result := a.formatItem(item, 60, true, resolver)
+	assert.NotContains(t, result, "\n", "selected multi-line comment must render as a single row")
+	assert.Contains(t, result, "> ")
+}
+
+func TestAnnotListOverlay_FormatItemMultiLineTruncation(t *testing.T) {
+	resolver := style.PlainResolver()
+	a := &annotListOverlay{}
+	// long multi-line comment must still truncate
+	body := strings.Repeat("very long first line ", 10) + "\n" + strings.Repeat("very long second line ", 10)
+	item := annotItem("a.go", 5, "+", body)
+	result := a.formatItem(item, 60, false, resolver)
+	assert.NotContains(t, result, "\n")
+	assert.Contains(t, result, "...", "long multi-line comment should still be truncated")
+}
+
 func TestAnnotListOverlay_FormatItemFileLevel(t *testing.T) {
 	resolver := style.PlainResolver()
 	a := &annotListOverlay{}

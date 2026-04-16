@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,20 +64,36 @@ func (m *Model) startAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti, cmd := m.newAnnotationInput("annotation...", 6) // cursor col + emoji prefix "💬 " + border margin
+	placeholder := "annotation... (Ctrl+E for editor)"
 
-	// pre-fill with existing annotation if one exists
+	// pre-fill with existing annotation if one exists. multi-line comments are
+	// NOT set via ti.SetValue because textinput's sanitizer collapses \n to
+	// space; instead, stash the original in existingMultiline and hint at it
+	// via the placeholder so Ctrl+E can seed the editor from it and Enter with
+	// empty input preserves it unchanged.
 	lineNum := m.diffLineNum(dl)
+	var preFill, existingMultiline string
 	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == lineNum && a.Type == string(dl.ChangeType) {
-			ti.SetValue(a.Comment)
+			if strings.Contains(a.Comment, "\n") {
+				existingMultiline = a.Comment
+				placeholder = "[existing multi-line — Ctrl+E to edit]"
+			} else {
+				preFill = a.Comment
+			}
 			break
 		}
+	}
+
+	ti, cmd := m.newAnnotationInput(placeholder, 6) // cursor col + emoji prefix "💬 " + border margin
+	if preFill != "" {
+		ti.SetValue(preFill)
 	}
 
 	m.annot.input = ti
 	m.annot.annotating = true
 	m.annot.fileAnnotating = false
+	m.annot.existingMultiline = existingMultiline
 	m.ensureLineAnnotationInputVisible()
 	return cmd
 }
@@ -108,25 +125,41 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti, cmd := m.newAnnotationInput("file-level annotation...", 12) // cursor col + "💬 file: " prefix + border margin
+	placeholder := "file-level annotation... (Ctrl+E for editor)"
 
-	// pre-fill with existing file-level annotation if one exists
+	// pre-fill with existing file-level annotation if one exists. multi-line
+	// comments bypass ti.SetValue (textinput sanitizer flattens \n to space);
+	// instead stash in existingMultiline so Ctrl+E can seed and Enter with empty
+	// input preserves it unchanged.
+	var preFill, existingMultiline string
 	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == 0 {
-			ti.SetValue(a.Comment)
+			if strings.Contains(a.Comment, "\n") {
+				existingMultiline = a.Comment
+				placeholder = "[existing multi-line — Ctrl+E to edit]"
+			} else {
+				preFill = a.Comment
+			}
 			break
 		}
+	}
+
+	ti, cmd := m.newAnnotationInput(placeholder, 12) // cursor col + "💬 file: " prefix + border margin
+	if preFill != "" {
+		ti.SetValue(preFill)
 	}
 
 	m.annot.input = ti
 	m.annot.annotating = true
 	m.annot.fileAnnotating = true
+	m.annot.existingMultiline = existingMultiline
 	m.nav.diffCursor = -1 // position cursor on the file annotation line
 	m.layout.viewport.GotoTop()
 	return cmd
 }
 
 // saveAnnotation saves the current text input as an annotation on the cursor line.
+// Thin wrapper around saveComment that reads model state for the current target.
 func (m *Model) saveAnnotation() {
 	text := m.annot.input.Value()
 	if text == "" {
@@ -135,13 +168,7 @@ func (m *Model) saveAnnotation() {
 	}
 
 	if m.annot.fileAnnotating {
-		m.store.Add(annotation.Annotation{File: m.file.name, Line: 0, Type: "", Comment: text})
-		m.annot.annotating = false
-		m.annot.fileAnnotating = false
-		m.nav.diffCursor = -1 // position cursor on the file annotation line
-		m.tree.RefreshFilter(m.annotatedFiles())
-		m.layout.viewport.SetContent(m.renderDiff())
-		m.layout.viewport.GotoTop()
+		m.saveComment(text, m.file.name, true, 0, "")
 		return
 	}
 
@@ -150,16 +177,58 @@ func (m *Model) saveAnnotation() {
 		m.cancelAnnotation()
 		return
 	}
+	m.saveComment(text, m.file.name, false, m.diffLineNum(dl), string(dl.ChangeType))
+}
 
-	lineNum := m.diffLineNum(dl)
-	a := annotation.Annotation{File: m.file.name, Line: lineNum, Type: string(dl.ChangeType), Comment: text}
-	if hunkKeywordRe.MatchString(text) {
-		if endLine := m.hunkEndLine(m.nav.diffCursor); endLine > lineNum {
-			a.EndLine = endLine
+// saveComment persists the annotation text for the explicitly provided target.
+// Target fields are taken as arguments (not read from model state) so the
+// Enter-key path and the editor-finished path can both use it without
+// temporal coupling on cursor position or current file. Hunk-end detection for
+// line-level saves re-derives the diffLines index from the (line, changeType)
+// pair so cursor movement during an external editor session does not skew the
+// range; when fileName matches the currently loaded file, m.file.lines is
+// scanned, otherwise EndLine expansion is skipped (no hunk context available).
+func (m *Model) saveComment(text, fileName string, fileLevel bool, line int, changeType string) {
+	if text == "" {
+		m.cancelAnnotation()
+		return
+	}
+
+	if fileLevel {
+		m.store.Add(annotation.Annotation{File: fileName, Line: 0, Type: "", Comment: text})
+		m.annot.annotating = false
+		m.annot.fileAnnotating = false
+		m.annot.existingMultiline = ""
+		m.nav.diffCursor = -1 // position cursor on the file annotation line
+		m.tree.RefreshFilter(m.annotatedFiles())
+		m.layout.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.GotoTop()
+		return
+	}
+
+	a := annotation.Annotation{File: fileName, Line: line, Type: changeType, Comment: text}
+	if hunkKeywordRe.MatchString(text) && fileName == m.file.name {
+		// re-derive the diff-line index from (line, changeType) so hunk-end
+		// detection survives cursor drift during an external editor session.
+		// only scan when the captured file still matches the loaded one —
+		// otherwise m.file.lines describes a different file and would mislead.
+		for i, dl := range m.file.lines {
+			if string(dl.ChangeType) != changeType {
+				continue
+			}
+			if m.diffLineNum(dl) != line {
+				continue
+			}
+			if endLine := m.hunkEndLine(i); endLine > line {
+				a.EndLine = endLine
+			}
+			break
 		}
 	}
 	m.store.Add(a)
 	m.annot.annotating = false
+	m.annot.fileAnnotating = false // defensive hygiene: parity with file-level branch
+	m.annot.existingMultiline = ""
 	m.tree.RefreshFilter(m.annotatedFiles())
 	m.layout.viewport.SetContent(m.renderDiff())
 }
@@ -168,6 +237,7 @@ func (m *Model) saveAnnotation() {
 func (m *Model) cancelAnnotation() {
 	m.annot.annotating = false
 	m.annot.fileAnnotating = false
+	m.annot.existingMultiline = ""
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
@@ -236,6 +306,11 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.cancelAnnotation()
 		return m, nil
+	case tea.KeyCtrlE:
+		// hand off to $EDITOR for multi-line annotation input.
+		// keep annotating=true so editorFinishedMsg routes back through the annotation flow.
+		cmd := m.openEditor()
+		return m, cmd
 	default:
 		var cmd tea.Cmd
 		m.annot.input, cmd = m.annot.input.Update(msg)
@@ -300,6 +375,8 @@ func (m Model) hunkEndLine(idx int) int {
 
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
 // annotations always wrap at the pane width regardless of wrapMode.
+// multi-line comments (embedded "\n") contribute the wrapped-row count for each
+// logical line, with continuation logical lines using the indent-padded width.
 func (m Model) wrappedAnnotationLineCount(key string) int {
 	var comment string
 	for _, a := range m.store.Get(m.file.name) {
@@ -316,10 +393,25 @@ func (m Model) wrappedAnnotationLineCount(key string) int {
 		return 1
 	}
 	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
-	if wrapWidth > 10 && lipgloss.Width(comment) > wrapWidth {
-		return len(m.wrapContent(comment, wrapWidth))
+
+	logical := strings.Split(comment, "\n")
+	indent := m.annotationContinuationIndent(logical[0])
+
+	total := 0
+	for i, segment := range logical {
+		if i > 0 {
+			segment = indent + segment
+		}
+		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
+			total += len(m.wrapContent(segment, wrapWidth))
+			continue
+		}
+		total++
 	}
-	return 1
+	if total < 1 {
+		return 1
+	}
+	return total
 }
 
 // hunkLineHeight returns the visual row count for a single diff line,

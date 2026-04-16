@@ -92,7 +92,8 @@ func (a *annotListOverlay) formatItem(item AnnotationItem, width int, selected b
 
 	var comment string
 	if commentSpace > 3 && item.Comment != "" {
-		comment = item.Comment
+		// flatten newlines so multi-line comments render as a single row
+		comment = strings.ReplaceAll(item.Comment, "\n", " ⏎ ")
 		if lipgloss.Width(comment) > commentSpace {
 			comment = ansi.Truncate(comment, commentSpace-3, "...")
 		}

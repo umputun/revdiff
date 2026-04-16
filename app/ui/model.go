@@ -13,6 +13,7 @@ package ui
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/editor"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -277,6 +279,13 @@ type annotationState struct {
 	fileAnnotating     bool            // true when annotating at file level (Line=0)
 	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
 	input              textinput.Model // text input for annotations
+	// existingMultiline holds the original multi-line comment of an annotation
+	// being re-edited. textinput's sanitizer collapses \n to space, so pre-filling
+	// via SetValue would silently flatten the stored content. When set, the
+	// textinput is left empty with a hint placeholder; Ctrl+E seeds the editor
+	// from this field, and Enter with empty input preserves the existing content
+	// unchanged. Cleared on every annotation-mode exit path.
+	existingMultiline string
 }
 
 // Model is the top-level bubbletea model for revdiff.
@@ -292,7 +301,8 @@ type Model struct {
 	store        *annotation.Store
 	diffRenderer Renderer
 	keymap       *keymap.Keymap
-	themes       ThemeCatalog // theme catalog for discovery, resolve, and persistence
+	themes       ThemeCatalog   // theme catalog for discovery, resolve, and persistence
+	editor       ExternalEditor // launches $EDITOR for multi-line annotation editing
 
 	// grouped state
 	cfg    modelConfigState // immutable session config
@@ -385,6 +395,7 @@ type ModelConfig struct {
 	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
 	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
+	Editor        ExternalEditor           // external-editor driver (nil uses app/editor.Editor{})
 
 	// --- Configuration values ---
 	Ref              string
@@ -408,6 +419,19 @@ type ModelConfig struct {
 // NewModel creates a new Model from the given configuration. All dependencies
 // must be provided by the caller — there is no fallback construction.
 // Returns an error if any required dependency is missing from the config.
+// isNilValue reports whether v is a typed-nil interface value (e.g. a (*T)(nil)
+// wrapped in an interface). Used to guard interface fields where "nil means
+// default" must survive a caller passing a typed-nil pointer.
+func isNilValue(v any) bool {
+	rv := reflect.ValueOf(v)
+	k := rv.Kind()
+	if k == reflect.Ptr || k == reflect.Interface || k == reflect.Chan ||
+		k == reflect.Func || k == reflect.Map || k == reflect.Slice {
+		return rv.IsNil()
+	}
+	return false
+}
+
 func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.Renderer == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.Renderer is required")
@@ -452,6 +476,10 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if km == nil {
 		km = keymap.Default()
 	}
+	ed := cfg.Editor
+	if ed == nil || isNilValue(ed) {
+		ed = editor.Editor{}
+	}
 
 	return Model{
 		resolver:     cfg.StyleResolver,
@@ -467,6 +495,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		tree:         cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
 		parseTOC:     cfg.ParseTOC,
 		themes:       cfg.Themes,
+		editor:       ed,
 		cfg: modelConfigState{
 			ref:              cfg.Ref,
 			staged:           cfg.Staged,
@@ -526,6 +555,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
 		return m.handleBlameLoaded(msg)
+	case editorFinishedMsg:
+		return m.handleEditorFinished(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)
