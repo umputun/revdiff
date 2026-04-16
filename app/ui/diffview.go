@@ -598,12 +598,12 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 // embedded "\n" in text splits into logical lines; the first logical line carries
 // the emoji prefix baked into text, continuation logical lines receive an indent
 // sized to the emoji prefix so body columns line up.
-// TODO: multi-line annotations do not apply extendLineBg to each visual row,
-// so themed pane backgrounds may show the terminal default in the right portion
-// of continuation rows. Mirroring the single-line input widget pattern requires
-// stripping trailing spaces and re-padding with DiffBg per visual line.
+// each visual row is padded with DiffPaneBg via extendLineBg so themed pane
+// backgrounds extend across the full width rather than falling back to terminal
+// default on the right portion.
 func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
 	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+	paneBg := m.resolver.Color(style.ColorKeyDiffPaneBg)
 
 	logical := strings.Split(text, "\n")
 	indent := m.annotationContinuationIndent(logical[0])
@@ -625,7 +625,8 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) 
 				c = cursor
 				first = false
 			}
-			b.WriteString(c + m.renderer.AnnotationInline(line) + "\n")
+			styled := c + m.renderer.AnnotationInline(line)
+			b.WriteString(m.extendLineBg(styled, paneBg) + "\n")
 		}
 	}
 }
