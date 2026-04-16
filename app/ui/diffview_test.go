@@ -1063,3 +1063,66 @@ func TestModel_WordDiffOptIn(t *testing.T) {
 		assert.Nil(t, m.file.intraRanges, "ranges should be cleared after second W")
 	})
 }
+
+func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
+	newModel := func() Model {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.layout.width = 120
+		m.layout.treeWidth = 20
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+		m.layout.focus = paneDiff
+		return m
+	}
+
+	t.Run("three logical lines: all lines rendered, cursor on first row only", func(t *testing.T) {
+		m := newModel()
+		var b strings.Builder
+		cursor := m.renderer.DiffCursor(m.cfg.noColors)
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac first\nsecond\nthird")
+		out := b.String()
+		assert.Contains(t, out, "first", "first logical line present")
+		assert.Contains(t, out, "second", "second logical line present")
+		assert.Contains(t, out, "third", "third logical line present")
+		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		require.Len(t, rows, 3, "three logical lines produce three rows")
+		// cursor on first row only
+		assert.Equal(t, 1, strings.Count(out, cursor), "cursor appears once on first row")
+		// continuation rows begin with leading space+indent (no cursor)
+		assert.True(t, strings.HasPrefix(rows[1], " "), "continuation row starts with space cursor column")
+		assert.True(t, strings.HasPrefix(rows[2], " "), "continuation row starts with space cursor column")
+		// continuation rows indented to align past emoji prefix
+		assert.Contains(t, rows[1], "   second", "second row aligned with 3-space indent past emoji")
+		assert.Contains(t, rows[2], "   third", "third row aligned with 3-space indent past emoji")
+	})
+
+	t.Run("file-level continuation uses 9-space indent", func(t *testing.T) {
+		m := newModel()
+		var b strings.Builder
+		cursor := m.renderer.DiffCursor(m.cfg.noColors)
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac file: alpha\nbeta")
+		out := b.String()
+		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		require.Len(t, rows, 2)
+		// file-level emoji width = 9; continuation should have 9 spaces of indent
+		assert.Contains(t, rows[1], strings.Repeat(" ", 9)+"beta", "continuation indented to align past 💬 file: prefix")
+	})
+
+	t.Run("two logical lines each wrap, counts grow", func(t *testing.T) {
+		m := newModel()
+		m.layout.width = 40 // narrow pane to force wrap
+		m.layout.treeWidth = 8
+		first := strings.Repeat("alpha ", 20)  // wraps multiple rows
+		second := strings.Repeat("bravo ", 20) // wraps multiple rows
+		text := "\U0001f4ac " + first + "\n" + second
+		var b strings.Builder
+		cursor := m.renderer.DiffCursor(m.cfg.noColors)
+		m.renderWrappedAnnotation(&b, cursor, text)
+		out := b.String()
+		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		assert.Greater(t, len(rows), 3, "both logical lines wrap beyond one row")
+		assert.Equal(t, 1, strings.Count(out, cursor), "cursor only on very first visual row")
+		assert.Contains(t, out, "alpha", "first logical line content present")
+		assert.Contains(t, out, "bravo", "second logical line content present")
+	})
+}

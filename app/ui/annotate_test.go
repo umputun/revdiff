@@ -1740,3 +1740,70 @@ func TestModel_ShiftAOnlyWorksFromDiffPane(t *testing.T) {
 	assert.True(t, model.annot.fileAnnotating)
 	assert.NotNil(t, cmd)
 }
+
+func TestModel_WrappedAnnotationLineCount_MultiLine(t *testing.T) {
+	newModel := func() Model {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.layout.width = 120
+		m.layout.treeWidth = 20
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+		return m
+	}
+
+	t.Run("single-line short comment is one row", func(t *testing.T) {
+		m := newModel()
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "hi"})
+		defer m.store.Delete("a.go", 1, " ")
+
+		assert.Equal(t, 1, m.wrappedAnnotationLineCount(m.annotationKey(1, " ")))
+	})
+
+	t.Run("multi-line without wrap counts each logical line", func(t *testing.T) {
+		m := newModel()
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "one\ntwo\nthree"})
+		defer m.store.Delete("a.go", 1, " ")
+
+		assert.Equal(t, 3, m.wrappedAnnotationLineCount(m.annotationKey(1, " ")))
+	})
+
+	t.Run("multi-line with inner-line wrap sums wrapped rows", func(t *testing.T) {
+		m := newModel()
+		m.layout.width = 40
+		m.layout.treeWidth = 8
+		long := strings.Repeat("alpha ", 20) // forces wrap
+		short := "brief"
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: long + "\n" + short})
+		defer m.store.Delete("a.go", 1, " ")
+
+		count := m.wrappedAnnotationLineCount(m.annotationKey(1, " "))
+		assert.Greater(t, count, 2, "long-first-line + short-second-line must exceed two rows")
+	})
+
+	t.Run("file-level multi-line annotation", func(t *testing.T) {
+		m := newModel()
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "line1\nline2"})
+		defer m.store.Delete("a.go", 0, "")
+
+		assert.Equal(t, 2, m.wrappedAnnotationLineCount(annotKeyFile))
+	})
+
+	t.Run("file-level multi-line with continuation-wrap", func(t *testing.T) {
+		m := newModel()
+		m.layout.width = 40
+		m.layout.treeWidth = 8
+		// second logical line is long AND receives 9-space file-level indent, so wraps
+		long := strings.Repeat("beta ", 20)
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "short\n" + long})
+		defer m.store.Delete("a.go", 0, "")
+
+		count := m.wrappedAnnotationLineCount(annotKeyFile)
+		assert.Greater(t, count, 2, "second line wraps due to length, total exceeds 2")
+	})
+
+	t.Run("empty annotation yields one row", func(t *testing.T) {
+		m := newModel()
+		// no annotation stored — lookup returns empty, falls through to baseline
+		assert.Equal(t, 1, m.wrappedAnnotationLineCount(m.annotationKey(42, "+")))
+	})
+}

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -300,6 +301,8 @@ func (m Model) hunkEndLine(idx int) int {
 
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
 // annotations always wrap at the pane width regardless of wrapMode.
+// multi-line comments (embedded "\n") contribute the wrapped-row count for each
+// logical line, with continuation logical lines using the indent-padded width.
 func (m Model) wrappedAnnotationLineCount(key string) int {
 	var comment string
 	for _, a := range m.store.Get(m.file.name) {
@@ -316,10 +319,25 @@ func (m Model) wrappedAnnotationLineCount(key string) int {
 		return 1
 	}
 	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
-	if wrapWidth > 10 && lipgloss.Width(comment) > wrapWidth {
-		return len(m.wrapContent(comment, wrapWidth))
+
+	logical := strings.Split(comment, "\n")
+	indent := annotationContinuationIndent(logical[0])
+
+	total := 0
+	for i, segment := range logical {
+		if i > 0 {
+			segment = indent + segment
+		}
+		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
+			total += len(m.wrapContent(segment, wrapWidth))
+			continue
+		}
+		total++
 	}
-	return 1
+	if total < 1 {
+		return 1
+	}
+	return total
 }
 
 // hunkLineHeight returns the visual row count for a single diff line,

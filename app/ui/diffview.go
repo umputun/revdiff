@@ -595,22 +595,50 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 
 // renderWrappedAnnotation writes an annotation line with word wrapping.
 // annotations always wrap regardless of wrapMode since they contain prose.
+// embedded "\n" in text splits into logical lines; the first logical line carries
+// the emoji prefix baked into text, continuation logical lines receive an indent
+// sized to the emoji prefix so body columns line up.
 func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
 	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
 
-	if wrapWidth > 10 && lipgloss.Width(text) > wrapWidth {
-		lines := m.wrapContent(text, wrapWidth)
-		for i, line := range lines {
-			c := " " // continuation lines get space instead of cursor
-			if i == 0 {
+	logical := strings.Split(text, "\n")
+	indent := annotationContinuationIndent(logical[0])
+
+	first := true
+	for i, segment := range logical {
+		segWrapWidth := wrapWidth
+		if i > 0 {
+			segment = indent + segment
+		}
+		var lines []string
+		if segWrapWidth > 10 && lipgloss.Width(segment) > segWrapWidth {
+			lines = m.wrapContent(segment, segWrapWidth)
+		} else {
+			lines = []string{segment}
+		}
+		for _, line := range lines {
+			c := " "
+			if first {
 				c = cursor
+				first = false
 			}
 			b.WriteString(c + m.renderer.AnnotationInline(line) + "\n")
 		}
-		return
 	}
+}
 
-	b.WriteString(cursor + m.renderer.AnnotationInline(text) + "\n")
+// annotationContinuationIndent returns leading whitespace sized to match the emoji prefix
+// on the first logical line of an annotation so continuation logical lines align.
+// uses lipgloss.Width because the emoji is double-width.
+func annotationContinuationIndent(firstLogicalLine string) string {
+	switch {
+	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac file: "):
+		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac file: "))
+	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac "):
+		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac "))
+	default:
+		return ""
+	}
 }
 
 const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "

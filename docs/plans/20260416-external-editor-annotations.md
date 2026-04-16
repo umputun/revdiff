@@ -146,12 +146,12 @@ Returning `[]string` handles `EDITOR="code --wait"` — the caller uses `exec.Co
 - Modify: `app/ui/diffview_test.go`
 - Modify: `app/ui/annotate_test.go`
 
-- [ ] refactor `renderWrappedAnnotation` to split `text` on `\n` into logical lines. For each logical line: wrap to `diffContentWidth() - 1 - indentWidth` (where `indentWidth` is 0 for the very first logical line because it already carries the emoji prefix, `emojiPrefixWidth` for subsequent logical lines) then render each resulting visual row with the correct leading glyph (cursor on the very first visual row of the whole annotation, space elsewhere) and the correct prefix (emoji on first visual row of first logical line, indent on first visual row of continuation logical lines, plain space for wrapped sub-rows within a logical line)
-- [ ] refactor `wrappedAnnotationLineCount` to sum `ceil(len(logicalLine) / wrapWidth_for_that_line)` across `\n`-split segments, using the same reduced wrap width for continuation logical lines; keep minimum 1 for empty input
-- [ ] add test case to `diffview_test.go` covering a 3-logical-line annotation: verify output contains each logical line, correct cursor on first row only, correct indent on continuation lines
-- [ ] add test case to `diffview_test.go` covering a 2-logical-line annotation where each logical line further word-wraps
-- [ ] add test cases to `annotate_test.go` for `wrappedAnnotationLineCount` with: single-line input, multi-line with no wrap, multi-line with wrap on inner lines, file-level annotation with newlines
-- [ ] run `go test ./app/ui/...` — must pass before Task 2
+- [x] refactor `renderWrappedAnnotation` to split `text` on `\n` into logical lines. For each logical line: wrap to `diffContentWidth() - 1 - indentWidth` (where `indentWidth` is 0 for the very first logical line because it already carries the emoji prefix, `emojiPrefixWidth` for subsequent logical lines) then render each resulting visual row with the correct leading glyph (cursor on the very first visual row of the whole annotation, space elsewhere) and the correct prefix (emoji on first visual row of first logical line, indent on first visual row of continuation logical lines, plain space for wrapped sub-rows within a logical line)
+- [x] refactor `wrappedAnnotationLineCount` to sum `ceil(len(logicalLine) / wrapWidth_for_that_line)` across `\n`-split segments, using the same reduced wrap width for continuation logical lines; keep minimum 1 for empty input
+- [x] add test case to `diffview_test.go` covering a 3-logical-line annotation: verify output contains each logical line, correct cursor on first row only, correct indent on continuation lines
+- [x] add test case to `diffview_test.go` covering a 2-logical-line annotation where each logical line further word-wraps
+- [x] add test cases to `annotate_test.go` for `wrappedAnnotationLineCount` with: single-line input, multi-line with no wrap, multi-line with wrap on inner lines, file-level annotation with newlines
+- [x] run `go test ./app/ui/...` — must pass before Task 2
 
 ### Task 2: Editor invocation helper and temp-file lifecycle
 
