@@ -1,6 +1,6 @@
 {
   "name": "revdiff",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Review diffs, files, and documents with inline annotations in a TUI overlay",
   "author": {
     "name": "umputun",

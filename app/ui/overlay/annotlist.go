@@ -170,7 +170,8 @@ func (a *annotListOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outco
 			}
 		}
 		return Outcome{Kind: OutcomeNone}
-	}
 
-	return Outcome{Kind: OutcomeNone}
+	default:
+		return Outcome{Kind: OutcomeNone}
+	}
 }
