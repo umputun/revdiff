@@ -191,7 +191,7 @@ Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, n
 
 ### app/annotation/ — annotation store
 
-In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export. `FormatOutput` escapes body lines that start with `##` by prefixing a single space so downstream parsers cannot confuse a comment line for a new record header.
+In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export. `FormatOutput` escapes body lines that start with `## ` (with trailing space, matching the record-header form) by prefixing a single space so downstream parsers cannot confuse a comment line for a new record header. Lines starting with `###` or `##` without a space are left unchanged.
 
 ### app/editor/ — external editor invocation
 

@@ -83,6 +83,29 @@ func TestEditor_tokenize_DoubleQuoteEscapes(t *testing.T) {
 	assert.Equal(t, []string{`a"b\c`}, Editor{}.tokenize(`"a\"b\\c"`))
 }
 
+func TestEditor_tokenize_PreservesBackslashBeforeNonShellMeta(t *testing.T) {
+	// outside quotes, backslash only escapes shell-meta chars. Other characters
+	// (notably Windows path separators) keep the backslash intact.
+	tests := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{"windows path", `C:\Program\ Files\Editor\code.exe`, []string{`C:\Program Files\Editor\code.exe`}},
+		{"backslash before letter kept", `foo\abar`, []string{`foo\abar`}},
+		{"backslash before digit kept", `foo\1bar`, []string{`foo\1bar`}},
+		{"backslash escapes space", `foo\ bar`, []string{`foo bar`}},
+		{"backslash escapes quote", `foo\"bar`, []string{`foo"bar`}},
+		{"backslash escapes backslash", `foo\\bar`, []string{`foo\bar`}},
+		{"backslash escapes dollar", `foo\$bar`, []string{`foo$bar`}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, Editor{}.tokenize(tc.in))
+		})
+	}
+}
+
 func TestEditor_writeTempFile_WritesContent(t *testing.T) {
 	path, err := Editor{}.writeTempFile("hello world")
 	require.NoError(t, err)

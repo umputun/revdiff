@@ -13,6 +13,7 @@ package ui
 
 import (
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -418,6 +419,19 @@ type ModelConfig struct {
 // NewModel creates a new Model from the given configuration. All dependencies
 // must be provided by the caller — there is no fallback construction.
 // Returns an error if any required dependency is missing from the config.
+// isNilValue reports whether v is a typed-nil interface value (e.g. a (*T)(nil)
+// wrapped in an interface). Used to guard interface fields where "nil means
+// default" must survive a caller passing a typed-nil pointer.
+func isNilValue(v any) bool {
+	rv := reflect.ValueOf(v)
+	k := rv.Kind()
+	if k == reflect.Ptr || k == reflect.Interface || k == reflect.Chan ||
+		k == reflect.Func || k == reflect.Map || k == reflect.Slice {
+		return rv.IsNil()
+	}
+	return false
+}
+
 func NewModel(cfg ModelConfig) (Model, error) {
 	if cfg.Renderer == nil {
 		return Model{}, errors.New("ui.NewModel: cfg.Renderer is required")
@@ -463,7 +477,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		km = keymap.Default()
 	}
 	ed := cfg.Editor
-	if ed == nil {
+	if ed == nil || isNilValue(ed) {
 		ed = editor.Editor{}
 	}
 

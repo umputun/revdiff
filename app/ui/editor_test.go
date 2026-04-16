@@ -8,7 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/overlay"
+	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // fakeExternalEditor captures the content passed to Command and returns a
@@ -101,6 +106,54 @@ func TestOpenEditor_LineLevelReturnsNilWhenNoCursorLine(t *testing.T) {
 	assert.Zero(t, fake.commandCallCnt, "editor.Command must NOT be invoked when no cursor line exists")
 	assert.True(t, m.annot.annotating, "annotating must remain true so the user can Esc out normally")
 	assert.False(t, m.annot.fileAnnotating, "fileAnnotating state must not be flipped by this no-op path")
+}
+
+// nilFakeEditor is a pointer type used to construct a typed-nil interface
+// value. Its Command method is never actually invoked if the nil-guard works.
+type nilFakeEditor struct{}
+
+func (*nilFakeEditor) Command(string) (*exec.Cmd, func(error) (string, error), error) {
+	panic("Command should never be called on typed-nil — nil-guard in NewModel should replace it")
+}
+
+func TestIsNilValue(t *testing.T) {
+	var typedNil *nilFakeEditor
+	var untypedNil ExternalEditor
+	assert.True(t, isNilValue(typedNil), "typed-nil pointer must be detected")
+	assert.False(t, isNilValue(untypedNil), "untyped-nil interface is handled by the != nil check, not isNilValue")
+	assert.False(t, isNilValue(42), "non-pointer value is not nil")
+	assert.False(t, isNilValue(&nilFakeEditor{}), "non-nil pointer is not nil")
+}
+
+func TestNewModel_TypedNilEditorDefaultsToConcrete(t *testing.T) {
+	// passing (*nilFakeEditor)(nil) as Editor would normally bypass a plain
+	// `cfg.Editor == nil` check and panic on later use. Verify the isNilValue
+	// guard in NewModel replaces it with the default editor.Editor{}.
+	var typedNil *nilFakeEditor
+	res := style.PlainResolver()
+	m, err := NewModel(ModelConfig{
+		Renderer:       &mocks.RendererMock{},
+		Store:          annotation.NewStore(),
+		Highlighter:    noopHighlighter(),
+		StyleResolver:  res,
+		StyleRenderer:  style.NewRenderer(res),
+		SGR:            style.SGR{},
+		WordDiffer:     worddiff.New(),
+		Overlay:        overlay.NewManager(),
+		Themes:         fakeThemeCatalog{},
+		TreeWidthRatio: 3,
+		NewFileTree:    testFileTreeFactory(),
+		ParseTOC:       testParseTOCFactory(),
+		Editor:         typedNil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, m.editor, "editor must not be a typed-nil interface")
+	// prove Command is callable (would panic on typed-nil route)
+	t.Setenv("EDITOR", "/bin/true")
+	cmd, complete, err := m.editor.Command("seed")
+	require.NoError(t, err)
+	require.NotNil(t, cmd)
+	_, _ = complete(nil)
 }
 
 func TestOpenEditor_CommandErrorProducesEditorFinishedMsg(t *testing.T) {

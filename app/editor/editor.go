@@ -56,12 +56,23 @@ func (e Editor) resolve() []string {
 	return []string{"vi"}
 }
 
+// shellMetaChars are the runes whose shell significance backslash can escape
+// outside quotes (POSIX-style). Other characters — notably Windows-style path
+// separators in `C:\foo` — preserve the backslash literally.
+var shellMetaChars = map[rune]bool{
+	' ': true, '\t': true, '\n': true,
+	'\'': true, '"': true, '\\': true, '$': true, '`': true,
+}
+
 // tokenize splits s into shell-style tokens honoring single and double quotes
-// and backslash escapes. Unterminated quotes are treated as literal from the
-// opening quote to end-of-string so a misquoted $EDITOR never drops user input.
-// Not a full shell parser — variable expansion, subshells, and redirection are
-// not interpreted; those are caller-supplied values handled by exec directly.
-func (Editor) tokenize(s string) []string {
+// and backslash escapes. Outside quotes, backslash only escapes shell-meta
+// characters — other characters preserve the backslash intact so paths like
+// `C:\Program Files` survive. Unterminated quotes are treated as literal from
+// the opening quote to end-of-string so a misquoted $EDITOR never drops user
+// input. Not a full shell parser — variable expansion, subshells, and
+// redirection are not interpreted; those are caller-supplied values handled
+// by exec directly.
+func (e Editor) tokenize(s string) []string {
 	var tokens []string
 	var cur strings.Builder
 	inSingle, inDouble, hasToken := false, false, false
@@ -75,50 +86,65 @@ func (Editor) tokenize(s string) []string {
 	runes := []rune(s)
 	for i := 0; i < len(runes); i++ {
 		r := runes[i]
-		switch {
-		case inSingle:
-			if r == '\'' {
-				inSingle = false
-				continue
-			}
-			cur.WriteRune(r)
-			hasToken = true
-		case inDouble:
-			if r == '"' {
-				inDouble = false
-				continue
-			}
-			if r == '\\' && i+1 < len(runes) {
-				next := runes[i+1]
-				// inside double quotes, backslash only escapes a limited set
-				if next == '"' || next == '\\' || next == '$' || next == '`' {
-					cur.WriteRune(next)
-					hasToken = true
-					i++
-					continue
-				}
-			}
-			cur.WriteRune(r)
-			hasToken = true
-		case r == '\'':
-			inSingle = true
-			hasToken = true
-		case r == '"':
-			inDouble = true
-			hasToken = true
-		case r == '\\' && i+1 < len(runes):
-			cur.WriteRune(runes[i+1])
-			hasToken = true
-			i++
-		case r == ' ' || r == '\t' || r == '\n':
+		consumed, open := e.tokenizeStep(runes, i, r, &cur, &hasToken, inSingle, inDouble)
+		i += consumed
+		inSingle, inDouble = open.single, open.double
+		if open.flush {
 			flush()
-		default:
-			cur.WriteRune(r)
-			hasToken = true
 		}
 	}
 	flush()
 	return tokens
+}
+
+type quoteState struct {
+	single, double, flush bool
+}
+
+// tokenizeStep processes one input rune. Returns the additional runes consumed
+// (for escape sequences) and the updated quote state plus a flush signal.
+func (Editor) tokenizeStep(runes []rune, i int, r rune, cur *strings.Builder, hasToken *bool, inSingle, inDouble bool) (int, quoteState) {
+	state := quoteState{single: inSingle, double: inDouble}
+	switch {
+	case inSingle:
+		if r == '\'' {
+			state.single = false
+			return 0, state
+		}
+		cur.WriteRune(r)
+		*hasToken = true
+	case inDouble:
+		if r == '"' {
+			state.double = false
+			return 0, state
+		}
+		if r == '\\' && i+1 < len(runes) {
+			next := runes[i+1]
+			if next == '"' || next == '\\' || next == '$' || next == '`' {
+				cur.WriteRune(next)
+				*hasToken = true
+				return 1, state
+			}
+		}
+		cur.WriteRune(r)
+		*hasToken = true
+	case r == '\'':
+		state.single = true
+		*hasToken = true
+	case r == '"':
+		state.double = true
+		*hasToken = true
+	case r == '\\' && i+1 < len(runes) && shellMetaChars[runes[i+1]]:
+		cur.WriteRune(runes[i+1])
+		*hasToken = true
+		return 1, state
+	case r == ' ' || r == '\t' || r == '\n':
+		state.flush = true
+	default:
+		cur.WriteRune(r)
+		*hasToken = true
+	}
+	return 0, state
 }
 
 // writeTempFile creates a new temp file with a .md suffix and writes content
