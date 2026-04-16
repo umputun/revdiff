@@ -159,15 +159,15 @@ Returning `[]string` handles `EDITOR="code --wait"` — the caller uses `exec.Co
 - Create: `app/ui/editor.go` (new — keeps `annotate.go` focused on input lifecycle)
 - Create: `app/ui/editor_test.go`
 
-- [ ] define `editorFinishedMsg` struct (fields: `content string`, `err error`, `tempPath string`, `fileLevel bool`, `line int`, `changeType string`)
-- [ ] add unexported `resolveEditor() []string` helper: reads `EDITOR`, falls back to `VISUAL`, falls back to `[]string{"vi"}`; splits on `strings.Fields` so `"code --wait"` works
-- [ ] add unexported `writeAnnotTempFile(content string) (string, error)` helper: `os.CreateTemp("", "revdiff-annot-*.md")`, writes `content`, returns path
-- [ ] extract the callback body as an unexported standalone function: `readEditorResult(tempPath string, fileLevel bool, line int, changeType string, runErr error) editorFinishedMsg` — reads the file, deletes it regardless of errors, returns a fully-populated `editorFinishedMsg`. This is directly testable without `tea.ExecProcess`.
-- [ ] add `(m *Model) openEditor() tea.Cmd` method: captures current `m.annot.input.Value()`, `m.annot.fileAnnotating`, target line/type; writes temp file; returns `tea.ExecProcess(exec.Command(editor[0], append(editor[1:], tempPath)...), adapter)` where `adapter` is a one-line closure over the captured context that calls `readEditorResult(tempPath, fileLevel, line, changeType, err)`
-- [ ] write tests for `resolveEditor` using `t.Setenv` covering all three paths (EDITOR set, VISUAL fallback, vi default); also covers whitespace splitting
-- [ ] write tests for `writeAnnotTempFile`: returns readable file with exact content; cleanup via `os.Remove` works; empty content is still written
-- [ ] write tests for `readEditorResult` directly (no `tea.ExecProcess`): pre-existing temp file with content → msg has expected content + no err, file is removed; `runErr` non-nil → msg has err, file is still removed; missing temp file → msg carries read error but does not panic
-- [ ] run `go test ./app/ui/...` — must pass before Task 3
+- [x] define `editorFinishedMsg` struct (fields: `content string`, `err error`, `tempPath string`, `fileLevel bool`, `line int`, `changeType string`)
+- [x] add unexported `resolveEditor() []string` helper: reads `EDITOR`, falls back to `VISUAL`, falls back to `[]string{"vi"}`; splits on `strings.Fields` so `"code --wait"` works
+- [x] add unexported `writeAnnotTempFile(content string) (string, error)` helper: `os.CreateTemp("", "revdiff-annot-*.md")`, writes `content`, returns path
+- [x] extract the callback body as an unexported standalone function: `readEditorResult(tempPath string, fileLevel bool, line int, changeType string, runErr error) editorFinishedMsg` — reads the file, deletes it regardless of errors, returns a fully-populated `editorFinishedMsg`. This is directly testable without `tea.ExecProcess`.
+- [x] add `(m *Model) openEditor() tea.Cmd` method: captures current `m.annot.input.Value()`, `m.annot.fileAnnotating`, target line/type; writes temp file; returns `tea.ExecProcess(exec.Command(editor[0], append(editor[1:], tempPath)...), adapter)` where `adapter` is a one-line closure over the captured context that calls `readEditorResult(tempPath, fileLevel, line, changeType, err)`
+- [x] write tests for `resolveEditor` using `t.Setenv` covering all three paths (EDITOR set, VISUAL fallback, vi default); also covers whitespace splitting
+- [x] write tests for `writeAnnotTempFile`: returns readable file with exact content; cleanup via `os.Remove` works; empty content is still written
+- [x] write tests for `readEditorResult` directly (no `tea.ExecProcess`): pre-existing temp file with content → msg has expected content + no err, file is removed; `runErr` non-nil → msg has err, file is still removed; missing temp file → msg carries read error but does not panic
+- [x] run `go test ./app/ui/...` — must pass before Task 3
 
 ### Task 3: Wire `Ctrl+E` into annotation input flow
 

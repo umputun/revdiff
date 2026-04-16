@@ -24,6 +24,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/editor"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -292,7 +293,8 @@ type Model struct {
 	store        *annotation.Store
 	diffRenderer Renderer
 	keymap       *keymap.Keymap
-	themes       ThemeCatalog // theme catalog for discovery, resolve, and persistence
+	themes       ThemeCatalog   // theme catalog for discovery, resolve, and persistence
+	editor       ExternalEditor // launches $EDITOR for multi-line annotation editing
 
 	// grouped state
 	cfg    modelConfigState // immutable session config
@@ -385,6 +387,7 @@ type ModelConfig struct {
 	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
 	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
+	Editor        ExternalEditor           // external-editor driver (nil uses app/editor.Editor{})
 
 	// --- Configuration values ---
 	Ref              string
@@ -452,6 +455,10 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if km == nil {
 		km = keymap.Default()
 	}
+	ed := cfg.Editor
+	if ed == nil {
+		ed = editor.Editor{}
+	}
 
 	return Model{
 		resolver:     cfg.StyleResolver,
@@ -467,6 +474,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		tree:         cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
 		parseTOC:     cfg.ParseTOC,
 		themes:       cfg.Themes,
+		editor:       ed,
 		cfg: modelConfigState{
 			ref:              cfg.Ref,
 			staged:           cfg.Staged,
