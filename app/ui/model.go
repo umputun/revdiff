@@ -534,6 +534,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
 		return m.handleBlameLoaded(msg)
+	case editorFinishedMsg:
+		return m.handleEditorFinished(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)

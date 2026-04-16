@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"log"
 	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -66,4 +67,23 @@ func (m *Model) openEditor() tea.Cmd {
 			changeType: changeType,
 		}
 	})
+}
+
+// handleEditorFinished processes the result of an external editor session.
+// On success with non-empty content, the captured target fields drive
+// saveComment — this bypasses the single-line textinput so embedded newlines
+// survive. Empty content routes through cancelAnnotation, preserving any
+// pre-existing annotation on that line. On editor error, the annotation mode
+// is left open with the prior input value untouched so the user can retry.
+func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		log.Printf("[WARN] external editor failed: %v", msg.err)
+		return m, nil
+	}
+	if msg.content == "" {
+		m.cancelAnnotation()
+		return m, nil
+	}
+	m.saveComment(msg.content, msg.fileLevel, msg.line, msg.changeType)
+	return m, nil
 }

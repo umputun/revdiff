@@ -1807,3 +1807,183 @@ func TestModel_WrappedAnnotationLineCount_MultiLine(t *testing.T) {
 		assert.Equal(t, 1, m.wrappedAnnotationLineCount(m.annotationKey(42, "+")))
 	})
 }
+
+func TestModel_AnnotateCtrlEOpensEditor(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 1
+
+	fake := &fakeExternalEditor{}
+	m.editor = fake
+
+	m.startAnnotation()
+	m.annot.input.SetValue("seeded text")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := result.(Model)
+	require.NotNil(t, cmd, "Ctrl+E should return a tea.Cmd for ExecProcess")
+	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command should be called once")
+	assert.Equal(t, "seeded text", fake.seenContent, "editor must receive current input value")
+	assert.True(t, model.annot.annotating, "annotation mode should remain active so editorFinishedMsg routes back correctly")
+}
+
+func TestModel_EditorFinishedSavesMultiLineContent(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 2
+
+	m.startAnnotation()
+	m.annot.input.SetValue("stale")
+
+	msg := editorFinishedMsg{content: "line1\nline2\nline3", fileLevel: false, line: 3, changeType: "+"}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "multi-line content should be saved as a single annotation")
+	assert.Equal(t, "line1\nline2\nline3", anns[0].Comment, "embedded newlines must be preserved")
+	assert.Equal(t, 3, anns[0].Line)
+	assert.Equal(t, "+", anns[0].Type)
+	assert.False(t, model.annot.annotating, "annotation mode should be cleared after successful save")
+}
+
+func TestModel_EditorFinishedErrorPreservesState(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.startAnnotation()
+	m.annot.input.SetValue("in-progress note")
+
+	msg := editorFinishedMsg{err: errors.New("editor exit 1"), fileLevel: false, line: 1, changeType: "+"}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	assert.Empty(t, model.store.Get("a.go"), "editor error must not touch the store")
+	assert.True(t, model.annot.annotating, "annotation mode should stay open so user can retry or Esc")
+	assert.Equal(t, "in-progress note", model.annot.input.Value(), "input value should be preserved on editor error")
+}
+
+func TestModel_EditorFinishedEmptyContentPreservesExistingAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 2
+
+	// pre-existing annotation on the target line
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: "+", Comment: "old comment"})
+
+	m.startAnnotation()
+
+	msg := editorFinishedMsg{content: "", fileLevel: false, line: 3, changeType: "+"}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "existing annotation must remain in the store")
+	assert.Equal(t, "old comment", anns[0].Comment, "empty editor result must not overwrite or delete the existing annotation")
+	assert.False(t, model.annot.annotating, "annotation mode should be cleared after cancel")
+}
+
+func TestModel_EditorFinishedFileLevelSavesMultiLine(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+
+	// start file-level annotation so saveComment's fileLevel branch is exercised
+	m.startFileAnnotation()
+
+	msg := editorFinishedMsg{content: "note1\nnote2", fileLevel: true, line: 0, changeType: ""}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 0, anns[0].Line, "file-level annotation stored on Line=0")
+	assert.Equal(t, "note1\nnote2", anns[0].Comment)
+	assert.False(t, model.annot.annotating)
+	assert.False(t, model.annot.fileAnnotating)
+}
+
+func TestModel_EditorFinishedHunkKeywordSetsEndLine(t *testing.T) {
+	// verifies saveComment re-derives the hunk index from (line, changeType)
+	// so hunk range expansion still works even though the editor path no
+	// longer references m.nav.diffCursor.
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx before", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "new line", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "added line", ChangeType: diff.ChangeAdd},
+		{OldNum: 2, NewNum: 4, Content: "ctx after", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 1
+	m.startAnnotation()
+
+	// simulate cursor drifting during editor session
+	m.nav.diffCursor = 0
+
+	msg := editorFinishedMsg{content: "rewrite this hunk", fileLevel: false, line: 2, changeType: "+"}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, 2, anns[0].Line)
+	assert.Equal(t, 3, anns[0].EndLine, "hunk-end detection must resolve from (line, type) not cursor")
+}
+
+func TestModel_AnnotationPlaceholderMentionsEditor(t *testing.T) {
+	// placeholder is an affordance surfacing Ctrl+E binding without a help overlay.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.startAnnotation()
+	assert.Contains(t, m.annot.input.Placeholder, "Ctrl+E", "line-level placeholder must mention Ctrl+E")
+
+	m2 := testModel([]string{"a.go"}, nil)
+	m2.tree = testNewFileTree([]string{"a.go"})
+	m2.layout.focus = paneDiff
+	m2.file.name = "a.go"
+	m2.startFileAnnotation()
+	assert.Contains(t, m2.annot.input.Placeholder, "Ctrl+E", "file-level placeholder must mention Ctrl+E")
+}

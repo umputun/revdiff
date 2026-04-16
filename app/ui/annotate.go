@@ -64,7 +64,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti, cmd := m.newAnnotationInput("annotation...", 6) // cursor col + emoji prefix "💬 " + border margin
+	ti, cmd := m.newAnnotationInput("annotation... (Ctrl+E for editor)", 6) // cursor col + emoji prefix "💬 " + border margin
 
 	// pre-fill with existing annotation if one exists
 	lineNum := m.diffLineNum(dl)
@@ -109,7 +109,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		return nil
 	}
 
-	ti, cmd := m.newAnnotationInput("file-level annotation...", 12) // cursor col + "💬 file: " prefix + border margin
+	ti, cmd := m.newAnnotationInput("file-level annotation... (Ctrl+E for editor)", 12) // cursor col + "💬 file: " prefix + border margin
 
 	// pre-fill with existing file-level annotation if one exists
 	for _, a := range m.store.Get(m.file.name) {
@@ -128,6 +128,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 }
 
 // saveAnnotation saves the current text input as an annotation on the cursor line.
+// Thin wrapper around saveComment that reads model state for the current target.
 func (m *Model) saveAnnotation() {
 	text := m.annot.input.Value()
 	if text == "" {
@@ -136,6 +137,31 @@ func (m *Model) saveAnnotation() {
 	}
 
 	if m.annot.fileAnnotating {
+		m.saveComment(text, true, 0, "")
+		return
+	}
+
+	dl, ok := m.cursorDiffLine()
+	if !ok {
+		m.cancelAnnotation()
+		return
+	}
+	m.saveComment(text, false, m.diffLineNum(dl), string(dl.ChangeType))
+}
+
+// saveComment persists the annotation text for the explicitly provided target.
+// Target fields are taken as arguments (not read from model state) so the
+// Enter-key path and the editor-finished path can both use it without
+// temporal coupling on cursor position. Hunk-end detection for line-level
+// saves re-derives the diffLines index from the (line, changeType) pair so
+// cursor movement during an external editor session does not skew the range.
+func (m *Model) saveComment(text string, fileLevel bool, line int, changeType string) {
+	if text == "" {
+		m.cancelAnnotation()
+		return
+	}
+
+	if fileLevel {
 		m.store.Add(annotation.Annotation{File: m.file.name, Line: 0, Type: "", Comment: text})
 		m.annot.annotating = false
 		m.annot.fileAnnotating = false
@@ -146,23 +172,34 @@ func (m *Model) saveAnnotation() {
 		return
 	}
 
-	dl, ok := m.cursorDiffLine()
-	if !ok {
-		m.cancelAnnotation()
-		return
-	}
-
-	lineNum := m.diffLineNum(dl)
-	a := annotation.Annotation{File: m.file.name, Line: lineNum, Type: string(dl.ChangeType), Comment: text}
+	a := annotation.Annotation{File: m.file.name, Line: line, Type: changeType, Comment: text}
 	if hunkKeywordRe.MatchString(text) {
-		if endLine := m.hunkEndLine(m.nav.diffCursor); endLine > lineNum {
-			a.EndLine = endLine
+		if idx := m.findLineIndex(line, changeType); idx >= 0 {
+			if endLine := m.hunkEndLine(idx); endLine > line {
+				a.EndLine = endLine
+			}
 		}
 	}
 	m.store.Add(a)
 	m.annot.annotating = false
 	m.tree.RefreshFilter(m.annotatedFiles())
 	m.layout.viewport.SetContent(m.renderDiff())
+}
+
+// findLineIndex returns the index in m.file.lines matching the given display
+// line number and change type. Returns -1 when not found. Used to re-derive
+// the diff-line index after the cursor may have moved (e.g. while the
+// external editor was active).
+func (m Model) findLineIndex(line int, changeType string) int {
+	for i, dl := range m.file.lines {
+		if string(dl.ChangeType) != changeType {
+			continue
+		}
+		if m.diffLineNum(dl) == line {
+			return i
+		}
+	}
+	return -1
 }
 
 // cancelAnnotation exits annotation input mode without saving.
@@ -237,6 +274,11 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.cancelAnnotation()
 		return m, nil
+	case tea.KeyCtrlE:
+		// hand off to $EDITOR for multi-line annotation input.
+		// keep annotating=true so editorFinishedMsg routes back through the annotation flow.
+		cmd := m.openEditor()
+		return m, cmd
 	default:
 		var cmd tea.Cmd
 		m.annot.input, cmd = m.annot.input.Update(msg)
