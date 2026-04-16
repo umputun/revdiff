@@ -29,6 +29,11 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/fsutil/` - filesystem utilities
 - `app/ui/mocks/` - moq-generated mocks (never edit manually)
 
+## Architecture Principles
+- **Decouple OS/external concerns from UI**: OS-level work (exec.Command, os.CreateTemp, env lookup, network calls) does not belong in `app/ui/`, even for small helpers. Extract to a dedicated package (e.g. `app/editor/`) even when there's only one production caller. The cost of a new package is lower than keeping `app/ui/` entangled with OS boundaries.
+- **Minimize exported surface**: first pass of a new package almost always over-exports. Before finalizing, ask "which of these does the caller actually need?" and unexport the rest. For stateless helpers, prefer unexported methods on the grouping struct over top-level unexported functions — matches the global "prefer methods over standalone utilities" rule.
+- **Consumer-side interfaces for external deps**: when UI uses an external subsystem, the default shape is: interface in `app/ui/` (consumer side), concrete type in the subsystem package, injection via `ModelConfig` (nil defaults to concrete). Direct import of a concrete type from an external package into `app/ui` is a smell — the interface documents the dependency direction and leaves room for alternate implementations, not just test mocks.
+
 ## Config
 - Config file: `~/.config/revdiff/config` (INI format via go-flags IniParser)
 - Precedence: CLI flags > env vars > config file > built-in defaults
