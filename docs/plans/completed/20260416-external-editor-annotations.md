@@ -218,13 +218,13 @@ Returning `[]string` handles `EDITOR="code --wait"` — the caller uses `exec.Co
 
 ### Task 6: Acceptance verification
 
-- [ ] verify all requirements from Overview are implemented
-- [ ] verify edge cases: empty editor result = cancel; editor non-zero exit = log + keep input; pre-existing single-line-only annotations still render correctly
-- [ ] run full test suite: `make test`
-- [ ] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] run formatters: `~/.claude/format.sh`
-- [ ] manual smoke: build (`make build`), run against a real repo, annotate a line with `Ctrl+E`, save multi-line content, quit, verify output contains newlines and `##` delimiter works
-- [ ] move this plan to `docs/plans/completed/`
+- [x] verify all requirements from Overview are implemented
+- [x] verify edge cases: empty editor result = cancel; editor non-zero exit = log + keep input; pre-existing single-line-only annotations still render correctly
+- [x] run full test suite: `make test`
+- [x] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] run formatters: `~/.claude/format.sh`
+- [x] manual smoke (skipped - not automatable in this environment)
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
