@@ -418,20 +418,60 @@ func TestStore_FormatOutputMixedSingleAndMultiLine(t *testing.T) {
 
 func TestStore_FormatOutputMultiLineDelimiterIntegrity(t *testing.T) {
 	s := NewStore()
-	// a body that contains "##" at start of an embedded line should still parse:
-	// the delimiter is "## " at the start of a record, which only the formatter emits.
-	// the body is quoted verbatim; "##" inside is not a record boundary because we
-	// rely on the caller parsing on "\n## " (newline + ##) — but our smoke is that
-	// the formatter does not escape or reject the body, preserving content fidelity.
+	// body lines that start with "##" are prefixed with a single space on output
+	// so parsers splitting on "## " record headers cannot confuse them for a new record.
 	s.Add(Annotation{File: "handler.go", Line: 1, Type: "+", Comment: "normal\n## not a header\nmore"})
 	s.Add(Annotation{File: "handler.go", Line: 2, Type: "+", Comment: "next entry"})
 
 	out := s.FormatOutput()
-	// both entries should be present with their full bodies intact
-	assert.Contains(t, out, "## handler.go:1 (+)\nnormal\n## not a header\nmore\n")
+	// embedded "##" line must be space-prefixed so the line no longer looks like a record header
+	assert.Contains(t, out, "## handler.go:1 (+)\nnormal\n ## not a header\nmore\n")
 	assert.Contains(t, out, "## handler.go:2 (+)\nnext entry\n")
-	// the count of "## handler.go:" records should match actual record count
+	// the count of "## handler.go:" records must match actual record count (2, not 3)
 	assert.Equal(t, 2, strings.Count(out, "## handler.go:"))
+	// the escaped body line should never appear as a bare "## not a header" record header
+	assert.NotContains(t, out, "\n## not a header\n")
+}
+
+func TestStore_FormatOutputEscapesHeaderLinesAtStart(t *testing.T) {
+	s := NewStore()
+	// body starting with "##" (no leading newline) must be escaped on the first line too
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "## starts with hash\nsecond"})
+
+	out := s.FormatOutput()
+	assert.Contains(t, out, "## a.go:1 (+)\n ## starts with hash\nsecond\n", "first body line starting with ## must be space-prefixed")
+	assert.Equal(t, 1, strings.Count(out, "## a.go:"), "escaping must produce exactly one record header")
+}
+
+func TestStore_FormatOutputDoesNotEscapeNonHeaderHash(t *testing.T) {
+	s := NewStore()
+	// "## " mid-line or single "#" lines must not be touched
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "word ## mid\n# single hash\nok"})
+
+	out := s.FormatOutput()
+	assert.Contains(t, out, "word ## mid\n# single hash\nok\n", "non-leading ## and single # must be preserved verbatim")
+}
+
+func TestStore_FormatOutputDoesNotEscapeDeeperMarkdownHeaders(t *testing.T) {
+	s := NewStore()
+	// "### subheader" and deeper markdown heading forms must pass through
+	// unchanged — they cannot collide with the "## " record-header split marker.
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "### section\n#### deeper\nbody"})
+
+	out := s.FormatOutput()
+	assert.Contains(t, out, "### section\n#### deeper\nbody\n", "### and deeper markdown headers must not be space-prefixed")
+	assert.NotContains(t, out, " ### section", "### must not be escaped — only the record-header '## ' form")
+}
+
+func TestStore_FormatOutputEscapesOnlyRecordHeaderForm(t *testing.T) {
+	s := NewStore()
+	// body line "## file-looking-line" is the record-header form and MUST be escaped,
+	// while "###" lines must pass through.
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "## file-looking-line\n### subheader\n"})
+
+	out := s.FormatOutput()
+	assert.Contains(t, out, " ## file-looking-line", "record-header '## ' form must be space-prefixed")
+	assert.Contains(t, out, "### subheader", "### subheader must pass through unchanged")
 }
 
 func TestStore_Count(t *testing.T) {

@@ -182,6 +182,8 @@ Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added
 
 When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 
+Comment body lines starting with `## ` (the record-header form) are prefixed with a single space on output so parsers that split on `## ` record headers cannot confuse a multi-line comment for a new record.
+
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
 
 ## Review History

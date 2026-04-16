@@ -39,15 +39,86 @@ func (e Editor) Command(content string) (*exec.Cmd, func(error) (string, error),
 }
 
 // resolve returns the editor command and its arguments. Lookup order is
-// $EDITOR → $VISUAL → "vi". Split on whitespace so values like "code --wait"
-// work as expected.
-func (Editor) resolve() []string {
+// $EDITOR → $VISUAL → "vi". Tokenization respects POSIX-style quoting so
+// values like `code --wait`, `"/Applications/My Editor.app/Contents/MacOS/Edit" --wait`,
+// or `sh -c 'vim "$@"' --` work as expected. Falls back to whitespace splitting
+// when the input contains no quote characters.
+func (e Editor) resolve() []string {
 	for _, env := range []string{"EDITOR", "VISUAL"} {
-		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
-			return strings.Fields(v)
+		v := strings.TrimSpace(os.Getenv(env))
+		if v == "" {
+			continue
+		}
+		if tokens := e.tokenize(v); len(tokens) > 0 {
+			return tokens
 		}
 	}
 	return []string{"vi"}
+}
+
+// tokenize splits s into shell-style tokens honoring single and double quotes
+// and backslash escapes. Unterminated quotes are treated as literal from the
+// opening quote to end-of-string so a misquoted $EDITOR never drops user input.
+// Not a full shell parser — variable expansion, subshells, and redirection are
+// not interpreted; those are caller-supplied values handled by exec directly.
+func (Editor) tokenize(s string) []string {
+	var tokens []string
+	var cur strings.Builder
+	inSingle, inDouble, hasToken := false, false, false
+	flush := func() {
+		if hasToken {
+			tokens = append(tokens, cur.String())
+			cur.Reset()
+			hasToken = false
+		}
+	}
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch {
+		case inSingle:
+			if r == '\'' {
+				inSingle = false
+				continue
+			}
+			cur.WriteRune(r)
+			hasToken = true
+		case inDouble:
+			if r == '"' {
+				inDouble = false
+				continue
+			}
+			if r == '\\' && i+1 < len(runes) {
+				next := runes[i+1]
+				// inside double quotes, backslash only escapes a limited set
+				if next == '"' || next == '\\' || next == '$' || next == '`' {
+					cur.WriteRune(next)
+					hasToken = true
+					i++
+					continue
+				}
+			}
+			cur.WriteRune(r)
+			hasToken = true
+		case r == '\'':
+			inSingle = true
+			hasToken = true
+		case r == '"':
+			inDouble = true
+			hasToken = true
+		case r == '\\' && i+1 < len(runes):
+			cur.WriteRune(runes[i+1])
+			hasToken = true
+			i++
+		case r == ' ' || r == '\t' || r == '\n':
+			flush()
+		default:
+			cur.WriteRune(r)
+			hasToken = true
+		}
+	}
+	flush()
+	return tokens
 }
 
 // writeTempFile creates a new temp file with a .md suffix and writes content

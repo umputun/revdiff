@@ -1820,7 +1820,7 @@ func TestModel_AnnotateCtrlEOpensEditor(t *testing.T) {
 	m.file.lines = lines
 	m.nav.diffCursor = 1
 
-	fake := &fakeExternalEditor{}
+	fake := &fakeExternalEditor{content: "edited result"}
 	m.editor = fake
 
 	m.startAnnotation()
@@ -1832,6 +1832,35 @@ func TestModel_AnnotateCtrlEOpensEditor(t *testing.T) {
 	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command should be called once")
 	assert.Equal(t, "seeded text", fake.seenContent, "editor must receive current input value")
 	assert.True(t, model.annot.annotating, "annotation mode should remain active so editorFinishedMsg routes back correctly")
+
+	// tea.ExecProcess wraps the cmd so that when invoked outside the runtime the
+	// returned msg is nil; the assertions above exercise the synchronous
+	// spawn-time contract. editorFinishedMsg delivery is covered by
+	// TestModel_EditorFinishedSavesMultiLineContent which feeds the msg directly.
+}
+
+func TestModel_AnnotateCtrlEOpensEditorFileLevel(t *testing.T) {
+	// mirrors TestModel_AnnotateCtrlEOpensEditor but starts from the file-level
+	// annotation entry point — asserts Ctrl+E also dispatches the editor on
+	// startFileAnnotation() flow.
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+
+	fake := &fakeExternalEditor{content: "edited file note"}
+	m.editor = fake
+
+	m.startFileAnnotation()
+	m.annot.input.SetValue("file seed")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := result.(Model)
+	require.NotNil(t, cmd, "Ctrl+E should return a tea.Cmd for ExecProcess on file-level path")
+	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command should be called once on file-level path")
+	assert.Equal(t, "file seed", fake.seenContent, "editor must receive current file-level input value")
+	assert.True(t, model.annot.annotating, "annotation mode should remain active so editorFinishedMsg routes back correctly")
+	assert.True(t, model.annot.fileAnnotating, "fileAnnotating must remain true so editor result targets file-level save")
 }
 
 func TestModel_EditorFinishedSavesMultiLineContent(t *testing.T) {
@@ -1850,7 +1879,7 @@ func TestModel_EditorFinishedSavesMultiLineContent(t *testing.T) {
 	m.startAnnotation()
 	m.annot.input.SetValue("stale")
 
-	msg := editorFinishedMsg{content: "line1\nline2\nline3", fileLevel: false, line: 3, changeType: "+"}
+	msg := editorFinishedMsg{content: "line1\nline2\nline3", fileName: "a.go", fileLevel: false, line: 3, changeType: "+"}
 	result, _ := m.Update(msg)
 	model := result.(Model)
 
@@ -1876,13 +1905,82 @@ func TestModel_EditorFinishedErrorPreservesState(t *testing.T) {
 	m.startAnnotation()
 	m.annot.input.SetValue("in-progress note")
 
-	msg := editorFinishedMsg{err: errors.New("editor exit 1"), fileLevel: false, line: 1, changeType: "+"}
+	msg := editorFinishedMsg{err: errors.New("editor exit 1"), fileName: "a.go", fileLevel: false, line: 1, changeType: "+"}
 	result, _ := m.Update(msg)
 	model := result.(Model)
 
 	assert.Empty(t, model.store.Get("a.go"), "editor error must not touch the store")
 	assert.True(t, model.annot.annotating, "annotation mode should stay open so user can retry or Esc")
 	assert.Equal(t, "in-progress note", model.annot.input.Value(), "input value should be preserved on editor error")
+
+	// feed a subsequent keystroke to prove annotation mode is fully live — not
+	// just value-aliased state. A default-branch key in handleAnnotateKey must
+	// append to the textinput, which would silently fail if the model weren't
+	// actually in annotation mode.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
+	model = result.(Model)
+	assert.Equal(t, "in-progress note!", model.annot.input.Value(), "annotation mode must accept typed keys after editor error path")
+}
+
+func TestModel_EditorFinishedErrorPreservesStateFileLevel(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+
+	m.startFileAnnotation()
+	m.annot.input.SetValue("file-level draft")
+
+	msg := editorFinishedMsg{err: errors.New("editor exit 1"), fileName: "a.go", fileLevel: true, line: 0, changeType: ""}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	assert.Empty(t, model.store.Get("a.go"), "editor error must not touch the store on file-level path")
+	assert.True(t, model.annot.annotating, "annotation mode should stay open so user can retry or Esc")
+	assert.True(t, model.annot.fileAnnotating, "fileAnnotating must remain true on error")
+	assert.Equal(t, "file-level draft", model.annot.input.Value(), "input value must be preserved on editor error")
+}
+
+func TestModel_EditorFinishedRetryAfterErrorReSeedsWithPreservedInput(t *testing.T) {
+	// after an editor error, pressing Ctrl+E again must re-seed the editor with
+	// the preserved input content so the user can resume without losing work.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	fake := &fakeExternalEditor{}
+	m.editor = fake
+
+	m.startAnnotation()
+	m.annot.input.SetValue("retry content")
+
+	// first Ctrl+E
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, 1, fake.commandCallCnt)
+	assert.Equal(t, "retry content", fake.seenContent)
+
+	// simulate editor failure
+	errMsg := editorFinishedMsg{err: errors.New("failed"), fileName: "a.go", fileLevel: false, line: 1, changeType: "+"}
+	result, _ = model.Update(errMsg)
+	model = result.(Model)
+	assert.True(t, model.annot.annotating, "annotating must remain true after error")
+	assert.Equal(t, "retry content", model.annot.input.Value(), "input preserved after error")
+
+	// second Ctrl+E — editor must be re-invoked with the preserved content
+	result, cmd2 := model.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model = result.(Model)
+	require.NotNil(t, cmd2)
+	assert.Equal(t, 2, fake.commandCallCnt, "editor must be invoked again on retry")
+	assert.Equal(t, "retry content", fake.seenContent, "retry must re-seed with preserved input content")
+	assert.True(t, model.annot.annotating)
 }
 
 func TestModel_EditorFinishedEmptyContentPreservesExistingAnnotation(t *testing.T) {
@@ -1903,7 +2001,7 @@ func TestModel_EditorFinishedEmptyContentPreservesExistingAnnotation(t *testing.
 
 	m.startAnnotation()
 
-	msg := editorFinishedMsg{content: "", fileLevel: false, line: 3, changeType: "+"}
+	msg := editorFinishedMsg{content: "", fileName: "a.go", fileLevel: false, line: 3, changeType: "+"}
 	result, _ := m.Update(msg)
 	model := result.(Model)
 
@@ -1911,6 +2009,7 @@ func TestModel_EditorFinishedEmptyContentPreservesExistingAnnotation(t *testing.
 	require.Len(t, anns, 1, "existing annotation must remain in the store")
 	assert.Equal(t, "old comment", anns[0].Comment, "empty editor result must not overwrite or delete the existing annotation")
 	assert.False(t, model.annot.annotating, "annotation mode should be cleared after cancel")
+	assert.False(t, model.annot.fileAnnotating, "fileAnnotating must also be cleared on cancel path")
 }
 
 func TestModel_EditorFinishedFileLevelSavesMultiLine(t *testing.T) {
@@ -1922,7 +2021,7 @@ func TestModel_EditorFinishedFileLevelSavesMultiLine(t *testing.T) {
 	// start file-level annotation so saveComment's fileLevel branch is exercised
 	m.startFileAnnotation()
 
-	msg := editorFinishedMsg{content: "note1\nnote2", fileLevel: true, line: 0, changeType: ""}
+	msg := editorFinishedMsg{content: "note1\nnote2", fileName: "a.go", fileLevel: true, line: 0, changeType: ""}
 	result, _ := m.Update(msg)
 	model := result.(Model)
 
@@ -1932,6 +2031,28 @@ func TestModel_EditorFinishedFileLevelSavesMultiLine(t *testing.T) {
 	assert.Equal(t, "note1\nnote2", anns[0].Comment)
 	assert.False(t, model.annot.annotating)
 	assert.False(t, model.annot.fileAnnotating)
+}
+
+func TestModel_EditorFinishedFileLevelEmptyContentPreservesExistingAnnotation(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+
+	// pre-existing file-level annotation the user is re-editing
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "original file note"})
+
+	m.startFileAnnotation()
+
+	msg := editorFinishedMsg{content: "", fileName: "a.go", fileLevel: true, line: 0, changeType: ""}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "pre-existing file-level annotation must survive empty editor result")
+	assert.Equal(t, "original file note", anns[0].Comment, "empty editor result must not overwrite existing file-level annotation")
+	assert.False(t, model.annot.annotating, "annotation mode cleared via cancelAnnotation")
+	assert.False(t, model.annot.fileAnnotating, "fileAnnotating cleared via cancelAnnotation")
 }
 
 func TestModel_EditorFinishedHunkKeywordSetsEndLine(t *testing.T) {
@@ -1955,7 +2076,7 @@ func TestModel_EditorFinishedHunkKeywordSetsEndLine(t *testing.T) {
 	// simulate cursor drifting during editor session
 	m.nav.diffCursor = 0
 
-	msg := editorFinishedMsg{content: "rewrite this hunk", fileLevel: false, line: 2, changeType: "+"}
+	msg := editorFinishedMsg{content: "rewrite this hunk", fileName: "a.go", fileLevel: false, line: 2, changeType: "+"}
 	result, _ := m.Update(msg)
 	model := result.(Model)
 
@@ -1963,6 +2084,206 @@ func TestModel_EditorFinishedHunkKeywordSetsEndLine(t *testing.T) {
 	require.Len(t, anns, 1)
 	assert.Equal(t, 2, anns[0].Line)
 	assert.Equal(t, 3, anns[0].EndLine, "hunk-end detection must resolve from (line, type) not cursor")
+	assert.False(t, model.annot.annotating, "annotation mode must be cleared after successful save via editor path")
+}
+
+func TestModel_ReAnnotateMultiLineKeepsInputEmptyAndStashesOriginal(t *testing.T) {
+	// re-annotating a line that already has a multi-line comment must NOT call
+	// ti.SetValue(comment) because textinput's sanitizer collapses \n to a
+	// single space — that would silently flatten user work on the first re-open
+	// and, if the user then hits Enter, overwrite the stored multi-line version.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "first line\nsecond line\nthird"})
+
+	m.startAnnotation()
+	assert.Empty(t, m.annot.input.Value(), "input must stay empty so the sanitizer cannot flatten \\n into space")
+	assert.Equal(t, "first line\nsecond line\nthird", m.annot.existingMultiline, "original multi-line content stashed verbatim")
+	assert.Contains(t, m.annot.input.Placeholder, "existing multi-line", "placeholder should hint that content is stored")
+
+	// Enter with empty input must not touch the stored annotation
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "first line\nsecond line\nthird", anns[0].Comment, "Enter on empty input must preserve existing multi-line annotation unchanged")
+	assert.False(t, model.annot.annotating, "annotation mode cleared")
+	assert.Empty(t, model.annot.existingMultiline, "existingMultiline cleared on annotation exit")
+}
+
+func TestModel_ReAnnotateMultiLineCtrlESeedsFromStash(t *testing.T) {
+	// Ctrl+E after re-opening a multi-line annotation must seed the editor
+	// with the full stored content, not the empty textinput value.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "top\nmiddle\nbottom"})
+
+	fake := &fakeExternalEditor{}
+	m.editor = fake
+
+	m.startAnnotation()
+	require.Empty(t, m.annot.input.Value())
+	require.Equal(t, "top\nmiddle\nbottom", m.annot.existingMultiline)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, 1, fake.commandCallCnt)
+	assert.Equal(t, "top\nmiddle\nbottom", fake.seenContent, "editor must be seeded from existingMultiline when input is empty")
+	assert.True(t, model.annot.annotating, "annotation mode remains open while editor runs")
+	assert.Equal(t, "top\nmiddle\nbottom", model.annot.existingMultiline, "stash preserved across Ctrl+E")
+}
+
+func TestModel_ReAnnotateMultiLineTypedOverwriteWins(t *testing.T) {
+	// if user re-opens multi-line and explicitly types a new value, that value
+	// overwrites the stored annotation (not silently blended with the original).
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "old\nmulti\nline"})
+
+	m.startAnnotation()
+	m.annot.input.SetValue("new one-liner")
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := result.(Model)
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "new one-liner", anns[0].Comment, "explicit typed value overwrites stored multi-line")
+	assert.Empty(t, model.annot.existingMultiline, "existingMultiline cleared after save")
+}
+
+func TestModel_ReAnnotateSingleLinePreFillsAsBefore(t *testing.T) {
+	// single-line existing annotations keep the pre-fill-via-SetValue path —
+	// only multi-line comments go through the stash workaround.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "plain note"})
+
+	m.startAnnotation()
+	assert.Equal(t, "plain note", m.annot.input.Value(), "single-line annotation still pre-fills the textinput")
+	assert.Empty(t, m.annot.existingMultiline, "single-line path does not populate existingMultiline")
+	assert.Contains(t, m.annot.input.Placeholder, "Ctrl+E", "placeholder unchanged for single-line re-annotation")
+}
+
+func TestModel_ReAnnotateFileLevelMultiLineStashedNotFlattened(t *testing.T) {
+	// file-level path has the same sanitizer hazard as line-level; verify it
+	// also stashes multi-line content instead of flattening via SetValue.
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file\nnote\nspans"})
+
+	m.startFileAnnotation()
+	assert.Empty(t, m.annot.input.Value(), "file-level input empty when existing is multi-line")
+	assert.Equal(t, "file\nnote\nspans", m.annot.existingMultiline, "file-level stash holds full content")
+
+	fake := &fakeExternalEditor{}
+	m.editor = fake
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, "file\nnote\nspans", fake.seenContent, "file-level Ctrl+E seeds from stash")
+
+	// Esc must clear the stash so it doesn't leak to a later annotation on a different line
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = result.(Model)
+	assert.False(t, model.annot.annotating)
+	assert.Empty(t, model.annot.existingMultiline, "Esc clears existingMultiline")
+}
+
+func TestModel_EditorFinishedErrorWithContentStillSavesRecoveredText(t *testing.T) {
+	// readResult's documented contract: on soft editor error (tty restore,
+	// non-zero exit after save) content is populated alongside runErr so callers
+	// can preserve user work. handleEditorFinished must save that content and
+	// log the error rather than dropping the edited text.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.startAnnotation()
+	m.annot.input.SetValue("stale")
+
+	msg := editorFinishedMsg{
+		err: errors.New("tty restore failed"), content: "recovered\nmulti-line text", seed: "stale",
+		fileName: "a.go", fileLevel: false, line: 1, changeType: "+",
+	}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "content must be saved even though editor reported an error")
+	assert.Equal(t, "recovered\nmulti-line text", anns[0].Comment, "recovered content survives")
+	assert.Equal(t, 1, anns[0].Line)
+	assert.Equal(t, "+", anns[0].Type)
+	assert.False(t, model.annot.annotating, "annotation mode cleared after save")
+}
+
+func TestModel_EditorFinishedErrorWithSeedUnchangedDoesNotSave(t *testing.T) {
+	// launch-time failure scenario: editor binary missing / tty release failure /
+	// cmd.Run start error — temp file still contains the ORIGINAL seed content,
+	// readResult returns the seed verbatim alongside the error. handleEditorFinished
+	// must NOT treat this as "user edited to produce this content" — the user's
+	// intent was to keep editing the in-progress draft, not to commit the seed
+	// as a finished annotation.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.startAnnotation()
+	m.annot.input.SetValue("my rough note")
+
+	msg := editorFinishedMsg{
+		err:     errors.New("exec: \"no-such-editor\": executable file not found in $PATH"),
+		content: "my rough note", seed: "my rough note",
+		fileName: "a.go", fileLevel: false, line: 1, changeType: "+",
+	}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	assert.Empty(t, model.store.Get("a.go"), "seed-equals-content on error must NOT commit the seed as an annotation")
+	assert.True(t, model.annot.annotating, "annotation mode must stay open so user can retry or continue typing")
+	assert.Equal(t, "my rough note", model.annot.input.Value(), "input value must be preserved verbatim")
 }
 
 func TestModel_AnnotationPlaceholderMentionsEditor(t *testing.T) {

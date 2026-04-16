@@ -1126,3 +1126,28 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		assert.Contains(t, out, "bravo", "second logical line content present")
 	})
 }
+
+func TestModel_AnnotationContinuationIndent(t *testing.T) {
+	m := testModel(nil, nil)
+
+	tests := []struct {
+		name  string
+		first string
+		want  int // number of indent spaces
+	}{
+		{"line-level emoji prefix gets 3-space indent", "\U0001f4ac line note", 3},
+		{"file-level emoji prefix gets 9-space indent", "\U0001f4ac file: note", 9},
+		{"no emoji prefix yields no indent (default branch)", "plain text", 0},
+		{"empty string yields no indent (default branch)", "", 0},
+		{"lookalike prefix without emoji yields no indent", "file: note", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			indent := m.annotationContinuationIndent(tt.first)
+			assert.Len(t, indent, tt.want)
+			for _, r := range indent {
+				assert.Equal(t, ' ', r, "indent must be spaces only")
+			}
+		})
+	}
+}

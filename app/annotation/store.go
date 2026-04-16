@@ -110,6 +110,13 @@ func (s *Store) Files() []string {
 // FormatOutput produces the structured output format for stdout.
 // Files are sorted alphabetically, annotations within each file by line number.
 // Returns empty string if no annotations exist.
+//
+// Body lines that start with "## " (the record-header form) are prefixed with a
+// single space on output so parsers that split on "## " record headers cannot
+// mistake a comment line for a new record. The added space is cosmetic
+// (markdown renderers treat leading whitespace before a heading marker as
+// paragraph text) and preserves the original text when whitespace is trimmed
+// per line. Other markdown heading forms like "### subheader" are not escaped.
 func (s *Store) FormatOutput() string {
 	if len(s.annotations) == 0 {
 		return ""
@@ -126,15 +133,34 @@ func (s *Store) FormatOutput() string {
 				buf.WriteString("\n")
 			}
 			first = false
+			body := s.escapeHeaderLines(a.Comment)
 			switch {
 			case a.Line == 0:
-				fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, a.Comment)
+				fmt.Fprintf(&buf, "## %s (file-level)\n%s\n", a.File, body)
 			case a.EndLine > 0:
-				fmt.Fprintf(&buf, "## %s:%d-%d (%s)\n%s\n", a.File, a.Line, a.EndLine, a.Type, a.Comment)
+				fmt.Fprintf(&buf, "## %s:%d-%d (%s)\n%s\n", a.File, a.Line, a.EndLine, a.Type, body)
 			default:
-				fmt.Fprintf(&buf, "## %s:%d (%s)\n%s\n", a.File, a.Line, a.Type, a.Comment)
+				fmt.Fprintf(&buf, "## %s:%d (%s)\n%s\n", a.File, a.Line, a.Type, body)
 			}
 		}
 	}
 	return buf.String()
+}
+
+// escapeHeaderLines prefixes any body line that starts with "## " (the
+// record-header form) with a single space so parsers splitting on "## " record
+// headers cannot confuse a body line for a new record header. Other heading
+// forms like "### subheader" are not escaped since they cannot collide with
+// the record-header split marker.
+func (s *Store) escapeHeaderLines(body string) string {
+	if !strings.Contains(body, "## ") {
+		return body
+	}
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "## ") {
+			lines[i] = " " + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }

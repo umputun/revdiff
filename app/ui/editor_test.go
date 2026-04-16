@@ -81,7 +81,8 @@ func TestOpenEditor_FileLevelCapturesTarget(t *testing.T) {
 
 	editorCmd := m.openEditor()
 	require.NotNil(t, editorCmd)
-	assert.Equal(t, "file-level seed", fake.seenContent)
+	assert.Equal(t, 1, fake.commandCallCnt, "editor.Command must be invoked exactly once on file-level path")
+	assert.Equal(t, "file-level seed", fake.seenContent, "editor must receive the current input value")
 }
 
 func TestOpenEditor_LineLevelReturnsNilWhenNoCursorLine(t *testing.T) {
@@ -91,11 +92,15 @@ func TestOpenEditor_LineLevelReturnsNilWhenNoCursorLine(t *testing.T) {
 	m.file.name = "a.go"
 	// no lines loaded and diffCursor default 0 -> cursorDiffLine returns false
 
-	m.editor = &fakeExternalEditor{}
+	fake := &fakeExternalEditor{}
+	m.editor = fake
 	m.annot.annotating = true
 	m.annot.fileAnnotating = false
 
 	assert.Nil(t, m.openEditor(), "line-level openEditor must return nil when cursor has no diff line")
+	assert.Zero(t, fake.commandCallCnt, "editor.Command must NOT be invoked when no cursor line exists")
+	assert.True(t, m.annot.annotating, "annotating must remain true so the user can Esc out normally")
+	assert.False(t, m.annot.fileAnnotating, "fileAnnotating state must not be flipped by this no-op path")
 }
 
 func TestOpenEditor_CommandErrorProducesEditorFinishedMsg(t *testing.T) {
@@ -110,6 +115,7 @@ func TestOpenEditor_CommandErrorProducesEditorFinishedMsg(t *testing.T) {
 	cmdErr := errors.New("temp file unavailable")
 	m.editor = &fakeExternalEditor{commandErr: cmdErr}
 	m.startAnnotation()
+	m.annot.input.SetValue("in-progress note")
 
 	cmd := m.openEditor()
 	require.NotNil(t, cmd)
@@ -120,4 +126,12 @@ func TestOpenEditor_CommandErrorProducesEditorFinishedMsg(t *testing.T) {
 	assert.False(t, finished.fileLevel)
 	assert.Equal(t, 1, finished.line)
 	assert.Equal(t, "+", finished.changeType)
+
+	// round-trip the msg through Update so handleEditorFinished executes and we
+	// verify its contract: error path keeps annotation mode open with input intact.
+	result, _ := m.Update(finished)
+	model := result.(Model)
+	assert.True(t, model.annot.annotating, "annotation mode must stay open after editor error so user can retry")
+	assert.Equal(t, "in-progress note", model.annot.input.Value(), "input value must be preserved after error")
+	assert.Empty(t, model.store.Get("a.go"), "no annotation should be saved when editor errored")
 }

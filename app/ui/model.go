@@ -278,6 +278,13 @@ type annotationState struct {
 	fileAnnotating     bool            // true when annotating at file level (Line=0)
 	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
 	input              textinput.Model // text input for annotations
+	// existingMultiline holds the original multi-line comment of an annotation
+	// being re-edited. textinput's sanitizer collapses \n to space, so pre-filling
+	// via SetValue would silently flatten the stored content. When set, the
+	// textinput is left empty with a hint placeholder; Ctrl+E seeds the editor
+	// from this field, and Enter with empty input preserves the existing content
+	// unchanged. Cleared on every annotation-mode exit path.
+	existingMultiline string
 }
 
 // Model is the top-level bubbletea model for revdiff.

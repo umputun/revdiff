@@ -45,6 +45,44 @@ func TestEditor_resolve_SplitsOnMultipleSpaces(t *testing.T) {
 	assert.Equal(t, []string{"code", "--wait", "--reuse-window"}, Editor{}.resolve())
 }
 
+func TestEditor_resolve_HandlesQuotedPathWithSpaces(t *testing.T) {
+	t.Setenv("EDITOR", `"/Applications/My Editor.app/Contents/MacOS/edit" --wait`)
+	assert.Equal(t, []string{"/Applications/My Editor.app/Contents/MacOS/edit", "--wait"}, Editor{}.resolve())
+}
+
+func TestEditor_resolve_HandlesSingleQuotedArgs(t *testing.T) {
+	t.Setenv("EDITOR", `sh -c 'vim "$@"' --`)
+	assert.Equal(t, []string{"sh", "-c", `vim "$@"`, "--"}, Editor{}.resolve())
+}
+
+func TestEditor_resolve_HandlesEscapedSpaceInPath(t *testing.T) {
+	t.Setenv("EDITOR", `/Applications/My\ Editor/edit --wait`)
+	assert.Equal(t, []string{"/Applications/My Editor/edit", "--wait"}, Editor{}.resolve())
+}
+
+func TestEditor_resolve_UnterminatedQuoteKeepsRemainder(t *testing.T) {
+	// misquoted $EDITOR: unterminated double quote. tokenizer treats the rest as
+	// literal rather than silently dropping tokens, so exec produces a clear
+	// "no such file" error instead of a misleading parse outcome.
+	t.Setenv("EDITOR", `"/path/to/edit --wait`)
+	got := Editor{}.resolve()
+	assert.Equal(t, []string{"/path/to/edit --wait"}, got)
+}
+
+func TestEditor_tokenize_EmptyInput(t *testing.T) {
+	assert.Empty(t, Editor{}.tokenize(""))
+}
+
+func TestEditor_tokenize_PreservesEmptyQuotedArg(t *testing.T) {
+	// `cmd "" arg` is valid: the empty string is a positional argument.
+	assert.Equal(t, []string{"cmd", "", "arg"}, Editor{}.tokenize(`cmd "" arg`))
+}
+
+func TestEditor_tokenize_DoubleQuoteEscapes(t *testing.T) {
+	// inside double quotes, \" and \\ are the only escapes interpreted.
+	assert.Equal(t, []string{`a"b\c`}, Editor{}.tokenize(`"a\"b\\c"`))
+}
+
 func TestEditor_writeTempFile_WritesContent(t *testing.T) {
 	path, err := Editor{}.writeTempFile("hello world")
 	require.NoError(t, err)
@@ -90,6 +128,27 @@ func TestEditor_writeTempFile_UniquePaths(t *testing.T) {
 	assert.NotEqual(t, path1, path2)
 }
 
+func TestEditor_writeTempFile_CreateFailure(t *testing.T) {
+	// point TMPDIR at a path that cannot exist so CreateTemp fails.
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent", "subdir"))
+
+	path, err := Editor{}.writeTempFile("content")
+	require.Error(t, err, "CreateTemp must fail when TMPDIR points to a missing parent")
+	assert.Empty(t, path, "no path should be returned on create failure")
+	assert.Contains(t, err.Error(), "create temp file", "error should be wrapped with context")
+}
+
+func TestEditor_Command_TempFileCreateFailurePropagates(t *testing.T) {
+	// Command delegates to writeTempFile; verify the error path is surfaced rather than swallowed.
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "nonexistent", "subdir"))
+	t.Setenv("EDITOR", "/bin/true")
+
+	cmd, complete, err := Editor{}.Command("seed")
+	require.Error(t, err)
+	assert.Nil(t, cmd, "no cmd returned when temp file creation fails")
+	assert.Nil(t, complete, "no complete fn returned when temp file creation fails")
+}
+
 func TestEditor_readResult_Success(t *testing.T) {
 	path, err := Editor{}.writeTempFile("line1\nline2\n")
 	require.NoError(t, err)
@@ -117,6 +176,10 @@ func TestEditor_readResult_EmptyFile(t *testing.T) {
 }
 
 func TestEditor_readResult_PreservesRunErr(t *testing.T) {
+	// Documented contract: when runErr is non-nil, readResult surfaces runErr as
+	// the returned error AND returns any content read from the temp file so
+	// callers can preserve user work in the editorFinishedMsg payload. Losing
+	// content on a soft editor error would surprise users.
 	path, err := Editor{}.writeTempFile("unused content")
 	require.NoError(t, err)
 
@@ -124,7 +187,7 @@ func TestEditor_readResult_PreservesRunErr(t *testing.T) {
 	content, resultErr := Editor{}.readResult(path, runErr)
 
 	assert.Equal(t, runErr, resultErr, "runErr must be preserved even when file reads successfully")
-	assert.Equal(t, "unused content", content, "content should still be populated")
+	assert.Equal(t, "unused content", content, "documented contract: content is populated alongside runErr so callers can keep user work")
 
 	_, statErr := os.Stat(path)
 	assert.True(t, os.IsNotExist(statErr), "temp file must be removed even on runErr")

@@ -24,6 +24,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 │  app/diff/        — VCS detection + diff parsing    │
 │  app/highlight/   — chroma syntax coloring          │
 │  app/annotation/  — in-memory annotation store      │
+│  app/editor/      — external $EDITOR invocation     │
 │  app/keymap/      — configurable keybindings        │
 │  app/theme/       — Catalog-centric theme system    │
 │  app/history/     — review session auto-save        │
@@ -101,6 +102,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
 | `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic |
+| `editor.go` | `$EDITOR` handoff for multi-line annotations: `openEditor()` wraps `app/editor.Editor` in `tea.ExecProcess`, `editorFinishedMsg` dispatch, `handleEditorFinished` routing (save / cancel / error-preserve) |
 | `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `search.go` | Search input handling, match computation, navigation |
 
@@ -189,7 +191,16 @@ Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, n
 
 ### app/annotation/ — annotation store
 
-In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export.
+In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export. `FormatOutput` escapes body lines that start with `##` by prefixing a single space so downstream parsers cannot confuse a comment line for a new record header.
+
+### app/editor/ — external editor invocation
+
+Spawns the user's `$EDITOR` on a seeded temp file and reads the result back. TUI-agnostic — the caller wraps the returned `*exec.Cmd` with bubbletea's `tea.ExecProcess` (or runs it directly).
+
+Single stateless type `Editor` bundling all behavior as methods (no standalone functions):
+- `Command(content)` — writes content to a `revdiff-annot-*.md` temp file, resolves the editor (`$EDITOR` → `$VISUAL` → `vi`, whitespace-split so `code --wait` works), returns `*exec.Cmd` + a `complete(runErr) (string, error)` function. `complete` reads the file, removes it regardless of outcome, and preserves `runErr` — content is still returned alongside a non-nil `runErr` so callers can keep user work on soft editor failures.
+
+Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.
 
 ### app/history/ — session auto-save
 
@@ -212,6 +223,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `TOCComponent` | 7 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `Close()`, `HandleKey()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
+| `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
 
 ## Data Flow
 
@@ -272,8 +284,16 @@ Each rendering feature (line numbers, blame, word-diff, search, wrap, collapsed)
 ```
 User presses 'a' on diff line
   → annotating = true, annotateInput focused
-  → Enter → store.Add(file, line, text)
-  → re-render shows annotation inline below diff line
+  → Enter → store.Add(file, line, text)  (single-line fast path)
+  → Ctrl+E → openEditor()
+      → editor.Editor.Command(seed)     (app/editor)
+      → tea.ExecProcess(cmd, complete)  (suspends bubbletea, hands over tty)
+      → editorFinishedMsg{content, err, target...}
+      → handleEditorFinished:
+          err != nil     → log, keep annotation mode open, preserve input
+          content == ""  → cancelAnnotation (preserve existing annotation)
+          otherwise      → saveComment(content, fileLevel, line, type)
+  → re-render shows annotation (multi-line aware) below diff line
   → on quit: store.Format() → structured output to stdout/file
   → (optional) history.Save() → markdown to ~/.config/revdiff/history/
 ```

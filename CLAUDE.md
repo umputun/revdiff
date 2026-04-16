@@ -24,6 +24,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/keymap/` - configurable keybindings (`Action` constants, parser, defaults, dump)
 - `app/theme/` - Catalog-centric theme system: `Theme` (data + serialization) and `Catalog` (discovery, loading, installation, gallery). Zero standalone functions — all logic as methods. Files: `theme.go` (Theme struct), `catalog.go` (Catalog struct + all operations). 7 bundled + community gallery
 - `app/annotation/` - in-memory annotation store and structured output
+- `app/editor/` - external `$EDITOR` invocation for multi-line annotations: temp-file lifecycle, editor resolution ($EDITOR → $VISUAL → vi), and `Command()` API returning `*exec.Cmd` + completion func for `tea.ExecProcess`. Consumed by `app/ui` via the `ExternalEditor` interface
 - `app/history/` - review session auto-save to `~/.config/revdiff/history/`
 - `app/fsutil/` - filesystem utilities
 - `app/ui/mocks/` - moq-generated mocks (never edit manually)

@@ -598,21 +598,24 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 // embedded "\n" in text splits into logical lines; the first logical line carries
 // the emoji prefix baked into text, continuation logical lines receive an indent
 // sized to the emoji prefix so body columns line up.
+// TODO: multi-line annotations do not apply extendLineBg to each visual row,
+// so themed pane backgrounds may show the terminal default in the right portion
+// of continuation rows. Mirroring the single-line input widget pattern requires
+// stripping trailing spaces and re-padding with DiffBg per visual line.
 func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
 	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
 
 	logical := strings.Split(text, "\n")
-	indent := annotationContinuationIndent(logical[0])
+	indent := m.annotationContinuationIndent(logical[0])
 
 	first := true
 	for i, segment := range logical {
-		segWrapWidth := wrapWidth
 		if i > 0 {
 			segment = indent + segment
 		}
 		var lines []string
-		if segWrapWidth > 10 && lipgloss.Width(segment) > segWrapWidth {
-			lines = m.wrapContent(segment, segWrapWidth)
+		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
+			lines = m.wrapContent(segment, wrapWidth)
 		} else {
 			lines = []string{segment}
 		}
@@ -627,10 +630,10 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) 
 	}
 }
 
-// annotationContinuationIndent returns leading whitespace sized to match the emoji prefix
-// on the first logical line of an annotation so continuation logical lines align.
-// uses lipgloss.Width because the emoji is double-width.
-func annotationContinuationIndent(firstLogicalLine string) string {
+// annotationContinuationIndent returns leading whitespace sized to match the emoji
+// prefix on the first logical line of an annotation so continuation logical lines
+// align under the body. Uses lipgloss.Width because the emoji is double-width.
+func (m Model) annotationContinuationIndent(firstLogicalLine string) string {
 	switch {
 	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac file: "):
 		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac file: "))
