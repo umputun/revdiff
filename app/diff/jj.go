@@ -2,10 +2,7 @@ package diff
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 )
@@ -269,21 +266,10 @@ func jjSynthesizeBinaryDiff(raw string) string {
 }
 
 // runJj executes a jj command in the working directory and returns its output.
-// Stderr is captured for error reporting but not returned on success — jj emits
-// informational warnings (config migrations, etc.) that should be ignored.
+// Prepends extraArgs (e.g. --no-pager) then delegates to the shared runVCS helper.
 func (j *Jj) runJj(args ...string) (string, error) {
 	full := make([]string, 0, len(j.extraArgs)+len(args))
 	full = append(full, j.extraArgs...)
 	full = append(full, args...)
-	cmd := exec.CommandContext(context.Background(), "jj", full...) //nolint:gosec // args constructed internally
-	cmd.Dir = j.workDir
-	out, err := cmd.Output()
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			return "", fmt.Errorf("jj %s: %s", strings.Join(args, " "), string(exitErr.Stderr))
-		}
-		return "", fmt.Errorf("jj %s: %w", strings.Join(args, " "), err)
-	}
-	return string(out), nil
+	return runVCS(j.workDir, "jj", full...)
 }
