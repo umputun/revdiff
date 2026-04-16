@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.18.1 - 2026-04-16
+
+### Improvements
+
+- structural refactor: split main.go, theme boundary cleanup, UI state consolidation #107 @umputun
+- bump github.com/mattn/go-runewidth from 0.0.22 to 0.0.23 #106 @app/dependabot
+- bump github.com/charmbracelet/x/ansi from 0.11.6 to 0.11.7 #105 @app/dependabot
+- bump plugin versions (claude 0.7.4, planning 0.2.3, pi 0.1.1) 5555d85
+- clean up dependencies and update Go version to 1.26 a98c168
+- add ARCHITECTURE.md and slim CLAUDE.md 2efe306
+
+### Bug Fixes
+
+- fix mktemp file/path.XXXX.suffix bug #108 @tsimoshka
+- fix exhaustive linter errors in action switch statements f714138
+
 ## v0.18.0 - 2026-04-13
 
 ### New Features
