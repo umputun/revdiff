@@ -1602,6 +1602,186 @@ func TestModel_CursorViewportYWithWrap(t *testing.T) {
 		assert.Equal(t, count0+count1+count2, m.cursorViewportY())
 	})
 }
+
+func TestModel_SyncViewportToCursor_WrappedLineBottomVisible(t *testing.T) {
+	// regression: cursor sitting on a wrapped line at the bottom of the viewport
+	// used to keep only the first visual row visible. scroll must shift by the
+	// extra wrap rows so the line's visual bottom stays within the viewport.
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.modes.wrap = true
+	m.layout.width = 60
+	m.layout.treeWidth = 20
+	m.layout.viewport.Width = 40
+	m.layout.viewport.Height = 4
+
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "short1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "short2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "short3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: strings.Repeat("a", 120), ChangeType: diff.ChangeAdd}, // wraps to 3+ rows
+	}
+
+	wrapRows := m.wrappedLineCount(3)
+	require.GreaterOrEqual(t, wrapRows, 3, "long line should wrap to at least 3 rows")
+
+	m.nav.diffCursor = 3
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(0)
+
+	m.syncViewportToCursor()
+
+	cursorTop := m.cursorViewportY()
+	cursorBottom := cursorTop + wrapRows - 1
+	expectedOffset := cursorBottom - m.layout.viewport.Height + 1
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset,
+		"YOffset should pin the wrapped line's visual bottom to the viewport bottom")
+	assert.GreaterOrEqual(t, cursorTop, m.layout.viewport.YOffset, "cursor top must be visible")
+	assert.Less(t, cursorBottom, m.layout.viewport.YOffset+m.layout.viewport.Height,
+		"last wrap row must be visible (was clipped below viewport before fix)")
+}
+
+func TestModel_SyncViewportToCursor_AnnotationRowsVisible(t *testing.T) {
+	// regression: multi-row annotation injected below a diff line at the bottom
+	// of the viewport used to render past the bottom edge because the down-scroll
+	// branch only compared the cursor's top row.
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 80
+	m.layout.treeWidth = 20
+
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 4, Type: " ",
+		Comment: "line-a\nline-b\nline-c"})
+
+	annotRows := m.wrappedAnnotationLineCount(m.annotationKey(4, " "))
+	require.Equal(t, 3, annotRows, "multi-line annotation should occupy 3 rows")
+
+	// viewport height of 4 comfortably fits the 1-row diff line + 3 annotation rows
+	m.layout.viewport.Width = 50
+	m.layout.viewport.Height = 4
+	m.nav.diffCursor = 3
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(0)
+
+	m.syncViewportToCursor()
+
+	cursorTop := m.cursorViewportY()
+	cursorBottom := cursorTop + 1 + annotRows - 1 // 1 diff row + annotation rows
+	expectedOffset := cursorBottom - m.layout.viewport.Height + 1
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset,
+		"YOffset should pin the annotation's visual bottom to the viewport bottom")
+	assert.GreaterOrEqual(t, cursorTop, m.layout.viewport.YOffset, "cursor top must be visible")
+	assert.Less(t, cursorBottom, m.layout.viewport.YOffset+m.layout.viewport.Height,
+		"last annotation row must be visible (was clipped below viewport before fix)")
+}
+
+func TestModel_SyncViewportToCursor_LineTallerThanViewport(t *testing.T) {
+	// when the cursor's logical line is taller than the viewport, the floor
+	// min(cursorBottom-Height+1, cursorTop) anchors scroll at cursorTop so the
+	// cursor itself stays visible; trailing rows overflow by necessity.
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.modes.wrap = true
+	m.layout.width = 60
+	m.layout.treeWidth = 20
+	m.layout.viewport.Width = 40
+	m.layout.viewport.Height = 2
+
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "short1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: strings.Repeat("b", 200), ChangeType: diff.ChangeAdd}, // wraps to 5+ rows
+	}
+
+	wrapRows := m.wrappedLineCount(1)
+	require.Greater(t, wrapRows, m.layout.viewport.Height, "wrapped line must exceed viewport height")
+
+	m.nav.diffCursor = 1
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(0)
+
+	m.syncViewportToCursor()
+
+	cursorTop := m.cursorViewportY()
+	assert.Equal(t, cursorTop, m.layout.viewport.YOffset,
+		"YOffset should snap to cursorTop when logical line is taller than viewport")
+}
+
+func TestModel_SyncViewportToCursor_FileAnnotationOverflow(t *testing.T) {
+	// file annotation on a narrow viewport: cursor at -1, multi-line file
+	// annotation that exceeds viewport height; syncViewportToCursor should
+	// keep the annotation's top row visible (the file-annotation branch of
+	// cursorVisualHeight returns the file annotation's row count).
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 80
+	m.layout.treeWidth = 20
+	m.layout.viewport.Width = 50
+	m.layout.viewport.Height = 2
+
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0,
+		Comment: "file-a\nfile-b\nfile-c"})
+
+	fileRows := m.wrappedAnnotationLineCount(annotKeyFile)
+	require.Greater(t, fileRows, m.layout.viewport.Height, "file annotation must exceed viewport height")
+
+	m.nav.diffCursor = -1 // cursor on file annotation line
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(5)
+
+	m.syncViewportToCursor()
+
+	// with cursor at top (Y=0) and prior offset=5, first branch fires:
+	// SetYOffset(0) so the file annotation's top row is visible.
+	assert.Equal(t, 0, m.layout.viewport.YOffset,
+		"YOffset should scroll to show the file annotation top row")
+}
+
+func TestModel_SyncViewportToCursor_OnAnnotationSubLineOverflow(t *testing.T) {
+	// cursor parked on annotation sub-line of a tall multi-row annotation:
+	// cursorVisualHeight branches on cursorOnAnnotation and returns only the
+	// annotation's row count, so scroll keeps the annotation's bottom visible.
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 80
+	m.layout.treeWidth = 20
+	m.layout.viewport.Width = 50
+	m.layout.viewport.Height = 3
+
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: " ",
+		Comment: "note-a\nnote-b\nnote-c"})
+
+	annotRows := m.wrappedAnnotationLineCount(m.annotationKey(2, " "))
+	require.Equal(t, 3, annotRows, "annotation should occupy 3 rows")
+
+	m.nav.diffCursor = 1
+	m.annot.cursorOnAnnotation = true
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(0)
+
+	m.syncViewportToCursor()
+
+	cursorTop := m.cursorViewportY()
+	cursorBottom := cursorTop + annotRows - 1
+	expectedOffset := cursorBottom - m.layout.viewport.Height + 1
+	assert.Equal(t, expectedOffset, m.layout.viewport.YOffset,
+		"YOffset should pin the annotation sub-line's visual bottom to the viewport bottom")
+	assert.Less(t, cursorBottom, m.layout.viewport.YOffset+m.layout.viewport.Height,
+		"last annotation row must be visible")
+}
+
 func TestModel_CursorViewportYWithWrapDeletePlaceholder(t *testing.T) {
 	m := testModel(nil, nil)
 	m.file.name = "a.go"

@@ -230,7 +230,9 @@ func (m *Model) saveComment(text, fileName string, fileLevel bool, line int, cha
 	m.annot.fileAnnotating = false // defensive hygiene: parity with file-level branch
 	m.annot.existingMultiline = ""
 	m.tree.RefreshFilter(m.annotatedFiles())
-	m.layout.viewport.SetContent(m.renderDiff())
+	// sync scroll so a newly added multi-row annotation stays visible when the
+	// cursor sits near the bottom of the viewport.
+	m.syncViewportToCursor()
 }
 
 // cancelAnnotation exits annotation input mode without saving.
@@ -470,6 +472,51 @@ func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) 
 		y += m.wrappedLineCount(m.nav.diffCursor)
 	}
 	return y
+}
+
+// cursorVisualRange returns the top and bottom viewport Y coordinates the
+// cursor currently occupies. when the cursor is on a diff row, bottom spans
+// any wrap-continuation rows plus any injected annotation rows below it;
+// when the cursor is on an annotation sub-line, bottom spans only the
+// annotation rows (the diff row sits above top). callers keeping the cursor
+// "visible" use this range to preserve the full logical extent, not just the
+// top row.
+func (m Model) cursorVisualRange() (top, bottom int) {
+	var hunks []int
+	if m.modes.collapsed.enabled {
+		hunks = m.findHunks()
+	}
+	annotationSet := m.buildAnnotationSet()
+	top = m.cursorViewportYUsing(hunks, annotationSet)
+	h := max(m.cursorVisualHeight(hunks, annotationSet), 1)
+	return top, top + h - 1
+}
+
+// cursorVisualHeight returns the number of visual rows occupied by the cursor.
+// branches, in order of evaluation:
+//   - cursor on the file-level annotation line → file annotation's wrapped row count
+//   - diffCursor out of range (empty or not loaded) → 1
+//   - cursor on annotation sub-line of a divider (defensive; unreachable today) → 1
+//   - cursor on annotation sub-line of a regular line → annotation's own wrapped row count
+//   - cursor on the diff row → hunkLineHeight (wrap + injected annotation rows)
+//
+// hunks and annotationSet are supplied by the caller to avoid redundant
+// computation when they are already built; both must describe the current file.
+func (m Model) cursorVisualHeight(hunks []int, annotationSet map[string]bool) int {
+	if m.cursorOnFileAnnotationLine() {
+		return m.wrappedAnnotationLineCount(annotKeyFile)
+	}
+	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
+		return 1
+	}
+	dl := m.file.lines[m.nav.diffCursor]
+	if m.annot.cursorOnAnnotation {
+		if dl.ChangeType == diff.ChangeDivider {
+			return 1
+		}
+		return m.wrappedAnnotationLineCount(m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType)))
+	}
+	return m.hunkLineHeight(m.nav.diffCursor, hunks, annotationSet)
 }
 
 // buildAnnotationSet returns a set of annotation keys for the current file.

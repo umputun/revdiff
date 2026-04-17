@@ -199,17 +199,25 @@ func (m *Model) moveDiffCursorToEnd() {
 	m.syncViewportToCursor()
 }
 
-// syncViewportToCursor adjusts viewport scroll to keep cursor visible and re-renders content.
-// accounts for annotation lines injected between diff lines.
+// syncViewportToCursor adjusts viewport scroll so the cursor's logical line
+// is visible — its full visual extent when it fits, otherwise the cursor's
+// top row (trailing wrap/annotation rows then overflow by necessity).
+// re-renders content in the process. the down-scroll branch compares against
+// the cursor's visual bottom row so wrap-continuation rows and injected
+// annotation rows below the diff line are not clipped at the viewport edge.
+// SetContent runs before SetYOffset because viewport.SetYOffset clamps to
+// maxYOffset() (derived from current content length); rendering first lets
+// the clamp accept a larger target after content grows (e.g. a freshly saved
+// multi-row annotation extending past the prior content end).
 func (m *Model) syncViewportToCursor() {
-	cursorY := m.cursorViewportY()
-	switch {
-	case cursorY < m.layout.viewport.YOffset:
-		m.layout.viewport.SetYOffset(cursorY)
-	case cursorY >= m.layout.viewport.YOffset+m.layout.viewport.Height:
-		m.layout.viewport.SetYOffset(cursorY - m.layout.viewport.Height + 1)
-	}
+	cursorTop, cursorBottom := m.cursorVisualRange()
 	m.layout.viewport.SetContent(m.renderDiff())
+	switch {
+	case cursorTop < m.layout.viewport.YOffset:
+		m.layout.viewport.SetYOffset(cursorTop)
+	case cursorBottom >= m.layout.viewport.YOffset+m.layout.viewport.Height:
+		m.layout.viewport.SetYOffset(min(cursorBottom-m.layout.viewport.Height+1, cursorTop))
+	}
 }
 
 // centerViewportOnCursor scrolls the viewport to place the cursor in the middle of the page.

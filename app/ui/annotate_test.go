@@ -2287,6 +2287,87 @@ func TestModel_EditorFinishedErrorWithSeedUnchangedDoesNotSave(t *testing.T) {
 	assert.Equal(t, "my rough note", model.annot.input.Value(), "input value must be preserved verbatim")
 }
 
+func TestModel_EditorFinishedScrollsToShowMultilineAnnotation(t *testing.T) {
+	// regression: saving a multi-row annotation via the external-editor path on
+	// a line sitting at the bottom of the viewport used to leave the appended
+	// annotation rows clipped below the viewport, because saveComment only
+	// re-rendered content without syncing scroll.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 3
+	// viewport height of 4 fits 1-row diff line + 3 annotation rows only if sync scrolls.
+	m.layout.viewport = viewport.New(80, 4)
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(0)
+
+	require.Equal(t, m.layout.viewport.YOffset+m.layout.viewport.Height-1, m.cursorViewportY(),
+		"cursor should start on the last visible row")
+
+	msg := editorFinishedMsg{
+		content:  "note line 1\nnote line 2\nnote line 3",
+		fileName: "a.go", fileLevel: false, line: 4, changeType: " ",
+	}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "annotation must be saved")
+
+	cursorTop := model.cursorViewportY()
+	annotRows := model.wrappedAnnotationLineCount(model.annotationKey(4, " "))
+	cursorBottom := cursorTop + 1 + annotRows - 1 // 1 diff row + annotation rows
+	expectedOffset := cursorBottom - model.layout.viewport.Height + 1
+	assert.Equal(t, expectedOffset, model.layout.viewport.YOffset,
+		"YOffset should pin the annotation's visual bottom to the viewport bottom after editor save")
+	assert.GreaterOrEqual(t, cursorTop, model.layout.viewport.YOffset, "cursor top must be visible")
+	assert.Less(t, cursorBottom, model.layout.viewport.YOffset+model.layout.viewport.Height,
+		"last annotation row must be visible after editor save")
+}
+
+func TestModel_EditorFinishedFileLevelGoesToTop(t *testing.T) {
+	// file-level annotation save via editor path goes to the top of the viewport
+	// (GotoTop), distinct from the line-level path which uses syncViewportToCursor.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "line4", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 3
+	m.layout.viewport = viewport.New(80, 3)
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(2)
+
+	msg := editorFinishedMsg{
+		content:  "file note 1\nfile note 2",
+		fileName: "a.go", fileLevel: true, line: 0, changeType: "",
+	}
+	result, _ := m.Update(msg)
+	model := result.(Model)
+
+	anns := model.store.Get("a.go")
+	require.Len(t, anns, 1, "file-level annotation must be saved")
+	assert.Equal(t, 0, anns[0].Line, "saved annotation should be file-level (Line=0)")
+	assert.Equal(t, 0, model.layout.viewport.YOffset,
+		"viewport should be at top after file-level save (GotoTop path)")
+	assert.Equal(t, -1, model.nav.diffCursor,
+		"cursor should park on file annotation line (-1)")
+}
+
 func TestModel_AnnotationPlaceholderMentionsEditor(t *testing.T) {
 	// placeholder is an affordance surfacing Ctrl+E binding without a help overlay.
 	lines := []diff.DiffLine{
