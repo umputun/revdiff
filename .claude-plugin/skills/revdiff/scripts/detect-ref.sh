@@ -71,15 +71,32 @@ detect_git() {
     fi
 }
 
-# stub — real implementation lands in a follow-up task
 detect_hg() {
-    branch="unknown"
-    main_branch=""
+    branch=$(hg branch 2>/dev/null || echo "unknown")
+
+    # hg has no remote HEAD equivalent; "default" is the conventional main branch.
+    main_branch="default"
     is_main="false"
+    if [ "$branch" = "$main_branch" ]; then
+        is_main="true"
+    fi
+
     has_uncommitted="false"
+    if [ -n "$(hg status 2>/dev/null)" ]; then
+        has_uncommitted="true"
+    fi
+
+    # hg has no staging area — staged-only is never true.
     has_staged_only="false"
+
+    # detect no-commits state (fresh repo after hg init). `hg log -r .` always
+    # succeeds because `.` resolves to the null revision (all-zeros) on an empty
+    # repo, so check for any actual revisions via `all()` — empty output means
+    # no commits yet.
     has_commits="true"
-    needs_ask="true"
+    if [ -z "$(hg log -r 'all()' -l 1 -T '.' 2>/dev/null)" ]; then
+        has_commits="false"
+    fi
 }
 
 # stub — real implementation lands in a follow-up task

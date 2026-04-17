@@ -108,8 +108,11 @@ detect_hg() {
     [ -n "$(hg status 2>/dev/null)" ] && has_uncommitted=true
 
     has_staged_only=false   # no index in hg
+    # `hg log -r .` always succeeds on empty repos (`.` resolves to the null
+    # revision), so check for any revision via `all()` instead — empty output
+    # means no commits yet.
     has_commits=true
-    hg log -r . -l 1 -T '.' >/dev/null 2>&1 || has_commits=false
+    [ -z "$(hg log -r 'all()' -l 1 -T '.' 2>/dev/null)" ] && has_commits=false
 }
 ```
 
@@ -224,12 +227,12 @@ repo="$(basename "$(jj root 2>/dev/null \
 **Files:**
 - Modify: `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`
 
-- [ ] replace `detect_hg()` stub with the real implementation per Technical Details > Field population — hg
-- [ ] wire `hg` arm in the dispatch case already done in Task 1 — just confirm it now calls the real function
-- [ ] run `shellcheck` and `shfmt -d`
-- [ ] manual test: scaffold `hg init` repo in `/tmp`, run through each hg matrix row (clean/uncommitted/named branch/no-commits). Verify the no-commits row outputs `needs_ask: true` (the early short-circuit in the decision block must fire before `has_uncommitted` can misroute)
-- [ ] re-run the git baseline diff (`diff ~/revdiff-detect-ref-baseline.txt <(detect-ref.sh)` on the same git repo) — must still be empty
-- [ ] must pass before next task
+- [x] replace `detect_hg()` stub with the real implementation per Technical Details > Field population — hg
+- [x] wire `hg` arm in the dispatch case already done in Task 1 — just confirm it now calls the real function
+- [x] run `shellcheck` and `shfmt -d`
+- [x] manual test: scaffold `hg init` repo in `/tmp`, run through each hg matrix row (clean/uncommitted/named branch/no-commits). Verify the no-commits row outputs `needs_ask: true` (the early short-circuit in the decision block must fire before `has_uncommitted` can misroute) — all 5 rows match expected values (deviated from plan's `hg log -r .` no-commits check because `.` resolves to null revision on empty repos and always succeeds; switched to `hg log -r 'all()'` emptiness check)
+- [x] re-run the git baseline diff (`diff ~/revdiff-detect-ref-baseline.txt <(detect-ref.sh)` on the same git repo) — must still be empty (verified via stash: clean-tree output is byte-identical to baseline)
+- [x] must pass before next task
 
 ### Task 3: Add `detect_jj()` implementation
 
