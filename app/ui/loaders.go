@@ -15,12 +15,16 @@ import (
 
 // loadFiles returns a command that fetches the list of changed files from the renderer.
 // it also appends staged-only and untracked files when applicable.
+// the caller must bump m.filesLoadSeq before invoking loadFiles when issuing a new
+// reload (e.g. toggleUntracked); the captured seq tags every emitted filesLoadedMsg
+// so handleFilesLoaded can drop stale results from earlier in-flight loads.
 func (m Model) loadFiles() tea.Cmd {
+	seq := m.filesLoadSeq
 	return func() tea.Msg {
 		var warnings []string
 		entries, err := m.diffRenderer.ChangedFiles(m.cfg.ref, m.cfg.staged)
 		if err != nil {
-			return filesLoadedMsg{entries: entries, err: err}
+			return filesLoadedMsg{seq: seq, entries: entries, err: err}
 		}
 		// include staged-only files (new files added to index but not yet committed)
 		// only when there are no unstaged entries; otherwise unstaged review should stay focused
@@ -58,7 +62,7 @@ func (m Model) loadFiles() tea.Cmd {
 				}
 			}
 		}
-		return filesLoadedMsg{entries: entries, warnings: warnings}
+		return filesLoadedMsg{seq: seq, entries: entries, warnings: warnings}
 	}
 }
 
@@ -99,6 +103,13 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 // handleFilesLoaded processes the result of loadFiles, populating the file tree
 // and triggering the initial file diff load.
 func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
+	// drop stale responses from an earlier load; only the latest load request
+	// (matching m.filesLoadSeq) is accepted. Prevents an older in-flight load from
+	// overwriting the tree after toggleUntracked (or a rapid double-toggle).
+	if msg.seq != m.filesLoadSeq {
+		return m, nil
+	}
+	m.filesLoaded = true
 	if msg.err != nil {
 		m.layout.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil
