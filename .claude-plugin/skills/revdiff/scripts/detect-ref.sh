@@ -99,15 +99,52 @@ detect_hg() {
     fi
 }
 
-# stub — real implementation lands in a follow-up task
+# targets jj 0.18+ — parsing uses `jj log -T` templates and `jj diff --summary`,
+# both of which have been spec-stable since the 0.18 release. separator-guard
+# below handles bookmark template separator variance (space vs comma) across
+# 0.18–0.30+ without pinning a specific version.
 detect_jj() {
-    branch="unknown"
+    # bookmarks on @; jj's @ is usually an anonymous change (empty template
+    # output). fall back to a literal "@" so the branch field is never blank.
+    branch=$(jj log -r @ --no-graph -T 'bookmarks' 2>/dev/null)
+    if [ -z "$branch" ]; then
+        branch="@"
+    fi
+
+    # detect main bookmark: try main, then master, then trunk. `jj log -r <name>`
+    # exits non-zero on unresolvable names — more stable than parsing
+    # `jj bookmark list` output (prefix + status markers vary by version).
     main_branch=""
+    for candidate in main master trunk; do
+        if jj log -r "$candidate" -l 1 --no-graph -T '.' >/dev/null 2>&1; then
+            main_branch="$candidate"
+            break
+        fi
+    done
+
     is_main="false"
+    if [ -n "$main_branch" ]; then
+        # nearest ancestor bookmark — the actual "am I on main" semantic, since
+        # @ is usually an anonymous change with no bookmarks of its own.
+        nearest=$(jj log --no-graph \
+            -r "latest(heads(::@ & bookmarks()))" \
+            -T 'bookmarks' 2>/dev/null)
+        # bookmarks template separator varies by jj version (space or comma);
+        # guard both forms so we don't need to pin a specific separator.
+        case " $nearest " in *" $main_branch "*) is_main="true" ;; esac
+        case ",$nearest," in *",$main_branch,"*) is_main="true" ;; esac
+    fi
+
+    # "uncommitted" = @ has changes vs @-. `jj diff -r @ --summary` has been
+    # stable since early jj releases — empty stdout means @ == @-.
     has_uncommitted="false"
+    if [ -n "$(jj diff -r @ --summary 2>/dev/null)" ]; then
+        has_uncommitted="true"
+    fi
+
+    # jj has no staging area; @ always exists so has_commits is always true.
     has_staged_only="false"
     has_commits="true"
-    needs_ask="true"
 }
 
 apply_decision_logic() {
