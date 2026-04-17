@@ -317,18 +317,18 @@ repo="$(basename "$(jj root 2>/dev/null \
 
 ### Task 8: Verify acceptance criteria
 
-- [ ] re-run `shellcheck` and `shfmt -d` across all four scripts
-- [ ] diff `.claude-plugin/skills/revdiff/scripts/` vs `plugins/codex/skills/revdiff/scripts/` (ignoring the codex-specific header lines) — confirm bodies are identical
-- [ ] re-run the full manual test matrix from Testing Strategy, including the jj-colocated-with-`.git` row
-- [ ] verify git repo output is byte-identical to the durable baseline: `diff ~/revdiff-detect-ref-baseline.txt <(detect-ref.sh)` on the same git repo state captured in Task 1
-- [ ] clean up the baseline file after verification passes
-- [ ] must pass before next task
+- [x] re-run `shellcheck` and `shfmt -d` across all four scripts (shellcheck clean on all four; `shfmt -d -i 4` clean except the pre-existing `set -uo pipefail  #` double-space noise in both copies of `read-latest-history.sh` — verified as pre-existing in Task 4, no new formatting diffs introduced by this plan)
+- [x] diff `.claude-plugin/skills/revdiff/scripts/` vs `plugins/codex/skills/revdiff/scripts/` (ignoring the codex-specific header lines) — confirm bodies are identical (`diff <(tail -n +3 source) <(tail -n +4 codex)` returns empty for both `detect-ref.sh` and `read-latest-history.sh`)
+- [x] re-run the full manual test matrix from Testing Strategy, including the jj-colocated-with-`.git` row (git: all 6 rows pass — HEAD~1/false, empty/false, empty+use_staged/false, master/false, empty/true, --all-files/false; hg: all 5 rows pass — HEAD~1/false, empty/false, default/false, empty/true, empty/true with no-commits short-circuit correctly firing before the uncommitted-on-main arm; jj rows: **skipped - jj not installed locally**; jj-colocated-with-`.git` row: **skipped - jj not installed locally**)
+- [x] verify git repo output is byte-identical to the durable baseline: `diff ~/revdiff-detect-ref-baseline.txt <(detect-ref.sh)` on the same git repo state captured in Task 1 (empty diff — byte-identical)
+- [x] clean up the baseline file after verification passes (`rm -f ~/revdiff-detect-ref-baseline.txt` done)
+- [x] must pass before next task
 
 ### Task 9: [Final] Documentation + plan archival
 
-- [ ] README.md — skim for "review git diffs" phrasing, update if user-facing
-- [ ] CLAUDE.md — no change expected (project structure docs already mention hg+jj)
-- [ ] move this plan to `docs/plans/completed/20260417-hg-jj-skill-scripts.md`
+- [x] README.md — skim for "review git diffs" phrasing, update if user-facing (updated: "outside a git repo" → "outside a VCS repo" in feature bullet and `--only` command example comment; "no git changes" / "no git repo" → VCS-neutral in Context-Only File Review section; "Inside/Outside a git repo" → "Inside a repo (git/hg/jj)" / "Outside a VCS repo"; "beyond git diffs" / "no git repo required" → VCS-neutral in Beyond Code Review. Left `--all-files` paragraph's "git repository" wording — that constraint is genuinely git-only, flagged in Post-Completion.)
+- [x] CLAUDE.md — no change needed (project-level structure docs already mention hg and jj throughout)
+- [x] move this plan to `docs/plans/completed/20260417-hg-jj-skill-scripts.md`
 
 ## Post-Completion
 
