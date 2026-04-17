@@ -293,13 +293,13 @@ repo="$(basename "$(jj root 2>/dev/null \
 - Modify: `.claude-plugin/skills/revdiff/SKILL.md`
 - Modify: `plugins/codex/skills/revdiff/SKILL.md`
 
-- [ ] `argument-hint`: change `optional: git ref(s), "all files", or file path` → `optional: ref(s), "all files", or file path`
-- [ ] intro line: change `Review git diffs with inline annotations…` → `Review diffs with inline annotations… Works in git, hg, and jj repos (auto-detected).`
-- [ ] history section: change `via git rev-parse --show-toplevel basename` → `via VCS root basename (jj/git/hg)`
-- [ ] file review note: change `Works both inside and outside a git repo` → `Works both inside and outside a VCS repo`
-- [ ] apply same four edits to the codex copy
-- [ ] grep both trees for any remaining `git repo` / `git rev-parse` phrasing in user-facing text (excluding code blocks that document the actual commands); flag anything found, don't edit blindly
-- [ ] must pass before next task
+- [x] `argument-hint`: change `optional: git ref(s), "all files", or file path` → `optional: ref(s), "all files", or file path`
+- [x] intro line: change `Review git diffs with inline annotations…` → `Review diffs with inline annotations… Works in git, hg, and jj repos (auto-detected).`
+- [x] history section: change `via git rev-parse --show-toplevel basename` → `via VCS root basename (jj/git/hg)`
+- [x] file review note: change `Works both inside and outside a git repo` → `Works both inside and outside a VCS repo`
+- [x] apply same four edits to the codex copy
+- [x] grep both trees for any remaining `git repo` / `git rev-parse` phrasing in user-facing text (excluding code blocks that document the actual commands); flag anything found, don't edit blindly (only hit is line 17 of codex SKILL.md inside the Script Path Resolution bash code block — legitimate command usage, not prose)
+- [x] must pass before next task
 
 ### Task 7: Audit references for VCS-specific wording
 

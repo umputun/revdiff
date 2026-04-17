@@ -1,13 +1,13 @@
 ---
 name: revdiff
 description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Activates on "revdiff", "review diff", "annotate diff", "git review with revdiff", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
-argument-hint: 'optional: git ref(s), "all files", or file path'
+argument-hint: 'optional: ref(s), "all files", or file path'
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
 
 # revdiff - TUI Diff Review
 
-Review git diffs with inline annotations using revdiff TUI in a terminal overlay.
+Review diffs with inline annotations using revdiff TUI in a terminal overlay. Works in git, hg, and jj repos (auto-detected).
 
 ## Script Path Resolution
 
@@ -45,7 +45,7 @@ If the user says things like "locate my review", "use my latest revdiff annotati
 $SCRIPT_DIR/read-latest-history.sh
 ```
 
-The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via `git rev-parse --show-toplevel` basename, and prints the newest `.md` file found. Each history file contains a header (path, refs, commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
+The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file found. Each history file contains a header (path, refs, commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
 
 ## How It Works
 
@@ -79,7 +79,7 @@ If not found, guide installation:
 **File review mode**: If `$ARGUMENTS` is a file path (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`):
 - Skip ref detection entirely
 - Go directly to Step 2 with `--only=<filepath>` (no ref argument)
-- Works both inside and outside a git repo — revdiff reads the file from disk as context-only
+- Works both inside and outside a VCS repo — revdiff reads the file from disk as context-only
 
 **Ref mode**: If `$ARGUMENTS` contains explicit ref(s) (e.g., `HEAD~1`, `main`, or `main feature` for two-ref diff), use as-is.
 
