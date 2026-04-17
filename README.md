@@ -26,7 +26,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Status line with filename, diff stats, hunk position, line number, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
-- All-files mode: browse and annotate all git-tracked files with `--all-files`, filter with `--include` and `--exclude`
+- All-files mode: browse and annotate all tracked files with `--all-files` (git `ls-files` or jj `file list`), filter with `--include` and `--exclude`
 - No-VCS file review: `--only` files outside a VCS repo (or not in any diff) are shown as context-only with full annotation support
 - Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
 - Pi package: launch revdiff from pi, capture annotations, and keep them visible in a widget and right-side panel until you apply or clear them
@@ -559,7 +559,7 @@ See the [Zed integration guide](https://revdiff.com/docs.html#zed-integration) f
 When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
 
 Each history file contains:
-- Header with path, VCS refs, and commit hash
+- Header with path, refs, and (git only) a short commit hash
 - Full annotation output (same format as stdout)
 - Raw git diff for annotated files only
 

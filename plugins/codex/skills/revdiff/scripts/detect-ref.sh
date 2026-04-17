@@ -172,7 +172,7 @@ apply_decision_logic() {
 vcs="unknown"
 if command -v jj >/dev/null 2>&1 && jj root >/dev/null 2>&1; then
     vcs="jj"
-elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+elif command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     vcs="git"
 elif command -v hg >/dev/null 2>&1 && hg root >/dev/null 2>&1; then
     vcs="hg"

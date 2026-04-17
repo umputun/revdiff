@@ -191,7 +191,7 @@ Use `--output` / `-o` flag to write annotations to a file instead of stdout.
 When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
 
 Each history file contains:
-- Header with path, VCS refs, and commit hash
+- Header with path, refs, and (git only) a short commit hash
 - Full annotation output (same format as stdout)
 - Raw git diff for annotated files only
 

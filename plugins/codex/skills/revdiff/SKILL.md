@@ -46,7 +46,7 @@ If the user says things like "locate my review", "use my latest revdiff annotati
 $SCRIPT_DIR/read-latest-history.sh
 ```
 
-The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file found. Each history file contains a header (path, refs, commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
+The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file found. Each history file contains a header (path, refs, and — when available — a git commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. The `commit:` line and diff block are captured from git only; in hg/jj repos the diff block will be empty and no commit hash is recorded. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
 
 ## How It Works
 
