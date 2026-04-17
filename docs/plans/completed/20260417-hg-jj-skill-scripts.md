@@ -139,15 +139,14 @@ detect_jj() {
 
     is_main=false
     if [ -n "$main_branch" ]; then
-        # nearest ancestor bookmark — the actual "am I on main" semantic,
-        # since @ is usually an anonymous change with no bookmarks
-        nearest=$(jj log --no-graph \
-            -r "latest(heads(::@ & bookmarks()))" \
-            -T 'bookmarks' 2>/dev/null)
-        # bookmarks template separator varies by jj version (space or comma);
-        # guard both forms so we don't need to pin a separator
-        case " $nearest " in *" $main_branch "*) is_main=true ;; esac
-        case ",$nearest," in *",$main_branch,"*) is_main=true ;; esac
+        # "am I on main" = @- (parent of working copy) is the main bookmark
+        # itself. anonymous feature changes descend from main, so a
+        # nearest-ancestor-bookmark check would mis-fire for them (main is
+        # still the nearest bookmark ancestor). compare change_ids instead —
+        # analogous to git's `[ "$branch" = "$main_branch" ]`.
+        main_id=$(jj log -r "$main_branch" -l 1 --no-graph -T 'change_id' 2>/dev/null)
+        parent_id=$(jj log -r @- -l 1 --no-graph -T 'change_id' 2>/dev/null)
+        [ -n "$main_id" ] && [ "$main_id" = "$parent_id" ] && is_main=true
     fi
 
     # "uncommitted" = @ has changes vs @-. Use `jj diff --summary` which is
@@ -166,7 +165,7 @@ detect_jj() {
 
 **Why `jj log -r <name>` instead of `jj bookmark list -r <name>` for bookmark detection**: `bookmark list` output format (prefix, status markers like `(ahead by 1)`) varies across jj versions. `jj log -r <name>` returns non-zero exit for unresolvable names, which is all we need.
 
-Bookmark-separator guard (space vs comma) in the nearest-ancestor check stays defensive — if neither matches, `is_main` stays false and falls through to the "feature branch" decision path, which is still safe.
+**Why change_id equality for `is_main` instead of nearest-ancestor-bookmark**: in jj's typical workflow, anonymous feature changes descend directly from `main`. The nearest ancestor bookmark for such a change IS `main`, so a `heads(::@ & bookmarks())` check fires `is_main=true` for feature branches — misrouting the "feature clean" and "feature uncommitted" matrix rows into the main-branch arms. Comparing `@-` change_id against the main bookmark's change_id is the direct semantic: "is the working copy's parent literally the main bookmark tip". Empty `main_id` leaves `is_main=false` and falls through to the feature-branch decision path.
 
 ### Patched decision block
 
@@ -338,8 +337,12 @@ repo="$(basename "$(jj root 2>/dev/null \
 - codex plugin has no manifest — no bump needed there
 
 **PR description callouts:**
-- Mention that `--all-files` remains git-only in the binary (`app/diff/directory.go` uses `git ls-files`); if users in hg/jj repos request all-files, the launcher will fail. Separate tracking issue, out of scope for this PR.
-- Note that jj bookmark list output separator varies by jj version; the `case` patterns handle both space- and comma-separated forms.
+- `--all-files` is supported for git and jj in the binary (`app/diff/directory.go` has `NewJjDirectoryReader` backed by `jj file list`); it remains unsupported for hg. `detect-ref.sh`'s no-commits short-circuit still falls back to `--all-files` only for git (the only VCS that can hit the no-commits state — jj always has `@`, hg rarely used with `--all-files`).
+- **Behaviour change for no-VCS case**: pre-refactor, `detect-ref.sh` returned `suggested_ref=--all-files`/`needs_ask=false` when run outside any VCS (fallthrough via failed `git rev-parse HEAD`). Post-refactor it returns empty/`needs_ask=true`. This is a fix — `--all-files` outside a repo would have failed at the launcher anyway.
+- Skill history files contain a **git** diff (`app/history/history.go` `gitDiff` shells out to `git`), so review history capture for hg/jj repos still records annotations + headers but no diff block. Tracked as a follow-up.
+- jj bookmark template output format assumed to be spec-stable across jj 0.18+; `jj log -T 'bookmarks'` emits space-separated bookmarks on a single line, with one-bookmark-per-line when `@` has multiple bookmarks (now collapsed via `tr '\n' ' '`).
+- jj colocated-with-`.git` matrix row was not verified locally (jj not installed on the dev machine); script logic puts jj first in the probe order so jj wins when both `.jj` and `.git` are present.
+- `set -euo pipefail` at the top of `detect-ref.sh` means any jj invocation that fails mid-detection (e.g. templates rejected by an older-than-0.18 jj) aborts the whole script. This is acceptable because (a) the skill targets jj 0.18+ per the spike notes, (b) it is not a regression — the pre-change script had no jj support at all, and (c) a hard abort is safer than silently misrouting `needs_ask`. If a future jj release breaks one of the templates, the fix is to adjust the parsing in `detect_jj()`, not to paper over failures.
 
 **Manual verification in the wild** (nice-to-have, not required):
 - Try the skill in a real hg-only repo and confirm auto-detection gives sensible refs.

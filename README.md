@@ -134,11 +134,12 @@ Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iT
 "revdiff for staged changes"      -- staged only
 ```
 
-When no ref is provided, the plugin detects what to review automatically:
+When no ref is provided, the plugin auto-detects the VCS (git, hg, or jj) and inspects the current repo state to pick what to review:
 - On main/master with uncommitted changes — reviews uncommitted changes
 - On main/master with clean tree — reviews the last commit
 - On a feature branch with clean tree — reviews branch diff against main
 - On a feature branch with uncommitted changes — asks whether to review uncommitted only or the full branch diff
+- Outside a VCS repo — falls back to asking the user what to review
 
 The plugin includes built-in reference documentation and can answer questions about revdiff usage, available themes, keybindings, and configuration options. It can also create or modify the local config file (`~/.config/revdiff/config`) on request:
 
@@ -558,7 +559,7 @@ See the [Zed integration guide](https://revdiff.com/docs.html#zed-integration) f
 When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
 
 Each history file contains:
-- Header with path, git refs, and commit hash
+- Header with path, VCS refs, and commit hash
 - Full annotation output (same format as stdout)
 - Raw git diff for annotated files only
 

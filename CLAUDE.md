@@ -70,6 +70,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - No plugin manifest or marketplace envelope — the `.codex-plugin/` / `.agents/` layout was non-conformant with codex's actual format and removed
 - Script path resolution in SKILL.md falls back to `${CODEX_HOME:-$HOME/.codex}/skills/<skill>/scripts` when not running inside the revdiff repo
 - Scripts are copies from `.claude-plugin/skills/revdiff/scripts/`, not symlinks — each has a source comment at top
+- `detect-ref.sh` dispatches by VCS (`detect_git` / `detect_hg` / `detect_jj`) via `command -v` probes (jj → git → hg, matching `DetectVCS` precedence); git path stays byte-identical to the pre-refactor output. `read-latest-history.sh` uses the same VCS probe order for repo-root resolution.
 - Codex has no hook system — plan review is manual via `/revdiff-plan`
 
 ## Pi Plugin

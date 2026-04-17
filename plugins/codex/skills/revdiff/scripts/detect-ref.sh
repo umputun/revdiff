@@ -26,7 +26,6 @@ branch="unknown"
 main_branch=""
 is_main="false"
 has_uncommitted="false"
-has_unstaged="false"
 has_staged_only="false"
 has_commits="true"
 
@@ -35,6 +34,7 @@ detect_git() {
 
     # detect main branch name from remote HEAD, fallback to master/main check
     main_branch=""
+    local remote_head
     if remote_head=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null); then
         main_branch="${remote_head##refs/remotes/origin/}"
     elif git show-ref --verify --quiet refs/heads/master 2>/dev/null; then
@@ -43,22 +43,19 @@ detect_git() {
         main_branch="main"
     fi
 
-    is_main="false"
     if [ "$branch" = "$main_branch" ]; then
         is_main="true"
     fi
 
-    has_uncommitted="false"
     if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
         has_uncommitted="true"
     fi
 
     # distinguish staged-only vs unstaged changes
-    has_unstaged="false"
+    local has_unstaged="false"
     if ! git diff --quiet 2>/dev/null; then
         has_unstaged="true"
     fi
-    has_staged_only="false"
     if [ "$has_uncommitted" = "true" ] && [ "$has_unstaged" = "false" ]; then
         if ! git diff --cached --quiet 2>/dev/null; then
             has_staged_only="true"
@@ -66,7 +63,6 @@ detect_git() {
     fi
 
     # detect no-commits state (fresh repo after git init)
-    has_commits="true"
     if ! git rev-parse HEAD >/dev/null 2>&1; then
         has_commits="false"
     fi
@@ -77,81 +73,70 @@ detect_hg() {
 
     # hg has no remote HEAD equivalent; "default" is the conventional main branch.
     main_branch="default"
-    is_main="false"
     if [ "$branch" = "$main_branch" ]; then
         is_main="true"
     fi
 
-    has_uncommitted="false"
     if [ -n "$(hg status 2>/dev/null)" ]; then
         has_uncommitted="true"
     fi
 
-    # hg has no staging area — staged-only is never true.
-    has_staged_only="false"
-
     # detect no-commits state (fresh repo after hg init). `hg log -r .` always
-    # succeeds because `.` resolves to the null revision (all-zeros) on an empty
-    # repo, so check for any actual revisions via `all()` — empty output means
+    # resolves to null revision on empty repos, so use `all()` — empty means
     # no commits yet.
-    has_commits="true"
     if [ -z "$(hg log -r 'all()' -l 1 -T '.' 2>/dev/null)" ]; then
         has_commits="false"
     fi
 }
 
-# targets jj 0.18+ — parsing uses `jj log -T` templates and `jj diff --summary`,
-# both of which have been spec-stable since the 0.18 release. separator-guard
-# below handles bookmark template separator variance (space vs comma) across
-# 0.18–0.30+ without pinning a specific version.
+# targets jj 0.18+ (spec-stable `jj log -T 'bookmarks'` and `jj diff --summary`).
 detect_jj() {
-    # bookmarks on @; jj's @ is usually an anonymous change (empty template
-    # output). fall back to a literal "@" so the branch field is never blank.
-    branch=$(jj log -r @ --no-graph -T 'bookmarks' 2>/dev/null)
+    # bookmarks on @; @ is usually anonymous (empty template). strip newlines
+    # that appear when @ has multiple bookmarks (template emits one per line).
+    branch=$(jj log -r @ --no-graph -T 'bookmarks' 2>/dev/null | tr '\n' ' ' | sed 's/ *$//')
     if [ -z "$branch" ]; then
         branch="@"
     fi
 
-    # detect main bookmark: try main, then master, then trunk. `jj log -r <name>`
-    # exits non-zero on unresolvable names — more stable than parsing
-    # `jj bookmark list` output (prefix + status markers vary by version).
+    # detect main bookmark: try main, then master. `jj log -r <name>` exits
+    # non-zero on unresolvable names.
     main_branch=""
-    for candidate in main master trunk; do
+    for candidate in main master; do
         if jj log -r "$candidate" -l 1 --no-graph -T '.' >/dev/null 2>&1; then
             main_branch="$candidate"
             break
         fi
     done
 
-    is_main="false"
     if [ -n "$main_branch" ]; then
-        # nearest ancestor bookmark — the actual "am I on main" semantic, since
-        # @ is usually an anonymous change with no bookmarks of its own.
-        nearest=$(jj log --no-graph \
-            -r "latest(heads(::@ & bookmarks()))" \
-            -T 'bookmarks' 2>/dev/null)
-        # bookmarks template separator varies by jj version (space or comma);
-        # guard both forms so we don't need to pin a specific separator.
-        case " $nearest " in *" $main_branch "*) is_main="true" ;; esac
-        case ",$nearest," in *",$main_branch,"*) is_main="true" ;; esac
+        # "am I on main" = @- (parent of working copy) is the main bookmark
+        # itself. anonymous feature changes descend from main, so the old
+        # "nearest ancestor bookmark" check mis-fired for them. compare
+        # change_ids directly — analogous to git's `[ "$branch" = "$main" ]`.
+        local main_id parent_id
+        main_id=$(jj log -r "$main_branch" -l 1 --no-graph -T 'change_id' 2>/dev/null)
+        parent_id=$(jj log -r @- -l 1 --no-graph -T 'change_id' 2>/dev/null)
+        if [ -n "$main_id" ] && [ "$main_id" = "$parent_id" ]; then
+            is_main="true"
+        fi
+    else
+        # set needs_ask here (not in apply_decision_logic) because the decision
+        # block would otherwise suggest an empty main_branch ref silently;
+        # without a main bookmark there's nothing sensible to diff against.
+        needs_ask="true"
     fi
 
-    # "uncommitted" = @ has changes vs @-. `jj diff -r @ --summary` has been
-    # stable since early jj releases — empty stdout means @ == @-.
-    has_uncommitted="false"
+    # uncommitted = @ has changes vs @-; empty `jj diff --summary` = no changes.
     if [ -n "$(jj diff -r @ --summary 2>/dev/null)" ]; then
         has_uncommitted="true"
     fi
-
-    # jj has no staging area; @ always exists so has_commits is always true.
-    has_staged_only="false"
-    has_commits="true"
+    # jj has no staging area; @ always exists so has_commits stays true.
 }
 
 apply_decision_logic() {
     # no-commits short-circuit fires first: on git, fall back to --all-files
-    # (browses staged files); on hg/jj, ask the user because --all-files is
-    # git-only in the binary (app/diff/directory.go uses `git ls-files`).
+    # (browses staged files); on hg, ask the user since --all-files is not
+    # supported for hg. jj always has @ so this branch is unreachable for jj.
     # short-circuit deliberately precedes is_main/has_uncommitted so a fresh
     # hg repo with `?` untracked files doesn't misroute into the main+uncommitted arm.
     if [ "$has_commits" = "false" ]; then
@@ -201,16 +186,7 @@ case "$vcs" in
 git) detect_git ;;
 hg) detect_hg ;;
 jj) detect_jj ;;
-*)
-    # no VCS detected — fall through with empty fields so the skill asks
-    branch="unknown"
-    main_branch=""
-    is_main="false"
-    has_uncommitted="false"
-    has_staged_only="false"
-    has_commits="true"
-    needs_ask="true"
-    ;;
+*) needs_ask="true" ;; # no VCS detected — defaults already set
 esac
 
 apply_decision_logic
