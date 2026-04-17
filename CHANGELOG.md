@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.19.2 - 2026-04-17
+
+### Improvements
+
+- add "??" shortcut for explanation requests, bump to 0.7.6 56067de
+- add Claude Code integration card and group integration tiles 7225082
+
+### Bug Fixes
+
+- keep wrap and annotation rows visible at viewport bottom #118 @umputun
+- suppress initial loading flash and drop stale file-list responses #117 @umputun
+- propagate EDITOR/VISUAL through overlay backends 34e0989
+
 ## v0.19.1 - 2026-04-16
 
 ### Improvements
