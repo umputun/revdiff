@@ -248,7 +248,8 @@ main()  [main.go]
 ```
 Model.Init() → loadFiles cmd
             → Renderer.ChangedFiles() → filesLoadedMsg
-            → tree.Rebuild(entries) + m.filesLoaded = true
+            → handleFilesLoaded drops stale msg (seq mismatch), else m.filesLoaded = true
+            → (on success) tree.Rebuild(entries)
             → auto-select first file → loadFileDiff cmd
             → Renderer.FileDiff() → fileLoadedMsg
             → highlight.HighlightLines() → highlightedLines
@@ -258,9 +259,12 @@ Model.Init() → loadFiles cmd
 `View()` is gated on two flags so the user never sees an empty two-pane layout
 during async initialisation: it returns the literal `"loading..."` while
 `!m.ready` (before the first `WindowSizeMsg`), then `"loading files..."` while
-`m.ready && !m.filesLoaded` (after resize, before `filesLoadedMsg`). `filesLoaded`
-flips to true on every `filesLoadedMsg`, including the error path, so the loading
-screen always exits.
+`m.ready && !m.filesLoaded` (after resize, before an accepted `filesLoadedMsg`).
+`filesLoaded` flips to true on every accepted `filesLoadedMsg` (success or
+error), so the loading screen always exits once the current in-flight load
+returns. Stale responses (`msg.seq != m.filesLoadSeq`, e.g. an older load still
+in flight after `toggleUntracked` bumped the sequence) are dropped and do not
+flip the flag or rebuild the tree.
 
 ### Rendering Pipeline
 
