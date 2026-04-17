@@ -21,8 +21,8 @@ revdiff --all-files --exclude vendor # browse all files, excluding vendor direct
 revdiff --include src                # include only src/ files
 revdiff --include src --exclude src/vendor  # include src/ but exclude src/vendor/
 revdiff main --exclude vendor        # diff against main, excluding vendor
-revdiff --only=/tmp/plan.md          # review a file outside a git repo (context-only)
-revdiff --only=docs/notes.txt        # review a file with no git changes (context-only)
+revdiff --only=/tmp/plan.md          # review a file outside a repo (context-only)
+revdiff --only=docs/notes.txt        # review a file with no VCS changes (context-only)
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md  # review piped text as markdown
 some-command | revdiff --stdin --output /tmp/annotations.txt      # annotate generated output
 ```
@@ -56,10 +56,10 @@ revdiff main --exclude vendor                # normal diff, excluding vendor
 
 ## Context-Only File Review
 
-When `--only` specifies a file that has no git changes (or when no git repo exists), revdiff shows the file in context-only mode: all lines displayed without `+`/`-` markers, with full annotation and syntax highlighting support.
+When `--only` specifies a file that has no VCS changes (or when no repo exists), revdiff shows the file in context-only mode: all lines displayed without `+`/`-` markers, with full annotation and syntax highlighting support.
 
-- **Inside a git repo**: `--only` files not in the diff are read from disk alongside changed files
-- **Outside a git repo**: `--only` is required; files are read directly from disk
+- **Inside a repo (git/hg/jj)**: `--only` files not in the diff are read from disk alongside changed files
+- **Outside a repo**: `--only` is required; files are read directly from disk
 
 ## Scratch-Buffer Review
 

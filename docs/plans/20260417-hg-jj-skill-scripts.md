@@ -308,12 +308,12 @@ repo="$(basename "$(jj root 2>/dev/null \
 - Modify (maybe): `.claude-plugin/skills/revdiff/references/install.md`, `config.md`
 - Modify (maybe): `plugins/codex/skills/revdiff/references/usage.md`, `install.md`, `config.md` if they mirror the .claude-plugin copies
 
-- [ ] grep all six reference files for `git repo` / `git-only` / `inside a git` / `outside a git`: `grep -rn "git repo\|git-only\|inside a git\|outside a git" .claude-plugin/skills/revdiff/references/ plugins/codex/skills/revdiff/references/`
-- [ ] update `references/usage.md` user-facing prose at lines 59-62 (and any other confirmed hits) to VCS-neutral wording — e.g. "inside a git repo" → "inside a repo (git/hg/jj)"
-- [ ] leave command examples alone — `git log`, `git diff` in example blocks remain accurate for git repos
-- [ ] verify codex reference copies match if they exist (same copy-not-symlink convention applies)
-- [ ] re-grep to confirm no remaining user-facing "git-only" prose
-- [ ] must pass before next task
+- [x] grep all six reference files for `git repo` / `git-only` / `inside a git` / `outside a git`: `grep -rn "git repo\|git-only\|inside a git\|outside a git" .claude-plugin/skills/revdiff/references/ plugins/codex/skills/revdiff/references/` (3 hits per tree: usage.md lines 24, 59, 61-62 — identical across both trees; install.md and config.md clean of target patterns)
+- [x] update `references/usage.md` user-facing prose at lines 59-62 (and any other confirmed hits) to VCS-neutral wording — e.g. "inside a git repo" → "inside a repo (git/hg/jj)" (line 24 comment changed to "outside a repo" / "no VCS changes"; line 59 intro sentence uses "no VCS changes" / "no repo exists"; bullets use "Inside a repo (git/hg/jj)" / "Outside a repo")
+- [x] leave command examples alone — `git log`, `git diff` in example blocks remain accurate for git repos (none of the command blocks were touched; only prose)
+- [x] verify codex reference copies match if they exist (same copy-not-symlink convention applies) (codex usage.md had identical hits at the same line numbers; applied the same four edits)
+- [x] re-grep to confirm no remaining user-facing "git-only" prose (both trees return "No matches found" for the four target patterns)
+- [x] must pass before next task
 
 ### Task 8: Verify acceptance criteria
 
