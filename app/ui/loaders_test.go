@@ -32,12 +32,50 @@ func TestModel_FilesLoaded(t *testing.T) {
 func TestModel_FilesLoadedError(t *testing.T) {
 	m := testModel(nil, nil)
 	m.ready = true
+	m.filesLoaded = false
 
 	result, cmd := m.Update(filesLoadedMsg{err: assert.AnError})
 	model := result.(Model)
 
 	assert.Nil(t, cmd)
 	assert.Equal(t, 0, model.tree.TotalFiles())
+	// filesLoaded must flip even on error, otherwise View() stays on "loading files..." forever
+	assert.True(t, model.filesLoaded, "filesLoaded must be set before the error early-return so the loading screen exits")
+}
+
+func TestModel_FilesLoaded_DropsStaleResponses(t *testing.T) {
+	// regression: a slow first load (seq=0) must not overwrite the tree after
+	// a newer load (seq=1) was issued — e.g. user toggled untracked immediately after startup.
+	m := testModel(nil, nil)
+	m.filesLoaded = false
+	m.filesLoadSeq = 1 // simulate a newer load already dispatched (e.g. toggleUntracked)
+
+	// stale response (seq=0) arrives first — must be dropped
+	stale := []diff.FileEntry{{Path: "stale.go"}}
+	result, cmd := m.Update(filesLoadedMsg{seq: 0, entries: stale})
+	model := result.(Model)
+	assert.Nil(t, cmd)
+	assert.False(t, model.filesLoaded, "stale response must not flip filesLoaded")
+	assert.Equal(t, 0, model.tree.TotalFiles(), "stale entries must not populate tree")
+	assert.Equal(t, "loading files...", model.View(), "View must still show loading while the current load is pending")
+
+	// fresh response (seq=1) arrives — accepted
+	fresh := []diff.FileEntry{{Path: "fresh.go"}}
+	result, _ = m.Update(filesLoadedMsg{seq: 1, entries: fresh})
+	model = result.(Model)
+	assert.True(t, model.filesLoaded)
+	assert.Equal(t, 1, model.tree.TotalFiles())
+}
+
+func TestModel_ToggleUntrackedBumpsFilesLoadSeq(t *testing.T) {
+	// regression: toggleUntracked must bump filesLoadSeq so any in-flight load
+	// from before the toggle is treated as stale by handleFilesLoaded.
+	m := testModel(nil, nil)
+	m.loadUntracked = func() ([]string, error) { return nil, nil }
+	before := m.filesLoadSeq
+	cmd := m.toggleUntracked()
+	require.NotNil(t, cmd)
+	assert.Greater(t, m.filesLoadSeq, before, "toggleUntracked must bump filesLoadSeq")
 }
 
 func TestModel_FilesLoadedMultipleFiles(t *testing.T) {

@@ -614,6 +614,7 @@ func TestModel_PlainStyles(t *testing.T) {
 	m.layout.height = 40
 	m.layout.treeWidth = 36
 	m.ready = true
+	m.filesLoaded = true
 	// plain styles should not panic and should render
 	output := m.View()
 	assert.NotEmpty(t, output)

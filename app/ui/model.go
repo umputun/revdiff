@@ -316,7 +316,9 @@ type Model struct {
 	search      searchState       // search lifecycle state
 	annot       annotationState   // annotation input lifecycle state
 
-	ready bool // true after first WindowSizeMsg
+	ready        bool   // true after first WindowSizeMsg
+	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
+	filesLoadSeq uint64 // bumped before each new file-list load; stale filesLoadedMsg (seq mismatch) is dropped
 
 	blamer        Blamer                   // optional blame provider (nil when git unavailable)
 	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
@@ -349,6 +351,7 @@ type blameLoadedMsg struct {
 
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
+	seq      uint64 // matches m.filesLoadSeq at the time the load was issued; mismatched messages are dropped
 	entries  []diff.FileEntry
 	err      error
 	warnings []string // non-fatal issues (staged/untracked fetch failures)
@@ -790,6 +793,7 @@ func (m *Model) toggleWordDiff() {
 // toggleUntracked toggles visibility of untracked files in the tree.
 func (m *Model) toggleUntracked() tea.Cmd {
 	m.modes.showUntracked = !m.modes.showUntracked
+	m.filesLoadSeq++
 	return m.loadFiles()
 }
 

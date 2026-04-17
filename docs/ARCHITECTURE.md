@@ -248,12 +248,19 @@ main()  [main.go]
 ```
 Model.Init() → loadFiles cmd
             → Renderer.ChangedFiles() → filesLoadedMsg
-            → tree.Rebuild(entries)
+            → tree.Rebuild(entries) + m.filesLoaded = true
             → auto-select first file → loadFileDiff cmd
             → Renderer.FileDiff() → fileLoadedMsg
             → highlight.HighlightLines() → highlightedLines
             → (optional) loadBlame cmd → blameLoadedMsg
 ```
+
+`View()` is gated on two flags so the user never sees an empty two-pane layout
+during async initialisation: it returns the literal `"loading..."` while
+`!m.ready` (before the first `WindowSizeMsg`), then `"loading files..."` while
+`m.ready && !m.filesLoaded` (after resize, before `filesLoadedMsg`). `filesLoaded`
+flips to true on every `filesLoadedMsg`, including the error path, so the loading
+screen always exits.
 
 ### Rendering Pipeline
 

@@ -159,6 +159,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 	m.layout.height = 40
 	m.layout.treeWidth = m.layout.width * m.cfg.treeWidthRatio / 10
 	m.ready = true
+	m.filesLoaded = true
 	return m
 }
 
@@ -262,6 +263,32 @@ func TestModel_Init(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []string{"a.go", "b.go"}, diff.FileEntryPaths(flm.entries))
 	assert.NoError(t, flm.err)
+}
+
+func TestModel_InitialLoadingState_NoEmptyFlash(t *testing.T) {
+	// regression: before filesLoadedMsg is handled, View() must not paint the two-pane
+	// layout with an empty tree and "no file selected". That made users see a 100-500 ms
+	// flash of a "no changes" screen on launch. See app/ui/view.go and handleFilesLoaded.
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	// undo the testModel shortcut to simulate a real program start
+	m.ready = false
+	m.filesLoaded = false
+
+	// before WindowSizeMsg: generic loading string
+	assert.Equal(t, "loading...", m.View())
+
+	// WindowSizeMsg arrives; filesLoadedMsg has not
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = result.(Model)
+	assert.Equal(t, "loading files...", m.View())
+
+	// filesLoadedMsg arrives; loading state must end
+	result, _ = m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	assert.True(t, m.filesLoaded)
+	got := m.View()
+	assert.NotEqual(t, "loading...", got)
+	assert.NotEqual(t, "loading files...", got)
 }
 
 func TestModel_EnterSwitchesToDiffPane(t *testing.T) {
