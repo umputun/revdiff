@@ -4,8 +4,9 @@
 # (temp file cleaned up, or user ran revdiff outside the plugin flow).
 #
 # resolves the history dir from $REVDIFF_HISTORY_DIR, falling back to
-# ~/.config/revdiff/history. resolves the repo subdir from `git rev-parse
-# --show-toplevel` basename, falling back to the cwd basename.
+# ~/.config/revdiff/history. resolves the repo subdir from the VCS root
+# basename, probing jj -> git -> hg (matching DetectVCS precedence in
+# app/diff/vcs.go), falling back to the cwd basename when no VCS is detected.
 #
 # prints file contents if found, prints nothing if not. exits 0 in both cases.
 
@@ -17,7 +18,10 @@ if [ -z "$hist_dir" ]; then
     hist_dir="${HOME:-}/.config/revdiff/history"
 fi
 
-repo="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
+repo="$(basename "$(jj root 2>/dev/null ||
+    git rev-parse --show-toplevel 2>/dev/null ||
+    hg root 2>/dev/null ||
+    pwd)")"
 repo_dir="$hist_dir/$repo"
 
 # find newest .md via -nt comparison instead of `ls -t` (shellcheck SC2012,

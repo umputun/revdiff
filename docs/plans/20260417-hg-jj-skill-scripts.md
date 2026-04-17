@@ -256,11 +256,11 @@ repo="$(basename "$(jj root 2>/dev/null \
 **Files:**
 - Modify: `.claude-plugin/skills/revdiff/scripts/read-latest-history.sh`
 
-- [ ] change the `repo=` line to probe jj → git → hg → pwd per Technical Details
-- [ ] update header comment block to describe multi-VCS resolution
-- [ ] run `shellcheck` and `shfmt -d`
-- [ ] manual test: place a dummy history file under `~/.config/revdiff/history/<reponame>/test.md`, run the script from inside a git repo, hg repo, and jj repo — confirm correct file is printed in each
-- [ ] must pass before next task
+- [x] change the `repo=` line to probe jj → git → hg → pwd per Technical Details
+- [x] update header comment block to describe multi-VCS resolution
+- [x] run `shellcheck` and `shfmt -d` (shellcheck clean; shfmt clean on the modified lines — only pre-existing `set -uo pipefail  #` double-space remains, untouched by this task)
+- [x] manual test: place a dummy history file under `<REVDIFF_HISTORY_DIR>/<reponame>/test.md`, run the script from inside a git repo, hg repo, and plain pwd dir — correct latest file printed in each. jj skipped (not installed locally); probe order puts jj first, so presence of jj only changes behaviour inside jj-detected dirs which this machine cannot construct.
+- [x] must pass before next task
 
 ### Task 5: Mirror changes into codex plugin script copies
 
