@@ -303,7 +303,7 @@ Positional arguments support several forms:
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
 | `--init-all-themes` | Write all gallery themes (bundled + community) to themes dir and exit | |
 | `--install-theme` | Install theme(s) from gallery or local file path and exit (repeatable) | |
-| `-A`, `--all-files` | Browse all git-tracked files, not just diffs (git only) | `false` |
+| `-A`, `--all-files` | Browse all tracked files, not just diffs (git or jj) | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
 | `-I`, `--include` | Include only files matching prefix, may be repeated, env: `REVDIFF_INCLUDE` (comma-separated) | |
@@ -480,9 +480,9 @@ some-command | revdiff --stdin --output /tmp/annotations.txt
 
 ### All-Files Mode
 
-Use `--all-files` (or `-A`) to browse all git-tracked files in a project, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode (no `+`/`-` markers) with full annotation and syntax highlighting support.
+Use `--all-files` (or `-A`) to browse all tracked files in a project, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode (no `+`/`-` markers) with full annotation and syntax highlighting support.
 
-`--all-files` requires a git repository (uses `git ls-files` for file discovery) and is mutually exclusive with refs, `--staged`, and `--only`.
+`--all-files` requires a git or jj repository (uses `git ls-files` or `jj file list` for file discovery) and is mutually exclusive with refs, `--staged`, and `--only`. Not supported in hg repos.
 
 Combine with `--include` (or `-I`) to narrow to specific paths and `--exclude` (or `-X`) to filter out unwanted paths:
 
