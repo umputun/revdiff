@@ -268,22 +268,24 @@ repo="$(basename "$(jj root 2>/dev/null \
 - Modify: `plugins/codex/skills/revdiff/scripts/detect-ref.sh`
 - Modify: `plugins/codex/skills/revdiff/scripts/read-latest-history.sh`
 
-- [ ] first inspect the codex copies to see exactly which lines are codex-specific (expected: a `# Source:` comment pointing back to `.claude-plugin/...`, right after the shebang): `head -5 plugins/codex/skills/revdiff/scripts/detect-ref.sh`
-- [ ] for each script, replace the body while preserving the codex-specific header. Concrete recipe (adjust line count if `# Source:` spans multiple lines):
+- [x] first inspect the codex copies to see exactly which lines are codex-specific (expected: a `# Source:` comment pointing back to `.claude-plugin/...`, right after the shebang): `head -5 plugins/codex/skills/revdiff/scripts/detect-ref.sh` (codex copies have 3-line header: shebang + script-name comment + `# source:` comment; source copies have 2-line header: shebang + script-name comment)
+- [x] for each script, replace the body while preserving the codex-specific header. Concrete recipe (adjust line count if `# Source:` spans multiple lines):
       ```bash
-      # say the codex header is lines 1-3 (shebang + blank + # Source:)
+      # codex header is lines 1-3 (shebang + script-name + # source:)
+      # source has 2-line header (shebang + script-name), so append from line 3 onwards
       SRC=.claude-plugin/skills/revdiff/scripts/detect-ref.sh
       DST=plugins/codex/skills/revdiff/scripts/detect-ref.sh
       head -3 "$DST" > "$DST.tmp"                       # keep codex-specific header
-      tail -n +2 "$SRC" >> "$DST.tmp"                   # append new body (skip SRC shebang)
-      mv "$DST.tmp" "$DST" && chmod +x "$DST"
+      tail -n +3 "$SRC" >> "$DST.tmp"                   # append new body (skip SRC shebang+name comment)
+      \mv -f "$DST.tmp" "$DST" && chmod +x "$DST"
       ```
-      Verify header line count by inspecting `head -5` output before running. Adjust `head -N`/`tail -n +N` accordingly.
-- [ ] repeat for `read-latest-history.sh`
-- [ ] run `shellcheck` and `shfmt -d` on both codex scripts
-- [ ] diff the two trees ignoring the first few lines: `diff <(tail -n +3 .claude-plugin/skills/revdiff/scripts/detect-ref.sh) <(tail -n +4 plugins/codex/skills/revdiff/scripts/detect-ref.sh)` — should be empty (adjust offsets based on actual header lengths)
-- [ ] manual test: repeat one hg and one jj matrix row using the codex copy to confirm parity
-- [ ] must pass before next task
+      Note: used `\mv -f` to bypass the interactive `mv` alias.
+- [x] repeat for `read-latest-history.sh`
+- [x] run `shellcheck` and `shfmt -d` on both codex scripts (shellcheck clean; shfmt shows the same pre-existing `set -uo pipefail  #` double-space warning as the source, which is intended parity — untouched by this task)
+- [x] diff the two trees ignoring the first few lines: `diff <(tail -n +3 .claude-plugin/skills/revdiff/scripts/detect-ref.sh) <(tail -n +4 plugins/codex/skills/revdiff/scripts/detect-ref.sh)` — should be empty (both scripts: byte-identical bodies confirmed)
+- [x] manual test: repeat one hg and one jj matrix row using the codex copy to confirm parity (hg on `default` clean → `HEAD~1`/false; hg on `default` uncommitted → empty/false — matches matrix expectations; jj skipped, see below)
+- [x] skipped - jj not installed locally — codex copy body is byte-identical to the `.claude-plugin` source, so any jj-path behaviour proven in Task 3 applies equally here; no independent validation possible on this machine
+- [x] must pass before next task
 
 ### Task 6: Update `SKILL.md` wording in both trees
 
