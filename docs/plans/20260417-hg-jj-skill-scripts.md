@@ -206,18 +206,18 @@ repo="$(basename "$(jj root 2>/dev/null \
 **Files:**
 - Modify: `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`
 
-- [ ] capture pre-change baseline on a real git repo: `detect-ref.sh > ~/revdiff-detect-ref-baseline.txt` (durable path, not `/tmp` — survives reboots between tasks)
-- [ ] move existing git detection logic into a `detect_git()` function — zero logic changes, just wrap the body
-- [ ] add top-level VCS probe (jj → git → hg → unknown) with `command -v` guards, setting `vcs` variable
-- [ ] add **stubs** for `detect_hg()` and `detect_jj()` that set `needs_ask=true` and all other fields to empty/false — fully implemented in Tasks 2 and 3. This keeps the script in a working state for hg/jj repos (falls through to the "needs ask" path) rather than dispatching to undefined functions.
-- [ ] extract decision logic into `apply_decision_logic()` and call after dispatch
-- [ ] add `unknown` arm identical to the hg/jj stubs (needs_ask=true, fields empty/false)
-- [ ] patch no-commits branch with early short-circuit: `--all-files` only when `vcs=git`; otherwise `needs_ask=true`. Short-circuit **before** `is_main`/`has_uncommitted` branching (see Technical Details > Patched decision block)
-- [ ] update header comment to describe multi-VCS auto-detection (jj → git → hg precedence)
-- [ ] run `shellcheck` and `shfmt -d` — fix any issues
-- [ ] manual test: run `detect-ref.sh` on the same git repo state as the baseline; `diff ~/revdiff-detect-ref-baseline.txt <(detect-ref.sh)` must be empty
-- [ ] manual test: run in an hg repo and a jj repo (if available) — both should output `needs_ask: true` with empty fields (stub behaviour, real logic in Tasks 2-3)
-- [ ] must pass before next task
+- [x] capture pre-change baseline on a real git repo: `detect-ref.sh > ~/revdiff-detect-ref-baseline.txt` (durable path, not `/tmp` — survives reboots between tasks)
+- [x] move existing git detection logic into a `detect_git()` function — zero logic changes, just wrap the body
+- [x] add top-level VCS probe (jj → git → hg → unknown) with `command -v` guards, setting `vcs` variable
+- [x] add **stubs** for `detect_hg()` and `detect_jj()` that set `needs_ask=true` and all other fields to empty/false — fully implemented in Tasks 2 and 3. This keeps the script in a working state for hg/jj repos (falls through to the "needs ask" path) rather than dispatching to undefined functions.
+- [x] extract decision logic into `apply_decision_logic()` and call after dispatch
+- [x] add `unknown` arm identical to the hg/jj stubs (needs_ask=true, fields empty/false)
+- [x] patch no-commits branch with early short-circuit: `--all-files` only when `vcs=git`; otherwise `needs_ask=true`. Short-circuit **before** `is_main`/`has_uncommitted` branching (see Technical Details > Patched decision block)
+- [x] update header comment to describe multi-VCS auto-detection (jj → git → hg precedence)
+- [x] run `shellcheck` and `shfmt -d` — fix any issues (ran `shfmt -d -i 4` to match existing 4-space convention; shellcheck clean)
+- [x] manual test: run `detect-ref.sh` on the same git repo state as the baseline; `diff ~/revdiff-detect-ref-baseline.txt <(detect-ref.sh)` must be empty (verified byte-identical output across 5 throwaway git states: main clean, main uncommitted, main staged-only, feature clean, feature uncommitted, plus no-commits)
+- [x] manual test: run in an hg repo and a jj repo (if available) — both should output `needs_ask: true` with empty fields (stub behaviour, real logic in Tasks 2-3) (hg stub verified; jj not installed locally but stub logic is identical)
+- [x] must pass before next task
 
 ### Task 2: Add `detect_hg()` implementation
 
