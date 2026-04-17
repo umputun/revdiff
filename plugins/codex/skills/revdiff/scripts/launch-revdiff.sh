@@ -31,6 +31,23 @@ REVDIFF_CMD="$REVDIFF_CMD $(sq "--output=$OUTPUT_FILE")"
 for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
 done
+
+# overlay backends (kitty @ launch, tmux display-popup, zellij run, etc.) spawn
+# children from a server/app process whose env predates user shell rc files,
+# so EDITOR/VISUAL exports from .zshrc/.bashrc are otherwise lost. prepend
+# `env KEY=VAL` so revdiff itself starts with the caller's editor env, which
+# its multi-line annotation flow passes to the spawned editor child.
+ENV_PREFIX=""
+for _name in EDITOR VISUAL; do
+    if [ "${!_name+x}" = x ]; then
+        ENV_PREFIX="$ENV_PREFIX $(sq "${_name}=${!_name}")"
+    fi
+done
+unset _name
+if [ -n "$ENV_PREFIX" ]; then
+    REVDIFF_CMD="/usr/bin/env$ENV_PREFIX $REVDIFF_CMD"
+fi
+
 CWD="$(pwd)"
 
 # build descriptive title: "rd: dirname [ref]"
