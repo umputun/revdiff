@@ -624,6 +624,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle commit info popup (subject + body of commits in the current ref range; git/hg/jj only) |
+| `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
 
@@ -685,7 +686,7 @@ Then edit to taste. Modal keys (annotation input, search input, confirm discard)
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
 
-**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `commit_info`
+**View:** `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `commit_info`, `reload`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 
