@@ -178,7 +178,7 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	annotated := m.annotatedFiles()
-	if len(annotated) > 0 {
+	if len(annotated) > 0 || m.tree.FilterActive() {
 		m.pendingAnnotJump = nil    // clear pending annotation jump on manual navigation
 		m.nav.pendingHunkJump = nil // clear pending hunk jump on manual navigation
 		m.tree.ToggleFilter(annotated)

@@ -100,6 +100,19 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// triggerReload triggers a full reload of the file list and current file diff.
+// It bumps filesLoadSeq to invalidate any in-flight loads, then re-runs
+// the same two-phase pipeline as startup. The selected file in the tree is
+// restored by SelectByPath in handleFilesLoaded; the diff cursor resets to
+// the top of the file. Named triggerReload (not reload) to avoid shadowing
+// the Model.reload field.
+func (m *Model) triggerReload() tea.Cmd {
+	m.filesLoadSeq++
+	m.commits.loaded = false // invalidate commit cache so i re-fetches after reload
+	m.commits.list = nil
+	return m.loadFiles()
+}
+
 // handleFilesLoaded processes the result of loadFiles, populating the file tree
 // and triggering the initial file diff load.
 func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {

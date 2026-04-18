@@ -862,6 +862,31 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	assert.Equal(t, bLines, model.file.lines)
 }
 
+func TestModel_TriggerReload_BumpsSeqAndCallsLoadFiles(t *testing.T) {
+	callCount := 0
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+			callCount++
+			return []diff.FileEntry{{Path: "main.go"}}, nil
+		},
+		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+			return nil, nil
+		},
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	initialSeq := m.filesLoadSeq
+
+	cmd := m.triggerReload()
+	assert.Equal(t, initialSeq+1, m.filesLoadSeq, "triggerReload must bump filesLoadSeq")
+	assert.NotNil(t, cmd, "triggerReload must return a loadFiles command")
+
+	// execute the command to confirm it calls ChangedFiles
+	msg := cmd()
+	_, ok := msg.(filesLoadedMsg)
+	assert.True(t, ok, "triggerReload command must emit filesLoadedMsg")
+	assert.Equal(t, 1, callCount, "triggerReload must trigger ChangedFiles")
+}
+
 func TestModel_RecomputeIntraRanges(t *testing.T) {
 	m := testModel(nil, nil)
 	m.modes.wordDiff = true

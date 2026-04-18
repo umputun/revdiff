@@ -117,6 +117,10 @@ func (m Model) statusBarText() string {
 		return m.commits.hint
 	}
 
+	if m.reload.hint != "" {
+		return m.reload.hint
+	}
+
 	// build left-side segments
 	var segments []string
 

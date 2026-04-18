@@ -473,6 +473,21 @@ func TestModel_HandleCommitInfo_StatusBarShowsHint(t *testing.T) {
 	assert.Equal(t, "no commits in this mode", status, "status bar surfaces the hint verbatim while it is set")
 }
 
+func TestModel_ReloadHint_ShownInStatusBar(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.reload.hint = "test reload hint"
+	assert.Equal(t, "test reload hint", m.statusBarText())
+}
+
+func TestModel_ReloadHint_ClearsOnNextKey(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.reload.hint = "some hint"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model := result.(Model)
+	assert.Empty(t, model.reload.hint, "any key press must clear the reload hint")
+}
+
 func TestModel_HandleCommitInfo_TruncatedFlagPropagates(t *testing.T) {
 	full := make([]diff.CommitInfo, diff.MaxCommits)
 	for i := range full {
@@ -488,4 +503,97 @@ func TestModel_HandleCommitInfo_TruncatedFlagPropagates(t *testing.T) {
 	model := result.(Model)
 	assert.True(t, model.commits.truncated, "MaxCommits result sets the truncated flag")
 	assert.True(t, model.overlay.Active())
+}
+
+func TestModel_ActionReload_StdinGuard(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.reload.applicable = false // stdin mode
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := result.(Model)
+	assert.Equal(t, "Reload not available in stdin mode", model.reload.hint)
+	assert.False(t, model.reload.pending)
+}
+
+func TestModel_ActionReload_NoAnnotations_DirectReload(t *testing.T) {
+	callCount := 0
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+			callCount++
+			return []diff.FileEntry{{Path: "a.go"}}, nil
+		},
+		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(),
+		ModelConfig{ReloadApplicable: true})
+	initialSeq := m.filesLoadSeq
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := result.(Model)
+	assert.False(t, model.reload.pending, "no confirmation needed without annotations")
+	assert.Equal(t, "Reloaded", model.reload.hint)
+	assert.Equal(t, initialSeq+1, model.filesLoadSeq, "filesLoadSeq must be bumped")
+	assert.NotNil(t, cmd, "reload command must be returned")
+}
+
+func TestModel_ActionReload_WithAnnotations_SetsPending(t *testing.T) {
+	store := annotation.NewStore()
+	store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	m := testNewModel(t, plainRenderer(), store, noopHighlighter(),
+		ModelConfig{ReloadApplicable: true})
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := result.(Model)
+	assert.True(t, model.reload.pending, "confirmation must be requested when annotations exist")
+	assert.Equal(t, "Annotations will be dropped — press y to confirm, any other key to cancel", model.reload.hint)
+	assert.Nil(t, cmd, "no reload command before confirmation")
+	assert.Equal(t, 1, store.Count(), "annotations must not be cleared yet")
+}
+
+func TestModel_ActionReload_YConfirms(t *testing.T) {
+	store := annotation.NewStore()
+	store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	callCount := 0
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+			callCount++
+			return []diff.FileEntry{{Path: "a.go"}}, nil
+		},
+		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := testNewModel(t, renderer, store, noopHighlighter(),
+		ModelConfig{ReloadApplicable: true})
+
+	// first R: sets pending
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := result.(Model)
+	require.True(t, model.reload.pending)
+
+	// y: confirms
+	result, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model = result.(Model)
+	assert.False(t, model.reload.pending, "pending must be cleared after confirmation")
+	assert.Equal(t, 0, store.Count(), "annotations must be cleared after confirmation")
+	assert.Equal(t, "Reloaded", model.reload.hint)
+	assert.NotNil(t, cmd, "reload command must be returned after confirmation")
+}
+
+func TestModel_ActionReload_OtherKeyCancels(t *testing.T) {
+	store := annotation.NewStore()
+	store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	m := testNewModel(t, plainRenderer(), store, noopHighlighter(),
+		ModelConfig{ReloadApplicable: true})
+
+	// first R: sets pending
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := result.(Model)
+	require.True(t, model.reload.pending)
+
+	// j: cancels
+	result, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = result.(Model)
+	assert.False(t, model.reload.pending, "pending must be cleared on cancel")
+	assert.Equal(t, "Reload canceled", model.reload.hint)
+	assert.Equal(t, 1, store.Count(), "annotations must not be cleared on cancel")
+	assert.Nil(t, cmd, "no reload command on cancel")
 }

@@ -304,6 +304,15 @@ type commitsState struct {
 	hint       string            // transient status-bar message; cleared on next key press
 }
 
+// reloadState holds the pending-confirmation state for the R reload feature.
+// hint is a transient status-bar message cleared on the next key press.
+// applicable is false in stdin mode (stream consumed; reload impossible).
+type reloadState struct {
+	pending    bool   // true when waiting for y/other-key confirmation
+	hint       string // transient status-bar message; cleared on next key press
+	applicable bool   // false when reload is unavailable (e.g. --stdin)
+}
+
 // annotationState holds annotation input lifecycle state.
 type annotationState struct {
 	annotating         bool            // true when annotation text input is active
@@ -346,6 +355,7 @@ type Model struct {
 	search      searchState       // search lifecycle state
 	annot       annotationState   // annotation input lifecycle state
 	commits     commitsState      // lazy-loaded commit log for the commit-info overlay
+	reload      reloadState       // pending-confirmation state and applicability for R reload
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
@@ -463,6 +473,10 @@ type ModelConfig struct {
 	// today does not carry stdin/all-files; keeping the computation in the
 	// composition root avoids scope creep.
 	CommitsApplicable bool
+	// ReloadApplicable is false when --stdin is active (stream already consumed;
+	// reload is impossible). Computed at composition root in main.go and copied
+	// into Model state. Follows the same pattern as CommitsApplicable.
+	ReloadApplicable bool
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -573,6 +587,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			source:     cls,
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
+		reload: reloadState{applicable: cfg.ReloadApplicable},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
 	}, nil
@@ -652,6 +667,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// transient hints persist for exactly one render cycle; any key that reaches
 	// this point dismisses the last hint before the new action runs.
 	m.commits.hint = ""
+	m.reload.hint = ""
+
+	// pending-reload intercept: y confirms, any other key cancels
+	if m.reload.pending {
+		return m.handlePendingReload(msg)
+	}
 
 	if handled, model, cmd := m.handleModalKey(msg); handled {
 		return model, cmd
@@ -690,6 +711,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
+	case keymap.ActionReload:
+		return m.handleReload()
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
@@ -739,6 +762,46 @@ func (m *Model) handleCommitInfo() {
 		Truncated:  m.commits.truncated,
 		Err:        m.commits.err,
 	})
+}
+
+func (m Model) handlePendingReload(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.reload.pending = false
+	if msg.String() == "y" {
+		m.store.Clear()
+		if m.tree.FilterActive() {
+			m.tree.ToggleFilter(nil)
+		}
+		m.reload.hint = "Reloaded"
+		cmd := m.triggerReload()
+		return m, cmd
+	}
+	m.reload.hint = "Reload canceled"
+	return m, nil
+}
+
+// handleReload handles the ActionReload key. In stdin mode the feature is
+// unavailable. If no annotations exist, reloads immediately. If annotations
+// exist, enters pending-confirmation state (waiting for y/other key in
+// handlePendingReload).
+func (m Model) handleReload() (tea.Model, tea.Cmd) {
+	if !m.reload.applicable {
+		m.reload.hint = "Reload not available in stdin mode"
+		return m, nil
+	}
+	if m.store.Count() > 0 && !m.cfg.noStatusBar {
+		m.reload.pending = true
+		m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
+		return m, nil
+	}
+	if m.store.Count() > 0 {
+		m.store.Clear()
+		if m.tree.FilterActive() {
+			m.tree.ToggleFilter(nil)
+		}
+	}
+	m.reload.hint = "Reloaded"
+	cmd := m.triggerReload()
+	return m, cmd
 }
 
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {

@@ -85,6 +85,11 @@ func (s *Store) Count() int {
 	return count
 }
 
+// Clear removes all annotations from the store.
+func (s *Store) Clear() {
+	s.annotations = make(map[string][]Annotation)
+}
+
 // All returns all annotations grouped by file. The returned map is a copy.
 func (s *Store) All() map[string][]Annotation {
 	result := make(map[string][]Annotation, len(s.annotations))
