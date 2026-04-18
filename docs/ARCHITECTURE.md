@@ -75,6 +75,8 @@ Handles all interaction with version control systems and diff parsing.
 - `Git` — runs `git diff`, parses unified diff output
 - `Hg` — runs `hg diff --git`, parses unified diff output
 - `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
+
+**CommitLogger capability** (`CommitLog(ref string) ([]CommitInfo, error)`) — an additive capability interface implemented by `Git`/`Hg`/`Jj` and consumed by the `i` commit-info overlay. Separate from the base `Renderer` so non-VCS renderers (`FileReader`, `DirectoryReader`, `StdinReader`) stay unaffected. Each VCS translates the pre-combined ref string to its own log syntax (`X..HEAD` for git, `X::.` for hg, `X..@` for jj), caps results at 500 commits, and strips raw `\x1b` bytes from subject/body at parse time so the overlay can render without re-scanning for ANSI injection. Hg uses ASCII US/RS separators (`\x1f`/`\x1e`) because literal NUL is invalid in argv; git and jj use NUL/SOH via stdout.
 - `FileReader` — reads standalone files as full-context (no VCS needed)
 - `DirectoryReader` — lists all tracked files via a pluggable lister (`git ls-files` by default; `NewJjDirectoryReader` uses `jj file list`) for `--all-files` mode
 - `StdinReader` — reads from stdin as scratch buffer
@@ -150,6 +152,7 @@ Layered popup system with mutual exclusivity (one overlay at a time).
 - **`helpOverlay`** — two-column keybinding help popup
 - **`annotListOverlay`** — scrollable annotation list with cross-file jump
 - **`themeSelectOverlay`** — theme picker with fzf-style filter, live swatch preview
+- **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated lazily on first `i` press (cached for the session). Sized via `clamp(term_w * 0.8, 30, 80)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
 
 `Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies.
 
@@ -214,6 +217,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | Interface | Methods | Implementors |
 |-----------|---------|-------------|
 | `Renderer` | `ChangedFiles()`, `FileDiff()` | `diff.Git`, `diff.Hg`, `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.FallbackRenderer`, `diff.ExcludeFilter`, `diff.IncludeFilter` |
+| `commitLogSource` | `CommitLog(ref)` | `diff.Git`, `diff.Hg`, `diff.Jj` (via `diff.CommitLogger` capability; resolved at Model construction by type-assertion on the Renderer when `ModelConfig.CommitLog` is nil) |
 | `SyntaxHighlighter` | `HighlightLines()`, `SetStyle()`, `StyleName()` | `highlight.Highlighter` |
 | `Blamer` | `FileBlame()` | `diff.Git`, `diff.Hg` |
 | `styleResolver` | `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()` | `style.Resolver` |
@@ -222,7 +226,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
 | `FileTreeComponent` | 15 methods (navigation, query, mutation, render) | `sidepane.FileTree` |
 | `TOCComponent` | 7 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
-| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `Close()`, `HandleKey()`, `Compose()` | `overlay.Manager` |
+| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenCommitInfo()`, `Close()`, `HandleKey()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 | `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
 
@@ -313,8 +317,12 @@ User presses 'a' on diff line
 ### Overlay Flow
 
 ```
-User presses '?' / '@' / 'T'
-  → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect
+User presses '?' / '@' / 'T' / 'i'
+  → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect/OpenCommitInfo
+      (for 'i': Model first runs ensureCommitsLoaded() which calls
+       commitLogSource.CommitLog(ref) once per session; cached thereafter.
+       When not applicable — stdin/staged/only/all-files/no-ref — Model
+       sets a transient status-bar hint and skips the open entirely.)
   → overlay.Manager activates popup, blocks other overlays
   → key events route through Manager.HandleKey() → Outcome
   → Model switches on OutcomeKind:

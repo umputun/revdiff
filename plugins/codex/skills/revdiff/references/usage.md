@@ -122,6 +122,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only |
 | `?` | Toggle help overlay showing all keybindings |
+| `i` | Toggle commit info popup (subject + body of commits in the current ref range; git/hg/jj only) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
 
