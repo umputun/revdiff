@@ -671,18 +671,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// pending-reload intercept: y confirms, any other key cancels
 	if m.reload.pending {
-		m.reload.pending = false
-		if msg.String() == "y" {
-			m.store.Clear()
-			if m.tree.FilterActive() {
-				m.tree.ToggleFilter(nil)
-			}
-			m.reload.hint = "Reloaded"
-			cmd := m.triggerReload()
-			return m, cmd
-		}
-		m.reload.hint = "Reload canceled"
-		return m, nil
+		return m.handlePendingReload(msg)
 	}
 
 	if handled, model, cmd := m.handleModalKey(msg); handled {
@@ -775,10 +764,25 @@ func (m *Model) handleCommitInfo() {
 	})
 }
 
+func (m Model) handlePendingReload(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.reload.pending = false
+	if msg.String() == "y" {
+		m.store.Clear()
+		if m.tree.FilterActive() {
+			m.tree.ToggleFilter(nil)
+		}
+		m.reload.hint = "Reloaded"
+		cmd := m.triggerReload()
+		return m, cmd
+	}
+	m.reload.hint = "Reload canceled"
+	return m, nil
+}
+
 // handleReload handles the ActionReload key. In stdin mode the feature is
 // unavailable. If no annotations exist, reloads immediately. If annotations
 // exist, enters pending-confirmation state (waiting for y/other key in
-// handleKey's intercept path).
+// handlePendingReload).
 func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	if !m.reload.applicable {
 		m.reload.hint = "Reload not available in stdin mode"
