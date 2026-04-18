@@ -781,10 +781,13 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 		m.reload.hint = "Reload not available in stdin mode"
 		return m, nil
 	}
-	if m.store.Count() > 0 {
+	if m.store.Count() > 0 && !m.cfg.noStatusBar {
 		m.reload.pending = true
 		m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
 		return m, nil
+	}
+	if m.store.Count() > 0 {
+		m.store.Clear()
 	}
 	m.reload.hint = "Reloaded"
 	cmd := m.triggerReload()
