@@ -674,6 +674,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.reload.pending = false
 		if msg.String() == "y" {
 			m.store.Clear()
+			if m.tree.FilterActive() {
+				m.tree.ToggleFilter(nil)
+			}
 			m.reload.hint = "Reloaded"
 			cmd := m.triggerReload()
 			return m, cmd
@@ -788,6 +791,9 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	}
 	if m.store.Count() > 0 {
 		m.store.Clear()
+		if m.tree.FilterActive() {
+			m.tree.ToggleFilter(nil)
+		}
 	}
 	m.reload.hint = "Reloaded"
 	cmd := m.triggerReload()
