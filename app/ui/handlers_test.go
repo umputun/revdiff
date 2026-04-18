@@ -545,7 +545,7 @@ func TestModel_ActionReload_WithAnnotations_SetsPending(t *testing.T) {
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
 	model := result.(Model)
 	assert.True(t, model.reload.pending, "confirmation must be requested when annotations exist")
-	assert.Contains(t, model.reload.hint, "press y to confirm")
+	assert.Equal(t, "Annotations will be dropped — press y to confirm, any other key to cancel", model.reload.hint)
 	assert.Nil(t, cmd, "no reload command before confirmation")
 	assert.Equal(t, 1, store.Count(), "annotations must not be cleared yet")
 }
@@ -593,7 +593,7 @@ func TestModel_ActionReload_OtherKeyCancels(t *testing.T) {
 	result, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model = result.(Model)
 	assert.False(t, model.reload.pending, "pending must be cleared on cancel")
-	assert.Equal(t, "Reload cancelled", model.reload.hint)
+	assert.Equal(t, "Reload canceled", model.reload.hint)
 	assert.Equal(t, 1, store.Count(), "annotations must not be cleared on cancel")
 	assert.Nil(t, cmd, "no reload command on cancel")
 }

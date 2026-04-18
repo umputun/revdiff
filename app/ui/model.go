@@ -675,9 +675,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if msg.String() == "y" {
 			m.store.Clear()
 			m.reload.hint = "Reloaded"
-			return m, m.triggerReload()
+			cmd := m.triggerReload()
+			return m, cmd
 		}
-		m.reload.hint = "Reload cancelled"
+		m.reload.hint = "Reload canceled"
 		return m, nil
 	}
 
@@ -786,7 +787,8 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.reload.hint = "Reloaded"
-	return m, m.triggerReload()
+	cmd := m.triggerReload()
+	return m, cmd
 }
 
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {

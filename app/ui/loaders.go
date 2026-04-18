@@ -102,9 +102,10 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 
 // triggerReload triggers a full reload of the file list and current file diff.
 // It bumps filesLoadSeq to invalidate any in-flight loads, then re-runs
-// the same two-phase pipeline as startup. The current file position is
-// preserved by the existing SelectByPath call in handleFilesLoaded.
-// Named triggerReload (not reload) to avoid shadowing the Model.reload field.
+// the same two-phase pipeline as startup. The selected file in the tree is
+// restored by SelectByPath in handleFilesLoaded; the diff cursor resets to
+// the top of the file. Named triggerReload (not reload) to avoid shadowing
+// the Model.reload field.
 func (m *Model) triggerReload() tea.Cmd {
 	m.filesLoadSeq++
 	return m.loadFiles()
