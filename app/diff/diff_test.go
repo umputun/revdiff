@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -576,6 +577,289 @@ func TestFormatBinaryDesc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, g.formatBinaryDesc(tt.kind, tt.oldSize, tt.newSize))
+		})
+	}
+}
+
+func TestGit_CommitLogRange(t *testing.T) {
+	g := NewGit("")
+	tests := []struct {
+		name, ref, want string
+	}{
+		{"single ref maps to range ending at HEAD", "main", "main..HEAD"},
+		{"explicit range passes through", "main..feature", "main..feature"},
+		{"explicit range with ref that contains dots not a range", "v1.2.3", "v1.2.3..HEAD"},
+		{"three-dot syntax treated as range", "main...feature", "main...feature"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, g.commitLogRange(tt.ref))
+		})
+	}
+}
+
+func TestGit_ParseCommitLog(t *testing.T) {
+	g := NewGit("")
+
+	t.Run("empty output returns nil", func(t *testing.T) {
+		assert.Nil(t, g.parseCommitLog(readFixture(t, "gitlog_empty.txt")))
+	})
+
+	t.Run("single record", func(t *testing.T) {
+		got := g.parseCommitLog(readFixture(t, "gitlog_single.txt"))
+		require.Len(t, got, 1)
+		assert.Equal(t, "abc123def456789012345678901234567890abcd", got[0].Hash)
+		assert.Equal(t, "Eugene <umputun@gmail.com>", got[0].Author)
+		assert.Equal(t, "Add commit info popup", got[0].Subject)
+		assert.Equal(t, "This popup shows the list of commits\nin the current ref-based diff range.\nUseful for PR reviews.", got[0].Body)
+		assert.Equal(t, 2026, got[0].Date.Year())
+		assert.Equal(t, time.April, got[0].Date.Month())
+		assert.Equal(t, 10, got[0].Date.Day())
+	})
+
+	t.Run("many records preserve order and separate bodies", func(t *testing.T) {
+		got := g.parseCommitLog(readFixture(t, "gitlog_many.txt"))
+		require.Len(t, got, 3)
+		assert.Equal(t, "First commit", got[0].Subject)
+		assert.Equal(t, "Body of first commit.", got[0].Body)
+		assert.Equal(t, "Second commit", got[1].Subject)
+		assert.Empty(t, got[1].Body)
+		assert.Equal(t, "Third commit", got[2].Subject)
+		assert.Equal(t, "Multi-line\nbody here.", got[2].Body)
+	})
+
+	t.Run("empty body produces empty Body field", func(t *testing.T) {
+		got := g.parseCommitLog(readFixture(t, "gitlog_nobody.txt"))
+		require.Len(t, got, 1)
+		assert.Equal(t, "Fix typo", got[0].Subject)
+		assert.Empty(t, got[0].Body)
+	})
+
+	t.Run("tricky content: CJK, ANSI escapes, tabs in body and subject", func(t *testing.T) {
+		got := g.parseCommitLog(readFixture(t, "gitlog_tricky.txt"))
+		require.Len(t, got, 4)
+
+		// CJK chars preserved as UTF-8
+		assert.Equal(t, "李雷 <lilei@example.com>", got[0].Author)
+		assert.Equal(t, "添加中文支持", got[0].Subject)
+		assert.Equal(t, "修复 CJK 字符宽度。", got[0].Body)
+
+		// ANSI escapes stripped from both subject and body
+		assert.Equal(t, "testred", got[1].Subject)
+		assert.NotContains(t, got[1].Subject, "\x1b")
+		assert.Equal(t, "payloadbold-green end", got[1].Body)
+		assert.NotContains(t, got[1].Body, "\x1b")
+
+		// tabs within the body are preserved (field separator is \x1f, not \t)
+		assert.Equal(t, "tabs-in-body", got[2].Subject)
+		assert.Equal(t, "col1\tcol2\tcol3", got[2].Body)
+
+		// tabs within the subject are preserved too — subject and body share one
+		// field split on the first newline, so tabs pass through verbatim
+		assert.Equal(t, "sub\twith\ttabs", got[3].Subject)
+		assert.Equal(t, "body with just one line", got[3].Body)
+	})
+
+	t.Run("malformed record (fewer than 4 fields) is skipped", func(t *testing.T) {
+		// three fields only — no desc (subject/body)
+		raw := "hash\x1fauthor\x1f2026-04-10T12:00:00-04:00\x00"
+		assert.Empty(t, g.parseCommitLog(raw))
+	})
+
+	t.Run("records cap at MaxCommits", func(t *testing.T) {
+		var b strings.Builder
+		for range MaxCommits + 50 {
+			b.WriteString("hash\x1fauthor\x1f2026-04-10T12:00:00-04:00\x1fsubject\x00")
+		}
+		got := g.parseCommitLog(b.String())
+		assert.Len(t, got, MaxCommits)
+	})
+
+	t.Run("malformed date leaves zero-value Date", func(t *testing.T) {
+		raw := "hash\x1fauthor\x1fnot-a-date\x1fsubject\nbody\x00"
+		got := g.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.True(t, got[0].Date.IsZero())
+	})
+
+	t.Run("subject containing \\x1f absorbs into final field and US byte is sanitized", func(t *testing.T) {
+		// crafted subject with US byte embedded — SplitN(4) absorbs all trailing
+		// \x1f into the last field; sanitizeCommitText then drops the US byte so
+		// the rendered subject has no framing artifacts
+		raw := "hash\x1fauthor\x1f2026-04-10T12:00:00-04:00\x1fsubject\x1fwith-us\nactual body\x00"
+		got := g.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "subjectwith-us", got[0].Subject)
+		assert.NotContains(t, got[0].Subject, "\x1f")
+		assert.Equal(t, "actual body", got[0].Body)
+	})
+
+	t.Run("author ANSI escape is stripped", func(t *testing.T) {
+		raw := "hash\x1fEvil\x1b[31mRed\x1b[0m <e@x>\x1f2026-04-10T12:00:00-04:00\x1fsubject\nbody\x00"
+		got := g.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "EvilRed <e@x>", got[0].Author)
+		assert.NotContains(t, got[0].Author, "\x1b")
+	})
+
+	t.Run("author BEL and C1 single-byte CSI stripped", func(t *testing.T) {
+		// BEL would ring the terminal bell; 0x9b is 8-bit CSI which some terminals
+		// interpret the same as ESC [ and would trigger styling on the popup
+		raw := "hash\x1fAlice\x07\u009b31m <a@x>\x1f2026-04-10T12:00:00-04:00\x1fsubject\nbody\x00"
+		got := g.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "Alice31m <a@x>", got[0].Author)
+		assert.NotContains(t, got[0].Author, "\x07")
+		assert.NotContains(t, got[0].Author, "\u009b")
+	})
+
+	t.Run("author with crafted US byte collapses into shifted fields but stays sanitized", func(t *testing.T) {
+		// delimiter injection in author shifts downstream fields. sanitizeCommitText
+		// still strips any ESC/BEL/C1 bytes in whatever content ends up in each
+		// parsed slot, so no terminal-control sequence reaches the overlay
+		raw := "hash\x1fEvil\x1fname\x1fwith\x1b[31mred\x1b[0m <e@x>\nbody\x00"
+		got := g.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.NotContains(t, got[0].Author, "\x1f")
+		assert.NotContains(t, got[0].Subject, "\x1b")
+		assert.NotContains(t, got[0].Body, "\x1b")
+		// date parse fails because the injected author shifted the date slot;
+		// parser preserves the commit with a zero Date rather than dropping it
+		assert.True(t, got[0].Date.IsZero())
+	})
+}
+
+func TestGit_CommitLog_EmptyRefReturnsNil(t *testing.T) {
+	g := NewGit("/nonexistent/dir")
+	commits, err := g.CommitLog("")
+	require.NoError(t, err)
+	assert.Nil(t, commits)
+
+	commits, err = g.CommitLog("   ")
+	require.NoError(t, err)
+	assert.Nil(t, commits)
+}
+
+func TestGit_CommitLog_InvalidDir(t *testing.T) {
+	g := NewGit("/nonexistent/dir")
+	_, err := g.CommitLog("HEAD")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commit log")
+}
+
+func TestGit_CommitLog_SingleRefRange(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "a.txt", "a\n")
+	gitCmd(t, dir, "add", "a.txt")
+	gitCmd(t, dir, "commit", "-m", "first commit\n\nBody of first commit.")
+
+	writeFile(t, dir, "a.txt", "a\nb\n")
+	gitCmd(t, dir, "add", "a.txt")
+	gitCmd(t, dir, "commit", "-m", "second commit")
+
+	writeFile(t, dir, "a.txt", "a\nb\nc\n")
+	gitCmd(t, dir, "add", "a.txt")
+	gitCmd(t, dir, "commit", "-m", "third commit")
+
+	// single ref translates to HEAD~2..HEAD, selecting the two most-recent commits
+	commits, err := g.CommitLog("HEAD~2")
+	require.NoError(t, err)
+	require.Len(t, commits, 2)
+	assert.Equal(t, "third commit", commits[0].Subject)
+	assert.Equal(t, "second commit", commits[1].Subject)
+}
+
+func TestGit_CommitLog_ExplicitRangeAndBodyStripping(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "a.txt", "a\n")
+	gitCmd(t, dir, "add", "a.txt")
+	gitCmd(t, dir, "commit", "-m", "first")
+
+	writeFile(t, dir, "a.txt", "a\nb\n")
+	gitCmd(t, dir, "add", "a.txt")
+	gitCmd(t, dir, "commit", "-m", "second subject\n\nbody line 1\nbody line 2")
+
+	commits, err := g.CommitLog("HEAD~1..HEAD")
+	require.NoError(t, err)
+	require.Len(t, commits, 1)
+	assert.Equal(t, "second subject", commits[0].Subject)
+	assert.Equal(t, "body line 1\nbody line 2", commits[0].Body)
+	assert.False(t, commits[0].Date.IsZero())
+	assert.Regexp(t, `^[0-9a-f]{40}$`, commits[0].Hash)
+	assert.Contains(t, commits[0].Author, "<test@test.com>")
+}
+
+func TestGit_CommitLog_ErrorOnInvalidRef(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "a.txt", "a\n")
+	gitCmd(t, dir, "add", "a.txt")
+	gitCmd(t, dir, "commit", "-m", "first")
+
+	_, err := g.CommitLog("not-a-real-ref")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commit log")
+}
+
+func TestSanitizeCommitText(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"no escape bytes passes through", "plain text", "plain text"},
+		{"CSI SGR sequence fully removed", "red \x1b[31mtext\x1b[0m here", "red text here"},
+		{"complex SGR with params", "\x1b[1;32mbold green\x1b[0m", "bold green"},
+		{"question-mark extension parsed", "start\x1b[?25lhidden\x1b[?25hend", "starthiddenend"},
+		{"stray escape without CSI dropped", "foo\x1bbar", "foobar"},
+		{"multiple escapes", "\x1b[31ma\x1b[32mb\x1b[0mc", "abc"},
+		{"CJK content preserved", "添加 \x1b[31m中文\x1b[0m 支持", "添加 中文 支持"},
+		{"BEL byte dropped", "ring\x07bell", "ringbell"},
+		{"backspace byte dropped", "back\x08space", "backspace"},
+		{"DEL byte dropped", "del\x7fete", "delete"},
+		{"C1 single-byte CSI (U+009B) dropped so ESC-equivalent sequence is broken", "fake\u009b31mtrick\u009b0m", "fake31mtrick0m"},
+		{"C1 OSC (U+009D) dropped so window-title sequence is broken", "set\u009dtitle\u009c", "settitle"},
+		{"framing US byte dropped defensively", "left\x1fright", "leftright"},
+		{"framing RS byte dropped defensively", "left\x1eright", "leftright"},
+		{"NUL byte dropped", "a\x00b", "ab"},
+		{"tab and newline preserved", "a\tb\nc", "a\tb\nc"},
+		{"CR dropped so crafted author cannot overwrite hash/meta via carriage return", "line1\r\nline2", "line1\nline2"},
+		{"standalone CR dropped", "start\rend", "startend"},
+		{"three-byte UTF-8 with continuation in C1 range preserved", "日本語", "日本語"},
+		{"emoji preserved", "shipit 🚀", "shipit 🚀"},
+		{"mixed ESC and C1 stripped together", "a\x1b[31mb\u009bc", "abc"},
+		{"raw 0x9b byte (invalid UTF-8) dropped so 8-bit CSI injection cannot survive", "fake\x9b31mtrick\x9b0m", "fake31mtrick0m"},
+		{"raw 0x9d byte (invalid UTF-8) dropped so 8-bit OSC injection cannot survive", "set\x9dtitle\x9c", "settitle"},
+		{"stray high byte 0xff dropped as invalid UTF-8", "a\xffb", "ab"},
+		{"valid UTF-8 preserved adjacent to stripped raw byte", "中\x9b文", "中文"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeCommitText(tt.in))
+		})
+	}
+}
+
+func TestSplitCommitDesc(t *testing.T) {
+	tests := []struct {
+		name, in, subject, body string
+	}{
+		{"subject only", "fix typo", "fix typo", ""},
+		{"subject plus body", "subject\nbody line", "subject", "body line"},
+		{"blank separator line stripped between subject and body", "subject\n\nbody", "subject", "body"},
+		{"multi-line body", "s\na\nb\nc", "s", "a\nb\nc"},
+		{"trailing newline stripped", "s\nbody\n", "s", "body"},
+		{"empty string", "", "", ""},
+		{"double blank separator: only one newline stripped", "s\n\n\nbody", "s", "\nbody"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, b := splitCommitDesc(tt.in)
+			assert.Equal(t, tt.subject, s)
+			assert.Equal(t, tt.body, b)
 		})
 	}
 }

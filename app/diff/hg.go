@@ -3,8 +3,17 @@ package diff
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// hgCommitLogTemplate is the hg log --template used by (*Hg).CommitLog.
+// Fields within a record are separated by ASCII US (\x1f); records end with
+// ASCII RS (\x1e). These control characters are valid in argv (unlike NUL,
+// which exec() rejects) and essentially never appear in commit messages,
+// so they work as reliable delimiters without escaping.
+const hgCommitLogTemplate = "{node}\x1f{author}\x1f{date|rfc3339date}\x1f{desc}\x1e"
 
 // Hg provides methods to extract changed files and build full-file diff views for Mercurial repos.
 type Hg struct {
@@ -167,6 +176,103 @@ func translateRef(ref string) string {
 	default:
 		return ref
 	}
+}
+
+// CommitLog returns commits reachable in the given ref range, newest first.
+//
+// The ref argument is interpreted as follows:
+//   - ""      → returns (nil, nil); there is no range to inspect
+//   - "X"     → commits in revset "X::." (X and descendants up to working copy parent)
+//   - "X..Y"  → commits in revset "X::Y - X" (reachable from Y but not X)
+//   - "X...Y" → symmetric difference "only(X,Y) + only(Y,X)"
+//
+// Empty sides of a range default to "0" (left) and "." (right) to mirror
+// revFlag. Git-style refs (HEAD, HEAD~N, HEAD^) are translated via translateRef.
+//
+// The result is capped at MaxCommits entries. Callers should treat a result of
+// exactly MaxCommits length as potentially truncated and signal that to the
+// user via CommitInfoSpec.Truncated.
+//
+// Author, Subject, and Body are sanitized (ANSI escape sequences, C0/DEL/C1
+// control bytes, and VCS framing delimiters stripped) to neutralize terminal
+// injection attempts via crafted commit metadata.
+func (h *Hg) CommitLog(ref string) ([]CommitInfo, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	revset := h.commitLogRevset(ref)
+	out, err := h.runHg("log", "--color=never", "-r", revset, "--template", hgCommitLogTemplate, "-l", strconv.Itoa(MaxCommits))
+	if err != nil {
+		return nil, fmt.Errorf("commit log: %w", err)
+	}
+	return h.parseCommitLog(out), nil
+}
+
+// commitLogRevset translates a combined ref string to hg's revset syntax for
+// commit log queries. See CommitLog for supported forms.
+func (h *Hg) commitLogRevset(ref string) string {
+	// triple-dot first so "A...B" isn't mis-split on ".."
+	if left, right, ok := strings.Cut(ref, "..."); ok {
+		l, r := h.rangeEnds(left, right)
+		return fmt.Sprintf("only(%s,%s) + only(%s,%s)", l, r, r, l)
+	}
+	if left, right, ok := strings.Cut(ref, ".."); ok {
+		l, r := h.rangeEnds(left, right)
+		return fmt.Sprintf("%s::%s - %s", l, r, l)
+	}
+	return translateRef(ref) + "::."
+}
+
+// rangeEnds translates both sides of a range expression via translateRef,
+// defaulting empty left to "0" (repo root) and empty right to "." (working copy parent).
+func (h *Hg) rangeEnds(left, right string) (string, string) {
+	l := translateRef(left)
+	r := translateRef(right)
+	if l == "" {
+		l = "0"
+	}
+	if r == "" {
+		r = "."
+	}
+	return l, r
+}
+
+// parseCommitLog parses the raw output of "hg log --template <hgCommitLogTemplate>"
+// into a slice of CommitInfo entries. Records end with RS (\x1e); within a
+// record fields are US-separated (\x1f) — hash, author, date, desc. The desc
+// field holds subject and body joined by a single newline. The slice is capped
+// at MaxCommits entries.
+func (h *Hg) parseCommitLog(raw string) []CommitInfo {
+	if raw == "" {
+		return nil
+	}
+	records := strings.Split(raw, "\x1e")
+	commits := make([]CommitInfo, 0, len(records))
+	for _, record := range records {
+		if record == "" {
+			continue
+		}
+		fields := strings.SplitN(record, "\x1f", 4)
+		if len(fields) < 4 {
+			continue
+		}
+		subject, body := splitCommitDesc(fields[3])
+		ci := CommitInfo{
+			Hash:    fields[0],
+			Author:  sanitizeCommitText(fields[1]),
+			Subject: sanitizeCommitText(subject),
+			Body:    sanitizeCommitText(body),
+		}
+		if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
+			ci.Date = t
+		}
+		commits = append(commits, ci)
+		if len(commits) >= MaxCommits {
+			break
+		}
+	}
+	return commits
 }
 
 // runHg executes a mercurial command in the working directory and returns its output.

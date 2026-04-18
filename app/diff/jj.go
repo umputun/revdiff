@@ -4,12 +4,22 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // jjFullContext is jj's equivalent of git's -U1000000 — request full-file diff context.
 // jj only accepts --context (not -U).
 const jjFullContext = "--context=1000000"
+
+// jjCommitLogTemplate is the jj log --template expression used by (*Jj).CommitLog.
+// Fields within a record are NUL-separated; records end with "\x00\x01" so the
+// parser can split on \x01 and trim the trailing \x00 (mirrors hg's convention).
+// Uses commit_id (git-style hash, stable for colocated repos) rather than change_id.
+// The fourth field is "1"/"0" for current_working_copy — used to filter the synthetic
+// empty @ placeholder without dropping real commits that happen to have no description.
+const jjCommitLogTemplate = `commit_id ++ "\x00" ++ author ++ "\x00" ++ committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z") ++ "\x00" ++ if(current_working_copy, "1", "0") ++ "\x00" ++ description ++ "\x00\x01"`
 
 // Jj provides methods to extract changed files and build full-file diff views for Jujutsu repos.
 // ref semantics are translated from the git-flavored syntax revdiff accepts:
@@ -214,6 +224,129 @@ func (j *Jj) translateRef(ref string) string {
 	default:
 		return ref
 	}
+}
+
+// CommitLog returns commits reachable in the given ref range, newest first.
+//
+// The ref argument is interpreted as follows:
+//   - ""       → returns (nil, nil); there is no range to inspect
+//   - "X"      → commits in revset "X..@" (exclusive of X, up to the working copy)
+//   - "X..Y"   → commits in revset "X..Y" (passed through after ref translation)
+//   - "X...Y"  → symmetric difference "(X..Y) | (Y..X)"
+//
+// Empty sides of a range default to "root()" (left) and "@" (right). Git-style
+// refs (HEAD, HEAD~N, HEAD^) are translated via translateRef.
+//
+// The result is capped at MaxCommits entries. Callers should treat a result of
+// exactly MaxCommits length as potentially truncated and signal that to the
+// user via CommitInfoSpec.Truncated.
+//
+// jj is queried with `-n MaxCommits+1` to absorb the synthetic working-copy @
+// placeholder that ranges like X..@ include. parseCommitLog drops that
+// placeholder and still caps real commits at MaxCommits, so the caller's
+// "len == MaxCommits means truncated" contract stays correct even when the
+// placeholder is present.
+//
+// Author, Subject, and Body are sanitized (ANSI escape sequences, C0/DEL/C1
+// control bytes, and VCS framing delimiters stripped) to neutralize terminal
+// injection attempts via crafted commit metadata.
+func (j *Jj) CommitLog(ref string) ([]CommitInfo, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	revset := j.commitLogRevset(ref)
+	out, err := j.runJj("log", "--no-graph", "--no-pager", "--color=never",
+		"-T", jjCommitLogTemplate, "-r", revset, "-n", strconv.Itoa(MaxCommits+1))
+	if err != nil {
+		return nil, fmt.Errorf("commit log: %w", err)
+	}
+	return j.parseCommitLog(out), nil
+}
+
+// commitLogRevset translates a combined ref string to jj's revset syntax for
+// commit log queries. See CommitLog for supported forms.
+func (j *Jj) commitLogRevset(ref string) string {
+	// triple-dot first so "A...B" isn't mis-split on ".."
+	if left, right, ok := strings.Cut(ref, "..."); ok {
+		l, r := j.rangeEnds(left, right)
+		return fmt.Sprintf("(%s..%s) | (%s..%s)", l, r, r, l)
+	}
+	if left, right, ok := strings.Cut(ref, ".."); ok {
+		l, r := j.rangeEnds(left, right)
+		return fmt.Sprintf("%s..%s", l, r)
+	}
+	return j.translateRef(ref) + "..@"
+}
+
+// rangeEnds translates both sides of a range expression via translateRef,
+// defaulting empty left to "root()" and empty right to "@" (working copy).
+func (j *Jj) rangeEnds(left, right string) (string, string) {
+	l := j.translateRef(left)
+	r := j.translateRef(right)
+	if l == "" {
+		l = "root()"
+	}
+	if r == "" {
+		r = "@"
+	}
+	return l, r
+}
+
+// parseCommitLog parses the raw output of "jj log --no-graph -T <jjCommitLogTemplate>"
+// into a slice of CommitInfo entries. Records end with "\x00\x01"; within a
+// record fields are NUL-separated (hash, author, date, current_working_copy flag,
+// description). The description field holds subject and body joined by a single
+// newline and includes a trailing newline that jj appends. The slice is capped
+// at MaxCommits entries.
+//
+// The synthetic working-copy @ placeholder is skipped when its description is
+// empty. jj auto-creates a new empty commit at @ every time you run `jj new`,
+// and range queries like X..@ will include that placeholder. Real commits with
+// empty descriptions (jj permits them) are kept so the popup reflects the range
+// accurately.
+func (j *Jj) parseCommitLog(raw string) []CommitInfo {
+	if raw == "" {
+		return nil
+	}
+	records := strings.Split(raw, "\x01")
+	commits := make([]CommitInfo, 0, len(records))
+	for _, record := range records {
+		// strip exactly one trailing "\x00" (the in-record separator that precedes
+		// the record terminator "\x01"). TrimRight would also eat an empty
+		// description's placeholder "\x00", collapsing 5 fields to 4.
+		record = strings.TrimSuffix(record, "\x00")
+		if record == "" {
+			continue
+		}
+		fields := strings.SplitN(record, "\x00", 5)
+		if len(fields) < 5 {
+			continue
+		}
+		isWorkingCopy := fields[3] == "1"
+		desc := strings.TrimRight(fields[4], "\n")
+		subject, body := splitCommitDesc(desc)
+		subject = sanitizeCommitText(subject)
+		body = sanitizeCommitText(body)
+		if isWorkingCopy && subject == "" && body == "" {
+			// synthetic working-copy @ placeholder created by `jj new` — see godoc
+			continue
+		}
+		ci := CommitInfo{
+			Hash:    fields[0],
+			Author:  sanitizeCommitText(fields[1]),
+			Subject: subject,
+			Body:    body,
+		}
+		if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
+			ci.Date = t
+		}
+		commits = append(commits, ci)
+		if len(commits) >= MaxCommits {
+			break
+		}
+	}
+	return commits
 }
 
 // parseSmallPositive parses a non-negative decimal integer. Returns false on

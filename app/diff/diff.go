@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 // ChangeType represents the type of change for a diff line.
@@ -67,6 +69,158 @@ func FileEntryPaths(entries []FileEntry) []string {
 	return paths
 }
 
+// MaxCommits is the hard cap on the number of commits returned by any CommitLogger
+// implementation. Callers should treat a result of exactly MaxCommits entries as
+// potentially truncated and surface that to the user (e.g. via CommitInfoSpec.Truncated).
+const MaxCommits = 500
+
+// CommitInfo holds metadata and message fields for a single commit in a ref range.
+// Author, Subject, and Body are pre-sanitized by sanitizeCommitText so overlay
+// renderers can treat them as literal text without a second sanitization pass.
+type CommitInfo struct {
+	Hash    string    // full hash or VCS change id
+	Author  string    // "Name <email>" or VCS equivalent
+	Date    time.Time // committer date (RFC3339-parsed)
+	Subject string    // first line of the commit message
+	Body    string    // remainder of the message with trailing blank lines trimmed (may be empty)
+}
+
+// CommitLogger is an optional capability interface implemented by VCS renderers
+// (Git, Hg, Jj) that can enumerate commits in a ref range. It is deliberately
+// separate from Renderer so consumers type-assert for the capability and gracefully
+// fall back when unavailable (e.g. FileReader, DirectoryReader).
+//
+// The ref argument follows revdiff's combined-ref convention produced by
+// options.ref(): "" means no range is selected, "X" is the single ref form,
+// and "X..Y" is the explicit range form. Each implementation translates the
+// string to its native log syntax.
+type CommitLogger interface {
+	CommitLog(ref string) ([]CommitInfo, error)
+}
+
+// commitLogFormat is the git-log --format template used by (*Git).CommitLog.
+// Fields inside a record are separated by ASCII US (\x1f); records are
+// NUL-separated via -z. Subject and body are joined by a newline inside the
+// final field so the parser's SplitN naturally absorbs any control bytes
+// (including \x1f) that a crafted commit message might embed — splitCommitDesc
+// then separates subject and body on the first newline, matching hg/jj.
+const commitLogFormat = "%H%x1f%an <%ae>%x1f%cI%x1f%s%n%b"
+
+// ansiCSIRe matches complete ANSI CSI escape sequences (ESC [ ... final-byte).
+// Used by sanitizeCommitText to neutralize ANSI injection via crafted commit messages.
+//
+//nolint:gocritic // explicit ASCII 0x20..0x2F range for CSI intermediate bytes
+var ansiCSIRe = regexp.MustCompile("\x1b\\[[0-9;?]*[\x20-\x2f]*[a-zA-Z~]")
+
+// sanitizeCommitText neutralizes bytes that could trigger terminal side effects
+// when a crafted commit Author/Subject/Body is rendered verbatim inside the
+// overlay. Used by VCS CommitLog parsers so the overlay renderer can treat the
+// fields as literal text without a second pass.
+//
+// Strips:
+//   - ANSI CSI sequences (ESC [ ... final-byte) and stray ESC bytes
+//   - C0 control bytes (except TAB and LF) — BEL, BS, VT, FF, CR, SO/SI, DEL.
+//     CR is stripped because a raw \r moves the terminal cursor to column 0 and
+//     lets a crafted Author/Subject overwrite earlier text on the same rendered
+//     line (hash, meta, leading subject chars).
+//   - VCS framing delimiters (US 0x1f, RS 0x1e, NUL) that slipped into a field
+//     through delimiter injection in upstream data
+//   - C1 control code points (U+0080–U+009F) which some terminals interpret as
+//     8-bit equivalents of ESC sequences (notably 0x9b = single-byte CSI,
+//     0x9d = single-byte OSC)
+//   - invalid UTF-8 bytes. Raw bytes such as 0x9b/0x9d are not valid starts of
+//     a UTF-8 sequence on their own, so a bare `for _, r := range s` would
+//     decode them as utf8.RuneError (U+FFFD) and let them pass; byte-level
+//     scanning closes that hole so 8-bit CSI/OSC injection cannot survive when
+//     a commit message carries arbitrary non-UTF-8 bytes.
+//
+// Preserves printable runes, TAB, and LF — scanning is done via
+// utf8.DecodeRuneInString so valid UTF-8 multi-byte sequences (CJK, emoji)
+// pass through unchanged even when their continuation bytes fall in the C1
+// byte range.
+func sanitizeCommitText(s string) string {
+	if !hasUnsafeContent(s) {
+		return s
+	}
+	if strings.ContainsRune(s, 0x1b) {
+		s = ansiCSIRe.ReplaceAllString(s, "")
+	}
+	if !hasUnsafeContent(s) {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			// invalid UTF-8 byte — drop it so raw 0x9b/0x9d (and other
+			// stray bytes) cannot reach the terminal.
+			i++
+			continue
+		}
+		if isUnsafeRune(r) {
+			i += size
+			continue
+		}
+		b.WriteString(s[i : i+size])
+		i += size
+	}
+	return b.String()
+}
+
+// hasUnsafeContent is a fast-path check used by sanitizeCommitText to skip the
+// full rune scan when s contains no ESC byte, no unsafe rune, and no invalid
+// UTF-8 byte.
+func hasUnsafeContent(s string) bool {
+	if strings.ContainsRune(s, 0x1b) {
+		return true
+	}
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			return true
+		}
+		if isUnsafeRune(r) {
+			return true
+		}
+		i += size
+	}
+	return false
+}
+
+// isUnsafeRune reports whether r should be dropped from commit metadata before
+// rendering. See sanitizeCommitText for the full rationale; briefly: TAB, LF,
+// and printable runes are kept, everything else in the C0/DEL/C1 ranges
+// (including CR) is dropped.
+func isUnsafeRune(r rune) bool {
+	switch {
+	case r == 0x09, r == 0x0a:
+		return false
+	case r < 0x20:
+		return true
+	case r == 0x7f:
+		return true
+	case r >= 0x80 && r <= 0x9f:
+		return true
+	default:
+		return false
+	}
+}
+
+// splitCommitDesc splits a VCS commit description value into subject and body
+// on the first newline. A single leading blank line (the conventional
+// subject/body separator) is stripped, and trailing blank lines in the body
+// are trimmed — matching git's %s/%b split so all VCS backends expose a
+// uniform subject/body pair to the overlay renderer.
+func splitCommitDesc(desc string) (subject, body string) {
+	subject, rest, found := strings.Cut(desc, "\n")
+	if !found {
+		return desc, ""
+	}
+	rest = strings.TrimPrefix(rest, "\n")
+	return subject, strings.TrimRight(rest, "\n")
+}
+
 // Git provides methods to extract changed files and build full-file diff views.
 type Git struct {
 	workDir string // working directory for git commands
@@ -75,6 +229,86 @@ type Git struct {
 // NewGit creates a new Git diff renderer rooted at the given working directory.
 func NewGit(workDir string) *Git {
 	return &Git{workDir: workDir}
+}
+
+// CommitLog returns commits reachable in the given ref range, newest first.
+//
+// The ref argument is interpreted as follows:
+//   - ""      → returns (nil, nil); there is no range to inspect
+//   - "X"     → commits in "X..HEAD"
+//   - "X..Y"  → passed through unchanged
+//
+// The result is capped at MaxCommits entries. Callers should treat a result
+// of exactly MaxCommits length as potentially truncated and signal that to
+// the user via CommitInfoSpec.Truncated.
+//
+// Author, Subject, and Body are sanitized (ANSI escape sequences, C0/DEL/C1
+// control bytes, and VCS framing delimiters stripped) to neutralize terminal
+// injection attempts via crafted commit metadata.
+func (g *Git) CommitLog(ref string) ([]CommitInfo, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil, nil
+	}
+	args := []string{
+		"log", "--no-color", "-z",
+		"--format=" + commitLogFormat,
+		"-n", strconv.Itoa(MaxCommits),
+		g.commitLogRange(ref),
+	}
+	out, err := g.runGit(args...)
+	if err != nil {
+		return nil, fmt.Errorf("commit log: %w", err)
+	}
+	return g.parseCommitLog(out), nil
+}
+
+// commitLogRange translates a combined ref string to git's log range syntax.
+// Single ref "X" becomes "X..HEAD"; "X..Y" passes through.
+func (g *Git) commitLogRange(ref string) string {
+	if strings.Contains(ref, "..") {
+		return ref
+	}
+	return ref + "..HEAD"
+}
+
+// parseCommitLog parses the raw output of "git log -z --format=<commitLogFormat>"
+// into a slice of CommitInfo entries. Records are NUL-separated; within a record
+// fields are ASCII-US-separated (hash, author, date, desc) and desc holds subject
+// and body joined by a newline. The slice is capped at MaxCommits entries.
+func (g *Git) parseCommitLog(raw string) []CommitInfo {
+	raw = strings.TrimRight(raw, "\x00")
+	if raw == "" {
+		return nil
+	}
+	records := strings.Split(raw, "\x00")
+	commits := make([]CommitInfo, 0, len(records))
+	for _, record := range records {
+		// leading newline can appear between NUL-terminated records after a body
+		record = strings.TrimLeft(record, "\n")
+		if record == "" {
+			continue
+		}
+		fields := strings.SplitN(record, "\x1f", 4)
+		if len(fields) < 4 {
+			continue
+		}
+		subject, body := splitCommitDesc(fields[3])
+		ci := CommitInfo{
+			Hash:    fields[0],
+			Author:  sanitizeCommitText(fields[1]),
+			Subject: sanitizeCommitText(subject),
+			Body:    sanitizeCommitText(body),
+		}
+		if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
+			ci.Date = t
+		}
+		commits = append(commits, ci)
+		if len(commits) >= MaxCommits {
+			break
+		}
+	}
+	return commits
 }
 
 // UntrackedFiles returns untracked files (not in .gitignore) using git ls-files --others --exclude-standard.

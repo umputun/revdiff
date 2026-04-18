@@ -4,7 +4,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -185,6 +187,175 @@ func TestJj_SynthesizeBinaryDiff_NoBinary(t *testing.T) {
 		"+new\n"
 	j := &Jj{}
 	assert.Equal(t, raw, j.synthesizeBinaryDiff(raw), "non-binary diff should be returned unchanged")
+}
+
+func TestJj_CommitLogRevset(t *testing.T) {
+	j := &Jj{}
+	tests := []struct {
+		name, ref, want string
+	}{
+		{"single ref maps to X..@", "feature", "feature..@"},
+		{"HEAD alias translates to @-", "HEAD", "@-..@"},
+		{"HEAD~N translates", "HEAD~3", "@----..@"},
+		{"explicit range X..Y", "main..feature", "main..feature"},
+		{"range with empty left defaults to root()", "..feature", "root()..feature"},
+		{"range with empty right defaults to @", "main..", "main..@"},
+		{"HEAD range translates both sides", "HEAD~3..HEAD", "@----..@-"},
+		{"triple dot produces symmetric difference", "main...feature", "(main..feature) | (feature..main)"},
+		{"triple dot with HEAD", "HEAD~2...HEAD", "(@---..@-) | (@-..@---)"},
+		{"tag-like ref with dots not a range", "v1.2.3", "v1.2.3..@"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, j.commitLogRevset(tt.ref))
+		})
+	}
+}
+
+func TestJj_ParseCommitLog(t *testing.T) {
+	j := &Jj{}
+
+	t.Run("empty output returns nil", func(t *testing.T) {
+		assert.Nil(t, j.parseCommitLog(readFixture(t, "jjlog_empty.txt")))
+	})
+
+	t.Run("single record", func(t *testing.T) {
+		got := j.parseCommitLog(readFixture(t, "jjlog_single.txt"))
+		require.Len(t, got, 1)
+		assert.Equal(t, "fb56480c709943c74d65ded4e13c94b2a7978ced", got[0].Hash)
+		assert.Equal(t, "Eugene <umputun@gmail.com>", got[0].Author)
+		assert.Equal(t, "Add commit info popup", got[0].Subject)
+		assert.Equal(t, "This popup shows the list of commits\nin the current ref-based diff range.\nUseful for PR reviews.", got[0].Body)
+		assert.Equal(t, 2026, got[0].Date.Year())
+		assert.Equal(t, time.April, got[0].Date.Month())
+		assert.Equal(t, 10, got[0].Date.Day())
+	})
+
+	t.Run("many records preserve order and separate bodies", func(t *testing.T) {
+		got := j.parseCommitLog(readFixture(t, "jjlog_many.txt"))
+		require.Len(t, got, 3)
+		assert.Equal(t, "First commit", got[0].Subject)
+		assert.Equal(t, "Body of first commit.", got[0].Body)
+		assert.Equal(t, "Second commit", got[1].Subject)
+		assert.Empty(t, got[1].Body)
+		assert.Equal(t, "Third commit", got[2].Subject)
+		assert.Equal(t, "Multi-line\nbody here.", got[2].Body)
+	})
+
+	t.Run("ANSI escape bytes stripped from author, subject and body", func(t *testing.T) {
+		raw := "hash\x00Evil\x1b[31mRed\x1b[0m <e@x>\x002026-04-10T12:00:00-04:00\x000\x00test\x1b[31mred\x1b[0m\nbody\x1b[32mgreen\x1b[0m end\n\x00\x01"
+		got := j.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "EvilRed <e@x>", got[0].Author)
+		assert.Equal(t, "testred", got[0].Subject)
+		assert.Equal(t, "bodygreen end", got[0].Body)
+		assert.NotContains(t, got[0].Author, "\x1b")
+		assert.NotContains(t, got[0].Subject, "\x1b")
+		assert.NotContains(t, got[0].Body, "\x1b")
+	})
+
+	t.Run("BEL and C1 control bytes stripped from all fields", func(t *testing.T) {
+		raw := "hash\x00Alice\x07 <a@x>\x002026-04-10T12:00:00-04:00\x000\x00sub\u009b31mject\nbo\u009ddy\n\x00\x01"
+		got := j.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.NotContains(t, got[0].Author, "\x07")
+		assert.NotContains(t, got[0].Subject, "\u009b")
+		assert.NotContains(t, got[0].Body, "\u009d")
+	})
+
+	t.Run("malformed record (fewer than 5 NUL-separated fields) skipped", func(t *testing.T) {
+		raw := "hash\x00author\x002026-04-10T12:00:00-04:00\x000\x00\x01"
+		assert.Empty(t, j.parseCommitLog(raw))
+	})
+
+	t.Run("records cap at MaxCommits", func(t *testing.T) {
+		var b strings.Builder
+		for range MaxCommits + 50 {
+			b.WriteString("hash\x00author\x002026-04-10T12:00:00-04:00\x000\x00subject\n\x00\x01")
+		}
+		got := j.parseCommitLog(b.String())
+		assert.Len(t, got, MaxCommits)
+	})
+
+	t.Run("working-copy placeholder does not shrink MaxCommits cap", func(t *testing.T) {
+		// jj is queried with `-n MaxCommits+1` so that the synthetic working-copy @
+		// placeholder does not steal one of the MaxCommits real-commit slots.
+		// When MaxCommits+1 records arrive with a leading placeholder and MaxCommits
+		// real commits, the parser must drop the placeholder and return exactly
+		// MaxCommits real entries so the caller's truncation signal still fires.
+		var b strings.Builder
+		b.WriteString(strings.Repeat("0", 40) + "\x00\x002026-04-10T13:00:00-04:00\x001\x00\n\x00\x01")
+		for range MaxCommits {
+			b.WriteString("hash\x00author\x002026-04-10T12:00:00-04:00\x000\x00subject\n\x00\x01")
+		}
+		got := j.parseCommitLog(b.String())
+		assert.Len(t, got, MaxCommits)
+	})
+
+	t.Run("malformed date leaves zero-value Date", func(t *testing.T) {
+		raw := "hash\x00author\x00not-a-date\x000\x00subject\nbody\n\x00\x01"
+		got := j.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.True(t, got[0].Date.IsZero())
+	})
+
+	t.Run("CJK content preserved as UTF-8", func(t *testing.T) {
+		raw := "hash\x00李雷 <lilei@example.com>\x002026-04-10T12:00:00-04:00\x000\x00添加中文支持\n修复 CJK 字符宽度。\n\x00\x01"
+		got := j.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "李雷 <lilei@example.com>", got[0].Author)
+		assert.Equal(t, "添加中文支持", got[0].Subject)
+		assert.Equal(t, "修复 CJK 字符宽度。", got[0].Body)
+	})
+
+	t.Run("empty-description working-copy @ commit is filtered out", func(t *testing.T) {
+		// jj auto-creates an empty working-copy commit at @ after every `jj new`;
+		// range queries like X..@ include it. The parser must drop these — identified
+		// by the current_working_copy flag combined with an empty description — so
+		// the popup does not show a blank/hash-only row. Real commits with empty
+		// descriptions (flag=0) are kept.
+		raw := "hash\x00Alice\x002026-04-10T12:00:00-04:00\x000\x00real subject\nreal body\n\x00\x01" +
+			strings.Repeat("0", 40) + "\x00\x002026-04-10T13:00:00-04:00\x001\x00\n\x00\x01"
+		got := j.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "hash", got[0].Hash)
+		assert.Equal(t, "real subject", got[0].Subject)
+		assert.Equal(t, "real body", got[0].Body)
+	})
+
+	t.Run("non-working-copy commit with empty description is kept", func(t *testing.T) {
+		// jj allows real commits with no description; they must not be dropped.
+		raw := "realhash\x00Bob\x002026-04-10T14:00:00-04:00\x000\x00\x00\x01"
+		got := j.parseCommitLog(raw)
+		require.Len(t, got, 1)
+		assert.Equal(t, "realhash", got[0].Hash)
+		assert.Empty(t, got[0].Subject)
+		assert.Empty(t, got[0].Body)
+	})
+
+	t.Run("working-copy flag with empty description and no trailing newline is filtered", func(t *testing.T) {
+		// some jj template paths emit a bare empty description field (no newline).
+		raw := "emptyhash\x00Bob\x002026-04-10T14:00:00-04:00\x001\x00\x00\x01"
+		assert.Empty(t, j.parseCommitLog(raw))
+	})
+}
+
+func TestJj_CommitLog_EmptyRefReturnsNil(t *testing.T) {
+	j := NewJj("/nonexistent/dir")
+	commits, err := j.CommitLog("")
+	require.NoError(t, err)
+	assert.Nil(t, commits)
+
+	commits, err = j.CommitLog("   ")
+	require.NoError(t, err)
+	assert.Nil(t, commits)
+}
+
+func TestJj_CommitLog_InvalidDir(t *testing.T) {
+	j := NewJj("/nonexistent/dir")
+	_, err := j.CommitLog("HEAD")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "commit log")
 }
 
 // e2e tests below

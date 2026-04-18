@@ -1,0 +1,4 @@
+abc123def456789012345678901234567890abcdEugene <umputun@gmail.com>2026-04-10T12:00:00-04:00Add commit info popup
+This popup shows the list of commits
+in the current ref-based diff range.
+Useful for PR reviews.

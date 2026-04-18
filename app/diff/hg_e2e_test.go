@@ -157,6 +157,80 @@ func TestHg_E2E_RefDiff(t *testing.T) {
 	assert.Equal(t, "Test User", blame[1].Author)
 }
 
+// TestHg_E2E_CommitLog exercises (*Hg).CommitLog against a real hg binary, covering
+// single-ref, range, and triple-dot revset translations plus round-trip of hash,
+// author, date, subject, and body.
+func TestHg_E2E_CommitLog(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+
+	dir := setupHgRepo(t)
+	h := NewHg(dir)
+
+	writeFile(t, dir, "a.txt", "a\n")
+	hgCmd(t, dir, "add", "a.txt")
+	hgCmd(t, dir, "commit", "-m", "first subject\n\nbody of first commit")
+
+	writeFile(t, dir, "a.txt", "a\nb\n")
+	hgCmd(t, dir, "commit", "-m", "second subject")
+
+	writeFile(t, dir, "a.txt", "a\nb\nc\n")
+	hgCmd(t, dir, "commit", "-m", "third subject\n\nthird body line 1\nthird body line 2")
+
+	t.Run("single ref selects range X::. (X and its descendants up to wc parent)", func(t *testing.T) {
+		// rev 0 → X::. includes revs 0, 1, 2
+		commits, err := h.CommitLog("0")
+		require.NoError(t, err)
+		require.Len(t, commits, 3)
+		// hg default order is ascending (oldest first); we only assert content, not order
+		subjects := map[string]string{}
+		bodies := map[string]string{}
+		for _, c := range commits {
+			subjects[c.Subject] = c.Subject
+			bodies[c.Subject] = c.Body
+		}
+		assert.Contains(t, subjects, "first subject")
+		assert.Contains(t, subjects, "second subject")
+		assert.Contains(t, subjects, "third subject")
+		assert.Equal(t, "body of first commit", bodies["first subject"])
+		assert.Empty(t, bodies["second subject"])
+		assert.Equal(t, "third body line 1\nthird body line 2", bodies["third subject"])
+
+		// all dates parsed, all authors populated
+		for _, c := range commits {
+			assert.False(t, c.Date.IsZero(), "date should be populated")
+			assert.Contains(t, c.Author, "Test User")
+			assert.NotEmpty(t, c.Hash)
+		}
+	})
+
+	t.Run("explicit range X..Y only includes descendants of X through Y", func(t *testing.T) {
+		// rev 0..2 — excludes rev 0, includes rev 1 and rev 2
+		commits, err := h.CommitLog("0..2")
+		require.NoError(t, err)
+		require.Len(t, commits, 2)
+		got := map[string]bool{commits[0].Subject: true, commits[1].Subject: true}
+		assert.True(t, got["second subject"])
+		assert.True(t, got["third subject"])
+		assert.False(t, got["first subject"], "X..Y must exclude X")
+	})
+
+	t.Run("range excluding tip returns earlier commits", func(t *testing.T) {
+		// 0..1 — excludes rev 0, includes rev 1 only
+		commits, err := h.CommitLog("0..1")
+		require.NoError(t, err)
+		require.Len(t, commits, 1)
+		assert.Equal(t, "second subject", commits[0].Subject)
+	})
+
+	t.Run("invalid ref returns wrapped error", func(t *testing.T) {
+		_, err := h.CommitLog("not-a-real-ref")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "commit log")
+	})
+}
+
 // TestGit_E2E_StillWorks verifies git repos still work after the refactoring.
 func TestGit_E2E_StillWorks(t *testing.T) {
 	dir := setupTestRepo(t)
