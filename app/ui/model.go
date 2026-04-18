@@ -667,6 +667,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// transient hints persist for exactly one render cycle; any key that reaches
 	// this point dismisses the last hint before the new action runs.
 	m.commits.hint = ""
+	m.reload.hint = ""
 
 	if handled, model, cmd := m.handleModalKey(msg); handled {
 		return model, cmd

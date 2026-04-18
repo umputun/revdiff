@@ -473,6 +473,21 @@ func TestModel_HandleCommitInfo_StatusBarShowsHint(t *testing.T) {
 	assert.Equal(t, "no commits in this mode", status, "status bar surfaces the hint verbatim while it is set")
 }
 
+func TestModel_ReloadHint_ShownInStatusBar(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.reload.hint = "test reload hint"
+	assert.Equal(t, "test reload hint", m.statusBarText())
+}
+
+func TestModel_ReloadHint_ClearsOnNextKey(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.reload.hint = "some hint"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model := result.(Model)
+	assert.Empty(t, model.reload.hint, "any key press must clear the reload hint")
+}
+
 func TestModel_HandleCommitInfo_TruncatedFlagPropagates(t *testing.T) {
 	full := make([]diff.CommitInfo, diff.MaxCommits)
 	for i := range full {
