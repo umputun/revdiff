@@ -845,3 +845,20 @@ func TestModel_CommitsLazyFetch(t *testing.T) {
 		assert.Equal(t, 0, fake.calls)
 	})
 }
+
+func TestModel_NewModel_ReloadApplicable(t *testing.T) {
+	plainRend := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	t.Run("true when ReloadApplicable is true", func(t *testing.T) {
+		m := testNewModel(t, plainRend, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{ReloadApplicable: true})
+		assert.True(t, m.reload.applicable)
+	})
+	t.Run("false when ReloadApplicable is false", func(t *testing.T) {
+		m := testNewModel(t, plainRend, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{ReloadApplicable: false})
+		assert.False(t, m.reload.applicable)
+	})
+}
