@@ -289,6 +289,17 @@ func buildStyles(c Colors) map[StyleKey]lipgloss.Style {
 	// differentiation happens at the call site via width/focus logic
 	m[StyleKeyThemeSelectBoxFocused] = themeBox
 
+	// commit info overlay box (accent border matches help/annot/theme overlays, optional DiffBg background)
+	commitInfoBox := lipgloss.NewStyle().
+		Border(border).
+		BorderForeground(lipgloss.Color(c.Accent)).
+		Padding(1, 2)
+	if c.DiffBg != "" {
+		bg := lipgloss.Color(c.DiffBg)
+		commitInfoBox = commitInfoBox.Background(bg).BorderBackground(bg)
+	}
+	m[StyleKeyCommitInfoBox] = commitInfoBox
+
 	return m
 }
 
@@ -340,6 +351,8 @@ func buildPlainStyles() map[StyleKey]lipgloss.Style {
 		Border(border).Padding(1, 1)
 	m[StyleKeyThemeSelectBoxFocused] = lipgloss.NewStyle().
 		Border(border).Padding(1, 1)
+	m[StyleKeyCommitInfoBox] = lipgloss.NewStyle().
+		Border(border).Padding(1, 2)
 
 	return m
 }

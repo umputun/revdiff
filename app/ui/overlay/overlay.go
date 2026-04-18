@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/style"
 )
@@ -29,6 +30,7 @@ const (
 	KindHelp             // help overlay
 	KindAnnotList        // annotation list popup
 	KindThemeSelect      // theme selector popup
+	KindCommitInfo       // commit info popup
 )
 
 // OutcomeKind describes what happened after a key press in an overlay.
@@ -118,13 +120,27 @@ type ThemeChoice struct {
 	Name string
 }
 
+// CommitInfoSpec describes the commit info popup content.
+// Applicable is false when the current mode (stdin/staged/only/all-files/no-ref)
+// precludes a meaningful commit list; the overlay renders a hint in that case.
+// Truncated is true when the commit list was capped at diff.MaxCommits entries.
+// Err is a non-nil VCS CommitLog error to surface to the user; takes precedence
+// over the empty-list and applicability messages when set.
+type CommitInfoSpec struct {
+	Commits    []diff.CommitInfo
+	Applicable bool
+	Truncated  bool
+	Err        error
+}
+
 // Manager coordinates overlay lifecycle: open/close, key routing, and render composition.
 // Only one overlay can be active at a time.
 type Manager struct {
-	kind     Kind
-	help     helpOverlay
-	annotLst annotListOverlay
-	themeSel themeSelectOverlay
+	kind       Kind
+	help       helpOverlay
+	annotLst   annotListOverlay
+	themeSel   themeSelectOverlay
+	commitInfo commitInfoOverlay
 }
 
 // NewManager creates a Manager with no active overlay.
@@ -162,6 +178,13 @@ func (m *Manager) OpenThemeSelect(spec ThemeSelectSpec) {
 	m.themeSel.open(spec)
 }
 
+// OpenCommitInfo activates the commit info popup with the given spec.
+func (m *Manager) OpenCommitInfo(spec CommitInfoSpec) {
+	m.Close()
+	m.kind = KindCommitInfo
+	m.commitInfo.open(spec)
+}
+
 // HandleKey routes a key press to the active overlay and returns the outcome.
 // auto-closes the overlay for outcomes that imply dismissal.
 // returns Outcome{Kind: OutcomeNone} when no overlay is active.
@@ -176,6 +199,8 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 		out = m.annotLst.handleKey(msg, action)
 	case KindThemeSelect:
 		out = m.themeSel.handleKey(msg, action)
+	case KindCommitInfo:
+		out = m.commitInfo.handleKey(msg, action)
 	default:
 		return Outcome{}
 	}
@@ -202,6 +227,8 @@ func (m *Manager) Compose(base string, ctx RenderCtx) string {
 		fg = m.annotLst.render(ctx, m)
 	case KindThemeSelect:
 		fg = m.themeSel.render(ctx, m)
+	case KindCommitInfo:
+		fg = m.commitInfo.render(ctx, m)
 	}
 	return m.overlayCenter(base, fg, ctx.Width)
 }

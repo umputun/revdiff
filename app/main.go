@@ -92,12 +92,13 @@ func run(opts options) error {
 	km := keymap.LoadOrDefault(keysPath)
 
 	var (
-		renderer    ui.Renderer
-		workDir     string
-		gitRoot     string
-		blamer      ui.Blamer
-		untrackedFn func() ([]string, error)
-		err         error
+		renderer     ui.Renderer
+		workDir      string
+		gitRoot      string
+		blamer       ui.Blamer
+		untrackedFn  func() ([]string, error)
+		commitLogger diff.CommitLogger
+		err          error
 	)
 
 	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
@@ -120,6 +121,7 @@ func run(opts options) error {
 		workDir = setup.workDir
 		blamer = setup.blamer
 		untrackedFn = setup.untrackedFn
+		commitLogger = setup.commitLogger
 	}
 
 	// construct the three style types per D15: Resolver first, Renderer from Resolver, SGR is zero-value
@@ -139,34 +141,36 @@ func run(opts options) error {
 	}
 
 	model, err := ui.NewModel(ui.ModelConfig{
-		Renderer:         renderer,
-		Store:            store,
-		Highlighter:      hl,
-		StyleResolver:    res,
-		StyleRenderer:    style.NewRenderer(res),
-		SGR:              style.SGR{},
-		WordDiffer:       worddiff.New(),
-		Overlay:          overlay.NewManager(),
-		Themes:           themes,
-		Blamer:           blamer,
-		LoadUntracked:    untrackedFn,
-		Keymap:           km,
-		NoColors:         opts.NoColors,
-		NoStatusBar:      opts.NoStatusBar,
-		NoConfirmDiscard: opts.NoConfirmDiscard,
-		Wrap:             opts.Wrap,
-		Collapsed:        opts.Collapsed,
-		CrossFileHunks:   opts.CrossFileHunks,
-		LineNumbers:      opts.LineNumbers,
-		ShowBlame:        opts.Blame,
-		WordDiff:         opts.WordDiff,
-		TabWidth:         opts.TabWidth,
-		Ref:              opts.ref(),
-		Staged:           opts.Staged,
-		TreeWidthRatio:   opts.TreeWidth,
-		Only:             opts.Only,
-		WorkDir:          workDir,
-		ActiveThemeName:  themes.catalog.ActiveName(opts.Theme),
+		Renderer:          renderer,
+		Store:             store,
+		Highlighter:       hl,
+		StyleResolver:     res,
+		StyleRenderer:     style.NewRenderer(res),
+		SGR:               style.SGR{},
+		WordDiffer:        worddiff.New(),
+		Overlay:           overlay.NewManager(),
+		Themes:            themes,
+		Blamer:            blamer,
+		LoadUntracked:     untrackedFn,
+		Keymap:            km,
+		CommitLog:         commitLogger,
+		CommitsApplicable: commitsApplicable(opts, commitLogger),
+		NoColors:          opts.NoColors,
+		NoStatusBar:       opts.NoStatusBar,
+		NoConfirmDiscard:  opts.NoConfirmDiscard,
+		Wrap:              opts.Wrap,
+		Collapsed:         opts.Collapsed,
+		CrossFileHunks:    opts.CrossFileHunks,
+		LineNumbers:       opts.LineNumbers,
+		ShowBlame:         opts.Blame,
+		WordDiff:          opts.WordDiff,
+		TabWidth:          opts.TabWidth,
+		Ref:               opts.ref(),
+		Staged:            opts.Staged,
+		TreeWidthRatio:    opts.TreeWidth,
+		Only:              opts.Only,
+		WorkDir:           workDir,
+		ActiveThemeName:   themes.catalog.ActiveName(opts.Theme),
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},
@@ -211,4 +215,21 @@ func run(opts options) error {
 	}
 	fmt.Print(output)
 	return nil
+}
+
+// commitsApplicable returns true when the current invocation can show a
+// commit-info popup: a VCS-backed log source must be present and the mode
+// must be ref-based (no stdin, staged, all-files, or empty ref). Computed
+// once in the composition root so the Model does not re-derive from CLI
+// flags. --only is fine when combined with a ref in a real repo; the empty
+// ref check excludes the standalone --only / FileReader case where the
+// commitLogger is nil anyway.
+func commitsApplicable(opts options, cl diff.CommitLogger) bool {
+	if cl == nil {
+		return false
+	}
+	if opts.Stdin || opts.Staged || opts.AllFiles {
+		return false
+	}
+	return opts.ref() != ""
 }

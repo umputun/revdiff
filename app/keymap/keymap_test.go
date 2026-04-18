@@ -40,6 +40,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
 		{"u", ActionToggleUntracked},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
+		{"i", ActionCommitInfo},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.action, km.Resolve(tt.key), "key %q should map to %q", tt.key, tt.action)
@@ -218,8 +219,44 @@ func TestHelpSections_customBindingReflected(t *testing.T) {
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))
+	assert.True(t, IsValidAction(ActionCommitInfo))
 	assert.False(t, IsValidAction(Action("nonexistent")))
 	assert.False(t, IsValidAction(Action("")))
+}
+
+func TestCommitInfo_roundTrip(t *testing.T) {
+	// default binding resolves correctly
+	km := Default()
+	assert.Equal(t, ActionCommitInfo, km.Resolve("i"))
+
+	// action appears in help sections
+	sections := km.HelpSections()
+	found := false
+	for _, s := range sections {
+		for _, e := range s.Entries {
+			if e.Action == ActionCommitInfo {
+				assert.NotEmpty(t, e.Description, "commit info action should have description")
+				assert.Contains(t, e.Keys, "i")
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "commit info action should appear in help sections")
+
+	// dump → parse round-trips the binding
+	var buf strings.Builder
+	require.NoError(t, km.Dump(&buf))
+	assert.Contains(t, buf.String(), "map i commit_info")
+
+	maps, _, err := parse(strings.NewReader(buf.String()))
+	require.NoError(t, err)
+	var matched bool
+	for _, m := range maps {
+		if m.key == "i" && m.action == ActionCommitInfo {
+			matched = true
+		}
+	}
+	assert.True(t, matched, "parsed dump should contain i → commit_info")
 }
 
 func TestKeysFor_sorted(t *testing.T) {

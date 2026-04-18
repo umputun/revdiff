@@ -63,6 +63,7 @@ var _styleKeyParseMap = map[string]StyleKey{
 	"helpbox":               StyleKeyHelpBox,
 	"themeselectbox":        StyleKeyThemeSelectBox,
 	"themeselectboxfocused": StyleKeyThemeSelectBoxFocused,
+	"commitinfobox":         StyleKeyCommitInfoBox,
 }
 
 // ParseStyleKey converts string to styleKey enum value.
@@ -129,6 +130,8 @@ var (
 	StyleKeyThemeSelectBox = StyleKey{name: "ThemeSelectBox", value: 30}
 	// theme selector focused state
 	StyleKeyThemeSelectBoxFocused = StyleKey{name: "ThemeSelectBoxFocused", value: 31}
+	// commit info overlay box
+	StyleKeyCommitInfoBox = StyleKey{name: "CommitInfoBox", value: 32}
 )
 
 // StyleKeyValues contains all possible enum values
@@ -165,6 +168,7 @@ var StyleKeyValues = []StyleKey{
 	StyleKeyHelpBox,
 	StyleKeyThemeSelectBox,
 	StyleKeyThemeSelectBoxFocused,
+	StyleKeyCommitInfoBox,
 }
 
 // StyleKeyNames contains all possible enum names
@@ -201,6 +205,7 @@ var StyleKeyNames = []string{
 	"HelpBox",
 	"ThemeSelectBox",
 	"ThemeSelectBoxFocused",
+	"CommitInfoBox",
 }
 
 // StyleKeyIter returns a function compatible with Go 1.23's range-over-func syntax.
@@ -288,5 +293,7 @@ var _ = func() bool {
 	var _ styleKey = styleKeyThemeSelectBox
 	// This avoids "defined but not used" linter error for styleKeyThemeSelectBoxFocused
 	var _ styleKey = styleKeyThemeSelectBoxFocused
+	// This avoids "defined but not used" linter error for styleKeyCommitInfoBox
+	var _ styleKey = styleKeyCommitInfoBox
 	return true
 }()

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -621,4 +622,226 @@ func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "? should open help with default keymap")
 	assert.Equal(t, overlay.KindHelp, model.overlay.Kind())
+}
+
+// fakeCommitLog is a tiny test fake satisfying both diff.CommitLogger and the
+// unexported commitLogSource. mirrors the fakeThemeCatalog pattern used for
+// interfaces whose moq-generated mocks land in another package and would be
+// unreachable from package-internal tests.
+type fakeCommitLog struct {
+	fn      func(ref string) ([]diff.CommitInfo, error)
+	calls   int
+	lastRef string
+	allRefs []string
+}
+
+func (f *fakeCommitLog) CommitLog(ref string) ([]diff.CommitInfo, error) {
+	f.calls++
+	f.lastRef = ref
+	f.allRefs = append(f.allRefs, ref)
+	if f.fn == nil {
+		return nil, nil
+	}
+	return f.fn(ref)
+}
+
+// rendererWithCommitLog wraps RendererMock and adds a CommitLog method so the
+// renderer satisfies diff.CommitLogger. Used to verify the type-assertion
+// fallback path in NewModel.
+type rendererWithCommitLog struct {
+	*mocks.RendererMock
+	commit *fakeCommitLog
+}
+
+func (r rendererWithCommitLog) CommitLog(ref string) ([]diff.CommitInfo, error) {
+	return r.commit.CommitLog(ref)
+}
+
+func TestNewModel_CommitLogResolution(t *testing.T) {
+	plainRenderer := func() *mocks.RendererMock {
+		return &mocks.RendererMock{
+			ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+			FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		}
+	}
+
+	t.Run("explicit CommitLog wins over renderer capability", func(t *testing.T) {
+		explicit := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return []diff.CommitInfo{{Hash: "explicit"}}, nil
+		}}
+		viaRenderer := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return []diff.CommitInfo{{Hash: "renderer"}}, nil
+		}}
+		m := testNewModel(t, rendererWithCommitLog{RendererMock: plainRenderer(), commit: viaRenderer},
+			annotation.NewStore(), noopHighlighter(), ModelConfig{
+				CommitLog:         explicit,
+				CommitsApplicable: true,
+			})
+		require.NotNil(t, m.commits.source)
+		got, err := m.commits.source.CommitLog("ref")
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "explicit", got[0].Hash, "explicit source must take precedence")
+		assert.Equal(t, 0, viaRenderer.calls, "renderer source must be ignored when explicit is provided")
+	})
+
+	t.Run("renderer capability is used when explicit is nil", func(t *testing.T) {
+		viaRenderer := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return []diff.CommitInfo{{Hash: "from-renderer"}}, nil
+		}}
+		m := testNewModel(t, rendererWithCommitLog{RendererMock: plainRenderer(), commit: viaRenderer},
+			annotation.NewStore(), noopHighlighter(), ModelConfig{CommitsApplicable: true})
+		require.NotNil(t, m.commits.source, "fallback to renderer capability must populate source")
+		got, err := m.commits.source.CommitLog("HEAD~1")
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "from-renderer", got[0].Hash)
+		assert.Equal(t, 1, viaRenderer.calls)
+	})
+
+	t.Run("typed-nil explicit collapses to renderer fallback", func(t *testing.T) {
+		var typedNil *fakeCommitLog
+		viaRenderer := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return []diff.CommitInfo{{Hash: "fallback"}}, nil
+		}}
+		m := testNewModel(t, rendererWithCommitLog{RendererMock: plainRenderer(), commit: viaRenderer},
+			annotation.NewStore(), noopHighlighter(), ModelConfig{
+				CommitLog:         typedNil,
+				CommitsApplicable: true,
+			})
+		require.NotNil(t, m.commits.source, "typed-nil must collapse to interface-nil and trigger fallback")
+		_, err := m.commits.source.CommitLog("X..Y")
+		require.NoError(t, err)
+		assert.Equal(t, 1, viaRenderer.calls, "fallback source must be used after typed-nil collapses")
+	})
+
+	t.Run("nil source when renderer lacks capability", func(t *testing.T) {
+		m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(),
+			ModelConfig{CommitsApplicable: true})
+		assert.Nil(t, m.commits.source, "no source must remain nil when renderer is not a CommitLogger")
+		assert.False(t, m.commits.applicable, "applicable must collapse to false when source is nil")
+	})
+
+	t.Run("applicable mirrors ModelConfig and source presence", func(t *testing.T) {
+		viaRenderer := &fakeCommitLog{}
+		t.Run("applicable+source -> true", func(t *testing.T) {
+			m := testNewModel(t, rendererWithCommitLog{RendererMock: plainRenderer(), commit: viaRenderer},
+				annotation.NewStore(), noopHighlighter(), ModelConfig{CommitsApplicable: true})
+			assert.True(t, m.commits.applicable)
+		})
+		t.Run("applicable but no source -> false", func(t *testing.T) {
+			m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(),
+				ModelConfig{CommitsApplicable: true})
+			assert.False(t, m.commits.applicable)
+		})
+		t.Run("not applicable -> false", func(t *testing.T) {
+			m := testNewModel(t, rendererWithCommitLog{RendererMock: plainRenderer(), commit: viaRenderer},
+				annotation.NewStore(), noopHighlighter(), ModelConfig{CommitsApplicable: false})
+			assert.False(t, m.commits.applicable)
+		})
+	})
+}
+
+func TestModel_CommitsLazyFetch(t *testing.T) {
+	// lazy-fetch caching is a Model concern, not a NewModel concern, but the
+	// underlying state lives on commitsState. exercise the cache helper here so
+	// the contract is locked down before Task 7 wires the actual handler.
+	t.Run("first fetch populates cache and stores result", func(t *testing.T) {
+		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return []diff.CommitInfo{{Hash: "abc"}, {Hash: "def"}}, nil
+		}}
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = fake
+		m.commits.applicable = true
+		m.cfg.ref = "HEAD~2"
+
+		m.ensureCommitsLoaded()
+		assert.True(t, m.commits.loaded)
+		assert.Len(t, m.commits.list, 2)
+		assert.False(t, m.commits.truncated)
+		require.NoError(t, m.commits.err)
+		assert.Equal(t, 1, fake.calls)
+		assert.Equal(t, "HEAD~2", fake.lastRef)
+	})
+
+	t.Run("second call is a cache hit (no extra fetch)", func(t *testing.T) {
+		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return []diff.CommitInfo{{Hash: "abc"}}, nil
+		}}
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = fake
+		m.commits.applicable = true
+		m.cfg.ref = "main..feature"
+
+		m.ensureCommitsLoaded()
+		m.ensureCommitsLoaded()
+		m.ensureCommitsLoaded()
+		assert.Equal(t, 1, fake.calls, "subsequent calls must reuse the cache")
+	})
+
+	t.Run("error is cached and not retried", func(t *testing.T) {
+		boom := errors.New("vcs blew up")
+		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return nil, boom
+		}}
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = fake
+		m.commits.applicable = true
+		m.cfg.ref = "X"
+
+		m.ensureCommitsLoaded()
+		assert.True(t, m.commits.loaded)
+		assert.Empty(t, m.commits.list)
+		require.Error(t, m.commits.err)
+		assert.Equal(t, boom, m.commits.err)
+
+		m.ensureCommitsLoaded()
+		assert.Equal(t, 1, fake.calls, "error result must also be cached")
+	})
+
+	t.Run("MaxCommits result marks truncated", func(t *testing.T) {
+		full := make([]diff.CommitInfo, diff.MaxCommits)
+		for i := range full {
+			full[i] = diff.CommitInfo{Hash: "h"}
+		}
+		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return full, nil }}
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = fake
+		m.commits.applicable = true
+		m.cfg.ref = "deep..head"
+
+		m.ensureCommitsLoaded()
+		assert.True(t, m.commits.truncated, "exactly MaxCommits results must mark truncated")
+	})
+
+	t.Run("under MaxCommits leaves truncated false", func(t *testing.T) {
+		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+			return make([]diff.CommitInfo, diff.MaxCommits-1), nil
+		}}
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = fake
+		m.commits.applicable = true
+		m.cfg.ref = "deep..head"
+
+		m.ensureCommitsLoaded()
+		assert.False(t, m.commits.truncated)
+	})
+
+	t.Run("nil source is a no-op", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = nil
+		m.commits.applicable = false
+		m.ensureCommitsLoaded()
+		assert.False(t, m.commits.loaded, "no-op when source is nil")
+	})
+
+	t.Run("not applicable is a no-op even with a source", func(t *testing.T) {
+		fake := &fakeCommitLog{}
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.source = fake
+		m.commits.applicable = false
+		m.ensureCommitsLoaded()
+		assert.False(t, m.commits.loaded, "no-op when not applicable")
+		assert.Equal(t, 0, fake.calls)
+	})
 }

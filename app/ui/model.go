@@ -8,6 +8,7 @@ package ui
 //go:generate moq -out mocks/sgr_processor.go -pkg mocks -skip-ensure -fmt goimports . sgrProcessor
 //go:generate moq -out mocks/word_differ.go -pkg mocks -skip-ensure -fmt goimports . wordDiffer
 //go:generate moq -out mocks/external_editor.go -pkg mocks -skip-ensure -fmt goimports . ExternalEditor
+//go:generate moq -out mocks/commit_log_source.go -pkg mocks -skip-ensure -fmt goimports . commitLogSource
 
 // note: ThemeCatalog is not moq-generated because ThemeEntry/ThemeSpec are defined in this package,
 // creating an import cycle (ui -> mocks -> ui). Tests use manual fakes instead.
@@ -96,9 +97,19 @@ type overlayManager interface {
 	OpenHelp(spec overlay.HelpSpec)
 	OpenAnnotList(spec overlay.AnnotListSpec)
 	OpenThemeSelect(spec overlay.ThemeSelectSpec)
+	OpenCommitInfo(spec overlay.CommitInfoSpec)
 	Close()
 	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
 	Compose(base string, ctx overlay.RenderCtx) string
+}
+
+// commitLogSource is what Model needs to enumerate commits in the current ref range
+// for the commit-info overlay. Implemented by diff.Git, diff.Hg, and diff.Jj via
+// the diff.CommitLogger capability interface; nil means the feature is unavailable
+// (e.g. stdin mode, FileReader, DirectoryReader, or any wrapper that hides the
+// underlying VCS). Defined on the consumer side per Go convention.
+type commitLogSource interface {
+	CommitLog(ref string) ([]diff.CommitInfo, error)
 }
 
 // ThemeCatalog is what Model needs for theme discovery and persistence.
@@ -274,6 +285,25 @@ type searchState struct {
 	matchSet map[int]bool    // set of file.lines indices that match, computed per render
 }
 
+// commitsState holds the lazy-loaded commit log for the commit-info overlay.
+// loaded is set to true after the first fetch attempt (success or failure) so
+// repeated `i` presses reuse the cached result without re-running the VCS log
+// command. applicable mirrors ModelConfig.CommitsApplicable, copied at
+// construction so the handler can short-circuit without consulting CLI flags.
+// hint holds a transient status-bar message shown once (until the next key
+// press) — set when the user triggers ActionCommitInfo in a mode where the
+// feature is unavailable, so the key press has visible feedback instead of
+// appearing inert.
+type commitsState struct {
+	source     commitLogSource   // VCS-backed log source; nil disables the feature
+	applicable bool              // true when current mode supports a commit list
+	loaded     bool              // true once a fetch attempt has populated the cache
+	list       []diff.CommitInfo // cached commits (may be empty after a successful empty-range fetch)
+	truncated  bool              // true when the list was capped at diff.MaxCommits
+	err        error             // last fetch error; surfaces in the overlay
+	hint       string            // transient status-bar message; cleared on next key press
+}
+
 // annotationState holds annotation input lifecycle state.
 type annotationState struct {
 	annotating         bool            // true when annotation text input is active
@@ -315,6 +345,7 @@ type Model struct {
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
 	search      searchState       // search lifecycle state
 	annot       annotationState   // annotation input lifecycle state
+	commits     commitsState      // lazy-loaded commit log for the commit-info overlay
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
@@ -400,6 +431,13 @@ type ModelConfig struct {
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
 	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
 	Editor        ExternalEditor           // external-editor driver (nil uses app/editor.Editor{})
+	// CommitLog enumerates commits in the current ref range for the commit-info
+	// overlay. When nil, NewModel attempts to derive the source by type-asserting
+	// the Renderer against diff.CommitLogger; if the assertion fails, the feature
+	// is unavailable and the `i` hotkey acts as a no-op. Pass a typed-nil
+	// (e.g. var c *Foo; cfg.CommitLog = c) and the typed-nil is collapsed to
+	// nil before the type-assertion fallback runs (mirrors the Editor guard).
+	CommitLog commitLogSource
 
 	// --- Configuration values ---
 	Ref              string
@@ -418,6 +456,13 @@ type ModelConfig struct {
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
 	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
+	// CommitsApplicable is the composition-root verdict on whether the current
+	// invocation supports a commit-info popup. Computed once in main.go from the
+	// full option set (stdin, staged, only, all-files, ref) and copied into Model
+	// state. Model does not re-derive from CLI flags because modelConfigState
+	// today does not carry stdin/all-files; keeping the computation in the
+	// composition root avoids scope creep.
+	CommitsApplicable bool
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -484,6 +529,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if ed == nil || isNilValue(ed) {
 		ed = editor.Editor{}
 	}
+	cls := resolveCommitLogSource(cfg.CommitLog, cfg.Renderer)
 
 	return Model{
 		resolver:     cfg.StyleResolver,
@@ -523,6 +569,10 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			showBlame:     cfg.ShowBlame && cfg.Blamer != nil,
 			showUntracked: false,
 		},
+		commits: commitsState{
+			source:     cls,
+			applicable: cfg.CommitsApplicable && cls != nil,
+		},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
 	}, nil
@@ -541,6 +591,23 @@ func (m Model) Discarded() bool {
 // Init initializes the model by loading changed files.
 func (m Model) Init() tea.Cmd {
 	return m.loadFiles()
+}
+
+// ensureCommitsLoaded fetches the commit log for the current ref range on the
+// first invocation and caches the result (success or failure) on the model so
+// repeated `i` presses don't re-run the VCS command. No-op when the feature is
+// not applicable, the source is unavailable, or the cache is already populated.
+// Refs do not change mid-session, so the cached result remains valid for the
+// model's lifetime.
+func (m *Model) ensureCommitsLoaded() {
+	if m.commits.loaded || !m.commits.applicable || m.commits.source == nil {
+		return
+	}
+	list, err := m.commits.source.CommitLog(m.cfg.ref)
+	m.commits.list = list
+	m.commits.err = err
+	m.commits.truncated = len(list) >= diff.MaxCommits
+	m.commits.loaded = true
 }
 
 // Update handles messages and updates the model state.
@@ -582,6 +649,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// transient hints persist for exactly one render cycle; any key that reaches
+	// this point dismisses the last hint before the new action runs.
+	m.commits.hint = ""
+
 	if handled, model, cmd := m.handleModalKey(msg); handled {
 		return model, cmd
 	}
@@ -643,9 +714,31 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 	case keymap.ActionThemeSelect:
 		m.openThemeSelector()
 		return m, true
+	case keymap.ActionCommitInfo:
+		m.handleCommitInfo()
+		return m, true
 	default:
 		return m, false
 	}
+}
+
+// handleCommitInfo opens the commit-info overlay when the feature is available
+// in the current mode, otherwise sets a transient status-bar hint so the key
+// press produces visible feedback instead of appearing inert. Uses the lazy
+// cache in commitsState so the underlying VCS log command runs at most once
+// per session.
+func (m *Model) handleCommitInfo() {
+	if !m.commits.applicable || m.commits.source == nil {
+		m.commits.hint = "no commits in this mode"
+		return
+	}
+	m.ensureCommitsLoaded()
+	m.overlay.OpenCommitInfo(overlay.CommitInfoSpec{
+		Commits:    m.commits.list,
+		Applicable: true,
+		Truncated:  m.commits.truncated,
+		Err:        m.commits.err,
+	})
 }
 
 func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
@@ -866,4 +959,19 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// resolveCommitLogSource picks the commit-log source for the model from an
+// explicit ModelConfig.CommitLog field (taking precedence) or, when that is
+// nil or a typed-nil interface, falls back to the renderer's optional
+// diff.CommitLogger capability. Returns nil when neither path produces a
+// usable source — the caller treats nil as "feature unavailable".
+func resolveCommitLogSource(explicit commitLogSource, renderer Renderer) commitLogSource {
+	if explicit != nil && !isNilValue(explicit) {
+		return explicit
+	}
+	if cl, ok := renderer.(diff.CommitLogger); ok {
+		return cl
+	}
+	return nil
 }

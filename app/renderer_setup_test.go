@@ -231,3 +231,34 @@ func TestDetectVCS_None(t *testing.T) {
 	assert.Equal(t, diff.VCSNone, vcsType)
 	assert.Empty(t, root)
 }
+
+func TestCommitsApplicable(t *testing.T) {
+	refOpts := options{}
+	refOpts.Refs.Base = "HEAD~1"
+	g := diff.NewGit(t.TempDir())
+
+	tests := []struct {
+		name string
+		opts options
+		cl   diff.CommitLogger
+		want bool
+	}{
+		{name: "nil commit logger", opts: refOpts, cl: nil, want: false},
+		{name: "stdin mode", opts: options{Stdin: true}, cl: g, want: false},
+		{name: "staged mode", opts: options{Staged: true}, cl: g, want: false},
+		{name: "all-files mode", opts: options{AllFiles: true}, cl: g, want: false},
+		{name: "empty ref", opts: options{}, cl: g, want: false},
+		{name: "ref + logger applicable", opts: refOpts, cl: g, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, commitsApplicable(tc.opts, tc.cl))
+		})
+	}
+}
+
+func TestGitHgJj_ImplementCommitLogger(t *testing.T) {
+	assert.Implements(t, (*diff.CommitLogger)(nil), diff.NewGit(t.TempDir()))
+	assert.Implements(t, (*diff.CommitLogger)(nil), diff.NewHg(t.TempDir()))
+	assert.Implements(t, (*diff.CommitLogger)(nil), diff.NewJj(t.TempDir()))
+}

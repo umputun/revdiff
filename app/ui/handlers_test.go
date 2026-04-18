@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
@@ -351,4 +353,139 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 		assert.False(t, model.annot.annotating, "should not start annotation")
 		assert.Nil(t, cmd, "should return nil command")
 	})
+}
+
+func TestModel_HandleCommitInfo_OpensOverlayWhenApplicable(t *testing.T) {
+	commits := []diff.CommitInfo{{Hash: "abc123"}, {Hash: "def456"}}
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return commits, nil }}
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "main..feature"
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	assert.Nil(t, cmd, "commit-info open does not issue a tea.Cmd")
+	assert.True(t, model.overlay.Active(), "i should open the overlay when applicable")
+	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
+	assert.True(t, model.commits.loaded, "first open triggers the lazy fetch")
+	assert.Equal(t, 1, fake.calls, "commit log fetched exactly once")
+	assert.Equal(t, "main..feature", fake.lastRef, "handler must use the session ref")
+	assert.Empty(t, model.commits.hint, "applicable path does not set a hint")
+}
+
+func TestModel_HandleCommitInfo_HintWhenNotApplicable(t *testing.T) {
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return []diff.CommitInfo{{Hash: "abc"}}, nil
+	}}
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = fake
+	m.commits.applicable = false // e.g. stdin/staged/only mode
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	assert.False(t, model.overlay.Active(), "overlay must not open in a non-applicable mode")
+	assert.Equal(t, "no commits in this mode", model.commits.hint, "hint surfaces the reason")
+	assert.Equal(t, 0, fake.calls, "no fetch when feature is not applicable")
+	assert.False(t, model.commits.loaded)
+}
+
+func TestModel_HandleCommitInfo_HintWhenSourceNil(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = nil
+	m.commits.applicable = false // applicable always collapses to false without a source
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	assert.False(t, model.overlay.Active(), "nil source means feature is unavailable")
+	assert.Equal(t, "no commits in this mode", model.commits.hint)
+}
+
+func TestModel_HandleCommitInfo_CachesBetweenOpens(t *testing.T) {
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return []diff.CommitInfo{{Hash: "abc"}}, nil
+	}}
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "HEAD~3"
+
+	// first press: open overlay, fetch runs
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	require.Equal(t, 1, fake.calls)
+
+	// second press while overlay open: routed to overlay handleKey, which closes it
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model = result.(Model)
+	assert.False(t, model.overlay.Active(), "second i closes the overlay via overlay dispatch")
+	assert.Equal(t, 1, fake.calls, "no refetch while overlay owned the key")
+
+	// third press reopens — cache hit, no fetch
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model = result.(Model)
+	assert.True(t, model.overlay.Active(), "reopen after close")
+	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
+	assert.Equal(t, 1, fake.calls, "cache hit on reopen")
+}
+
+func TestModel_HandleCommitInfo_StoresErrorInSpec(t *testing.T) {
+	boom := errors.New("git blew up")
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return nil, boom }}
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "HEAD~1"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	assert.True(t, model.overlay.Active(), "overlay opens even on fetch failure so user sees the error")
+	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
+	require.Error(t, model.commits.err)
+	assert.Equal(t, boom, model.commits.err, "error is stored on the model and passed into the spec")
+}
+
+func TestModel_HandleCommitInfo_HintClearsOnNextKey(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = nil
+	m.commits.applicable = false
+
+	// first press sets the hint
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	require.Equal(t, "no commits in this mode", model.commits.hint)
+
+	// next key clears the hint before dispatching the new action
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = result.(Model)
+	assert.Empty(t, model.commits.hint, "any subsequent key press must clear the transient hint")
+}
+
+func TestModel_HandleCommitInfo_StatusBarShowsHint(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = nil
+	m.commits.applicable = false
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+
+	status := model.statusBarText()
+	assert.Equal(t, "no commits in this mode", status, "status bar surfaces the hint verbatim while it is set")
+}
+
+func TestModel_HandleCommitInfo_TruncatedFlagPropagates(t *testing.T) {
+	full := make([]diff.CommitInfo, diff.MaxCommits)
+	for i := range full {
+		full[i] = diff.CommitInfo{Hash: "h"}
+	}
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return full, nil }}
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "deep..head"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	assert.True(t, model.commits.truncated, "MaxCommits result sets the truncated flag")
+	assert.True(t, model.overlay.Active())
 }

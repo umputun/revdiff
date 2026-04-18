@@ -113,6 +113,10 @@ func (m Model) statusBarText() string {
 		return "[enter] save  [esc] cancel"
 	}
 
+	if m.commits.hint != "" {
+		return m.commits.hint
+	}
+
 	// build left-side segments
 	var segments []string
 
