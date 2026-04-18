@@ -294,16 +294,16 @@ func TestHg_CommitLogRevset(t *testing.T) {
 	tests := []struct {
 		name, ref, want string
 	}{
-		{"single ref maps to X::.", "feature", "feature::."},
-		{"HEAD alias translates to .", "HEAD", ".::."},
-		{"HEAD~N translates", "HEAD~3", ".~3::."},
+		{"single ref X excludes X for parity with git/jj", "feature", "feature::. - feature"},
+		{"HEAD alias translates to .", "HEAD", ".::. - ."},
+		{"HEAD~N translates", "HEAD~3", ".~3::. - .~3"},
 		{"explicit range X..Y", "default..feature", "default::feature - default"},
 		{"range with empty left defaults to 0", "..feature", "0::feature - 0"},
 		{"range with empty right defaults to .", "default..", "default::. - default"},
 		{"HEAD range translates both sides", "HEAD~3..HEAD", ".~3::. - .~3"},
 		{"triple dot produces symmetric difference", "default...feature", "only(default,feature) + only(feature,default)"},
 		{"triple dot with HEAD", "HEAD~2...HEAD", "only(.~2,.) + only(.,.~2)"},
-		{"tag-like ref with dots not a range", "v1.2.3", "v1.2.3::."},
+		{"tag-like ref with dots not a range", "v1.2.3", "v1.2.3::. - v1.2.3"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

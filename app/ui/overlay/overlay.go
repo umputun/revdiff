@@ -121,8 +121,10 @@ type ThemeChoice struct {
 }
 
 // CommitInfoSpec describes the commit info popup content.
-// Applicable is false when the current mode (stdin/staged/only/all-files/no-ref)
+// Applicable is false when the current mode (stdin/staged/all-files/no-ref)
 // precludes a meaningful commit list; the overlay renders a hint in that case.
+// --only paired with a ref in a real repo is applicable; the standalone --only
+// case is excluded upstream because commitLogger is nil when there's no VCS.
 // Truncated is true when the commit list was capped at diff.MaxCommits entries.
 // Err is a non-nil VCS CommitLog error to surface to the user; takes precedence
 // over the empty-list and applicability messages when set.

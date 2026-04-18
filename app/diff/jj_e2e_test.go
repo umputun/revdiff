@@ -2,6 +2,7 @@ package diff
 
 import (
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -117,5 +118,5 @@ func jjCommitID(t *testing.T, dir, rev string) string {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "jj log for %q failed: %s", rev, string(out))
-	return string(out)
+	return strings.TrimSpace(string(out))
 }

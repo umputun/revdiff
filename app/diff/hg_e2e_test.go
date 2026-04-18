@@ -178,22 +178,21 @@ func TestHg_E2E_CommitLog(t *testing.T) {
 	writeFile(t, dir, "a.txt", "a\nb\nc\n")
 	hgCmd(t, dir, "commit", "-m", "third subject\n\nthird body line 1\nthird body line 2")
 
-	t.Run("single ref selects range X::. (X and its descendants up to wc parent)", func(t *testing.T) {
-		// rev 0 → X::. includes revs 0, 1, 2
+	t.Run("single ref X excludes X for parity with git/jj", func(t *testing.T) {
+		// rev 0 → X::. - X includes revs 1, 2 (X itself excluded to match
+		// git's X..HEAD and jj's X..@ semantics)
 		commits, err := h.CommitLog("0")
 		require.NoError(t, err)
-		require.Len(t, commits, 3)
-		// hg default order is ascending (oldest first); we only assert content, not order
+		require.Len(t, commits, 2)
 		subjects := map[string]string{}
 		bodies := map[string]string{}
 		for _, c := range commits {
 			subjects[c.Subject] = c.Subject
 			bodies[c.Subject] = c.Body
 		}
-		assert.Contains(t, subjects, "first subject")
+		assert.NotContains(t, subjects, "first subject", "X::. - X must exclude X")
 		assert.Contains(t, subjects, "second subject")
 		assert.Contains(t, subjects, "third subject")
-		assert.Equal(t, "body of first commit", bodies["first subject"])
 		assert.Empty(t, bodies["second subject"])
 		assert.Equal(t, "third body line 1\nthird body line 2", bodies["third subject"])
 

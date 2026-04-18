@@ -152,7 +152,7 @@ Layered popup system with mutual exclusivity (one overlay at a time).
 - **`helpOverlay`** — two-column keybinding help popup
 - **`annotListOverlay`** — scrollable annotation list with cross-file jump
 - **`themeSelectOverlay`** — theme picker with fzf-style filter, live swatch preview
-- **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated lazily on first `i` press (cached for the session). Sized via `clamp(term_w * 0.8, 30, 80)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
+- **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated lazily on first `i` press (cached for the session). Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
 
 `Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies.
 

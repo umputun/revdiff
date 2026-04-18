@@ -52,6 +52,22 @@ func TestCommitInfoOverlay_RenderError(t *testing.T) {
 	assert.Contains(t, out, ansiItalicOn, "error text rendered italic")
 }
 
+func TestCommitInfoOverlay_RenderErrorFlattensMultilineMessage(t *testing.T) {
+	// runVCS embeds raw stderr into errors which may contain newlines and tabs;
+	// buildContent must flatten before centering or the popup layout breaks.
+	mgr := NewManager()
+	mgr.OpenCommitInfo(CommitInfoSpec{
+		Applicable: true,
+		Err:        errors.New("git log failed:\nfatal: bad revision\n\ttry a different ref"),
+	})
+	out := mgr.commitInfo.render(commitInfoRenderCtx(), mgr)
+	// flattened: whitespace runs (newlines, tabs) collapse to single spaces
+	assert.Contains(t, out, "git log failed: fatal: bad revision try a different ref")
+	// raw newline/tab sequences from the error must not survive
+	assert.NotContains(t, out, "failed:\nfatal")
+	assert.NotContains(t, out, "revision\n\ttry")
+}
+
 func TestCommitInfoOverlay_RenderSingleCommit(t *testing.T) {
 	date := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
 	commit := makeCommit("abcdef1234567890", "Alice <alice@example.com>", "Short subject", "Body line one.\nBody line two.", date)
@@ -286,6 +302,30 @@ func TestCommitInfoOverlay_ColorsDeliveredViaResolver(t *testing.T) {
 	assert.Contains(t, out, style.AnsiFg("#6c6c6c"), "muted color escape present for author/date")
 	assert.Contains(t, out, ansiBoldOn, "bold on present for subject")
 	assert.Contains(t, out, ansiBoldOff, "bold off present")
+}
+
+func TestCommitInfoOverlay_MetaWrapReemitsSGRState(t *testing.T) {
+	// long author email forces the meta line to wrap inside a muted-colored span;
+	// wrapLine must re-emit the muted escape on the continuation line, otherwise
+	// the continuation renders with default fg and looks inconsistent.
+	c := style.Colors{Accent: "#5f87ff", Muted: "#6c6c6c", Normal: "#d0d0d0", Border: "#585858"}
+	resolver := style.NewResolver(c)
+	ctx := RenderCtx{Width: 60, Height: 30, Resolver: resolver} // narrow to force wrap
+
+	longAuthor := "Alice Verylongname <alice.verylongname@example-with-long-domain.com>"
+	date := time.Date(2026, 4, 17, 12, 0, 0, 0, time.UTC)
+	commit := makeCommit("abcdef1234567890", longAuthor, "subject", "", date)
+
+	mgr := NewManager()
+	mgr.OpenCommitInfo(CommitInfoSpec{Applicable: true, Commits: []diff.CommitInfo{commit}})
+	out := mgr.commitInfo.render(ctx, mgr)
+
+	muted := style.AnsiFg("#6c6c6c")
+	// the muted escape must appear at least twice: once for the original span
+	// and at least once more reemitted on a wrapped continuation line.
+	// without Reemit, a wrapped continuation would render with no fg escape.
+	require.GreaterOrEqual(t, strings.Count(out, muted), 2,
+		"muted escape should appear on the original meta span and be reemitted on at least one wrapped continuation line")
 }
 
 func TestCommitInfoOverlay_PopupWidthClamping(t *testing.T) {

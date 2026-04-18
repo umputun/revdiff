@@ -101,7 +101,11 @@ func (c *commitInfoOverlay) buildContent(innerWidth int, resolver Resolver) []st
 	case !c.spec.Applicable:
 		return c.centeredMessage("no commits in this mode", innerWidth, true)
 	case c.spec.Err != nil:
-		return c.centeredMessage(c.spec.Err.Error(), innerWidth, true)
+		// runVCS embeds raw stderr in errors which may contain newlines/tabs;
+		// Fields collapses all whitespace runs into single spaces so the
+		// centered-message single-line layout assumption holds.
+		msg := strings.Join(strings.Fields(c.spec.Err.Error()), " ")
+		return c.centeredMessage(msg, innerWidth, true)
 	case len(c.spec.Commits) == 0:
 		return c.centeredMessage("no commits in range", innerWidth, false)
 	}
@@ -173,17 +177,18 @@ func (c *commitInfoOverlay) centeredMessage(text string, innerWidth int, italic 
 	return []string{c.padLine(line, innerWidth)}
 }
 
-// wrapLine wraps s to width using ANSI-aware soft wrap. SGR state inside s is
-// already paired (bold on/off, italic on/off) so no continuation re-emit is
-// required — ansi.Wrap keeps in-line escapes intact and only inserts newlines
-// at whitespace or hard breaks, identical behavior to diffview.wrapContent for
-// content that never spans a reset.
+// wrapLine wraps s to width using ANSI-aware soft wrap and re-emits active SGR
+// state on each continuation line. ansi.Wrap can split between an SGR opening
+// and its paired reset (e.g. inside a muted author/date span in meta); without
+// re-emit, continuation lines would lose the active color. style.SGR.Reemit
+// scans each line for active attributes and prepends them to the next.
 func (c *commitInfoOverlay) wrapLine(s string, width int) []string {
 	if width <= 0 {
 		return []string{s}
 	}
 	wrapped := ansi.Wrap(s, width, "")
-	return strings.Split(wrapped, "\n")
+	lines := strings.Split(wrapped, "\n")
+	return style.SGR{}.Reemit(lines)
 }
 
 // padLine right-pads line with spaces up to width so an optional box background
@@ -197,7 +202,8 @@ func (c *commitInfoOverlay) padLine(line string, width int) string {
 }
 
 // applyScroll returns the slice of lines currently visible given the viewport
-// height and the overlay's offset. pads with empty lines when content is short.
+// height and the overlay's offset. returns content as-is when it fits; the
+// outer lipgloss box sizes to content so no padding is needed.
 func (c *commitInfoOverlay) applyScroll(content []string, viewportHeight int) []string {
 	if viewportHeight <= 0 {
 		return nil

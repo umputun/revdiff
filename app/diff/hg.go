@@ -221,7 +221,8 @@ func (h *Hg) commitLogRevset(ref string) string {
 		l, r := h.rangeEnds(left, right)
 		return fmt.Sprintf("%s::%s - %s", l, r, l)
 	}
-	return translateRef(ref) + "::."
+	r := translateRef(ref)
+	return r + "::. - " + r
 }
 
 // rangeEnds translates both sides of a range expression via translateRef,
