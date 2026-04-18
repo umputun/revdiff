@@ -26,6 +26,14 @@ func noopHighlighter() *mocks.SyntaxHighlighterMock {
 	}
 }
 
+// plainRenderer returns a RendererMock that returns an empty file list and no diff lines.
+func plainRenderer() *mocks.RendererMock {
+	return &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+}
+
 // testFileTreeFactory returns the sidepane factory closures for NewFileTree and ParseTOC,
 // suitable for injection into ModelConfig in tests.
 func testFileTreeFactory() func(entries []diff.FileEntry) FileTreeComponent {
