@@ -474,6 +474,17 @@ func TestStore_FormatOutputEscapesOnlyRecordHeaderForm(t *testing.T) {
 	assert.Contains(t, out, "### subheader", "### subheader must pass through unchanged")
 }
 
+func TestStore_Clear(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	s.Add(Annotation{File: "b.go", Line: 2, Type: "-", Comment: "other"})
+	require.Equal(t, 2, s.Count())
+
+	s.Clear()
+	assert.Equal(t, 0, s.Count(), "Clear must remove all annotations")
+	assert.Empty(t, s.All(), "All must return empty map after Clear")
+}
+
 func TestStore_Count(t *testing.T) {
 	s := NewStore()
 	assert.Equal(t, 0, s.Count(), "empty store should return 0")
