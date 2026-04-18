@@ -56,6 +56,7 @@ const (
 	ActionDismiss          Action = "dismiss"
 	ActionThemeSelect      Action = "theme_select"
 	ActionCommitInfo       Action = "commit_info"
+	ActionReload           Action = "reload"
 )
 
 // SectionPane is the help section name for pane-related keybindings.
@@ -75,6 +76,7 @@ var validActions = map[Action]bool{
 	ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
 	ActionCommitInfo: true,
+	ActionReload:     true,
 }
 
 // IsValidAction returns true if the action name is recognized.
@@ -157,6 +159,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionFilter, "filter files", "View"},
 		{ActionThemeSelect, "theme selector", "View"},
 		{ActionCommitInfo, "show commit info for the current range", "View"},
+		{ActionReload, "reload diff from VCS", "View"},
 
 		// quit
 		{ActionQuit, "quit", "Quit"},
@@ -210,6 +213,7 @@ func defaultBindings() map[string]Action {
 		"?":      ActionHelp,
 		"T":      ActionThemeSelect,
 		"i":      ActionCommitInfo,
+		"R":      ActionReload,
 		"esc":    ActionDismiss,
 	}
 }

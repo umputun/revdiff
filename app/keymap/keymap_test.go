@@ -41,6 +41,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"u", ActionToggleUntracked},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
 		{"i", ActionCommitInfo},
+		{"R", ActionReload},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.action, km.Resolve(tt.key), "key %q should map to %q", tt.key, tt.action)
@@ -214,6 +215,10 @@ func TestHelpSections_customBindingReflected(t *testing.T) {
 		}
 	}
 	t.Error("quit action not found in help sections")
+}
+
+func TestActionReload_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionReload))
 }
 
 func TestIsValidAction(t *testing.T) {
