@@ -35,6 +35,37 @@ def read_plan_from_stdin() -> str:
         return ""
 
 
+def resolve_launcher(plugin_root: str, name: str) -> Path | None:
+    """resolve launcher path through override chain.
+
+    shells out to <plugin_root>/scripts/resolve-launcher.sh, passing the launcher
+    name and CLAUDE_PLUGIN_DATA so the resolver can walk project → user → bundled.
+    returns Path on resolver success (exit 0); returns None if the resolver exits
+    non-zero (all layers absent, or invocation error). logs resolver stderr for
+    diagnostics."""
+    resolver = Path(plugin_root) / "scripts" / "resolve-launcher.sh"
+    if not resolver.exists():
+        print(f"resolve-launcher.sh not found at {resolver}", file=sys.stderr)
+        return None
+    data_dir = os.environ.get("CLAUDE_PLUGIN_DATA", "")
+    try:
+        result = subprocess.run(
+            [str(resolver), name, data_dir],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"resolve-launcher.sh invocation failed: {exc}", file=sys.stderr)
+        return None
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr.rstrip(), file=sys.stderr)
+        return None
+    path = result.stdout.strip()
+    if not path:
+        return None
+    return Path(path)
+
+
 def make_response(decision: str, reason: str = "") -> None:
     """output PreToolUse hook response and exit with appropriate code.
     deny: plain text to stderr + exit 2 (Claude Code blocks the tool and shows the text).
@@ -68,8 +99,8 @@ def main() -> None:
         make_response("ask", "revdiff not installed, skipping plan review")
         return
 
-    launcher = Path(plugin_root) / "scripts" / "launch-plan-review.sh"
-    if not launcher.exists():
+    launcher = resolve_launcher(plugin_root, "launch-plan-review.sh")
+    if launcher is None:
         make_response("ask", "launch-plan-review.sh not found")
         return
 

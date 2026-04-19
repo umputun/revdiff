@@ -172,12 +172,12 @@ Helper shells out to `<plugin_root>/scripts/resolve-launcher.sh <name> <CLAUDE_P
 - Modify: `plugins/revdiff-planning/scripts/plan-review-hook.py`
 - Create: `plugins/revdiff-planning/README.md`
 
-- [ ] create `plugins/revdiff-planning/scripts/resolve-launcher.sh` matching the shape in Solution Overview (NAMESPACE = `revdiff-planning`, identical to Task 1's resolver except for the namespace constant)
-- [ ] `chmod +x` the new resolver
-- [ ] update `plan-review-hook.py`: add `resolve_launcher(plugin_root, name) -> Path | None` helper per the contract in Solution Overview (returns `Path` on resolver exit 0; returns `None` on non-zero; logs resolver stderr); replace the hard-coded `Path(plugin_root) / "scripts" / "launch-plan-review.sh"` with the helper; keep the existing not-found branch as the `None`-return handler
-- [ ] create `plugins/revdiff-planning/README.md` with plugin description and "Overrides" subsection (project / user / bundled paths for `launch-plan-review.sh`)
-- [ ] run `shellcheck plugins/revdiff-planning/scripts/resolve-launcher.sh` and `shfmt -d` — must be clean
-- [ ] run `python3 -m py_compile plugins/revdiff-planning/scripts/plan-review-hook.py` to syntax-check the hook change
+- [x] create `plugins/revdiff-planning/scripts/resolve-launcher.sh` matching the shape in Solution Overview (NAMESPACE = `revdiff-planning`, identical to Task 1's resolver except for the namespace constant)
+- [x] `chmod +x` the new resolver
+- [x] update `plan-review-hook.py`: add `resolve_launcher(plugin_root, name) -> Path | None` helper per the contract in Solution Overview (returns `Path` on resolver exit 0; returns `None` on non-zero; logs resolver stderr); replace the hard-coded `Path(plugin_root) / "scripts" / "launch-plan-review.sh"` with the helper; keep the existing not-found branch as the `None`-return handler
+- [x] create `plugins/revdiff-planning/README.md` with plugin description and "Overrides" subsection (project / user / bundled paths for `launch-plan-review.sh`)
+- [x] run `shellcheck plugins/revdiff-planning/scripts/resolve-launcher.sh` and `shfmt -d` — must be clean
+- [x] run `python3 -m py_compile plugins/revdiff-planning/scripts/plan-review-hook.py` to syntax-check the hook change
 
 ### Task 3a: Bump plugin versions (ASK USER FIRST)
 
