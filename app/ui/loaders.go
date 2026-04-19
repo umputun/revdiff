@@ -288,8 +288,9 @@ func (m Model) computeBlameAuthorLen() int {
 
 // filterOnly returns only files matching the --only patterns, or all files if no filter is set.
 // matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
-// when a pattern is an absolute path, it is also resolved relative to workDir for matching
-// (e.g. "/repo/README.md" with workDir="/repo" matches "README.md").
+// both entries and patterns are also normalized to workDir-relative form for matching,
+// so "./CLAUDE.md" matches "CLAUDE.md" and an absolute entry from FileReader
+// ("/repo/CLAUDE.md") matches a relative pattern ("CLAUDE.md").
 func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
 	if len(m.cfg.only) == 0 {
 		return entries
@@ -297,21 +298,44 @@ func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
 	var filtered []diff.FileEntry
 	for _, e := range entries {
 		for _, pattern := range m.cfg.only {
-			if e.Path == pattern || strings.HasSuffix(e.Path, "/"+pattern) {
+			if m.entryMatchesOnly(e.Path, pattern) {
 				filtered = append(filtered, e)
 				break
-			}
-			// resolve absolute pattern relative to workDir for matching against repo-relative files
-			if m.cfg.workDir != "" && filepath.IsAbs(pattern) {
-				rel, err := filepath.Rel(m.cfg.workDir, pattern)
-				if err == nil && !strings.HasPrefix(rel, "..") && (e.Path == rel || strings.HasSuffix(e.Path, "/"+rel)) {
-					filtered = append(filtered, e)
-					break
-				}
 			}
 		}
 	}
 	return filtered
+}
+
+// entryMatchesOnly reports whether a file entry matches a single --only pattern.
+// checks exact match, suffix match, and workDir-normalized equality/suffix.
+// normalization handles "./" prefixes, absolute patterns, and absolute entries uniformly.
+func (m Model) entryMatchesOnly(entry, pattern string) bool {
+	if entry == pattern || strings.HasSuffix(entry, "/"+pattern) {
+		return true
+	}
+	if m.cfg.workDir == "" {
+		return false
+	}
+	entryRel := m.workDirRel(entry)
+	patternRel := m.workDirRel(pattern)
+	if entryRel == "" || patternRel == "" {
+		return false
+	}
+	return entryRel == patternRel || strings.HasSuffix(entryRel, "/"+patternRel)
+}
+
+// workDirRel returns path as workDir-relative, or "" if path escapes workDir.
+// relative input is joined with workDir first; absolute input is used as-is.
+func (m Model) workDirRel(path string) string {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(m.cfg.workDir, path)
+	}
+	rel, err := filepath.Rel(m.cfg.workDir, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	return rel
 }
 
 // computeFileStats counts added and removed lines in the current file.

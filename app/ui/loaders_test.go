@@ -269,6 +269,53 @@ func TestModel_FilterOnly(t *testing.T) {
 		files := toEntries("ui/model.go", "diff/diff.go")
 		assert.Empty(t, m.filterOnly(files))
 	})
+
+	t.Run("dot-slash prefix matches relative entry", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.cfg.only = []string{"./CLAUDE.md"}
+		m.cfg.workDir = "/repo"
+		files := toEntries("CLAUDE.md", "ui/model.go")
+		assert.Equal(t, []string{"CLAUDE.md"}, diff.FileEntryPaths(m.filterOnly(files)))
+	})
+
+	t.Run("dot-slash prefix matches absolute entry", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.cfg.only = []string{"./CLAUDE.md"}
+		m.cfg.workDir = "/repo"
+		files := toEntries("/repo/CLAUDE.md", "/repo/ui/model.go")
+		assert.Equal(t, []string{"/repo/CLAUDE.md"}, diff.FileEntryPaths(m.filterOnly(files)))
+	})
+
+	t.Run("dot-slash prefix with subdirectory", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.cfg.only = []string{"./ui/model.go"}
+		m.cfg.workDir = "/repo"
+		files := toEntries("ui/model.go", "diff/diff.go")
+		assert.Equal(t, []string{"ui/model.go"}, diff.FileEntryPaths(m.filterOnly(files)))
+	})
+
+	t.Run("relative pattern matches absolute entry", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.cfg.only = []string{"CLAUDE.md"}
+		m.cfg.workDir = "/repo"
+		files := toEntries("/repo/CLAUDE.md", "/repo/ui/model.go")
+		assert.Equal(t, []string{"/repo/CLAUDE.md"}, diff.FileEntryPaths(m.filterOnly(files)))
+	})
+
+	t.Run("dot-slash prefix no workDir falls through to exact/suffix", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.cfg.only = []string{"./CLAUDE.md"}
+		files := toEntries("CLAUDE.md", "ui/model.go")
+		assert.Empty(t, m.filterOnly(files))
+	})
+
+	t.Run("relative pattern escaping workDir does not match", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.cfg.only = []string{"../other/CLAUDE.md"}
+		m.cfg.workDir = "/repo"
+		files := toEntries("CLAUDE.md", "ui/model.go")
+		assert.Empty(t, m.filterOnly(files))
+	})
 }
 
 func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
