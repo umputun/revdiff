@@ -209,8 +209,8 @@ Helper shells out to `<plugin_root>/scripts/resolve-launcher.sh <name> <CLAUDE_P
 
 ### Task 4: [Final] Verify doc consistency and archive plan
 
-- [ ] confirm `README.md`, `CLAUDE.md`, `site/docs.html`, `.claude-plugin/skills/revdiff/references/install.md`, `plugins/revdiff-planning/README.md`, and `plugins/codex/skills/revdiff/SKILL.md` all describe the same override paths and asymmetries (no doc drift)
-- [ ] move this plan to `docs/plans/completed/`
+- [x] confirm `README.md`, `CLAUDE.md`, `site/docs.html`, `.claude-plugin/skills/revdiff/references/install.md`, `plugins/revdiff-planning/README.md`, and `plugins/codex/skills/revdiff/SKILL.md` all describe the same override paths and asymmetries (no doc drift)
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 
