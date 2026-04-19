@@ -258,3 +258,8 @@ Per cc-thingz `CLAUDE.md:39` convention: `claude --plugin-dir <path>` loads a lo
 **Downstream awareness**:
 - `cc-thingz` and other downstream projects bundling their own copy of `launch-revdiff.sh` are unaffected (they continue using their own copy); no coordination needed
 - pi extension: behavior unchanged (still uses the bundled script path directly); the asymmetry is now documented in README/CLAUDE.md/site
+
+## Addendum (post-merge)
+
+- 2026-04-19 — codex external review flagged the project layer (`.claude/<plugin-namespace>/scripts/`) as a security risk: the `revdiff-planning` plugin's `ExitPlanMode` hook fires automatically on every plan exit in any repo Claude opens, so a repo-controlled executable at that path would auto-execute without per-repo opt-in. Resolution: dropped the project layer from BOTH resolvers (commit `53347de`); the diff-review skill keeps the same shape for symmetry. Final chain is `user (${CLAUDE_PLUGIN_DATA}/scripts/) → bundled` only.
+- 2026-04-19 — codex follow-up review flagged that the `-x` test alone matches directories. Fixed by switching both resolvers to `[ -f path ] && [ -x path ]` (commit pending).

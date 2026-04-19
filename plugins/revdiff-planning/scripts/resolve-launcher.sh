@@ -20,12 +20,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 abspath() { (cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd)" "$(basename "$1")"); }
 
 # user layer
-if [ -n "$data_dir" ] && [ -x "$data_dir/scripts/$name" ]; then
+if [ -n "$data_dir" ] && [ -f "$data_dir/scripts/$name" ] && [ -x "$data_dir/scripts/$name" ]; then
     abspath "$data_dir/scripts/$name"
     exit 0
 fi
 # bundled default
-if [ -x "$SCRIPT_DIR/$name" ]; then
+if [ -f "$SCRIPT_DIR/$name" ] && [ -x "$SCRIPT_DIR/$name" ]; then
     abspath "$SCRIPT_DIR/$name"
     exit 0
 fi
