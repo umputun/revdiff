@@ -39,6 +39,10 @@ node_modules/
 # debug
 __debug_bin*
 
+# python bytecode
+__pycache__/
+*.pyc
+
 # ralphex progress logs
 .ralphex/progress/
 .pi/
