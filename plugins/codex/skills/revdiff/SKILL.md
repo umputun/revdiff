@@ -22,7 +22,7 @@ fi
 
 Use `$SCRIPT_DIR` in place of script paths throughout this skill.
 
-**Note**: the launcher override chain (project / user / bundled via `${CLAUDE_PLUGIN_DATA}`) is Claude-only — codex users customize the launcher by editing `~/.codex/skills/revdiff/scripts/launch-revdiff.sh` directly.
+**Note**: the launcher override chain (user via `${CLAUDE_PLUGIN_DATA}` → bundled) is Claude-only — codex users customize the launcher by editing `~/.codex/skills/revdiff/scripts/launch-revdiff.sh` directly.
 
 ## Activation Triggers
 

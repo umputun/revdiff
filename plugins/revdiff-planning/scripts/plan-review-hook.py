@@ -41,7 +41,7 @@ def resolve_launcher(plugin_root: str, name: str) -> Path | None:
     """resolve launcher path through override chain.
 
     shells out to <plugin_root>/scripts/resolve-launcher.sh, passing the launcher
-    name and CLAUDE_PLUGIN_DATA so the resolver can walk project → user → bundled.
+    name and CLAUDE_PLUGIN_DATA so the resolver can walk user → bundled.
     returns Path on resolver success (exit 0); returns None if the resolver exits
     non-zero (all layers absent, or invocation error). logs resolver stderr for
     diagnostics."""
@@ -50,11 +50,10 @@ def resolve_launcher(plugin_root: str, name: str) -> Path | None:
         print(f"resolve-launcher.sh not found at {resolver}", file=sys.stderr)
         return None
     data_dir = os.environ.get("CLAUDE_PLUGIN_DATA", "")
-    # pin cwd to the project root so the resolver's project-layer check
-    # (relative path .claude/<namespace>/scripts/<name>) works regardless of
-    # where Claude Code launched the hook from. CLAUDE_PROJECT_DIR is the
-    # standard env var Claude Code sets for hook subprocesses; if absent we
-    # inherit the parent's cwd to preserve current behavior.
+    # pin cwd to CLAUDE_PROJECT_DIR for hygiene: ensures consistent CWD for the
+    # resolver invocation regardless of where Claude Code launches the hook
+    # from. CLAUDE_PROJECT_DIR is the standard env var Claude Code sets for
+    # hook subprocesses; if absent we inherit the parent's cwd.
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or None
     try:
         result = subprocess.run(

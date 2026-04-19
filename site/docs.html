@@ -583,15 +583,15 @@ unmap q</code></div>
         <p>This plugin is independent from the main <code>revdiff</code> plugin and does not conflict with other planning plugins.</p>
 
         <h2 id="plugin-overrides">Custom launchers</h2>
-        <p>Both Claude plugins resolve their launcher script through a three-layer chain (project &rarr; user &rarr; bundled, first executable wins). Drop a custom launcher into either layer to customize how revdiff opens (separate window, alternate split layout, custom terminal multiplexer) without forking the plugin.</p>
+        <p>Both Claude plugins resolve their launcher script through a two-layer chain (user &rarr; bundled, first executable wins). Drop a custom launcher into the user layer to customize how revdiff opens (separate window, alternate split layout, custom terminal multiplexer) without forking the plugin.</p>
         <table>
-            <thead><tr><th>Plugin</th><th>Project layer</th><th>User layer</th><th>Bundled default</th></tr></thead>
+            <thead><tr><th>Plugin</th><th>User layer</th><th>Bundled default</th></tr></thead>
             <tbody>
-                <tr><td>diff-review (<code>revdiff</code>)</td><td><code>.claude/revdiff/scripts/launch-revdiff.sh</code></td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh</code></td><td><code>${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh</code></td></tr>
-                <tr><td>plan-review (<code>revdiff-planning</code>)</td><td><code>.claude/revdiff-planning/scripts/launch-plan-review.sh</code></td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh</code></td><td><code>${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh</code></td></tr>
+                <tr><td>diff-review (<code>revdiff</code>)</td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh</code></td><td><code>${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh</code></td></tr>
+                <tr><td>plan-review (<code>revdiff-planning</code>)</td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh</code></td><td><code>${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh</code></td></tr>
             </tbody>
         </table>
-        <p>The override file must be executable (<code>chmod +x</code>) — a non-executable file is treated as absent and the resolver falls through. The override chain is Claude-only: the pi extension and the Codex plugin do not honor it (no <code>CLAUDE_PLUGIN_DATA</code> in those runtimes; codex users edit <code>~/.codex/skills/revdiff/scripts/launch-revdiff.sh</code> directly). See <a href="https://github.com/umputun/revdiff/blob/master/.claude-plugin/skills/revdiff/references/install.md">install.md</a> and <a href="https://github.com/umputun/revdiff/blob/master/plugins/revdiff-planning/README.md">revdiff-planning README</a> for working examples.</p>
+        <p>There is no project-level (<code>.claude/...</code>) override layer by design: the planning hook fires automatically on every <code>ExitPlanMode</code> in any repo Claude opens, and a repo-controlled executable layer would let an untrusted repo run arbitrary code on routine Claude actions. The diff-review skill keeps the same two-layer shape for symmetry. The override file must be executable (<code>chmod +x</code>) — a non-executable file is treated as absent and the resolver falls through. The override chain is Claude-only: the pi extension and the Codex plugin do not honor it (no <code>CLAUDE_PLUGIN_DATA</code> in those runtimes; codex users edit <code>~/.codex/skills/revdiff/scripts/launch-revdiff.sh</code> directly). See <a href="https://github.com/umputun/revdiff/blob/master/.claude-plugin/skills/revdiff/references/install.md">install.md</a> and <a href="https://github.com/umputun/revdiff/blob/master/plugins/revdiff-planning/README.md">revdiff-planning README</a> for working examples.</p>
 
         <!-- codex plugin -->
         <h2 id="codex-install">Codex plugin</h2>

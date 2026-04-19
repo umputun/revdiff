@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# resolve launcher script through three-layer override chain
+# resolve launcher script through two-layer override chain (user → bundled)
 # usage: resolve-launcher.sh <launcher-name> [data-dir]
 # outputs absolute path of the first-found executable launcher
+#
+# No project (.claude/...) layer by design: this script can be invoked
+# automatically by hooks (e.g. revdiff-planning's ExitPlanMode), and a
+# repo-controlled executable layer would let an untrusted repo run
+# arbitrary code on routine Claude actions. User layer + bundled only.
 set -euo pipefail
-
-NAMESPACE="revdiff-planning"
 
 name="${1:-}"
 if [ -z "$name" ]; then
@@ -16,11 +19,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 abspath() { (cd "$(dirname "$1")" && printf '%s/%s\n' "$(pwd)" "$(basename "$1")"); }
 
-# project layer
-if [ -x ".claude/$NAMESPACE/scripts/$name" ]; then
-    abspath ".claude/$NAMESPACE/scripts/$name"
-    exit 0
-fi
 # user layer
 if [ -n "$data_dir" ] && [ -x "$data_dir/scripts/$name" ]; then
     abspath "$data_dir/scripts/$name"

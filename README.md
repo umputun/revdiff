@@ -153,7 +153,7 @@ The plugin includes built-in reference documentation and can answer questions ab
 
 The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
 
-**Custom launchers:** both Claude plugins resolve their launcher script through a three-layer chain (project → user → bundled), so you can drop a custom launcher at `.claude/revdiff/scripts/launch-revdiff.sh` (project) or `${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh` (user) without forking the plugin. See `.claude-plugin/skills/revdiff/references/install.md` for the diff-review skill and [plugins/revdiff-planning/README.md](plugins/revdiff-planning/README.md) for the planning hook.
+**Custom launchers:** both Claude plugins resolve their launcher script through a two-layer chain (user → bundled), so you can drop a custom launcher at `${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh` without forking the plugin. There is no project-level (`.claude/...`) override layer by design — the planning hook fires automatically on every `ExitPlanMode`, and a repo-controlled executable layer would let an untrusted repo run arbitrary code on routine Claude actions. See `.claude-plugin/skills/revdiff/references/install.md` for the diff-review skill and [plugins/revdiff-planning/README.md](plugins/revdiff-planning/README.md) for the planning hook.
 
 ### Plan Review Plugin
 
