@@ -159,11 +159,11 @@ Helper shells out to `<plugin_root>/scripts/resolve-launcher.sh <name> <CLAUDE_P
 - Modify: `.claude-plugin/skills/revdiff/SKILL.md`
 - Modify: `.claude-plugin/skills/revdiff/references/install.md`
 
-- [ ] create `.claude-plugin/skills/revdiff/scripts/resolve-launcher.sh` matching the shape in Solution Overview (NAMESPACE = `revdiff`, `set -euo pipefail`, `cd && pwd` for path absolutization)
-- [ ] `chmod +x` the new resolver
-- [ ] update `SKILL.md` Step 2: replace the direct `${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh ...` invocation with the single-line composition `"$(${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh launch-revdiff.sh ${CLAUDE_PLUGIN_DATA})" ...` inside one fenced bash block; add a sentence noting "resolver and launcher must run in the same bash invocation"
-- [ ] add "Overrides" subsection to `references/install.md` documenting the project / user / bundled paths and an example "open in a new kitty window instead of an overlay" stub
-- [ ] run `shellcheck .claude-plugin/skills/revdiff/scripts/resolve-launcher.sh` and `shfmt -d` — must be clean
+- [x] create `.claude-plugin/skills/revdiff/scripts/resolve-launcher.sh` matching the shape in Solution Overview (NAMESPACE = `revdiff`, `set -euo pipefail`, `cd && pwd` for path absolutization)
+- [x] `chmod +x` the new resolver
+- [x] update `SKILL.md` Step 2: replace the direct `${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh ...` invocation with the single-line composition `"$(${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh launch-revdiff.sh ${CLAUDE_PLUGIN_DATA})" ...` inside one fenced bash block; add a sentence noting "resolver and launcher must run in the same bash invocation"
+- [x] add "Overrides" subsection to `references/install.md` documenting the project / user / bundled paths and an example "open in a new kitty window instead of an overlay" stub
+- [x] run `shellcheck .claude-plugin/skills/revdiff/scripts/resolve-launcher.sh` and `shfmt -d` — must be clean
 
 ### Task 2: Add resolver to revdiff-planning plugin
 
