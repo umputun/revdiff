@@ -153,6 +153,8 @@ The plugin includes built-in reference documentation and can answer questions ab
 
 The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
 
+**Custom launchers:** both Claude plugins resolve their launcher script through a three-layer chain (project → user → bundled), so you can drop a custom launcher at `.claude/revdiff/scripts/launch-revdiff.sh` (project) or `${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh` (user) without forking the plugin. See `.claude-plugin/skills/revdiff/references/install.md` for the diff-review skill and [plugins/revdiff-planning/README.md](plugins/revdiff-planning/README.md) for the planning hook.
+
 ### Plan Review Plugin
 
 A separate `revdiff-planning` plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again — looping until you're satisfied.
@@ -194,7 +196,7 @@ pi install https://github.com/umputun/revdiff
 - Requires the `revdiff` binary on `PATH`
 - Set `REVDIFF_BIN=/absolute/path/to/revdiff` if pi can't find the binary
 - Same-terminal mode is the default: pi temporarily suspends, revdiff takes over the terminal, and pi resumes on exit
-- Optional overlay mode (`--pi-overlay` or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration
+- Optional overlay mode (`--pi-overlay` or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration; pi invokes the bundled script directly and does not honor Claude-plugin overrides (`CLAUDE_PLUGIN_DATA` is not set in the pi runtime)
 - Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 

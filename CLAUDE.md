@@ -63,6 +63,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
   - `install.md` — installation methods and plugin setup
   - `config.md` — options, colors, chroma styles
   - `usage.md` — examples, key bindings, output format
+- **Launcher override chain**: both Claude plugins resolve their launcher script via `resolve-launcher.sh` through `project → user → bundled` layers (first executable wins). Namespaces: `revdiff` for the diff-review skill (`.claude/revdiff/scripts/launch-revdiff.sh`) and `revdiff-planning` for the plan-review hook (`.claude/revdiff-planning/scripts/launch-plan-review.sh`). User layer is `${CLAUDE_PLUGIN_DATA}/scripts/<launcher>`. The override chain is **Claude-only** — pi (no `CLAUDE_PLUGIN_DATA` in runtime) and codex (no plugin-data path) ignore it; codex users edit `~/.codex/skills/revdiff/scripts/launch-revdiff.sh` directly to customize.
+- **Testing locally**: `claude --plugin-dir .claude-plugin` loads the diff-review skill from this checkout without going through the marketplace; `claude --plugin-dir plugins/revdiff-planning` does the same for the planning hook. Use `/reload-plugins` to pick up file edits mid-session.
 
 ## Codex Skills
 - Codex skills live at `plugins/codex/skills/` — two skills: `revdiff` (diff review) and `revdiff-plan` (plan review via last Codex assistant message)

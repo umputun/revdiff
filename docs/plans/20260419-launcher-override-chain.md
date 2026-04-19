@@ -200,12 +200,12 @@ Helper shells out to `<plugin_root>/scripts/resolve-launcher.sh <name> <CLAUDE_P
 - Modify: `site/docs.html`
 - Modify: `plugins/codex/skills/revdiff/SKILL.md` (note: codex skills do not honor the override chain)
 
-- [ ] update `README.md`: add a sentence to the existing Claude plugin section pointing at the override paths in `.claude-plugin/skills/revdiff/references/install.md` and `plugins/revdiff-planning/README.md`; add a one-sentence clarification near the pi mention (line ~197) that pi uses the bundled `launch-revdiff.sh` directly and does not honor Claude-plugin overrides (CLAUDE_PLUGIN_DATA is not set in the Pi runtime)
-- [ ] update `CLAUDE.md`: add a note under the "Claude Code Plugin" section that launchers go through `resolve-launcher.sh` with the three-layer chain; spell out which namespace each plugin uses (`revdiff` and `revdiff-planning`); note the pi/codex asymmetry (overrides are Claude-only); add a "Testing locally" line documenting `claude --plugin-dir .claude-plugin` and `claude --plugin-dir plugins/revdiff-planning` plus `/reload-plugins` for iteration (matches cc-thingz `CLAUDE.md:39` convention)
-- [ ] update `site/docs.html`: mirror the README override-chain note (per CLAUDE.md "must stay in sync with README.md") AND mirror the pi asymmetry sentence
-- [ ] update `plugins/codex/skills/revdiff/SKILL.md`: add a one-sentence note that the override chain is Claude-only (codex users edit `~/.codex/skills/revdiff/scripts/launch-revdiff.sh` directly to customize)
-- [ ] verify no broken links: every doc that mentions launchers references the override path correctly
-- [ ] **NOT changed**: `site/index.html` version badge — that tracks revdiff CLI releases, not plugin versions; intentionally omitted
+- [x] update `README.md`: add a sentence to the existing Claude plugin section pointing at the override paths in `.claude-plugin/skills/revdiff/references/install.md` and `plugins/revdiff-planning/README.md`; add a one-sentence clarification near the pi mention (line ~197) that pi uses the bundled `launch-revdiff.sh` directly and does not honor Claude-plugin overrides (CLAUDE_PLUGIN_DATA is not set in the Pi runtime)
+- [x] update `CLAUDE.md`: add a note under the "Claude Code Plugin" section that launchers go through `resolve-launcher.sh` with the three-layer chain; spell out which namespace each plugin uses (`revdiff` and `revdiff-planning`); note the pi/codex asymmetry (overrides are Claude-only); add a "Testing locally" line documenting `claude --plugin-dir .claude-plugin` and `claude --plugin-dir plugins/revdiff-planning` plus `/reload-plugins` for iteration (matches cc-thingz `CLAUDE.md:39` convention)
+- [x] update `site/docs.html`: mirror the README override-chain note (per CLAUDE.md "must stay in sync with README.md") AND mirror the pi asymmetry sentence
+- [x] update `plugins/codex/skills/revdiff/SKILL.md`: add a one-sentence note that the override chain is Claude-only (codex users edit `~/.codex/skills/revdiff/scripts/launch-revdiff.sh` directly to customize)
+- [x] verify no broken links: every doc that mentions launchers references the override path correctly
+- [x] **NOT changed**: `site/index.html` version badge — that tracks revdiff CLI releases, not plugin versions; intentionally omitted
 
 ### Task 4: [Final] Verify doc consistency and archive plan
 
