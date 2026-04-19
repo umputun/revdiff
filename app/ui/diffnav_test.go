@@ -395,6 +395,64 @@ func TestModel_CtrlUMovesHalfPageUp(t *testing.T) {
 	model = result.(Model)
 	assert.Equal(t, 80-pageHeight, model.nav.diffCursor, "PgUp should move cursor up by full viewport height")
 }
+
+// pgdown/pgup must keep the cursor's on-screen row stable — same relative position
+// before and after. symmetric to ctrl+d/ctrl+u. regression test for issue #124.
+func TestModel_PgDownPgUpPreservesRelativeCursorPosition(t *testing.T) {
+	lines := make([]diff.DiffLine, 200)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+
+	pageHeight := model.layout.viewport.Height
+	require.Positive(t, pageHeight, "page height must be positive")
+
+	// scenario 1: cursor at top of screen, pgdown then pgup returns to the start
+	require.Equal(t, 0, model.nav.diffCursor, "cursor starts at 0")
+	require.Equal(t, 0, model.layout.viewport.YOffset, "viewport starts at 0")
+	cursorRowBefore := model.cursorViewportY() - model.layout.viewport.YOffset
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	cursorRowAfterDown := model.cursorViewportY() - model.layout.viewport.YOffset
+	assert.Equal(t, cursorRowBefore, cursorRowAfterDown,
+		"pgdown should keep cursor on the same on-screen row")
+	assert.Equal(t, pageHeight, model.nav.diffCursor, "pgdown should advance cursor by page height")
+	assert.Equal(t, pageHeight, model.layout.viewport.YOffset, "pgdown should scroll viewport by page height")
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+	assert.Equal(t, 0, model.nav.diffCursor, "pgup should reverse pgdown exactly")
+	assert.Equal(t, 0, model.layout.viewport.YOffset, "pgup should restore viewport offset")
+
+	// scenario 2: two pgdowns then pgup returns to state after first pgdown (issue #124 repro)
+	model.nav.diffCursor = 0
+	model.layout.viewport.SetYOffset(0)
+	model.layout.viewport.SetContent(model.renderDiff())
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	afterFirstPgDownCursor := model.nav.diffCursor
+	afterFirstPgDownOffset := model.layout.viewport.YOffset
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+	assert.Equal(t, afterFirstPgDownCursor, model.nav.diffCursor,
+		"pgdown+pgdown+pgup should return cursor to after-first-pgdown state")
+	assert.Equal(t, afterFirstPgDownOffset, model.layout.viewport.YOffset,
+		"pgdown+pgdown+pgup should return viewport to after-first-pgdown state")
+}
+
 func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
 	files := make([]string, 50)
 	for i := range files {

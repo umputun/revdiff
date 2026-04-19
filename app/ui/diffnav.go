@@ -93,49 +93,35 @@ func (m *Model) moveDiffCursorUp() {
 }
 
 // moveDiffCursorPageDown moves the diff cursor down by one visual page.
-// accounts for divider lines and annotation rows that occupy rendered space.
-// scrolls the viewport so cursor appears near the top of the new page.
+// keeps the cursor's relative screen position stable by scrolling both
+// cursor and viewport by the same amount.
 func (m *Model) moveDiffCursorPageDown() {
-	startY := m.cursorViewportY()
-	for {
-		prev := m.nav.diffCursor
-		m.moveDiffCursorDown()
-		if m.nav.diffCursor == prev {
-			break
-		}
-		if m.cursorViewportY()-startY >= m.layout.viewport.Height {
-			break
-		}
-	}
-	// place cursor at the top of the viewport for a true page-scroll feel
-	m.layout.viewport.SetYOffset(m.cursorViewportY())
-	m.layout.viewport.SetContent(m.renderDiff())
+	m.moveDiffCursorDownBy(m.layout.viewport.Height)
 }
 
 // moveDiffCursorPageUp moves the diff cursor up by one visual page.
-// accounts for divider lines and annotation rows that occupy rendered space.
-// scrolls the viewport so cursor appears near the bottom of the new page.
+// keeps the cursor's relative screen position stable by scrolling both
+// cursor and viewport by the same amount.
 func (m *Model) moveDiffCursorPageUp() {
-	startY := m.cursorViewportY()
-	for {
-		prev := m.nav.diffCursor
-		m.moveDiffCursorUp()
-		if m.nav.diffCursor == prev {
-			break
-		}
-		if startY-m.cursorViewportY() >= m.layout.viewport.Height {
-			break
-		}
-	}
-	// place cursor at the bottom of the viewport for a true page-scroll feel
-	m.layout.viewport.SetYOffset(max(0, m.cursorViewportY()-m.layout.viewport.Height+1))
-	m.layout.viewport.SetContent(m.renderDiff())
+	m.moveDiffCursorUpBy(m.layout.viewport.Height)
 }
 
 // moveDiffCursorHalfPageDown moves the diff cursor down by half a visual page.
 // scrolls viewport by half page explicitly, matching vim/less ctrl+d behavior.
 func (m *Model) moveDiffCursorHalfPageDown() {
-	halfPage := max(1, m.layout.viewport.Height/2)
+	m.moveDiffCursorDownBy(max(1, m.layout.viewport.Height/2))
+}
+
+// moveDiffCursorHalfPageUp moves the diff cursor up by half a visual page.
+// scrolls viewport by half page explicitly, matching vim/less ctrl+u behavior.
+func (m *Model) moveDiffCursorHalfPageUp() {
+	m.moveDiffCursorUpBy(max(1, m.layout.viewport.Height/2))
+}
+
+// moveDiffCursorDownBy advances the cursor down by approximately n visual rows
+// and scrolls the viewport by the same amount so the cursor's on-screen row stays stable.
+// accounts for divider lines, wrap continuations, and annotation rows that occupy rendered space.
+func (m *Model) moveDiffCursorDownBy(n int) {
 	startY := m.cursorViewportY()
 	for {
 		prev := m.nav.diffCursor
@@ -143,19 +129,19 @@ func (m *Model) moveDiffCursorHalfPageDown() {
 		if m.nav.diffCursor == prev {
 			break
 		}
-		if m.cursorViewportY()-startY >= halfPage {
+		if m.cursorViewportY()-startY >= n {
 			break
 		}
 	}
 	maxOffset := max(0, m.layout.viewport.TotalLineCount()-m.layout.viewport.Height)
-	m.layout.viewport.SetYOffset(min(m.layout.viewport.YOffset+halfPage, maxOffset))
+	m.layout.viewport.SetYOffset(min(m.layout.viewport.YOffset+n, maxOffset))
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
-// moveDiffCursorHalfPageUp moves the diff cursor up by half a visual page.
-// scrolls viewport by half page explicitly, matching vim/less ctrl+u behavior.
-func (m *Model) moveDiffCursorHalfPageUp() {
-	halfPage := max(1, m.layout.viewport.Height/2)
+// moveDiffCursorUpBy moves the cursor up by approximately n visual rows
+// and scrolls the viewport by the same amount so the cursor's on-screen row stays stable.
+// accounts for divider lines, wrap continuations, and annotation rows that occupy rendered space.
+func (m *Model) moveDiffCursorUpBy(n int) {
 	startY := m.cursorViewportY()
 	for {
 		prev := m.nav.diffCursor
@@ -163,11 +149,11 @@ func (m *Model) moveDiffCursorHalfPageUp() {
 		if m.nav.diffCursor == prev {
 			break
 		}
-		if startY-m.cursorViewportY() >= halfPage {
+		if startY-m.cursorViewportY() >= n {
 			break
 		}
 	}
-	m.layout.viewport.SetYOffset(max(0, m.layout.viewport.YOffset-halfPage))
+	m.layout.viewport.SetYOffset(max(0, m.layout.viewport.YOffset-n))
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
