@@ -471,6 +471,43 @@ func TestModel_PgDownPgUpPreservesRelativeCursorPosition(t *testing.T) {
 		assert.Equal(t, afterFirstPgDownOffset, model.layout.viewport.YOffset,
 			"pgdown+pgdown+pgup should return viewport to after-first-pgdown state")
 	})
+
+	t.Run("wrap mode with long lines preserves cursor on-screen row", func(t *testing.T) {
+		// mix short and long lines so some wrap and cursorViewportY math spans multiple rows per line
+		longLine := strings.Repeat("abcdefghij ", 20) // ~220 chars, forces wrap
+		lines := make([]diff.DiffLine, 100)
+		for i := range lines {
+			content := "short"
+			if i%3 == 0 {
+				content = longLine
+			}
+			lines[i] = diff.DiffLine{NewNum: i + 1, Content: content, ChangeType: diff.ChangeContext}
+		}
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model = result.(Model)
+		model.layout.focus = paneDiff
+		model.modes.wrap = true
+		model.layout.viewport.SetContent(model.renderDiff())
+
+		// move cursor down 3 rows so it is mid-screen (over wrapped and short lines)
+		for range 3 {
+			model.moveDiffCursorDown()
+		}
+		midScreenRow := model.cursorViewportY() - model.layout.viewport.YOffset
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Equal(t, midScreenRow, model.cursorViewportY()-model.layout.viewport.YOffset,
+			"wrap-mode pgdown should preserve cursor's on-screen row")
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		model = result.(Model)
+		assert.Equal(t, midScreenRow, model.cursorViewportY()-model.layout.viewport.YOffset,
+			"wrap-mode pgup should preserve cursor's on-screen row")
+	})
 }
 
 // on annotated lines the cursor must stay visible within the viewport after pgdown/pgup,
