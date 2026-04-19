@@ -288,9 +288,9 @@ func (m Model) computeBlameAuthorLen() int {
 
 // filterOnly returns only files matching the --only patterns, or all files if no filter is set.
 // matches by exact path or path suffix (e.g. "model.go" matches "ui/model.go").
-// both entries and patterns are also normalized to workDir-relative form for matching,
-// so "./CLAUDE.md" matches "CLAUDE.md" and an absolute entry from FileReader
-// ("/repo/CLAUDE.md") matches a relative pattern ("CLAUDE.md").
+// when workDir is set, both entries and patterns are also normalized to workDir-relative
+// form for matching, so "./CLAUDE.md" matches "CLAUDE.md" and an absolute entry from
+// FileReader ("/repo/CLAUDE.md") matches a relative pattern ("CLAUDE.md").
 func (m Model) filterOnly(entries []diff.FileEntry) []diff.FileEntry {
 	if len(m.cfg.only) == 0 {
 		return entries
