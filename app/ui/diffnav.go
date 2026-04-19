@@ -118,42 +118,52 @@ func (m *Model) moveDiffCursorHalfPageUp() {
 	m.moveDiffCursorUpBy(max(1, m.layout.viewport.Height/2))
 }
 
-// moveDiffCursorDownBy advances the cursor down by approximately n visual rows
-// and scrolls the viewport by the same amount so the cursor's on-screen row stays stable.
+// moveDiffCursorDownBy advances the cursor down by up to rows visual rows
+// and scrolls the viewport by the cursor's actual visual delta so the on-screen
+// row stays stable and the cursor never drops below the viewport.
 // accounts for divider lines, wrap continuations, and annotation rows that occupy rendered space.
-func (m *Model) moveDiffCursorDownBy(n int) {
+// transitions onto an annotation sub-row (cursorOnAnnotation flip with no diffCursor change)
+// count as real progress so the loop does not terminate early on annotated lines.
+func (m *Model) moveDiffCursorDownBy(rows int) {
 	startY := m.cursorViewportY()
 	for {
-		prev := m.nav.diffCursor
+		prevCursor := m.nav.diffCursor
+		prevAnnot := m.annot.cursorOnAnnotation
 		m.moveDiffCursorDown()
-		if m.nav.diffCursor == prev {
-			break
+		if m.nav.diffCursor == prevCursor && m.annot.cursorOnAnnotation == prevAnnot {
+			break // no more movement possible (end of content)
 		}
-		if m.cursorViewportY()-startY >= n {
+		if m.cursorViewportY()-startY >= rows {
 			break
 		}
 	}
+	actualDelta := m.cursorViewportY() - startY
 	maxOffset := max(0, m.layout.viewport.TotalLineCount()-m.layout.viewport.Height)
-	m.layout.viewport.SetYOffset(min(m.layout.viewport.YOffset+n, maxOffset))
+	m.layout.viewport.SetYOffset(min(m.layout.viewport.YOffset+actualDelta, maxOffset))
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
-// moveDiffCursorUpBy moves the cursor up by approximately n visual rows
-// and scrolls the viewport by the same amount so the cursor's on-screen row stays stable.
+// moveDiffCursorUpBy moves the cursor up by up to rows visual rows
+// and scrolls the viewport by the cursor's actual visual delta so the on-screen
+// row stays stable and the cursor never rises above the viewport.
 // accounts for divider lines, wrap continuations, and annotation rows that occupy rendered space.
-func (m *Model) moveDiffCursorUpBy(n int) {
+// transitions off an annotation sub-row count as real progress so the loop does not
+// terminate early on annotated lines.
+func (m *Model) moveDiffCursorUpBy(rows int) {
 	startY := m.cursorViewportY()
 	for {
-		prev := m.nav.diffCursor
+		prevCursor := m.nav.diffCursor
+		prevAnnot := m.annot.cursorOnAnnotation
 		m.moveDiffCursorUp()
-		if m.nav.diffCursor == prev {
-			break
+		if m.nav.diffCursor == prevCursor && m.annot.cursorOnAnnotation == prevAnnot {
+			break // no more movement possible (start of content)
 		}
-		if startY-m.cursorViewportY() >= n {
+		if startY-m.cursorViewportY() >= rows {
 			break
 		}
 	}
-	m.layout.viewport.SetYOffset(max(0, m.layout.viewport.YOffset-n))
+	actualDelta := startY - m.cursorViewportY()
+	m.layout.viewport.SetYOffset(max(0, m.layout.viewport.YOffset-actualDelta))
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 

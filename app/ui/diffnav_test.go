@@ -399,58 +399,122 @@ func TestModel_CtrlUMovesHalfPageUp(t *testing.T) {
 // pgdown/pgup must keep the cursor's on-screen row stable — same relative position
 // before and after. symmetric to ctrl+d/ctrl+u. regression test for issue #124.
 func TestModel_PgDownPgUpPreservesRelativeCursorPosition(t *testing.T) {
-	lines := make([]diff.DiffLine, 200)
+	makeModel := func() Model {
+		lines := make([]diff.DiffLine, 200)
+		for i := range lines {
+			lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+		}
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model = result.(Model)
+		model.layout.focus = paneDiff
+		return model
+	}
+
+	t.Run("from top, pgdown then pgup is reversible", func(t *testing.T) {
+		model := makeModel()
+		pageHeight := model.layout.viewport.Height
+		require.Positive(t, pageHeight, "page height must be positive")
+		require.Equal(t, 0, model.nav.diffCursor, "cursor starts at 0")
+		require.Equal(t, 0, model.layout.viewport.YOffset, "viewport starts at 0")
+
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Equal(t, 0, model.cursorViewportY()-model.layout.viewport.YOffset,
+			"pgdown from top should keep cursor at screen row 0")
+		assert.Equal(t, pageHeight, model.nav.diffCursor, "pgdown should advance cursor by page height")
+		assert.Equal(t, pageHeight, model.layout.viewport.YOffset, "pgdown should scroll viewport by page height")
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		model = result.(Model)
+		assert.Equal(t, 0, model.nav.diffCursor, "pgup should reverse pgdown exactly")
+		assert.Equal(t, 0, model.layout.viewport.YOffset, "pgup should restore viewport offset")
+	})
+
+	t.Run("cursor at mid-screen row stays at mid-screen after pgdown", func(t *testing.T) {
+		model := makeModel()
+		// move cursor down 5 rows so it is NOT at screen row 0
+		for range 5 {
+			model.moveDiffCursorDown()
+		}
+		midScreenRow := model.cursorViewportY() - model.layout.viewport.YOffset
+		require.Equal(t, 5, midScreenRow, "setup: cursor should be at screen row 5")
+
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Equal(t, midScreenRow, model.cursorViewportY()-model.layout.viewport.YOffset,
+			"pgdown should preserve cursor's on-screen row (not snap to top)")
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		model = result.(Model)
+		assert.Equal(t, midScreenRow, model.cursorViewportY()-model.layout.viewport.YOffset,
+			"pgup should preserve cursor's on-screen row (not snap to bottom)")
+	})
+
+	t.Run("pgdown+pgdown+pgup returns to after-first-pgdown state", func(t *testing.T) {
+		model := makeModel()
+
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		afterFirstPgDownCursor := model.nav.diffCursor
+		afterFirstPgDownOffset := model.layout.viewport.YOffset
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		model = result.(Model)
+		assert.Equal(t, afterFirstPgDownCursor, model.nav.diffCursor,
+			"pgdown+pgdown+pgup should return cursor to after-first-pgdown state")
+		assert.Equal(t, afterFirstPgDownOffset, model.layout.viewport.YOffset,
+			"pgdown+pgdown+pgup should return viewport to after-first-pgdown state")
+	})
+}
+
+// on annotated lines the cursor must stay visible within the viewport after pgdown/pgup,
+// even when moveDiffCursorDown only flips cursorOnAnnotation without advancing diffCursor.
+func TestModel_PgDownKeepsCursorVisibleOnAnnotatedLine(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
 	for i := range lines {
-		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeAdd}
 	}
 
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
-	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	model := result.(Model)
 	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	model = result.(Model)
 	model.layout.focus = paneDiff
 
+	// annotate the first few lines so that moveDiffCursorDown will stall on cursorOnAnnotation
+	for i := range 5 {
+		model.store.Add(annotation.Annotation{File: "a.go", Line: i + 1, Type: string(diff.ChangeAdd), Comment: "note"})
+	}
+
 	pageHeight := model.layout.viewport.Height
-	require.Positive(t, pageHeight, "page height must be positive")
-
-	// scenario 1: cursor at top of screen, pgdown then pgup returns to the start
-	require.Equal(t, 0, model.nav.diffCursor, "cursor starts at 0")
-	require.Equal(t, 0, model.layout.viewport.YOffset, "viewport starts at 0")
-	cursorRowBefore := model.cursorViewportY() - model.layout.viewport.YOffset
+	require.Positive(t, pageHeight)
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 	model = result.(Model)
-	cursorRowAfterDown := model.cursorViewportY() - model.layout.viewport.YOffset
-	assert.Equal(t, cursorRowBefore, cursorRowAfterDown,
-		"pgdown should keep cursor on the same on-screen row")
-	assert.Equal(t, pageHeight, model.nav.diffCursor, "pgdown should advance cursor by page height")
-	assert.Equal(t, pageHeight, model.layout.viewport.YOffset, "pgdown should scroll viewport by page height")
 
+	cursorY := model.cursorViewportY()
+	yOffset := model.layout.viewport.YOffset
+	assert.GreaterOrEqual(t, cursorY, yOffset,
+		"cursor must stay on or below the top of the viewport after pgdown on annotated line")
+	assert.Less(t, cursorY, yOffset+pageHeight,
+		"cursor must stay above the bottom of the viewport after pgdown on annotated line")
+
+	// pgup must also keep cursor visible
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
 	model = result.(Model)
-	assert.Equal(t, 0, model.nav.diffCursor, "pgup should reverse pgdown exactly")
-	assert.Equal(t, 0, model.layout.viewport.YOffset, "pgup should restore viewport offset")
-
-	// scenario 2: two pgdowns then pgup returns to state after first pgdown (issue #124 repro)
-	model.nav.diffCursor = 0
-	model.layout.viewport.SetYOffset(0)
-	model.layout.viewport.SetContent(model.renderDiff())
-
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
-	model = result.(Model)
-	afterFirstPgDownCursor := model.nav.diffCursor
-	afterFirstPgDownOffset := model.layout.viewport.YOffset
-
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
-	model = result.(Model)
-
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
-	model = result.(Model)
-	assert.Equal(t, afterFirstPgDownCursor, model.nav.diffCursor,
-		"pgdown+pgdown+pgup should return cursor to after-first-pgdown state")
-	assert.Equal(t, afterFirstPgDownOffset, model.layout.viewport.YOffset,
-		"pgdown+pgdown+pgup should return viewport to after-first-pgdown state")
+	cursorY = model.cursorViewportY()
+	yOffset = model.layout.viewport.YOffset
+	assert.GreaterOrEqual(t, cursorY, yOffset,
+		"cursor must stay visible after pgup on annotated line")
+	assert.Less(t, cursorY, yOffset+pageHeight,
+		"cursor must stay visible after pgup on annotated line")
 }
 
 func TestModel_TreeCtrlDUMovesHalfPage(t *testing.T) {
