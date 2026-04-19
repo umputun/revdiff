@@ -187,10 +187,10 @@ Helper shells out to `<plugin_root>/scripts/resolve-launcher.sh <name> <CLAUDE_P
 - Modify: `plugins/revdiff-planning/.claude-plugin/plugin.json` (version field, line 4)
 - Modify: `.claude-plugin/marketplace.json` (revdiff-planning entry version, line 21)
 
-- [ ] **ASK USER** before bumping any plugin version (per CLAUDE.md "ALWAYS ask about plugin version bump after `.claude-plugin/` file change")
-- [ ] bump version in `.claude-plugin/plugin.json` (line 3) and the corresponding entry in `.claude-plugin/marketplace.json` (line 12) — keep in lockstep
-- [ ] bump version in `plugins/revdiff-planning/.claude-plugin/plugin.json` (line 4) and the corresponding entry in `.claude-plugin/marketplace.json` (line 21) — keep in lockstep
-- [ ] verify all four version fields match the intended values via `grep -n version .claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/revdiff-planning/.claude-plugin/plugin.json`
+- [x] **ASK USER** before bumping any plugin version (per CLAUDE.md "ALWAYS ask about plugin version bump after `.claude-plugin/` file change") — approved: minor bumps
+- [x] bump version in `.claude-plugin/plugin.json` (line 3) and the corresponding entry in `.claude-plugin/marketplace.json` (line 12) — keep in lockstep
+- [x] bump version in `plugins/revdiff-planning/.claude-plugin/plugin.json` (line 4) and the corresponding entry in `.claude-plugin/marketplace.json` (line 21) — keep in lockstep
+- [x] verify all four version fields match the intended values via `grep -n version .claude-plugin/plugin.json .claude-plugin/marketplace.json plugins/revdiff-planning/.claude-plugin/plugin.json`
 
 ### Task 3b: Sync top-level documentation
 
