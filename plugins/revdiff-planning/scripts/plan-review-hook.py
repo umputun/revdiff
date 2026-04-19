@@ -14,6 +14,8 @@ requirements:
   - tmux, kitty, wezterm, cmux, or ghostty (macOS) terminal
 """
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
@@ -48,10 +50,17 @@ def resolve_launcher(plugin_root: str, name: str) -> Path | None:
         print(f"resolve-launcher.sh not found at {resolver}", file=sys.stderr)
         return None
     data_dir = os.environ.get("CLAUDE_PLUGIN_DATA", "")
+    # pin cwd to the project root so the resolver's project-layer check
+    # (relative path .claude/<namespace>/scripts/<name>) works regardless of
+    # where Claude Code launched the hook from. CLAUDE_PROJECT_DIR is the
+    # standard env var Claude Code sets for hook subprocesses; if absent we
+    # inherit the parent's cwd to preserve current behavior.
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or None
     try:
         result = subprocess.run(
             [str(resolver), name, data_dir],
             capture_output=True, text=True, timeout=10,
+            cwd=project_dir,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         print(f"resolve-launcher.sh invocation failed: {exc}", file=sys.stderr)
