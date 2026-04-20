@@ -1017,6 +1017,57 @@ func TestModel_LoadCommits_TruncatedFlag(t *testing.T) {
 	assert.True(t, cmsg.truncated, "exactly MaxCommits results must mark truncated")
 }
 
+func TestModel_HandleCommitsLoaded_PopulatesState(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.loadSeq = 3
+	m.commits.loaded = false
+	m.commits.list = nil
+	m.commits.err = nil
+	m.commits.truncated = false
+
+	list := []diff.CommitInfo{{Hash: "abc"}, {Hash: "def"}}
+	result, cmd := m.Update(commitsLoadedMsg{seq: 3, list: list, truncated: true})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.True(t, model.commits.loaded, "loaded must flip to true after matching seq")
+	assert.Equal(t, list, model.commits.list)
+	assert.True(t, model.commits.truncated)
+	require.NoError(t, model.commits.err)
+}
+
+func TestModel_HandleCommitsLoaded_DropsStaleResult(t *testing.T) {
+	// regression: a slow commit fetch (seq=0) must not overwrite state after a
+	// newer load (seq=1) was issued — e.g. user pressed R immediately after startup.
+	m := testModel(nil, nil)
+	m.commits.loadSeq = 1 // simulate a newer load already dispatched (e.g. triggerReload)
+	m.commits.loaded = false
+	m.commits.list = nil
+
+	stale := []diff.CommitInfo{{Hash: "stale"}}
+	result, cmd := m.Update(commitsLoadedMsg{seq: 0, list: stale})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.False(t, model.commits.loaded, "stale result must not flip loaded")
+	assert.Nil(t, model.commits.list, "stale result must not populate list")
+}
+
+func TestModel_HandleCommitsLoaded_SetsLoadedOnError(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.loadSeq = 5
+	m.commits.loaded = false
+
+	boom := errors.New("vcs blew up")
+	result, cmd := m.Update(commitsLoadedMsg{seq: 5, err: boom})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.True(t, model.commits.loaded, "error result must still mark loaded=true to cache the failure")
+	assert.Equal(t, boom, model.commits.err)
+	assert.Empty(t, model.commits.list)
+}
+
 func TestModel_TriggerReload_InvalidatesCommitCache(t *testing.T) {
 	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
 	m.commits.loaded = true

@@ -191,6 +191,22 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleCommitsLoaded processes the result of loadCommits, populating the
+// cached commit log on the model. Drops stale results from earlier in-flight
+// loads (triggered by R reload) via the seq tag, mirroring handleFilesLoaded.
+// An error is cached the same way as success: loaded is set to true so the
+// overlay shows the error once instead of re-triggering the fetch.
+func (m Model) handleCommitsLoaded(msg commitsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.seq != m.commits.loadSeq {
+		return m, nil
+	}
+	m.commits.list = msg.list
+	m.commits.err = msg.err
+	m.commits.truncated = msg.truncated
+	m.commits.loaded = true
+	return m, nil
+}
+
 func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	// discard stale responses; only the latest load request (by sequence) is accepted
 	if msg.seq != m.file.loadSeq {

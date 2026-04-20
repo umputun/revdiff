@@ -213,14 +213,14 @@ func (m *Model) handleCommitInfo() {
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/loaders_test.go`
 
-- [ ] add `handleCommitsLoaded(msg commitsLoadedMsg)` method in `app/ui/loaders.go` next to `handleFilesLoaded`
-- [ ] implement seq-guard: return `(m, nil)` when `msg.seq != m.commits.loadSeq`
-- [ ] populate `m.commits.list`, `.err`, `.truncated`, `.loaded = true` on seq match
-- [ ] add `case commitsLoadedMsg: return m.handleCommitsLoaded(msg)` in `Update()` switch (`app/ui/model.go:629`)
-- [ ] write test `TestModel_HandleCommitsLoaded_PopulatesState` — assert all four fields set
-- [ ] write test `TestModel_HandleCommitsLoaded_DropsStaleResult` — bump `loadSeq` after msg constructed, assert fields NOT populated
-- [ ] write test `TestModel_HandleCommitsLoaded_SetsLoadedOnError` — err message still marks `loaded=true` (caches the error, same as files)
-- [ ] run `go test ./app/ui/...` — must pass before task 3
+- [x] add `handleCommitsLoaded(msg commitsLoadedMsg)` method in `app/ui/loaders.go` next to `handleFilesLoaded`
+- [x] implement seq-guard: return `(m, nil)` when `msg.seq != m.commits.loadSeq`
+- [x] populate `m.commits.list`, `.err`, `.truncated`, `.loaded = true` on seq match
+- [x] add `case commitsLoadedMsg: return m.handleCommitsLoaded(msg)` in `Update()` switch (`app/ui/model.go:629`)
+- [x] write test `TestModel_HandleCommitsLoaded_PopulatesState` — assert all four fields set
+- [x] write test `TestModel_HandleCommitsLoaded_DropsStaleResult` — bump `loadSeq` after msg constructed, assert fields NOT populated
+- [x] write test `TestModel_HandleCommitsLoaded_SetsLoadedOnError` — err message still marks `loaded=true` (caches the error, same as files)
+- [x] run `go test ./app/ui/...` — must pass before task 3
 
 ### Task 3: Wire `loadCommits` into `Init()` and `triggerReload()`
 

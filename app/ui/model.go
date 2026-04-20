@@ -649,6 +649,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleResize(msg)
 	case filesLoadedMsg:
 		return m.handleFilesLoaded(msg)
+	case commitsLoadedMsg:
+		return m.handleCommitsLoaded(msg)
 	case fileLoadedMsg:
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
