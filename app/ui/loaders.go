@@ -66,6 +66,30 @@ func (m Model) loadFiles() tea.Cmd {
 	}
 }
 
+// loadCommits returns a command that fetches the commit log for the current ref range.
+// returns nil when the feature is not applicable or no source is configured, so callers
+// can unconditionally include it in tea.Batch alongside loadFiles.
+// the caller must bump m.commits.loadSeq before invoking loadCommits when issuing a new
+// reload (e.g. triggerReload); the captured seq tags every emitted commitsLoadedMsg
+// so handleCommitsLoaded can drop stale results from earlier in-flight loads.
+func (m Model) loadCommits() tea.Cmd {
+	if !m.commits.applicable || m.commits.source == nil {
+		return nil
+	}
+	seq := m.commits.loadSeq
+	ref := m.cfg.ref
+	src := m.commits.source
+	return func() tea.Msg {
+		list, err := src.CommitLog(ref)
+		return commitsLoadedMsg{
+			seq:       seq,
+			list:      list,
+			err:       err,
+			truncated: len(list) >= diff.MaxCommits,
+		}
+	}
+}
+
 // loadFileDiff returns a command that fetches the diff lines for the given file.
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq

@@ -302,6 +302,7 @@ type commitsState struct {
 	truncated  bool              // true when the list was capped at diff.MaxCommits
 	err        error             // last fetch error; surfaces in the overlay
 	hint       string            // transient status-bar message; cleared on next key press
+	loadSeq    uint64            // bumped before each new commit-log load; stale commitsLoadedMsg (seq mismatch) is dropped
 }
 
 // reloadState holds the pending-confirmation state for the R reload feature.
@@ -396,6 +397,17 @@ type filesLoadedMsg struct {
 	entries  []diff.FileEntry
 	err      error
 	warnings []string // non-fatal issues (staged/untracked fetch failures)
+}
+
+// commitsLoadedMsg is sent when the commit log for the current ref range is loaded.
+// The seq field matches m.commits.loadSeq at the time the load was issued; mismatched
+// messages are dropped by handleCommitsLoaded to prevent stale results from landing
+// after a rapid R reload.
+type commitsLoadedMsg struct {
+	seq       uint64
+	list      []diff.CommitInfo
+	err       error
+	truncated bool
 }
 
 // ModelConfig holds all dependencies and configuration for NewModel.

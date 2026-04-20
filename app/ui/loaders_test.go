@@ -941,6 +941,82 @@ func TestModel_TriggerReload_DropsStaleFileLoadedMsg(t *testing.T) {
 		"stale fileLoadedMsg must be dropped after triggerReload bumps file.loadSeq")
 }
 
+func TestModel_LoadCommits_ReturnsNilWhenNotApplicable(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.source = &fakeCommitLog{}
+	m.commits.applicable = false
+
+	cmd := m.loadCommits()
+	assert.Nil(t, cmd, "loadCommits must return nil when not applicable")
+}
+
+func TestModel_LoadCommits_ReturnsNilWhenSourceIsNil(t *testing.T) {
+	m := testModel(nil, nil)
+	m.commits.source = nil
+	m.commits.applicable = true
+
+	cmd := m.loadCommits()
+	assert.Nil(t, cmd, "loadCommits must return nil when source is nil")
+}
+
+func TestModel_LoadCommits_ReturnsCmdWhenApplicable(t *testing.T) {
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return []diff.CommitInfo{{Hash: "abc"}, {Hash: "def"}}, nil
+	}}
+	m := testModel(nil, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "HEAD~2"
+	m.commits.loadSeq = 7
+
+	cmd := m.loadCommits()
+	require.NotNil(t, cmd, "loadCommits must return a command when applicable and source is set")
+
+	msg := cmd()
+	cmsg, ok := msg.(commitsLoadedMsg)
+	require.True(t, ok, "command must emit a commitsLoadedMsg")
+	assert.Equal(t, uint64(7), cmsg.seq, "captured seq must be on the message")
+	assert.Len(t, cmsg.list, 2)
+	assert.Equal(t, "abc", cmsg.list[0].Hash)
+	assert.False(t, cmsg.truncated, "under MaxCommits must not be truncated")
+	require.NoError(t, cmsg.err)
+	assert.Equal(t, "HEAD~2", fake.lastRef, "CommitLog must be called with the captured ref")
+}
+
+func TestModel_LoadCommits_PropagatesError(t *testing.T) {
+	boom := errors.New("vcs blew up")
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return nil, boom
+	}}
+	m := testModel(nil, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.cfg.ref = "bad"
+
+	cmd := m.loadCommits()
+	require.NotNil(t, cmd)
+	msg := cmd()
+	cmsg, ok := msg.(commitsLoadedMsg)
+	require.True(t, ok)
+	require.Error(t, cmsg.err)
+	assert.Equal(t, boom, cmsg.err)
+	assert.Empty(t, cmsg.list)
+	assert.False(t, cmsg.truncated)
+}
+
+func TestModel_LoadCommits_TruncatedFlag(t *testing.T) {
+	full := make([]diff.CommitInfo, diff.MaxCommits)
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return full, nil }}
+	m := testModel(nil, nil)
+	m.commits.source = fake
+	m.commits.applicable = true
+
+	cmd := m.loadCommits()
+	require.NotNil(t, cmd)
+	cmsg := cmd().(commitsLoadedMsg)
+	assert.True(t, cmsg.truncated, "exactly MaxCommits results must mark truncated")
+}
+
 func TestModel_TriggerReload_InvalidatesCommitCache(t *testing.T) {
 	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
 	m.commits.loaded = true

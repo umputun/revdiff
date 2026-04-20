@@ -196,15 +196,15 @@ func (m *Model) handleCommitInfo() {
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/loaders_test.go`
 
-- [ ] add `commitsLoadedMsg` struct to `app/ui/model.go` (next to `filesLoadedMsg` at line 393)
-- [ ] add `loadSeq uint64` field to `commitsState` struct in `app/ui/model.go`
-- [ ] add `loadCommits() tea.Cmd` method in `app/ui/loaders.go` — returns nil when `!applicable` or `source == nil`; captures seq + ref + source at invocation time; calls `CommitLog(ref)` inside the closure
-- [ ] add godoc on `loadCommits()` mirroring `loadFiles()` (loaders.go:16-20): explain the seq-tag contract — caller must bump `m.commits.loadSeq` before invoking when issuing a re-fetch
-- [ ] write test `TestModel_LoadCommits_ReturnsNilWhenNotApplicable` — asserts nil cmd when `applicable=false`
-- [ ] write test `TestModel_LoadCommits_ReturnsNilWhenSourceIsNil` — asserts nil cmd when `source=nil`
-- [ ] write test `TestModel_LoadCommits_ReturnsCmdWhenApplicable` — asserts non-nil cmd returns correct `commitsLoadedMsg`
-- [ ] write test `TestModel_LoadCommits_PropagatesError` — fake source returns error, asserts `msg.err` populated
-- [ ] run `go test ./app/ui/...` — must pass before task 2
+- [x] add `commitsLoadedMsg` struct to `app/ui/model.go` (next to `filesLoadedMsg` at line 393)
+- [x] add `loadSeq uint64` field to `commitsState` struct in `app/ui/model.go`
+- [x] add `loadCommits() tea.Cmd` method in `app/ui/loaders.go` — returns nil when `!applicable` or `source == nil`; captures seq + ref + source at invocation time; calls `CommitLog(ref)` inside the closure
+- [x] add godoc on `loadCommits()` mirroring `loadFiles()` (loaders.go:16-20): explain the seq-tag contract — caller must bump `m.commits.loadSeq` before invoking when issuing a re-fetch
+- [x] write test `TestModel_LoadCommits_ReturnsNilWhenNotApplicable` — asserts nil cmd when `applicable=false`
+- [x] write test `TestModel_LoadCommits_ReturnsNilWhenSourceIsNil` — asserts nil cmd when `source=nil`
+- [x] write test `TestModel_LoadCommits_ReturnsCmdWhenApplicable` — asserts non-nil cmd returns correct `commitsLoadedMsg`
+- [x] write test `TestModel_LoadCommits_PropagatesError` — fake source returns error, asserts `msg.err` populated
+- [x] run `go test ./app/ui/...` — must pass before task 2
 
 ### Task 2: Add `handleCommitsLoaded` and wire into `Update()`
 
