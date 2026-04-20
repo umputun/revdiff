@@ -615,9 +615,12 @@ func (m Model) Discarded() bool {
 	return m.discarded
 }
 
-// Init initializes the model by loading changed files.
+// Init initializes the model by loading changed files and the commit log
+// in parallel. loadCommits returns nil when the feature is not applicable
+// (e.g. --stdin, standalone file, working-tree review), so tea.Batch harmlessly
+// drops it in those cases.
 func (m Model) Init() tea.Cmd {
-	return m.loadFiles()
+	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
 // ensureCommitsLoaded fetches the commit log for the current ref range on the

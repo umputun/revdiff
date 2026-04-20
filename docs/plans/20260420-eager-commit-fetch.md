@@ -231,12 +231,12 @@ func (m *Model) handleCommitInfo() {
 
 **Receiver note**: `triggerReload()` stays `func (m *Model)` — the seq bump and cache resets must mutate the live Model, not a copy. `Init()` stays value-receiver.
 
-- [ ] change `Init()` in `app/ui/model.go` to `return tea.Batch(m.loadFiles(), m.loadCommits())`
-- [ ] in `triggerReload()` (`app/ui/loaders.go`), add `m.commits.loadSeq++` alongside the existing `m.filesLoadSeq++` / `m.file.loadSeq++` bumps
-- [ ] **keep** the existing `m.commits.loaded = false` and `m.commits.list = nil` resets — the seq guard only catches stale results; the resets are what ensure the overlay shows the loading hint (not stale data) while the new fetch is in flight
-- [ ] change `triggerReload()` return from `m.loadFiles()` to `tea.Batch(m.loadFiles(), m.loadCommits())`
-- [ ] write test `TestModel_TriggerReload_RefetchesCommits` — seed `commits.loaded=true, commits.list=[...]`, call `triggerReload()`, assert (a) `commits.loaded` flipped to false, (b) `commits.list` is nil, (c) `commits.loadSeq` incremented, (d) returned cmd is non-nil batch
-- [ ] run `go test ./app/ui/...` — must pass before task 4
+- [x] change `Init()` in `app/ui/model.go` to `return tea.Batch(m.loadFiles(), m.loadCommits())`
+- [x] in `triggerReload()` (`app/ui/loaders.go`), add `m.commits.loadSeq++` alongside the existing `m.filesLoadSeq++` / `m.file.loadSeq++` bumps
+- [x] **keep** the existing `m.commits.loaded = false` and `m.commits.list = nil` resets — the seq guard only catches stale results; the resets are what ensure the overlay shows the loading hint (not stale data) while the new fetch is in flight
+- [x] change `triggerReload()` return from `m.loadFiles()` to `tea.Batch(m.loadFiles(), m.loadCommits())`
+- [x] write test `TestModel_TriggerReload_RefetchesCommits` — seed `commits.loaded=true, commits.list=[...]`, call `triggerReload()`, assert (a) `commits.loaded` flipped to false, (b) `commits.list` is nil, (c) `commits.loadSeq` incremented, (d) returned cmd is non-nil batch
+- [x] run `go test ./app/ui/...` — must pass before task 4
 
 ### Task 4: Delete `ensureCommitsLoaded` and simplify `handleCommitInfo`
 

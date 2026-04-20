@@ -1079,6 +1079,25 @@ func TestModel_TriggerReload_InvalidatesCommitCache(t *testing.T) {
 	assert.Nil(t, m.commits.list, "triggerReload must invalidate commit cache")
 }
 
+func TestModel_TriggerReload_RefetchesCommits(t *testing.T) {
+	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
+		return []diff.CommitInfo{{Hash: "fresh"}}, nil
+	}}
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	m.commits.source = fake
+	m.commits.applicable = true
+	m.commits.loaded = true
+	m.commits.list = []diff.CommitInfo{{Hash: "stale"}}
+	oldSeq := m.commits.loadSeq
+
+	cmd := m.triggerReload()
+
+	assert.False(t, m.commits.loaded, "triggerReload must invalidate commit cache")
+	assert.Nil(t, m.commits.list, "triggerReload must clear commit list")
+	assert.Equal(t, oldSeq+1, m.commits.loadSeq, "triggerReload must bump commits.loadSeq")
+	require.NotNil(t, cmd, "triggerReload must return a non-nil batch cmd")
+}
+
 func TestModel_TriggerReload_BumpsSeqAndCallsLoadFiles(t *testing.T) {
 	callCount := 0
 	renderer := &mocks.RendererMock{
