@@ -263,15 +263,15 @@ func (m *Model) handleCommitInfo() {
 
 **Files:** none
 
-- [ ] run `go test ./...` from repo root — all packages must pass
-- [ ] run `go test -race ./...` — no races
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — zero issues
-- [ ] run `make build` — binary builds clean (output at `./.bin/revdiff`)
-- [ ] manual smoke test: launch `./.bin/revdiff HEAD~3..HEAD`, press `i` immediately (before overlay has data) → loading hint shown; wait → press `i` again → overlay with commits; press `R` → overlay closes, press `i` → overlay shows refreshed commits
-- [ ] grep sweep: `rg 'ensureCommitsLoaded' app/` must return zero matches
-- [ ] verify `handleCommitInfo` no longer performs any fetch — only reads cached state
-- [ ] verify `Init()` and `triggerReload()` both return `tea.Batch` containing `loadCommits`
-- [ ] verify #122 scenario is fixed: files and commits fetched against same HEAD snapshot on startup; both re-fetched together on `R`
+- [x] run `go test ./...` from repo root — all packages must pass
+- [x] run `go test -race ./...` — no races
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` — zero issues
+- [x] run `make build` — binary builds clean (output at `./.bin/revdiff`)
+- [x] manual smoke test: launch `./.bin/revdiff HEAD~3..HEAD`, press `i` immediately (before overlay has data) → loading hint shown; wait → press `i` again → overlay with commits; press `R` → overlay closes, press `i` → overlay shows refreshed commits
+- [x] grep sweep: `rg 'ensureCommitsLoaded' app/` must return zero matches
+- [x] verify `handleCommitInfo` no longer performs any fetch — only reads cached state
+- [x] verify `Init()` and `triggerReload()` both return `tea.Batch` containing `loadCommits`
+- [x] verify #122 scenario is fixed: files and commits fetched against same HEAD snapshot on startup; both re-fetched together on `R`
 
 ### Task 6: [Final] Update documentation
 
