@@ -597,3 +597,30 @@ func TestModel_ActionReload_OtherKeyCancels(t *testing.T) {
 	assert.Equal(t, 1, store.Count(), "annotations must not be cleared on cancel")
 	assert.Nil(t, cmd, "no reload command on cancel")
 }
+
+// TestModel_HandleFilterToggle_TurnsOffWhenNoAnnotations is a regression test
+// for the || m.tree.FilterActive() branch at handlers.go:181.
+// The filter must be toggle-able off even when all annotations have been deleted
+// (annotatedFiles() returns empty), so that the user is not stuck with an empty
+// filtered view after a reload or manual annotation deletion.
+func TestModel_HandleFilterToggle_TurnsOffWhenNoAnnotations(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+
+	// add annotation and turn filter on
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model := result.(Model)
+	require.True(t, model.tree.FilterActive(), "precondition: filter must be active after 'f' with annotation")
+
+	// delete the annotation so annotatedFiles() becomes empty
+	model.store.Delete("a.go", 1, "+")
+	require.Equal(t, 0, model.store.Count(), "precondition: store must be empty after delete")
+	require.Empty(t, model.annotatedFiles(), "precondition: annotatedFiles() must return empty")
+
+	// pressing f again must toggle the filter off via the FilterActive() branch
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}})
+	model = result.(Model)
+	assert.False(t, model.tree.FilterActive(),
+		"filter must toggle off even when no annotations remain — guards the || m.tree.FilterActive() branch")
+}

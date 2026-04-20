@@ -764,13 +764,21 @@ func (m *Model) handleCommitInfo() {
 	})
 }
 
+// applyReloadCleanup clears annotations and turns off the annotated-only
+// filter if it was active. Value receiver matches handleReload and
+// handlePendingReload; store and tree are reference-holding so mutations
+// propagate without a pointer receiver.
+func (m Model) applyReloadCleanup() {
+	m.store.Clear()
+	if m.tree.FilterActive() {
+		m.tree.ToggleFilter(nil)
+	}
+}
+
 func (m Model) handlePendingReload(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.reload.pending = false
 	if msg.String() == "y" {
-		m.store.Clear()
-		if m.tree.FilterActive() {
-			m.tree.ToggleFilter(nil)
-		}
+		m.applyReloadCleanup()
 		m.reload.hint = "Reloaded"
 		cmd := m.triggerReload()
 		return m, cmd
@@ -794,10 +802,7 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.store.Count() > 0 {
-		m.store.Clear()
-		if m.tree.FilterActive() {
-			m.tree.ToggleFilter(nil)
-		}
+		m.applyReloadCleanup()
 	}
 	m.reload.hint = "Reloaded"
 	cmd := m.triggerReload()

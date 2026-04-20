@@ -108,6 +108,7 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 // the Model.reload field.
 func (m *Model) triggerReload() tea.Cmd {
 	m.filesLoadSeq++
+	m.file.loadSeq++ // invalidate in-flight fileLoadedMsg from pre-reload selection
 	m.commits.loaded = false // invalidate commit cache so i re-fetches after reload
 	m.commits.list = nil
 	return m.loadFiles()

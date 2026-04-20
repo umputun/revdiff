@@ -854,6 +854,41 @@ func TestModel_CommitsLazyFetch(t *testing.T) {
 	})
 }
 
+func TestModel_ApplyReloadCleanup(t *testing.T) {
+	t.Run("annotations cleared", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go", "b.go"})
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+		require.Equal(t, 1, m.store.Count(), "precondition: store has annotation")
+
+		m.applyReloadCleanup()
+
+		assert.Equal(t, 0, m.store.Count(), "applyReloadCleanup must clear annotations")
+	})
+
+	t.Run("filter turned off when active", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go", "b.go"})
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+		m.tree.ToggleFilter(m.annotatedFiles()) // activate filter
+		require.True(t, m.tree.FilterActive(), "precondition: filter must be active")
+
+		m.applyReloadCleanup()
+
+		assert.False(t, m.tree.FilterActive(), "applyReloadCleanup must turn off active filter")
+	})
+
+	t.Run("filter left alone when not active", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go", "b.go"})
+		require.False(t, m.tree.FilterActive(), "precondition: filter must be inactive")
+
+		m.applyReloadCleanup() // no-op on filter when not active
+
+		assert.False(t, m.tree.FilterActive(), "applyReloadCleanup must not flip inactive filter")
+	})
+}
+
 func TestModel_NewModel_ReloadApplicable(t *testing.T) {
 	plainRend := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
