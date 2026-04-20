@@ -279,9 +279,9 @@ func (m *Model) handleCommitInfo() {
 - Modify: `CLAUDE.md`
 - Modify: `docs/ARCHITECTURE.md`
 
-- [ ] update `CLAUDE.md` Gotchas section: change the "Data is fetched lazily on first press and cached for the session" sentence in the commit-info overlay bullet to reflect eager parallel fetch from Init/triggerReload, with seq-guard
-- [ ] update `docs/ARCHITECTURE.md` line 322 reference to `ensureCommitsLoaded()` — replace with description of `loadCommits()` / `handleCommitsLoaded` pair
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update `CLAUDE.md` Gotchas section: change the "Data is fetched lazily on first press and cached for the session" sentence in the commit-info overlay bullet to reflect eager parallel fetch from Init/triggerReload, with seq-guard
+- [x] update `docs/ARCHITECTURE.md` line 322 reference to `ensureCommitsLoaded()` — replace with description of `loadCommits()` / `handleCommitsLoaded` pair
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 

@@ -319,10 +319,15 @@ User presses 'a' on diff line
 ```
 User presses '?' / '@' / 'T' / 'i'
   → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect/OpenCommitInfo
-      (for 'i': Model first runs ensureCommitsLoaded() which calls
-       commitLogSource.CommitLog(ref) once per session; cached thereafter.
-       When not applicable — stdin/staged/only/all-files/no-ref — Model
-       sets a transient status-bar hint and skips the open entirely.)
+      (for 'i': commits are fetched eagerly at startup via loadCommits()
+       running in parallel with loadFiles() under tea.Batch from Init();
+       triggerReload() re-fires both together. handleCommitsLoaded caches
+       the result under a seq-guard (m.commits.loadSeq) that drops stale
+       messages after a reload. handleCommitInfo only reads cached state —
+       if the fetch has not yet landed, it sets a transient "loading
+       commits…" hint instead of opening the overlay. When not applicable —
+       stdin/staged/only/all-files/no-ref — Model sets a transient
+       status-bar hint and skips the open entirely.)
   → overlay.Manager activates popup, blocks other overlays
   → key events route through Manager.HandleKey() → Outcome
   → Model switches on OutcomeKind:
