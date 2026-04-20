@@ -1068,17 +1068,6 @@ func TestModel_HandleCommitsLoaded_SetsLoadedOnError(t *testing.T) {
 	assert.Empty(t, model.commits.list)
 }
 
-func TestModel_TriggerReload_InvalidatesCommitCache(t *testing.T) {
-	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
-	m.commits.loaded = true
-	m.commits.list = []diff.CommitInfo{{Hash: "sha1"}}
-
-	m.triggerReload()
-
-	assert.False(t, m.commits.loaded, "triggerReload must invalidate commit cache")
-	assert.Nil(t, m.commits.list, "triggerReload must invalidate commit cache")
-}
-
 func TestModel_TriggerReload_RefetchesCommits(t *testing.T) {
 	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
 		return []diff.CommitInfo{{Hash: "fresh"}}, nil

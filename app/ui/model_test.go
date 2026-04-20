@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"errors"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -747,110 +746,6 @@ func TestNewModel_CommitLogResolution(t *testing.T) {
 				annotation.NewStore(), noopHighlighter(), ModelConfig{CommitsApplicable: false})
 			assert.False(t, m.commits.applicable)
 		})
-	})
-}
-
-func TestModel_CommitsLazyFetch(t *testing.T) {
-	// lazy-fetch caching is a Model concern, not a NewModel concern, but the
-	// underlying state lives on commitsState. exercise the cache helper here so
-	// the contract is locked down before Task 7 wires the actual handler.
-	t.Run("first fetch populates cache and stores result", func(t *testing.T) {
-		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
-			return []diff.CommitInfo{{Hash: "abc"}, {Hash: "def"}}, nil
-		}}
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = fake
-		m.commits.applicable = true
-		m.cfg.ref = "HEAD~2"
-
-		m.ensureCommitsLoaded()
-		assert.True(t, m.commits.loaded)
-		assert.Len(t, m.commits.list, 2)
-		assert.False(t, m.commits.truncated)
-		require.NoError(t, m.commits.err)
-		assert.Equal(t, 1, fake.calls)
-		assert.Equal(t, "HEAD~2", fake.lastRef)
-	})
-
-	t.Run("second call is a cache hit (no extra fetch)", func(t *testing.T) {
-		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
-			return []diff.CommitInfo{{Hash: "abc"}}, nil
-		}}
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = fake
-		m.commits.applicable = true
-		m.cfg.ref = "main..feature"
-
-		m.ensureCommitsLoaded()
-		m.ensureCommitsLoaded()
-		m.ensureCommitsLoaded()
-		assert.Equal(t, 1, fake.calls, "subsequent calls must reuse the cache")
-	})
-
-	t.Run("error is cached and not retried", func(t *testing.T) {
-		boom := errors.New("vcs blew up")
-		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
-			return nil, boom
-		}}
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = fake
-		m.commits.applicable = true
-		m.cfg.ref = "X"
-
-		m.ensureCommitsLoaded()
-		assert.True(t, m.commits.loaded)
-		assert.Empty(t, m.commits.list)
-		require.Error(t, m.commits.err)
-		assert.Equal(t, boom, m.commits.err)
-
-		m.ensureCommitsLoaded()
-		assert.Equal(t, 1, fake.calls, "error result must also be cached")
-	})
-
-	t.Run("MaxCommits result marks truncated", func(t *testing.T) {
-		full := make([]diff.CommitInfo, diff.MaxCommits)
-		for i := range full {
-			full[i] = diff.CommitInfo{Hash: "h"}
-		}
-		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return full, nil }}
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = fake
-		m.commits.applicable = true
-		m.cfg.ref = "deep..head"
-
-		m.ensureCommitsLoaded()
-		assert.True(t, m.commits.truncated, "exactly MaxCommits results must mark truncated")
-	})
-
-	t.Run("under MaxCommits leaves truncated false", func(t *testing.T) {
-		fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
-			return make([]diff.CommitInfo, diff.MaxCommits-1), nil
-		}}
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = fake
-		m.commits.applicable = true
-		m.cfg.ref = "deep..head"
-
-		m.ensureCommitsLoaded()
-		assert.False(t, m.commits.truncated)
-	})
-
-	t.Run("nil source is a no-op", func(t *testing.T) {
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = nil
-		m.commits.applicable = false
-		m.ensureCommitsLoaded()
-		assert.False(t, m.commits.loaded, "no-op when source is nil")
-	})
-
-	t.Run("not applicable is a no-op even with a source", func(t *testing.T) {
-		fake := &fakeCommitLog{}
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.source = fake
-		m.commits.applicable = false
-		m.ensureCommitsLoaded()
-		assert.False(t, m.commits.loaded, "no-op when not applicable")
-		assert.Equal(t, 0, fake.calls)
 	})
 }
 

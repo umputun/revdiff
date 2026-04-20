@@ -246,18 +246,18 @@ func (m *Model) handleCommitInfo() {
 - Modify: `app/ui/handlers_test.go`
 - Modify: `app/ui/loaders_test.go`
 
-- [ ] delete `ensureCommitsLoaded()` method at `app/ui/model.go:611-626` entirely
-- [ ] remove `m.ensureCommitsLoaded()` call inside `handleCommitInfo` (`app/ui/model.go:758`)
-- [ ] add `if !m.commits.loaded { m.commits.hint = "loading commits…"; return }` guard in `handleCommitInfo` before the overlay open
-- [ ] delete `TestModel_ensureCommitsLoaded_*` subtests in `app/ui/model_test.go` (6 subtests, the block starting around line 762)
-- [ ] delete `TestModel_TriggerReload_InvalidatesCommitCache` in `app/ui/loaders_test.go` — superseded by `TestModel_TriggerReload_RefetchesCommits`
-- [ ] delete `TestModel_HandleCommitInfo_CachesBetweenOpens` in `app/ui/handlers_test.go` — cache-on-press semantics no longer exist
-- [ ] update `TestModel_HandleCommitInfo_OpensOverlayWhenApplicable` — seed `m.commits.loaded=true` and `m.commits.list=[...]` directly; drop any assertion that the first press triggered the fetch
-- [ ] update `TestModel_HandleCommitInfo_StoresErrorInSpec` — seed `m.commits.loaded=true, m.commits.err=<someErr>` directly instead of relying on fetch-on-press
-- [ ] update `TestModel_HandleCommitInfo_TruncatedFlagPropagates` — seed `m.commits.loaded=true, m.commits.truncated=true` directly
-- [ ] verify `TestModel_HandleCommitInfo_HintWhenNotApplicable`, `TestModel_HandleCommitInfo_HintWhenSourceNil`, `TestModel_HandleCommitInfo_HintClearsOnNextKey`, `TestModel_HandleCommitInfo_StatusBarShowsHint` still pass without changes — they do not depend on fetch-on-press
-- [ ] write test `TestModel_HandleCommitInfo_ShowsLoadingHintBeforeLoad` — seed `m.commits.applicable=true, m.commits.source=<fake>, m.commits.loaded=false`, call `handleCommitInfo`, assert hint set to `loading commits…` and overlay NOT opened
-- [ ] run `go test ./app/ui/...` — must pass before task 5
+- [x] delete `ensureCommitsLoaded()` method at `app/ui/model.go:611-626` entirely
+- [x] remove `m.ensureCommitsLoaded()` call inside `handleCommitInfo` (`app/ui/model.go:758`)
+- [x] add `if !m.commits.loaded { m.commits.hint = "loading commits…"; return }` guard in `handleCommitInfo` before the overlay open
+- [x] delete `TestModel_ensureCommitsLoaded_*` subtests in `app/ui/model_test.go` (6 subtests, the block starting around line 762)
+- [x] delete `TestModel_TriggerReload_InvalidatesCommitCache` in `app/ui/loaders_test.go` — superseded by `TestModel_TriggerReload_RefetchesCommits`
+- [x] delete `TestModel_HandleCommitInfo_CachesBetweenOpens` in `app/ui/handlers_test.go` — cache-on-press semantics no longer exist
+- [x] update `TestModel_HandleCommitInfo_OpensOverlayWhenApplicable` — seed `m.commits.loaded=true` and `m.commits.list=[...]` directly; drop any assertion that the first press triggered the fetch
+- [x] update `TestModel_HandleCommitInfo_StoresErrorInSpec` — seed `m.commits.loaded=true, m.commits.err=<someErr>` directly instead of relying on fetch-on-press
+- [x] update `TestModel_HandleCommitInfo_TruncatedFlagPropagates` — seed `m.commits.loaded=true, m.commits.truncated=true` directly
+- [x] verify `TestModel_HandleCommitInfo_HintWhenNotApplicable`, `TestModel_HandleCommitInfo_HintWhenSourceNil`, `TestModel_HandleCommitInfo_HintClearsOnNextKey`, `TestModel_HandleCommitInfo_StatusBarShowsHint` still pass without changes — they do not depend on fetch-on-press
+- [x] write test `TestModel_HandleCommitInfo_ShowsLoadingHintBeforeLoad` — seed `m.commits.applicable=true, m.commits.source=<fake>, m.commits.loaded=false`, call `handleCommitInfo`, assert hint set to `loading commits…` and overlay NOT opened
+- [x] run `go test ./app/ui/...` — must pass before task 5
 
 ### Task 5: Full validation and acceptance check
 

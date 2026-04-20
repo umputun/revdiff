@@ -357,10 +357,11 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 
 func TestModel_HandleCommitInfo_OpensOverlayWhenApplicable(t *testing.T) {
 	commits := []diff.CommitInfo{{Hash: "abc123"}, {Hash: "def456"}}
-	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return commits, nil }}
 	m := testModel([]string{"a.go"}, nil)
-	m.commits.source = fake
+	m.commits.source = &fakeCommitLog{}
 	m.commits.applicable = true
+	m.commits.loaded = true
+	m.commits.list = commits
 	m.cfg.ref = "main..feature"
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
@@ -368,9 +369,6 @@ func TestModel_HandleCommitInfo_OpensOverlayWhenApplicable(t *testing.T) {
 	assert.Nil(t, cmd, "commit-info open does not issue a tea.Cmd")
 	assert.True(t, model.overlay.Active(), "i should open the overlay when applicable")
 	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
-	assert.True(t, model.commits.loaded, "first open triggers the lazy fetch")
-	assert.Equal(t, 1, fake.calls, "commit log fetched exactly once")
-	assert.Equal(t, "main..feature", fake.lastRef, "handler must use the session ref")
 	assert.Empty(t, model.commits.hint, "applicable path does not set a hint")
 }
 
@@ -401,40 +399,13 @@ func TestModel_HandleCommitInfo_HintWhenSourceNil(t *testing.T) {
 	assert.Equal(t, "no commits in this mode", model.commits.hint)
 }
 
-func TestModel_HandleCommitInfo_CachesBetweenOpens(t *testing.T) {
-	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
-		return []diff.CommitInfo{{Hash: "abc"}}, nil
-	}}
-	m := testModel([]string{"a.go"}, nil)
-	m.commits.source = fake
-	m.commits.applicable = true
-	m.cfg.ref = "HEAD~3"
-
-	// first press: open overlay, fetch runs
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
-	model := result.(Model)
-	require.Equal(t, 1, fake.calls)
-
-	// second press while overlay open: routed to overlay handleKey, which closes it
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
-	model = result.(Model)
-	assert.False(t, model.overlay.Active(), "second i closes the overlay via overlay dispatch")
-	assert.Equal(t, 1, fake.calls, "no refetch while overlay owned the key")
-
-	// third press reopens — cache hit, no fetch
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
-	model = result.(Model)
-	assert.True(t, model.overlay.Active(), "reopen after close")
-	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
-	assert.Equal(t, 1, fake.calls, "cache hit on reopen")
-}
-
 func TestModel_HandleCommitInfo_StoresErrorInSpec(t *testing.T) {
 	boom := errors.New("git blew up")
-	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return nil, boom }}
 	m := testModel([]string{"a.go"}, nil)
-	m.commits.source = fake
+	m.commits.source = &fakeCommitLog{}
 	m.commits.applicable = true
+	m.commits.loaded = true
+	m.commits.err = boom
 	m.cfg.ref = "HEAD~1"
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
@@ -473,6 +444,18 @@ func TestModel_HandleCommitInfo_StatusBarShowsHint(t *testing.T) {
 	assert.Equal(t, "no commits in this mode", status, "status bar surfaces the hint verbatim while it is set")
 }
 
+func TestModel_HandleCommitInfo_ShowsLoadingHintBeforeLoad(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = &fakeCommitLog{}
+	m.commits.applicable = true
+	m.commits.loaded = false
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	model := result.(Model)
+	assert.False(t, model.overlay.Active(), "overlay must not open before commits load")
+	assert.Equal(t, "loading commits…", model.commits.hint, "transient hint shown while fetch is in flight")
+}
+
 func TestModel_ReloadHint_ShownInStatusBar(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.reload.hint = "test reload hint"
@@ -493,10 +476,12 @@ func TestModel_HandleCommitInfo_TruncatedFlagPropagates(t *testing.T) {
 	for i := range full {
 		full[i] = diff.CommitInfo{Hash: "h"}
 	}
-	fake := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) { return full, nil }}
 	m := testModel([]string{"a.go"}, nil)
-	m.commits.source = fake
+	m.commits.source = &fakeCommitLog{}
 	m.commits.applicable = true
+	m.commits.loaded = true
+	m.commits.list = full
+	m.commits.truncated = true
 	m.cfg.ref = "deep..head"
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})

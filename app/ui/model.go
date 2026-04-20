@@ -623,23 +623,6 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
-// ensureCommitsLoaded fetches the commit log for the current ref range on the
-// first invocation and caches the result (success or failure) on the model so
-// repeated `i` presses don't re-run the VCS command. No-op when the feature is
-// not applicable, the source is unavailable, or the cache is already populated.
-// Refs do not change mid-session, so the cached result remains valid for the
-// model's lifetime.
-func (m *Model) ensureCommitsLoaded() {
-	if m.commits.loaded || !m.commits.applicable || m.commits.source == nil {
-		return
-	}
-	list, err := m.commits.source.CommitLog(m.cfg.ref)
-	m.commits.list = list
-	m.commits.err = err
-	m.commits.truncated = len(list) >= diff.MaxCommits
-	m.commits.loaded = true
-}
-
 // Update handles messages and updates the model state.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -764,15 +747,19 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 
 // handleCommitInfo opens the commit-info overlay when the feature is available
 // in the current mode, otherwise sets a transient status-bar hint so the key
-// press produces visible feedback instead of appearing inert. Uses the lazy
-// cache in commitsState so the underlying VCS log command runs at most once
-// per session.
+// press produces visible feedback instead of appearing inert. Reads from the
+// cache populated eagerly by loadCommits at startup / reload; if the fetch has
+// not yet landed (commits.loaded=false), shows a transient "loading commits…"
+// hint instead of opening the overlay.
 func (m *Model) handleCommitInfo() {
 	if !m.commits.applicable || m.commits.source == nil {
 		m.commits.hint = "no commits in this mode"
 		return
 	}
-	m.ensureCommitsLoaded()
+	if !m.commits.loaded {
+		m.commits.hint = "loading commits…"
+		return
+	}
 	m.overlay.OpenCommitInfo(overlay.CommitInfoSpec{
 		Commits:    m.commits.list,
 		Applicable: true,
