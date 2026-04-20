@@ -2,11 +2,11 @@
 
 ## Overview
 
-Replace the lazy commit-info fetch (triggered on first `i` press) with an eager parallel async fetch that runs alongside `loadFiles()` at startup and on `R` reload. This keeps the commit overlay consistent with the displayed diff by querying the same VCS HEAD snapshot for both.
+Replace the lazy commit-info fetch (triggered on first `i` press) with an eager parallel async fetch that runs alongside `loadFiles()` at startup and on `R` reload. This dramatically narrows the window in which the commit overlay can disagree with the displayed diff — from "time until first `i` press" (could be minutes) to "skew between two parallel goroutine starts" (milliseconds).
 
 **Problem** (issue #122): files are loaded eagerly at startup against `HEAD@T0`. Commits are fetched lazily on first `i` press at `T1`. If HEAD advances between T0 and T1 (e.g. during an iterative workflow), the overlay and the diff reflect inconsistent VCS states.
 
-**Fix**: fire `loadCommits()` in parallel with `loadFiles()` via `tea.Batch` in `Init()` and from `triggerReload()`. Both commands run as independent goroutines and land as separate messages. No ordering coupling, no blocking VCS call on the `i` key press, no stale-HEAD mismatch. `R` reload extends the same invariant — both caches get invalidated and re-fetched in parallel, so the post-reload overlay matches the post-reload diff.
+**Fix**: fire `loadCommits()` in parallel with `loadFiles()` via `tea.Batch` in `Init()` and from `triggerReload()`. Both commands run as independent goroutines and land as separate messages. No ordering coupling, no blocking VCS call on the `i` key press, and the practical race window shrinks to the time between two subprocess starts. `R` reload extends the same invariant — both caches get invalidated and re-fetched in parallel. Note: this is not a strict snapshot guarantee — the two subprocesses each resolve `HEAD` independently, so a theoretical race remains. A stricter fix would resolve `HEAD` to a concrete SHA once and pass it to both loaders, but the milliseconds-wide window does not justify the added VCS capability.
 
 **UX change**: previously, the first `i` press blocked for the duration of the VCS call and then opened the overlay. Now, if the user presses `i` before `commitsLoadedMsg` arrives, the status bar shows a transient `loading commits…` hint and the overlay does not open; a second press (after load) opens it. Acceptable for typical startup timing (tens of ms); the loading window only widens on very large repos.
 
