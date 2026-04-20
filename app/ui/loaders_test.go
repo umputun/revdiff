@@ -1085,6 +1085,21 @@ func TestModel_TriggerReload_RefetchesCommits(t *testing.T) {
 	assert.Nil(t, m.commits.list, "triggerReload must clear commit list")
 	assert.Equal(t, oldSeq+1, m.commits.loadSeq, "triggerReload must bump commits.loadSeq")
 	require.NotNil(t, cmd, "triggerReload must return a non-nil batch cmd")
+
+	// execute the batch and find the commitsLoadedMsg to verify the refetch actually runs
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok, "triggerReload must return a tea.BatchMsg when both loaders are active")
+	var gotCommits *commitsLoadedMsg
+	for _, inner := range batch {
+		if msg, ok := inner().(commitsLoadedMsg); ok {
+			gotCommits = &msg
+			break
+		}
+	}
+	require.NotNil(t, gotCommits, "batch must include a commitsLoadedMsg")
+	assert.Equal(t, 1, fake.calls, "CommitLog must be called once by the refetch")
+	assert.Equal(t, []diff.CommitInfo{{Hash: "fresh"}}, gotCommits.list, "refetched commits must be fresh, not stale")
+	assert.Equal(t, oldSeq+1, gotCommits.seq, "refetched commits must carry the bumped seq")
 }
 
 func TestModel_TriggerReload_BumpsSeqAndCallsLoadFiles(t *testing.T) {

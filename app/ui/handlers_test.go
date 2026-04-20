@@ -362,7 +362,6 @@ func TestModel_HandleCommitInfo_OpensOverlayWhenApplicable(t *testing.T) {
 	m.commits.applicable = true
 	m.commits.loaded = true
 	m.commits.list = commits
-	m.cfg.ref = "main..feature"
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	model := result.(Model)
@@ -406,7 +405,6 @@ func TestModel_HandleCommitInfo_StoresErrorInSpec(t *testing.T) {
 	m.commits.applicable = true
 	m.commits.loaded = true
 	m.commits.err = boom
-	m.cfg.ref = "HEAD~1"
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	model := result.(Model)
@@ -482,7 +480,6 @@ func TestModel_HandleCommitInfo_TruncatedFlagPropagates(t *testing.T) {
 	m.commits.loaded = true
 	m.commits.list = full
 	m.commits.truncated = true
-	m.cfg.ref = "deep..head"
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	model := result.(Model)

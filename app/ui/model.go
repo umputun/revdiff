@@ -285,10 +285,14 @@ type searchState struct {
 	matchSet map[int]bool    // set of file.lines indices that match, computed per render
 }
 
-// commitsState holds the lazy-loaded commit log for the commit-info overlay.
-// loaded is set to true after the first fetch attempt (success or failure) so
-// repeated `i` presses reuse the cached result without re-running the VCS log
-// command. applicable mirrors ModelConfig.CommitsApplicable, copied at
+// commitsState holds the commit log for the commit-info overlay, fetched
+// eagerly at startup (and on R reload) via loadCommits under tea.Batch. loaded
+// flips to true once the first commitsLoadedMsg lands (success or failure) so
+// handleCommitInfo only reads cached state — pressing `i` before the fetch
+// resolves shows a transient "loading commits…" hint instead of triggering a
+// fetch. loadSeq is bumped before each new load; handleCommitsLoaded drops
+// messages whose seq no longer matches, discarding stale in-flight results
+// after a reload. applicable mirrors ModelConfig.CommitsApplicable, copied at
 // construction so the handler can short-circuit without consulting CLI flags.
 // hint holds a transient status-bar message shown once (until the next key
 // press) — set when the user triggers ActionCommitInfo in a mode where the
@@ -355,7 +359,7 @@ type Model struct {
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
 	search      searchState       // search lifecycle state
 	annot       annotationState   // annotation input lifecycle state
-	commits     commitsState      // lazy-loaded commit log for the commit-info overlay
+	commits     commitsState      // eagerly loaded commit log for the commit-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 
 	ready        bool   // true after first WindowSizeMsg
@@ -596,7 +600,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			source:     cls,
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
-		reload: reloadState{applicable: cfg.ReloadApplicable},
+		reload:          reloadState{applicable: cfg.ReloadApplicable},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
 	}, nil
