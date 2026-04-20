@@ -909,6 +909,74 @@ func TestModel_FileLoadedAcceptedAfterCursorMove(t *testing.T) {
 	assert.Equal(t, bLines, model.file.lines)
 }
 
+func TestModel_TriggerReload_BumpsFileLoadSeq(t *testing.T) {
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	oldSeq := m.file.loadSeq
+
+	m.triggerReload()
+
+	assert.Equal(t, oldSeq+1, m.file.loadSeq, "triggerReload must bump file.loadSeq to invalidate in-flight fileLoadedMsg")
+}
+
+func TestModel_TriggerReload_DropsStaleFileLoadedMsg(t *testing.T) {
+	// regression: a fileLoadedMsg dispatched before R is pressed must be
+	// dropped by handleFileLoaded because triggerReload bumps file.loadSeq.
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	sentinelLine := diff.DiffLine{Content: "sentinel", ChangeType: diff.ChangeContext, NewNum: 1}
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{sentinelLine}
+
+	// capture seq before reload; this is the seq the in-flight load was dispatched with
+	oldSeq := m.file.loadSeq
+
+	m.triggerReload() // bumps file.loadSeq — the old seq is now stale
+
+	// deliver the stale fileLoadedMsg (seq matches oldSeq, not the bumped value)
+	staleLine := diff.DiffLine{Content: "stale", ChangeType: diff.ChangeAdd, NewNum: 1}
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", seq: oldSeq, lines: []diff.DiffLine{staleLine}})
+	model := result.(Model)
+
+	// stale message must be dropped — sentinel lines must be unchanged
+	assert.Equal(t, []diff.DiffLine{sentinelLine}, model.file.lines,
+		"stale fileLoadedMsg must be dropped after triggerReload bumps file.loadSeq")
+}
+
+func TestModel_TriggerReload_InvalidatesCommitCache(t *testing.T) {
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	m.commits.loaded = true
+	m.commits.list = []diff.CommitInfo{{Hash: "sha1"}}
+
+	m.triggerReload()
+
+	assert.False(t, m.commits.loaded, "triggerReload must invalidate commit cache")
+	assert.Nil(t, m.commits.list, "triggerReload must invalidate commit cache")
+}
+
+func TestModel_TriggerReload_BumpsSeqAndCallsLoadFiles(t *testing.T) {
+	callCount := 0
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+			callCount++
+			return []diff.FileEntry{{Path: "main.go"}}, nil
+		},
+		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+			return nil, nil
+		},
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	initialSeq := m.filesLoadSeq
+
+	cmd := m.triggerReload()
+	assert.Equal(t, initialSeq+1, m.filesLoadSeq, "triggerReload must bump filesLoadSeq")
+	assert.NotNil(t, cmd, "triggerReload must return a loadFiles command")
+
+	// execute the command to confirm it calls ChangedFiles
+	msg := cmd()
+	_, ok := msg.(filesLoadedMsg)
+	assert.True(t, ok, "triggerReload command must emit filesLoadedMsg")
+	assert.Equal(t, 1, callCount, "triggerReload must trigger ChangedFiles")
+}
+
 func TestModel_RecomputeIntraRanges(t *testing.T) {
 	m := testModel(nil, nil)
 	m.modes.wordDiff = true

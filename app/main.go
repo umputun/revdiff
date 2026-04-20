@@ -155,6 +155,7 @@ func run(opts options) error {
 		Keymap:            km,
 		CommitLog:         commitLogger,
 		CommitsApplicable: commitsApplicable(opts, commitLogger),
+		ReloadApplicable:  reloadApplicable(opts),
 		NoColors:          opts.NoColors,
 		NoStatusBar:       opts.NoStatusBar,
 		NoConfirmDiscard:  opts.NoConfirmDiscard,
@@ -215,6 +216,12 @@ func run(opts options) error {
 	}
 	fmt.Print(output)
 	return nil
+}
+
+// reloadApplicable returns false when --stdin is active: the stream has already
+// been consumed and cannot be re-read. All other modes support reload.
+func reloadApplicable(opts options) bool {
+	return !opts.Stdin
 }
 
 // commitsApplicable returns true when the current invocation can show a

@@ -26,6 +26,14 @@ func noopHighlighter() *mocks.SyntaxHighlighterMock {
 	}
 }
 
+// plainRenderer returns a RendererMock that returns an empty file list and no diff lines.
+func plainRenderer() *mocks.RendererMock {
+	return &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+}
+
 // testFileTreeFactory returns the sidepane factory closures for NewFileTree and ParseTOC,
 // suitable for injection into ModelConfig in tests.
 func testFileTreeFactory() func(entries []diff.FileEntry) FileTreeComponent {
@@ -843,5 +851,57 @@ func TestModel_CommitsLazyFetch(t *testing.T) {
 		m.ensureCommitsLoaded()
 		assert.False(t, m.commits.loaded, "no-op when not applicable")
 		assert.Equal(t, 0, fake.calls)
+	})
+}
+
+func TestModel_ApplyReloadCleanup(t *testing.T) {
+	t.Run("annotations cleared", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go", "b.go"})
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+		require.Equal(t, 1, m.store.Count(), "precondition: store has annotation")
+
+		m.applyReloadCleanup()
+
+		assert.Equal(t, 0, m.store.Count(), "applyReloadCleanup must clear annotations")
+	})
+
+	t.Run("filter turned off when active", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go", "b.go"})
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+		m.tree.ToggleFilter(m.annotatedFiles()) // activate filter
+		require.True(t, m.tree.FilterActive(), "precondition: filter must be active")
+
+		m.applyReloadCleanup()
+
+		assert.False(t, m.tree.FilterActive(), "applyReloadCleanup must turn off active filter")
+	})
+
+	t.Run("filter left alone when not active", func(t *testing.T) {
+		m := testModel([]string{"a.go", "b.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go", "b.go"})
+		require.False(t, m.tree.FilterActive(), "precondition: filter must be inactive")
+
+		m.applyReloadCleanup() // no-op on filter when not active
+
+		assert.False(t, m.tree.FilterActive(), "applyReloadCleanup must not flip inactive filter")
+	})
+}
+
+func TestModel_NewModel_ReloadApplicable(t *testing.T) {
+	plainRend := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	t.Run("true when ReloadApplicable is true", func(t *testing.T) {
+		m := testNewModel(t, plainRend, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{ReloadApplicable: true})
+		assert.True(t, m.reload.applicable)
+	})
+	t.Run("false when ReloadApplicable is false", func(t *testing.T) {
+		m := testNewModel(t, plainRend, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{ReloadApplicable: false})
+		assert.False(t, m.reload.applicable)
 	})
 }

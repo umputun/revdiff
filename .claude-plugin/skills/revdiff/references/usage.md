@@ -123,6 +123,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | `f` | Toggle filter: all files / annotated only |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle commit info popup (subject + body of commits in the current ref range; git/hg/jj only) |
+| `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
 

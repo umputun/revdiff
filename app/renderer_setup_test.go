@@ -262,3 +262,21 @@ func TestGitHgJj_ImplementCommitLogger(t *testing.T) {
 	assert.Implements(t, (*diff.CommitLogger)(nil), diff.NewHg(t.TempDir()))
 	assert.Implements(t, (*diff.CommitLogger)(nil), diff.NewJj(t.TempDir()))
 }
+
+func TestReloadApplicable(t *testing.T) {
+	tests := []struct {
+		name string
+		opts options
+		want bool
+	}{
+		{name: "stdin mode", opts: options{Stdin: true}, want: false},
+		{name: "normal mode", opts: options{}, want: true},
+		{name: "staged mode", opts: options{Staged: true}, want: true},
+		{name: "all-files mode", opts: options{AllFiles: true}, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, reloadApplicable(tc.opts))
+		})
+	}
+}
