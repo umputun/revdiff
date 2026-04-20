@@ -400,11 +400,8 @@ type filesLoadedMsg struct {
 }
 
 // commitsLoadedMsg is sent when the commit log for the current ref range is loaded.
-// The seq field matches m.commits.loadSeq at the time the load was issued; mismatched
-// messages are dropped by handleCommitsLoaded to prevent stale results from landing
-// after a rapid R reload.
 type commitsLoadedMsg struct {
-	seq       uint64
+	seq       uint64 // matches m.commits.loadSeq at the time the load was issued; mismatched messages are dropped
 	list      []diff.CommitInfo
 	err       error
 	truncated bool
