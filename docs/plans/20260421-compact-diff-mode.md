@@ -353,18 +353,18 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 
 ### Task 9: Verify acceptance criteria
 
-- [ ] verify the reporter's scenario end-to-end: open a large file with a one-line change in a git repo, start with `--compact`, confirm the cursor lands on the change and surrounding context is ~5 lines each side
-- [ ] verify runtime toggle: open without `--compact`, press `C`, confirm file re-fetches and cursor repositions
-- [ ] verify `--compact-context=10` produces 10 lines of context instead of 5
-- [ ] verify `C` is a no-op in `--stdin`, `--all-files`, and `--only path/to/file.md` (no VCS) modes, with a status-bar hint shown
-- [ ] verify compact + collapsed together work (both glyphs in status bar, both behaviors apply)
-- [ ] verify `--dump-config` includes the new fields
-- [ ] verify `--dump-keys` lists the new binding
-- [ ] run full test suite: `go test ./...`
-- [ ] run race detector: `go test -race ./...`
-- [ ] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] run formatters: `~/.claude/format.sh`
-- [ ] verify test coverage did not regress: `go test -cover ./...`
+- [x] verify the reporter's scenario end-to-end: open a large file with a one-line change in a git repo, start with `--compact`, confirm the cursor lands on the change and surrounding context is ~5 lines each side
+- [x] verify runtime toggle: open without `--compact`, press `C`, confirm file re-fetches and cursor repositions
+- [x] verify `--compact-context=10` produces 10 lines of context instead of 5
+- [x] verify `C` is a no-op in `--stdin`, `--all-files`, and `--only path/to/file.md` (no VCS) modes, with a status-bar hint shown
+- [x] verify compact + collapsed together work (both glyphs in status bar, both behaviors apply)
+- [x] verify `--dump-config` includes the new fields
+- [x] verify `--dump-keys` lists the new binding
+- [x] run full test suite: `go test ./...`
+- [x] run race detector: `go test -race ./...`
+- [x] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] run formatters: `~/.claude/format.sh`
+- [x] verify test coverage did not regress: `go test -cover ./...`
 
 ### Task 10: [Final] Update project documentation and move plan
 
