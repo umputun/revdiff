@@ -26,6 +26,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Status line with filename, diff stats, hunk position, line number, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
 - Commit info popup (`i`) showing subject + body of every commit in the current ref range (git/hg/jj), useful for restoring the narrative context when reviewing PR-style diffs
+- Description overlay (`D`) showing an agent-supplied markdown description of the diff (`--description` / `--description-file`), with opt-in auto-open via `--description-auto-open` — keeps context visible when revdiff pops up from a Claude Code / Codex session
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - All-files mode: browse and annotate all tracked files with `--all-files` (git `ls-files` or jj `file list`), filter with `--include` and `--exclude`
 - No-VCS file review: `--only` files outside a VCS repo (or not in any diff) are shown as context-only with full annotation support
@@ -309,6 +310,9 @@ Positional arguments support several forms:
 | `-A`, `--all-files` | Browse all tracked files, not just diffs (git or jj) | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
+| `--description` | Markdown description shown in the description overlay (press `D` to toggle); useful for agents attaching context to a diff | |
+| `--description-file` | Path to markdown file shown in the description overlay (mutually exclusive with `--description`) | |
+| `--description-auto-open` | Open the description overlay on startup when `--description` or `--description-file` is set | `false` |
 | `-I`, `--include` | Include only files matching prefix, may be repeated, env: `REVDIFF_INCLUDE` (comma-separated) | |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
@@ -626,6 +630,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle commit info popup (subject + body of commits in the current ref range; git/hg/jj only) |
+| `D` | Toggle description overlay (shows `--description` / `--description-file` content; hint when neither is set) |
 | `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
@@ -646,6 +651,7 @@ The status bar shows a fixed row of mode indicators on the right side. All ten s
 | `±` | `W` | Intra-line word-diff highlighting |
 | `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
 | `∅` | `u` | Untracked files visible in tree |
+| `§` | `D` | Description overlay available (a `--description` / `--description-file` was supplied) |
 
 On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
 

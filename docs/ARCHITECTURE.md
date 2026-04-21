@@ -153,6 +153,7 @@ Layered popup system with mutual exclusivity (one overlay at a time).
 - **`annotListOverlay`** — scrollable annotation list with cross-file jump
 - **`themeSelectOverlay`** — theme picker with fzf-style filter, live swatch preview
 - **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated eagerly at startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R` reload. `handleCommitInfo` only reads cached state — a transient "loading commits…" hint fires if the user presses `i` before the fetch lands. Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
+- **`descriptionOverlay`** (`description.go`) — scrollable read-only pager showing an agent-supplied markdown description (`--description` / `--description-file`). Content is already loaded at startup (read in the composition root with a 1 MiB cap), so there is no async fetch path. Reuses the chroma markdown lexer via `highlight.Highlighter.HighlightText` so styling matches how a `.md` file appears in the diff view. Sized and wrapped the same way as `commitInfoOverlay`. Auto-opens once after the first `tea.WindowSizeMsg` when `--description-auto-open` is set (guarded by a one-shot latch so closing the overlay doesn't trigger it again on terminal resize). Pressing `D` with no description attached sets a transient "no description provided" hint on the status bar.
 
 `Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies.
 
@@ -226,7 +227,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
 | `FileTreeComponent` | 15 methods (navigation, query, mutation, render) | `sidepane.FileTree` |
 | `TOCComponent` | 7 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
-| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenCommitInfo()`, `Close()`, `HandleKey()`, `Compose()` | `overlay.Manager` |
+| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenCommitInfo()`, `OpenDescription()`, `Close()`, `HandleKey()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 | `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
 
