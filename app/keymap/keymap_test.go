@@ -35,7 +35,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"/", ActionSearch},
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList},
-		{"v", ActionToggleCollapsed}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
+		{"v", ActionToggleCollapsed}, {"C", ActionToggleCompact}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
 		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
 		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
 		{"u", ActionToggleUntracked},
@@ -219,6 +219,29 @@ func TestHelpSections_customBindingReflected(t *testing.T) {
 
 func TestActionReload_IsValid(t *testing.T) {
 	assert.True(t, IsValidAction(ActionReload))
+}
+
+func TestActionToggleCompact_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionToggleCompact))
+}
+
+func TestActionToggleCompact_DefaultBinding(t *testing.T) {
+	km := Default()
+	assert.Equal(t, ActionToggleCompact, km.Resolve("C"))
+}
+
+func TestActionToggleCompact_HelpEntry(t *testing.T) {
+	entries := defaultDescriptions()
+	var found bool
+	for _, e := range entries {
+		if e.Action == ActionToggleCompact {
+			assert.Equal(t, "toggle compact diff view", e.Description)
+			assert.Equal(t, "View", e.Section)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "ActionToggleCompact should have a help entry")
 }
 
 func TestIsValidAction(t *testing.T) {

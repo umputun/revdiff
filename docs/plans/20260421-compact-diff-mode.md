@@ -258,14 +258,14 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `app/keymap/keymap.go` (action constant, validActions entry, default binding, help entry)
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] add `ActionToggleCompact Action = "toggle_compact"` to action constants
-- [ ] add `ActionToggleCompact: true` to `validActions` map
-- [ ] add default binding `"C": ActionToggleCompact` to the defaults map (around line 201)
-- [ ] add help entry `{ActionToggleCompact, "toggle compact diff view", "View"}` in `defaultDescriptions()` near the other view toggles (after `ActionToggleCollapsed`)
-- [ ] write test verifying default binding resolves `C` → `ActionToggleCompact` (follow `ActionToggleCollapsed` test precedent at keymap_test.go:580)
-- [ ] write test verifying `IsValidAction(ActionToggleCompact)` returns true
-- [ ] write test verifying help entry is present in `defaultDescriptions()`
-- [ ] run `go test ./app/keymap/...` — must pass before Task 5
+- [x] add `ActionToggleCompact Action = "toggle_compact"` to action constants
+- [x] add `ActionToggleCompact: true` to `validActions` map
+- [x] add default binding `"C": ActionToggleCompact` to the defaults map (around line 201)
+- [x] add help entry `{ActionToggleCompact, "toggle compact diff view", "View"}` in `defaultDescriptions()` near the other view toggles (after `ActionToggleCollapsed`)
+- [x] write test verifying default binding resolves `C` → `ActionToggleCompact` (follow `ActionToggleCollapsed` test precedent at keymap_test.go:580)
+- [x] write test verifying `IsValidAction(ActionToggleCompact)` returns true
+- [x] write test verifying help entry is present in `defaultDescriptions()`
+- [x] run `go test ./app/keymap/...` — must pass before Task 5
 
 ### Task 5: Add `compact` mode state, ModelConfig wiring, toggle handler, and re-fetch on toggle
 
