@@ -1297,6 +1297,34 @@ func TestModel_StatusModeIconsWordDiff(t *testing.T) {
 	assert.Contains(t, icons, "\033[38;2;32;32;32m±", "active word-diff icon uses status fg")
 }
 
+func TestModel_StatusModeIconsCompact(t *testing.T) {
+	m := testModel(nil, nil)
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "⊂", "compact icon should always be present")
+
+	m.modes.compact = true
+	sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+	res := style.NewResolver(sc)
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	icons = m.statusModeIcons()
+	assert.Contains(t, icons, "\033[38;2;32;32;32m⊂", "active compact icon uses status fg")
+}
+
+func TestModel_StatusModeIconsCompactWithCollapsed(t *testing.T) {
+	m := testModel(nil, nil)
+	sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+	res := style.NewResolver(sc)
+	m.resolver = res
+	m.renderer = style.NewRenderer(res)
+	m.modes.compact = true
+	m.modes.collapsed.enabled = true
+
+	icons := m.statusModeIcons()
+	assert.Contains(t, icons, "\033[38;2;32;32;32m▼", "collapsed icon active with status fg")
+	assert.Contains(t, icons, "\033[38;2;32;32;32m⊂", "compact icon active with status fg")
+}
+
 func TestModel_ReviewedStatusBar(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go", "c.go"}, map[string][]diff.DiffLine{

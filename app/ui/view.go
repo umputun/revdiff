@@ -345,6 +345,7 @@ func (m Model) statusModeIcons() string {
 	}
 	indicators := []indicator{
 		{"▼", m.modes.collapsed.enabled},
+		{"⊂", m.modes.compact},
 		{"◉", m.tree.FilterActive()},
 		{"↩", m.modes.wrap},
 		{"≋", len(m.search.matches) > 0},

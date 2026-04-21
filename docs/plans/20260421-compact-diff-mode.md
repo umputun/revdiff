@@ -320,12 +320,12 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `app/ui/view.go` (statusModeIcons function at line 330)
 - Modify: `app/ui/view_test.go`
 
-- [ ] in `statusModeIcons()`, append `⊂` (and a separator matching the existing pattern) when `m.modes.compact` is true
-- [ ] verify placement: icons should render in a consistent order; place compact near `v`/collapsed since they're related view-mode toggles
-- [ ] verify graceful degradation on narrow terminals (per CLAUDE.md: "Graceful degradation drops segments on narrow terminals") — follow existing code pattern
-- [ ] write test `TestModel_StatusModeIconsCompact` following `TestModel_StatusModeIconsWordDiff` pattern (view_test.go:1286): assert glyph present when compact on, absent when off
-- [ ] write test verifying compact + collapsed together produces both glyphs
-- [ ] run `go test ./app/ui -run StatusMode` — must pass before Task 8
+- [x] in `statusModeIcons()`, append `⊂` (and a separator matching the existing pattern) when `m.modes.compact` is true
+- [x] verify placement: icons should render in a consistent order; place compact near `v`/collapsed since they're related view-mode toggles
+- [x] verify graceful degradation on narrow terminals (per CLAUDE.md: "Graceful degradation drops segments on narrow terminals") — follow existing code pattern
+- [x] write test `TestModel_StatusModeIconsCompact` following `TestModel_StatusModeIconsWordDiff` pattern (view_test.go:1286): assert glyph present when compact on, absent when off
+- [x] write test verifying compact + collapsed together produces both glyphs
+- [x] run `go test ./app/ui -run StatusMode` — must pass before Task 8
 
 ### Task 8: Documentation sync — README, site, plugin references, ARCHITECTURE
 
