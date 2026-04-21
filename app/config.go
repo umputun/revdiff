@@ -17,38 +17,41 @@ type options struct {
 		Against string `positional-arg-name:"against" description:"second git ref for two-ref diff (e.g. revdiff main feature)"`
 	} `positional-args:"yes"`
 
-	Staged           bool     `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	TreeWidth        int      `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
-	TabWidth         int      `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
-	NoColors         bool     `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
-	NoStatusBar      bool     `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
-	NoConfirmDiscard bool     `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
-	Wrap             bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
-	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
-	CrossFileHunks   bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
-	LineNumbers      bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
-	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter on startup"`
-	WordDiff         bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
-	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
-	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git and jj only)"`
-	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
-	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
-	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
-	Include          []string `long:"include" short:"I" ini-name:"include" env:"REVDIFF_INCLUDE" env-delim:"," description:"include only files matching prefix (may be repeated)"`
-	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
-	HistoryDir       string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
-	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
-	Keys             string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
-	DumpKeys         bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
-	Theme            string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
-	DumpTheme        bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
-	ListThemes       bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
-	InitThemes       bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
-	InitAllThemes    bool     `long:"init-all-themes" no-ini:"true" description:"write all gallery themes (bundled + community) to themes dir and exit"`
-	InstallTheme     []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
-	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
-	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
-	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
+	Staged              bool     `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
+	TreeWidth           int      `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
+	TabWidth            int      `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
+	NoColors            bool     `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	NoStatusBar         bool     `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
+	NoConfirmDiscard    bool     `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
+	Wrap                bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
+	Collapsed           bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
+	CrossFileHunks      bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
+	LineNumbers         bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
+	Blame               bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter on startup"`
+	WordDiff            bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
+	ChromaStyle         string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
+	AllFiles            bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git and jj only)"`
+	Stdin               bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
+	StdinName           string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
+	Exclude             []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
+	Include             []string `long:"include" short:"I" ini-name:"include" env:"REVDIFF_INCLUDE" env-delim:"," description:"include only files matching prefix (may be repeated)"`
+	Only                []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
+	HistoryDir          string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
+	Output              string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
+	Keys                string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
+	DumpKeys            bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
+	Theme               string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
+	DumpTheme           bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
+	ListThemes          bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
+	InitThemes          bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
+	InitAllThemes       bool     `long:"init-all-themes" no-ini:"true" description:"write all gallery themes (bundled + community) to themes dir and exit"`
+	InstallTheme        []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
+	Config              string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
+	DumpConfig          bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
+	Version             bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
+	Description         string   `long:"description" no-ini:"true" description:"markdown description shown in an overlay (for agent context)"`
+	DescriptionFile     string   `long:"description-file" no-ini:"true" description:"path to markdown file shown in the description overlay"`
+	DescriptionAutoOpen bool     `long:"description-auto-open" no-ini:"true" description:"open the description overlay on startup"`
 
 	Colors struct {
 		Accent       string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
@@ -129,7 +132,23 @@ func parseArgs(args []string) (options, error) {
 		return options{}, err
 	}
 
+	if err := validateDescriptionFlags(opts); err != nil {
+		return options{}, err
+	}
+
 	return opts, nil
+}
+
+// validateDescriptionFlags enforces mutex between --description and --description-file,
+// and requires one of them when --description-auto-open is set.
+func validateDescriptionFlags(opts options) error {
+	if opts.Description != "" && opts.DescriptionFile != "" {
+		return errors.New("--description cannot be used with --description-file")
+	}
+	if opts.DescriptionAutoOpen && opts.Description == "" && opts.DescriptionFile == "" {
+		return errors.New("--description-auto-open requires --description or --description-file")
+	}
+	return nil
 }
 
 // dumpConfig writes the current config with defaults to the given writer.

@@ -699,3 +699,50 @@ func TestParseArgs_InstallThemeFlag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dracula", "nord"}, opts.InstallTheme)
 }
+
+func TestParseArgs_DescriptionFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--description", "# hello"))
+	require.NoError(t, err)
+	assert.Equal(t, "# hello", opts.Description)
+}
+
+func TestParseArgs_DescriptionEqualsForm(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--description=# hello"))
+	require.NoError(t, err)
+	assert.Equal(t, "# hello", opts.Description)
+}
+
+func TestParseArgs_DescriptionFileFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--description-file", "/tmp/desc.md"))
+	require.NoError(t, err)
+	assert.Equal(t, "/tmp/desc.md", opts.DescriptionFile)
+}
+
+func TestParseArgs_DescriptionAutoOpenFlag(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--description", "hi", "--description-auto-open"))
+	require.NoError(t, err)
+	assert.True(t, opts.DescriptionAutoOpen)
+}
+
+func TestParseArgs_DescriptionConflictsWithFile(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--description", "inline", "--description-file", "/tmp/desc.md"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--description cannot be used with --description-file")
+}
+
+func TestParseArgs_DescriptionAutoOpenRequiresDescription(t *testing.T) {
+	_, err := parseArgs(append(noConfigArgs(t), "--description-auto-open"))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--description-auto-open requires --description or --description-file")
+}
+
+func TestParseArgs_DescriptionNoIni(t *testing.T) {
+	// description flags must not be persisted to config file
+	cfgDir := t.TempDir()
+	cfgPath := filepath.Join(cfgDir, "config")
+	err := os.WriteFile(cfgPath, []byte("[Application Options]\ndescription = should-be-ignored\n"), 0o600)
+	require.NoError(t, err)
+	opts, err := parseArgs([]string{"--config", cfgPath})
+	require.NoError(t, err)
+	assert.Empty(t, opts.Description, "--description should be excluded from ini")
+}
