@@ -368,11 +368,13 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	return entries, nil
 }
 
-// FileDiff returns the full-file diff view for a single file.
+// FileDiff returns the diff view for a single file.
 // The result is a sequence of DiffLine entries representing unchanged, added, and removed lines
 // interleaved at their correct positions.
 // For binary files, it returns a single placeholder line with size delta information.
-func (g *Git) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
+// contextLines controls surrounding context: 0 or >= 1000000 requests full-file context;
+// positive values < 1000000 request that many lines on each side of a hunk.
+func (g *Git) FileDiff(ref, file string, staged bool, _ int) ([]DiffLine, error) {
 	args := g.diffArgs(ref, staged)
 	args = append(args, fullFileContext, "--", file) // large context to get full file
 

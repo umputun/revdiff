@@ -53,8 +53,9 @@ func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, 
 // that escape workDir), it skips the inner renderer entirely and reads from disk.
 // for in-repo files, it calls the inner renderer first; if the result is empty
 // (no error, no lines) and the file matches an --only pattern, it falls back to
-// reading the file from disk as all-context lines.
-func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
+// reading the file from disk as all-context lines. contextLines is passed through
+// to the inner renderer unchanged; disk-read fallback paths ignore it.
+func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
 	resolved := resolvePath(fr.workDir, file)
 
 	// skip inner renderer for files outside the repo — VCS would reject them
@@ -66,7 +67,7 @@ func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool) ([]DiffLine,
 		return nil, fmt.Errorf("file not found: %s", file)
 	}
 
-	lines, err := fr.inner.FileDiff(ref, file, staged)
+	lines, err := fr.inner.FileDiff(ref, file, staged, contextLines)
 	if err != nil {
 		return lines, fmt.Errorf("fallback file diff %s: %w", file, err)
 	}
@@ -175,7 +176,8 @@ func (r *FileReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 }
 
 // FileDiff reads the file from disk and returns all lines as context DiffLines.
-func (r *FileReader) FileDiff(_, file string, _ bool) ([]DiffLine, error) {
+// contextLines is ignored — FileReader is a context-only source with no hunks.
+func (r *FileReader) FileDiff(_, file string, _ bool, _ int) ([]DiffLine, error) {
 	resolved := resolvePath(r.workDir, file)
 	return readFileAsContext(resolved)
 }

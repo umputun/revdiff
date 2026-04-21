@@ -160,7 +160,7 @@ func TestHg_FileDiff_Uncommitted(t *testing.T) {
 
 	writeFile(t, dir, "hello.txt", "line one\nline modified\nline three\n")
 
-	lines, err := h.FileDiff("", "hello.txt", false)
+	lines, err := h.FileDiff("", "hello.txt", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -192,7 +192,7 @@ func TestHg_FileDiff_NewFile(t *testing.T) {
 	writeFile(t, dir, "new.txt", "new content\n")
 	hgCmd(t, dir, "add", "new.txt")
 
-	lines, err := h.FileDiff("", "new.txt", false)
+	lines, err := h.FileDiff("", "new.txt", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -217,7 +217,7 @@ func TestHg_FileDiff_WithRef(t *testing.T) {
 	hgCmd(t, dir, "commit", "-m", "second")
 
 	// diff between revisions
-	lines, err := h.FileDiff("0..1", "hello.txt", false)
+	lines, err := h.FileDiff("0..1", "hello.txt", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 

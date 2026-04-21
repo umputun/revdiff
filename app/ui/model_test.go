@@ -29,7 +29,7 @@ func noopHighlighter() *mocks.SyntaxHighlighterMock {
 func plainRenderer() *mocks.RendererMock {
 	return &mocks.RendererMock{
 		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 }
 
@@ -139,7 +139,7 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 			return entries, nil
 		},
-		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
 			return fileDiffs[file], nil
 		},
 	}
@@ -225,7 +225,7 @@ func TestNewModel_RequiredDependencies(t *testing.T) {
 func TestNewModel_OptionalDefaults(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 
 	t.Run("nil keymap defaults to keymap.Default()", func(t *testing.T) {
@@ -348,7 +348,7 @@ func TestModel_TabPaneSwitching(t *testing.T) {
 func TestModel_WrapModeFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
 
@@ -366,7 +366,7 @@ func TestModel_WrapModeFromConfig(t *testing.T) {
 func TestModel_CollapsedModeFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
 
@@ -384,7 +384,7 @@ func TestModel_CollapsedModeFromConfig(t *testing.T) {
 func TestModel_LineNumbersFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
 
@@ -402,7 +402,7 @@ func TestModel_LineNumbersFromConfig(t *testing.T) {
 func TestModel_BlameFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
 	blamer := &mocks.BlamerMock{
@@ -493,7 +493,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			renderer := &mocks.RendererMock{
 				ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
-				FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+				FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 			}
 			m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: tc.ratio})
 			result, _ := m.Update(tea.WindowSizeMsg{Width: tc.termWidth, Height: 40})
@@ -668,7 +668,7 @@ func TestNewModel_CommitLogResolution(t *testing.T) {
 	plainRenderer := func() *mocks.RendererMock {
 		return &mocks.RendererMock{
 			ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-			FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+			FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 		}
 	}
 
@@ -787,7 +787,7 @@ func TestModel_ApplyReloadCleanup(t *testing.T) {
 func TestModel_NewModel_ReloadApplicable(t *testing.T) {
 	plainRend := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	t.Run("true when ReloadApplicable is true", func(t *testing.T) {
 		m := testNewModel(t, plainRend, annotation.NewStore(), noopHighlighter(),

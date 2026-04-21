@@ -205,7 +205,7 @@ func TestIncludeExcludeComposition(t *testing.T) {
 	}
 	inner := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return files, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 
 	// include narrows to src/, then exclude removes src/vendor/

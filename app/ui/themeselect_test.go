@@ -90,7 +90,7 @@ func newTestThemeCatalog() *testThemeCatalog {
 func TestOpenThemeSelector_savesOriginalState(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
@@ -119,7 +119,7 @@ func TestCancelThemeSelect_restoresOriginalTheme(t *testing.T) {
 	currentStyle := "orig-style"
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
@@ -155,7 +155,7 @@ func TestPreviewThemeByName_appliesTheme(t *testing.T) {
 	currentStyle := "orig-style"
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
@@ -187,7 +187,7 @@ func TestPreviewThemeByName_nilSessionNoOp(t *testing.T) {
 func TestPreviewThemeByName_unknownThemeNoOp(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
@@ -213,7 +213,7 @@ func TestConfirmThemeByName_appliesAndPersists(t *testing.T) {
 	currentStyle := "orig-style"
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
@@ -244,7 +244,7 @@ func TestConfirmThemeByName_appliesAndPersists(t *testing.T) {
 func TestThemeSelectPreviewAndConfirmPreserveNoColors(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
@@ -279,7 +279,7 @@ func TestApplyTheme_invalidChromaStyleKeepsPreviousHighlightingStyle(t *testing.
 	highlightCalls := 0
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string {

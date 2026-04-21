@@ -35,10 +35,13 @@ import (
 	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
-// Renderer provides methods to extract changed files and build full-file diff views.
+// Renderer provides methods to extract changed files and build diff views.
+// contextLines controls surrounding context on FileDiff: 0 or >= 1000000 requests
+// full-file context (the revdiff default); positive values < 1000000 request that
+// many lines on each side of a hunk. Context-only sources ignore this parameter.
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]diff.FileEntry, error)
-	FileDiff(ref, file string, staged bool) ([]diff.DiffLine, error)
+	FileDiff(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)
 }
 
 // SyntaxHighlighter provides syntax highlighting for diff lines.

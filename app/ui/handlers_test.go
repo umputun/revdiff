@@ -180,7 +180,7 @@ func TestModel_QuitNoAnnotationsEmptyOutput(t *testing.T) {
 func TestModel_NoConfirmDiscardWired(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	store := annotation.NewStore()
 	m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{NoConfirmDiscard: true, TreeWidthRatio: 3})
@@ -504,7 +504,7 @@ func TestModel_ActionReload_NoAnnotations_DirectReload(t *testing.T) {
 			callCount++
 			return []diff.FileEntry{{Path: "a.go"}}, nil
 		},
-		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(),
 		ModelConfig{ReloadApplicable: true})
@@ -541,7 +541,7 @@ func TestModel_ActionReload_YConfirms(t *testing.T) {
 			callCount++
 			return []diff.FileEntry{{Path: "a.go"}}, nil
 		},
-		FileDiffFunc: func(ref, file string, staged bool) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, store, noopHighlighter(),
 		ModelConfig{ReloadApplicable: true})

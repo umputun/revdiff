@@ -143,7 +143,7 @@ func TestDirectoryReader_FileDiff_brokenSymlink(t *testing.T) {
 	assert.Contains(t, files, FileEntry{Path: "broken.link"})
 
 	// FileDiff should return a placeholder, not an error
-	lines, err := dr.FileDiff("", "broken.link", false)
+	lines, err := dr.FileDiff("", "broken.link", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(broken symlink)", lines[0].Content)
@@ -167,7 +167,7 @@ func TestDirectoryReader_FileDiff(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	dr := NewDirectoryReader(dir)
-	lines, err := dr.FileDiff("", "main.go", false)
+	lines, err := dr.FileDiff("", "main.go", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 7)
 
@@ -189,7 +189,7 @@ func TestDirectoryReader_FileDiff_emptyFile(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	dr := NewDirectoryReader(dir)
-	lines, err := dr.FileDiff("", "empty.go", false)
+	lines, err := dr.FileDiff("", "empty.go", false, 0)
 	require.NoError(t, err)
 	assert.Empty(t, lines)
 }
@@ -204,7 +204,7 @@ func TestDirectoryReader_FileDiff_binaryFile(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	dr := NewDirectoryReader(dir)
-	lines, err := dr.FileDiff("", "image.png", false)
+	lines, err := dr.FileDiff("", "image.png", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(binary file)", lines[0].Content)
@@ -219,7 +219,7 @@ func TestDirectoryReader_FileDiff_nonexistentFile(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	dr := NewDirectoryReader(dir)
-	_, err := dr.FileDiff("", "missing.go", false)
+	_, err := dr.FileDiff("", "missing.go", false, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stat file")
 }
@@ -233,7 +233,7 @@ func TestDirectoryReader_FileDiff_subdirectory(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	dr := NewDirectoryReader(dir)
-	lines, err := dr.FileDiff("", "pkg/sub/lib.go", false)
+	lines, err := dr.FileDiff("", "pkg/sub/lib.go", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 3)
 	assert.Equal(t, "package sub", lines[0].Content)
@@ -260,7 +260,7 @@ func TestDirectoryReader_FullPipeline(t *testing.T) {
 
 	// read each file
 	for _, f := range files {
-		lines, readErr := dr.FileDiff("", f.Path, false)
+		lines, readErr := dr.FileDiff("", f.Path, false, 0)
 		require.NoError(t, readErr, "failed to read %s", f.Path)
 		require.NotEmpty(t, lines, "file %s should not be empty", f.Path)
 		for _, l := range lines {

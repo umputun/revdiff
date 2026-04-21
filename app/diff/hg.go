@@ -143,9 +143,11 @@ func (h *Hg) revFlag(flag, ref string) []string {
 	return []string{flag, translateRef(ref)}
 }
 
-// FileDiff returns the full-file diff view for a single file.
-// staged flag is ignored (hg has no staging area).
-func (h *Hg) FileDiff(ref, file string, _ bool) ([]DiffLine, error) {
+// FileDiff returns the diff view for a single file.
+// staged flag is ignored (hg has no staging area). contextLines controls surrounding
+// context: 0 or >= 1000000 requests full-file context; positive values < 1000000
+// request that many lines on each side of a hunk.
+func (h *Hg) FileDiff(ref, file string, _ bool, _ int) ([]DiffLine, error) {
 	rArgs := h.revFlag("-r", ref)
 	args := make([]string, 0, 5+len(rArgs))
 	args = append(args, "diff", "--git", "--color=never")

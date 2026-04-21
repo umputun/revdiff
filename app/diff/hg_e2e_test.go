@@ -61,7 +61,7 @@ func TestHg_E2E_FullPipeline(t *testing.T) {
 	}
 
 	// step 4: get file diff (goes through parseUnifiedDiff)
-	lines, err := h.FileDiff("", "hello.txt", false)
+	lines, err := h.FileDiff("", "hello.txt", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -82,7 +82,7 @@ func TestHg_E2E_FullPipeline(t *testing.T) {
 	assert.Equal(t, 2, ctx, "expected 2 context lines (line two + line three)")
 
 	// step 5: new file diff should be all additions
-	newLines, err := h.FileDiff("", "new.txt", false)
+	newLines, err := h.FileDiff("", "new.txt", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, newLines)
 	for _, l := range newLines {
@@ -135,7 +135,7 @@ func TestHg_E2E_RefDiff(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "hello.txt", entries[0].Path)
 
-	lines, err := h.FileDiff("0..2", "hello.txt", false)
+	lines, err := h.FileDiff("0..2", "hello.txt", false, 0)
 	require.NoError(t, err)
 
 	var adds, removes int
@@ -254,7 +254,7 @@ func TestGit_E2E_StillWorks(t *testing.T) {
 	assert.Equal(t, "hello.txt", entries[0].Path)
 	assert.Equal(t, FileModified, entries[0].Status)
 
-	lines, err := g.FileDiff("", "hello.txt", false)
+	lines, err := g.FileDiff("", "hello.txt", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 

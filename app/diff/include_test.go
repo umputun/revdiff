@@ -112,24 +112,50 @@ func TestIncludeFilter_FileDiff_passthrough(t *testing.T) {
 		{OldNum: 2, NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
 	inner := &mocks.RendererMock{
-		FileDiffFunc: func(string, string, bool) ([]diff.DiffLine, error) { return lines, nil },
+		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) { return lines, nil },
 	}
 	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	// even a file NOT matching include prefix is passed through — filtering is only at file list level
-	result, err := f.FileDiff("", "vendor/foo.go", false)
+	result, err := f.FileDiff("", "vendor/foo.go", false, 0)
 	require.NoError(t, err)
 	assert.Equal(t, lines, result)
 }
 
 func TestIncludeFilter_FileDiff_innerError(t *testing.T) {
 	inner := &mocks.RendererMock{
-		FileDiffFunc: func(string, string, bool) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
+		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
 	}
 	f := diff.NewIncludeFilter(inner, []string{"src"})
 
-	_, err := f.FileDiff("", "foo.go", false)
+	_, err := f.FileDiff("", "foo.go", false, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "include filter, file diff foo.go")
 	assert.Contains(t, err.Error(), "read failed")
+}
+
+func TestIncludeFilter_FileDiff_passesContextLinesThrough(t *testing.T) {
+	tests := []struct {
+		name    string
+		context int
+	}{
+		{name: "full context (zero)", context: 0},
+		{name: "small context", context: 5},
+		{name: "full-file sentinel", context: 1000000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotContext int
+			inner := &mocks.RendererMock{
+				FileDiffFunc: func(_, _ string, _ bool, c int) ([]diff.DiffLine, error) {
+					gotContext = c
+					return nil, nil
+				},
+			}
+			f := diff.NewIncludeFilter(inner, []string{"src"})
+			_, err := f.FileDiff("", "foo.go", false, tt.context)
+			require.NoError(t, err)
+			assert.Equal(t, tt.context, gotContext)
+		})
+	}
 }

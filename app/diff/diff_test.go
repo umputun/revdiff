@@ -274,7 +274,7 @@ func TestGit_FileDiff(t *testing.T) {
 
 	writeFile(t, dir, "main.go", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n")
 
-	lines, err := g.FileDiff("", "main.go", false)
+	lines, err := g.FileDiff("", "main.go", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines, "expected non-empty diff lines")
 
@@ -295,7 +295,7 @@ func TestGit_FileDiff(t *testing.T) {
 
 func TestGit_FileDiff_Error(t *testing.T) {
 	g := NewGit("/nonexistent/repo")
-	_, err := g.FileDiff("", "main.go", false)
+	_, err := g.FileDiff("", "main.go", false, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get file diff")
 }
@@ -326,7 +326,7 @@ func TestGit_FileDiff_NoChanges(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	// no modifications, diff should be empty
-	lines, err := g.FileDiff("", "x.go", false)
+	lines, err := g.FileDiff("", "x.go", false, 0)
 	require.NoError(t, err)
 	assert.Empty(t, lines)
 }
@@ -353,7 +353,7 @@ func TestGit_FileDiff_BinaryFile(t *testing.T) {
 	err = os.WriteFile(filepath.Join(dir, "image.png"), binData2, 0o600)
 	require.NoError(t, err)
 
-	lines, err := g.FileDiff("", "image.png", false)
+	lines, err := g.FileDiff("", "image.png", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, ChangeContext, lines[0].ChangeType)
@@ -382,7 +382,7 @@ func TestGit_FileDiff_NewBinaryFile(t *testing.T) {
 	require.NoError(t, err)
 	gitCmd(t, dir, "add", "new.bin")
 
-	lines, err := g.FileDiff("", "new.bin", true)
+	lines, err := g.FileDiff("", "new.bin", true, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Contains(t, lines[0].Content, "new binary file")
@@ -405,7 +405,7 @@ func TestGit_FileDiff_ModifiedEmptyBinaryFile(t *testing.T) {
 	err = os.WriteFile(filepath.Join(dir, "empty.bin"), []byte{0x00, 0x01, 0x02}, 0o600)
 	require.NoError(t, err)
 
-	lines, err := g.FileDiff("", "empty.bin", false)
+	lines, err := g.FileDiff("", "empty.bin", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(binary file: 0 B → 3 B)", lines[0].Content)

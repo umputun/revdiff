@@ -18,7 +18,7 @@ import (
 //			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 //				panic("mock out the ChangedFiles method")
 //			},
-//			FileDiffFunc: func(ref string, file string, staged bool) ([]diff.DiffLine, error) {
+//			FileDiffFunc: func(ref string, file string, staged bool, contextLines int) ([]diff.DiffLine, error) {
 //				panic("mock out the FileDiff method")
 //			},
 //		}
@@ -32,7 +32,7 @@ type RendererMock struct {
 	ChangedFilesFunc func(ref string, staged bool) ([]diff.FileEntry, error)
 
 	// FileDiffFunc mocks the FileDiff method.
-	FileDiffFunc func(ref string, file string, staged bool) ([]diff.DiffLine, error)
+	FileDiffFunc func(ref string, file string, staged bool, contextLines int) ([]diff.DiffLine, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -51,6 +51,8 @@ type RendererMock struct {
 			File string
 			// Staged is the staged argument value.
 			Staged bool
+			// ContextLines is the contextLines argument value.
+			ContextLines int
 		}
 	}
 	lockChangedFiles sync.RWMutex
@@ -94,23 +96,25 @@ func (mock *RendererMock) ChangedFilesCalls() []struct {
 }
 
 // FileDiff calls FileDiffFunc.
-func (mock *RendererMock) FileDiff(ref string, file string, staged bool) ([]diff.DiffLine, error) {
+func (mock *RendererMock) FileDiff(ref string, file string, staged bool, contextLines int) ([]diff.DiffLine, error) {
 	if mock.FileDiffFunc == nil {
 		panic("RendererMock.FileDiffFunc: method is nil but Renderer.FileDiff was just called")
 	}
 	callInfo := struct {
-		Ref    string
-		File   string
-		Staged bool
+		Ref          string
+		File         string
+		Staged       bool
+		ContextLines int
 	}{
-		Ref:    ref,
-		File:   file,
-		Staged: staged,
+		Ref:          ref,
+		File:         file,
+		Staged:       staged,
+		ContextLines: contextLines,
 	}
 	mock.lockFileDiff.Lock()
 	mock.calls.FileDiff = append(mock.calls.FileDiff, callInfo)
 	mock.lockFileDiff.Unlock()
-	return mock.FileDiffFunc(ref, file, staged)
+	return mock.FileDiffFunc(ref, file, staged, contextLines)
 }
 
 // FileDiffCalls gets all the calls that were made to FileDiff.
@@ -118,14 +122,16 @@ func (mock *RendererMock) FileDiff(ref string, file string, staged bool) ([]diff
 //
 //	len(mockedRenderer.FileDiffCalls())
 func (mock *RendererMock) FileDiffCalls() []struct {
-	Ref    string
-	File   string
-	Staged bool
+	Ref          string
+	File         string
+	Staged       bool
+	ContextLines int
 } {
 	var calls []struct {
-		Ref    string
-		File   string
-		Staged bool
+		Ref          string
+		File         string
+		Staged       bool
+		ContextLines int
 	}
 	mock.lockFileDiff.RLock()
 	calls = mock.calls.FileDiff

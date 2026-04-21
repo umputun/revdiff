@@ -196,24 +196,24 @@ This is the full API change — both the `diff.Renderer` interface and the UI-si
 - Regenerate: `app/diff/mocks/Renderer.go` via `go generate ./app/diff/...`
 - Regenerate: `app/ui/mocks/renderer.go` via `go generate ./app/ui/...`
 
-- [ ] change `diff.Renderer.FileDiff` signature in `app/diff/exclude.go` to `FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error)`
-- [ ] change `ui.Renderer.FileDiff` signature in `app/ui/model.go:38-42` to `FileDiff(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)`
-- [ ] update `FallbackRenderer.FileDiff` to accept and pass `contextLines` to inner
-- [ ] update `ExcludeFilter.FileDiff` to accept and pass `contextLines` to inner
-- [ ] update `IncludeFilter.FileDiff` to accept and pass `contextLines` to inner
-- [ ] update `DirectoryReader.FileDiff` to accept `contextLines` (unused — context-only source; document in comment)
-- [ ] update `StdinReader.FileDiff` to accept `contextLines` (unused — context-only source; document in comment)
-- [ ] update `Git.FileDiff`, `Hg.FileDiff`, `Jj.FileDiff` signatures to accept `contextLines int` — still use the hardcoded full-file arg in this task; arg construction changes in Task 2
-- [ ] run `go generate ./app/diff/...` to regenerate `app/diff/mocks/Renderer.go`
-- [ ] run `go generate ./app/ui/...` to regenerate `app/ui/mocks/renderer.go`
-- [ ] update every `FileDiff(...)` callsite in `app/ui/loaders.go` to pass `0` as the 4th argument (including `resolveEmptyDiff:293` staged retry)
-- [ ] update existing tests in `app/diff/` wrappers to pass `0` for `contextLines` (existing behavior preserved)
-- [ ] update existing tests in `app/ui/` that construct `RendererMock` or call `FileDiff` to pass `0` for `contextLines`
-- [ ] add test case to `fallback_test.go` verifying `contextLines` is passed through unchanged to inner (table-driven: 0, 5, 1000000)
-- [ ] add test case to `exclude_test.go` verifying `contextLines` is passed through unchanged to inner
-- [ ] add test case to `include_test.go` verifying `contextLines` is passed through unchanged to inner
-- [ ] run `go build ./...` — must succeed (confirms atomic API change covered all sites)
-- [ ] run `go test ./...` — must pass before Task 2 (behavior unchanged since everyone passes 0 and VCS renderers still use hardcoded full-context)
+- [x] change `diff.Renderer.FileDiff` signature in `app/diff/exclude.go` to `FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error)`
+- [x] change `ui.Renderer.FileDiff` signature in `app/ui/model.go:38-42` to `FileDiff(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)`
+- [x] update `FallbackRenderer.FileDiff` to accept and pass `contextLines` to inner
+- [x] update `ExcludeFilter.FileDiff` to accept and pass `contextLines` to inner
+- [x] update `IncludeFilter.FileDiff` to accept and pass `contextLines` to inner
+- [x] update `DirectoryReader.FileDiff` to accept `contextLines` (unused — context-only source; document in comment)
+- [x] update `StdinReader.FileDiff` to accept `contextLines` (unused — context-only source; document in comment)
+- [x] update `Git.FileDiff`, `Hg.FileDiff`, `Jj.FileDiff` signatures to accept `contextLines int` — still use the hardcoded full-file arg in this task; arg construction changes in Task 2
+- [x] run `go generate ./app/diff/...` to regenerate `app/diff/mocks/Renderer.go`
+- [x] run `go generate ./app/ui/...` to regenerate `app/ui/mocks/renderer.go`
+- [x] update every `FileDiff(...)` callsite in `app/ui/loaders.go` to pass `0` as the 4th argument (including `resolveEmptyDiff:293` staged retry)
+- [x] update existing tests in `app/diff/` wrappers to pass `0` for `contextLines` (existing behavior preserved)
+- [x] update existing tests in `app/ui/` that construct `RendererMock` or call `FileDiff` to pass `0` for `contextLines`
+- [x] add test case to `fallback_test.go` verifying `contextLines` is passed through unchanged to inner (table-driven: 0, 5, 1000000)
+- [x] add test case to `exclude_test.go` verifying `contextLines` is passed through unchanged to inner
+- [x] add test case to `include_test.go` verifying `contextLines` is passed through unchanged to inner
+- [x] run `go build ./...` — must succeed (confirms atomic API change covered all sites)
+- [x] run `go test ./...` — must pass before Task 2 (behavior unchanged since everyone passes 0 and VCS renderers still use hardcoded full-context)
 
 ### Task 2: Use `contextLines` in Git/Hg/Jj `FileDiff` — replace hardcoded full-file arg with computed one
 

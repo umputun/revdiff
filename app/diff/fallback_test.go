@@ -332,7 +332,7 @@ func TestFallbackRenderer_FileDiff_FileHasDiff(t *testing.T) {
 	writeFile(t, dir, "main.go", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n")
 
 	fr := NewFallbackRenderer(g, []string{"main.go"}, dir)
-	lines, err := fr.FileDiff("", "main.go", false)
+	lines, err := fr.FileDiff("", "main.go", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -357,7 +357,7 @@ func TestFallbackRenderer_FileDiff_NoDiffFallbackToDisk(t *testing.T) {
 
 	// readme.md is committed and unchanged, so inner FileDiff returns empty
 	fr := NewFallbackRenderer(g, []string{"readme.md"}, dir)
-	lines, err := fr.FileDiff("", "readme.md", false)
+	lines, err := fr.FileDiff("", "readme.md", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 3)
 
@@ -380,7 +380,7 @@ func TestFallbackRenderer_FileDiff_FileNotInOnly(t *testing.T) {
 
 	// file is not in the --only list, so no fallback
 	fr := NewFallbackRenderer(g, []string{"other.go"}, dir)
-	lines, err := fr.FileDiff("", "hello.go", false)
+	lines, err := fr.FileDiff("", "hello.go", false, 0)
 	require.NoError(t, err)
 	assert.Empty(t, lines) // no diff and not in --only, so empty
 }
@@ -395,7 +395,7 @@ func TestFallbackRenderer_FileDiff_FileNotOnDisk(t *testing.T) {
 
 	// --only points to a file that doesn't exist on disk
 	fr := NewFallbackRenderer(g, []string{"missing.go"}, dir)
-	lines, err := fr.FileDiff("", "missing.go", false)
+	lines, err := fr.FileDiff("", "missing.go", false, 0)
 	require.NoError(t, err)
 	assert.Empty(t, lines) // file doesn't exist, return empty
 }
@@ -414,7 +414,7 @@ func TestFallbackRenderer_FileDiff_OutsideRepoAbsPath(t *testing.T) {
 
 	fr := NewFallbackRenderer(g, []string{tmpFile}, dir)
 	// should read from disk without calling inner git (which would fail with "outside repository")
-	lines, err := fr.FileDiff("", tmpFile, false)
+	lines, err := fr.FileDiff("", tmpFile, false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 2)
 	assert.Equal(t, ChangeContext, lines[0].ChangeType)
@@ -433,7 +433,7 @@ func TestFallbackRenderer_FileDiff_OutsideRepoNonexistent(t *testing.T) {
 	// absolute path outside the repo that doesn't exist on disk
 	missingFile := filepath.Join(t.TempDir(), "no-such-file.md")
 	fr := NewFallbackRenderer(g, []string{missingFile}, dir)
-	_, err := fr.FileDiff("", missingFile, false)
+	_, err := fr.FileDiff("", missingFile, false, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "file not found")
 }
@@ -473,7 +473,7 @@ func TestFallbackRenderer_FileDiff_InnerErrorWithOnlyFile(t *testing.T) {
 
 	fr := NewFallbackRenderer(g, []string{"readme.md"}, dir)
 	// use a ref that will cause inner.FileDiff to return an error
-	_, err := fr.FileDiff("nonexistent-ref-abc123", "readme.md", false)
+	_, err := fr.FileDiff("nonexistent-ref-abc123", "readme.md", false, 0)
 	require.Error(t, err, "git errors should propagate, not be swallowed by fallback")
 	assert.Contains(t, err.Error(), "get file diff")
 }
@@ -567,7 +567,7 @@ func TestFileReader_FileDiff(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "readme.md"), []byte("line one\nline two\nline three\n"), 0o600))
 
 	r := NewFileReader([]string{"readme.md"}, dir)
-	lines, err := r.FileDiff("", filepath.Join(dir, "readme.md"), false)
+	lines, err := r.FileDiff("", filepath.Join(dir, "readme.md"), false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 3)
 
@@ -586,7 +586,7 @@ func TestFileReader_FileDiff_RelativePath(t *testing.T) {
 
 	r := NewFileReader([]string{"doc.txt"}, dir)
 	// pass relative path, should resolve against workDir
-	lines, err := r.FileDiff("", "doc.txt", false)
+	lines, err := r.FileDiff("", "doc.txt", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 2)
 	assert.Equal(t, "alpha", lines[0].Content)
@@ -596,7 +596,7 @@ func TestFileReader_FileDiff_RelativePath(t *testing.T) {
 func TestFileReader_FileDiff_NonexistentFile(t *testing.T) {
 	dir := t.TempDir()
 	r := NewFileReader([]string{"missing.go"}, dir)
-	_, err := r.FileDiff("", "missing.go", false)
+	_, err := r.FileDiff("", "missing.go", false, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stat file")
 }
@@ -623,7 +623,7 @@ func TestFallbackRenderer_ContextOnlyView(t *testing.T) {
 	assert.Equal(t, []FileEntry{{Path: "main.go"}}, files)
 
 	// FileDiff should return context-only lines (fallback to disk read)
-	lines, err := fr.FileDiff("", "main.go", false)
+	lines, err := fr.FileDiff("", "main.go", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 7, "should have 7 lines from the file")
 
@@ -654,7 +654,7 @@ func TestFallbackRenderer_NormalDiffUnaffected(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []FileEntry{{Path: "main.go", Status: FileModified}}, files)
 
-	lines, err := fr.FileDiff("", "main.go", false)
+	lines, err := fr.FileDiff("", "main.go", false, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -688,7 +688,7 @@ func TestFileReader_FullPipeline(t *testing.T) {
 	assert.Equal(t, filepath.Join(dir, "plan.md"), files[0].Path)
 
 	// FileDiff should return all lines as context
-	lines, err := r.FileDiff("", files[0].Path, false)
+	lines, err := r.FileDiff("", files[0].Path, false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 5)
 
@@ -712,12 +712,12 @@ func TestStdinReader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []FileEntry{{Path: "plan.md"}}, files)
 
-	got, err := r.FileDiff("", "plan.md", false)
+	got, err := r.FileDiff("", "plan.md", false, 0)
 	require.NoError(t, err)
 	assert.Equal(t, lines, got)
 
 	// wrong filename returns nil
-	got, err = r.FileDiff("", "other.md", false)
+	got, err = r.FileDiff("", "other.md", false, 0)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
@@ -730,7 +730,7 @@ func TestNewStdinReaderFromReader(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []FileEntry{{Path: "test.md"}}, files)
 
-	lines, err := r.FileDiff("", "test.md", false)
+	lines, err := r.FileDiff("", "test.md", false, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 2)
 	assert.Equal(t, "line one", lines[0].Content)
@@ -815,4 +815,40 @@ func TestReadFileAsAdded_BrokenSymlink(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(broken symlink)", lines[0].Content)
 	assert.Equal(t, ChangeContext, lines[0].ChangeType)
+}
+
+// stubInnerRenderer records FileDiff/ChangedFiles arguments for pass-through assertions.
+type stubInnerRenderer struct {
+	gotContext int
+}
+
+func (s *stubInnerRenderer) ChangedFiles(string, bool) ([]FileEntry, error) {
+	return nil, nil
+}
+
+func (s *stubInnerRenderer) FileDiff(_, _ string, _ bool, contextLines int) ([]DiffLine, error) {
+	s.gotContext = contextLines
+	return nil, nil
+}
+
+func TestFallbackRenderer_FileDiff_passesContextLinesThrough(t *testing.T) {
+	dir := setupTestRepo(t)
+
+	tests := []struct {
+		name    string
+		context int
+	}{
+		{name: "full context (zero)", context: 0},
+		{name: "small context", context: 5},
+		{name: "full-file sentinel", context: 1000000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inner := &stubInnerRenderer{}
+			fr := NewFallbackRenderer(inner, nil, dir)
+			_, err := fr.FileDiff("", "main.go", false, tt.context)
+			require.NoError(t, err)
+			assert.Equal(t, tt.context, inner.gotContext)
+		})
+	}
 }

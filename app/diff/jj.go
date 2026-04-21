@@ -136,9 +136,11 @@ func (j *Jj) expandRename(target string) (oldPath, newPath string, ok bool) {
 	return prefix + oldMid + suffix, prefix + newMid + suffix, true
 }
 
-// FileDiff returns the full-file diff view for a single file.
-// The staged flag is ignored — Jujutsu has no staging area.
-func (j *Jj) FileDiff(ref, file string, _ bool) ([]DiffLine, error) {
+// FileDiff returns the diff view for a single file.
+// The staged flag is ignored — Jujutsu has no staging area. contextLines controls
+// surrounding context: 0 or >= 1000000 requests full-file context; positive values
+// < 1000000 request that many lines on each side of a hunk.
+func (j *Jj) FileDiff(ref, file string, _ bool, _ int) ([]DiffLine, error) {
 	rangeArgs := j.diffRangeFlags(ref)
 	args := make([]string, 0, 5+len(rangeArgs))
 	args = append(args, "diff", "--git", jjFullContext)

@@ -94,7 +94,7 @@ func (m Model) loadCommits() tea.Cmd {
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
 	return func() tea.Msg {
-		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged)
+		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged, 0)
 		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
 	}
 }
@@ -290,7 +290,7 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 	}
 	// staged-only files: retry with git diff --cached
 	if !m.cfg.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
-		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true); err == nil && len(cachedLines) > 0 {
+		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true, 0); err == nil && len(cachedLines) > 0 {
 			m.file.lines = cachedLines
 			return
 		}

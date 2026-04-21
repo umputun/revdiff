@@ -5,9 +5,13 @@ import "fmt"
 //go:generate moq -out mocks/Renderer.go -pkg mocks -skip-ensure -fmt goimports . Renderer
 
 // Renderer is the local interface mirroring ui.Renderer, exported for moq generation.
+// contextLines controls how many lines of context surround each hunk in the diff output.
+// 0 or values >= 1000000 request full-file context (the revdiff default); positive values
+// < 1000000 request that many lines on each side. Context-only sources (e.g. FileReader,
+// DirectoryReader, StdinReader) ignore this parameter since they have no hunks.
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
-	FileDiff(ref, file string, staged bool) ([]DiffLine, error)
+	FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error)
 }
 
 // ExcludeFilter wraps a renderer and filters out files matching any of the given prefixes.
@@ -39,8 +43,9 @@ func (ef *ExcludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, err
 }
 
 // FileDiff delegates directly to the inner renderer without filtering.
-func (ef *ExcludeFilter) FileDiff(ref, file string, staged bool) ([]DiffLine, error) {
-	lines, err := ef.inner.FileDiff(ref, file, staged)
+// contextLines is passed through unchanged.
+func (ef *ExcludeFilter) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
+	lines, err := ef.inner.FileDiff(ref, file, staged, contextLines)
 	if err != nil {
 		return nil, fmt.Errorf("exclude filter, file diff %s: %w", file, err)
 	}
