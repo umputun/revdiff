@@ -81,6 +81,22 @@ func (h *Highlighter) HighlightLines(filename string, lines []diff.DiffLine) []s
 	return h.mapHighlightedLines(lines, newHL, oldHL)
 }
 
+// HighlightText tokenizes text as-is (no diff reconstruction) and returns a
+// slice of per-line ANSI-formatted strings using the same foreground-only
+// styling as HighlightLines. The filename determines the Chroma lexer.
+// returns nil when highlighting is disabled, text is empty, or no lexer matches.
+func (h *Highlighter) HighlightText(filename, text string) []string {
+	if !h.enabled || text == "" {
+		return nil
+	}
+	lexer := lexers.Match(filename)
+	if lexer == nil {
+		return nil
+	}
+	lexer = chroma.Coalesce(lexer)
+	return h.highlightFile(lexer, styles.Get(h.styleName), text)
+}
+
 // reconstructFiles builds old and new file content from diff lines.
 // new file = context + added lines, old file = context + removed lines.
 func (h *Highlighter) reconstructFiles(lines []diff.DiffLine) (newFile, oldFile string) {

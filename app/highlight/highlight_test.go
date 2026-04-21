@@ -206,3 +206,36 @@ func TestSetStyle_unknownStyle(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, "monokai", h.StyleName(), "style should not change on failure")
 }
+
+func TestHighlighter_HighlightText_markdown(t *testing.T) {
+	h := New("monokai", true)
+
+	const src = "# Heading\n\nSome **bold** text.\n"
+	result := h.HighlightText("note.md", src)
+	require.NotNil(t, result)
+	// input has a trailing newline producing 4 logical segments, but we
+	// return one entry per rendered line of source (3 non-empty + 1 empty).
+	require.Len(t, result, 3)
+	assert.Contains(t, result[0], "Heading")
+	assert.Contains(t, result[0], "\033[", "heading should carry ANSI codes")
+	assert.Contains(t, result[2], "bold")
+}
+
+func TestHighlighter_HighlightText_disabled(t *testing.T) {
+	h := New("monokai", false)
+	result := h.HighlightText("note.md", "# hi")
+	assert.Nil(t, result)
+}
+
+func TestHighlighter_HighlightText_unknownLexer(t *testing.T) {
+	h := New("monokai", true)
+	// an extension chroma has no lexer for — expect nil so caller can fall back
+	result := h.HighlightText("note.zzznoextension", "hello world")
+	assert.Nil(t, result)
+}
+
+func TestHighlighter_HighlightText_empty(t *testing.T) {
+	h := New("monokai", true)
+	result := h.HighlightText("note.md", "")
+	assert.Nil(t, result)
+}
