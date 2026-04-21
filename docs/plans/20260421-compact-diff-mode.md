@@ -277,22 +277,22 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `app/ui/loaders_test.go`
 - Modify: `app/ui/diffnav_test.go` (if exists, otherwise add toggle test to suitable existing file)
 
-- [ ] add `compact bool` and `compactContext int` fields to `modeState` struct (grouped with `collapsed`)
-- [ ] add `Compact bool`, `CompactContext int`, `CompactApplicable bool` fields to `ModelConfig` — mirror the `Collapsed` and `CommitsApplicable` precedent exactly (model.go:482 for doc comment pattern)
-- [ ] in Model constructor (around model.go:601), copy all three into Model state: `m.modes.compact = cfg.Compact`, `m.modes.compactContext = cfg.CompactContext`, `m.compactApplicable = cfg.CompactApplicable`
-- [ ] add helper method `(m Model) currentContextLines() int` returning `m.modes.compactContext` if `m.modes.compact && m.compactApplicable`, else `0`
-- [ ] update every `FileDiff(...)` callsite in `app/ui/loaders.go` to pass `m.currentContextLines()` as the 4th argument (replacing the `0` placeholders added in Task 1). Known sites: the primary `loadFileDiff` body, and `resolveEmptyDiff:293` (staged retry for new files — same context as the primary call, since it's re-fetching the same file)
-- [ ] add a current-file-only re-fetch helper on Model (e.g. `reloadCurrentFile() tea.Cmd`) — distinct from `triggerReload()` which batches files+commits; this helper only bumps `file.loadSeq` and returns `loadFileDiff(m.file.name)`. Used by the compact toggle so other files and commit log aren't re-fetched unnecessarily
-- [ ] in `diffnav.go` (verify exact location by grepping for `ActionToggleCollapsed` dispatch), add case for `ActionToggleCompact`:
+- [x] add `compact bool` and `compactContext int` fields to `modeState` struct (grouped with `collapsed`)
+- [x] add `Compact bool`, `CompactContext int`, `CompactApplicable bool` fields to `ModelConfig` — mirror the `Collapsed` and `CommitsApplicable` precedent exactly (model.go:482 for doc comment pattern)
+- [x] in Model constructor (around model.go:601), copy all three into Model state: `m.modes.compact = cfg.Compact`, `m.modes.compactContext = cfg.CompactContext`, `m.compactApplicable = cfg.CompactApplicable`
+- [x] add helper method `(m Model) currentContextLines() int` returning `m.modes.compactContext` if `m.modes.compact && m.compactApplicable`, else `0`
+- [x] update every `FileDiff(...)` callsite in `app/ui/loaders.go` to pass `m.currentContextLines()` as the 4th argument (replacing the `0` placeholders added in Task 1). Known sites: the primary `loadFileDiff` body, and `resolveEmptyDiff:293` (staged retry for new files — same context as the primary call, since it's re-fetching the same file)
+- [x] add a current-file-only re-fetch helper on Model (e.g. `reloadCurrentFile() tea.Cmd`) — distinct from `triggerReload()` which batches files+commits; this helper only bumps `file.loadSeq` and returns `loadFileDiff(m.file.name)`. Used by the compact toggle so other files and commit log aren't re-fetched unnecessarily
+- [x] in `diffnav.go` (verify exact location by grepping for `ActionToggleCollapsed` dispatch), add case for `ActionToggleCompact`:
   - if `!m.compactApplicable`, set transient hint `"compact not applicable"` on status bar and return no-op command
   - else flip `m.modes.compact`, call the new `reloadCurrentFile()` helper, return its cmd. Cursor reset to first hunk happens naturally via existing `skipInitialDividers()` in `handleFileLoaded` after reload completes — verify by reading `handleFileLoaded` flow (loaders.go:213 onwards)
-- [ ] write test verifying `C` toggles `m.modes.compact` when applicable
-- [ ] write test verifying `C` is a no-op when `!CompactApplicable` (status hint set, mode unchanged, no re-fetch issued)
-- [ ] write test verifying `currentContextLines()` returns `compactContext` when compact on AND applicable, `0` when compact off, `0` when compact on but not applicable
-- [ ] write test verifying compact toggle triggers a current-file re-fetch (observe `file.loadSeq` bump or `loadFileDiff` invocation via mock) and does NOT trigger files-list or commits reload
-- [ ] write test verifying cursor lands on first hunk after compact-toggle re-fetch completes (simulate `fileLoadedMsg` and assert `m.nav.diffCursor` via `skipInitialDividers` outcome)
-- [ ] write wiring test verifying `ModelConfig{Compact: true, CompactContext: 10}` at Model construction → `m.modes.compact == true` and `m.modes.compactContext == 10` and `m.currentContextLines() == 10` (when applicable)
-- [ ] run `go test ./app/ui/...` — must pass before Task 6
+- [x] write test verifying `C` toggles `m.modes.compact` when applicable
+- [x] write test verifying `C` is a no-op when `!CompactApplicable` (status hint set, mode unchanged, no re-fetch issued)
+- [x] write test verifying `currentContextLines()` returns `compactContext` when compact on AND applicable, `0` when compact off, `0` when compact on but not applicable
+- [x] write test verifying compact toggle triggers a current-file re-fetch (observe `file.loadSeq` bump or `loadFileDiff` invocation via mock) and does NOT trigger files-list or commits reload
+- [x] write test verifying cursor lands on first hunk after compact-toggle re-fetch completes (simulate `fileLoadedMsg` and assert `m.nav.diffCursor` via `skipInitialDividers` outcome)
+- [x] write wiring test verifying `ModelConfig{Compact: true, CompactContext: 10}` at Model construction → `m.modes.compact == true` and `m.modes.compactContext == 10` and `m.currentContextLines() == 10` (when applicable)
+- [x] run `go test ./app/ui/...` — must pass before Task 6
 
 ### Task 6: Wire `Compact`, `CompactContext`, `CompactApplicable` at the composition root
 

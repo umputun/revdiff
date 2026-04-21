@@ -93,10 +93,34 @@ func (m Model) loadCommits() tea.Cmd {
 // loadFileDiff returns a command that fetches the diff lines for the given file.
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
+	contextLines := m.currentContextLines()
 	return func() tea.Msg {
-		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged, 0)
+		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged, contextLines)
 		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
 	}
+}
+
+// currentContextLines returns the context-lines count to pass to FileDiff based
+// on the current compact mode state. returns compactContext when compact mode
+// is enabled and the feature is applicable to this source; otherwise 0, which
+// the renderers treat as "full-file context" (the revdiff default).
+func (m Model) currentContextLines() int {
+	if m.modes.compact && m.compactApplicable {
+		return m.modes.compactContext
+	}
+	return 0
+}
+
+// reloadCurrentFile re-fetches the diff for the currently displayed file and
+// invalidates any in-flight load for it via a loadSeq bump. Used by the compact
+// toggle to pick up the new context size without re-fetching the full file list
+// or commit log (unlike triggerReload). Returns nil when no file is loaded.
+func (m *Model) reloadCurrentFile() tea.Cmd {
+	if m.file.name == "" {
+		return nil
+	}
+	m.file.loadSeq++
+	return m.loadFileDiff(m.file.name)
 }
 
 // loadBlame returns a command that fetches blame data for the given file.
@@ -290,7 +314,7 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 	}
 	// staged-only files: retry with git diff --cached
 	if !m.cfg.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
-		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true, 0); err == nil && len(cachedLines) > 0 {
+		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true, m.currentContextLines()); err == nil && len(cachedLines) > 0 {
 			m.file.lines = cachedLines
 			return
 		}

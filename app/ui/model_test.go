@@ -381,6 +381,41 @@ func TestModel_CollapsedModeFromConfig(t *testing.T) {
 	})
 }
 
+func TestModel_CompactModeFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+
+	t.Run("compact enabled and applicable via config", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			Compact: true, CompactContext: 10, CompactApplicable: true, TreeWidthRatio: 2,
+		})
+		assert.True(t, m.modes.compact, "compact flag must be copied into modeState")
+		assert.Equal(t, 10, m.modes.compactContext, "compact context must be copied from config")
+		assert.True(t, m.compactApplicable, "applicable flag must be copied into Model")
+		assert.Equal(t, 10, m.currentContextLines(), "helper must return configured context when compact+applicable")
+	})
+
+	t.Run("compact requested but not applicable drops to off at construction", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			Compact: true, CompactContext: 7, CompactApplicable: false, TreeWidthRatio: 2,
+		})
+		assert.False(t, m.modes.compact, "compact must be off when the feature is not applicable at startup")
+		assert.Equal(t, 7, m.modes.compactContext, "compact context is still carried so toggle can use it if state changes")
+		assert.False(t, m.compactApplicable)
+		assert.Equal(t, 0, m.currentContextLines(), "non-applicable startup must resolve to full-file context")
+	})
+
+	t.Run("compact disabled by default", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		assert.False(t, m.modes.compact)
+		assert.False(t, m.compactApplicable)
+		assert.Equal(t, 0, m.modes.compactContext)
+	})
+}
+
 func TestModel_LineNumbersFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
