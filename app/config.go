@@ -127,8 +127,8 @@ func parseArgs(args []string) (options, error) {
 		return options{}, errors.New("--include cannot be used with --only")
 	}
 
-	if opts.Compact && opts.CompactContext <= 0 {
-		return options{}, errors.New("--compact-context must be >= 1 when --compact is set")
+	if opts.CompactContext <= 0 {
+		return options{}, errors.New("--compact-context must be >= 1")
 	}
 
 	if err := validateStdinFlags(opts); err != nil {

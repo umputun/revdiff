@@ -177,8 +177,10 @@ func TestParseArgs_CompactContextRejectsZero(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "zero", args: []string{"--compact", "--compact-context=0"}},
-		{name: "negative", args: []string{"--compact", "--compact-context=-1"}},
+		{name: "zero with compact", args: []string{"--compact", "--compact-context=0"}},
+		{name: "negative with compact", args: []string{"--compact", "--compact-context=-1"}},
+		{name: "zero without compact", args: []string{"--compact-context=0"}},
+		{name: "negative without compact", args: []string{"--compact-context=-1"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
