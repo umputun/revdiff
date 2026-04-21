@@ -454,6 +454,91 @@ func TestModel_HandleCommitInfo_ShowsLoadingHintBeforeLoad(t *testing.T) {
 	assert.Equal(t, "loading commits…", model.commits.hint, "transient hint shown while fetch is in flight")
 }
 
+func TestModel_HandleDescription_OpensOverlayWhenTextSet(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = "# hello\n\nworld"
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	model := result.(Model)
+	assert.Nil(t, cmd, "description open does not issue a tea.Cmd")
+	assert.True(t, model.overlay.Active(), "D should open the overlay when a description is set")
+	assert.Equal(t, overlay.KindDescription, model.overlay.Kind())
+	assert.Empty(t, model.description.hint, "set-text path does not set a hint")
+}
+
+func TestModel_HandleDescription_HintWhenEmpty(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = ""
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	model := result.(Model)
+	assert.False(t, model.overlay.Active(), "overlay must not open when no description provided")
+	assert.Equal(t, "no description provided", model.description.hint)
+}
+
+func TestModel_HandleDescription_HintClearsOnNextKey(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = ""
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	model := result.(Model)
+	require.Equal(t, "no description provided", model.description.hint)
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model = result.(Model)
+	assert.Empty(t, model.description.hint, "any subsequent key press must clear the transient hint")
+}
+
+func TestModel_HandleDescription_StatusBarShowsHint(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = ""
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	model := result.(Model)
+	assert.Equal(t, "no description provided", model.statusBarText())
+}
+
+func TestModel_Description_AutoOpensOnFirstResize(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = "# hi"
+	m.description.autoOpen = true
+	require.False(t, m.overlay.Active())
+
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	model := result.(Model)
+	assert.True(t, model.overlay.Active(), "first WindowSizeMsg should auto-open the description overlay")
+	assert.Equal(t, overlay.KindDescription, model.overlay.Kind())
+	assert.True(t, model.description.autoOpened, "autoOpened latch should be set")
+}
+
+func TestModel_Description_AutoOpenSuppressedWhenDisabled(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = "# hi"
+	m.description.autoOpen = false
+
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	model := result.(Model)
+	assert.False(t, model.overlay.Active(), "auto-open must not fire without the flag")
+}
+
+func TestModel_Description_AutoOpenDoesNotRepeat(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.description.text = "# hi"
+	m.description.autoOpen = true
+
+	// first resize auto-opens
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	model := result.(Model)
+	require.True(t, model.overlay.Active())
+	// user closes the overlay
+	model.overlay.Close()
+	require.False(t, model.overlay.Active())
+	// subsequent resize (e.g. terminal stretched) must not re-open
+	result, _ = model.Update(tea.WindowSizeMsg{Width: 120, Height: 50})
+	model = result.(Model)
+	assert.False(t, model.overlay.Active(), "second resize must not re-open the description overlay")
+}
+
 func TestModel_ReloadHint_ShownInStatusBar(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.reload.hint = "test reload hint"

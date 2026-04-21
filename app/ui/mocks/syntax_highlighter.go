@@ -18,6 +18,9 @@ import (
 //			HighlightLinesFunc: func(filename string, lines []diff.DiffLine) []string {
 //				panic("mock out the HighlightLines method")
 //			},
+//			HighlightTextFunc: func(filename string, text string) []string {
+//				panic("mock out the HighlightText method")
+//			},
 //			SetStyleFunc: func(styleName string) bool {
 //				panic("mock out the SetStyle method")
 //			},
@@ -34,6 +37,9 @@ type SyntaxHighlighterMock struct {
 	// HighlightLinesFunc mocks the HighlightLines method.
 	HighlightLinesFunc func(filename string, lines []diff.DiffLine) []string
 
+	// HighlightTextFunc mocks the HighlightText method.
+	HighlightTextFunc func(filename string, text string) []string
+
 	// SetStyleFunc mocks the SetStyle method.
 	SetStyleFunc func(styleName string) bool
 
@@ -49,6 +55,13 @@ type SyntaxHighlighterMock struct {
 			// Lines is the lines argument value.
 			Lines []diff.DiffLine
 		}
+		// HighlightText holds details about calls to the HighlightText method.
+		HighlightText []struct {
+			// Filename is the filename argument value.
+			Filename string
+			// Text is the text argument value.
+			Text string
+		}
 		// SetStyle holds details about calls to the SetStyle method.
 		SetStyle []struct {
 			// StyleName is the styleName argument value.
@@ -59,6 +72,7 @@ type SyntaxHighlighterMock struct {
 		}
 	}
 	lockHighlightLines sync.RWMutex
+	lockHighlightText  sync.RWMutex
 	lockSetStyle       sync.RWMutex
 	lockStyleName      sync.RWMutex
 }
@@ -96,6 +110,42 @@ func (mock *SyntaxHighlighterMock) HighlightLinesCalls() []struct {
 	mock.lockHighlightLines.RLock()
 	calls = mock.calls.HighlightLines
 	mock.lockHighlightLines.RUnlock()
+	return calls
+}
+
+// HighlightText calls HighlightTextFunc.
+func (mock *SyntaxHighlighterMock) HighlightText(filename string, text string) []string {
+	if mock.HighlightTextFunc == nil {
+		panic("SyntaxHighlighterMock.HighlightTextFunc: method is nil but SyntaxHighlighter.HighlightText was just called")
+	}
+	callInfo := struct {
+		Filename string
+		Text     string
+	}{
+		Filename: filename,
+		Text:     text,
+	}
+	mock.lockHighlightText.Lock()
+	mock.calls.HighlightText = append(mock.calls.HighlightText, callInfo)
+	mock.lockHighlightText.Unlock()
+	return mock.HighlightTextFunc(filename, text)
+}
+
+// HighlightTextCalls gets all the calls that were made to HighlightText.
+// Check the length with:
+//
+//	len(mockedSyntaxHighlighter.HighlightTextCalls())
+func (mock *SyntaxHighlighterMock) HighlightTextCalls() []struct {
+	Filename string
+	Text     string
+} {
+	var calls []struct {
+		Filename string
+		Text     string
+	}
+	mock.lockHighlightText.RLock()
+	calls = mock.calls.HighlightText
+	mock.lockHighlightText.RUnlock()
 	return calls
 }
 

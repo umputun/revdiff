@@ -41,9 +41,11 @@ type Renderer interface {
 	FileDiff(ref, file string, staged bool) ([]diff.DiffLine, error)
 }
 
-// SyntaxHighlighter provides syntax highlighting for diff lines.
+// SyntaxHighlighter provides syntax highlighting for diff lines and arbitrary
+// text blocks (used by the description overlay to render markdown).
 type SyntaxHighlighter interface {
 	HighlightLines(filename string, lines []diff.DiffLine) []string
+	HighlightText(filename, text string) []string
 	SetStyle(styleName string) bool
 	StyleName() string
 }
@@ -98,6 +100,7 @@ type overlayManager interface {
 	OpenAnnotList(spec overlay.AnnotListSpec)
 	OpenThemeSelect(spec overlay.ThemeSelectSpec)
 	OpenCommitInfo(spec overlay.CommitInfoSpec)
+	OpenDescription(spec overlay.DescriptionSpec)
 	Close()
 	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
 	Compose(base string, ctx overlay.RenderCtx) string
@@ -309,6 +312,20 @@ type commitsState struct {
 	loadSeq    uint64            // bumped before each new commit-log load; stale commitsLoadedMsg (seq mismatch) is dropped
 }
 
+// descriptionState holds the agent-supplied markdown description shown in the
+// description overlay. Populated once at construction from ModelConfig. autoOpen
+// triggers a one-shot open after the first WindowSizeMsg (sizing required by
+// the overlay render path); autoOpened flips to true once that happens so the
+// behavior does not recur after the user closes the overlay. hint is a
+// transient status-bar message used when the user presses D without a
+// description attached — cleared on next key press like other overlay hints.
+type descriptionState struct {
+	text       string
+	autoOpen   bool
+	autoOpened bool
+	hint       string
+}
+
 // reloadState holds the pending-confirmation state for the R reload feature.
 // hint is a transient status-bar message cleared on the next key press.
 // applicable is false in stdin mode (stream consumed; reload impossible).
@@ -361,6 +378,7 @@ type Model struct {
 	annot       annotationState   // annotation input lifecycle state
 	commits     commitsState      // eagerly loaded commit log for the commit-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
+	description descriptionState  // agent-supplied markdown description for the description overlay
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
@@ -490,6 +508,16 @@ type ModelConfig struct {
 	// reload is impossible). Computed at composition root in main.go and copied
 	// into Model state. Follows the same pattern as CommitsApplicable.
 	ReloadApplicable bool
+	// Description is the markdown description shown in the description overlay.
+	// Empty means the feature is unavailable — pressing the description hotkey
+	// shows a transient "no description provided" hint instead of the overlay.
+	// Composition root reads --description or --description-file (whichever is
+	// set) into this string.
+	Description string
+	// DescriptionAutoOpen causes the description overlay to open once after the
+	// first WindowSizeMsg when Description is non-empty. Intended for agent
+	// workflows; off by default so interactive users aren't force-fed a popup.
+	DescriptionAutoOpen bool
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -600,7 +628,11 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			source:     cls,
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
-		reload:          reloadState{applicable: cfg.ReloadApplicable},
+		reload: reloadState{applicable: cfg.ReloadApplicable},
+		description: descriptionState{
+			text:     cfg.Description,
+			autoOpen: cfg.DescriptionAutoOpen && cfg.Description != "",
+		},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
 	}, nil
@@ -669,6 +701,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// this point dismisses the last hint before the new action runs.
 	m.commits.hint = ""
 	m.reload.hint = ""
+	m.description.hint = ""
 
 	// pending-reload intercept: y confirms, any other key cancels
 	if m.reload.pending {
@@ -741,6 +774,9 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 	case keymap.ActionCommitInfo:
 		m.handleCommitInfo()
 		return m, true
+	case keymap.ActionDescription:
+		m.handleDescription()
+		return m, true
 	default:
 		return m, false
 	}
@@ -767,6 +803,37 @@ func (m *Model) handleCommitInfo() {
 		Truncated:  m.commits.truncated,
 		Err:        m.commits.err,
 	})
+}
+
+// handleDescription opens the description overlay when a description is
+// attached. When no description was supplied, sets a transient status-bar hint
+// so the key press has visible feedback, mirroring handleCommitInfo's no-op
+// branches.
+func (m *Model) handleDescription() {
+	if m.description.text == "" {
+		m.description.hint = "no description provided"
+		return
+	}
+	m.overlay.OpenDescription(overlay.DescriptionSpec{
+		Text:        m.description.text,
+		Highlighter: descriptionHighlighter{base: m.highlighter, enabled: !m.cfg.noColors},
+	})
+}
+
+// descriptionHighlighter adapts the injected SyntaxHighlighter (whose concrete
+// impl owns the chroma plumbing) to the overlay's DescriptionHighlighter shape.
+// When --no-colors is active, returns nil so the overlay falls back to plain
+// text; matches the rest of revdiff's "colors off means colors off" contract.
+type descriptionHighlighter struct {
+	base    SyntaxHighlighter
+	enabled bool
+}
+
+func (h descriptionHighlighter) HighlightText(filename, text string) []string {
+	if !h.enabled || h.base == nil {
+		return nil
+	}
+	return h.base.HighlightText(filename, text)
 }
 
 // applyReloadCleanup clears annotations and turns off the annotated-only
@@ -1029,6 +1096,14 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 	if m.file.name != "" {
 		m.syncViewportToCursor()
+	}
+
+	// one-shot description auto-open: fires the first time sizing is known so
+	// overlay.Compose has a valid RenderCtx.Width/Height. autoOpened latches so
+	// the overlay does not reopen on subsequent resizes or after the user closes it.
+	if m.description.autoOpen && !m.description.autoOpened {
+		m.description.autoOpened = true
+		m.handleDescription()
 	}
 
 	return m, nil

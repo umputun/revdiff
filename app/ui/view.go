@@ -121,6 +121,10 @@ func (m Model) statusBarText() string {
 		return m.reload.hint
 	}
 
+	if m.description.hint != "" {
+		return m.description.hint
+	}
+
 	// build left-side segments
 	var segments []string
 
@@ -343,6 +347,7 @@ func (m Model) statusModeIcons() string {
 		{"±", m.modes.wordDiff},
 		{"✓", m.tree.ReviewedCount() > 0},
 		{"∅", m.modes.showUntracked},
+		{"§", m.description.text != ""},
 	}
 
 	mutedSeq := string(m.resolver.Color(style.ColorKeyMutedFg))
