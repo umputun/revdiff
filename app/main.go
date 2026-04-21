@@ -91,6 +91,11 @@ func run(opts options) error {
 	}
 	km := keymap.LoadOrDefault(keysPath)
 
+	description, err := resolveDescription(opts)
+	if err != nil {
+		return err
+	}
+
 	var (
 		renderer     ui.Renderer
 		workDir      string
@@ -98,7 +103,6 @@ func run(opts options) error {
 		blamer       ui.Blamer
 		untrackedFn  func() ([]string, error)
 		commitLogger diff.CommitLogger
-		err          error
 	)
 
 	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
@@ -141,37 +145,39 @@ func run(opts options) error {
 	}
 
 	model, err := ui.NewModel(ui.ModelConfig{
-		Renderer:          renderer,
-		Store:             store,
-		Highlighter:       hl,
-		StyleResolver:     res,
-		StyleRenderer:     style.NewRenderer(res),
-		SGR:               style.SGR{},
-		WordDiffer:        worddiff.New(),
-		Overlay:           overlay.NewManager(),
-		Themes:            themes,
-		Blamer:            blamer,
-		LoadUntracked:     untrackedFn,
-		Keymap:            km,
-		CommitLog:         commitLogger,
-		CommitsApplicable: commitsApplicable(opts, commitLogger),
-		ReloadApplicable:  reloadApplicable(opts),
-		NoColors:          opts.NoColors,
-		NoStatusBar:       opts.NoStatusBar,
-		NoConfirmDiscard:  opts.NoConfirmDiscard,
-		Wrap:              opts.Wrap,
-		Collapsed:         opts.Collapsed,
-		CrossFileHunks:    opts.CrossFileHunks,
-		LineNumbers:       opts.LineNumbers,
-		ShowBlame:         opts.Blame,
-		WordDiff:          opts.WordDiff,
-		TabWidth:          opts.TabWidth,
-		Ref:               opts.ref(),
-		Staged:            opts.Staged,
-		TreeWidthRatio:    opts.TreeWidth,
-		Only:              opts.Only,
-		WorkDir:           workDir,
-		ActiveThemeName:   themes.catalog.ActiveName(opts.Theme),
+		Renderer:            renderer,
+		Store:               store,
+		Highlighter:         hl,
+		StyleResolver:       res,
+		StyleRenderer:       style.NewRenderer(res),
+		SGR:                 style.SGR{},
+		WordDiffer:          worddiff.New(),
+		Overlay:             overlay.NewManager(),
+		Themes:              themes,
+		Blamer:              blamer,
+		LoadUntracked:       untrackedFn,
+		Keymap:              km,
+		CommitLog:           commitLogger,
+		CommitsApplicable:   commitsApplicable(opts, commitLogger),
+		ReloadApplicable:    reloadApplicable(opts),
+		NoColors:            opts.NoColors,
+		NoStatusBar:         opts.NoStatusBar,
+		NoConfirmDiscard:    opts.NoConfirmDiscard,
+		Wrap:                opts.Wrap,
+		Collapsed:           opts.Collapsed,
+		CrossFileHunks:      opts.CrossFileHunks,
+		LineNumbers:         opts.LineNumbers,
+		ShowBlame:           opts.Blame,
+		WordDiff:            opts.WordDiff,
+		TabWidth:            opts.TabWidth,
+		Ref:                 opts.ref(),
+		Staged:              opts.Staged,
+		TreeWidthRatio:      opts.TreeWidth,
+		Only:                opts.Only,
+		WorkDir:             workDir,
+		ActiveThemeName:     themes.catalog.ActiveName(opts.Theme),
+		Description:         description,
+		DescriptionAutoOpen: opts.DescriptionAutoOpen,
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},
