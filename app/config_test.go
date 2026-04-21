@@ -29,6 +29,8 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoConfirmDiscard)
 	assert.False(t, opts.Wrap)
 	assert.False(t, opts.Collapsed)
+	assert.False(t, opts.Compact)
+	assert.Equal(t, 5, opts.CompactContext)
 	assert.False(t, opts.CrossFileHunks)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
@@ -111,6 +113,62 @@ func TestParseArgs_Collapsed(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.Collapsed)
+	})
+}
+
+func TestParseArgs_Compact(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--compact"))
+		require.NoError(t, err)
+		assert.True(t, opts.Compact)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_COMPACT", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.Compact)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\ncompact = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.Compact)
+	})
+}
+
+func TestParseArgs_CompactContext(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, 5, opts.CompactContext)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--compact-context=10"))
+		require.NoError(t, err)
+		assert.Equal(t, 10, opts.CompactContext)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_COMPACT_CONTEXT", "7")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, 7, opts.CompactContext)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\ncompact-context = 3\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, 3, opts.CompactContext)
 	})
 }
 

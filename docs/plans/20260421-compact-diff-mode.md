@@ -245,12 +245,12 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `app/config.go` (add two fields to options struct)
 - Modify: `app/config_test.go` (parse tests)
 
-- [ ] add `Compact bool` with long/ini-name/env tags and description matching `--collapsed` precedent
-- [ ] add `CompactContext int` with long/ini-name/env tags, `default:"5"`, description
-- [ ] add test `TestParseArgs_Compact` following `TestParseArgs_Collapsed` pattern — verify CLI flag, env var, and config file variants all parse correctly
-- [ ] add test `TestParseArgs_CompactContext` verifying default is 5 and custom values parse
-- [ ] verify `TestParseArgs` default-values test (around line 31) includes the new fields with expected defaults
-- [ ] run `go test ./app -run TestParseArgs` — must pass before Task 4
+- [x] add `Compact bool` with long/ini-name/env tags and description matching `--collapsed` precedent
+- [x] add `CompactContext int` with long/ini-name/env tags, `default:"5"`, description
+- [x] add test `TestParseArgs_Compact` following `TestParseArgs_Collapsed` pattern — verify CLI flag, env var, and config file variants all parse correctly
+- [x] add test `TestParseArgs_CompactContext` verifying default is 5 and custom values parse
+- [x] verify `TestParseArgs` default-values test (around line 31) includes the new fields with expected defaults
+- [x] run `go test ./app -run TestParseArgs` — must pass before Task 4
 
 ### Task 4: Add `ActionToggleCompact` to keymap with default binding `C`
 
