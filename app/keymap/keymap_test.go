@@ -42,6 +42,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
 		{"i", ActionCommitInfo},
 		{"R", ActionReload},
+		{"D", ActionDescription},
 	}
 	for _, tt := range tests {
 		assert.Equal(t, tt.action, km.Resolve(tt.key), "key %q should map to %q", tt.key, tt.action)
@@ -219,6 +220,42 @@ func TestHelpSections_customBindingReflected(t *testing.T) {
 
 func TestActionReload_IsValid(t *testing.T) {
 	assert.True(t, IsValidAction(ActionReload))
+}
+
+func TestActionDescription_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionDescription))
+}
+
+func TestDescription_roundTrip(t *testing.T) {
+	km := Default()
+	assert.Equal(t, ActionDescription, km.Resolve("D"))
+
+	sections := km.HelpSections()
+	found := false
+	for _, s := range sections {
+		for _, e := range s.Entries {
+			if e.Action == ActionDescription {
+				assert.NotEmpty(t, e.Description, "description action should have description text")
+				assert.Contains(t, e.Keys, "D")
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "description action should appear in help sections")
+
+	var buf strings.Builder
+	require.NoError(t, km.Dump(&buf))
+	assert.Contains(t, buf.String(), "map D description")
+
+	maps, _, err := parse(strings.NewReader(buf.String()))
+	require.NoError(t, err)
+	var matched bool
+	for _, m := range maps {
+		if m.key == "D" && m.action == ActionDescription {
+			matched = true
+		}
+	}
+	assert.True(t, matched, "parsed dump should contain D → description")
 }
 
 func TestIsValidAction(t *testing.T) {
