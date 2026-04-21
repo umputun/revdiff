@@ -1299,7 +1299,7 @@ func TestModel_CurrentContextLines(t *testing.T) {
 			m := testModel([]string{"a.go"}, nil)
 			m.modes.compact = tc.compact
 			m.modes.compactContext = tc.ctx
-			m.compactApplicable = tc.applicable
+			m.compact.applicable = tc.applicable
 			assert.Equal(t, tc.want, m.currentContextLines())
 		})
 	}
@@ -1318,7 +1318,7 @@ func TestModel_LoadFileDiffPassesContextLines(t *testing.T) {
 	m.diffRenderer = renderer
 	m.modes.compact = true
 	m.modes.compactContext = 7
-	m.compactApplicable = true
+	m.compact.applicable = true
 
 	cmd := m.loadFileDiff("a.go")
 	require.NotNil(t, cmd)
@@ -1339,7 +1339,7 @@ func TestModel_LoadFileDiffPassesZeroWhenNotApplicable(t *testing.T) {
 	m.diffRenderer = renderer
 	m.modes.compact = true
 	m.modes.compactContext = 5
-	m.compactApplicable = false
+	m.compact.applicable = false
 
 	cmd := m.loadFileDiff("a.go")
 	require.NotNil(t, cmd)

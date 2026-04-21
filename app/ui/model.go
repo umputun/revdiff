@@ -323,6 +323,20 @@ type reloadState struct {
 	applicable bool   // false when reload is unavailable (e.g. --stdin)
 }
 
+// compactState holds runtime state for the compact diff mode feature.
+// applicable mirrors ModelConfig.CompactApplicable, copied at construction so
+// the toggle handler can short-circuit without consulting CLI flags: false
+// when the underlying source is context-only (stdin, all-files, standalone
+// FileReader) and shrinking context makes no sense. hint is a transient
+// status-bar message set when the toggle fires in an unavailable mode, so
+// the key press has visible feedback; cleared on the next key press, matching
+// the commits.hint / reload.hint lifecycle. The user-controlled toggle state
+// (on/off, context size) lives on modeState alongside the other view toggles.
+type compactState struct {
+	applicable bool   // true when current mode supports compact diffs
+	hint       string // transient status-bar message; cleared on next key press
+}
+
 // annotationState holds annotation input lifecycle state.
 type annotationState struct {
 	annotating         bool            // true when annotation text input is active
@@ -366,21 +380,11 @@ type Model struct {
 	annot       annotationState   // annotation input lifecycle state
 	commits     commitsState      // eagerly loaded commit log for the commit-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
+	compact     compactState      // applicability + transient hint for compact diff mode
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
 	filesLoadSeq uint64 // bumped before each new file-list load; stale filesLoadedMsg (seq mismatch) is dropped
-
-	// compactApplicable mirrors ModelConfig.CompactApplicable, copied at
-	// construction so the compact-toggle handler can short-circuit without
-	// consulting CLI flags. false when the underlying source is context-only
-	// (stdin, all-files, standalone FileReader) and shrinking context makes
-	// no sense; the C hotkey is a no-op with a transient hint in that case.
-	compactApplicable bool
-	// compactHint is a transient status-bar message set when ActionToggleCompact
-	// fires in a mode where the feature is unavailable. Cleared on the next key
-	// press, matching the commits.hint / reload.hint lifecycle.
-	compactHint string
 
 	blamer        Blamer                   // optional blame provider (nil when git unavailable)
 	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
@@ -629,10 +633,10 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			source:     cls,
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
-		reload:            reloadState{applicable: cfg.ReloadApplicable},
-		compactApplicable: cfg.CompactApplicable,
-		loadUntracked:     cfg.LoadUntracked,
-		activeThemeName:   cfg.ActiveThemeName,
+		reload:          reloadState{applicable: cfg.ReloadApplicable},
+		compact:         compactState{applicable: cfg.CompactApplicable},
+		loadUntracked:   cfg.LoadUntracked,
+		activeThemeName: cfg.ActiveThemeName,
 	}, nil
 }
 
@@ -699,7 +703,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// this point dismisses the last hint before the new action runs.
 	m.commits.hint = ""
 	m.reload.hint = ""
-	m.compactHint = ""
+	m.compact.hint = ""
 
 	// pending-reload intercept: y confirms, any other key cancels
 	if m.reload.pending {
@@ -1001,8 +1005,8 @@ func (m *Model) toggleUntracked() tea.Cmd {
 // standalone FileReader), sets a transient status-bar hint and returns nil —
 // mode stays unchanged and no re-fetch is issued.
 func (m *Model) toggleCompactMode() tea.Cmd {
-	if !m.compactApplicable {
-		m.compactHint = "compact not applicable in this mode"
+	if !m.compact.applicable {
+		m.compact.hint = "compact not applicable in this mode"
 		return nil
 	}
 	m.modes.compact = !m.modes.compact

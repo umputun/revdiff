@@ -106,8 +106,8 @@ func (m Model) transientHint() string {
 		return m.commits.hint
 	case m.reload.hint != "":
 		return m.reload.hint
-	case m.compactHint != "":
-		return m.compactHint
+	case m.compact.hint != "":
+		return m.compact.hint
 	}
 	return ""
 }
@@ -360,7 +360,7 @@ func (m Model) statusModeIcons() string {
 	mutedSeq := string(m.resolver.Color(style.ColorKeyMutedFg))
 	activeSeq := string(m.resolver.Color(style.ColorKeyStatusFg))
 
-	var icons []string
+	icons := make([]string, 0, len(indicators))
 	for _, ind := range indicators {
 		if ind.active {
 			icons = append(icons, activeSeq+ind.icon)

@@ -618,7 +618,7 @@ func TestModel_ToggleCompactMode_FlipsModeAndRefetches(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, nil)
 	m.diffRenderer = renderer
-	m.compactApplicable = true
+	m.compact.applicable = true
 	m.modes.compactContext = 5
 	m.file.name = "a.go"
 
@@ -629,7 +629,7 @@ func TestModel_ToggleCompactMode_FlipsModeAndRefetches(t *testing.T) {
 	require.NotNil(t, cmd, "C should issue a re-fetch command for the current file")
 	cmd()
 	assert.Equal(t, 1, calls, "toggle must trigger exactly one FileDiff call for the current file")
-	assert.Empty(t, model.compactHint, "applicable path must not set a hint")
+	assert.Empty(t, model.compact.hint, "applicable path must not set a hint")
 
 	// pressing C again flips compact off and re-fetches
 	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
@@ -651,7 +651,7 @@ func TestModel_ToggleCompactMode_NoOpWhenNotApplicable(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, nil)
 	m.diffRenderer = renderer
-	m.compactApplicable = false
+	m.compact.applicable = false
 	m.file.name = "a.go"
 	beforeSeq := m.file.loadSeq
 
@@ -661,22 +661,22 @@ func TestModel_ToggleCompactMode_NoOpWhenNotApplicable(t *testing.T) {
 	assert.Nil(t, cmd, "no-op path must not issue a command")
 	assert.Equal(t, beforeSeq, model.file.loadSeq, "no-op path must not bump loadSeq")
 	assert.Equal(t, 0, calls, "no-op path must not invoke FileDiff")
-	assert.Equal(t, "compact not applicable in this mode", model.compactHint, "hint must surface the reason")
+	assert.Equal(t, "compact not applicable in this mode", model.compact.hint, "hint must surface the reason")
 }
 
 func TestModel_CompactHint_ShownInStatusBar(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.compactHint = "test compact hint"
+	m.compact.hint = "test compact hint"
 	assert.Equal(t, "test compact hint", m.statusBarText())
 }
 
 func TestModel_CompactHint_ClearsOnNextKey(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
-	m.compactHint = "some hint"
+	m.compact.hint = "some hint"
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model := result.(Model)
-	assert.Empty(t, model.compactHint, "any key press must clear the compact hint")
+	assert.Empty(t, model.compact.hint, "any key press must clear the compact hint")
 }
 
 func TestModel_ToggleCompactMode_DoesNotReloadFilesOrCommits(t *testing.T) {
@@ -693,7 +693,7 @@ func TestModel_ToggleCompactMode_DoesNotReloadFilesOrCommits(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, nil)
 	m.diffRenderer = renderer
-	m.compactApplicable = true
+	m.compact.applicable = true
 	m.modes.compactContext = 5
 	m.file.name = "a.go"
 	beforeFilesSeq := m.filesLoadSeq
@@ -728,7 +728,7 @@ func TestModel_ToggleCompactMode_CursorResetsAfterReload(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, nil)
 	m.diffRenderer = renderer
-	m.compactApplicable = true
+	m.compact.applicable = true
 	m.modes.compactContext = 5
 	m.file.name = "a.go"
 	m.nav.diffCursor = 999 // pretend cursor was somewhere deep in a full-file view

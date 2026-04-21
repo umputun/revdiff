@@ -394,7 +394,7 @@ func TestModel_CompactModeFromConfig(t *testing.T) {
 		})
 		assert.True(t, m.modes.compact, "compact flag must be copied into modeState")
 		assert.Equal(t, 10, m.modes.compactContext, "compact context must be copied from config")
-		assert.True(t, m.compactApplicable, "applicable flag must be copied into Model")
+		assert.True(t, m.compact.applicable, "applicable flag must be copied into Model")
 		assert.Equal(t, 10, m.currentContextLines(), "helper must return configured context when compact+applicable")
 	})
 
@@ -404,14 +404,14 @@ func TestModel_CompactModeFromConfig(t *testing.T) {
 		})
 		assert.False(t, m.modes.compact, "compact must be off when the feature is not applicable at startup")
 		assert.Equal(t, 7, m.modes.compactContext, "compact context is still carried so toggle can use it if state changes")
-		assert.False(t, m.compactApplicable)
+		assert.False(t, m.compact.applicable)
 		assert.Equal(t, 0, m.currentContextLines(), "non-applicable startup must resolve to full-file context")
 	})
 
 	t.Run("compact disabled by default", func(t *testing.T) {
 		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
 		assert.False(t, m.modes.compact)
-		assert.False(t, m.compactApplicable)
+		assert.False(t, m.compact.applicable)
 		assert.Equal(t, 0, m.modes.compactContext)
 	})
 }

@@ -105,7 +105,7 @@ func (m Model) loadFileDiff(file string) tea.Cmd {
 // is enabled and the feature is applicable to this source; otherwise 0, which
 // the renderers treat as "full-file context" (the revdiff default).
 func (m Model) currentContextLines() int {
-	if m.modes.compact && m.compactApplicable {
+	if m.modes.compact && m.compact.applicable {
 		return m.modes.compactContext
 	}
 	return 0
