@@ -71,6 +71,28 @@ func TestModel_StatusModeIcons(t *testing.T) {
 		assert.Contains(t, icons, "◉")
 		assert.Contains(t, icons, "↩")
 		assert.Contains(t, icons, "≋")
+		assert.Contains(t, icons, "§", "description indicator always present (muted when no description)")
+	})
+
+	t.Run("description icon active when text set", func(t *testing.T) {
+		sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+		m := testModel(nil, nil)
+		res := style.NewResolver(sc)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.description.text = "# hi"
+		icons := m.statusModeIcons()
+		assert.Contains(t, icons, "\033[38;2;32;32;32m§", "active description icon should have status fg")
+	})
+
+	t.Run("description icon inactive when no text", func(t *testing.T) {
+		sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+		m := testModel(nil, nil)
+		res := style.NewResolver(sc)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		icons := m.statusModeIcons()
+		assert.Contains(t, icons, "\033[38;2;108;108;108m§", "inactive description icon should use muted fg")
 	})
 
 	t.Run("with colors active icons use status fg", func(t *testing.T) {
