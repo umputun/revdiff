@@ -31,6 +31,7 @@ const (
 	KindAnnotList        // annotation list popup
 	KindThemeSelect      // theme selector popup
 	KindCommitInfo       // commit info popup
+	KindDescription      // description overlay
 )
 
 // OutcomeKind describes what happened after a key press in an overlay.
@@ -138,11 +139,12 @@ type CommitInfoSpec struct {
 // Manager coordinates overlay lifecycle: open/close, key routing, and render composition.
 // Only one overlay can be active at a time.
 type Manager struct {
-	kind       Kind
-	help       helpOverlay
-	annotLst   annotListOverlay
-	themeSel   themeSelectOverlay
-	commitInfo commitInfoOverlay
+	kind        Kind
+	help        helpOverlay
+	annotLst    annotListOverlay
+	themeSel    themeSelectOverlay
+	commitInfo  commitInfoOverlay
+	description descriptionOverlay
 }
 
 // NewManager creates a Manager with no active overlay.
@@ -187,6 +189,13 @@ func (m *Manager) OpenCommitInfo(spec CommitInfoSpec) {
 	m.commitInfo.open(spec)
 }
 
+// OpenDescription activates the description overlay with the given spec.
+func (m *Manager) OpenDescription(spec DescriptionSpec) {
+	m.Close()
+	m.kind = KindDescription
+	m.description.open(spec)
+}
+
 // HandleKey routes a key press to the active overlay and returns the outcome.
 // auto-closes the overlay for outcomes that imply dismissal.
 // returns Outcome{Kind: OutcomeNone} when no overlay is active.
@@ -203,6 +212,8 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 		out = m.themeSel.handleKey(msg, action)
 	case KindCommitInfo:
 		out = m.commitInfo.handleKey(msg, action)
+	case KindDescription:
+		out = m.description.handleKey(msg, action)
 	default:
 		return Outcome{}
 	}
@@ -231,6 +242,8 @@ func (m *Manager) Compose(base string, ctx RenderCtx) string {
 		fg = m.themeSel.render(ctx, m)
 	case KindCommitInfo:
 		fg = m.commitInfo.render(ctx, m)
+	case KindDescription:
+		fg = m.description.render(ctx, m)
 	}
 	return m.overlayCenter(base, fg, ctx.Width)
 }
