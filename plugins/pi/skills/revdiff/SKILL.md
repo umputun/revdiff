@@ -17,6 +17,8 @@ Use the revdiff pi extension for interactive review sessions.
 - `/revdiff-clear` — clear the stored review state widget/panel
 - `/revdiff-reminders on|off` — enable or disable post-edit review reminders
 
+Pass `--description="…"` or `--description-file=<path>` (plus `--description-auto-open` to open it on startup) to attach a markdown description shown in the `D` overlay — useful when the agent wants to summarize the diff before the user reviews it.
+
 ## Recommended usage
 
 Examples:
@@ -29,6 +31,7 @@ Examples:
 /revdiff --all-files --include src
 /revdiff --all-files --exclude vendor
 /revdiff --only README.md
+/revdiff HEAD~1 --description-file=/tmp/notes.md --description-auto-open
 ```
 
 Behavior:

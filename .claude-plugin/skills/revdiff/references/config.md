@@ -41,6 +41,9 @@ Then uncomment and edit the values you want to change.
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
+| `--description` | | Markdown description shown in the description overlay (press `D` to toggle); useful for agents attaching context to a diff | |
+| `--description-file` | | Path to markdown file shown in the description overlay (mutually exclusive with `--description`) | |
+| `--description-auto-open` | | Open the description overlay on startup when a description is set | `false` |
 | `--history-dir` | `REVDIFF_HISTORY_DIR` | Directory for review history auto-saves | `~/.config/revdiff/history/` |
 | `--keys` | `REVDIFF_KEYS` | Path to keybindings file | `~/.config/revdiff/keybindings` |
 | `--dump-keys` | | Print effective keybindings to stdout and exit | |

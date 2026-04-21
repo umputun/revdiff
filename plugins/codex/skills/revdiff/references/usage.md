@@ -123,6 +123,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | `f` | Toggle filter: all files / annotated only |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle commit info popup (subject + body of commits in the current ref range; git/hg/jj only) |
+| `D` | Toggle description overlay (shows `--description` / `--description-file` content) |
 | `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
@@ -143,6 +144,7 @@ The status bar shows a fixed row of mode indicators on the right side. All ten s
 | `±` | `W` | Intra-line word-diff highlighting |
 | `✓` | `Space` | Reviewed count (increments when a file is marked reviewed) |
 | `∅` | `u` | Untracked files visible in tree |
+| `§` | `D` | Description overlay available (a `--description` / `--description-file` was supplied) |
 
 On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
 

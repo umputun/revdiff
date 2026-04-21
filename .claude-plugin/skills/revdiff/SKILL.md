@@ -95,6 +95,32 @@ The script outputs structured fields:
 - On main + clean → `HEAD~1` (last commit)
 - On feature branch + clean → main branch name (full branch diff)
 
+### Step 1.5: Compose a Description (when you have context)
+
+If you have meaningful context about the diff — you just implemented the code, you're running revdiff as part of a larger workflow, or the user has been discussing the change — write a short markdown description and pass it to the launcher so the reviewer sees it the moment revdiff pops up.
+
+Write 2–6 lines of markdown that cover: what changed, why, and anything specific you want the user to look at. Save it to a temp file and pass both flags on the launcher command line:
+
+```bash
+DESC_FILE="$(mktemp -t revdiff-desc.XXXXXX.md)"
+cat > "$DESC_FILE" <<'MARKDOWN'
+# Added --description overlay
+
+- New `D` hotkey toggles a markdown overlay with the CLI-supplied description.
+- `--description-file` reads from a path to avoid shell-escape pain.
+- `--description-auto-open` opens the overlay on startup (agent mode).
+
+Please check the auto-open timing on narrow terminals.
+MARKDOWN
+# launcher call below will pass: --description-file="$DESC_FILE" --description-auto-open
+```
+
+Skip this step when the user explicitly invoked `revdiff <ref>` without any conversation backstory (you don't know what's in the diff, so inventing context would mislead the reviewer). Also skip for the explanation loop (Step 3.5) — the explanation markdown is already the content being reviewed.
+
+The launcher passes all remaining arguments through to revdiff verbatim, so append `--description-file="$DESC_FILE"` and `--description-auto-open` to the launcher call in Step 2 when you composed a description.
+
+After the review loop exits (Step 7), remove the temp file: `rm -f "$DESC_FILE"`.
+
 ### Step 2: Launch Review
 
 Run the launcher through the override-chain resolver:
