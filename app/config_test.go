@@ -172,6 +172,23 @@ func TestParseArgs_CompactContext(t *testing.T) {
 	})
 }
 
+func TestParseArgs_CompactContextRejectsZero(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "zero", args: []string{"--compact", "--compact-context=0"}},
+		{name: "negative", args: []string{"--compact", "--compact-context=-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseArgs(append(noConfigArgs(t), tt.args...))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "--compact-context must be >= 1")
+		})
+	}
+}
+
 func TestParseArgs_CrossFileHunks(t *testing.T) {
 	t.Run("flag", func(t *testing.T) {
 		opts, err := parseArgs(append(noConfigArgs(t), "--cross-file-hunks"))

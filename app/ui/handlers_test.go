@@ -679,6 +679,34 @@ func TestModel_CompactHint_ClearsOnNextKey(t *testing.T) {
 	assert.Empty(t, model.compact.hint, "any key press must clear the compact hint")
 }
 
+func TestModel_TransientHint_Priority(t *testing.T) {
+	t.Run("commits wins over reload and compact", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.commits.hint = "commits msg"
+		m.reload.hint = "reload msg"
+		m.compact.hint = "compact msg"
+		assert.Equal(t, "commits msg", m.transientHint())
+	})
+
+	t.Run("reload wins over compact when commits empty", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.reload.hint = "reload msg"
+		m.compact.hint = "compact msg"
+		assert.Equal(t, "reload msg", m.transientHint())
+	})
+
+	t.Run("compact when only one set", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.compact.hint = "compact msg"
+		assert.Equal(t, "compact msg", m.transientHint())
+	})
+
+	t.Run("empty when none set", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		assert.Empty(t, m.transientHint())
+	})
+}
+
 func TestModel_ToggleCompactMode_DoesNotReloadFilesOrCommits(t *testing.T) {
 	var fileDiffCalls, changedFilesCalls int
 	renderer := &mocks.RendererMock{

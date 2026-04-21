@@ -22,6 +22,11 @@ const (
 	ChangeContext ChangeType = " "
 	ChangeDivider ChangeType = "~" // separates non-adjacent hunks
 
+	// fullContextSentinel is the numeric threshold that callers use to request
+	// full-file diff context. contextLines <= 0 or >= fullContextSentinel causes
+	// the per-VCS *ContextArg helpers to return the full-file argument form.
+	fullContextSentinel = 1000000
+
 	// fullFileContext is the -U value treated as "give me the full file"; use
 	// gitContextArg / hgContextArg helpers at call sites to choose between full-file
 	// and small-context based on the caller's contextLines value.
@@ -375,8 +380,8 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 // The result is a sequence of DiffLine entries representing unchanged, added, and removed lines
 // interleaved at their correct positions.
 // For binary files, it returns a single placeholder line with size delta information.
-// contextLines controls surrounding context: 0 or >= 1000000 requests full-file context;
-// positive values < 1000000 request that many lines on each side of a hunk.
+// contextLines controls surrounding context: 0 or >= fullContextSentinel requests full-file
+// context; positive values below the sentinel request that many lines on each side of a hunk.
 func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
 	args := g.diffArgs(ref, staged)
 	args = append(args, gitContextArg(contextLines), "--", file)
@@ -402,10 +407,10 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 }
 
 // gitContextArg returns the -U argument for git diff given the caller's requested
-// context size. A non-positive contextLines or one at or above the full-file sentinel
-// (1000000) returns the full-file arg; any other value returns -U<contextLines>.
+// context size. A non-positive contextLines or one at or above fullContextSentinel
+// returns the full-file arg; any other value returns -U<contextLines>.
 func gitContextArg(contextLines int) string {
-	if contextLines <= 0 || contextLines >= 1000000 {
+	if contextLines <= 0 || contextLines >= fullContextSentinel {
 		return fullFileContext
 	}
 	return fmt.Sprintf("-U%d", contextLines)

@@ -694,6 +694,43 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 
 		assert.Nil(t, m.file.lines, "FileModified should not trigger staged retry even with empty diff")
 	})
+
+	t.Run("staged retry propagates current compact context", func(t *testing.T) {
+		entries := []diff.FileEntry{{Path: "newfile.go", Status: diff.FileAdded}}
+		cachedLines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
+		var stagedCtx int
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return entries, nil
+			},
+			FileDiffFunc: func(ref, file string, staged bool, ctx int) ([]diff.DiffLine, error) {
+				if staged {
+					stagedCtx = ctx
+					return cachedLines, nil
+				}
+				return nil, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 3, WorkDir: "testdata"})
+		m.layout.width = 120
+		m.layout.height = 40
+		m.ready = true
+		m.compact.applicable = true
+		m.modes.compact = true
+		m.modes.compactContext = 5
+
+		cmd := m.Init()
+		msg := cmd()
+		result, cmd := m.Update(msg)
+		m = result.(Model)
+		msg2 := cmd()
+		result, _ = m.Update(msg2)
+		m = result.(Model)
+
+		assert.Equal(t, 5, stagedCtx, "staged retry must pass current compact context, not 0")
+		assert.Equal(t, cachedLines, m.file.lines)
+	})
 }
 
 func TestModel_FilesLoadedSingleFile(t *testing.T) {

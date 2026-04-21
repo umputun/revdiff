@@ -35,7 +35,7 @@
 //     blame data, line numbering, TOC, and single-file flag. groups parallel arrays and derived
 //     metadata to make the synchronization invariant explicit
 //   - modeState (m.modes) — user-togglable view modes (wrap, collapsed, lineNumbers, wordDiff,
-//     showBlame, showUntracked)
+//     showBlame, showUntracked, compact, compactContext)
 //   - navigationState (m.nav) — diff cursor position and pending hunk jump
 //   - searchState (m.search) — search input, term, matches, cursor, match set
 //   - annotationState (m.annot) — annotation input lifecycle (annotating, file-level, cursor state)

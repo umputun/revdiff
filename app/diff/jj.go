@@ -139,8 +139,8 @@ func (j *Jj) expandRename(target string) (oldPath, newPath string, ok bool) {
 
 // FileDiff returns the diff view for a single file.
 // The staged flag is ignored — Jujutsu has no staging area. contextLines controls
-// surrounding context: 0 or >= 1000000 requests full-file context; positive values
-// < 1000000 request that many lines on each side of a hunk.
+// surrounding context: 0 or >= fullContextSentinel requests full-file context;
+// positive values below the sentinel request that many lines on each side of a hunk.
 func (j *Jj) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, error) {
 	rangeArgs := j.diffRangeFlags(ref)
 	args := make([]string, 0, 5+len(rangeArgs))
@@ -160,11 +160,11 @@ func (j *Jj) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, e
 }
 
 // jjContextArg returns the --context argument for jj diff given the caller's
-// requested context size. A non-positive contextLines or one at or above the
-// full-file sentinel (1000000) returns the full-file arg; any other value
-// returns --context=<contextLines>.
+// requested context size. A non-positive contextLines or one at or above
+// fullContextSentinel returns the full-file arg; any other value returns
+// --context=<contextLines>.
 func jjContextArg(contextLines int) string {
-	if contextLines <= 0 || contextLines >= 1000000 {
+	if contextLines <= 0 || contextLines >= fullContextSentinel {
 		return jjFullContext
 	}
 	return fmt.Sprintf("--context=%d", contextLines)

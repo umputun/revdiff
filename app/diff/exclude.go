@@ -6,9 +6,10 @@ import "fmt"
 
 // Renderer is the local interface mirroring ui.Renderer, exported for moq generation.
 // contextLines controls how many lines of context surround each hunk in the diff output.
-// 0 or values >= 1000000 request full-file context (the revdiff default); positive values
-// < 1000000 request that many lines on each side. Context-only sources (e.g. FileReader,
-// DirectoryReader, StdinReader) ignore this parameter since they have no hunks.
+// 0 or values >= fullContextSentinel request full-file context (the revdiff default);
+// positive values below the sentinel request that many lines on each side. Context-only
+// sources (e.g. FileReader, DirectoryReader, StdinReader) ignore this parameter since
+// they have no hunks.
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
 	FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error)
