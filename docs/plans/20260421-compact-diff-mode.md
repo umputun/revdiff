@@ -339,17 +339,17 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `plugins/codex/skills/revdiff/references/usage.md` (byte-identical except source header)
 - Modify: `docs/ARCHITECTURE.md` (add one line about the new `compact` mode on `modeState`, alongside the existing mode documentation)
 
-- [ ] add `--compact` and `--compact-context` rows to README.md Options table (near `--collapsed`)
-- [ ] add `C` row to README.md Key Bindings table (near `v` collapsed toggle) with description "toggle compact diff view (small context around changes)"
-- [ ] mirror the README changes in `site/docs.html` (find the equivalent tables)
-- [ ] decide whether to mention in `site/index.html` features grid — skip unless it's prominent; this is a refinement, not a flagship feature
-- [ ] mirror the Options table changes in `.claude-plugin/skills/revdiff/references/config.md`
-- [ ] mirror the Key Bindings changes in `.claude-plugin/skills/revdiff/references/usage.md`
-- [ ] copy the updated `.claude-plugin/` reference files to `plugins/codex/skills/revdiff/references/` (preserving the source-tracking header comment at the top of each file; per CLAUDE.md they must stay byte-identical except the header)
-- [ ] verify doc sync by diffing the .claude-plugin vs plugins/codex copies — only the source header line should differ
-- [ ] add one line to `docs/ARCHITECTURE.md` about the `compact` field on `modeState` in the section that documents mode flags (mirror how `collapsed`, `wrap`, etc. are mentioned)
-- [ ] no tests for this task (documentation only)
-- [ ] run `make lint` to confirm no markdown/link issues flagged
+- [x] add `--compact` and `--compact-context` rows to README.md Options table (near `--collapsed`)
+- [x] add `C` row to README.md Key Bindings table (near `v` collapsed toggle) with description "toggle compact diff view (small context around changes)"
+- [x] mirror the README changes in `site/docs.html` (find the equivalent tables)
+- [x] decide whether to mention in `site/index.html` features grid — skip unless it's prominent; this is a refinement, not a flagship feature
+- [x] mirror the Options table changes in `.claude-plugin/skills/revdiff/references/config.md`
+- [x] mirror the Key Bindings changes in `.claude-plugin/skills/revdiff/references/usage.md`
+- [x] copy the updated `.claude-plugin/` reference files to `plugins/codex/skills/revdiff/references/` (preserving the source-tracking header comment at the top of each file; per CLAUDE.md they must stay byte-identical except the header)
+- [x] verify doc sync by diffing the .claude-plugin vs plugins/codex copies — only the source header line should differ
+- [x] add one line to `docs/ARCHITECTURE.md` about the `compact` field on `modeState` in the section that documents mode flags (mirror how `collapsed`, `wrap`, etc. are mentioned)
+- [x] no tests for this task (documentation only)
+- [x] run `make lint` to confirm no markdown/link issues flagged
 
 ### Task 9: Verify acceptance criteria
 

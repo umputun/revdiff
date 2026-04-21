@@ -330,6 +330,8 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--no-status-bar</code></td><td>Hide the status bar</td><td><code>false</code></td></tr>
                 <tr><td><code>--wrap</code></td><td>Enable line wrapping</td><td><code>false</code></td></tr>
                 <tr><td><code>--collapsed</code></td><td>Start in collapsed diff mode</td><td><code>false</code></td></tr>
+                <tr><td><code>--compact</code></td><td>Start in compact diff mode (small context around changes)</td><td><code>false</code></td></tr>
+                <tr><td><code>--compact-context</code></td><td>Number of context lines around changes when in compact mode</td><td><code>5</code></td></tr>
                 <tr><td><code>--cross-file-hunks</code></td><td>Allow <code>[</code> and <code>]</code> to continue into adjacent files</td><td><code>false</code></td></tr>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
                 <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
@@ -468,6 +470,7 @@ color-border = #6272a4
             <thead><tr><th>Key</th><th>Action</th></tr></thead>
             <tbody>
                 <tr><td><code>v</code></td><td>Toggle collapsed diff mode</td></tr>
+                <tr><td><code>C</code></td><td>Toggle compact diff view (small context around changes)</td></tr>
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
@@ -485,11 +488,12 @@ color-border = #6272a4
         </table>
 
         <h2 id="status-bar-icons">Status bar icons</h2>
-        <p>The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered &mdash; active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.</p>
+        <p>The status bar shows a fixed row of mode indicators on the right side. All slots are always rendered &mdash; active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.</p>
         <table>
             <thead><tr><th>Icon</th><th>Toggle</th><th>Meaning</th></tr></thead>
             <tbody>
                 <tr><td><code>▼</code></td><td><code>v</code></td><td>Collapsed diff mode</td></tr>
+                <tr><td><code>⊂</code></td><td><code>C</code></td><td>Compact diff mode (small context around changes)</td></tr>
                 <tr><td><code>◉</code></td><td><code>f</code></td><td>Filter: annotated files only</td></tr>
                 <tr><td><code>↩</code></td><td><code>w</code></td><td>Word wrap mode</td></tr>
                 <tr><td><code>≋</code></td><td><code>/</code></td><td>Search active</td></tr>
@@ -518,7 +522,7 @@ unmap q</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>commit_info</code>, <code>reload</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>commit_info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <!-- claude code plugin -->

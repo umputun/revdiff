@@ -25,6 +25,8 @@ Then uncomment and edit the values you want to change.
 | `--no-status-bar` | `REVDIFF_NO_STATUS_BAR` | Hide the status bar | `false` |
 | `--wrap` | `REVDIFF_WRAP` | Enable line wrapping in diff view | `false` |
 | `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
+| `--compact` | `REVDIFF_COMPACT` | Start in compact diff mode (small context around changes) | `false` |
+| `--compact-context` | `REVDIFF_COMPACT_CONTEXT` | Number of context lines around changes when in compact mode | `5` |
 | `--line-numbers` | `REVDIFF_LINE_NUMBERS` | Show line numbers in diff gutter | `false` |
 | `--blame` | `REVDIFF_BLAME` | Show blame gutter on startup | `false` |
 | `--word-diff` | `REVDIFF_WORD_DIFF` | Highlight intra-line word-level changes in paired add/remove lines | `false` |
@@ -132,6 +134,6 @@ unmap q
 map ctrl+d half_page_down
 ```
 
-Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `commit_info`, `quit`, `discard_quit`, `help`, `dismiss`
+Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `commit_info`, `quit`, `discard_quit`, `help`, `dismiss`
 
 Modal keys (annotation input, search input, confirm discard) are not remappable.

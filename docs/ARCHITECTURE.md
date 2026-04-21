@@ -118,7 +118,7 @@ Each source file has a matching `_test.go`.
 | `modelConfigState` (`m.cfg`) | immutable session config | `ref`, `staged`, `only`, `noColors`, `tabSpaces`, etc. |
 | `layoutState` (`m.layout`) | viewport and pane geometry | `viewport`, `focus`, `treeHidden`, `width`, `height`, `scrollX` |
 | `loadedFileState` (`m.file`) | current file's loaded state | `lines`, `highlighted`, `intraRanges`, `blameData`, `mdTOC`, `singleFile` |
-| `modeState` (`m.modes`) | user-togglable view modes | `wrap`, `collapsed`, `lineNumbers`, `wordDiff`, `showBlame` |
+| `modeState` (`m.modes`) | user-togglable view modes | `wrap`, `collapsed`, `compact`, `compactContext`, `lineNumbers`, `wordDiff`, `showBlame` |
 | `navigationState` (`m.nav`) | cursor position | `diffCursor`, `pendingHunkJump` |
 | `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet` |
 | `annotationState` (`m.annot`) | annotation input lifecycle | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input` |

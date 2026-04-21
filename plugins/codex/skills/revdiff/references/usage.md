@@ -113,6 +113,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | Key | Action |
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
+| `C` | Toggle compact diff view (small context around changes, re-fetches current file) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
@@ -129,11 +130,12 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 
 ## Status Bar Icons
 
-The status bar shows a fixed row of mode indicators on the right side. All ten slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.
+The status bar shows a fixed row of mode indicators on the right side. All slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on.
 
 | Icon | Toggle | Meaning |
 |------|--------|---------|
 | `▼` | `v` | Collapsed diff mode |
+| `⊂` | `C` | Compact diff mode (small context around changes) |
 | `◉` | `f` | Filter: annotated files only |
 | `↩` | `w` | Word wrap mode |
 | `≋` | `/` | Search active |
