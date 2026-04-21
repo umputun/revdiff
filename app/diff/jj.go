@@ -10,7 +10,8 @@ import (
 )
 
 // jjFullContext is jj's equivalent of git's -U1000000 — request full-file diff context.
-// jj only accepts --context (not -U).
+// jj only accepts --context (not -U). Use jjContextArg at call sites to choose
+// between full-file and small-context based on the caller's contextLines value.
 const jjFullContext = "--context=1000000"
 
 // jjCommitLogTemplate is the jj log --template expression used by (*Jj).CommitLog.
@@ -140,10 +141,10 @@ func (j *Jj) expandRename(target string) (oldPath, newPath string, ok bool) {
 // The staged flag is ignored — Jujutsu has no staging area. contextLines controls
 // surrounding context: 0 or >= 1000000 requests full-file context; positive values
 // < 1000000 request that many lines on each side of a hunk.
-func (j *Jj) FileDiff(ref, file string, _ bool, _ int) ([]DiffLine, error) {
+func (j *Jj) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, error) {
 	rangeArgs := j.diffRangeFlags(ref)
 	args := make([]string, 0, 5+len(rangeArgs))
-	args = append(args, "diff", "--git", jjFullContext)
+	args = append(args, "diff", "--git", jjContextArg(contextLines))
 	args = append(args, rangeArgs...)
 	args = append(args, "--", file)
 
@@ -156,6 +157,17 @@ func (j *Jj) FileDiff(ref, file string, _ bool, _ int) ([]DiffLine, error) {
 	// marker. Detect and rewrite so parseUnifiedDiff produces the binary placeholder.
 	normalized := j.synthesizeBinaryDiff(out)
 	return parseUnifiedDiff(normalized)
+}
+
+// jjContextArg returns the --context argument for jj diff given the caller's
+// requested context size. A non-positive contextLines or one at or above the
+// full-file sentinel (1000000) returns the full-file arg; any other value
+// returns --context=<contextLines>.
+func jjContextArg(contextLines int) string {
+	if contextLines <= 0 || contextLines >= 1000000 {
+		return jjFullContext
+	}
+	return fmt.Sprintf("--context=%d", contextLines)
 }
 
 // diffRangeFlags builds the --from/--to arguments from a git-style ref.

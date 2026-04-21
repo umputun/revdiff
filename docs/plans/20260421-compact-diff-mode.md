@@ -227,17 +227,17 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `app/diff/hg_test.go`
 - Modify: `app/diff/jj_test.go`
 
-- [ ] in `diff.go`: add helper `gitContextArg(contextLines int) string` returning `"-U1000000"` if `contextLines <= 0 || contextLines >= 1000000`, else `fmt.Sprintf("-U%d", contextLines)`. Use it in `Git.FileDiff` instead of hardcoded `fullFileContext`
-- [ ] in `hg.go`: add helper `hgContextArg(contextLines int) string` with identical semantics (also produces `"-U<N>"`). Use it in `Hg.FileDiff`
-- [ ] in `jj.go`: add helper `jjContextArg(contextLines int) string` producing `"--context=1000000"` for full, else `fmt.Sprintf("--context=%d", contextLines)`. Use it in `Jj.FileDiff`
-- [ ] keep the existing `fullFileContext` / `jjFullContext` constants but update their doc comments to "full-file sentinel value; use the per-renderer *ContextArg helpers for call-site context selection"
-- [ ] write table-driven tests for `gitContextArg`: input 0 → `-U1000000`, 5 → `-U5`, 1000000 → `-U1000000`, 1000001 → `-U1000000`, negative → `-U1000000` (defensive)
-- [ ] write analogous tests for `hgContextArg`
-- [ ] write analogous tests for `jjContextArg` (note `--context=` form)
-- [ ] in `diff_test.go`: add a test case for `Git.FileDiff` that creates a real tiny git repo (following existing pattern in this file) with a small change, invokes `FileDiff` with `contextLines=2`, and asserts the returned `[]DiffLine` contains only changed lines + 2 context lines per side (i.e. verifies end-to-end that the `-U2` arg was actually passed to git). Keeps fidelity high — no exec-stub gymnastics needed
-- [ ] add analogous end-to-end test in `hg_test.go` (follows the existing hg_e2e test pattern)
-- [ ] add analogous end-to-end test in `jj_test.go`
-- [ ] run `go test ./app/diff/...` — must pass before Task 3
+- [x] in `diff.go`: add helper `gitContextArg(contextLines int) string` returning `"-U1000000"` if `contextLines <= 0 || contextLines >= 1000000`, else `fmt.Sprintf("-U%d", contextLines)`. Use it in `Git.FileDiff` instead of hardcoded `fullFileContext`
+- [x] in `hg.go`: add helper `hgContextArg(contextLines int) string` with identical semantics (also produces `"-U<N>"`). Use it in `Hg.FileDiff`
+- [x] in `jj.go`: add helper `jjContextArg(contextLines int) string` producing `"--context=1000000"` for full, else `fmt.Sprintf("--context=%d", contextLines)`. Use it in `Jj.FileDiff`
+- [x] keep the existing `fullFileContext` / `jjFullContext` constants but update their doc comments to "full-file sentinel value; use the per-renderer *ContextArg helpers for call-site context selection"
+- [x] write table-driven tests for `gitContextArg`: input 0 → `-U1000000`, 5 → `-U5`, 1000000 → `-U1000000`, 1000001 → `-U1000000`, negative → `-U1000000` (defensive)
+- [x] write analogous tests for `hgContextArg`
+- [x] write analogous tests for `jjContextArg` (note `--context=` form)
+- [x] in `diff_test.go`: add a test case for `Git.FileDiff` that creates a real tiny git repo (following existing pattern in this file) with a small change, invokes `FileDiff` with `contextLines=2`, and asserts the returned `[]DiffLine` contains only changed lines + 2 context lines per side (i.e. verifies end-to-end that the `-U2` arg was actually passed to git). Keeps fidelity high — no exec-stub gymnastics needed
+- [x] add analogous end-to-end test in `hg_test.go` (follows the existing hg_e2e test pattern)
+- [x] add analogous end-to-end test in `jj_test.go`
+- [x] run `go test ./app/diff/...` — must pass before Task 3
 
 ### Task 3: Add `Compact` and `CompactContext` config fields
 

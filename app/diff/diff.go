@@ -22,7 +22,10 @@ const (
 	ChangeContext ChangeType = " "
 	ChangeDivider ChangeType = "~" // separates non-adjacent hunks
 
-	fullFileContext = "-U1000000" // request full file as diff context
+	// fullFileContext is the -U value treated as "give me the full file"; use
+	// gitContextArg / hgContextArg helpers at call sites to choose between full-file
+	// and small-context based on the caller's contextLines value.
+	fullFileContext = "-U1000000"
 
 	// MaxLineLength is the maximum line length (in bytes) that scanners will accept.
 	// used by parseUnifiedDiff, readReaderAsContext, and parseBlame.
@@ -374,9 +377,9 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 // For binary files, it returns a single placeholder line with size delta information.
 // contextLines controls surrounding context: 0 or >= 1000000 requests full-file context;
 // positive values < 1000000 request that many lines on each side of a hunk.
-func (g *Git) FileDiff(ref, file string, staged bool, _ int) ([]DiffLine, error) {
+func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, fullFileContext, "--", file) // large context to get full file
+	args = append(args, gitContextArg(contextLines), "--", file)
 
 	out, err := g.runGit(args...)
 	if err != nil {
@@ -396,6 +399,16 @@ func (g *Git) FileDiff(ref, file string, staged bool, _ int) ([]DiffLine, error)
 	}
 
 	return lines, nil
+}
+
+// gitContextArg returns the -U argument for git diff given the caller's requested
+// context size. A non-positive contextLines or one at or above the full-file sentinel
+// (1000000) returns the full-file arg; any other value returns -U<contextLines>.
+func gitContextArg(contextLines int) string {
+	if contextLines <= 0 || contextLines >= 1000000 {
+		return fullFileContext
+	}
+	return fmt.Sprintf("-U%d", contextLines)
 }
 
 // diffArgs builds the base git diff arguments for the given ref and staged flag.

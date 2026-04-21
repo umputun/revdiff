@@ -147,12 +147,12 @@ func (h *Hg) revFlag(flag, ref string) []string {
 // staged flag is ignored (hg has no staging area). contextLines controls surrounding
 // context: 0 or >= 1000000 requests full-file context; positive values < 1000000
 // request that many lines on each side of a hunk.
-func (h *Hg) FileDiff(ref, file string, _ bool, _ int) ([]DiffLine, error) {
+func (h *Hg) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, error) {
 	rArgs := h.revFlag("-r", ref)
 	args := make([]string, 0, 5+len(rArgs))
 	args = append(args, "diff", "--git", "--color=never")
 	args = append(args, rArgs...)
-	args = append(args, fullFileContext, "--", file)
+	args = append(args, hgContextArg(contextLines), "--", file)
 
 	out, err := h.runHg(args...)
 	if err != nil {
@@ -160,6 +160,16 @@ func (h *Hg) FileDiff(ref, file string, _ bool, _ int) ([]DiffLine, error) {
 	}
 
 	return parseUnifiedDiff(out)
+}
+
+// hgContextArg returns the -U argument for hg diff given the caller's requested
+// context size. A non-positive contextLines or one at or above the full-file sentinel
+// (1000000) returns the full-file arg; any other value returns -U<contextLines>.
+func hgContextArg(contextLines int) string {
+	if contextLines <= 0 || contextLines >= 1000000 {
+		return fullFileContext
+	}
+	return fmt.Sprintf("-U%d", contextLines)
 }
 
 // translateRef converts git-style refs to mercurial revset syntax.
