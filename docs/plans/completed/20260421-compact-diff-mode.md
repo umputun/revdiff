@@ -368,8 +368,8 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 
 ### Task 10: [Final] Update project documentation and move plan
 
-- [ ] update CLAUDE.md with any new patterns discovered (likely: mention compact mode alongside the existing collapsed/wrap toggle pattern in the project structure section)
-- [ ] move this plan to `docs/plans/completed/` — `mv docs/plans/20260421-compact-diff-mode.md docs/plans/completed/`
+- [x] update CLAUDE.md with any new patterns discovered (likely: mention compact mode alongside the existing collapsed/wrap toggle pattern in the project structure section)
+- [x] move this plan to `docs/plans/completed/` — `mv docs/plans/20260421-compact-diff-mode.md docs/plans/completed/`
 
 ## Post-Completion
 
