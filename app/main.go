@@ -156,11 +156,14 @@ func run(opts options) error {
 		CommitLog:         commitLogger,
 		CommitsApplicable: commitsApplicable(opts, commitLogger),
 		ReloadApplicable:  reloadApplicable(opts),
+		CompactApplicable: compactApplicable(opts, renderer),
 		NoColors:          opts.NoColors,
 		NoStatusBar:       opts.NoStatusBar,
 		NoConfirmDiscard:  opts.NoConfirmDiscard,
 		Wrap:              opts.Wrap,
 		Collapsed:         opts.Collapsed,
+		Compact:           opts.Compact,
+		CompactContext:    opts.CompactContext,
 		CrossFileHunks:    opts.CrossFileHunks,
 		LineNumbers:       opts.LineNumbers,
 		ShowBlame:         opts.Blame,
@@ -239,4 +242,21 @@ func commitsApplicable(opts options, cl diff.CommitLogger) bool {
 		return false
 	}
 	return opts.ref() != ""
+}
+
+// compactApplicable returns true when the current invocation can shrink the
+// VCS diff via the compact toggle. false for stdin (no VCS), all-files (no
+// hunks to contextualize), and standalone file review via FileReader (pure
+// context-only source with no underlying VCS). All other renderer shapes —
+// *Git / *Hg / *Jj, with or without Fallback / Include / Exclude wrappers —
+// qualify because the wrapper chain delegates FileDiff straight through to
+// a VCS that honors contextLines.
+func compactApplicable(opts options, r ui.Renderer) bool {
+	if opts.Stdin || opts.AllFiles {
+		return false
+	}
+	if _, ok := r.(*diff.FileReader); ok {
+		return false
+	}
+	return true
 }

@@ -301,18 +301,18 @@ Task 1 already added the `contextLines` parameter to the three VCS implementatio
 - Modify: `app/renderer_setup.go` (if capability detection needs to peek at the renderer constructed there; otherwise not touched)
 - Modify: `app/renderer_setup_test.go` or `app/main_test.go`
 
-- [ ] add `compactApplicable(opts options, r diff.Renderer) bool` function following `commitsApplicable()` pattern (main.go:234)
-- [ ] definition (commit to type-assertion — same approach as `CommitLogger`, no new capability interface):
+- [x] add `compactApplicable(opts options, r diff.Renderer) bool` function following `commitsApplicable()` pattern (main.go:234)
+- [x] definition (commit to type-assertion — same approach as `CommitLogger`, no new capability interface):
   - return `false` when `opts.Stdin` (stream-only source, no changes to contextualize)
   - return `false` when `opts.AllFiles` (all-files browse mode reads files as all-context, no diffs)
   - return `false` when `r` (or the innermost renderer it wraps) type-asserts to `*diff.StdinReader`, `*diff.DirectoryReader`, or the pure-FileReader branch of Fallback (follow the existing pattern for unwrapping Include/Exclude/Fallback to reach the underlying VCS — mirror how `setupVCSRenderer` detects VCS capability)
   - return `true` when the underlying source is a VCS type (Git, Hg, Jj), including when wrapped in ExcludeFilter/IncludeFilter/FallbackRenderer
-- [ ] wire the three config fields into `ModelConfig` construction (main.go around line 157, alongside `Collapsed: opts.Collapsed` at line 163):
+- [x] wire the three config fields into `ModelConfig` construction (main.go around line 157, alongside `Collapsed: opts.Collapsed` at line 163):
   - `Compact: opts.Compact`
   - `CompactContext: opts.CompactContext`
   - `CompactApplicable: compactApplicable(opts, renderer)`
-- [ ] write tests for `compactApplicable` covering: plain git ref → true, --stdin → false, --all-files → false, `--only path/to/file` without VCS → false (FileReader / pure-fallback path), `--only` in a VCS repo → true (Fallback wrapping VCS reaches a VCS inner), ExcludeFilter wrapping Git → true, IncludeFilter wrapping Git → true, hg → true, jj → true
-- [ ] run `go test ./app/...` — must pass before Task 7
+- [x] write tests for `compactApplicable` covering: plain git ref → true, --stdin → false, --all-files → false, `--only path/to/file` without VCS → false (FileReader / pure-fallback path), `--only` in a VCS repo → true (Fallback wrapping VCS reaches a VCS inner), ExcludeFilter wrapping Git → true, IncludeFilter wrapping Git → true, hg → true, jj → true
+- [x] run `go test ./app/...` — must pass before Task 7
 
 ### Task 7: Add `⊂` glyph to status bar mode icons
 

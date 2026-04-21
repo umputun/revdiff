@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui"
 	"github.com/umputun/revdiff/app/ui/mocks"
 )
 
@@ -253,6 +254,39 @@ func TestCommitsApplicable(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, commitsApplicable(tc.opts, tc.cl))
+		})
+	}
+}
+
+func TestCompactApplicable(t *testing.T) {
+	dir := t.TempDir()
+	g := diff.NewGit(dir)
+	h := diff.NewHg(dir)
+	j := diff.NewJj(dir)
+	fr := diff.NewFileReader([]string{"file.md"}, dir)
+	fallback := diff.NewFallbackRenderer(g, []string{"file.md"}, dir)
+	incl := diff.NewIncludeFilter(g, []string{"src"})
+	excl := diff.NewExcludeFilter(g, []string{"vendor"})
+
+	tests := []struct {
+		name     string
+		opts     options
+		renderer ui.Renderer
+		want     bool
+	}{
+		{name: "plain git ref", opts: options{}, renderer: g, want: true},
+		{name: "plain hg", opts: options{}, renderer: h, want: true},
+		{name: "plain jj", opts: options{}, renderer: j, want: true},
+		{name: "stdin disqualifies", opts: options{Stdin: true}, renderer: g, want: false},
+		{name: "all-files disqualifies", opts: options{AllFiles: true}, renderer: g, want: false},
+		{name: "only without VCS (FileReader)", opts: options{Only: []string{"file.md"}}, renderer: fr, want: false},
+		{name: "only in VCS repo (Fallback wrapping Git)", opts: options{Only: []string{"file.md"}}, renderer: fallback, want: true},
+		{name: "include wrapping git", opts: options{Include: []string{"src"}}, renderer: incl, want: true},
+		{name: "exclude wrapping git", opts: options{Exclude: []string{"vendor"}}, renderer: excl, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, compactApplicable(tc.opts, tc.renderer))
 		})
 	}
 }
