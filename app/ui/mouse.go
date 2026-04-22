@@ -116,9 +116,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		switch zone {
 		case hitTree:
-			return m.clickTree(msg.X, msg.Y)
+			return m.clickTree(msg.Y)
 		case hitDiff:
-			return m.clickDiff(msg.X, msg.Y)
+			return m.clickDiff(msg.Y)
 		case hitNone, hitStatus, hitHeader:
 			return m, nil
 		}
@@ -153,13 +153,11 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 			m.moveDiffCursorUpBy(-delta)
 		}
 	case hitTree:
-		step := delta
-		if step < 0 {
-			step = -step
-		}
 		motion := sidepane.MotionPageDown
+		step := delta
 		if delta < 0 {
 			motion = sidepane.MotionPageUp
+			step = -delta
 		}
 		if m.file.mdTOC != nil {
 			m.file.mdTOC.Move(motion, step)
@@ -183,7 +181,7 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 // load is triggered via loadSelectedIfChanged; on a directory row or an
 // out-of-range row the click just moves the cursor with no load (mirrors
 // j-landing semantics).
-func (m Model) clickTree(_, y int) (tea.Model, tea.Cmd) {
+func (m Model) clickTree(y int) (tea.Model, tea.Cmd) {
 	row := y - m.treeTopRow()
 	m.layout.focus = paneTree
 	if m.file.mdTOC != nil {
@@ -207,7 +205,7 @@ func (m Model) clickTree(_, y int) (tea.Model, tea.Cmd) {
 // under the pointer. when the click lands on an injected annotation
 // sub-row, cursorOnAnnotation is set so subsequent navigation treats the
 // cursor as being on the annotation rather than the diff line above it.
-func (m Model) clickDiff(_, y int) (tea.Model, tea.Cmd) {
+func (m Model) clickDiff(y int) (tea.Model, tea.Cmd) {
 	if m.file.name == "" {
 		return m, nil // no file loaded — nothing to focus or point at
 	}
