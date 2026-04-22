@@ -163,6 +163,7 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 		case delta < 0:
 			m.moveDiffCursorUpBy(-delta)
 		}
+		m.syncTOCActiveSection()
 	case hitTree:
 		motion := sidepane.MotionPageDown
 		step := delta
@@ -226,5 +227,6 @@ func (m Model) clickDiff(y int) (tea.Model, tea.Cmd) {
 	m.nav.diffCursor = idx
 	m.annot.cursorOnAnnotation = onAnnot
 	m.syncViewportToCursor()
+	m.syncTOCActiveSection()
 	return m, nil
 }

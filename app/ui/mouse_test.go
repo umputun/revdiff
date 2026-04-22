@@ -286,6 +286,30 @@ func TestModel_HandleMouse_LeftClickInDiff(t *testing.T) {
 	assert.False(t, model.annot.cursorOnAnnotation, "plain diff click must not set cursorOnAnnotation")
 }
 
+func TestModel_HandleMouse_LeftClickInDiffWithScrolledViewport(t *testing.T) {
+	// verifies the full clickDiff formula: row = (y - diffTopRow()) + YOffset.
+	// plan requires a YOffset > 0 case to guard against regressions in the
+	// scroll-adjusted click mapping; without this, clicks on a scrolled
+	// viewport could silently drop the YOffset term and land on the wrong
+	// diff line.
+	lines := make([]diff.DiffLine, 60)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.lines = lines
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(5)
+	m.layout.focus = paneTree
+
+	// click at y=12 with diffTopRow=2, YOffset=5 → row 15
+	result, _ := m.Update(leftPressAt(60, 12))
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.layout.focus)
+	assert.Equal(t, 15, model.nav.diffCursor, "click in scrolled viewport must add YOffset to logical row")
+	assert.False(t, model.annot.cursorOnAnnotation)
+}
+
 func TestModel_HandleMouse_LeftClickInDiffNoopWhenNoFileLoaded(t *testing.T) {
 	// mirrors the togglePane invariant: focus must not switch to paneDiff
 	// when no file is loaded (e.g. clicks received before filesLoadedMsg
@@ -626,4 +650,70 @@ func TestModel_HandleMouse_LeftClickInTOCJumpsViewport(t *testing.T) {
 	result, _ := m.Update(leftPressAt(5, 2))
 	model := result.(Model)
 	assert.Equal(t, paneTree, model.layout.focus, "TOC click must focus tree pane slot")
+}
+
+func TestModel_HandleMouse_WheelInDiffSyncsTOCActiveSection(t *testing.T) {
+	// mirrors the keyboard-navigation TOC-sync guarantee (diffnav.go:464):
+	// moving the diff cursor via wheel must keep mdTOC.activeSection aligned
+	// with the new cursor position, otherwise switching focus back to the TOC
+	// highlights the stale section.
+	files := []string{"README.md"}
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "body", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "body", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "body", ChangeType: diff.ChangeContext},
+	}
+	m := mouseTestModel(t, files, map[string][]diff.DiffLine{"README.md": lines})
+	m.file.lines = lines
+	m.file.singleFile = true
+	m.file.mdTOC = sidepane.ParseTOC(lines, "README.md")
+	require.NotNil(t, m.file.mdTOC)
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+
+	// wheel-down in diff pane (x=60 lands past treeWidth, y=5 > diffTopRow)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 5, false))
+	model := result.(Model)
+
+	// after wheel, diffCursor advanced; TOC active-section must reflect it
+	require.Positive(t, model.nav.diffCursor, "wheel-down must advance diffCursor")
+	model.file.mdTOC.SyncCursorToActiveSection()
+	idx, ok := model.file.mdTOC.CurrentLineIdx()
+	assert.True(t, ok, "TOC active section must be set after wheel in diff")
+	// cursor moved past line 2 (## Second at lineIdx=2); active section must be Second or Third
+	assert.GreaterOrEqual(t, idx, 2, "TOC active section must match diff cursor region after wheel")
+}
+
+func TestModel_HandleMouse_ClickInDiffSyncsTOCActiveSection(t *testing.T) {
+	// same guarantee as the wheel case, for click-to-set-cursor.
+	files := []string{"README.md"}
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "body", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "body", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "body", ChangeType: diff.ChangeContext},
+	}
+	m := mouseTestModel(t, files, map[string][]diff.DiffLine{"README.md": lines})
+	m.file.lines = lines
+	m.file.singleFile = true
+	m.file.mdTOC = sidepane.ParseTOC(lines, "README.md")
+	require.NotNil(t, m.file.mdTOC)
+	m.layout.focus = paneTree
+	m.nav.diffCursor = 0
+
+	// click at y=6 with diffTopRow=2, YOffset=0 → row 4 (### Third)
+	result, _ := m.Update(leftPressAt(60, 6))
+	model := result.(Model)
+
+	assert.Equal(t, paneDiff, model.layout.focus)
+	assert.Equal(t, 4, model.nav.diffCursor, "click must land on diff line 4 (### Third)")
+	model.file.mdTOC.SyncCursorToActiveSection()
+	idx, ok := model.file.mdTOC.CurrentLineIdx()
+	assert.True(t, ok, "TOC active section must be set after click in diff")
+	assert.Equal(t, 4, idx, "TOC active section must match clicked diff line (Third section at lineIdx=4)")
 }
