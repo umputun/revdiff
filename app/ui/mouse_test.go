@@ -277,6 +277,23 @@ func TestModel_HandleMouse_LeftClickInDiff(t *testing.T) {
 	assert.False(t, model.annot.cursorOnAnnotation, "plain diff click must not set cursorOnAnnotation")
 }
 
+func TestModel_HandleMouse_LeftClickInDiffNoopWhenNoFileLoaded(t *testing.T) {
+	// mirrors the togglePane invariant: focus must not switch to paneDiff
+	// when no file is loaded (e.g. clicks received before filesLoadedMsg
+	// arrives or in an empty --only result).
+	m := mouseTestModel(t, []string{"a.go"}, nil)
+	m.file.name = ""
+	m.file.lines = nil
+	m.layout.focus = paneTree
+
+	result, cmd := m.Update(leftPressAt(60, 12))
+	model := result.(Model)
+	assert.Nil(t, cmd)
+	assert.Equal(t, paneTree, model.layout.focus, "click in diff with no file loaded must not flip focus")
+	assert.Equal(t, 0, model.nav.diffCursor, "click with no file loaded must not move the diff cursor")
+	assert.False(t, model.annot.cursorOnAnnotation)
+}
+
 func TestModel_HandleMouse_LeftClickSetsCursorOnAnnotation(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},

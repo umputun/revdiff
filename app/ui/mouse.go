@@ -146,9 +146,10 @@ func (m Model) wheelStepFor(shift bool) int {
 func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 	switch zone {
 	case hitDiff:
-		if delta > 0 {
+		switch {
+		case delta > 0:
 			m.moveDiffCursorDownBy(delta)
-		} else if delta < 0 {
+		case delta < 0:
 			m.moveDiffCursorUpBy(-delta)
 		}
 	case hitTree:
@@ -156,21 +157,17 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 		if step < 0 {
 			step = -step
 		}
+		motion := sidepane.MotionPageDown
+		if delta < 0 {
+			motion = sidepane.MotionPageUp
+		}
 		if m.file.mdTOC != nil {
-			if delta > 0 {
-				m.file.mdTOC.Move(sidepane.MotionPageDown, step)
-			} else {
-				m.file.mdTOC.Move(sidepane.MotionPageUp, step)
-			}
+			m.file.mdTOC.Move(motion, step)
 			m.file.mdTOC.EnsureVisible(m.treePageSize())
 			m.syncDiffToTOCCursor()
 			return m, nil
 		}
-		if delta > 0 {
-			m.tree.Move(sidepane.MotionPageDown, step)
-		} else {
-			m.tree.Move(sidepane.MotionPageUp, step)
-		}
+		m.tree.Move(motion, step)
 		m.pendingAnnotJump = nil
 		m.nav.pendingHunkJump = nil
 		return m.loadSelectedIfChanged()
@@ -211,6 +208,9 @@ func (m Model) clickTree(_, y int) (tea.Model, tea.Cmd) {
 // sub-row, cursorOnAnnotation is set so subsequent navigation treats the
 // cursor as being on the annotation rather than the diff line above it.
 func (m Model) clickDiff(_, y int) (tea.Model, tea.Cmd) {
+	if m.file.name == "" {
+		return m, nil // no file loaded — nothing to focus or point at
+	}
 	row := (y - m.diffTopRow()) + m.layout.viewport.YOffset
 	idx, onAnnot := m.visualRowToDiffLine(row)
 	m.layout.focus = paneDiff
