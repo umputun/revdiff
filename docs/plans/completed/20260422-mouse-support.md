@@ -401,9 +401,9 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 **Files:**
 - Potentially modify: `CLAUDE.md`
 
-- [ ] update `CLAUDE.md` Gotchas section ONLY if implementation revealed a non-obvious nesting or coordinate issue (e.g., mouse X/Y vs wrapped-ANSI rendering quirk). Otherwise skip — the code is discoverable and a gotcha note would be noise.
-- [ ] move this plan to `docs/plans/completed/`
-- [ ] no test changes needed
+- [x] update `CLAUDE.md` Gotchas section ONLY if implementation revealed a non-obvious nesting or coordinate issue (e.g., mouse X/Y vs wrapped-ANSI rendering quirk). Otherwise skip — the code is discoverable and a gotcha note would be noise. *(skipped: coordinate math is encapsulated in `diffTopRow`/`treeTopRow`/`hitTest` with comments explaining the magic numbers; no quirk worth a gotcha)*
+- [x] move this plan to `docs/plans/completed/`
+- [x] no test changes needed
 
 ## Post-Completion
 
