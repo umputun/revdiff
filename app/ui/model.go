@@ -172,6 +172,10 @@ type FileTreeComponent interface {
 	StepFile(dir sidepane.Direction)
 	// SelectByPath sets the cursor to the file entry matching the given path.
 	SelectByPath(path string) bool
+	// SelectByVisibleRow sets the cursor to the entry at the given visible row
+	// (0-based, relative to the first visible tree line). Returns true when the
+	// row maps to a valid entry; the cursor is unchanged when false.
+	SelectByVisibleRow(row int) bool
 	// EnsureVisible adjusts offset so the cursor is within the visible range.
 	EnsureVisible(height int)
 	// Rebuild rebuilds the file tree from new entries in-place.
@@ -195,6 +199,10 @@ type TOCComponent interface {
 	NumEntries() int
 	// Move navigates the cursor according to the given motion.
 	Move(m sidepane.Motion, count ...int)
+	// SelectByVisibleRow sets the cursor to the entry at the given visible row
+	// (0-based, relative to the first visible TOC line). Returns true when the
+	// row maps to a valid entry; the cursor is unchanged when false.
+	SelectByVisibleRow(row int) bool
 	// EnsureVisible adjusts offset so the cursor is within the visible range.
 	EnsureVisible(height int)
 	// UpdateActiveSection sets the active section based on the diff cursor position.
@@ -666,6 +674,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleConfirmDiscardKey(msg)
 		}
 		return m.handleKey(msg)
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 	case tea.WindowSizeMsg:
 		return m.handleResize(msg)
 	case filesLoadedMsg:

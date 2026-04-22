@@ -1,5 +1,16 @@
 package ui
 
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/umputun/revdiff/app/ui/sidepane"
+)
+
+// wheelStep is the number of lines one wheel notch scrolls by. matches the
+// typical terminal feel (3 lines per notch). Shift+wheel uses half the
+// viewport height instead.
+const wheelStep = 3
+
 // hitZone identifies which interactive area a mouse event targets.
 type hitZone int
 
@@ -63,4 +74,148 @@ func (m Model) hitTest(x, y int) hitZone {
 		return hitHeader
 	}
 	return hitDiff
+}
+
+// handleMouse routes a tea.MouseMsg through the modal-state checks and into
+// per-button dispatch. mouse events are only generated when
+// tea.WithMouseCellMotion is enabled (i.e. --no-mouse is off), so this
+// handler never runs in the opted-out path. wheel routing is by pointer
+// position, not by current focus — this matches terminal conventions where
+// scrolling follows the cursor.
+func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// transient hints persist for exactly one render cycle; any mouse event
+	// that reaches this point dismisses the last hint, mirroring handleKey.
+	m.commits.hint = ""
+	m.reload.hint = ""
+	m.compact.hint = ""
+
+	// swallow during modal states — input belongs to the modal, not the
+	// viewport beneath. overlay must also swallow so wheel does not scroll
+	// through a popup.
+	if m.inConfirmDiscard || m.reload.pending || m.annot.annotating || m.search.active {
+		return m, nil
+	}
+	if m.overlay.Active() {
+		return m, nil
+	}
+
+	zone := m.hitTest(msg.X, msg.Y)
+
+	switch msg.Button {
+	case tea.MouseButtonWheelUp:
+		return m.handleWheel(zone, -m.wheelStepFor(msg.Shift))
+	case tea.MouseButtonWheelDown:
+		return m.handleWheel(zone, m.wheelStepFor(msg.Shift))
+	case tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
+		// horizontal wheel is intentionally swallowed — horizontal scroll
+		// stays keyboard-driven so users keep a single mental model.
+		return m, nil
+	case tea.MouseButtonLeft:
+		if msg.Action != tea.MouseActionPress {
+			return m, nil // ignore release and motion while holding
+		}
+		switch zone {
+		case hitTree:
+			return m.clickTree(msg.X, msg.Y)
+		case hitDiff:
+			return m.clickDiff(msg.X, msg.Y)
+		case hitNone, hitStatus, hitHeader:
+			return m, nil
+		}
+		return m, nil
+	default:
+		// right, middle, back, forward, none — no-op for this pass.
+		return m, nil
+	}
+}
+
+// wheelStepFor returns the wheel scroll step. Shift+wheel scrolls by half
+// the diff viewport (mirroring the half-page-down keyboard shortcut);
+// a plain wheel notch scrolls by the wheelStep constant.
+func (m Model) wheelStepFor(shift bool) int {
+	if shift {
+		return max(1, m.layout.viewport.Height/2)
+	}
+	return wheelStep
+}
+
+// handleWheel routes a vertical wheel event to the pane under the pointer.
+// delta is positive for wheel-down, negative for wheel-up. the pane is
+// selected by the hit zone, not the current pane focus: users expect the
+// wheel to act on whichever pane the pointer is over.
+func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
+	switch zone {
+	case hitDiff:
+		if delta > 0 {
+			m.moveDiffCursorDownBy(delta)
+		} else if delta < 0 {
+			m.moveDiffCursorUpBy(-delta)
+		}
+	case hitTree:
+		step := delta
+		if step < 0 {
+			step = -step
+		}
+		if m.file.mdTOC != nil {
+			if delta > 0 {
+				m.file.mdTOC.Move(sidepane.MotionPageDown, step)
+			} else {
+				m.file.mdTOC.Move(sidepane.MotionPageUp, step)
+			}
+			m.file.mdTOC.EnsureVisible(m.treePageSize())
+			m.syncDiffToTOCCursor()
+			return m, nil
+		}
+		if delta > 0 {
+			m.tree.Move(sidepane.MotionPageDown, step)
+		} else {
+			m.tree.Move(sidepane.MotionPageUp, step)
+		}
+		m.pendingAnnotJump = nil
+		m.nav.pendingHunkJump = nil
+		return m.loadSelectedIfChanged()
+	case hitNone, hitStatus, hitHeader:
+		// no-op zones — wheel outside the interactive panes is ignored.
+	}
+	return m, nil
+}
+
+// clickTree handles a left-click press in the tree (or TOC) pane. the click
+// both focuses the pane and selects the entry under the pointer — same as
+// pressing j/k to land on the entry. when the entry is a file, the diff
+// load is triggered via loadSelectedIfChanged; on a directory row or an
+// out-of-range row the click just moves the cursor with no load (mirrors
+// j-landing semantics).
+func (m Model) clickTree(_, y int) (tea.Model, tea.Cmd) {
+	row := y - m.treeTopRow()
+	m.layout.focus = paneTree
+	if m.file.mdTOC != nil {
+		if !m.file.mdTOC.SelectByVisibleRow(row) {
+			return m, nil
+		}
+		m.file.mdTOC.EnsureVisible(m.treePageSize())
+		m.syncDiffToTOCCursor()
+		return m, nil
+	}
+	if !m.tree.SelectByVisibleRow(row) {
+		return m, nil
+	}
+	m.pendingAnnotJump = nil
+	m.nav.pendingHunkJump = nil
+	return m.loadSelectedIfChanged()
+}
+
+// clickDiff handles a left-click press in the diff viewport. the click
+// focuses the diff pane and moves the diff cursor to the logical line
+// under the pointer. when the click lands on an injected annotation
+// sub-row, cursorOnAnnotation is set so subsequent navigation treats the
+// cursor as being on the annotation rather than the diff line above it.
+func (m Model) clickDiff(_, y int) (tea.Model, tea.Cmd) {
+	row := (y - m.diffTopRow()) + m.layout.viewport.YOffset
+	idx, onAnnot := m.visualRowToDiffLine(row)
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = idx
+	m.annot.cursorOnAnnotation = onAnnot
+	m.syncViewportToCursor()
+	return m, nil
 }

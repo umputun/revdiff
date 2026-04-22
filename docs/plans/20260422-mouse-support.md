@@ -330,24 +330,24 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 - Modify: `app/ui/model.go` (add `tea.MouseMsg` case in `Update`)
 - Modify: `app/ui/mouse_test.go`
 
-- [ ] add `tea.MouseMsg` case in `Model.Update` at `app/ui/model.go:662` → delegates to `m.handleMouse(msg)`
-- [ ] at top of `handleMouse`, clear transient hints mirroring `handleKey` at `model.go:704-706`: `m.commits.hint = ""`, `m.reload.hint = ""`, `m.compact.hint = ""`
-- [ ] implement swallow checks in the order specified in Solution Overview (`inConfirmDiscard`, `reload.pending`, `annot.annotating`, `search.active`, overlay-open via `m.overlay` check) — all return `m, nil`
-- [ ] dispatch by `msg.Button`:
+- [x] add `tea.MouseMsg` case in `Model.Update` at `app/ui/model.go:662` → delegates to `m.handleMouse(msg)`
+- [x] at top of `handleMouse`, clear transient hints mirroring `handleKey` at `model.go:704-706`: `m.commits.hint = ""`, `m.reload.hint = ""`, `m.compact.hint = ""`
+- [x] implement swallow checks in the order specified in Solution Overview (`inConfirmDiscard`, `reload.pending`, `annot.annotating`, `search.active`, overlay-open via `m.overlay` check) — all return `m, nil`
+- [x] dispatch by `msg.Button`:
   - wheel up/down: compute `step := wheelStep` (const 3); when `msg.Shift`, use `m.layout.viewport.Height/2`; hit-test `(msg.X, msg.Y)`; route to `m.moveDiffCursorDownBy(step)`/`UpBy(step)` for `hitDiff`, `m.tree.Move(sidepane.MotionPageDown, step)` / `MotionPageUp` for `hitTree`, analogous `m.file.mdTOC.Move(MotionPageDown/Up, step)` when TOC active, no-op for `hitStatus`/`hitHeader`/`hitNone`
   - wheel left/right: return `m, nil` (intentionally swallowed)
   - left press (only `msg.Action == tea.MouseActionPress` — skip release/motion): invoke `clickTree` or `clickDiff` based on hit-zone (helpers set focus themselves)
   - any other button or action: return `m, nil`
-- [ ] implement `clickDiff(x, y int)` helper as shown in Technical Details: uses `visualRowToDiffLine` two-return, sets `m.annot.cursorOnAnnotation` to the `onAnnotation` flag, calls `syncViewportToCursor`, sets `m.layout.focus = paneDiff`
-- [ ] implement `clickTree(x, y int)` helper as shown in Technical Details: routes to `m.file.mdTOC.SelectByVisibleRow` when mdTOC active, else `m.tree.SelectByVisibleRow`; clears pending jumps; calls `loadSelectedIfChanged`; sets focus
-- [ ] wheel tests: wheel in diff pane → cursor moves 3 lines; shift+wheel in diff → cursor moves `viewport.Height/2`; wheel in tree pane → tree cursor moves 3; wheel in tree with focus on diff → tree cursor still moves (routing is by cursor-position, not by current focus); wheel in TOC pane (markdown file, full-context) → TOC cursor moves; wheel-left / wheel-right → no-op
-- [ ] click tests: click in diff at row N → `diffCursor` lands on matching diff-line, `cursorOnAnnotation` set correctly; click on annotation sub-row sets `cursorOnAnnotation=true`; click in tree → tree selection changes + file load triggered; click on directory entry in tree → cursor moves but no file load; click in TOC pane (mdTOC active) → TOC selection changes; click in status zone → no-op; click in diff header → no-op; click in out-of-bounds zone → no-op
-- [ ] button filter tests: right-click → no-op; middle-click → no-op; left release (no press) → no-op; mouse motion → no-op; back/forward buttons → no-op
-- [ ] modal swallow tests: wheel while annotating → no-op; click while annotating → no-op, annotation input unchanged; wheel while overlay open → no-op, overlay stays open; click while overlay open → no-op; wheel while search active → no-op; click while `reload.pending` → no-op; click while `inConfirmDiscard` → no-op
-- [ ] hint-clearing test: wheel event with `m.commits.hint="loading commits..."` — after handler, hint is empty
-- [ ] focus side-effect tests: click in tree while focused on diff → `layout.focus == paneTree`; click in diff while focused on tree → `layout.focus == paneDiff`
-- [ ] stdin-mode test: tree is hidden in stdin mode; click at `(x=0, y=1)` → `hitDiff`, not `hitTree`; wheel and click behave as diff-only
-- [ ] run `go test ./app/ui/...` — must pass before task 6
+- [x] implement `clickDiff(x, y int)` helper as shown in Technical Details: uses `visualRowToDiffLine` two-return, sets `m.annot.cursorOnAnnotation` to the `onAnnotation` flag, calls `syncViewportToCursor`, sets `m.layout.focus = paneDiff`
+- [x] implement `clickTree(x, y int)` helper as shown in Technical Details: routes to `m.file.mdTOC.SelectByVisibleRow` when mdTOC active, else `m.tree.SelectByVisibleRow`; clears pending jumps; calls `loadSelectedIfChanged`; sets focus
+- [x] wheel tests: wheel in diff pane → cursor moves 3 lines; shift+wheel in diff → cursor moves `viewport.Height/2`; wheel in tree pane → tree cursor moves 3; wheel in tree with focus on diff → tree cursor still moves (routing is by cursor-position, not by current focus); wheel in TOC pane (markdown file, full-context) → TOC cursor moves; wheel-left / wheel-right → no-op
+- [x] click tests: click in diff at row N → `diffCursor` lands on matching diff-line, `cursorOnAnnotation` set correctly; click on annotation sub-row sets `cursorOnAnnotation=true`; click in tree → tree selection changes + file load triggered; click on directory entry in tree → cursor moves but no file load; click in TOC pane (mdTOC active) → TOC selection changes; click in status zone → no-op; click in diff header → no-op; click in out-of-bounds zone → no-op
+- [x] button filter tests: right-click → no-op; middle-click → no-op; left release (no press) → no-op; mouse motion → no-op; back/forward buttons → no-op
+- [x] modal swallow tests: wheel while annotating → no-op; click while annotating → no-op, annotation input unchanged; wheel while overlay open → no-op, overlay stays open; click while overlay open → no-op; wheel while search active → no-op; click while `reload.pending` → no-op; click while `inConfirmDiscard` → no-op
+- [x] hint-clearing test: wheel event with `m.commits.hint="loading commits..."` — after handler, hint is empty
+- [x] focus side-effect tests: click in tree while focused on diff → `layout.focus == paneTree`; click in diff while focused on tree → `layout.focus == paneDiff`
+- [x] stdin-mode test: tree is hidden in stdin mode; click at `(x=0, y=1)` → `hitDiff`, not `hitTree`; wheel and click behave as diff-only
+- [x] run `go test ./app/ui/...` — must pass before task 6
 
 ### Task 6: Documentation sync (README + site + ARCHITECTURE + plugin references)
 
