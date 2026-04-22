@@ -379,9 +379,9 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 **Files:**
 - Potentially modify: `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `package.json`
 
-- [ ] per project memory "plugin-version-bump": ask user whether to bump Claude plugin version (both `plugin.json` and `marketplace.json`) after modifying `.claude-plugin/skills/revdiff/references/*.md`
-- [ ] ask user whether to bump pi plugin version in `package.json` after modifying `plugins/pi/` (only if any pi files changed — this task does not modify pi by default, so likely no-op)
-- [ ] no test changes needed
+- [x] per project memory "plugin-version-bump": ask user whether to bump Claude plugin version (both `plugin.json` and `marketplace.json`) after modifying `.claude-plugin/skills/revdiff/references/*.md`
+- [x] ask user whether to bump pi plugin version in `package.json` after modifying `plugins/pi/` (only if any pi files changed — this task does not modify pi by default, so likely no-op)
+- [x] no test changes needed
 
 ### Task 8: Verify acceptance criteria
 

@@ -9,7 +9,7 @@
       "name": "revdiff",
       "source": "./",
       "description": "Review diffs, files, and documents with inline annotations in a TUI overlay",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "author": {
         "name": "umputun"
       }
