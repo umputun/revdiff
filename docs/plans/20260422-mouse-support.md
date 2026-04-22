@@ -385,16 +385,16 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 
 ### Task 8: Verify acceptance criteria
 
-- [ ] verify scroll wheel works in both panes (automated test via `tea.MouseMsg` in Task 5 — re-run here)
-- [ ] verify click in tree selects + loads file
-- [ ] verify click in diff sets cursor, enabling "click then `a`" annotation flow
-- [ ] verify modal-state swallow: no mouse interference during annotation, search, pending-reload, confirm-discard, or any open overlay
-- [ ] verify `--no-mouse` compiles, runs, and disables all mouse behavior (unit test from Task 1)
-- [ ] run full test suite: `go test ./...`
-- [ ] run `go test -race ./...`
-- [ ] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] run `~/.claude/format.sh`
-- [ ] verify test coverage did not regress (`make test`)
+- [x] verify scroll wheel works in both panes (automated test via `tea.MouseMsg` in Task 5 — re-run here)
+- [x] verify click in tree selects + loads file
+- [x] verify click in diff sets cursor, enabling "click then `a`" annotation flow
+- [x] verify modal-state swallow: no mouse interference during annotation, search, pending-reload, confirm-discard, or any open overlay
+- [x] verify `--no-mouse` compiles, runs, and disables all mouse behavior (unit test from Task 1)
+- [x] run full test suite: `go test ./...`
+- [x] run `go test -race ./...`
+- [x] run `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] run `~/.claude/format.sh`
+- [x] verify test coverage did not regress (`make test`)
 
 ### Task 9: Final documentation wrap-up
 
