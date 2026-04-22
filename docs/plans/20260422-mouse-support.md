@@ -300,11 +300,11 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 - Modify: `app/ui/sidepane/toc.go`
 - Modify: `app/ui/sidepane/toc_test.go`
 
-- [ ] add `func (ft *FileTree) SelectByVisibleRow(row int) bool` — returns true if row maps to a valid entry, updates `ft.cursor` to `ft.offset + row`
-- [ ] add equivalent `SelectByVisibleRow` on `*TOC` (same signature)
-- [ ] tests for `FileTree`: click on first visible row when `offset=0` selects entry 0; click when scrolled (`offset=5`) selects `offset+row`; click past end returns false and does not modify cursor; click on directory row succeeds (cursor moves to dir entry); click on negative row returns false
-- [ ] tests for `TOC`: mirror the above
-- [ ] run `go test ./app/ui/sidepane/...` — must pass before task 4
+- [x] add `func (ft *FileTree) SelectByVisibleRow(row int) bool` — returns true if row maps to a valid entry, updates `ft.cursor` to `ft.offset + row`
+- [x] add equivalent `SelectByVisibleRow` on `*TOC` (same signature)
+- [x] tests for `FileTree`: click on first visible row when `offset=0` selects entry 0; click when scrolled (`offset=5`) selects `offset+row`; click past end returns false and does not modify cursor; click on directory row succeeds (cursor moves to dir entry); click on negative row returns false
+- [x] tests for `TOC`: mirror the above
+- [x] run `go test ./app/ui/sidepane/...` — must pass before task 4
 
 ### Task 4: Add `hitTest` and `hitZone` classification + layout helpers
 

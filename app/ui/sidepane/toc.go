@@ -155,6 +155,22 @@ func (t *TOC) EnsureVisible(height int) {
 	ensureVisible(&t.cursor, &t.offset, len(t.entries), height)
 }
 
+// SelectByVisibleRow sets the cursor to the entry at the given visible row.
+// row is 0-based relative to the first visible TOC line (t.offset).
+// returns true if the row maps to a valid entry, false otherwise.
+// does not modify the cursor when returning false.
+func (t *TOC) SelectByVisibleRow(row int) bool {
+	if row < 0 {
+		return false
+	}
+	idx := t.offset + row
+	if idx >= len(t.entries) {
+		return false
+	}
+	t.cursor = idx
+	return true
+}
+
 // UpdateActiveSection finds the nearest entry with lineIdx <= diffCursor and sets activeSection.
 // sets activeSection back to -1 when no entry matches, preserving the sentinel contract.
 func (t *TOC) UpdateActiveSection(diffCursor int) {

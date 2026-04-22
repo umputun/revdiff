@@ -460,6 +460,79 @@ func TestFileTree_SelectByPath(t *testing.T) {
 	})
 }
 
+func TestFileTree_SelectByVisibleRow(t *testing.T) {
+	t.Run("first row at offset zero selects first entry", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		// entries: ["./", "a.go", "b.go"]
+		ok := ft.SelectByVisibleRow(0)
+		assert.True(t, ok)
+		assert.Equal(t, 0, ft.cursor)
+	})
+
+	t.Run("row within visible range selects matching entry", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		// entries: ["./", "a.go", "b.go", "c.go"], offset=0
+		ok := ft.SelectByVisibleRow(2)
+		assert.True(t, ok)
+		assert.Equal(t, 2, ft.cursor) // "b.go"
+		assert.Equal(t, "b.go", ft.SelectedFile())
+	})
+
+	t.Run("row with non-zero offset adds offset", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go"))
+		// entries: ["./", "a.go", "b.go", "c.go", "d.go", "e.go"]
+		ft.offset = 3
+		ok := ft.SelectByVisibleRow(1)
+		assert.True(t, ok)
+		assert.Equal(t, 4, ft.cursor) // offset(3) + row(1) = "d.go"
+		assert.Equal(t, "d.go", ft.SelectedFile())
+	})
+
+	t.Run("click past end returns false and does not modify cursor", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		// entries: ["./", "a.go", "b.go"] — only 3 entries
+		prev := ft.cursor
+		ok := ft.SelectByVisibleRow(10)
+		assert.False(t, ok)
+		assert.Equal(t, prev, ft.cursor)
+	})
+
+	t.Run("click on directory row succeeds", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("internal/a.go"))
+		// entries: ["internal/", "a.go"] — first is directory
+		ok := ft.SelectByVisibleRow(0)
+		assert.True(t, ok)
+		assert.Equal(t, 0, ft.cursor)
+		assert.True(t, ft.entries[ft.cursor].isDir)
+		// SelectedFile returns empty for dir entries, mirroring j-landing behavior
+		assert.Empty(t, ft.SelectedFile())
+	})
+
+	t.Run("negative row returns false and does not modify cursor", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		prev := ft.cursor
+		ok := ft.SelectByVisibleRow(-1)
+		assert.False(t, ok)
+		assert.Equal(t, prev, ft.cursor)
+	})
+
+	t.Run("empty tree returns false for any row", func(t *testing.T) {
+		ft := NewFileTree(nil)
+		ok := ft.SelectByVisibleRow(0)
+		assert.False(t, ok)
+	})
+
+	t.Run("row past end with offset returns false", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft.offset = 2
+		prev := ft.cursor
+		// entries has 4 items (./, a.go, b.go, c.go); offset=2, row=5 -> idx=7, out of range
+		ok := ft.SelectByVisibleRow(5)
+		assert.False(t, ok)
+		assert.Equal(t, prev, ft.cursor)
+	})
+}
+
 func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 	ft := NewFileTree(fileEntries(".claude-plugin/skills/revdiff/references/config.md"))
 	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})

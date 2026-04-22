@@ -633,6 +633,78 @@ func TestTOC_NumEntries(t *testing.T) {
 	})
 }
 
+func TestTOC_SelectByVisibleRow(t *testing.T) {
+	t.Run("first row at offset zero selects first entry", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 5},
+		}, cursor: 1}
+		ok := toc.SelectByVisibleRow(0)
+		assert.True(t, ok)
+		assert.Equal(t, 0, toc.cursor)
+	})
+
+	t.Run("row within visible range selects matching entry", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 5},
+			{title: "C", level: 1, lineIdx: 10},
+		}, cursor: 0}
+		ok := toc.SelectByVisibleRow(2)
+		assert.True(t, ok)
+		assert.Equal(t, 2, toc.cursor)
+	})
+
+	t.Run("row with non-zero offset adds offset", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 5},
+			{title: "C", level: 1, lineIdx: 10},
+			{title: "D", level: 1, lineIdx: 15},
+			{title: "E", level: 1, lineIdx: 20},
+		}, cursor: 0, offset: 2}
+		ok := toc.SelectByVisibleRow(1)
+		assert.True(t, ok)
+		assert.Equal(t, 3, toc.cursor) // offset(2) + row(1)
+	})
+
+	t.Run("click past end returns false and does not modify cursor", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 5},
+		}, cursor: 1}
+		ok := toc.SelectByVisibleRow(10)
+		assert.False(t, ok)
+		assert.Equal(t, 1, toc.cursor)
+	})
+
+	t.Run("negative row returns false and does not modify cursor", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+		}, cursor: 0}
+		ok := toc.SelectByVisibleRow(-1)
+		assert.False(t, ok)
+		assert.Equal(t, 0, toc.cursor)
+	})
+
+	t.Run("empty TOC returns false for any row", func(t *testing.T) {
+		toc := &TOC{}
+		ok := toc.SelectByVisibleRow(0)
+		assert.False(t, ok)
+	})
+
+	t.Run("row past end with offset returns false", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 5},
+			{title: "C", level: 1, lineIdx: 10},
+		}, cursor: 0, offset: 1}
+		ok := toc.SelectByVisibleRow(5)
+		assert.False(t, ok)
+		assert.Equal(t, 0, toc.cursor)
+	})
+}
+
 func TestFencePrefix(t *testing.T) {
 	tests := []struct {
 		name    string
