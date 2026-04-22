@@ -77,6 +77,9 @@ func (m Model) hitTest(x, y int) hitZone {
 		return hitTree
 	}
 
+	if y == 0 {
+		return hitNone // diff pane top border — mirror of treeTopRow() guard above
+	}
 	if y < m.diffTopRow() {
 		return hitHeader
 	}
@@ -114,9 +117,15 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
-		return m.handleWheel(zone, -m.wheelStepFor(msg.Shift))
+		if msg.Action != tea.MouseActionPress {
+			return m, nil // guard against non-press wheel emissions for symmetry with left-click
+		}
+		return m.handleWheel(zone, -m.wheelStepFor(zone, msg.Shift))
 	case tea.MouseButtonWheelDown:
-		return m.handleWheel(zone, m.wheelStepFor(msg.Shift))
+		if msg.Action != tea.MouseActionPress {
+			return m, nil
+		}
+		return m.handleWheel(zone, m.wheelStepFor(zone, msg.Shift))
 	case tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
 		// horizontal wheel is intentionally swallowed — horizontal scroll
 		// stays keyboard-driven so users keep a single mental model.
@@ -140,14 +149,18 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// wheelStepFor returns the wheel scroll step. Shift+wheel scrolls by half
-// the diff viewport (mirroring the half-page-down keyboard shortcut);
-// a plain wheel notch scrolls by the wheelStep constant.
-func (m Model) wheelStepFor(shift bool) int {
-	if shift {
-		return max(1, m.layout.viewport.Height/2)
+// wheelStepFor returns the wheel scroll step. Plain wheel scrolls by the
+// wheelStep constant in every zone. Shift+wheel scrolls by half the pane
+// under the pointer — viewport half for the diff, treePageSize half for
+// the tree/TOC — to match the keyboard half-page shortcuts for that pane.
+func (m Model) wheelStepFor(zone hitZone, shift bool) int {
+	if !shift {
+		return wheelStep
 	}
-	return wheelStep
+	if zone == hitTree {
+		return max(1, m.treePageSize()/2)
+	}
+	return max(1, m.layout.viewport.Height/2)
 }
 
 // handleWheel routes a vertical wheel event to the pane under the pointer.

@@ -86,7 +86,7 @@ func TestModel_hitTest(t *testing.T) {
 		{name: "tree pane first content row", setup: func(m *Model) {}, x: 5, y: 1, want: hitTree},
 		{name: "diff pane viewport row", setup: func(m *Model) {}, x: 60, y: 10, want: hitDiff},
 		{name: "diff pane header row", setup: func(m *Model) {}, x: 60, y: 1, want: hitHeader},
-		{name: "diff pane top border", setup: func(m *Model) {}, x: 60, y: 0, want: hitHeader},
+		{name: "diff pane top border", setup: func(m *Model) {}, x: 60, y: 0, want: hitNone},
 		{name: "status bar", setup: func(m *Model) {}, x: 60, y: 39, want: hitStatus},
 		{name: "status bar at x=0", setup: func(m *Model) {}, x: 0, y: 39, want: hitStatus},
 		{name: "tree-diff boundary: last tree column", setup: func(m *Model) {}, x: 37, y: 10, want: hitTree},
@@ -253,6 +253,51 @@ func TestModel_HandleMouse_WheelInTreeMovesTreeCursor(t *testing.T) {
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
 	model := result.(Model)
 	assert.NotEqual(t, before, model.tree.SelectedFile(), "wheel in tree should change tree selection even when focus is diff")
+}
+
+func TestModel_HandleMouse_WheelNonPressActionIgnored(t *testing.T) {
+	// bubbletea viewport guards wheel on MouseActionPress to avoid double-firing
+	// if a terminal emits non-press wheel events (motion/release). handleMouse
+	// matches that pattern for symmetry with the left-click guard.
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext}},
+	})
+	m.nav.diffCursor = 0
+
+	for _, action := range []tea.MouseAction{tea.MouseActionRelease, tea.MouseActionMotion} {
+		for _, btn := range []tea.MouseButton{tea.MouseButtonWheelUp, tea.MouseButtonWheelDown} {
+			msg := tea.MouseMsg(tea.MouseEvent{X: 60, Y: 10, Button: btn, Action: action})
+			result, _ := m.Update(msg)
+			model := result.(Model)
+			assert.Equal(t, 0, model.nav.diffCursor, "wheel with Action=%v must be ignored", action)
+		}
+	}
+}
+
+func TestModel_HandleMouse_ShiftWheelInTreeUsesTreePageSize(t *testing.T) {
+	// shift+wheel over the tree must move by treePageSize()/2 entries,
+	// matching the keyboard half-page shortcut for that pane — not by
+	// viewport.Height/2 which is the diff-pane half-page step.
+	// force viewport.Height != treePageSize so the test fails under the old
+	// formula.
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}},
+	})
+	m.layout.viewport.Height = 4 // small diff viewport
+	// treePageSize derives from layout.height - 2 (- 1 if status bar present);
+	// with the default mouseTestModel height it is larger than 4.
+	assert.NotEqual(t, m.layout.viewport.Height/2, m.treePageSize()/2,
+		"test precondition: viewport and tree half-pages must differ")
+
+	// shift+wheel in tree zone (x < treeWidth+2, y >= treeTopRow)
+	got := m.wheelStepFor(hitTree, true)
+	assert.Equal(t, max(1, m.treePageSize()/2), got,
+		"shift+wheel in tree must step by treePageSize/2, not viewport.Height/2")
+
+	// sanity: shift+wheel in diff still uses viewport half-page
+	got = m.wheelStepFor(hitDiff, true)
+	assert.Equal(t, max(1, m.layout.viewport.Height/2), got,
+		"shift+wheel in diff must step by viewport.Height/2")
 }
 
 func TestModel_HandleMouse_HorizontalWheelNoop(t *testing.T) {
