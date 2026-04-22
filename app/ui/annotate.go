@@ -492,6 +492,28 @@ func (m Model) cursorVisualRange() (top, bottom int) {
 	return top, top + h - 1
 }
 
+// rowOnAnnotationSubLine reports whether relRow (0-based, relative to the first
+// visual row of the diff line at idx) targets the injected annotation sub-line
+// below that diff line. h is the total visual height of the diff line (wrap rows
+// plus any injected annotation rows). delete-only placeholders always return
+// false because renderCollapsedDiff skips annotation rendering for them, even
+// when the underlying removed line has an annotation.
+func (m Model) rowOnAnnotationSubLine(idx, relRow, h int, hunks []int, annSet map[string]bool) bool {
+	if m.isDeleteOnlyPlaceholder(idx, hunks) {
+		return false
+	}
+	dl := m.file.lines[idx]
+	if dl.ChangeType == diff.ChangeDivider {
+		return false
+	}
+	key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
+	if !annSet[key] {
+		return false
+	}
+	annRows := m.wrappedAnnotationLineCount(key)
+	return annRows > 0 && relRow >= h-annRows
+}
+
 // visualRowToDiffLine maps a visual row within the diff viewport content back
 // to a diff-line index. row is 0-based relative to the first visible content
 // row of the viewport (caller must add YOffset and subtract any header rows).
@@ -542,19 +564,7 @@ func (m Model) visualRowToDiffLine(row int) (idx int, onAnnotation bool) {
 			continue
 		}
 		if row < running+h {
-			annRows := 0
-			dl := m.file.lines[i]
-			if dl.ChangeType != diff.ChangeDivider {
-				key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
-				if annSet[key] {
-					annRows = m.wrappedAnnotationLineCount(key)
-				}
-			}
-			diffRows := h - annRows
-			if annRows > 0 && row >= running+diffRows {
-				return i, true
-			}
-			return i, false
+			return i, m.rowOnAnnotationSubLine(i, row-running, h, hunks, annSet)
 		}
 		running += h
 	}

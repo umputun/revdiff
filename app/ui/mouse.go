@@ -59,6 +59,13 @@ func (m Model) hitTest(x, y int) hitZone {
 	if sbh := m.statusBarHeight(); sbh > 0 && y >= m.layout.height-sbh {
 		return hitStatus
 	}
+	// pane bottom border row sits just above the status bar (or the last
+	// row when the status bar is hidden). clicks on the border must not
+	// map into the viewport — without this guard, clickDiff would compute
+	// a row one past the visible content.
+	if y == m.layout.height-m.statusBarHeight()-1 {
+		return hitNone
+	}
 
 	// tree block spans columns [0, treeWidth+1] when visible: left border +
 	// treeWidth content columns + right border = treeWidth+2 columns total.
@@ -83,21 +90,25 @@ func (m Model) hitTest(x, y int) hitZone {
 // position, not by current focus — this matches terminal conventions where
 // scrolling follows the cursor.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	// transient hints persist for exactly one render cycle; any mouse event
-	// that reaches this point dismisses the last hint, mirroring handleKey.
-	m.commits.hint = ""
-	m.reload.hint = ""
-	m.compact.hint = ""
-
 	// swallow during modal states — input belongs to the modal, not the
 	// viewport beneath. overlay must also swallow so wheel does not scroll
-	// through a popup.
+	// through a popup. hints are preserved here so the modal prompt (e.g.
+	// reload's "press y to confirm") stays visible while the event is
+	// discarded. in the keyboard path the prompt is also replaced by a new
+	// hint from handlePendingReload, but mouse events don't transition the
+	// modal, so dropping the hint would leave an invisible modal.
 	if m.inConfirmDiscard || m.reload.pending || m.annot.annotating || m.search.active {
 		return m, nil
 	}
 	if m.overlay.Active() {
 		return m, nil
 	}
+
+	// transient hints persist for exactly one render cycle; any mouse event
+	// that reaches this point dismisses the last hint, mirroring handleKey.
+	m.commits.hint = ""
+	m.reload.hint = ""
+	m.compact.hint = ""
 
 	zone := m.hitTest(msg.X, msg.Y)
 

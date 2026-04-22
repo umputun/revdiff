@@ -132,19 +132,28 @@ func TestModel_hitTest(t *testing.T) {
 			x: 5, y: 10, want: hitTree,
 		},
 		{
-			name: "no status bar: last row is diff, not status",
+			name: "no status bar: last row is pane bottom border",
 			setup: func(m *Model) {
 				m.cfg.noStatusBar = true
 			},
-			x: 60, y: 39, want: hitDiff,
+			x: 60, y: 39, want: hitNone,
 		},
 		{
-			name: "no status bar: last row in tree zone is hitTree",
+			name: "no status bar: last row in tree zone is pane bottom border",
 			setup: func(m *Model) {
 				m.cfg.noStatusBar = true
 			},
-			x: 5, y: 39, want: hitTree,
+			x: 5, y: 39, want: hitNone,
 		},
+		{
+			name: "no status bar: second-to-last row is diff content",
+			setup: func(m *Model) {
+				m.cfg.noStatusBar = true
+			},
+			x: 60, y: 38, want: hitDiff,
+		},
+		{name: "diff pane bottom border", setup: func(m *Model) {}, x: 60, y: 38, want: hitNone},
+		{name: "tree pane bottom border", setup: func(m *Model) {}, x: 5, y: 38, want: hitNone},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -313,6 +322,35 @@ func TestModel_HandleMouse_LeftClickSetsCursorOnAnnotation(t *testing.T) {
 	assert.True(t, model.annot.cursorOnAnnotation, "click on annotation sub-row must set cursorOnAnnotation")
 }
 
+func TestModel_HandleMouse_LeftClickOnDeleteOnlyPlaceholderDoesNotLandOnAnnotation(t *testing.T) {
+	// in collapsed mode, a delete-only hunk renders a single "⋯ N lines deleted"
+	// placeholder. annotations on the underlying removed lines are NOT rendered
+	// (see renderCollapsedDiff). clicking the placeholder must not set
+	// cursorOnAnnotation, mirroring keyboard navigation guarded by
+	// TestModel_CollapsedCursorDownSkipsPlaceholderAnnotation.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // 0
+		{OldNum: 2, Content: "del1", ChangeType: diff.ChangeRemove},  // 1 - placeholder
+		{OldNum: 3, Content: "del2", ChangeType: diff.ChangeRemove},  // 2 - hidden
+		{NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext}, // 3
+	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.lines = lines
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	// annotation on the hidden removed line — its sub-row is NOT rendered for a placeholder
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "-", Comment: "hidden note"})
+
+	// collapsed layout: row 0 = ctx1, row 1 = placeholder (idx 1), row 2 = ctx2 (idx 3).
+	// diffTopRow=2 so y=3 targets the placeholder row.
+	result, _ := m.Update(leftPressAt(60, 3))
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.layout.focus)
+	assert.Equal(t, 1, model.nav.diffCursor, "click on placeholder lands on placeholder line index")
+	assert.False(t, model.annot.cursorOnAnnotation,
+		"click on placeholder must not set cursorOnAnnotation — annotation is not rendered")
+}
+
 func TestModel_HandleMouse_LeftClickInTreeSelectsAndLoads(t *testing.T) {
 	files := []string{"a.go", "b.go", "c.go"}
 	diffs := map[string][]diff.DiffLine{
@@ -453,6 +491,7 @@ func TestModel_HandleMouse_SwallowedWhileReloadPending(t *testing.T) {
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 	})
 	m.reload.pending = true
+	m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
 	m.nav.diffCursor = 0
 	m.layout.focus = paneTree
 
@@ -461,6 +500,14 @@ func TestModel_HandleMouse_SwallowedWhileReloadPending(t *testing.T) {
 	assert.Equal(t, 0, model.nav.diffCursor, "click must be swallowed while reload confirmation is pending")
 	assert.Equal(t, paneTree, model.layout.focus)
 	assert.True(t, model.reload.pending)
+	assert.Equal(t, "Annotations will be dropped — press y to confirm, any other key to cancel", model.reload.hint,
+		"reload hint must stay visible while pending — otherwise the modal prompt vanishes but the modal remains")
+
+	// wheel must also preserve the hint
+	result, _ = m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model = result.(Model)
+	assert.True(t, model.reload.pending)
+	assert.NotEmpty(t, model.reload.hint, "wheel must not erase the reload prompt while pending")
 }
 
 func TestModel_HandleMouse_SwallowedWhileConfirmDiscard(t *testing.T) {
