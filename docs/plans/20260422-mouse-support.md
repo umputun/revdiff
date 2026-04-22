@@ -360,17 +360,17 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 - Modify: `plugins/codex/skills/revdiff/references/config.md`
 - Modify: `plugins/codex/skills/revdiff/references/usage.md`
 
-- [ ] README: add a "Mouse support" subsection covering wheel, click-to-select in tree, click-to-set-cursor in diff, Shift+wheel half-page, `--no-mouse` opt-out
-- [ ] README: add explicit text-selection note in that subsection — something like: "Text selection requires Shift+drag (most terminals) or Option+drag (iTerm2). Because the tree pane is rendered alongside the diff on the same rows, multi-line Shift+drag will include tree content. For clean copies of diff text, use your terminal's block-select mode: Option+drag in iTerm2, Ctrl+Shift+drag in kitty, or run with `--no-mouse` to disable mouse capture entirely."
-- [ ] README: add `--no-mouse` to the flags table (placement consistent with `--no-colors`, `--no-status-bar`)
-- [ ] `site/docs.html`: mirror README Mouse section and flag entry (including the text-selection note)
-- [ ] `docs/ARCHITECTURE.md`: add one paragraph under the `app/ui/` description noting the new `mouse.go` file and its role (hit-testing + event routing), matching the file-by-file breakdown style
-- [ ] `.claude-plugin/skills/revdiff/references/config.md`: add `--no-mouse` / `REVDIFF_NO_MOUSE` to config options
-- [ ] `.claude-plugin/skills/revdiff/references/usage.md`: add mouse interactions (wheel, click) to the interactions list, plus the Shift+drag / block-select note
-- [ ] `plugins/codex/skills/revdiff/references/config.md`: byte-identical copy of the claude-plugin version
-- [ ] `plugins/codex/skills/revdiff/references/usage.md`: byte-identical copy of the claude-plugin version
-- [ ] verify byte-identity: `diff -q .claude-plugin/skills/revdiff/references/config.md plugins/codex/skills/revdiff/references/config.md` and same for usage.md — both must produce no output
-- [ ] no test changes needed (documentation task)
+- [x] README: add a "Mouse support" subsection covering wheel, click-to-select in tree, click-to-set-cursor in diff, Shift+wheel half-page, `--no-mouse` opt-out
+- [x] README: add explicit text-selection note in that subsection — something like: "Text selection requires Shift+drag (most terminals) or Option+drag (iTerm2). Because the tree pane is rendered alongside the diff on the same rows, multi-line Shift+drag will include tree content. For clean copies of diff text, use your terminal's block-select mode: Option+drag in iTerm2, Ctrl+Shift+drag in kitty, or run with `--no-mouse` to disable mouse capture entirely."
+- [x] README: add `--no-mouse` to the flags table (placement consistent with `--no-colors`, `--no-status-bar`)
+- [x] `site/docs.html`: mirror README Mouse section and flag entry (including the text-selection note)
+- [x] `docs/ARCHITECTURE.md`: add one paragraph under the `app/ui/` description noting the new `mouse.go` file and its role (hit-testing + event routing), matching the file-by-file breakdown style
+- [x] `.claude-plugin/skills/revdiff/references/config.md`: add `--no-mouse` / `REVDIFF_NO_MOUSE` to config options
+- [x] `.claude-plugin/skills/revdiff/references/usage.md`: add mouse interactions (wheel, click) to the interactions list, plus the Shift+drag / block-select note
+- [x] `plugins/codex/skills/revdiff/references/config.md`: byte-identical copy of the claude-plugin version
+- [x] `plugins/codex/skills/revdiff/references/usage.md`: byte-identical copy of the claude-plugin version
+- [x] verify byte-identity: `diff -q .claude-plugin/skills/revdiff/references/config.md plugins/codex/skills/revdiff/references/config.md` and same for usage.md — both must produce no output
+- [x] no test changes needed (documentation task)
 
 *Note: CHANGELOG.md is updated at release-tag time (see commit pattern `c564016 docs: update changelog, site, and plugin versions for v0.22.0` — changelog updates land with version bumps, not with feature PRs). Do not modify CHANGELOG.md in this task.*
 

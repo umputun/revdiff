@@ -108,6 +108,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `editor.go` | `$EDITOR` handoff for multi-line annotations: `openEditor()` wraps `app/editor.Editor` in `tea.ExecProcess`, `editorFinishedMsg` dispatch, `handleEditorFinished` routing (save / cancel / error-preserve) |
 | `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `search.go` | Search input handling, match computation, navigation |
+| `mouse.go` | Mouse event routing: `handleMouse` dispatch, `hitTest` pane classification (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers (`statusBarHeight`, `diffTopRow`, `treeTopRow`). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set |
 
 Each source file has a matching `_test.go`.
 

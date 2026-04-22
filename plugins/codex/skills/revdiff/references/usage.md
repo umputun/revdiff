@@ -148,6 +148,28 @@ The status bar shows a fixed row of mode indicators on the right side. All slots
 
 On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
 
+## Mouse Support
+
+revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals.
+
+- **Scroll wheel** — scrolls whichever pane the cursor is over (tree/TOC or diff). Three lines per notch.
+- **Shift+scroll** — half-page scroll in whichever pane the cursor is over.
+- **Left-click in the tree** — focuses the tree and selects/loads the clicked entry. Clicking a directory row moves the cursor but does not load a file.
+- **Left-click in the diff** — focuses the diff and moves the cursor to the clicked line. Enables a "click, then `a`" annotation flow.
+- **Left-click in the TOC pane** (single-file markdown) — focuses the TOC and selects the clicked header.
+
+Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Modal states (annotation input, search input, confirm discard, reload confirm, open overlay) swallow mouse events so they cannot interfere with text entry or popups.
+
+**Text selection trade-off** — once mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection:
+
+- **kitty**: hold `Ctrl+Shift` while dragging
+- **iTerm2**: hold `Option` while dragging
+- **most other terminals**: hold `Shift` while dragging
+
+Because the tree pane is rendered alongside the diff on the same rows, multi-line Shift+drag will include tree content. For clean copies of diff text, use your terminal's block-select mode (Option+drag in iTerm2, Ctrl+Shift+drag in kitty) or run with `--no-mouse` to disable mouse capture entirely.
+
+Opt out with `--no-mouse`, `REVDIFF_NO_MOUSE=true`, or `no-mouse = true` in the config file.
+
 ## Custom Keybindings
 
 All keybindings can be customized via `~/.config/revdiff/keybindings` (override path with `--keys` or `REVDIFF_KEYS`).

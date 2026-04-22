@@ -80,6 +80,7 @@
         <a href="#annotations">Annotations</a>
         <a href="#view">View toggles</a>
         <a href="#status-bar-icons">Status bar icons</a>
+        <a href="#mouse-support">Mouse support</a>
         <a href="#custom-keys">Custom keybindings</a>
 
         <h4>Claude Code plugin</h4>
@@ -336,6 +337,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
                 <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-confirm-discard</code></td><td>Skip discard confirmation</td><td><code>false</code></td></tr>
+                <tr><td><code>--no-mouse</code></td><td>Disable mouse support (scroll wheel, click)</td><td><code>false</code></td></tr>
                 <tr><td><code>--chroma-style</code></td><td>Syntax highlighting theme</td><td><code>catppuccin-macchiato</code></td></tr>
                 <tr><td><code>--theme</code></td><td>Load color theme from <code>~/.config/revdiff/themes/</code></td><td></td></tr>
                 <tr><td><code>--dump-theme</code></td><td>Print resolved colors as theme file and exit</td><td></td></tr>
@@ -506,6 +508,25 @@ color-border = #6272a4
             </tbody>
         </table>
         <p>On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.</p>
+
+        <h2 id="mouse-support">Mouse support</h2>
+        <p>revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals.</p>
+        <ul>
+            <li><strong>Scroll wheel</strong> &mdash; scrolls whichever pane the cursor is over (tree/TOC or diff). Three lines per notch.</li>
+            <li><strong>Shift+scroll</strong> &mdash; half-page scroll in whichever pane the cursor is over.</li>
+            <li><strong>Left-click in the tree</strong> &mdash; focuses the tree and selects/loads the clicked entry (same as pressing <code>j</code>/<code>k</code> to land there). Clicking a directory row moves the cursor but does not load a file.</li>
+            <li><strong>Left-click in the diff</strong> &mdash; focuses the diff and moves the cursor to the clicked line. Enables a &ldquo;click, then <code>a</code>&rdquo; annotation flow.</li>
+            <li><strong>Left-click in the TOC pane</strong> (single-file markdown) &mdash; focuses the TOC and selects the clicked header.</li>
+        </ul>
+        <p>Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Modal states (annotation input, search input, confirm discard, reload confirm, open overlay) swallow mouse events so they cannot interfere with text entry or popups.</p>
+        <p><strong>Text selection trade-off</strong> &mdash; once mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection:</p>
+        <ul>
+            <li><strong>kitty</strong>: hold <code>Ctrl+Shift</code> while dragging</li>
+            <li><strong>iTerm2</strong>: hold <code>Option</code> while dragging</li>
+            <li><strong>most other terminals</strong>: hold <code>Shift</code> while dragging</li>
+        </ul>
+        <p>Because the tree pane is rendered alongside the diff on the same rows, multi-line Shift+drag will include tree content. For clean copies of diff text, use your terminal's block-select mode (Option+drag in iTerm2, Ctrl+Shift+drag in kitty) or run with <code>--no-mouse</code> to disable mouse capture entirely.</p>
+        <p>Opt out with <code>--no-mouse</code>, <code>REVDIFF_NO_MOUSE=true</code>, or <code>no-mouse = true</code> in the config file.</p>
 
         <h2 id="custom-keys">Custom keybindings</h2>
         <p>All keybindings can be customized via <code>~/.config/revdiff/keybindings</code>. Override path with <code>--keys</code> or <code>REVDIFF_KEYS</code>.</p>
