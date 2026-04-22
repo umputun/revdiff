@@ -2390,3 +2390,397 @@ func TestModel_AnnotationPlaceholderMentionsEditor(t *testing.T) {
 	m2.startFileAnnotation()
 	assert.Contains(t, m2.annot.input.Placeholder, "Ctrl+E", "file-level placeholder must mention Ctrl+E")
 }
+
+func TestModel_VisualRowToDiffLine_EmptyFile(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.nav.diffCursor = 5
+
+	idx, onAnn := m.visualRowToDiffLine(0)
+	assert.Equal(t, 5, idx, "empty file returns current diffCursor")
+	assert.False(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(10)
+	assert.Equal(t, 5, idx)
+	assert.False(t, onAnn)
+}
+
+func TestModel_VisualRowToDiffLine_EmptyFileWithFileAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+
+	idx, onAnn := m.visualRowToDiffLine(0)
+	assert.Equal(t, -1, idx, "row 0 within empty-file file-annotation returns -1")
+	assert.False(t, onAnn)
+}
+
+func TestModel_VisualRowToDiffLine_SimpleLines(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeAdd},
+	}
+
+	tests := []struct {
+		name    string
+		row     int
+		wantIdx int
+		wantAnn bool
+	}{
+		{name: "row 0 maps to line 0", row: 0, wantIdx: 0, wantAnn: false},
+		{name: "row 1 maps to line 1", row: 1, wantIdx: 1, wantAnn: false},
+		{name: "row 2 maps to line 2", row: 2, wantIdx: 2, wantAnn: false},
+		{name: "row beyond end clamps to last", row: 10, wantIdx: 2, wantAnn: false},
+		{name: "negative row falls back to first visible line", row: -1, wantIdx: 0, wantAnn: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx, onAnn := m.visualRowToDiffLine(tt.row)
+			assert.Equal(t, tt.wantIdx, idx)
+			assert.Equal(t, tt.wantAnn, onAnn)
+		})
+	}
+}
+
+func TestModel_VisualRowToDiffLine_FileAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+
+	idx, onAnn := m.visualRowToDiffLine(0)
+	assert.Equal(t, -1, idx, "row 0 maps to file annotation line")
+	assert.False(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(1)
+	assert.Equal(t, 0, idx, "row 1 maps to first diff line")
+	assert.False(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(2)
+	assert.Equal(t, 1, idx, "row 2 maps to second diff line")
+	assert.False(t, onAnn)
+}
+
+func TestModel_VisualRowToDiffLine_WrappedFileAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 60
+	m.layout.treeWidth = 20
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	longComment := strings.Repeat("word ", 20) // ~100 chars, wraps
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: longComment})
+
+	wrapCount := m.wrappedAnnotationLineCount(annotKeyFile)
+	require.Greater(t, wrapCount, 1, "test precondition: file annotation must wrap")
+
+	// every row within the wrapped file annotation maps to idx=-1
+	for r := range wrapCount {
+		idx, onAnn := m.visualRowToDiffLine(r)
+		assert.Equal(t, -1, idx, "row %d inside wrapped file annotation", r)
+		assert.False(t, onAnn, "file annotation does not distinguish sub-rows")
+	}
+	// row right after the wrapped annotation is the first diff line
+	idx, onAnn := m.visualRowToDiffLine(wrapCount)
+	assert.Equal(t, 0, idx)
+	assert.False(t, onAnn)
+	idx, onAnn = m.visualRowToDiffLine(wrapCount + 1)
+	assert.Equal(t, 1, idx)
+	assert.False(t, onAnn)
+}
+
+func TestModel_VisualRowToDiffLine_LineAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "inline note"})
+
+	// line 0 occupies row 0, line 1 occupies rows 1 (diff) + 2 (annotation),
+	// line 2 starts at row 3
+	idx, onAnn := m.visualRowToDiffLine(0)
+	assert.Equal(t, 0, idx)
+	assert.False(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(1)
+	assert.Equal(t, 1, idx, "row 1 on diff row of annotated line")
+	assert.False(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(2)
+	assert.Equal(t, 1, idx, "row 2 on annotation sub-row of line 1")
+	assert.True(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(3)
+	assert.Equal(t, 2, idx, "row 3 on the following diff line")
+	assert.False(t, onAnn)
+}
+
+func TestModel_VisualRowToDiffLine_WrappedLineAnnotation(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 60
+	m.layout.treeWidth = 20
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+	}
+	longComment := strings.Repeat("note ", 20)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: longComment})
+
+	key := m.annotationKey(2, "+")
+	annCount := m.wrappedAnnotationLineCount(key)
+	require.Greater(t, annCount, 1, "test precondition: annotation must wrap")
+
+	// line 0 at row 0, line 1 starts at row 1 (1 diff row + annCount annotation rows)
+	idx, onAnn := m.visualRowToDiffLine(0)
+	assert.Equal(t, 0, idx)
+	assert.False(t, onAnn)
+
+	idx, onAnn = m.visualRowToDiffLine(1)
+	assert.Equal(t, 1, idx, "row 1 is the diff row of annotated line 1")
+	assert.False(t, onAnn)
+
+	// each subsequent row within annotation maps to line 1 with onAnn=true
+	for r := 2; r < 1+1+annCount; r++ {
+		idx, onAnn = m.visualRowToDiffLine(r)
+		assert.Equal(t, 1, idx, "row %d inside wrapped annotation", r)
+		assert.True(t, onAnn, "row %d must be flagged as annotation sub-row", r)
+	}
+}
+
+func TestModel_VisualRowToDiffLine_Dividers(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{Content: "...", ChangeType: diff.ChangeDivider},
+		{NewNum: 10, Content: "line10", ChangeType: diff.ChangeContext},
+	}
+
+	// dividers occupy 1 row each (they are not hidden unless in collapsed mode)
+	idx, _ := m.visualRowToDiffLine(0)
+	assert.Equal(t, 0, idx)
+	idx, _ = m.visualRowToDiffLine(1)
+	assert.Equal(t, 1, idx, "divider row maps to its line index")
+	idx, _ = m.visualRowToDiffLine(2)
+	assert.Equal(t, 2, idx)
+}
+
+func TestModel_VisualRowToDiffLine_CollapsedHidden(t *testing.T) {
+	t.Run("mixed hunk hides all removes", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		// a hunk with context, then remove+add+context — not a delete-only hunk,
+		// so collapsed mode hides every remove line entirely (no placeholder).
+		m.file.lines = []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "removed1", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "removed2", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "added1", ChangeType: diff.ChangeAdd},
+			{OldNum: 4, NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = map[int]bool{}
+
+		// visible rows: 0->ctx(0), 1->added1(3), 2->ctx2(4)
+		idx, onAnn := m.visualRowToDiffLine(0)
+		assert.Equal(t, 0, idx)
+		assert.False(t, onAnn)
+
+		idx, onAnn = m.visualRowToDiffLine(1)
+		assert.Equal(t, 3, idx, "row 1 skips hidden removed lines and lands on added1")
+		assert.False(t, onAnn)
+
+		idx, onAnn = m.visualRowToDiffLine(2)
+		assert.Equal(t, 4, idx, "row 2 must land on the trailing context line")
+		assert.False(t, onAnn)
+	})
+
+	t.Run("delete-only hunk keeps placeholder visible", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		// delete-only hunk: placeholder at hunkStart stays visible, subsequent
+		// removes hidden
+		m.file.lines = []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "removed1", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "removed2", ChangeType: diff.ChangeRemove},
+			{OldNum: 4, NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = map[int]bool{}
+
+		// visible rows: 0->ctx, 1->placeholder(idx 1), 2->ctx2
+		idx, onAnn := m.visualRowToDiffLine(1)
+		assert.Equal(t, 1, idx, "delete-only hunk placeholder maps to hunkStart")
+		assert.False(t, onAnn)
+	})
+}
+
+func TestModel_VisualRowToDiffLine_LargeRow(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "b", ChangeType: diff.ChangeContext},
+	}
+	// simulates a scrolled viewport: caller passes (y + YOffset) — arbitrary big row
+	idx, onAnn := m.visualRowToDiffLine(9999)
+	assert.Equal(t, 1, idx, "rows past end clamp to last line")
+	assert.False(t, onAnn)
+}
+
+func TestModel_VisualRowToDiffLine_RoundTrip(t *testing.T) {
+	// for every reachable cursor position, cursorVisualRange top must round-trip
+	// back through visualRowToDiffLine to the same index. this is the core
+	// invariant — inverse mapping bugs would surface here.
+	t.Run("plain diff", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+			{Content: "...", ChangeType: diff.ChangeDivider},
+			{NewNum: 10, Content: "line10", ChangeType: diff.ChangeContext},
+		}
+
+		for i := range m.file.lines {
+			m.nav.diffCursor = i
+			m.annot.cursorOnAnnotation = false
+			top, _ := m.cursorVisualRange()
+			idx, onAnn := m.visualRowToDiffLine(top)
+			assert.Equal(t, i, idx, "round-trip diff index for cursor %d", i)
+			assert.False(t, onAnn, "diff row (not annotation) for cursor %d", i)
+		}
+	})
+
+	t.Run("with file annotation", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+		}
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file"})
+
+		// file-annotation cursor (-1)
+		m.nav.diffCursor = -1
+		m.annot.cursorOnAnnotation = false
+		top, _ := m.cursorVisualRange()
+		idx, onAnn := m.visualRowToDiffLine(top)
+		assert.Equal(t, -1, idx, "file annotation cursor round-trips to -1")
+		assert.False(t, onAnn)
+
+		// regular cursor positions still round-trip after the file annotation offset
+		for i := range m.file.lines {
+			m.nav.diffCursor = i
+			m.annot.cursorOnAnnotation = false
+			rowTop, _ := m.cursorVisualRange()
+			gotIdx, gotAnn := m.visualRowToDiffLine(rowTop)
+			assert.Equal(t, i, gotIdx, "round-trip with file annotation, cursor %d", i)
+			assert.False(t, gotAnn)
+		}
+	})
+
+	t.Run("with inline annotation and cursor on annotation sub-row", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		}
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "inline"})
+
+		// cursor on the diff row of annotated line
+		m.nav.diffCursor = 1
+		m.annot.cursorOnAnnotation = false
+		top, _ := m.cursorVisualRange()
+		idx, onAnn := m.visualRowToDiffLine(top)
+		assert.Equal(t, 1, idx)
+		assert.False(t, onAnn)
+
+		// cursor on the annotation sub-row — top now points to the annotation row
+		m.nav.diffCursor = 1
+		m.annot.cursorOnAnnotation = true
+		top, _ = m.cursorVisualRange()
+		idx, onAnn = m.visualRowToDiffLine(top)
+		assert.Equal(t, 1, idx, "annotation sub-row round-trips to same diff-line index")
+		assert.True(t, onAnn, "annotation sub-row round-trips with onAnnotation=true")
+	})
+
+	t.Run("with wrapped file and line annotations", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.layout.width = 60
+		m.layout.treeWidth = 20
+		m.file.lines = []diff.DiffLine{
+			{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "line2", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "line3", ChangeType: diff.ChangeContext},
+		}
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: strings.Repeat("word ", 20)})
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: strings.Repeat("note ", 20)})
+
+		// file-annotation cursor
+		m.nav.diffCursor = -1
+		m.annot.cursorOnAnnotation = false
+		top, _ := m.cursorVisualRange()
+		idx, onAnn := m.visualRowToDiffLine(top)
+		assert.Equal(t, -1, idx)
+		assert.False(t, onAnn)
+
+		for i := range m.file.lines {
+			m.nav.diffCursor = i
+			m.annot.cursorOnAnnotation = false
+			rowTop, _ := m.cursorVisualRange()
+			gotIdx, gotAnn := m.visualRowToDiffLine(rowTop)
+			assert.Equal(t, i, gotIdx, "wrapped diff round-trip cursor %d", i)
+			assert.False(t, gotAnn, "cursor %d should not be on annotation sub-row", i)
+		}
+
+		// cursor on annotation sub-row of the annotated line
+		m.nav.diffCursor = 1
+		m.annot.cursorOnAnnotation = true
+		top, _ = m.cursorVisualRange()
+		idx, onAnn = m.visualRowToDiffLine(top)
+		assert.Equal(t, 1, idx)
+		assert.True(t, onAnn)
+	})
+
+	t.Run("in collapsed mode", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "rem1", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "rem2", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "add1", ChangeType: diff.ChangeAdd},
+			{OldNum: 4, NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext},
+		}
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = map[int]bool{}
+
+		// visible indices are 0 (ctx), 3 (add), 4 (ctx2). indices 1 and 2 are
+		// hidden removes (mixed hunk, not delete-only) and can't be cursor targets.
+		for _, i := range []int{0, 3, 4} {
+			m.nav.diffCursor = i
+			m.annot.cursorOnAnnotation = false
+			top, _ := m.cursorVisualRange()
+			idx, onAnn := m.visualRowToDiffLine(top)
+			assert.Equal(t, i, idx, "collapsed-mode round-trip for visible cursor %d", i)
+			assert.False(t, onAnn)
+		}
+	})
+}

@@ -283,14 +283,14 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 - Modify: `app/ui/diffnav.go` (or `app/ui/annotate.go` — put it next to `cursorVisualRange` wherever that lives; currently `annotate.go:477`)
 - Modify: `app/ui/diffnav_test.go` or corresponding test file (match location of implementation)
 
-- [ ] add `func (m Model) visualRowToDiffLine(row int) (idx int, onAnnotation bool)` next to `cursorVisualRange` — walks `m.file.lines` summing `hunkLineHeight` (using `m.findHunks()` and `m.buildAnnotationSet()`) until the running sum crosses `row`; distinguishes annotation sub-rows from diff rows within each line
-- [ ] handle file-level annotation: when `m.hasFileAnnotation()` is true, visual row 0 maps to `idx=-1, onAnnotation=false`
-- [ ] handle edge cases: empty `m.file.lines` → return `(m.nav.diffCursor, false)`; row < 0 → return `(0, false)` (or `(-1, false)` if file-level annotation present); row exceeds total → return last valid index
-- [ ] add round-trip table test: for each cursor index `i` in a synthetic set, set `m.nav.diffCursor = i`, call `top, _ := m.cursorVisualRange()`, assert `visualRowToDiffLine(top) == (i, false)`
-- [ ] add round-trip test for annotation sub-rows: set cursor on a line with annotation, set `cursorOnAnnotation=true`, round-trip must return `(i, true)`
-- [ ] add table cases covering: file-level annotation row `i=-1`, `i=0` baseline, wrapped long lines, lines with injected annotations, collapsed-mode dividers, viewport with `YOffset > 0`
-- [ ] add direct-input tests: specific `row` values → expected `(idx, onAnnotation)` pairs in a known fixture
-- [ ] run `go test ./app/ui/...` — must pass before task 3
+- [x] add `func (m Model) visualRowToDiffLine(row int) (idx int, onAnnotation bool)` next to `cursorVisualRange` — walks `m.file.lines` summing `hunkLineHeight` (using `m.findHunks()` and `m.buildAnnotationSet()`) until the running sum crosses `row`; distinguishes annotation sub-rows from diff rows within each line
+- [x] handle file-level annotation: when `m.hasFileAnnotation()` is true, visual row 0 maps to `idx=-1, onAnnotation=false`
+- [x] handle edge cases: empty `m.file.lines` → return `(m.nav.diffCursor, false)`; row < 0 → return `(0, false)` (or `(-1, false)` if file-level annotation present); row exceeds total → return last valid index
+- [x] add round-trip table test: for each cursor index `i` in a synthetic set, set `m.nav.diffCursor = i`, call `top, _ := m.cursorVisualRange()`, assert `visualRowToDiffLine(top) == (i, false)`
+- [x] add round-trip test for annotation sub-rows: set cursor on a line with annotation, set `cursorOnAnnotation=true`, round-trip must return `(i, true)`
+- [x] add table cases covering: file-level annotation row `i=-1`, `i=0` baseline, wrapped long lines, lines with injected annotations, collapsed-mode dividers, viewport with `YOffset > 0`
+- [x] add direct-input tests: specific `row` values → expected `(idx, onAnnotation)` pairs in a known fixture
+- [x] run `go test ./app/ui/...` — must pass before task 3
 
 ### Task 3: Add `SelectByVisibleRow` on FileTree and TOC
 
