@@ -102,6 +102,9 @@ func run(opts options) error {
 	)
 
 	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
+	if !opts.NoMouse {
+		programOptions = append(programOptions, tea.WithMouseCellMotion())
+	}
 	if opts.Stdin {
 		var tty *os.File
 		renderer, tty, err = prepareStdinMode(opts, os.Stdin)

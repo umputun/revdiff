@@ -269,11 +269,11 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 - Modify: `app/main.go`
 - Modify: `app/config_test.go` (add flag-parsing assertion)
 
-- [ ] add `NoMouse bool` field to `Options` in `app/config.go` following `NoColors`/`NoStatusBar` convention (CLI flag, ini-name, env var, description)
-- [ ] in `app/main.go` conditionally append `tea.WithMouseCellMotion()` to `programOptions` when `!opts.NoMouse`
-- [ ] add flag-parsing test: `--no-mouse` sets `Options.NoMouse=true`; env var `REVDIFF_NO_MOUSE=true` sets it; default is false
-- [ ] verify `--dump-config` output includes `no-mouse = false` by default (spot-check via existing dump-config test pattern)
-- [ ] run `go test ./...` — must pass before task 2
+- [x] add `NoMouse bool` field to `Options` in `app/config.go` following `NoColors`/`NoStatusBar` convention (CLI flag, ini-name, env var, description)
+- [x] in `app/main.go` conditionally append `tea.WithMouseCellMotion()` to `programOptions` when `!opts.NoMouse`
+- [x] add flag-parsing test: `--no-mouse` sets `Options.NoMouse=true`; env var `REVDIFF_NO_MOUSE=true` sets it; default is false
+- [x] verify `--dump-config` output includes `no-mouse = false` by default (spot-check via existing dump-config test pattern)
+- [x] run `go test ./...` — must pass before task 2
 
 *Note: bubbletea `ProgramOption` is an opaque function value — testing its presence in a `[]tea.ProgramOption` slice is impractical. Program wiring is covered by the manual terminal verification in Post-Completion.*
 

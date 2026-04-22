@@ -27,6 +27,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoColors)
 	assert.False(t, opts.NoStatusBar)
 	assert.False(t, opts.NoConfirmDiscard)
+	assert.False(t, opts.NoMouse)
 	assert.False(t, opts.Wrap)
 	assert.False(t, opts.Collapsed)
 	assert.False(t, opts.Compact)
@@ -63,6 +64,31 @@ func TestParseArgs_NoConfirmDiscard(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.NoConfirmDiscard)
+	})
+}
+
+func TestParseArgs_NoMouse(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--no-mouse"))
+		require.NoError(t, err)
+		assert.True(t, opts.NoMouse)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_NO_MOUSE", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.NoMouse)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nno-mouse = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.NoMouse)
 	})
 }
 
@@ -555,6 +581,7 @@ func TestDumpConfig(t *testing.T) {
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
 	assert.Contains(t, output, "cross-file-hunks = false")
+	assert.Contains(t, output, "no-mouse = false")
 	assert.Contains(t, output, "[color options]")
 	assert.Contains(t, output, "color-accent = #D5895F")
 	assert.NotContains(t, output, "\ncolors =", "should not have spurious colors= line")
