@@ -313,15 +313,15 @@ When `m.file.mdTOC != nil`, the tree pane slot renders the TOC instead. Click in
 - Create: `app/ui/mouse_test.go`
 - Potentially Modify: `app/ui/model.go` or `app/ui/view.go` (for layout helpers, if they don't already exist)
 
-- [ ] check existing code for `statusBarHeight`, `diffTopRow`, `treeTopRow` helpers — reuse if present, otherwise add as methods on `Model` near other layout methods
-- [ ] `statusBarHeight() int` returns 0 when `m.NoStatusBar`, otherwise the actual number of rows (typically 1)
-- [ ] `diffTopRow() int` returns the first row of diff viewport content (after diff header). Derive from the same math that `view.go` uses to render
-- [ ] `treeTopRow() int` returns the first row of tree content (after any pane border). Derive from the same math that `renderTwoPaneLayout` uses
-- [ ] declare `hitZone` type and constants (`hitNone`, `hitTree`, `hitDiff`, `hitStatus`, `hitHeader`) in `app/ui/mouse.go`
-- [ ] implement `func (m Model) hitTest(x, y int) hitZone` using the three helpers above — pure arithmetic, no I/O
-- [ ] unit test table for `hitTest`: tree visible/hidden, single-file without TOC, single-file with TOC, no-status-bar, stdin-mode (tree hidden by default), `(x=treeWidth-1, y)` → `hitTree`, `(x=treeWidth, y)` → `hitDiff`, `y=0` → `hitHeader`, `y=last` → `hitStatus`, `x=width` → `hitNone` (out of bounds)
-- [ ] unit tests for `statusBarHeight`, `diffTopRow`, `treeTopRow` covering status bar on/off and single-file vs two-pane layout
-- [ ] run `go test ./app/ui/...` — must pass before task 5
+- [x] check existing code for `statusBarHeight`, `diffTopRow`, `treeTopRow` helpers — reuse if present, otherwise add as methods on `Model` near other layout methods
+- [x] `statusBarHeight() int` returns 0 when `m.NoStatusBar`, otherwise the actual number of rows (typically 1)
+- [x] `diffTopRow() int` returns the first row of diff viewport content (after diff header). Derive from the same math that `view.go` uses to render
+- [x] `treeTopRow() int` returns the first row of tree content (after any pane border). Derive from the same math that `renderTwoPaneLayout` uses
+- [x] declare `hitZone` type and constants (`hitNone`, `hitTree`, `hitDiff`, `hitStatus`, `hitHeader`) in `app/ui/mouse.go`
+- [x] implement `func (m Model) hitTest(x, y int) hitZone` using the three helpers above — pure arithmetic, no I/O
+- [x] unit test table for `hitTest`: tree visible/hidden, single-file without TOC, single-file with TOC, no-status-bar, stdin-mode (tree hidden by default), `(x=treeWidth-1, y)` → `hitTree`, `(x=treeWidth, y)` → `hitDiff`, `y=0` → `hitHeader`, `y=last` → `hitStatus`, `x=width` → `hitNone` (out of bounds)
+- [x] unit tests for `statusBarHeight`, `diffTopRow`, `treeTopRow` covering status bar on/off and single-file vs two-pane layout
+- [x] run `go test ./app/ui/...` — must pass before task 5
 
 ### Task 5: Implement `handleMouse` routing with wheel + left-click
 
