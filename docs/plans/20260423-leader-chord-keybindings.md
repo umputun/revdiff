@@ -279,14 +279,14 @@ Example: `Pending: ctrl+w, esc to cancel`. Verbatim — no case transformation.
 - Modify: `app/keymap/keymap.go`
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] add `ResolveChord(prefix, second string) Action` method
-- [ ] direct lookup first: `bindings[prefix + ">" + second]`
-- [ ] fallback: if direct miss AND `second` is a single rune, decode the rune and call `layoutResolve(r rune) (rune, bool)` (layout.go:68); if it returns a translated rune (`ok == true`), retry lookup with `prefix + ">" + string(translatedRune)`
-- [ ] write `TestResolveChord_Direct` — `ResolveChord("ctrl+w", "x")` returns the bound action when `ctrl+w>x` exists
-- [ ] write `TestResolveChord_LayoutFallback` — `ResolveChord("ctrl+w", "ч")` (Cyrillic ch) returns the action bound to `ctrl+w>x` (because `ч` translates to `x` on Cyrillic)
-- [ ] write `TestResolveChord_Unbound` — returns empty Action when no binding matches
-- [ ] write `TestResolveChord_PrefixOnly` — returns empty Action when only the leader is bound (i.e., no chord exists)
-- [ ] run `make test` — must pass before task 4
+- [x] add `ResolveChord(prefix, second string) Action` method
+- [x] direct lookup first: `bindings[prefix + ">" + second]`
+- [x] fallback: if direct miss AND `second` is a single rune, decode the rune and call `layoutResolve(r rune) (rune, bool)` (layout.go:68); if it returns a translated rune (`ok == true`), retry lookup with `prefix + ">" + string(translatedRune)`
+- [x] write `TestResolveChord_Direct` — `ResolveChord("ctrl+w", "x")` returns the bound action when `ctrl+w>x` exists
+- [x] write `TestResolveChord_LayoutFallback` — `ResolveChord("ctrl+w", "ч")` (Cyrillic ch) returns the action bound to `ctrl+w>x` (because `ч` translates to `x` on Cyrillic)
+- [x] write `TestResolveChord_Unbound` — returns empty Action when no binding matches
+- [x] write `TestResolveChord_PrefixOnly` — returns empty Action when only the leader is bound (i.e., no chord exists)
+- [x] run `make test` — must pass before task 4
 
 ### Task 4: Dump round-trip + KeysFor includes chord keys
 

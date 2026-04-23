@@ -850,6 +850,43 @@ func TestLoad_ConflictInvalidatesChordCache(t *testing.T) {
 	assert.Equal(t, ActionHelp, km.Resolve("ctrl+d>x"))
 }
 
+func TestResolveChord_Direct(t *testing.T) {
+	km := Default()
+	km.Bind("ctrl+w>x", ActionQuit)
+	assert.Equal(t, ActionQuit, km.ResolveChord("ctrl+w", "x"))
+}
+
+func TestResolveChord_LayoutFallback(t *testing.T) {
+	// ч (Cyrillic che) sits on the same physical key as x on QWERTY.
+	// chord bound under the latin "x" must still resolve when user presses ч.
+	km := Default()
+	km.Bind("ctrl+w>x", ActionHelp)
+	assert.Equal(t, ActionHelp, km.ResolveChord("ctrl+w", "ч"))
+}
+
+func TestResolveChord_Unbound(t *testing.T) {
+	km := Default()
+	km.Bind("ctrl+w>x", ActionQuit)
+	assert.Equal(t, Action(""), km.ResolveChord("ctrl+w", "q"))
+	assert.Equal(t, Action(""), km.ResolveChord("ctrl+t", "x"))
+}
+
+func TestResolveChord_PrefixOnly(t *testing.T) {
+	// only the leader is bound (no chord under it) → ResolveChord returns empty
+	km := Default()
+	km.Bind("ctrl+w", ActionQuit)
+	assert.Equal(t, Action(""), km.ResolveChord("ctrl+w", "x"))
+}
+
+func TestResolveChord_LayoutFallbackMissingForMultiRuneSecond(t *testing.T) {
+	// layout fallback only applies when second is a single rune; multi-rune
+	// strings like "esc" should not trigger a translation attempt
+	km := Default()
+	km.Bind("ctrl+w>esc", ActionDismiss)
+	assert.Equal(t, ActionDismiss, km.ResolveChord("ctrl+w", "esc"))
+	assert.Equal(t, Action(""), km.ResolveChord("ctrl+w", "tab"))
+}
+
 func TestParse_casePreservedForSingleChars(t *testing.T) {
 	input := strings.NewReader("map N prev_item\nmap n next_item\n")
 	maps, _, err := parse(input)

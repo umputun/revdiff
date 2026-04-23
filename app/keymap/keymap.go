@@ -248,6 +248,24 @@ func (km *Keymap) Resolve(key string) Action {
 	return ""
 }
 
+// ResolveChord returns the action bound to the chord (prefix, second), or empty
+// Action if unbound. Applies a layout-resolve fallback to the second key: when
+// the direct lookup misses and the second key is a single rune, the rune is
+// translated to its Latin QWERTY equivalent and the lookup is retried.
+func (km *Keymap) ResolveChord(prefix, second string) Action {
+	if a, ok := km.bindings[prefix+">"+second]; ok {
+		return a
+	}
+	if r, size := utf8.DecodeRuneInString(second); size == len(second) {
+		if alias, ok := layoutResolve(r); ok {
+			if a, ok := km.bindings[prefix+">"+string(alias)]; ok {
+				return a
+			}
+		}
+	}
+	return ""
+}
+
 // KeysFor returns all keys bound to the given action, sorted alphabetically.
 func (km *Keymap) KeysFor(action Action) []string {
 	var keys []string
