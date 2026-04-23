@@ -1325,6 +1325,28 @@ func TestStartAnnotation_ClearsVimState(t *testing.T) {
 	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
 }
 
+func TestStartFileAnnotation_ClearsVimState(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.vim.count = 5
+	m.vim.leader = "Z"
+	m.vim.hint = "Z…"
+
+	m.startFileAnnotation()
+
+	assert.Zero(t, m.vim.count, "startFileAnnotation must clear vim.count")
+	assert.Empty(t, m.vim.leader, "startFileAnnotation must clear vim.leader")
+	assert.Empty(t, m.vim.hint, "startFileAnnotation must clear vim.hint")
+	assert.True(t, m.annot.fileAnnotating, "startFileAnnotation must enter file-level annotating mode")
+}
+
 func TestHandleOverlayOpen_ClearsVimState_Help(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.vim.count = 7

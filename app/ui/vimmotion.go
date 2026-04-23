@@ -39,6 +39,11 @@ var vimChordTable = map[string]keymap.Action{
 // The interceptor is a pure state-machine layer: it never calls handleModalKey
 // and never resolves through the keymap. Callers must gate invocation on
 // m.modes.vimMotion to keep the cost at one branch per keypress when off.
+//
+// Invariant: every fall-through branch (handled=false) returns cmd=nil.
+// handleKey relies on this — on fall-through it keeps the returned model but
+// discards cmd. If a future branch needs to emit a command, promote it to
+// handled=true instead.
 func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	keyStr := msg.String()
 
@@ -121,27 +126,34 @@ func (m Model) resolveVimLeader(keyStr string) (tea.Model, tea.Cmd, bool) {
 	return model, cmd, true
 }
 
-// repeatDiffAction invokes handleDiffAction n times with the given action,
-// keeping only the last command. Used by count-prefixed j/k motion to turn
-// "5j" into five successive ActionDown dispatches. Count and hint are cleared
-// on the returned model so the next keypress starts fresh.
+// repeatDiffAction applies the given cursor motion n times, then syncs the
+// viewport once. Used by count-prefixed j/k motion to turn "5j" into five
+// cursor advances without re-rendering after each step — looping through
+// handleDiffAction would call syncViewportToCursor (and therefore renderDiff)
+// on every iteration, turning bounded counts like 9999 into multi-second
+// hangs on large diffs.
 //
-// handleDiffAction returns nil cmd for Down/Up in current code; if a future
-// change starts producing commands per iteration, collect them into a
-// tea.Batch instead of keeping only the last.
+// Only ActionDown and ActionUp are expected; any other action is a caller
+// bug and returns without moving. Count and hint are cleared on the returned
+// model so the next keypress starts fresh.
 func (m Model) repeatDiffAction(action keymap.Action, n int) (tea.Model, tea.Cmd, bool) {
-	var model tea.Model = m
-	var cmd tea.Cmd
-	for range n {
-		mm := model.(Model)
-		mm.vim.count = 0
-		mm.vim.hint = ""
-		model, cmd = mm.handleDiffAction(action)
+	m.vim.count = 0
+	m.vim.hint = ""
+	switch action {
+	case keymap.ActionDown:
+		for range n {
+			m.moveDiffCursorDown()
+		}
+	case keymap.ActionUp:
+		for range n {
+			m.moveDiffCursorUp()
+		}
+	default:
+		return m, nil, true
 	}
-	final := model.(Model)
-	final.vim.count = 0
-	final.vim.hint = ""
-	return final, cmd, true
+	m.syncViewportToCursor()
+	m.syncTOCActiveSection()
+	return m, nil, true
 }
 
 // isDigit reports whether keyStr is a single-character string representing an

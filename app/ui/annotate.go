@@ -122,6 +122,7 @@ func (m *Model) ensureLineAnnotationInputVisible() {
 
 // startFileAnnotation enters annotation input mode for a file-level annotation (Line=0).
 func (m *Model) startFileAnnotation() tea.Cmd {
+	m.clearPendingInputState()
 	if m.file.name == "" {
 		return nil
 	}
