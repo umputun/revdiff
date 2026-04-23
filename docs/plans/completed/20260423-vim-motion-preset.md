@@ -585,8 +585,8 @@ Scroll actions (`ActionScrollCenter`/`ActionScrollTop`/`ActionScrollBottom`) hav
 **Files:**
 - Modify: `CLAUDE.md`
 
-- [ ] add a bullet in CLAUDE.md "Gotchas" section noting: vim-motion preset is gated by `--vim-motion`; state lives on `vimState` (separate from `keyState`); interceptor runs between chord-second and modal key; diff-pane scope for motion/viewport, pane-agnostic for quit aliases
-- [ ] move this plan file to `docs/plans/completed/20260423-vim-motion-preset.md`
+- [x] add a bullet in CLAUDE.md "Gotchas" section noting: vim-motion preset is gated by `--vim-motion`; state lives on `vimState` (separate from `keyState`); interceptor runs between chord-second and modal key; diff-pane scope for motion/viewport, pane-agnostic for quit aliases
+- [x] move this plan file to `docs/plans/completed/20260423-vim-motion-preset.md`
 
 ## Post-Completion
 
