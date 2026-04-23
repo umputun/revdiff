@@ -262,16 +262,16 @@ Example: `Pending: ctrl+w, esc to cancel`. Verbatim — no case transformation.
 - Modify: `app/keymap/keymap.go`
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] add `chordPrefixCache map[string]struct{}` field to Keymap (nil = not yet built)
-- [ ] add unexported `chordPrefixes()` method that lazily builds the cache from `bindings` on first call
-- [ ] add exported `IsChordLeader(key string) bool` method that wraps the cache lookup
-- [ ] update `Bind` and `Unbind` to set `chordPrefixCache = nil` on every call (lazy invalidation; rebuild deferred to next `IsChordLeader`)
-- [ ] add a `resolveConflicts()` step that runs at the end of `Load()`: for every chord key, if the leader exists as a standalone binding, log warn + delete the standalone; then set `chordPrefixCache = nil` once at the end
-- [ ] write `TestIsChordLeader` — true for `ctrl+w` when `ctrl+w>x` is bound; false for `ctrl+w` when only standalone `ctrl+w` is bound; false for non-prefix keys
-- [ ] write `TestIsChordLeader_LazyAndInvalidated` — first call builds cache, subsequent calls reuse; Bind/Unbind invalidates so the next call rebuilds (assert via observable behavior: bind a new chord, expect IsChordLeader to return true on the next call)
-- [ ] write `TestLoad_ConflictDropsStandalone` — `~/.config/revdiff/keybindings` with both `map ctrl+w toggle_pane` and `map ctrl+w>x close_file` results in only the chord remaining; warn logged
-- [ ] write `TestLoad_NoConflictKeepsBoth` — bindings without conflict are unaffected
-- [ ] run `make test` — must pass before task 3
+- [x] add `chordPrefixCache map[string]struct{}` field to Keymap (nil = not yet built)
+- [x] add unexported `chordPrefixes()` method that lazily builds the cache from `bindings` on first call
+- [x] add exported `IsChordLeader(key string) bool` method that wraps the cache lookup
+- [x] update `Bind` and `Unbind` to set `chordPrefixCache = nil` on every call (lazy invalidation; rebuild deferred to next `IsChordLeader`)
+- [x] add a `resolveConflicts()` step that runs at the end of `Load()`: for every chord key, if the leader exists as a standalone binding, log warn + delete the standalone; then set `chordPrefixCache = nil` once at the end
+- [x] write `TestIsChordLeader` — true for `ctrl+w` when `ctrl+w>x` is bound; false for `ctrl+w` when only standalone `ctrl+w` is bound; false for non-prefix keys
+- [x] write `TestIsChordLeader_LazyAndInvalidated` — first call builds cache, subsequent calls reuse; Bind/Unbind invalidates so the next call rebuilds (assert via observable behavior: bind a new chord, expect IsChordLeader to return true on the next call)
+- [x] write `TestLoad_ConflictDropsStandalone` — `~/.config/revdiff/keybindings` with both `map ctrl+w toggle_pane` and `map ctrl+w>x close_file` results in only the chord remaining; warn logged
+- [x] write `TestLoad_NoConflictKeepsBoth` — bindings without conflict are unaffected
+- [x] run `make test` — must pass before task 3
 
 ### Task 3: ResolveChord with layout-resolve fallback
 

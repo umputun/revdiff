@@ -108,8 +108,9 @@ type HelpEntryWithKeys struct {
 // Keymap maps key names to actions. Keys are stored as the string returned
 // by bubbletea's tea.KeyMsg.String().
 type Keymap struct {
-	bindings     map[string]Action
-	descriptions []HelpEntry // ordered list of action descriptions
+	bindings         map[string]Action
+	descriptions     []HelpEntry         // ordered list of action descriptions
+	chordPrefixCache map[string]struct{} // lazy cache of chord leader keys; nil = not yet built
 }
 
 // defaultDescriptions returns the ordered help entries grouped by section.
@@ -262,11 +263,38 @@ func (km *Keymap) KeysFor(action Action) []string {
 // Bind maps a key to an action, overriding any previous binding for that key.
 func (km *Keymap) Bind(key string, action Action) {
 	km.bindings[key] = action
+	km.chordPrefixCache = nil
 }
 
 // Unbind removes the binding for the given key. No-op if key is not bound.
 func (km *Keymap) Unbind(key string) {
 	delete(km.bindings, key)
+	km.chordPrefixCache = nil
+}
+
+// chordPrefixes returns the set of leader keys that have at least one chord binding.
+// The result is built lazily on first call and cached until a Bind/Unbind invalidates it.
+func (km *Keymap) chordPrefixes() map[string]struct{} {
+	if km.chordPrefixCache != nil {
+		return km.chordPrefixCache
+	}
+	cache := make(map[string]struct{})
+	for k := range km.bindings {
+		idx := strings.Index(k, ">")
+		if idx <= 0 {
+			continue
+		}
+		cache[k[:idx]] = struct{}{}
+	}
+	km.chordPrefixCache = cache
+	return cache
+}
+
+// IsChordLeader returns true if the given key is the leader of any chord binding.
+// Lookup is O(1) via a cached prefix index, built on first call.
+func (km *Keymap) IsChordLeader(key string) bool {
+	_, ok := km.chordPrefixes()[key]
+	return ok
 }
 
 // HelpSections returns grouped help entries with effective key bindings.
@@ -484,7 +512,27 @@ func Load(path string) (*Keymap, error) {
 		km.Bind(m.key, m.action)
 	}
 
+	km.resolveConflicts()
 	return km, nil
+}
+
+// resolveConflicts drops any standalone binding whose key is also a chord leader.
+// When both "ctrl+w" and "ctrl+w>x" exist, the standalone is removed with a warning
+// so that pressing the leader always enters chord-pending state instead of firing
+// the standalone action. Invalidates the chord-prefix cache once at the end.
+func (km *Keymap) resolveConflicts() {
+	for chordKey := range km.bindings {
+		idx := strings.Index(chordKey, ">")
+		if idx <= 0 {
+			continue
+		}
+		leader := chordKey[:idx]
+		if _, exists := km.bindings[leader]; exists {
+			log.Printf("[WARN] keybindings: %s bound as both standalone and chord prefix; standalone dropped", leader)
+			delete(km.bindings, leader)
+		}
+	}
+	km.chordPrefixCache = nil
 }
 
 // LoadOrDefault loads keybindings from path if the file exists, otherwise returns

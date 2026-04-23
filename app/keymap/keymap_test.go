@@ -761,6 +761,95 @@ func TestAcceptance_invalidActionWarnsNoCrash(t *testing.T) {
 	assert.Equal(t, ActionQuit, maps[0].action)
 }
 
+func TestIsChordLeader(t *testing.T) {
+	km := Default()
+	km.Bind("ctrl+w>x", ActionQuit)
+
+	assert.True(t, km.IsChordLeader("ctrl+w"), "ctrl+w should be a chord leader")
+	assert.False(t, km.IsChordLeader("ctrl+d"), "ctrl+d has no chord binding")
+	assert.False(t, km.IsChordLeader("j"), "plain keys should never be chord leaders")
+	assert.False(t, km.IsChordLeader("ctrl+w>x"), "the full chord key is not itself a leader")
+}
+
+func TestIsChordLeader_standaloneIsNotLeader(t *testing.T) {
+	// standalone ctrl+w without any ctrl+w>* chord → not a leader
+	km := Default()
+	km.Bind("ctrl+w", ActionQuit)
+	assert.False(t, km.IsChordLeader("ctrl+w"), "standalone-only binding should not be a chord leader")
+}
+
+func TestIsChordLeader_LazyAndInvalidated(t *testing.T) {
+	km := Default()
+	// no chord bindings yet
+	assert.False(t, km.IsChordLeader("ctrl+w"))
+
+	// binding a chord must invalidate the cache so the next call sees it
+	km.Bind("ctrl+w>x", ActionQuit)
+	assert.True(t, km.IsChordLeader("ctrl+w"), "Bind must invalidate chord-prefix cache")
+
+	// unbinding the only chord under a leader must invalidate the cache
+	km.Unbind("ctrl+w>x")
+	assert.False(t, km.IsChordLeader("ctrl+w"), "Unbind must invalidate chord-prefix cache")
+
+	// multiple chords under same leader: removing one keeps leader active
+	km.Bind("ctrl+w>x", ActionQuit)
+	km.Bind("ctrl+w>y", ActionHelp)
+	km.Unbind("ctrl+w>x")
+	assert.True(t, km.IsChordLeader("ctrl+w"), "leader still active while any chord under it remains")
+}
+
+func TestLoad_ConflictDropsStandalone(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	content := "map ctrl+w quit\nmap ctrl+w>x help\n"
+	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o600))
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+
+	// the chord binding survives
+	assert.Equal(t, ActionHelp, km.Resolve("ctrl+w>x"))
+	// the standalone is dropped so the leader can enter chord-pending state
+	assert.Equal(t, Action(""), km.Resolve("ctrl+w"))
+	// the leader is recognized as a chord leader
+	assert.True(t, km.IsChordLeader("ctrl+w"))
+}
+
+func TestLoad_NoConflictKeepsBoth(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	content := "map ctrl+w>x help\nmap ctrl+t quit\n"
+	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o600))
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+
+	// chord survives
+	assert.Equal(t, ActionHelp, km.Resolve("ctrl+w>x"))
+	// unrelated standalone binding untouched
+	assert.Equal(t, ActionQuit, km.Resolve("ctrl+t"))
+	// leader of the chord has no standalone action
+	assert.Equal(t, Action(""), km.Resolve("ctrl+w"))
+	// defaults that are neither leaders nor chord bindings remain
+	assert.Equal(t, ActionDown, km.Resolve("j"))
+}
+
+func TestLoad_ConflictInvalidatesChordCache(t *testing.T) {
+	// prime a state where the default ctrl+d binding would conflict with a chord,
+	// then verify the conflict-resolution pass invalidates the cache correctly.
+	tmpFile := t.TempDir() + "/keybindings"
+	content := "map ctrl+d>x help\n"
+	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o600))
+
+	km, err := Load(tmpFile)
+	require.NoError(t, err)
+
+	// the default ctrl+d standalone binding was dropped by resolveConflicts
+	assert.Equal(t, Action(""), km.Resolve("ctrl+d"))
+	// chord leader is recognized immediately after Load
+	assert.True(t, km.IsChordLeader("ctrl+d"))
+	// the chord itself resolves
+	assert.Equal(t, ActionHelp, km.Resolve("ctrl+d>x"))
+}
+
 func TestParse_casePreservedForSingleChars(t *testing.T) {
 	input := strings.NewReader("map N prev_item\nmap n next_item\n")
 	maps, _, err := parse(input)
