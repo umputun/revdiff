@@ -237,6 +237,20 @@ func Default() *Keymap {
 	}
 }
 
+// NormalizeKey returns the Latin QWERTY equivalent of a single non-Latin key
+// character, or the input unchanged when it has no mapping. Multi-character key
+// strings (e.g. "esc", "ctrl+w") pass through unchanged. Used by dispatch paths
+// that compare keys against literal bindings without going through Resolve, so
+// non-Latin layouts behave identically to Latin ones.
+func NormalizeKey(key string) string {
+	if r, size := utf8.DecodeRuneInString(key); size == len(key) {
+		if alias, ok := layoutResolve(r); ok {
+			return string(alias)
+		}
+	}
+	return key
+}
+
 // Resolve returns the action bound to the given key, or empty Action if unbound.
 // For non-Latin keyboard layouts, if the key has no direct binding, it is
 // translated to its Latin QWERTY equivalent and looked up again.

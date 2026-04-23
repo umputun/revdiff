@@ -674,6 +674,79 @@ func TestVimMotion_MotionInTreePane(t *testing.T) {
 	assert.Equal(t, 0, model.nav.diffCursor, "diff cursor unchanged — motion did not reach diff pane")
 }
 
+func TestInterceptVimMotion_CyrillicLeaderEntry(t *testing.T) {
+	// cyrillic 'п' sits on the physical g key; pressing it on a cyrillic layout
+	// must enter leader state the same way 'g' does on QWERTY.
+	m := vimTestModel(t, 50)
+
+	result, _, handled := m.interceptVimMotion(keyMsg('п'))
+	require.True(t, handled, "cyrillic 'п' must activate g leader via layout alias")
+	model := result.(Model)
+	assert.Equal(t, "g", model.vim.leader, "leader must be stored as latin 'g'")
+	assert.Equal(t, "g…", model.vim.hint)
+}
+
+func TestInterceptVimMotion_CyrillicCountThenJ(t *testing.T) {
+	// cyrillic 'о' is on the physical j key. With a count pending, it must
+	// repeat ActionDown just like 'j' does on QWERTY.
+	m := vimTestModel(t, 50)
+	m.vim.count = 5
+	m.nav.diffCursor = 0
+
+	result, _, handled := m.interceptVimMotion(keyMsg('о'))
+	require.True(t, handled, "cyrillic 'о' must act as j via layout alias")
+	model := result.(Model)
+	assert.Equal(t, 5, model.nav.diffCursor, "5<cyrillic-j> moves cursor 5 lines")
+	assert.Equal(t, 0, model.vim.count)
+}
+
+func TestInterceptVimMotion_CyrillicG(t *testing.T) {
+	// cyrillic 'П' sits on the physical G key (shift variant). Bare <cyrillic-G>
+	// must jump to the last line.
+	m := vimTestModel(t, 50)
+	m.nav.diffCursor = 0
+
+	result, _, handled := m.interceptVimMotion(keyMsg('П'))
+	require.True(t, handled, "cyrillic 'П' must act as G via layout alias")
+	model := result.(Model)
+	assert.Equal(t, 49, model.nav.diffCursor, "<cyrillic-G> must jump to last line")
+}
+
+func TestInterceptVimMotion_CyrillicGg(t *testing.T) {
+	// full gg chord in cyrillic: leader 'п' (g) followed by 'п' (g) jumps to home.
+	m := vimTestModel(t, 50)
+	m.nav.diffCursor = 25
+
+	result, _, handled := m.interceptVimMotion(keyMsg('п'))
+	require.True(t, handled)
+	model := result.(Model)
+	require.Equal(t, "g", model.vim.leader)
+
+	result, _, handled = model.interceptVimMotion(keyMsg('п'))
+	require.True(t, handled, "second cyrillic 'п' must resolve gg")
+	model = result.(Model)
+	assert.Equal(t, 0, model.nav.diffCursor, "gg via cyrillic must jump to first line")
+	assert.Empty(t, model.vim.leader)
+}
+
+func TestInterceptVimMotion_CyrillicZZ(t *testing.T) {
+	// ZZ via cyrillic 'Я' (Z) must emit a quit command.
+	m := vimTestModel(t, 50)
+
+	result, _, handled := m.interceptVimMotion(keyMsg('Я'))
+	require.True(t, handled)
+	model := result.(Model)
+	require.Equal(t, "Z", model.vim.leader)
+
+	result, cmd, handled := model.interceptVimMotion(keyMsg('Я'))
+	require.True(t, handled)
+	require.NotNil(t, cmd, "cyrillic ZZ must produce a quit command")
+	_, ok := cmd().(tea.QuitMsg)
+	assert.True(t, ok, "cyrillic ZZ must emit tea.QuitMsg")
+	model = result.(Model)
+	assert.Empty(t, model.vim.leader)
+}
+
 func TestVimMotion_ZQuitFromTreePane(t *testing.T) {
 	// ZZ is pane-agnostic: the user can quit from any pane.
 	m := vimTestModel(t, 100)

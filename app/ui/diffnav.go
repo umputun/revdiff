@@ -294,6 +294,9 @@ func (m *Model) bottomAlignViewportOnCursor() {
 
 // jumpToLineN moves the diff cursor to line n (1-indexed), clamped to [1, total],
 // then centers the viewport on the new cursor position. no-op when the diff is empty.
+// in collapsed mode, the cursor is nudged to the nearest visible line so it
+// cannot land on a hidden removed line. any TOC pane active for markdown files
+// also has its highlighted section refreshed to match the new cursor.
 func (m *Model) jumpToLineN(n int) {
 	total := len(m.file.lines)
 	if total == 0 {
@@ -307,6 +310,8 @@ func (m *Model) jumpToLineN(n int) {
 	}
 	m.annot.cursorOnAnnotation = false
 	m.nav.diffCursor = n - 1
+	m.adjustCursorIfHidden()
+	m.syncTOCActiveSection()
 	m.centerViewportOnCursor()
 }
 

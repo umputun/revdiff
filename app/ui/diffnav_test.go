@@ -2709,6 +2709,85 @@ func TestJumpToLineN_EmptyDiff(t *testing.T) {
 	assert.Equal(t, before, model.nav.diffCursor, "empty diff should leave cursor unchanged")
 }
 
+func TestJumpToLineN_CollapsedModeSkipsHiddenLine(t *testing.T) {
+	// target line is a hidden removed line in collapsed mode; jumpToLineN must
+	// nudge the cursor to the nearest visible line so users never land on an
+	// invisible row when pressing G or <N>G.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // idx 0, line 1
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},  // idx 1, line 2 - hidden
+		{OldNum: 3, Content: "old2", ChangeType: diff.ChangeRemove},  // idx 2, line 3 - hidden
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},     // idx 3, line 4
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // idx 4, line 5
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	model.modes.collapsed.enabled = true
+	model.nav.diffCursor = 0
+
+	// line 2 is a hidden removed line; must nudge forward to the add line (idx 3)
+	model.jumpToLineN(2)
+	assert.Equal(t, 3, model.nav.diffCursor, "hidden removed line must nudge to nearest visible line")
+}
+
+func TestJumpToLineN_SyncsTOCActiveSection(t *testing.T) {
+	// when a markdown TOC is active, jumping to a line in a different section
+	// must refresh the TOC highlight so the rendered active-section indicator
+	// tracks the new cursor location.
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},  // idx 0
+		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},     // idx 1
+		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext}, // idx 2
+		{NewNum: 4, Content: "text", ChangeType: diff.ChangeContext},     // idx 3
+		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext}, // idx 4
+		{NewNum: 6, Content: "text", ChangeType: diff.ChangeContext},     // idx 5
+	}
+	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+	m.file.singleFile = true
+	m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+	require.NotNil(t, m.file.mdTOC)
+	m.file.name = "README.md"
+	m.file.lines = mdLines
+	m.file.highlighted = make([]string, len(mdLines))
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 0
+
+	// jump to line 5 (idx 4 = ### Third); TOC active section must track.
+	model.jumpToLineN(5)
+	model.file.mdTOC.SyncCursorToActiveSection()
+	idx, ok := model.file.mdTOC.CurrentLineIdx()
+	require.True(t, ok, "active section must be set after jumpToLineN")
+	assert.Equal(t, 4, idx, "jumpToLineN must sync TOC active section (Third, lineIdx=4)")
+}
+
+func TestJumpToLineN_CollapsedModeVisibleLineStays(t *testing.T) {
+	// target line is already visible in collapsed mode; cursor must land exactly
+	// on the requested line without adjustment.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext}, // idx 0
+		{OldNum: 2, Content: "old1", ChangeType: diff.ChangeRemove},  // idx 1 - hidden
+		{NewNum: 2, Content: "new1", ChangeType: diff.ChangeAdd},     // idx 2 - visible
+		{NewNum: 3, Content: "ctx2", ChangeType: diff.ChangeContext}, // idx 3
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	model.modes.collapsed.enabled = true
+	model.nav.diffCursor = 0
+
+	model.jumpToLineN(3) // line 3 = idx 2, the add line, visible
+	assert.Equal(t, 2, model.nav.diffCursor, "visible target line must not be adjusted")
+}
+
 func TestHandleDiffAction_ScrollCenter(t *testing.T) {
 	lines := make([]diff.DiffLine, 100)
 	for i := range lines {

@@ -953,6 +953,37 @@ func TestLoad_ConflictInvalidatesChordCache(t *testing.T) {
 	assert.Equal(t, ActionHelp, km.Resolve("ctrl+d>x"))
 }
 
+func TestNormalizeKey_LatinPassThrough(t *testing.T) {
+	// ASCII keys must be returned unchanged; no spurious translation.
+	assert.Equal(t, "j", NormalizeKey("j"))
+	assert.Equal(t, "G", NormalizeKey("G"))
+	assert.Equal(t, "5", NormalizeKey("5"))
+}
+
+func TestNormalizeKey_MultiRunePassThrough(t *testing.T) {
+	// multi-character key strings (special keys, modifier combos) bypass
+	// the layout alias entirely.
+	assert.Equal(t, "esc", NormalizeKey("esc"))
+	assert.Equal(t, "ctrl+w", NormalizeKey("ctrl+w"))
+	assert.Equal(t, "tab", NormalizeKey("tab"))
+}
+
+func TestNormalizeKey_CyrillicToLatin(t *testing.T) {
+	// single-rune non-Latin keys translate to their Latin QWERTY equivalent.
+	tests := []struct{ in, want string }{
+		{"о", "j"}, {"л", "k"}, {"п", "g"}, {"я", "z"},
+		{"Я", "Z"}, {"О", "J"}, {"ь", "m"}, {"м", "v"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, NormalizeKey(tc.in), "NormalizeKey(%q)", tc.in)
+	}
+}
+
+func TestNormalizeKey_UnmappedRunePassThrough(t *testing.T) {
+	// a non-Latin rune with no layout mapping returns unchanged.
+	assert.Equal(t, "日", NormalizeKey("日"))
+}
+
 func TestResolveChord_Direct(t *testing.T) {
 	km := Default()
 	km.Bind("ctrl+w>x", ActionQuit)
