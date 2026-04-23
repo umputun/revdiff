@@ -845,24 +845,24 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
-	// clear chord state on any overlay-opening action so a pending chord never
-	// coexists with an active overlay. the non-overlay default case short-circuits
-	// below without touching chord state.
+	// clear pending input state on any overlay-opening action so a pending chord
+	// or vim-motion count/leader never coexists with an active overlay. the
+	// non-overlay default case short-circuits below without touching state.
 	switch action {
 	case keymap.ActionHelp:
-		m.clearChordState()
+		m.clearPendingInputState()
 		m.overlay.OpenHelp(m.buildHelpSpec())
 		return m, true
 	case keymap.ActionAnnotList:
-		m.clearChordState()
+		m.clearPendingInputState()
 		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
 		return m, true
 	case keymap.ActionThemeSelect:
-		m.clearChordState()
+		m.clearPendingInputState()
 		m.openThemeSelector()
 		return m, true
 	case keymap.ActionCommitInfo:
-		m.clearChordState()
+		m.clearPendingInputState()
 		m.handleCommitInfo()
 		return m, true
 	default:
@@ -870,14 +870,16 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 	}
 }
 
-// clearChordState clears both chord-pending and the chord hint, enforcing the
-// invariant that the two fields are always cleared together. Called by modal-
-// entry paths (startSearch, startAnnotation, handleOverlayOpen) so chord state
-// never coexists with an active modal — the early chord-second guard in
-// handleKey is defense-in-depth against accidental coexistence.
-func (m *Model) clearChordState() {
+// clearPendingInputState clears all pending key-dispatch state: chord-pending,
+// chord hint, and vim-motion (count, leader, hint). Enforces the invariant
+// that these fields never coexist with an active modal. Called by modal-entry
+// paths (startSearch, startAnnotation, handleOverlayOpen) so a pending chord
+// or vim count never survives into a modal session — the early chord-second
+// guard in handleKey is defense-in-depth against accidental coexistence.
+func (m *Model) clearPendingInputState() {
 	m.keys.chordPending = ""
 	m.keys.hint = ""
+	m.vim = vimState{}
 }
 
 // handleCommitInfo opens the commit-info overlay when the feature is available

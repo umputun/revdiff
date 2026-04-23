@@ -486,15 +486,15 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/ui/search_test.go`
 - Modify: `app/ui/annotate_test.go`
 
-- [ ] rename `clearChordState` (model.go:848) to `clearPendingInputState`; extend body to also reset `m.vim = vimState{}`
-- [ ] update all three callsites: `startSearch` (search.go), `startAnnotation` (annotate.go), `handleOverlayOpen` (model.go)
-- [ ] update existing tests that referenced `clearChordState` (rename in test names too; search test files for "clearChordState" to find them)
-- [ ] write `TestClearPendingInputState_ClearsAllFields` — set chordPending, keys.hint, vim.count, vim.leader, vim.hint, call method, assert all cleared
-- [ ] write `TestStartSearch_ClearsVimState` — set `m.vim.count = 5`, `m.vim.hint = "5"`, call `startSearch`, assert both cleared
-- [ ] write `TestStartAnnotation_ClearsVimState` — same for annotation
-- [ ] write `TestHandleOverlayOpen_ClearsVimState_Help` — set vim state, call `handleOverlayOpen(ActionHelp)`, assert vim state cleared
-- [ ] write `TestHandleOverlayOpen_ClearsVimState_ThemeSelect` — same for ActionThemeSelect
-- [ ] run `make test` — must pass before task 9
+- [x] rename `clearChordState` (model.go:848) to `clearPendingInputState`; extend body to also reset `m.vim = vimState{}`
+- [x] update all three callsites: `startSearch` (search.go), `startAnnotation` (annotate.go), `handleOverlayOpen` (model.go)
+- [x] update existing tests that referenced `clearChordState` (rename in test names too; search test files for "clearChordState" to find them)
+- [x] write `TestClearPendingInputState_ClearsAllFields` — set chordPending, keys.hint, vim.count, vim.leader, vim.hint, call method, assert all cleared
+- [x] write `TestStartSearch_ClearsVimState` — set `m.vim.count = 5`, `m.vim.hint = "5"`, call `startSearch`, assert both cleared
+- [x] write `TestStartAnnotation_ClearsVimState` — same for annotation
+- [x] write `TestHandleOverlayOpen_ClearsVimState_Help` — set vim state, call `handleOverlayOpen(ActionHelp)`, assert vim state cleared
+- [x] write `TestHandleOverlayOpen_ClearsVimState_ThemeSelect` — same for ActionThemeSelect
+- [x] run `make test` — must pass before task 9
 
 ### Task 9: Integration test matrix
 

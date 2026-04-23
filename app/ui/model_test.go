@@ -1158,15 +1158,21 @@ func TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord(t *testing.T) {
 	assert.True(t, ok, "ctrl+w must fire the standalone ActionQuit")
 }
 
-func TestClearChordState(t *testing.T) {
+func TestClearPendingInputState_ClearsAllFields(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.keys.chordPending = "ctrl+w"
 	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+	m.vim.count = 42
+	m.vim.leader = "g"
+	m.vim.hint = "g…"
 
-	m.clearChordState()
+	m.clearPendingInputState()
 
 	assert.Empty(t, m.keys.chordPending, "chordPending must be cleared")
-	assert.Empty(t, m.keys.hint, "hint must be cleared alongside chordPending")
+	assert.Empty(t, m.keys.hint, "keys.hint must be cleared alongside chordPending")
+	assert.Zero(t, m.vim.count, "vim.count must be cleared")
+	assert.Empty(t, m.vim.leader, "vim.leader must be cleared")
+	assert.Empty(t, m.vim.hint, "vim.hint must be cleared")
 }
 
 func TestVimState_ZeroValue(t *testing.T) {
@@ -1281,6 +1287,75 @@ func TestStartAnnotation_ClearsChord(t *testing.T) {
 	assert.Empty(t, m.keys.chordPending, "startAnnotation must clear chordPending")
 	assert.Empty(t, m.keys.hint, "startAnnotation must clear chord hint")
 	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
+}
+
+func TestStartSearch_ClearsVimState(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.vim.count = 5
+	m.vim.leader = "g"
+	m.vim.hint = "5"
+
+	m.startSearch()
+
+	assert.Zero(t, m.vim.count, "startSearch must clear vim.count")
+	assert.Empty(t, m.vim.leader, "startSearch must clear vim.leader")
+	assert.Empty(t, m.vim.hint, "startSearch must clear vim.hint")
+	assert.True(t, m.search.active, "startSearch must enter searching mode")
+}
+
+func TestStartAnnotation_ClearsVimState(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.vim.count = 5
+	m.vim.leader = "z"
+	m.vim.hint = "z…"
+
+	m.startAnnotation()
+
+	assert.Zero(t, m.vim.count, "startAnnotation must clear vim.count")
+	assert.Empty(t, m.vim.leader, "startAnnotation must clear vim.leader")
+	assert.Empty(t, m.vim.hint, "startAnnotation must clear vim.hint")
+	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
+}
+
+func TestHandleOverlayOpen_ClearsVimState_Help(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.vim.count = 7
+	m.vim.leader = "g"
+	m.vim.hint = "g…"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionHelp)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionHelp must be handled by handleOverlayOpen")
+	assert.Zero(t, model.vim.count, "help overlay entry must clear vim.count")
+	assert.Empty(t, model.vim.leader, "help overlay entry must clear vim.leader")
+	assert.Empty(t, model.vim.hint, "help overlay entry must clear vim.hint")
+	assert.True(t, model.overlay.Active(), "help overlay must be open")
+}
+
+func TestHandleOverlayOpen_ClearsVimState_ThemeSelect(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.themes = newTestThemeCatalog()
+	m.vim.count = 9
+	m.vim.leader = "Z"
+	m.vim.hint = "Z…"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionThemeSelect must be handled by handleOverlayOpen")
+	assert.Zero(t, model.vim.count, "theme-select overlay entry must clear vim.count")
+	assert.Empty(t, model.vim.leader, "theme-select overlay entry must clear vim.leader")
+	assert.Empty(t, model.vim.hint, "theme-select overlay entry must clear vim.hint")
+	assert.True(t, model.overlay.Active(), "theme-select overlay must be open")
 }
 
 func TestHandleKey_ChordPrecedence(t *testing.T) {

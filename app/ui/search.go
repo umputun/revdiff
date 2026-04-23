@@ -9,7 +9,7 @@ import (
 
 // startSearch creates a search textinput and enters searching mode.
 func (m *Model) startSearch() tea.Cmd {
-	m.clearChordState()
+	m.clearPendingInputState()
 	ti := textinput.New()
 	ti.Placeholder = "/"
 	cmd := ti.Focus()
