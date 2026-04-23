@@ -835,3 +835,83 @@ func TestModel_NewModel_ReloadApplicable(t *testing.T) {
 		assert.False(t, m.reload.applicable)
 	})
 }
+
+func TestDispatchAction_OverlayOpen(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	require.False(t, m.overlay.Active(), "precondition: no overlay active")
+
+	result, cmd := m.dispatchAction(keymap.ActionHelp, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model := result.(Model)
+	assert.True(t, model.overlay.Active(), "help action should open help overlay")
+	assert.Nil(t, cmd)
+}
+
+func TestDispatchAction_Resolves(t *testing.T) {
+	tests := []struct {
+		name   string
+		action keymap.Action
+		verify func(t *testing.T, m Model, cmd tea.Cmd)
+	}{
+		{
+			name:   "ActionQuit returns tea.Quit",
+			action: keymap.ActionQuit,
+			verify: func(t *testing.T, _ Model, cmd tea.Cmd) {
+				require.NotNil(t, cmd)
+				msg := cmd()
+				_, ok := msg.(tea.QuitMsg)
+				assert.True(t, ok, "ActionQuit must produce tea.QuitMsg")
+			},
+		},
+		{
+			name:   "ActionTogglePane switches focus",
+			action: keymap.ActionTogglePane,
+			verify: func(t *testing.T, m Model, _ tea.Cmd) {
+				assert.Equal(t, paneDiff, m.layout.focus, "toggle_pane with file loaded should go to diff")
+			},
+		},
+		{
+			name:   "ActionHelp opens help overlay",
+			action: keymap.ActionHelp,
+			verify: func(t *testing.T, m Model, _ tea.Cmd) {
+				assert.True(t, m.overlay.Active(), "help must open overlay")
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			m.tree = testNewFileTree([]string{"a.go"})
+			m.file.name = "a.go" // enables togglePane to switch to diff
+			result, cmd := m.dispatchAction(tc.action, tea.KeyMsg{})
+			tc.verify(t, result.(Model), cmd)
+		})
+	}
+}
+
+func TestDispatchAction_PaneNavFallback_Diff(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	result, _ := m.dispatchAction(keymap.ActionDown, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model := result.(Model)
+	assert.Equal(t, 1, model.nav.diffCursor, "ActionDown should route to handleDiffAction and move cursor")
+}
+
+func TestDispatchAction_PaneNavFallback_Tree(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.layout.focus = paneTree
+	require.Equal(t, "a.go", m.tree.SelectedFile(), "precondition: first file selected")
+
+	result, _ := m.dispatchAction(keymap.ActionDown, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model := result.(Model)
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "ActionDown should route to handleTreeAction and move selection")
+}

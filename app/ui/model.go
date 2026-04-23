@@ -725,7 +725,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	action := m.keymap.Resolve(msg.String())
+	return m.dispatchAction(action, msg)
+}
 
+// dispatchAction routes a resolved keymap action through overlay-open, the
+// global action switch, and the pane-specific nav fallback. It is the unified
+// dispatch path shared by keymap-resolved single keys (handleKey) and by
+// chord-resolved actions (handleChordSecond). The msg parameter is forwarded
+// to pane-nav handlers for context.
+func (m Model) dispatchAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if model, ok := m.handleOverlayOpen(action); ok {
 		return model, nil
 	}
@@ -765,9 +773,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// pane-specific navigation
 	switch m.layout.focus {
 	case paneTree:
-		return m.handleTreeNav(msg)
+		return m.handleTreeAction(action, msg)
 	case paneDiff:
-		return m.handleDiffNav(msg)
+		return m.handleDiffAction(action, msg)
 	}
 	return m, nil
 }

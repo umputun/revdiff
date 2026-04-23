@@ -309,16 +309,16 @@ Example: `Pending: ctrl+w, esc to cancel`. Verbatim — no case transformation.
 
 This is a pure refactor — no behavior change. Required because chord-resolved actions (Task 6) need to flow through the same dispatch machinery as keymap-resolved actions, but the existing code re-resolves from `msg.String()` inside pane handlers.
 
-- [ ] add `dispatchAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, tea.Cmd)` method on Model containing the post-Resolve flow currently inline in `handleKey` (model.go:729-771): `handleOverlayOpen` check, then the `switch action` block, then the pane-nav fallback. The `msg` parameter is needed because `handleDiffAction`/`handleTreeAction` may need it for context (e.g., raw key for some pane operations); pass it through.
-- [ ] split `handleDiffNav(msg tea.KeyMsg)` into a thin wrapper `func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) { return m.handleDiffAction(m.keymap.Resolve(msg.String()), msg) }` plus a new `handleDiffAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, tea.Cmd)` containing the existing `switch action` body
-- [ ] split `handleTreeNav` identically: thin wrapper + new `handleTreeAction(action, msg)` core
-- [ ] update `handleKey` to replace the current post-Resolve inline code with `return m.dispatchAction(action, msg)`
-- [ ] verify all existing tests in `diffnav_test.go`, `model_test.go`, `handlers_test.go` still pass — this is a refactor, no behavior change expected
-- [ ] write `TestDispatchAction_Resolves` — table-driven test exercising the dispatch matrix: pass each action constant, assert the correct handler is invoked (use a moq for any external dep that needs verification)
-- [ ] write `TestDispatchAction_PaneNavFallback` — when action is a navigation action (Down, Up, etc.) and focus is paneDiff, assert `handleDiffAction` invoked; same for paneTree
-- [ ] write `TestDispatchAction_OverlayOpen` — when action is ActionHelp, assert overlay opens
-- [ ] write `TestHandleDiffNav_StillWorks` — sanity check that the thin wrapper produces identical results to pre-refactor (use existing nav tests as reference)
-- [ ] run `make test` — must pass before task 6
+- [x] add `dispatchAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, tea.Cmd)` method on Model containing the post-Resolve flow currently inline in `handleKey` (model.go:729-771): `handleOverlayOpen` check, then the `switch action` block, then the pane-nav fallback. The `msg` parameter is needed because `handleDiffAction`/`handleTreeAction` may need it for context (e.g., raw key for some pane operations); pass it through.
+- [x] split `handleDiffNav(msg tea.KeyMsg)` into a thin wrapper `func (m Model) handleDiffNav(msg tea.KeyMsg) (tea.Model, tea.Cmd) { return m.handleDiffAction(m.keymap.Resolve(msg.String()), msg) }` plus a new `handleDiffAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, tea.Cmd)` containing the existing `switch action` body
+- [x] split `handleTreeNav` identically: thin wrapper + new `handleTreeAction(action, msg)` core
+- [x] update `handleKey` to replace the current post-Resolve inline code with `return m.dispatchAction(action, msg)`
+- [x] verify all existing tests in `diffnav_test.go`, `model_test.go`, `handlers_test.go` still pass — this is a refactor, no behavior change expected
+- [x] write `TestDispatchAction_Resolves` — table-driven test exercising the dispatch matrix: pass each action constant, assert the correct handler is invoked (use a moq for any external dep that needs verification)
+- [x] write `TestDispatchAction_PaneNavFallback` — when action is a navigation action (Down, Up, etc.) and focus is paneDiff, assert `handleDiffAction` invoked; same for paneTree
+- [x] write `TestDispatchAction_OverlayOpen` — when action is ActionHelp, assert overlay opens
+- [x] write `TestHandleDiffNav_StillWorks` — sanity check that the thin wrapper produces identical results to pre-refactor (use existing nav tests as reference)
+- [x] run `make test` — must pass before task 6
 
 ### Task 6: Model state (keyState) + handleChordSecond
 
