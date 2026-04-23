@@ -537,6 +537,11 @@ map x quit
 unmap q</code></div>
         <p>Generate a template: <code>revdiff --dump-keys > ~/.config/revdiff/keybindings</code></p>
         <p>Modal keys (annotation input, search input, confirm discard) are not remappable.</p>
+        <h3>Chord bindings (ctrl/alt leader)</h3>
+        <p>Bind a two-stage chord by joining the leader and second key with <code>&gt;</code>. The leader must be a <code>ctrl+*</code> or <code>alt+*</code> combo; the second stage is any single key. Only two stages are supported.</p>
+        <div class="code-block"><code>map ctrl+w&gt;x close_file
+map alt+t&gt;n theme_select</code></div>
+        <p>When the leader is pressed, the status bar shows <code>Pending: ctrl+w, esc to cancel</code>; press the second key to dispatch, or <code>esc</code> to cancel silently. Binding a key as both a standalone action and a chord prefix drops the standalone binding (the chord wins, with a warning). Chord bindings work under non-Latin keyboard layouts &mdash; the second-stage key is translated via the same layout-resolve fallback as single-key bindings.</p>
         <h3>Available actions</h3>
         <p><strong>Navigation:</strong> <code>down</code>, <code>up</code>, <code>page_down</code>, <code>page_up</code>, <code>half_page_down</code>, <code>half_page_up</code>, <code>home</code>, <code>end</code>, <code>scroll_left</code>, <code>scroll_right</code></p>
         <p><strong>File/Hunk:</strong> <code>next_item</code>, <code>prev_item</code>, <code>next_hunk</code>, <code>prev_hunk</code></p>

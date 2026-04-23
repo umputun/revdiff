@@ -407,12 +407,12 @@ Three identical two-statement clears (`m.keys.chordPending = ""; m.keys.hint = "
 - Modify: `.claude-plugin/skills/revdiff/references/usage.md`
 - Modify: `plugins/codex/skills/revdiff/references/usage.md`
 
-- [ ] in `README.md` keybindings section, add a paragraph explaining chord syntax: leader must be `ctrl+*` or `alt+*`; second stage is any single key; format `map ctrl+w>x close_file`; while pending, status bar shows `Pending: ctrl+w, esc to cancel`; press `esc` to cancel; only 2-stage chords supported
-- [ ] mirror the README change in `site/docs.html` (same wording, HTML-formatted)
-- [ ] add identical paragraph to `.claude-plugin/skills/revdiff/references/usage.md`
-- [ ] copy the same paragraph BYTE-IDENTICAL to `plugins/codex/skills/revdiff/references/usage.md` (per `feedback_revdiff-docs-sync-plugins.md`)
-- [ ] verify byte-identity: `diff .claude-plugin/skills/revdiff/references/usage.md plugins/codex/skills/revdiff/references/usage.md` shows no differences (or only differences that pre-existed before this PR)
-- [ ] no test changes; run `make test` to confirm nothing broke
+- [x] in `README.md` keybindings section, add a paragraph explaining chord syntax: leader must be `ctrl+*` or `alt+*`; second stage is any single key; format `map ctrl+w>x close_file`; while pending, status bar shows `Pending: ctrl+w, esc to cancel`; press `esc` to cancel; only 2-stage chords supported
+- [x] mirror the README change in `site/docs.html` (same wording, HTML-formatted)
+- [x] add identical paragraph to `.claude-plugin/skills/revdiff/references/usage.md`
+- [x] copy the same paragraph BYTE-IDENTICAL to `plugins/codex/skills/revdiff/references/usage.md` (per `feedback_revdiff-docs-sync-plugins.md`)
+- [x] verify byte-identity: `diff .claude-plugin/skills/revdiff/references/usage.md plugins/codex/skills/revdiff/references/usage.md` shows no differences (or only differences that pre-existed before this PR)
+- [x] no test changes; run `make test` to confirm nothing broke
 
 ### Task 11: Verify acceptance criteria
 
