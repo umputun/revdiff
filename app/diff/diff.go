@@ -652,6 +652,10 @@ func parseUnifiedDiff(raw string, totalOldLines int) ([]DiffLine, error) {
 	// prevOldEnd = next untouched old-side line. Initialized to 1 so the first hunk's
 	// leading divider uses the same `oldStart - prevOldEnd` formula as between-hunks gaps.
 	prevOldEnd := 1
+	// sawHunk tracks whether any hunk header was parsed — used as the guard for the
+	// trailing divider so that insertion-at-start hunks (@@ -0,0 ...) don't collide
+	// with the prevOldEnd==1 initialization sentinel.
+	var sawHunk bool
 	var isNewFile, isDeletedFile bool
 
 	for scanner.Scan() {
@@ -697,6 +701,7 @@ func parseUnifiedDiff(raw string, totalOldLines int) ([]DiffLine, error) {
 			// prevOldEnd from prior iteration. Gap uses hunk-header metadata not oldNum, so
 			// insertion-only hunks (@@ -K,0 ...) compute correctly; oldNum stays put on `+` lines.
 			lines = appendGapDivider(lines, oldStart-prevOldEnd)
+			sawHunk = true
 			// prevOldEnd = line number AFTER the current hunk on the old side. Normal hunks
 			// (oldLen>0) cover [oldStart, oldStart+oldLen). Insertion-only hunks (oldLen==0,
 			// e.g. @@ -K,0 ...) insert between old lines K and K+1 — handled by max(oldLen,1).
@@ -748,8 +753,9 @@ func parseUnifiedDiff(raw string, totalOldLines int) ([]DiffLine, error) {
 
 	// trailing divider: unchanged lines after the last hunk on the old side.
 	// Emitted only when the caller supplied totalOldLines AND at least one hunk
-	// was processed (prevOldEnd > 1 means a hunk advanced it past the initial value).
-	if totalOldLines > 0 && prevOldEnd > 1 {
+	// was processed. sawHunk (not prevOldEnd > 1) is the correct "processed" flag
+	// — insertion-at-start hunks (@@ -0,0 ...) leave prevOldEnd at 1 but still count.
+	if totalOldLines > 0 && sawHunk {
 		lines = appendGapDivider(lines, totalOldLines-prevOldEnd+1)
 	}
 

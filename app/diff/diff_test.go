@@ -289,6 +289,16 @@ func TestParseUnifiedDiff_TrailingDivider(t *testing.T) {
 			totalOldLines: 7,
 			wantDividers:  []string{"⋯ 4 lines ⋯"},
 		},
+		{
+			name: "insertion-at-start hunk (@@ -0,0) with totalOldLines>0 emits trailing",
+			raw: "--- a\n+++ b\n" +
+				"@@ -0,0 +1,2 @@\n+x\n+y\n",
+			// hypothetical/malformed: prevOldEnd stays at 1 after the hunk,
+			// but sawHunk is true, so the trailing guard still fires.
+			// gap = totalOldLines - prevOldEnd + 1 = 10 - 1 + 1 = 10.
+			totalOldLines: 10,
+			wantDividers:  []string{"⋯ 10 lines ⋯"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
