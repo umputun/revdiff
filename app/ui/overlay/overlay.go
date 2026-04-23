@@ -256,8 +256,6 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 	}
 	var out Outcome
 	switch m.kind {
-	case KindNone:
-		return Outcome{}
 	case KindHelp:
 		out = m.help.handleMouse(msg)
 	case KindAnnotList:
@@ -266,7 +264,7 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 		out = m.themeSel.handleMouse(msg)
 	case KindCommitInfo:
 		out = m.commitInfo.handleMouse(msg)
-	default:
+	default: // KindNone handled by the early return above
 		return Outcome{}
 	}
 

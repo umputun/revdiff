@@ -10,12 +10,32 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/style"
 )
 
 func TestNewManager(t *testing.T) {
 	mgr := NewManager()
 	assert.False(t, mgr.Active(), "new manager should have no active overlay")
 	assert.Equal(t, KindNone, mgr.Kind())
+}
+
+func TestManager_HandleMouse_NoActiveOverlay(t *testing.T) {
+	mgr := NewManager()
+	out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	assert.Equal(t, Outcome{}, out, "no active overlay returns zero Outcome")
+}
+
+func TestManager_Close_ClearsBounds(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenHelp(HelpSpec{})
+
+	ctx := RenderCtx{Width: 120, Height: 40, Resolver: style.PlainResolver()}
+	base := strings.Repeat(strings.Repeat(" ", ctx.Width)+"\n", ctx.Height)
+	_ = mgr.Compose(base, ctx)
+	require.NotZero(t, mgr.bounds.w, "Compose should have populated bounds")
+
+	mgr.Close()
+	assert.Equal(t, popupBounds{}, mgr.bounds, "Close must reset bounds to zero value")
 }
 
 func TestManager_OpenClose(t *testing.T) {

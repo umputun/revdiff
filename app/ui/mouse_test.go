@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -627,14 +628,114 @@ func TestModel_HandleMouse_WheelScrollsCommitInfoOverlay(t *testing.T) {
 		commits = append(commits, diff.CommitInfo{Hash: "abc", Author: "a", Subject: "subject", Body: "body"})
 	}
 	mgr.OpenCommitInfo(overlay.CommitInfoSpec{Applicable: true, Commits: commits})
+	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
+	_ = mgr.Compose(strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height), ctx)
 	require.True(t, m.overlay.Active())
-	m.nav.diffCursor = 0
+	// park diff cursor mid-stream: if wheel leaks through, it would change
+	// this value; overlay consuming the wheel leaves it intact.
+	m.nav.diffCursor = 5
 
-	// wheel down over the commit-info popup scrolls the popup, not the diff
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "commit-info overlay stays open after wheel")
-	assert.Equal(t, 0, model.nav.diffCursor, "diff cursor must not move while overlay consumes wheel")
+	assert.Equal(t, 5, model.nav.diffCursor, "diff cursor must stay put — wheel is consumed by overlay, not the pane beneath")
+	// exact offset advancement is verified by TestCommitInfoOverlay_HandleMouse_WheelScrollsOffset
+	// in the overlay package (has access to the private offset field).
+}
+
+func TestModel_HandleMouse_WheelScrollsAnnotListOverlay(t *testing.T) {
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
+	})
+	mgr, ok := m.overlay.(*overlay.Manager)
+	require.True(t, ok)
+
+	items := []overlay.AnnotationItem{
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 1, ChangeType: "+"}, Comment: "one"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 2, ChangeType: "+"}, Comment: "two"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 3, ChangeType: "+"}, Comment: "three"},
+	}
+	mgr.OpenAnnotList(overlay.AnnotListSpec{Items: items})
+	m.nav.diffCursor = 0
+
+	// wheel-down must be consumed by the overlay; diff cursor must not move
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	assert.True(t, model.overlay.Active(), "annotlist overlay stays open after wheel")
+	assert.Equal(t, 0, model.nav.diffCursor, "diff cursor must not move")
+}
+
+func TestModel_HandleMouse_WheelScrollsThemeSelectOverlay(t *testing.T) {
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
+	})
+	mgr, ok := m.overlay.(*overlay.Manager)
+	require.True(t, ok)
+
+	mgr.OpenThemeSelect(overlay.ThemeSelectSpec{Items: []overlay.ThemeItem{
+		{Name: "a"}, {Name: "b"},
+	}, ActiveName: "a"})
+	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
+	_ = mgr.Compose(strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height), ctx)
+	m.nav.diffCursor = 0
+
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	assert.True(t, model.overlay.Active(), "themeselect overlay stays open after wheel")
+	assert.Equal(t, 0, model.nav.diffCursor)
+}
+
+func TestModel_HandleMouse_ClickConfirmsThemeSelect(t *testing.T) {
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
+	})
+	mgr, ok := m.overlay.(*overlay.Manager)
+	require.True(t, ok)
+
+	mgr.OpenThemeSelect(overlay.ThemeSelectSpec{Items: []overlay.ThemeItem{
+		{Name: "a"}, {Name: "b"},
+	}, ActiveName: "a"})
+	// prime bounds via Compose so Manager.HandleMouse can translate screen to popup-local
+	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
+	base := strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height)
+	_ = mgr.Compose(base, ctx)
+
+	// we need the popup's screen coords — derive from the manager by reading bounds
+	// via the same Compose output. Since we can't read Manager.bounds from outside the
+	// overlay package, the simplest verification: send a click at the screen center
+	// (popup is centered by Compose) and verify the outcome path runs. The actual
+	// row math is exercised by overlay-package tests; here we verify the Model-side
+	// side-effect pathway (confirmThemeByName is invoked and overlay closes).
+	centerX, centerY := m.layout.width/2, m.layout.height/2
+	result, _ := m.Update(leftPressAt(centerX, centerY))
+	model := result.(Model)
+
+	assert.False(t, model.overlay.Active(), "click inside popup on an entry row should confirm and close the overlay")
+}
+
+func TestModel_HandleMouse_ClickJumpsAnnotList(t *testing.T) {
+	m := mouseTestModel(t, []string{"a.go", "b.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
+		"b.go": {{NewNum: 1, Content: "b", ChangeType: diff.ChangeContext}},
+	})
+	mgr, ok := m.overlay.(*overlay.Manager)
+	require.True(t, ok)
+
+	items := []overlay.AnnotationItem{
+		{AnnotationTarget: overlay.AnnotationTarget{File: "b.go", Line: 1, ChangeType: "+"}, Comment: "one"},
+	}
+	mgr.OpenAnnotList(overlay.AnnotListSpec{Items: items})
+	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
+	base := strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height)
+	_ = mgr.Compose(base, ctx)
+
+	// click at screen center — the centered annotlist popup is small, so center
+	// hits the first item row. verifies Manager.HandleMouse → annotlist → jump path.
+	centerX, centerY := m.layout.width/2, m.layout.height/2
+	result, _ := m.Update(leftPressAt(centerX, centerY))
+	model := result.(Model)
+
+	assert.False(t, model.overlay.Active(), "click on item row should jump and auto-close")
 }
 
 func TestModel_HandleMouse_ClearsTransientHints(t *testing.T) {

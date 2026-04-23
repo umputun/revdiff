@@ -273,9 +273,8 @@ func TestCommitInfoOverlay_HandleKeyClose(t *testing.T) {
 
 func TestCommitInfoOverlay_HandleMouse_WheelScrollsOffset(t *testing.T) {
 	commits := make([]diff.CommitInfo, 0, 20)
-	for i := range 20 {
+	for range 20 {
 		commits = append(commits, makeCommit("hash", "a", "subject", "body", time.Time{}))
-		_ = i
 	}
 	mgr := NewManager()
 	mgr.OpenCommitInfo(CommitInfoSpec{Applicable: true, Commits: commits})
@@ -283,11 +282,11 @@ func TestCommitInfoOverlay_HandleMouse_WheelScrollsOffset(t *testing.T) {
 	_ = mgr.commitInfo.render(commitInfoRenderCtx(), mgr)
 	require.Equal(t, 0, mgr.commitInfo.offset)
 
-	t.Run("wheel down advances offset by commitInfoWheelStep", func(t *testing.T) {
+	t.Run("wheel down advances offset by WheelStep", func(t *testing.T) {
 		mgr.commitInfo.offset = 0
 		out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
 		assert.Equal(t, OutcomeNone, out.Kind)
-		assert.Equal(t, commitInfoWheelStep, mgr.commitInfo.offset)
+		assert.Equal(t, WheelStep, mgr.commitInfo.offset)
 	})
 
 	t.Run("wheel up decreases offset and clamps at 0", func(t *testing.T) {

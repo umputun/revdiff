@@ -14,10 +14,11 @@ import (
 )
 
 type annotListOverlay struct {
-	items  []AnnotationItem
-	cursor int
-	offset int
-	height int // last known terminal height, updated on render
+	items      []AnnotationItem
+	cursor     int
+	offset     int
+	height     int // last known terminal height, updated on render
+	popupWidth int // last known popup width, updated on render; used by handleLeftClick
 }
 
 func (a *annotListOverlay) open(spec AnnotListSpec) {
@@ -29,6 +30,7 @@ func (a *annotListOverlay) open(spec AnnotListSpec) {
 func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	a.height = ctx.Height
 	popupWidth := max(min(ctx.Width-10, 70), 20)
+	a.popupWidth = popupWidth
 
 	if len(a.items) == 0 {
 		return a.emptyOverlay(popupWidth, ctx.Resolver, mgr)
@@ -204,7 +206,7 @@ func (a *annotListOverlay) handleMouse(msg tea.MouseMsg) Outcome {
 		a.moveCursorBy(-a.wheelStep(msg.Shift))
 		return Outcome{Kind: OutcomeNone}
 	case tea.MouseButtonLeft:
-		return a.handleLeftClick(msg.Y)
+		return a.handleLeftClick(msg.X, msg.Y)
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
@@ -219,12 +221,18 @@ func (a *annotListOverlay) wheelStep(shift bool) int {
 	return max(a.maxVisible(a.height)/2, 1)
 }
 
-// handleLeftClick maps a popup-local y to an item row and returns a jump
-// outcome. the popup has a 1-row border and 1-row padding at the top, so
-// entries start at localY=2. clicks on border, padding, or past the last
-// visible item are no-ops; the overlay stays open.
-func (a *annotListOverlay) handleLeftClick(localY int) Outcome {
-	const contentTop = 2 // border (1) + top padding (1)
+// handleLeftClick maps popup-local (x, y) to an item row and returns a jump
+// outcome. the popup has a 1-row border + 1-row top padding, and 1-col border
+// + 1-col left/right padding — so the content rectangle is y in [2, h-2) and
+// x in [2, popupWidth-2). clicks outside that rectangle (including the
+// vertical borders and horizontal padding on an item row) are no-ops so
+// users cannot accidentally select by clicking chrome.
+func (a *annotListOverlay) handleLeftClick(localX, localY int) Outcome {
+	const contentTop = 2      // border (1) + top padding (1)
+	const horizChromeCols = 2 // border (1) + side padding (1) on each side
+	if localX < horizChromeCols || localX >= a.popupWidth-horizChromeCols {
+		return Outcome{Kind: OutcomeNone}
+	}
 	relRow := localY - contentTop
 	maxVis := a.maxVisible(a.height)
 	if relRow < 0 || relRow >= maxVis {

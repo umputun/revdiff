@@ -7,10 +7,10 @@ import (
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
-// wheelStep is the number of lines one wheel notch scrolls by. matches the
-// typical terminal feel (3 lines per notch). Shift+wheel uses half the
-// viewport height instead.
-const wheelStep = 3
+// wheelStep is the number of lines one wheel notch scrolls by. Shift+wheel
+// uses half the viewport height instead. Shared with overlay.WheelStep so
+// overlay popup scroll feels the same as diff-pane scroll.
+const wheelStep = overlay.WheelStep
 
 // hitZone identifies which interactive area a mouse event targets.
 type hitZone int
@@ -152,8 +152,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // handleOverlayMouse routes a mouse event to the active overlay. wheel events
 // drive the overlay's own scroll/cursor navigation; clicks and other buttons
 // are consumed so they don't leak through to the panes underneath. outcomes
-// that need model-side side effects (theme preview/confirm/cancel, annotation
-// jump) are dispatched through the same helpers as the keyboard path.
+// that need model-side side effects (annotation jump, theme preview/confirm)
+// are dispatched through the same helpers as the keyboard path. Canceled and
+// Closed branches mirror the keyboard dispatch for symmetry but the current
+// overlay mouse handlers never emit them — a mouse click either confirms
+// (themeselect) or is a no-op.
 func (m Model) handleOverlayMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	out := m.overlay.HandleMouse(msg)
 	switch out.Kind {

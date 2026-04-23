@@ -389,13 +389,18 @@ func TestAnnotListOverlay_HandleLeftClick(t *testing.T) {
 		annotItem("b.go", 20, "-", "second"),
 		annotItem("c.go", 30, "+", "third"),
 	}
-	mgr := NewManager()
-	mgr.OpenAnnotList(annotListSpec(items...))
-	mgr.annotLst.height = 20 // maxVisible = max(min(3, 20-6), 1) = 3
+	const popupWidth = 40
+	// prime layout state that render() would normally set
+	setup := func() *Manager {
+		mgr := NewManager()
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20 // maxVisible = max(min(3, 20-6), 1) = 3
+		mgr.annotLst.popupWidth = popupWidth
+		return mgr
+	}
 
 	t.Run("click on first item row", func(t *testing.T) {
-		mgr.OpenAnnotList(annotListSpec(items...))
-		mgr.annotLst.height = 20
+		mgr := setup()
 		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 2})
 		assert.Equal(t, OutcomeAnnotationChosen, out.Kind)
 		require.NotNil(t, out.AnnotationTarget)
@@ -405,8 +410,7 @@ func TestAnnotListOverlay_HandleLeftClick(t *testing.T) {
 	})
 
 	t.Run("click on third item row", func(t *testing.T) {
-		mgr.OpenAnnotList(annotListSpec(items...))
-		mgr.annotLst.height = 20
+		mgr := setup()
 		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 4})
 		assert.Equal(t, OutcomeAnnotationChosen, out.Kind)
 		assert.Equal(t, "c.go", out.AnnotationTarget.File)
@@ -414,33 +418,62 @@ func TestAnnotListOverlay_HandleLeftClick(t *testing.T) {
 	})
 
 	t.Run("click on top border is no-op", func(t *testing.T) {
-		mgr.OpenAnnotList(annotListSpec(items...))
-		mgr.annotLst.height = 20
+		mgr := setup()
 		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 0})
 		assert.Equal(t, OutcomeNone, out.Kind)
 	})
 
 	t.Run("click on top padding is no-op", func(t *testing.T) {
-		mgr.OpenAnnotList(annotListSpec(items...))
-		mgr.annotLst.height = 20
+		mgr := setup()
 		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 1})
 		assert.Equal(t, OutcomeNone, out.Kind)
 	})
 
 	t.Run("click past visible items is no-op", func(t *testing.T) {
-		mgr.OpenAnnotList(annotListSpec(items...))
-		mgr.annotLst.height = 20
+		mgr := setup()
 		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 5})
 		assert.Equal(t, OutcomeNone, out.Kind, "row past the 3 visible items")
 	})
 
+	t.Run("click on left border column is no-op", func(t *testing.T) {
+		mgr := setup()
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 0, Y: 2})
+		assert.Equal(t, OutcomeNone, out.Kind, "x=0 is the left border")
+	})
+
+	t.Run("click on left padding column is no-op", func(t *testing.T) {
+		mgr := setup()
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 1, Y: 2})
+		assert.Equal(t, OutcomeNone, out.Kind, "x=1 is the left padding")
+	})
+
+	t.Run("click on right padding column is no-op", func(t *testing.T) {
+		mgr := setup()
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: popupWidth - 2, Y: 2})
+		assert.Equal(t, OutcomeNone, out.Kind, "x=popupWidth-2 is the right padding")
+	})
+
+	t.Run("click on right border column is no-op", func(t *testing.T) {
+		mgr := setup()
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: popupWidth - 1, Y: 2})
+		assert.Equal(t, OutcomeNone, out.Kind, "x=popupWidth-1 is the right border")
+	})
+
+	t.Run("click at first content column (x=2) selects", func(t *testing.T) {
+		mgr := setup()
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 2, Y: 2})
+		assert.Equal(t, OutcomeAnnotationChosen, out.Kind, "x=2 is the first content column")
+	})
+
 	t.Run("click respects scroll offset", func(t *testing.T) {
+		mgr := NewManager()
 		many := make([]AnnotationItem, 10)
 		for i := range many {
 			many[i] = annotItem("a.go", i+1, "+", "note")
 		}
 		mgr.OpenAnnotList(annotListSpec(many...))
 		mgr.annotLst.height = 10 // maxVisible = 4
+		mgr.annotLst.popupWidth = popupWidth
 		mgr.annotLst.offset = 3
 
 		// clicking the first visible row (localY=2) selects item at offset
@@ -450,8 +483,7 @@ func TestAnnotListOverlay_HandleLeftClick(t *testing.T) {
 	})
 
 	t.Run("non-press action is no-op", func(t *testing.T) {
-		mgr.OpenAnnotList(annotListSpec(items...))
-		mgr.annotLst.height = 20
+		mgr := setup()
 		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease, X: 5, Y: 2})
 		assert.Equal(t, OutcomeNone, out.Kind)
 	})

@@ -28,6 +28,7 @@ type themeSelectOverlay struct {
 	filter            string
 	lastPreviewedName string
 	height            int // last known terminal height, updated on render
+	popupWidth        int // last known popup width, updated on render; used by handleLeftClick
 }
 
 func (t *themeSelectOverlay) open(spec ThemeSelectSpec) {
@@ -70,6 +71,7 @@ func (t *themeSelectOverlay) applyFilter() {
 func (t *themeSelectOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	t.height = ctx.Height
 	popupWidth := max(min(ctx.Width-themePopupMargin, themePopupMaxWidth), themePopupMinWidth)
+	t.popupWidth = popupWidth
 	maxVisible := t.maxVisible()
 
 	// clamp offset after height refresh so cursor stays visible on terminal resize
@@ -267,7 +269,7 @@ func (t *themeSelectOverlay) handleMouse(msg tea.MouseMsg) Outcome {
 		}
 		return t.previewOutcome()
 	case tea.MouseButtonLeft:
-		return t.handleLeftClick(msg.Y)
+		return t.handleLeftClick(msg.X, msg.Y)
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
@@ -282,12 +284,20 @@ func (t *themeSelectOverlay) wheelStep(shift bool) int {
 	return max(t.maxVisible()/2, 1)
 }
 
-// handleLeftClick maps a popup-local y to an entry row and confirms that
-// theme. layout inside the box: border (y=0), top padding (y=1), filter (y=2),
-// blank separator (y=3), entries starting at y=4. clicks on non-entry rows
-// (border, padding, filter, separator, past the visible list) are no-ops.
-func (t *themeSelectOverlay) handleLeftClick(localY int) Outcome {
-	const entriesTop = 4 // border (1) + top padding (1) + filter (1) + blank (1)
+// handleLeftClick maps popup-local (x, y) to an entry row and confirms that
+// theme. layout inside the box: y=0 border, y=1 top padding, y=2 filter,
+// y=3 blank separator, y=4+ entries. horizontally: x=0 border, x=1 left
+// padding, x in [2, popupWidth-2) content, x=popupWidth-2 right padding,
+// x=popupWidth-1 right border. clicks outside the content rectangle are
+// no-ops so users cannot accidentally confirm a theme by clicking chrome.
+// lastPreviewedName is updated so a subsequent arrow-key back to the same
+// entry does not re-emit a redundant preview.
+func (t *themeSelectOverlay) handleLeftClick(localX, localY int) Outcome {
+	const entriesTop = 4      // border (1) + top padding (1) + filter (1) + blank (1)
+	const horizChromeCols = 2 // border (1) + side padding (1) on each side
+	if localX < horizChromeCols || localX >= t.popupWidth-horizChromeCols {
+		return Outcome{Kind: OutcomeNone}
+	}
 	relRow := localY - entriesTop
 	maxVis := t.maxVisible()
 	if relRow < 0 || relRow >= maxVis {
@@ -298,6 +308,7 @@ func (t *themeSelectOverlay) handleLeftClick(localY int) Outcome {
 		return Outcome{Kind: OutcomeNone}
 	}
 	t.cursor = entryIdx
+	t.lastPreviewedName = t.entries[entryIdx].Name
 	return Outcome{Kind: OutcomeThemeConfirmed, ThemeChoice: &ThemeChoice{Name: t.entries[entryIdx].Name}}
 }
 
