@@ -374,12 +374,12 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/ui/diffnav.go`
 - Modify: `app/ui/diffnav_test.go`
 
-- [ ] in `handleDiffAction` (diffnav.go:424), add three `case` arms: `ActionScrollCenter → centerViewportOnCursor`, `ActionScrollTop → topAlignViewportOnCursor`, `ActionScrollBottom → bottomAlignViewportOnCursor`
-- [ ] do NOT add to `handleTreeAction` (diff-pane-only scope)
-- [ ] write `TestHandleDiffAction_ScrollCenter` — focus diff, call with `ActionScrollCenter`, assert viewport repositioned
-- [ ] write `TestHandleDiffAction_ScrollTop` — same for top
-- [ ] write `TestHandleDiffAction_ScrollBottom` — same for bottom
-- [ ] run `make test` — must pass before task 4
+- [x] in `handleDiffAction` (diffnav.go:424), add three `case` arms: `ActionScrollCenter → centerViewportOnCursor`, `ActionScrollTop → topAlignViewportOnCursor`, `ActionScrollBottom → bottomAlignViewportOnCursor`
+- [x] do NOT add to `handleTreeAction` (diff-pane-only scope)
+- [x] write `TestHandleDiffAction_ScrollCenter` — focus diff, call with `ActionScrollCenter`, assert viewport repositioned
+- [x] write `TestHandleDiffAction_ScrollTop` — same for top
+- [x] write `TestHandleDiffAction_ScrollBottom` — same for bottom
+- [x] run `make test` — must pass before task 4
 
 ### Task 4: Add VimMotion config field
 

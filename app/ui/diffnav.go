@@ -475,6 +475,15 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
+	case keymap.ActionScrollCenter:
+		m.centerViewportOnCursor()
+		return m, nil
+	case keymap.ActionScrollTop:
+		m.topAlignViewportOnCursor()
+		return m, nil
+	case keymap.ActionScrollBottom:
+		m.bottomAlignViewportOnCursor()
+		return m, nil
 	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
