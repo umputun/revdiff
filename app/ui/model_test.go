@@ -1063,6 +1063,27 @@ func TestTransientHint_ChordHintLowestPriority(t *testing.T) {
 	}
 }
 
+func TestTransientHint_VimLowestPriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		setHint func(m *Model)
+		want    string
+	}{
+		{name: "vim hint alone", setHint: func(m *Model) { m.vim.hint = "5" }, want: "5"},
+		{name: "commits beats vim", setHint: func(m *Model) { m.commits.hint = "no commits"; m.vim.hint = "5" }, want: "no commits"},
+		{name: "reload beats vim", setHint: func(m *Model) { m.reload.hint = "Reloaded"; m.vim.hint = "5" }, want: "Reloaded"},
+		{name: "compact beats vim", setHint: func(m *Model) { m.compact.hint = "compact off"; m.vim.hint = "5" }, want: "compact off"},
+		{name: "keys beats vim", setHint: func(m *Model) { m.keys.hint = "Pending: ctrl+w"; m.vim.hint = "5" }, want: "Pending: ctrl+w"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			tc.setHint(&m)
+			assert.Equal(t, tc.want, m.transientHint())
+		})
+	}
+}
+
 func TestHandleKey_EntersChordPending(t *testing.T) {
 	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
@@ -1146,6 +1167,23 @@ func TestClearChordState(t *testing.T) {
 
 	assert.Empty(t, m.keys.chordPending, "chordPending must be cleared")
 	assert.Empty(t, m.keys.hint, "hint must be cleared alongside chordPending")
+}
+
+func TestVimState_ZeroValue(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	assert.Equal(t, 0, m.vim.count, "vim.count must default to 0")
+	assert.Empty(t, m.vim.leader, "vim.leader must default to empty")
+	assert.Empty(t, m.vim.hint, "vim.hint must default to empty")
+}
+
+func TestHandleKey_ClearsVimHint(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.vim.hint = "5"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+
+	assert.Empty(t, model.vim.hint, "any key press must clear vim.hint alongside other transient hints")
 }
 
 func TestHandleOverlayOpen_HelpClearsChord(t *testing.T) {

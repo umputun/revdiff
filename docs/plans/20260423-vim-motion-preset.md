@@ -406,15 +406,15 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/ui/view.go`
 - Modify: `app/ui/view_test.go`
 
-- [ ] define `vimState` struct (count, leader, hint) in `app/ui/model.go` next to `keyState` (godoc both fields and struct purpose)
-- [ ] add `vim vimState` field to Model struct as a plain value (not pointer)
-- [ ] in `handleKey` (model.go:~711), add `m.vim.hint = ""` to the existing hint-clear block alongside existing `m.commits.hint = ""` etc.
-- [ ] in `view.go` `transientHint()` (line 105), append `case m.vim.hint != "": return m.vim.hint` as the LAST case (lowest priority)
-- [ ] write `TestVimState_ZeroValue` — default Model has `vim.count == 0`, `vim.leader == ""`, `vim.hint == ""`
-- [ ] write `TestTransientHint_VimLowestPriority` — set `m.commits.hint = "x"` AND `m.vim.hint = "y"`, assert `transientHint()` returns "x"
-- [ ] write `TestTransientHint_VimShownWhenOthersEmpty` — only `m.vim.hint = "5"` set, assert returns "5"
-- [ ] write `TestHandleKey_ClearsVimHint` — set `m.vim.hint = "x"`, send any KeyMsg (vim-motion off), assert hint cleared
-- [ ] run `make test` — must pass before task 6
+- [x] define `vimState` struct (count, leader, hint) in `app/ui/model.go` next to `keyState` (godoc both fields and struct purpose)
+- [x] add `vim vimState` field to Model struct as a plain value (not pointer)
+- [x] in `handleKey` (model.go:~711), add `m.vim.hint = ""` to the existing hint-clear block alongside existing `m.commits.hint = ""` etc.
+- [x] in `view.go` `transientHint()` (line 105), append `case m.vim.hint != "": return m.vim.hint` as the LAST case (lowest priority)
+- [x] write `TestVimState_ZeroValue` — default Model has `vim.count == 0`, `vim.leader == ""`, `vim.hint == ""`
+- [x] write `TestTransientHint_VimLowestPriority` — set `m.commits.hint = "x"` AND `m.vim.hint = "y"`, assert `transientHint()` returns "x"
+- [x] write `TestTransientHint_VimShownWhenOthersEmpty` — only `m.vim.hint = "5"` set, assert returns "5"
+- [x] write `TestHandleKey_ClearsVimHint` — set `m.vim.hint = "x"`, send any KeyMsg (vim-motion off), assert hint cleared
+- [x] run `make test` — must pass before task 6
 
 ### Task 6: Add vimmotion.go with interceptor + state-machine logic
 

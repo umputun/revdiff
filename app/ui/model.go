@@ -359,6 +359,18 @@ type keyState struct {
 	hint         string // transient status-bar message; cleared on next key press
 }
 
+// vimState holds vim-motion preset state: count prefix accumulator and
+// pending letter leader. Distinct from keyState (ctrl/alt chord dispatch);
+// the two are orthogonal and run in different guards of handleKey. The vim
+// interceptor runs only when modes.vimMotion is true; when off, all fields
+// stay at their zero values. Invariant: count > 0 and leader != "" never
+// coexist (enforced in interceptor code, not types).
+type vimState struct {
+	count  int    // accumulated count prefix; 0 = none pending
+	leader string // pending letter leader: "g", "z", "Z", or ""
+	hint   string // transient status-bar message; cleared on next key press
+}
+
 // annotationState holds annotation input lifecycle state.
 type annotationState struct {
 	annotating         bool            // true when annotation text input is active
@@ -404,6 +416,7 @@ type Model struct {
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 	compact     compactState      // applicability + transient hint for compact diff mode
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
+	vim         vimState          // count accumulator, pending letter leader, and transient hint for vim-motion preset
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
@@ -736,6 +749,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.reload.hint = ""
 	m.compact.hint = ""
 	m.keys.hint = ""
+	m.vim.hint = ""
 
 	// pending-reload intercept: y confirms, any other key cancels
 	if m.reload.pending {
