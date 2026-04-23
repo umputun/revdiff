@@ -247,14 +247,14 @@ Example: `Pending: ctrl+w, esc to cancel`. Verbatim — no case transformation.
 - Modify: `app/keymap/keymap.go`
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] in `parse()`, when a `map` line's key contains `>`, validate: leader must start with `ctrl+` or `alt+`, second must not contain `>` (2-stage only); warn + skip on violation
-- [ ] normalize each half through `normalizeKey()` then rejoin with `>` so user can write `Ctrl+W>X` and have it stored as `ctrl+w>X`
-- [ ] write `TestParse_ChordBinding` — `map ctrl+w>x close_file` parses correctly, stored as `ctrl+w>x`
-- [ ] write `TestParse_ChordBinding_NormalizesCase` — `map Ctrl+W>X close_file` stored as `ctrl+w>X` (ctrl lowercased, second-stage case preserved)
-- [ ] write `TestParse_ChordBinding_RejectsNonModifierLeader` — `map g>g home` warns and is skipped (not added to bindings)
-- [ ] write `TestParse_ChordBinding_RejectsThreeStage` — `map ctrl+w>x>y foo` warns and is skipped
-- [ ] write `TestParse_ChordBinding_RejectsEmptyHalves` — `map ctrl+w> foo` and `map >x foo` warn and are skipped
-- [ ] run `make test` — must pass before task 2
+- [x] in `parse()`, when a `map` line's key contains `>`, validate: leader must start with `ctrl+` or `alt+`, second must not contain `>` (2-stage only); warn + skip on violation
+- [x] normalize each half through `normalizeKey()` then rejoin with `>` so user can write `Ctrl+W>X` and have it stored as `ctrl+w>X`
+- [x] write `TestParse_ChordBinding` — `map ctrl+w>x close_file` parses correctly, stored as `ctrl+w>x`
+- [x] write `TestParse_ChordBinding_NormalizesCase` — `map Ctrl+W>X close_file` stored as `ctrl+w>X` (ctrl lowercased, second-stage case preserved)
+- [x] write `TestParse_ChordBinding_RejectsNonModifierLeader` — `map g>g home` warns and is skipped (not added to bindings)
+- [x] write `TestParse_ChordBinding_RejectsThreeStage` — `map ctrl+w>x>y foo` warns and is skipped
+- [x] write `TestParse_ChordBinding_RejectsEmptyHalves` — `map ctrl+w> foo` and `map >x foo` warn and are skipped
+- [x] run `make test` — must pass before task 2
 
 ### Task 2: Conflict resolution + lazy chord-prefix index
 

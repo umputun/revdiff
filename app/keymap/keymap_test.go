@@ -388,6 +388,89 @@ func TestParse_unmapNormalization(t *testing.T) {
 	assert.Equal(t, []string{"pgdown"}, unmaps)
 }
 
+func TestParse_ChordBinding(t *testing.T) {
+	input := strings.NewReader("map ctrl+w>x quit\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 1)
+	assert.Equal(t, "ctrl+w>x", maps[0].key)
+	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
+func TestParse_ChordBinding_NormalizesCase(t *testing.T) {
+	// leader is case-normalized via normalizeKey (ctrl+/alt+ lowercased)
+	// second-stage case is preserved (X stays X)
+	input := strings.NewReader("map Ctrl+W>X quit\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 1)
+	assert.Equal(t, "ctrl+w>X", maps[0].key)
+	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
+func TestParse_ChordBinding_AltLeader(t *testing.T) {
+	input := strings.NewReader("map alt+t>n quit\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 1)
+	assert.Equal(t, "alt+t>n", maps[0].key)
+}
+
+func TestParse_ChordBinding_RejectsNonModifierLeader(t *testing.T) {
+	input := strings.NewReader("map g>g home\nmap ctrl+w>x quit\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	// only the valid chord should remain; g>g rejected
+	require.Len(t, maps, 1)
+	assert.Equal(t, "ctrl+w>x", maps[0].key)
+	assert.Equal(t, ActionQuit, maps[0].action)
+}
+
+func TestParse_ChordBinding_RejectsShiftLeader(t *testing.T) {
+	// shift+ is neither ctrl+ nor alt+; rejected
+	input := strings.NewReader("map shift+w>x quit\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	assert.Empty(t, maps)
+}
+
+func TestParse_ChordBinding_RejectsThreeStage(t *testing.T) {
+	input := strings.NewReader("map ctrl+w>x>y quit\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	assert.Empty(t, maps)
+}
+
+func TestParse_ChordBinding_RejectsEmptyHalves(t *testing.T) {
+	cases := []string{
+		"map ctrl+w> quit\n",
+		"map >x quit\n",
+		"map > quit\n",
+	}
+	for _, c := range cases {
+		t.Run(c, func(t *testing.T) {
+			maps, _, err := parse(strings.NewReader(c))
+			require.NoError(t, err)
+			assert.Empty(t, maps, "input %q should parse to no map entries", c)
+		})
+	}
+}
+
+func TestParse_ChordBinding_UnmapChord(t *testing.T) {
+	input := strings.NewReader("unmap ctrl+w>x\n")
+	_, unmaps, err := parse(input)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ctrl+w>x"}, unmaps)
+}
+
+func TestParse_ChordBinding_UnmapInvalidChordSkipped(t *testing.T) {
+	input := strings.NewReader("unmap g>g\nunmap ctrl+w>x\n")
+	_, unmaps, err := parse(input)
+	require.NoError(t, err)
+	// invalid chord leader rejected; only the valid chord unmap remains
+	assert.Equal(t, []string{"ctrl+w>x"}, unmaps)
+}
+
 func TestLoad_withOverrides(t *testing.T) {
 	tmpFile := t.TempDir() + "/keybindings"
 	err := os.WriteFile(tmpFile, []byte("map x quit\nunmap j\n"), 0o600)

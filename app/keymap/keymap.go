@@ -374,6 +374,30 @@ func normalizeKey(key string) string {
 	return key
 }
 
+// parseChordKey validates and normalizes a chord key of the form "<leader>><second>".
+// Returns the normalized chord key and true on success, or "" and false after logging
+// a warning for empty halves, three-stage chords, or non-ctrl/alt leaders. Leader case
+// is normalized via normalizeKey (ctrl+/alt+ lowercased); second-stage case is preserved
+// so that ctrl+w>x and ctrl+w>X remain distinct.
+func parseChordKey(rawKey string, lineNum int) (string, bool) {
+	parts := strings.SplitN(rawKey, ">", 2)
+	leader, second := parts[0], parts[1]
+	if leader == "" || second == "" {
+		log.Printf("[WARN] keybindings:%d: chord halves cannot be empty, skipping", lineNum)
+		return "", false
+	}
+	if strings.Contains(second, ">") {
+		log.Printf("[WARN] keybindings:%d: only 2-stage chords supported, skipping", lineNum)
+		return "", false
+	}
+	leaderNorm := normalizeKey(leader)
+	if !strings.HasPrefix(leaderNorm, "ctrl+") && !strings.HasPrefix(leaderNorm, "alt+") {
+		log.Printf("[WARN] keybindings:%d: chord leader must be ctrl+ or alt+ combo, skipping", lineNum)
+		return "", false
+	}
+	return leaderNorm + ">" + normalizeKey(second), true
+}
+
 // parse reads keybinding definitions from r and returns map entries and unmap keys.
 // format: "map <key> <action>" or "unmap <key>", with # comments and blank lines ignored.
 // unknown action names are reported via log and skipped. Duplicate mappings: last wins.
@@ -400,16 +424,32 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 				log.Printf("[WARN] keybindings:%d: map requires key and action, skipping", lineNum)
 				continue
 			}
-			key := normalizeKey(fields[1])
+			rawKey := fields[1]
 			action := Action(fields[2])
 			if !IsValidAction(action) {
 				log.Printf("[WARN] keybindings:%d: unknown action %q, skipping", lineNum, action)
 				continue
 			}
-			maps = append(maps, mapEntry{key: key, action: action})
+			if strings.Contains(rawKey, ">") {
+				key, ok := parseChordKey(rawKey, lineNum)
+				if !ok {
+					continue
+				}
+				maps = append(maps, mapEntry{key: key, action: action})
+				continue
+			}
+			maps = append(maps, mapEntry{key: normalizeKey(rawKey), action: action})
 		case "unmap":
-			key := normalizeKey(fields[1])
-			unmaps = append(unmaps, key)
+			rawKey := fields[1]
+			if strings.Contains(rawKey, ">") {
+				key, ok := parseChordKey(rawKey, lineNum)
+				if !ok {
+					continue
+				}
+				unmaps = append(unmaps, key)
+				continue
+			}
+			unmaps = append(unmaps, normalizeKey(rawKey))
 		default:
 			log.Printf("[WARN] keybindings:%d: unknown command %q in line %q, skipping", lineNum, cmd, line)
 		}
