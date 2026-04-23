@@ -131,8 +131,9 @@ func TestInterceptVimMotion_LeaderPendingEsc(t *testing.T) {
 func TestInterceptVimMotion_DigitZeroFallsThrough(t *testing.T) {
 	m := vimTestModel(t, 50)
 	// count == 0 and key == "0" must fall through so "0" can keep its normal binding.
-	result, _, handled := m.interceptVimMotion(keyMsg('0'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('0'))
 	require.False(t, handled, "bare 0 with no pending count must fall through")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Equal(t, 0, model.vim.count, "count must stay 0")
 	assert.Empty(t, model.vim.hint, "hint must stay empty")
@@ -203,8 +204,9 @@ func TestInterceptVimMotion_CountJFocusTreeFallsThrough(t *testing.T) {
 	m.layout.focus = paneTree
 	m.vim.count = 5
 
-	result, _, handled := m.interceptVimMotion(keyMsg('j'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('j'))
 	require.False(t, handled, "j outside diff pane must fall through")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Equal(t, 0, model.vim.count, "count must be cleared on fall-through")
 	assert.Empty(t, model.vim.hint)
@@ -236,8 +238,9 @@ func TestInterceptVimMotion_GTreePaneFallsThrough(t *testing.T) {
 	m := vimTestModel(t, 50)
 	m.layout.focus = paneTree
 
-	result, _, handled := m.interceptVimMotion(keyMsg('G'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('G'))
 	require.False(t, handled, "G in tree pane must fall through (diff-only)")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Equal(t, 0, model.vim.count)
 }
@@ -248,8 +251,9 @@ func TestInterceptVimMotion_CountUnrelatedKeyFallsThrough(t *testing.T) {
 
 	// "q" with a pending count must drop the count silently and fall through
 	// so the key still performs its normal action (ActionQuit).
-	result, _, handled := m.interceptVimMotion(keyMsg('q'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('q'))
 	require.False(t, handled, "unrelated key after count must fall through")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Equal(t, 0, model.vim.count, "count must be cleared silently")
 	assert.Empty(t, model.vim.hint)
@@ -269,8 +273,9 @@ func TestInterceptVimMotion_LeaderEntryGTreeFallsThrough(t *testing.T) {
 	m := vimTestModel(t, 50)
 	m.layout.focus = paneTree
 
-	result, _, handled := m.interceptVimMotion(keyMsg('g'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('g'))
 	require.False(t, handled, "g in tree pane must fall through")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Empty(t, model.vim.leader)
 }
@@ -289,8 +294,9 @@ func TestInterceptVimMotion_LeaderEntryZTreeFallsThrough(t *testing.T) {
 	m := vimTestModel(t, 50)
 	m.layout.focus = paneTree
 
-	result, _, handled := m.interceptVimMotion(keyMsg('z'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('z'))
 	require.False(t, handled, "z in tree pane must fall through")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Empty(t, model.vim.leader)
 }
@@ -315,8 +321,9 @@ func TestInterceptVimMotion_LeaderEntryCapitalZPaneAgnostic(t *testing.T) {
 func TestInterceptVimMotion_NonVimKeyFallsThrough(t *testing.T) {
 	m := vimTestModel(t, 50)
 
-	result, _, handled := m.interceptVimMotion(keyMsg('q'))
+	result, cmd, handled := m.interceptVimMotion(keyMsg('q'))
 	require.False(t, handled, "non-vim key with no pending state must fall through")
+	assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
 	model := result.(Model)
 	assert.Equal(t, 0, model.vim.count)
 	assert.Empty(t, model.vim.leader)
@@ -377,8 +384,7 @@ func TestResolveVimLeader_AllChordTableEntries(t *testing.T) {
 			m.vim.leader = tc.leader
 			m.vim.hint = tc.leader + "…"
 
-			result, cmd, handled := m.resolveVimLeader(tc.second)
-			require.True(t, handled, "chord resolution must always be handled")
+			result, cmd := m.resolveVimLeader(tc.second)
 			model := result.(Model)
 			assert.Empty(t, model.vim.leader, "leader must be cleared")
 			tc.check(t, model, cmd)
@@ -391,8 +397,7 @@ func TestResolveVimLeader_UnknownChordSetsHint(t *testing.T) {
 	m.vim.leader = "z"
 	m.vim.hint = "z…"
 
-	result, _, handled := m.resolveVimLeader("x")
-	require.True(t, handled)
+	result, _ := m.resolveVimLeader("x")
 	model := result.(Model)
 	assert.Empty(t, model.vim.leader)
 	assert.Equal(t, "Unknown: zx", model.vim.hint)
@@ -403,8 +408,7 @@ func TestResolveVimLeader_EscCancelsSilently(t *testing.T) {
 	m.vim.leader = "g"
 	m.vim.hint = "g…"
 
-	result, _, handled := m.resolveVimLeader("esc")
-	require.True(t, handled)
+	result, _ := m.resolveVimLeader("esc")
 	model := result.(Model)
 	assert.Empty(t, model.vim.leader)
 	assert.Empty(t, model.vim.hint, "esc must not leave any hint")
@@ -414,9 +418,7 @@ func TestRepeatDiffAction_MultipleIterations(t *testing.T) {
 	m := vimTestModel(t, 50)
 	m.nav.diffCursor = 0
 
-	result, _, handled := m.repeatDiffAction(keymap.ActionDown, 5)
-	require.True(t, handled)
-	model := result.(Model)
+	model := m.repeatDiffAction(keymap.ActionDown, 5).(Model)
 	assert.Equal(t, 5, model.nav.diffCursor)
 	assert.Equal(t, 0, model.vim.count, "count must be cleared after repeat")
 	assert.Empty(t, model.vim.hint)
@@ -426,9 +428,7 @@ func TestRepeatDiffAction_ClampsAtBoundary(t *testing.T) {
 	m := vimTestModel(t, 20)
 	m.nav.diffCursor = 15
 
-	result, _, handled := m.repeatDiffAction(keymap.ActionDown, 9999)
-	require.True(t, handled)
-	model := result.(Model)
+	model := m.repeatDiffAction(keymap.ActionDown, 9999).(Model)
 	assert.Equal(t, 19, model.nav.diffCursor, "cursor must clamp at last line (handleDiffAction clamps internally)")
 	assert.Equal(t, 0, model.vim.count)
 }
@@ -437,9 +437,7 @@ func TestRepeatDiffAction_ZeroCountNoMotion(t *testing.T) {
 	m := vimTestModel(t, 50)
 	m.nav.diffCursor = 10
 
-	result, _, handled := m.repeatDiffAction(keymap.ActionDown, 0)
-	require.True(t, handled, "repeatDiffAction always returns handled=true")
-	model := result.(Model)
+	model := m.repeatDiffAction(keymap.ActionDown, 0).(Model)
 	assert.Equal(t, 10, model.nav.diffCursor, "zero iterations leaves cursor alone")
 }
 

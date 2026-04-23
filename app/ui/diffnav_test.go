@@ -2616,8 +2616,6 @@ func TestBottomAlignViewportOnCursor_PlacesCursorAtBottom(t *testing.T) {
 	require.Positive(t, pageHeight)
 
 	cursorY := model.cursorViewportY()
-	assert.Equal(t, cursorY-pageHeight+1, model.layout.viewport.YOffset,
-		"bottom-align should put cursor on last visible row")
 	assert.Equal(t, pageHeight-1, cursorY-model.layout.viewport.YOffset,
 		"cursor should be at visual row pageHeight-1 (bottom row)")
 }

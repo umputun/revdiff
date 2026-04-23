@@ -49,7 +49,8 @@ func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 
 	// priority 1: pending letter leader
 	if m.vim.leader != "" {
-		return m.resolveVimLeader(keyStr)
+		model, cmd := m.resolveVimLeader(keyStr)
+		return model, cmd, true
 	}
 
 	// priority 2: digit accumulation
@@ -79,9 +80,9 @@ func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if m.vim.count > 0 {
 		switch {
 		case keyStr == "j" && m.layout.focus == paneDiff:
-			return m.repeatDiffAction(keymap.ActionDown, m.vim.count)
+			return m.repeatDiffAction(keymap.ActionDown, m.vim.count), nil, true
 		case keyStr == "k" && m.layout.focus == paneDiff:
-			return m.repeatDiffAction(keymap.ActionUp, m.vim.count)
+			return m.repeatDiffAction(keymap.ActionUp, m.vim.count), nil, true
 		}
 		// count is active but key is not a consumer (or wrong pane): drop count
 		// silently and fall through so the key still triggers its normal action
@@ -110,20 +111,20 @@ func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 // pending. esc cancels silently; a bound second-stage key dispatches the
 // chord's action; any other key clears the leader and surfaces an
 // "Unknown: <leader><key>" hint. The leader is always cleared before returning.
-func (m Model) resolveVimLeader(keyStr string) (tea.Model, tea.Cmd, bool) {
+// The caller is interceptVimMotion; the key is always consumed (no fall-through).
+func (m Model) resolveVimLeader(keyStr string) (tea.Model, tea.Cmd) {
 	leader := m.vim.leader
 	m.vim.leader = ""
 	m.vim.hint = ""
 	if keyStr == "esc" {
-		return m, nil, true
+		return m, nil
 	}
 	action, ok := vimChordTable[leader+keyStr]
 	if !ok {
 		m.vim.hint = "Unknown: " + leader + keyStr
-		return m, nil, true
+		return m, nil
 	}
-	model, cmd := m.dispatchAction(action)
-	return model, cmd, true
+	return m.dispatchAction(action)
 }
 
 // repeatDiffAction applies the given cursor motion n times, then syncs the
@@ -135,8 +136,9 @@ func (m Model) resolveVimLeader(keyStr string) (tea.Model, tea.Cmd, bool) {
 //
 // Only ActionDown and ActionUp are expected; any other action is a caller
 // bug and returns without moving. Count and hint are cleared on the returned
-// model so the next keypress starts fresh.
-func (m Model) repeatDiffAction(action keymap.Action, n int) (tea.Model, tea.Cmd, bool) {
+// model so the next keypress starts fresh. The caller is interceptVimMotion;
+// the key is always consumed (no fall-through) and no command is produced.
+func (m Model) repeatDiffAction(action keymap.Action, n int) tea.Model {
 	m.vim.count = 0
 	m.vim.hint = ""
 	switch action {
@@ -149,11 +151,11 @@ func (m Model) repeatDiffAction(action keymap.Action, n int) (tea.Model, tea.Cmd
 			m.moveDiffCursorUp()
 		}
 	default:
-		return m, nil, true
+		return m
 	}
 	m.syncViewportToCursor()
 	m.syncTOCActiveSection()
-	return m, nil, true
+	return m
 }
 
 // isDigit reports whether keyStr is a single-character string representing an
