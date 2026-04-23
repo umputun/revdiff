@@ -422,13 +422,13 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Create: `app/ui/vimmotion.go`
 - Create: `app/ui/vimmotion_test.go`
 
-- [ ] create `app/ui/vimmotion.go` with package-level `vimChordTable` map (6 entries from Solution Overview)
-- [ ] implement `interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool)` method on Model with the priority 1–5 decision list
-- [ ] implement `resolveVimLeader(keyStr string) (tea.Model, tea.Cmd, bool)` helper
-- [ ] implement `repeatDiffAction(action keymap.Action, n int) (tea.Model, tea.Cmd, bool)` helper that loops `handleDiffAction`
-- [ ] helper `isDigit(keyStr string) bool` and `digitValue(keyStr string) int` (unexported, package-private)
-- [ ] do NOT wire into handleKey yet — that happens in Task 7
-- [ ] write table-driven test `TestInterceptVimMotion_Priority` covering the full matrix:
+- [x] create `app/ui/vimmotion.go` with package-level `vimChordTable` map (6 entries from Solution Overview)
+- [x] implement `interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool)` method on Model with the priority 1–5 decision list
+- [x] implement `resolveVimLeader(keyStr string) (tea.Model, tea.Cmd, bool)` helper
+- [x] implement `repeatDiffAction(action keymap.Action, n int) (tea.Model, tea.Cmd, bool)` helper that loops `handleDiffAction`
+- [x] helper `isDigit(keyStr string) bool` and `digitValue(keyStr string) int` (unexported, package-private)
+- [x] do NOT wire into handleKey yet — that happens in Task 7
+- [x] write table-driven test `TestInterceptVimMotion_Priority` covering the full matrix:
   - leader pending + bound second → action dispatched, leader cleared, handled=true
   - leader pending + unbound second → hint set, leader cleared, handled=true
   - leader pending + esc → leader cleared silently, handled=true
@@ -447,10 +447,10 @@ func (m *Model) bottomAlignViewportOnCursor() {
   - count=0, key="z", focus=diff → leader="z", hint="z…", handled=true
   - count=0, key="Z", any focus → leader="Z", hint="Z…", handled=true (pane-agnostic)
   - count=0, non-vim key → falls through, handled=false
-- [ ] write `TestResolveVimLeader_AllChordTableEntries` — for each entry in `vimChordTable`, set leader, call `resolveVimLeader(second)`, assert correct action dispatched via dispatchAction (use moq or direct Model inspection)
-- [ ] write `TestRepeatDiffAction_MultipleIterations` — start at cursor 0, call `repeatDiffAction(ActionDown, 5)`, assert cursor at 5
-- [ ] write `TestRepeatDiffAction_ClampsAtBoundary` — near end of diff, `repeatDiffAction(ActionDown, 9999)`, assert cursor at last line (relies on `handleDiffAction`'s own clamping)
-- [ ] run `make test` — must pass before task 7
+- [x] write `TestResolveVimLeader_AllChordTableEntries` — for each entry in `vimChordTable`, set leader, call `resolveVimLeader(second)`, assert correct action dispatched via dispatchAction (use moq or direct Model inspection)
+- [x] write `TestRepeatDiffAction_MultipleIterations` — start at cursor 0, call `repeatDiffAction(ActionDown, 5)`, assert cursor at 5
+- [x] write `TestRepeatDiffAction_ClampsAtBoundary` — near end of diff, `repeatDiffAction(ActionDown, 9999)`, assert cursor at last line (relies on `handleDiffAction`'s own clamping)
+- [x] run `make test` — must pass before task 7
 
 ### Task 7: Wire interceptor into handleKey
 
