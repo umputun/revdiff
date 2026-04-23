@@ -458,7 +458,7 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/model_test.go`
 
-- [ ] in `handleKey`, insert the vim-motion interceptor call AFTER `handleModalKey` and BEFORE `keymap.Resolve`:
+- [x] in `handleKey`, insert the vim-motion interceptor call AFTER `handleModalKey` and BEFORE `keymap.Resolve`:
   ```go
   if m.modes.vimMotion {
       if model, cmd, handled := m.interceptVimMotion(msg); handled {
@@ -466,15 +466,15 @@ func (m *Model) bottomAlignViewportOnCursor() {
       }
   }
   ```
-- [ ] write `TestHandleKey_VimMotionOff_InterceptorSkipped` — `modes.vimMotion = false`, send `5`, assert no vim state set, key falls through normally (likely unhandled, no-op)
-- [ ] write `TestHandleKey_VimMotionOn_DigitAccumulates` — `modes.vimMotion = true`, send `5`, assert `m.vim.count == 5`, `m.vim.hint == "5"`
-- [ ] write `TestHandleKey_VimMotionOn_ChordSecondWins` — `m.keys.chordPending = "ctrl+w"`, `modes.vimMotion = true`, send `5`, assert chord-second handles the key (vim NOT reached); verify `m.keys.chordPending` cleared and `m.vim.count == 0`
-- [ ] write `TestHandleKey_VimMotionOn_PendingReloadWins` — `m.reload.pending = true`, `modes.vimMotion = true`, send `y`, assert reload confirmed, vim state untouched
-- [ ] write `TestHandleKey_VimMotionOn_SearchActiveModalWins` — `modes.vimMotion = true`, `m.search.active = true`, send `5`, assert search textinput receives the `5` (modal handles the key), `m.vim.count == 0` (interceptor never ran). Locks in the ordering invariant: modal preempts vim.
-- [ ] write `TestHandleKey_VimMotionOn_AnnotateActiveModalWins` — same assertion with annotation mode active
-- [ ] write `TestHandleKey_VimMotionOn_OverlayActiveModalWins` — same with overlay open (e.g., help overlay)
-- [ ] write `TestHandleKey_VimMotionOn_NonVimKeyFallsThrough` — `modes.vimMotion = true`, send `q`, assert quit handled normally (interceptor returns handled=false for non-vim keys with no pending state)
-- [ ] run `make test` — must pass before task 8
+- [x] write `TestHandleKey_VimMotionOff_InterceptorSkipped` — `modes.vimMotion = false`, send `5`, assert no vim state set, key falls through normally (likely unhandled, no-op)
+- [x] write `TestHandleKey_VimMotionOn_DigitAccumulates` — `modes.vimMotion = true`, send `5`, assert `m.vim.count == 5`, `m.vim.hint == "5"`
+- [x] write `TestHandleKey_VimMotionOn_ChordSecondWins` — `m.keys.chordPending = "ctrl+w"`, `modes.vimMotion = true`, send `5`, assert chord-second handles the key (vim NOT reached); verify `m.keys.chordPending` cleared and `m.vim.count == 0`
+- [x] write `TestHandleKey_VimMotionOn_PendingReloadWins` — `m.reload.pending = true`, `modes.vimMotion = true`, send `y`, assert reload confirmed, vim state untouched
+- [x] write `TestHandleKey_VimMotionOn_SearchActiveModalWins` — `modes.vimMotion = true`, `m.search.active = true`, send `5`, assert search textinput receives the `5` (modal handles the key), `m.vim.count == 0` (interceptor never ran). Locks in the ordering invariant: modal preempts vim.
+- [x] write `TestHandleKey_VimMotionOn_AnnotateActiveModalWins` — same assertion with annotation mode active
+- [x] write `TestHandleKey_VimMotionOn_OverlayActiveModalWins` — same with overlay open (e.g., help overlay)
+- [x] write `TestHandleKey_VimMotionOn_NonVimKeyFallsThrough` — `modes.vimMotion = true`, send `q`, assert quit handled normally (interceptor returns handled=false for non-vim keys with no pending state)
+- [x] run `make test` — must pass before task 8
 
 ### Task 8: Extend clearChordState → clearPendingInputState
 
