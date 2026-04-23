@@ -224,14 +224,12 @@ func TestParseUnifiedDiff_TrailingDivider(t *testing.T) {
 			wantDividers:  []string{"⋯ 7 lines ⋯", "⋯ 290 lines ⋯"},
 		},
 		{
-			name: "trailing singular — total is one past last hunk",
+			name: "trailing singular — exactly one line after last hunk",
 			raw: "--- a\n+++ b\n" +
 				"@@ -1,3 +1,3 @@\n a\n-b\n+B\n",
-			// prevOldEnd=4, trailing = 5-4+1 = 2? let me recompute: trailing = totalOldLines - prevOldEnd + 1 = 5-4+1 = 2.
-			// so this one has gap=2 (two lines). adjusted below.
+			// prevOldEnd=4, totalOldLines=4, gap = 4-4+1 = 1 → singular label
 			totalOldLines: 4,
-			// prevOldEnd=4, gap = 4-4+1 = 1
-			wantDividers: []string{"⋯ 1 line ⋯"},
+			wantDividers:  []string{"⋯ 1 line ⋯"},
 		},
 		{
 			name: "no trailing — last hunk covers to EOF",
@@ -263,6 +261,33 @@ func TestParseUnifiedDiff_TrailingDivider(t *testing.T) {
 			// no hunks processed → prevOldEnd stays 1 → trailing skipped by guard.
 			totalOldLines: 100,
 			wantDividers:  nil,
+		},
+		{
+			name: "insertion-only LAST hunk computes trailing from prevOldEnd=K+1",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,1 +1,1 @@\n-a\n+A\n" +
+				"@@ -10,0 +11,2 @@\n+x\n+y\n",
+			// between hunks: prevOldEnd after hunk 1 = 2, next oldStart = 10 → gap = 8.
+			// last hunk is insertion-only: prevOldEnd = 10 + max(0,1) = 11.
+			// trailing: totalOldLines=20, 20 - 11 + 1 = 10.
+			totalOldLines: 20,
+			wantDividers:  []string{"⋯ 8 lines ⋯", "⋯ 10 lines ⋯"},
+		},
+		{
+			name: "deleted file (@@ -1,N +0,0 @@) — last hunk covers EOF, no trailing",
+			raw: "--- a\n+++ /dev/null\n" +
+				"@@ -1,3 +0,0 @@\n-a\n-b\n-c\n",
+			// prevOldEnd = 1 + 3 = 4 = totalOldLines + 1, so gap = 3-4+1 = 0 → no divider.
+			totalOldLines: 3,
+			wantDividers:  nil,
+		},
+		{
+			name: "exact boundary prevOldEnd == totalOldLines + 1 emits no trailing",
+			raw: "--- a\n+++ b\n" +
+				"@@ -5,3 +5,3 @@\n a\n-b\n+B\n",
+			// leading: 4 lines (5-1). prevOldEnd = 8. totalOldLines = 7 → 7-8+1 = 0 → no trailing.
+			totalOldLines: 7,
+			wantDividers:  []string{"⋯ 4 lines ⋯"},
 		},
 	}
 	for _, tc := range tests {
@@ -1076,6 +1101,58 @@ func gitCmd(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func TestGit_TotalOldLines(t *testing.T) {
+	dir := setupTestRepo(t)
+	// commit A: 5 lines
+	writeFile(t, dir, "f.txt", "a\nb\nc\nd\ne\n")
+	gitCmd(t, dir, "add", "f.txt")
+	gitCmd(t, dir, "commit", "-m", "A")
+	commitA, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output() //nolint:gosec // test-controlled args
+	require.NoError(t, err)
+	refA := strings.TrimSpace(string(commitA))
+
+	// commit B: 3 lines (same file, modified)
+	writeFile(t, dir, "f.txt", "a\nB\nC\n")
+	gitCmd(t, dir, "add", "f.txt")
+	gitCmd(t, dir, "commit", "-m", "B")
+
+	// working tree: 7 lines
+	writeFile(t, dir, "f.txt", "a\nB\nC\nd\ne\nf\ng\n")
+
+	// staged version (10 lines)
+	writeFile(t, dir, "staged.txt", strings.Repeat("x\n", 10))
+	gitCmd(t, dir, "add", "staged.txt")
+
+	// file without trailing newline
+	writeFile(t, dir, "notrail.txt", "line1\nline2")
+	gitCmd(t, dir, "add", "notrail.txt")
+	gitCmd(t, dir, "commit", "-m", "notrail")
+
+	g := NewGit(dir)
+
+	tests := []struct {
+		name   string
+		ref    string
+		file   string
+		staged bool
+		want   int
+	}{
+		{"HEAD commit B — 3 lines", "HEAD", "f.txt", false, 3},
+		{"commit A — 5 lines via single ref", refA, "f.txt", false, 5},
+		{"range A..HEAD — left operand A, 5 lines", refA + "..HEAD", "f.txt", false, 5},
+		{"triple-dot A...HEAD — takes left operand A, 5 lines", refA + "...HEAD", "f.txt", false, 5},
+		{"empty ref + staged → HEAD, 3 lines", "", "f.txt", true, 3},
+		{"non-existent ref → 0", "nonexistent-ref-xyz", "f.txt", false, 0},
+		{"non-existent file → 0", "HEAD", "missing.txt", false, 0},
+		{"file without trailing newline counts final line", "HEAD", "notrail.txt", false, 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, g.totalOldLines(tc.ref, tc.file, tc.staged))
+		})
+	}
 }
 
 func TestMatchesPrefix(t *testing.T) {

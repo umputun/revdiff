@@ -20,7 +20,7 @@ const (
 	ChangeAdd     ChangeType = "+"
 	ChangeRemove  ChangeType = "-"
 	ChangeContext ChangeType = " "
-	ChangeDivider ChangeType = "~" // separates non-adjacent hunks
+	ChangeDivider ChangeType = "~" // marks a skipped unchanged region (leading, between-hunk, or trailing)
 
 	// fullContextSentinel is the numeric threshold that callers use to request
 	// full-file diff context. contextLines <= 0 or >= fullContextSentinel causes
@@ -45,7 +45,7 @@ const (
 type DiffLine struct {
 	OldNum        int        // line number in old version (0 for additions)
 	NewNum        int        // line number in new version (0 for removals)
-	Content       string     // line content without the +/- prefix
+	Content       string     // line content without the +/- prefix; for ChangeDivider rows it is a human-readable "⋯ N line[s] ⋯" label — never pattern-match it, dispatch on ChangeType
 	ChangeType    ChangeType // changeAdd, ChangeRemove, ChangeContext, or ChangeDivider
 	IsBinary      bool       // true when this line is a binary file placeholder
 	IsPlaceholder bool       // true for non-content placeholders (broken symlink, non-regular file, too-long lines)
@@ -391,7 +391,13 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
 	}
 
-	lines, err := parseUnifiedDiff(out, g.totalOldLines(ref, file, staged))
+	// trailing divider is only meaningful in compact mode — full-file mode always
+	// reaches EOF, so probing the old-file size would be a wasted subprocess.
+	total := 0
+	if contextLines > 0 && contextLines < fullContextSentinel {
+		total = g.totalOldLines(ref, file, staged)
+	}
+	lines, err := parseUnifiedDiff(out, total)
 	if err != nil {
 		return nil, err
 	}
@@ -413,12 +419,19 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 //
 // Old-side resolution:
 //   - ref empty + staged      → HEAD (git diff --cached compares HEAD against index)
-//   - ref empty + not staged  → index (git diff compares index against working tree)
-//   - ref contains "..|..."  → left operand (git diff A..B → A)
+//   - ref empty + not staged  → index via `git show :path`
+//   - ref contains ".." or "..." → left operand (triple-dot checked first so A...B
+//     is not mis-split on the leading "..")
 //   - single ref              → use as-is
+//
+// For triple-dot ranges the left operand is an approximation of the true old side
+// (merge-base(A,B)); accurate enough for the informational trailing-divider count.
 func (g *Git) totalOldLines(ref, file string, staged bool) int {
 	oldRef := ref
-	if left, _, ok := strings.Cut(ref, ".."); ok {
+	if left, _, ok := strings.Cut(ref, "..."); ok {
+		oldRef = left
+	}
+	if left, _, ok := strings.Cut(oldRef, ".."); ok {
 		oldRef = left
 	}
 	if oldRef == "" && staged {
@@ -429,14 +442,7 @@ func (g *Git) totalOldLines(ref, file string, staged bool) int {
 	if err != nil {
 		return 0
 	}
-	if out == "" {
-		return 0
-	}
-	n := strings.Count(out, "\n")
-	if !strings.HasSuffix(out, "\n") {
-		n++ // file without trailing newline
-	}
-	return n
+	return countLines(out)
 }
 
 // gitContextArg returns the -U argument for git diff given the caller's requested
@@ -594,6 +600,20 @@ func (g *Git) formatSize(bytes int64) string {
 // Lengths are optional per git's spec (omitted means length 1) and are captured
 // so the parser can compute the old-side end of each hunk.
 var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
+
+// countLines returns the number of lines in s, counting a final non-newline-terminated
+// line as one additional line. Empty input returns 0. Used by the per-VCS totalOldLines
+// methods to translate file contents into a line count for the trailing divider.
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := strings.Count(s, "\n")
+	if !strings.HasSuffix(s, "\n") {
+		n++
+	}
+	return n
+}
 
 // appendGapDivider appends a "⋯ N lines ⋯" divider to lines when gap is positive.
 // Used for leading, between-hunks, and trailing dividers — same format, different
