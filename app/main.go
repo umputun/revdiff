@@ -171,6 +171,7 @@ func run(opts options) error {
 		LineNumbers:       opts.LineNumbers,
 		ShowBlame:         opts.Blame,
 		WordDiff:          opts.WordDiff,
+		VimMotion:         opts.VimMotion,
 		TabWidth:          opts.TabWidth,
 		Ref:               opts.ref(),
 		Staged:            opts.Staged,

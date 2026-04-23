@@ -51,7 +51,7 @@ func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinp
 
 // startAnnotation enters annotation input mode for the current cursor line.
 func (m *Model) startAnnotation() tea.Cmd {
-	m.clearChordState()
+	m.clearPendingInputState()
 	dl, ok := m.cursorDiffLine()
 	if !ok || dl.ChangeType == diff.ChangeDivider {
 		return nil
@@ -122,6 +122,7 @@ func (m *Model) ensureLineAnnotationInputVisible() {
 
 // startFileAnnotation enters annotation input mode for a file-level annotation (Line=0).
 func (m *Model) startFileAnnotation() tea.Cmd {
+	m.clearPendingInputState()
 	if m.file.name == "" {
 		return nil
 	}

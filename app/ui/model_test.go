@@ -417,6 +417,24 @@ func TestModel_CompactModeFromConfig(t *testing.T) {
 	})
 }
 
+func TestModel_VimMotionFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+
+	t.Run("vim motion enabled via config", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{VimMotion: true, TreeWidthRatio: 2})
+		assert.True(t, m.modes.vimMotion, "vim motion flag must be copied into modeState")
+	})
+
+	t.Run("vim motion disabled by default", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		assert.False(t, m.modes.vimMotion)
+	})
+}
+
 func TestModel_LineNumbersFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
@@ -1045,6 +1063,27 @@ func TestTransientHint_ChordHintLowestPriority(t *testing.T) {
 	}
 }
 
+func TestTransientHint_VimLowestPriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		setHint func(m *Model)
+		want    string
+	}{
+		{name: "vim hint alone", setHint: func(m *Model) { m.vim.hint = "5" }, want: "5"},
+		{name: "commits beats vim", setHint: func(m *Model) { m.commits.hint = "no commits"; m.vim.hint = "5" }, want: "no commits"},
+		{name: "reload beats vim", setHint: func(m *Model) { m.reload.hint = "Reloaded"; m.vim.hint = "5" }, want: "Reloaded"},
+		{name: "compact beats vim", setHint: func(m *Model) { m.compact.hint = "compact off"; m.vim.hint = "5" }, want: "compact off"},
+		{name: "keys beats vim", setHint: func(m *Model) { m.keys.hint = "Pending: ctrl+w"; m.vim.hint = "5" }, want: "Pending: ctrl+w"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			tc.setHint(&m)
+			assert.Equal(t, tc.want, m.transientHint())
+		})
+	}
+}
+
 func TestHandleKey_EntersChordPending(t *testing.T) {
 	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
@@ -1119,15 +1158,38 @@ func TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord(t *testing.T) {
 	assert.True(t, ok, "ctrl+w must fire the standalone ActionQuit")
 }
 
-func TestClearChordState(t *testing.T) {
+func TestClearPendingInputState_ClearsAllFields(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.keys.chordPending = "ctrl+w"
 	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+	m.vim.count = 42
+	m.vim.leader = "g"
+	m.vim.hint = "g…"
 
-	m.clearChordState()
+	m.clearPendingInputState()
 
 	assert.Empty(t, m.keys.chordPending, "chordPending must be cleared")
-	assert.Empty(t, m.keys.hint, "hint must be cleared alongside chordPending")
+	assert.Empty(t, m.keys.hint, "keys.hint must be cleared alongside chordPending")
+	assert.Zero(t, m.vim.count, "vim.count must be cleared")
+	assert.Empty(t, m.vim.leader, "vim.leader must be cleared")
+	assert.Empty(t, m.vim.hint, "vim.hint must be cleared")
+}
+
+func TestVimState_ZeroValue(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	assert.Equal(t, 0, m.vim.count, "vim.count must default to 0")
+	assert.Empty(t, m.vim.leader, "vim.leader must default to empty")
+	assert.Empty(t, m.vim.hint, "vim.hint must default to empty")
+}
+
+func TestHandleKey_ClearsVimHint(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.vim.hint = "5"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+
+	assert.Empty(t, model.vim.hint, "any key press must clear vim.hint alongside other transient hints")
 }
 
 func TestHandleOverlayOpen_HelpClearsChord(t *testing.T) {
@@ -1225,6 +1287,97 @@ func TestStartAnnotation_ClearsChord(t *testing.T) {
 	assert.Empty(t, m.keys.chordPending, "startAnnotation must clear chordPending")
 	assert.Empty(t, m.keys.hint, "startAnnotation must clear chord hint")
 	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
+}
+
+func TestStartSearch_ClearsVimState(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.vim.count = 5
+	m.vim.leader = "g"
+	m.vim.hint = "5"
+
+	m.startSearch()
+
+	assert.Zero(t, m.vim.count, "startSearch must clear vim.count")
+	assert.Empty(t, m.vim.leader, "startSearch must clear vim.leader")
+	assert.Empty(t, m.vim.hint, "startSearch must clear vim.hint")
+	assert.True(t, m.search.active, "startSearch must enter searching mode")
+}
+
+func TestStartAnnotation_ClearsVimState(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.vim.count = 5
+	m.vim.leader = "z"
+	m.vim.hint = "z…"
+
+	m.startAnnotation()
+
+	assert.Zero(t, m.vim.count, "startAnnotation must clear vim.count")
+	assert.Empty(t, m.vim.leader, "startAnnotation must clear vim.leader")
+	assert.Empty(t, m.vim.hint, "startAnnotation must clear vim.hint")
+	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
+}
+
+func TestStartFileAnnotation_ClearsVimState(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.vim.count = 5
+	m.vim.leader = "Z"
+	m.vim.hint = "Z…"
+
+	m.startFileAnnotation()
+
+	assert.Zero(t, m.vim.count, "startFileAnnotation must clear vim.count")
+	assert.Empty(t, m.vim.leader, "startFileAnnotation must clear vim.leader")
+	assert.Empty(t, m.vim.hint, "startFileAnnotation must clear vim.hint")
+	assert.True(t, m.annot.fileAnnotating, "startFileAnnotation must enter file-level annotating mode")
+}
+
+func TestHandleOverlayOpen_ClearsVimState_Help(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.vim.count = 7
+	m.vim.leader = "g"
+	m.vim.hint = "g…"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionHelp)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionHelp must be handled by handleOverlayOpen")
+	assert.Zero(t, model.vim.count, "help overlay entry must clear vim.count")
+	assert.Empty(t, model.vim.leader, "help overlay entry must clear vim.leader")
+	assert.Empty(t, model.vim.hint, "help overlay entry must clear vim.hint")
+	assert.True(t, model.overlay.Active(), "help overlay must be open")
+}
+
+func TestHandleOverlayOpen_ClearsVimState_ThemeSelect(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.themes = newTestThemeCatalog()
+	m.vim.count = 9
+	m.vim.leader = "Z"
+	m.vim.hint = "Z…"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionThemeSelect must be handled by handleOverlayOpen")
+	assert.Zero(t, model.vim.count, "theme-select overlay entry must clear vim.count")
+	assert.Empty(t, model.vim.leader, "theme-select overlay entry must clear vim.leader")
+	assert.Empty(t, model.vim.hint, "theme-select overlay entry must clear vim.hint")
+	assert.True(t, model.overlay.Active(), "theme-select overlay must be open")
 }
 
 func TestHandleKey_ChordPrecedence(t *testing.T) {
@@ -1370,6 +1523,128 @@ func TestHandleKey_ChordPrecedence(t *testing.T) {
 			tc.check(t, after, cmd)
 		})
 	}
+}
+
+func TestHandleKey_VimMotionOff_InterceptorSkipped(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = false
+
+	// digit key with vim-motion off must not touch vim state
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	model := result.(Model)
+
+	assert.Equal(t, 0, model.vim.count, "vim.count must stay 0 when vim-motion is off")
+	assert.Empty(t, model.vim.hint, "vim.hint must stay empty when vim-motion is off")
+	assert.Empty(t, model.vim.leader, "vim.leader must stay empty when vim-motion is off")
+}
+
+func TestHandleKey_VimMotionOn_DigitAccumulates(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	model := result.(Model)
+
+	assert.Equal(t, 5, model.vim.count, "digit must accumulate into vim.count")
+	assert.Equal(t, "5", model.vim.hint, "vim.hint must reflect accumulated count")
+	assert.Nil(t, cmd, "digit accumulation must not produce a tea.Cmd")
+}
+
+func TestHandleKey_VimMotionOn_ChordSecondWins(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+	m.modes.vimMotion = true
+	// coexistence: chord pending + vim-motion on. chord-second guard must
+	// preempt the vim-motion interceptor (runs earlier in handleKey).
+	m.keys.chordPending = "ctrl+w"
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "chord-second guard must clear chordPending")
+	assert.Equal(t, 0, model.vim.count, "vim interceptor must NOT see the key when chord-second consumed it")
+	assert.Empty(t, model.vim.hint, "vim.hint must stay empty when chord-second wins")
+	assert.Nil(t, cmd, "ctrl+w>5 is unbound — chord-second surfaces an Unknown hint without dispatch")
+	assert.Equal(t, "Unknown chord: ctrl+w>5", model.keys.hint, "chord-second sets Unknown chord hint")
+}
+
+func TestHandleKey_VimMotionOn_PendingReloadWins(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+	m.reload.applicable = true
+	m.reload.pending = true
+	m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	model := result.(Model)
+
+	assert.False(t, model.reload.pending, "pending-reload guard must consume y before vim interceptor")
+	assert.Equal(t, 0, model.vim.count, "vim state must be untouched when reload preempts")
+	assert.Empty(t, model.vim.hint, "vim.hint must stay empty when reload preempts")
+}
+
+func TestHandleKey_VimMotionOn_SearchActiveModalWins(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+	m.search.active = true
+	m.search.input = textinput.New()
+	m.search.input.Focus()
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	model := result.(Model)
+
+	assert.True(t, model.search.active, "search mode stays active")
+	assert.Equal(t, "5", model.search.input.Value(), "search textinput must receive the digit key")
+	assert.Equal(t, 0, model.vim.count, "vim interceptor must not run while search modal is active")
+	assert.Empty(t, model.vim.hint, "vim.hint must stay empty when modal consumes the key")
+}
+
+func TestHandleKey_VimMotionOn_AnnotateActiveModalWins(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+	m.annot.annotating = true
+	m.annot.input = textinput.New()
+	m.annot.input.Focus()
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	model := result.(Model)
+
+	assert.True(t, model.annot.annotating, "annotation mode stays active")
+	assert.Equal(t, "5", model.annot.input.Value(), "annotation textinput must receive the digit key")
+	assert.Equal(t, 0, model.vim.count, "vim interceptor must not run while annotate modal is active")
+	assert.Empty(t, model.vim.hint, "vim.hint must stay empty when modal consumes the key")
+}
+
+func TestHandleKey_VimMotionOn_OverlayActiveModalWins(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+	m.overlay.OpenHelp(m.buildHelpSpec())
+	require.True(t, m.overlay.Active(), "help overlay must be open for this test")
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	model := result.(Model)
+
+	assert.Equal(t, 0, model.vim.count, "vim interceptor must not run while overlay is active")
+	assert.Empty(t, model.vim.hint, "vim.hint must stay empty when overlay consumes the key")
+}
+
+func TestHandleKey_VimMotionOn_NonVimKeyFallsThrough(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+
+	// 'q' is not a vim key and has no pending vim state — interceptor returns
+	// handled=false, keymap.Resolve routes it to ActionQuit.
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	model := result.(Model)
+
+	assert.Equal(t, 0, model.vim.count, "non-vim key must not set vim.count")
+	assert.Empty(t, model.vim.leader, "non-vim key must not set vim.leader")
+	assert.Empty(t, model.vim.hint, "non-vim key must not set vim.hint")
+	require.NotNil(t, cmd, "q must dispatch ActionQuit through normal keymap resolution")
+	_, ok := cmd().(tea.QuitMsg)
+	assert.True(t, ok, "q must fire ActionQuit even when vim-motion is on")
 }
 
 func TestHandleKey_NonKeyMessagesPreserveChordState(t *testing.T) {

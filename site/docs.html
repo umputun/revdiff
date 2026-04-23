@@ -82,6 +82,7 @@
         <a href="#status-bar-icons">Status bar icons</a>
         <a href="#mouse-support">Mouse support</a>
         <a href="#custom-keys">Custom keybindings</a>
+        <a href="#vim-motion">Vim-motion preset</a>
 
         <h4>Claude Code plugin</h4>
         <a href="#plugin-install">Installation</a>
@@ -338,6 +339,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-confirm-discard</code></td><td>Skip discard confirmation</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-mouse</code></td><td>Disable mouse support (scroll wheel, click)</td><td><code>false</code></td></tr>
+                <tr><td><code>--vim-motion</code></td><td>Enable vim-style motion preset (counts, <code>gg</code>, <code>G</code>, <code>zz</code>/<code>zt</code>/<code>zb</code>, <code>ZZ</code>/<code>ZQ</code>)</td><td><code>false</code></td></tr>
                 <tr><td><code>--chroma-style</code></td><td>Syntax highlighting theme</td><td><code>catppuccin-macchiato</code></td></tr>
                 <tr><td><code>--theme</code></td><td>Load color theme from <code>~/.config/revdiff/themes/</code></td><td></td></tr>
                 <tr><td><code>--dump-theme</code></td><td>Print resolved colors as theme file and exit</td><td></td></tr>
@@ -547,13 +549,32 @@ map alt+t&gt;n theme_select</code></div>
         <p>When the leader is pressed, the status bar shows <code>Pending: ctrl+w, esc to cancel</code>; press the second key to dispatch, or <code>esc</code> to cancel silently. Binding a key as both a standalone action and a chord prefix drops the standalone binding (the chord wins, with a warning). Chord bindings work under non-Latin keyboard layouts &mdash; the second-stage key is translated via the same layout-resolve fallback as single-key bindings.</p>
         <p><strong>macOS note:</strong> <code>alt+*</code> leaders require your terminal to send Option as Meta/Alt. Most terminals default to &quot;Option composes special characters&quot; (e.g. <code>Option+T</code> &rarr; <code>&dagger;</code>), in which case Alt chords silently won&apos;t fire. To enable: iTerm2 &rarr; <em>Profiles &rarr; Keys &rarr; Left/Right Option key &rarr; <code>Esc+</code></em>; Terminal.app &rarr; <em>Profiles &rarr; Keyboard &rarr; Use Option as Meta key</em>; Kitty &rarr; <code>macos_option_as_alt yes</code>; Ghostty &rarr; <code>macos-option-as-alt = true</code>. If you&apos;d rather not touch terminal settings, use <code>ctrl+*</code> leaders &mdash; those work everywhere with no configuration.</p>
         <h3>Available actions</h3>
-        <p><strong>Navigation:</strong> <code>down</code>, <code>up</code>, <code>page_down</code>, <code>page_up</code>, <code>half_page_down</code>, <code>half_page_up</code>, <code>home</code>, <code>end</code>, <code>scroll_left</code>, <code>scroll_right</code></p>
+        <p><strong>Navigation:</strong> <code>down</code>, <code>up</code>, <code>page_down</code>, <code>page_up</code>, <code>half_page_down</code>, <code>half_page_up</code>, <code>home</code>, <code>end</code>, <code>scroll_left</code>, <code>scroll_right</code>, <code>scroll_center</code>, <code>scroll_top</code>, <code>scroll_bottom</code></p>
         <p><strong>File/Hunk:</strong> <code>next_item</code>, <code>prev_item</code>, <code>next_hunk</code>, <code>prev_hunk</code></p>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
         <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>commit_info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
+
+        <h2 id="vim-motion">Vim-motion preset</h2>
+        <p>Opt-in vim-style motion layer activated via <code>--vim-motion</code>, <code>REVDIFF_VIM_MOTION=true</code>, or <code>vim-motion = true</code> in the config file. Off by default &mdash; when off, existing single-key bindings are unchanged.</p>
+        <table>
+            <thead><tr><th>Keys</th><th>Action</th></tr></thead>
+            <tbody>
+                <tr><td><code>&lt;N&gt;j</code> / <code>&lt;N&gt;k</code></td><td>Move cursor N lines down/up (diff pane, 1-9999)</td></tr>
+                <tr><td><code>gg</code></td><td>Jump to first line (diff pane)</td></tr>
+                <tr><td><code>G</code></td><td>Jump to last line (diff pane)</td></tr>
+                <tr><td><code>&lt;N&gt;G</code></td><td>Goto line N (diff pane)</td></tr>
+                <tr><td><code>zz</code></td><td>Center viewport on cursor (diff pane)</td></tr>
+                <tr><td><code>zt</code></td><td>Align viewport top on cursor (diff pane)</td></tr>
+                <tr><td><code>zb</code></td><td>Align viewport bottom on cursor (diff pane)</td></tr>
+                <tr><td><code>ZZ</code></td><td>Quit (any pane)</td></tr>
+                <tr><td><code>ZQ</code></td><td>Discard annotations and quit (any pane)</td></tr>
+            </tbody>
+        </table>
+        <p>When the preset is on, the digits <code>0</code>-<code>9</code> and the leader keys <code>g</code>, <code>z</code>, <code>Z</code> are intercepted before the regular keymap, so any standalone binding on those keys is overridden while the flag is active. <code>&lt;N&gt;j</code>/<code>&lt;N&gt;k</code>/<code>&lt;N&gt;G</code> and <code>gg</code>/<code>zz</code>/<code>zt</code>/<code>zb</code> apply to the diff pane only &mdash; in the file tree they fall through to the normal bindings. <code>ZZ</code> and <code>ZQ</code> work from any pane. Press <code>Esc</code> to silently cancel a pending leader; an unknown second key surfaces a transient <code>Unknown: &lt;chord&gt;</code> hint in the status bar. A bare digit <code>0</code> is not consumed (falls through to whatever binding is mapped); counts over 9999 are clamped. Modal keys (search input, annotation input, overlay navigation) always take precedence over the interceptor, and <code>ctrl+*</code>/<code>alt+*</code> chord bindings keep working orthogonally.</p>
+        <p>The help overlay (<code>?</code>) shows a dedicated <strong>Vim motion</strong> section listing all eight preset bindings when <code>--vim-motion</code> is on; when off, the section is hidden.</p>
 
         <!-- claude code plugin -->
         <h2 id="plugin-install">Claude Code plugin</h2>

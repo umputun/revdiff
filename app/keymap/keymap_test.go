@@ -244,6 +244,43 @@ func TestActionToggleCompact_HelpEntry(t *testing.T) {
 	assert.True(t, found, "ActionToggleCompact should have a help entry")
 }
 
+func TestActionScrollConstants_InNavigationActions(t *testing.T) {
+	// the three scroll-align actions must be recognized as valid so keybindings
+	// files can map custom keys to them (e.g. "map z scroll_center").
+	assert.True(t, IsValidAction(ActionScrollCenter))
+	assert.True(t, IsValidAction(ActionScrollTop))
+	assert.True(t, IsValidAction(ActionScrollBottom))
+}
+
+func TestActionScrollConstants_InHelpEntries(t *testing.T) {
+	entries := defaultDescriptions()
+	wants := map[Action]string{
+		ActionScrollCenter: "center viewport on cursor",
+		ActionScrollTop:    "align viewport top",
+		ActionScrollBottom: "align viewport bottom",
+	}
+	found := make(map[Action]bool, len(wants))
+	for _, e := range entries {
+		if desc, ok := wants[e.Action]; ok {
+			assert.Equal(t, desc, e.Description, "description mismatch for %q", e.Action)
+			assert.Equal(t, "Navigation", e.Section, "section mismatch for %q", e.Action)
+			found[e.Action] = true
+		}
+	}
+	for a := range wants {
+		assert.True(t, found[a], "action %q should have a help entry", a)
+	}
+}
+
+func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
+	// vim-motion interceptor is the only way to reach these actions by default;
+	// there must be NO single-key bindings in defaultBindings.
+	km := Default()
+	for _, a := range []Action{ActionScrollCenter, ActionScrollTop, ActionScrollBottom} {
+		assert.Empty(t, km.KeysFor(a), "action %q must have no default bindings", a)
+	}
+}
+
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))
@@ -914,6 +951,37 @@ func TestLoad_ConflictInvalidatesChordCache(t *testing.T) {
 	assert.True(t, km.IsChordLeader("ctrl+d"))
 	// the chord itself resolves
 	assert.Equal(t, ActionHelp, km.Resolve("ctrl+d>x"))
+}
+
+func TestNormalizeKey_LatinPassThrough(t *testing.T) {
+	// ASCII keys must be returned unchanged; no spurious translation.
+	assert.Equal(t, "j", NormalizeKey("j"))
+	assert.Equal(t, "G", NormalizeKey("G"))
+	assert.Equal(t, "5", NormalizeKey("5"))
+}
+
+func TestNormalizeKey_MultiRunePassThrough(t *testing.T) {
+	// multi-character key strings (special keys, modifier combos) bypass
+	// the layout alias entirely.
+	assert.Equal(t, "esc", NormalizeKey("esc"))
+	assert.Equal(t, "ctrl+w", NormalizeKey("ctrl+w"))
+	assert.Equal(t, "tab", NormalizeKey("tab"))
+}
+
+func TestNormalizeKey_CyrillicToLatin(t *testing.T) {
+	// single-rune non-Latin keys translate to their Latin QWERTY equivalent.
+	tests := []struct{ in, want string }{
+		{"о", "j"}, {"л", "k"}, {"п", "g"}, {"я", "z"},
+		{"Я", "Z"}, {"О", "J"}, {"ь", "m"}, {"м", "v"},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, NormalizeKey(tc.in), "NormalizeKey(%q)", tc.in)
+	}
+}
+
+func TestNormalizeKey_UnmappedRunePassThrough(t *testing.T) {
+	// a non-Latin rune with no layout mapping returns unchanged.
+	assert.Equal(t, "日", NormalizeKey("日"))
 }
 
 func TestResolveChord_Direct(t *testing.T) {

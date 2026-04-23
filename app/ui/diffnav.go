@@ -22,8 +22,13 @@ func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
 // if the current line has an annotation and cursor is on the diff line, stops on the annotation first.
 // in collapsed mode, also skips removed lines unless their hunk is expanded.
 func (m *Model) moveDiffCursorDown() {
-	hunks := m.findHunks()
+	m.moveDiffCursorDownWithHunks(m.findHunks())
+}
 
+// moveDiffCursorDownWithHunks is the hunks-precomputed variant of moveDiffCursorDown.
+// Callers that move the cursor repeatedly (e.g. repeatDiffAction for N j/k) call
+// findHunks once and pass the result in to avoid O(N × len(diff)) rescans.
+func (m *Model) moveDiffCursorDownWithHunks(hunks []int) {
 	// if currently on annotation sub-line, move to the next diff line
 	if m.annot.cursorOnAnnotation {
 		m.annot.cursorOnAnnotation = false
@@ -66,13 +71,18 @@ func (m *Model) moveDiffCursorDown() {
 // when moving up from a diff line, if the previous line has an annotation, lands on the annotation first.
 // in collapsed mode, also skips removed lines unless their hunk is expanded.
 func (m *Model) moveDiffCursorUp() {
+	m.moveDiffCursorUpWithHunks(m.findHunks())
+}
+
+// moveDiffCursorUpWithHunks is the hunks-precomputed variant of moveDiffCursorUp.
+// See moveDiffCursorDownWithHunks for the rationale.
+func (m *Model) moveDiffCursorUpWithHunks(hunks []int) {
 	// if currently on annotation sub-line, move up to the diff line itself
 	if m.annot.cursorOnAnnotation {
 		m.annot.cursorOnAnnotation = false
 		return
 	}
 
-	hunks := m.findHunks()
 	for i := m.nav.diffCursor - 1; i >= 0; i-- {
 		if m.file.lines[i].ChangeType == diff.ChangeDivider || m.isCollapsedHidden(i, hunks) {
 			continue
@@ -217,11 +227,13 @@ func (m *Model) syncViewportToCursor() {
 }
 
 // centerViewportOnCursor scrolls the viewport to place the cursor in the middle of the page.
+// SetContent runs before SetYOffset so the viewport's clamp (bound to current content length)
+// accepts the target offset even when the cursor move mutated render height (wrap/annotation rows).
 func (m *Model) centerViewportOnCursor() {
 	cursorY := m.cursorViewportY()
 	offset := max(0, cursorY-m.layout.viewport.Height/2)
-	m.layout.viewport.SetYOffset(offset)
 	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(offset)
 }
 
 // centerHunkInViewport centers the current hunk in the viewport.
@@ -278,10 +290,63 @@ func (m *Model) centerHunkInViewport() {
 }
 
 // topAlignViewportOnCursor scrolls the viewport to place the cursor at the top of the page.
+// SetContent runs before SetYOffset — see centerViewportOnCursor for the clamp rationale.
 func (m *Model) topAlignViewportOnCursor() {
 	cursorY := m.cursorViewportY()
-	m.layout.viewport.SetYOffset(max(0, cursorY))
 	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(max(0, cursorY))
+}
+
+// bottomAlignViewportOnCursor scrolls the viewport to place the cursor on the last visible row.
+// mirror of topAlignViewportOnCursor with the offset flipped by viewport height.
+// SetContent runs before SetYOffset — see centerViewportOnCursor for the clamp rationale.
+func (m *Model) bottomAlignViewportOnCursor() {
+	cursorY := m.cursorViewportY()
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(max(0, cursorY-m.layout.viewport.Height+1))
+}
+
+// jumpToLineN moves the diff cursor to line n (1-indexed), clamped to [1, total],
+// then centers the viewport on the new cursor position. no-op when the diff is empty.
+// in collapsed mode, the cursor is nudged to the nearest visible line so it
+// cannot land on a hidden removed line. if the target lands on a ChangeDivider row
+// (e.g. G on a file with a trailing gap divider), the cursor nudges to the nearest
+// non-divider line (backward first, then forward) so users can act on the landing.
+// any TOC pane active for markdown files also has its highlighted section refreshed
+// to match the new cursor.
+func (m *Model) jumpToLineN(n int) {
+	total := len(m.file.lines)
+	if total == 0 {
+		return
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > total {
+		n = total
+	}
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = n - 1
+	m.adjustCursorIfHidden()
+	// nudge off ChangeDivider rows — they cannot host cursor actions.
+	if m.nav.diffCursor >= 0 && m.nav.diffCursor < len(m.file.lines) && m.file.lines[m.nav.diffCursor].ChangeType == diff.ChangeDivider {
+		for i := m.nav.diffCursor - 1; i >= 0; i-- {
+			if m.file.lines[i].ChangeType != diff.ChangeDivider {
+				m.nav.diffCursor = i
+				break
+			}
+		}
+	}
+	if m.nav.diffCursor >= 0 && m.nav.diffCursor < len(m.file.lines) && m.file.lines[m.nav.diffCursor].ChangeType == diff.ChangeDivider {
+		for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
+			if m.file.lines[i].ChangeType != diff.ChangeDivider {
+				m.nav.diffCursor = i
+				break
+			}
+		}
+	}
+	m.syncTOCActiveSection()
+	m.centerViewportOnCursor()
 }
 
 // findHunks scans diffLines and returns a slice of hunk start indices.
@@ -449,6 +514,15 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
 		m.moveDiffCursorToEnd()
+	case keymap.ActionScrollCenter:
+		m.centerViewportOnCursor()
+		return m, nil
+	case keymap.ActionScrollTop:
+		m.topAlignViewportOnCursor()
+		return m, nil
+	case keymap.ActionScrollBottom:
+		m.bottomAlignViewportOnCursor()
+		return m, nil
 	case keymap.ActionDeleteAnnotation:
 		cmd := m.deleteAnnotation()
 		return m, cmd
