@@ -244,31 +244,61 @@ func (t *themeSelectOverlay) moveCursorBy(delta int) bool {
 	return true
 }
 
-// handleMouse moves the cursor in response to wheel events and returns a
-// preview outcome so the main model can restyle the background diff live.
-// plain wheel steps one entry, shift+wheel steps by half the visible page.
-// non-wheel buttons and non-press actions are ignored.
+// handleMouse drives the overlay in response to mouse events. wheel navigates
+// the list and returns a preview outcome so the main model can restyle the
+// background diff live. left-click inside an entry row confirms that theme
+// (same as pressing Enter). clicks on the filter row, the blank separator,
+// past the last entry, or on border/padding are no-ops so the overlay is not
+// dismissed by a stray click. coords are popup-local (Manager.HandleMouse
+// translates).
 func (t *themeSelectOverlay) handleMouse(msg tea.MouseMsg) Outcome {
 	if msg.Action != tea.MouseActionPress {
 		return Outcome{Kind: OutcomeNone}
 	}
-	step := 1
-	if msg.Shift {
-		step = max(t.maxVisible()/2, 1)
-	}
-	var moved bool
 	switch msg.Button {
 	case tea.MouseButtonWheelDown:
-		moved = t.moveCursorBy(step)
+		if !t.moveCursorBy(t.wheelStep(msg.Shift)) {
+			return Outcome{Kind: OutcomeNone}
+		}
+		return t.previewOutcome()
 	case tea.MouseButtonWheelUp:
-		moved = t.moveCursorBy(-step)
+		if !t.moveCursorBy(-t.wheelStep(msg.Shift)) {
+			return Outcome{Kind: OutcomeNone}
+		}
+		return t.previewOutcome()
+	case tea.MouseButtonLeft:
+		return t.handleLeftClick(msg.Y)
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
-	if !moved {
+}
+
+// wheelStep returns the cursor step for a wheel notch: 1 by default,
+// half the visible page when shift is held.
+func (t *themeSelectOverlay) wheelStep(shift bool) int {
+	if !shift {
+		return 1
+	}
+	return max(t.maxVisible()/2, 1)
+}
+
+// handleLeftClick maps a popup-local y to an entry row and confirms that
+// theme. layout inside the box: border (y=0), top padding (y=1), filter (y=2),
+// blank separator (y=3), entries starting at y=4. clicks on non-entry rows
+// (border, padding, filter, separator, past the visible list) are no-ops.
+func (t *themeSelectOverlay) handleLeftClick(localY int) Outcome {
+	const entriesTop = 4 // border (1) + top padding (1) + filter (1) + blank (1)
+	relRow := localY - entriesTop
+	maxVis := t.maxVisible()
+	if relRow < 0 || relRow >= maxVis {
 		return Outcome{Kind: OutcomeNone}
 	}
-	return t.previewOutcome()
+	entryIdx := t.offset + relRow
+	if entryIdx < 0 || entryIdx >= len(t.entries) {
+		return Outcome{Kind: OutcomeNone}
+	}
+	t.cursor = entryIdx
+	return Outcome{Kind: OutcomeThemeConfirmed, ThemeChoice: &ThemeChoice{Name: t.entries[entryIdx].Name}}
 }
 
 // previewOutcome returns a theme preview outcome with dedup — if the current

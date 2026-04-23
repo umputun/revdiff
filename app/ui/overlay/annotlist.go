@@ -185,24 +185,56 @@ func (a *annotListOverlay) moveCursorBy(delta int) {
 	}
 }
 
-// handleMouse moves the cursor in response to wheel events. plain wheel steps
-// one entry at a time (matches a single-notch feel); shift+wheel steps by half
-// the visible page. non-wheel buttons and non-press actions are ignored.
+// handleMouse drives the overlay in response to mouse events. plain wheel steps
+// the cursor by one entry (single-notch feel); shift+wheel steps by half the
+// visible page. left-click inside the popup maps the clicked row to an item
+// and returns OutcomeAnnotationChosen for the main model to jump to (same as
+// pressing Enter). coords are popup-local (Manager.HandleMouse translates).
+// non-press actions and other buttons are ignored so the overlay is not
+// dismissed by accidental drag or release events.
 func (a *annotListOverlay) handleMouse(msg tea.MouseMsg) Outcome {
 	if msg.Action != tea.MouseActionPress {
 		return Outcome{Kind: OutcomeNone}
 	}
-	step := 1
-	if msg.Shift {
-		step = max(a.maxVisible(a.height)/2, 1)
-	}
 	switch msg.Button {
 	case tea.MouseButtonWheelDown:
-		a.moveCursorBy(step)
+		a.moveCursorBy(a.wheelStep(msg.Shift))
+		return Outcome{Kind: OutcomeNone}
 	case tea.MouseButtonWheelUp:
-		a.moveCursorBy(-step)
+		a.moveCursorBy(-a.wheelStep(msg.Shift))
+		return Outcome{Kind: OutcomeNone}
+	case tea.MouseButtonLeft:
+		return a.handleLeftClick(msg.Y)
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
-	return Outcome{Kind: OutcomeNone}
+}
+
+// wheelStep returns the cursor step for a wheel notch: 1 by default,
+// half the visible page when shift is held.
+func (a *annotListOverlay) wheelStep(shift bool) int {
+	if !shift {
+		return 1
+	}
+	return max(a.maxVisible(a.height)/2, 1)
+}
+
+// handleLeftClick maps a popup-local y to an item row and returns a jump
+// outcome. the popup has a 1-row border and 1-row padding at the top, so
+// entries start at localY=2. clicks on border, padding, or past the last
+// visible item are no-ops; the overlay stays open.
+func (a *annotListOverlay) handleLeftClick(localY int) Outcome {
+	const contentTop = 2 // border (1) + top padding (1)
+	relRow := localY - contentTop
+	maxVis := a.maxVisible(a.height)
+	if relRow < 0 || relRow >= maxVis {
+		return Outcome{Kind: OutcomeNone}
+	}
+	itemIdx := a.offset + relRow
+	if itemIdx < 0 || itemIdx >= len(a.items) {
+		return Outcome{Kind: OutcomeNone}
+	}
+	a.cursor = itemIdx
+	target := a.items[itemIdx].AnnotationTarget
+	return Outcome{Kind: OutcomeAnnotationChosen, AnnotationTarget: &target}
 }

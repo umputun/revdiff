@@ -383,6 +383,125 @@ func TestAnnotListOverlay_HandleMouse_EmptyList(t *testing.T) {
 	assert.Equal(t, 0, mgr.annotLst.cursor)
 }
 
+func TestAnnotListOverlay_HandleLeftClick(t *testing.T) {
+	items := []AnnotationItem{
+		annotItem("a.go", 10, "+", "first"),
+		annotItem("b.go", 20, "-", "second"),
+		annotItem("c.go", 30, "+", "third"),
+	}
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec(items...))
+	mgr.annotLst.height = 20 // maxVisible = max(min(3, 20-6), 1) = 3
+
+	t.Run("click on first item row", func(t *testing.T) {
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 2})
+		assert.Equal(t, OutcomeAnnotationChosen, out.Kind)
+		require.NotNil(t, out.AnnotationTarget)
+		assert.Equal(t, "a.go", out.AnnotationTarget.File)
+		assert.Equal(t, 10, out.AnnotationTarget.Line)
+		assert.Equal(t, 0, mgr.annotLst.cursor)
+	})
+
+	t.Run("click on third item row", func(t *testing.T) {
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 4})
+		assert.Equal(t, OutcomeAnnotationChosen, out.Kind)
+		assert.Equal(t, "c.go", out.AnnotationTarget.File)
+		assert.Equal(t, 2, mgr.annotLst.cursor)
+	})
+
+	t.Run("click on top border is no-op", func(t *testing.T) {
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 0})
+		assert.Equal(t, OutcomeNone, out.Kind)
+	})
+
+	t.Run("click on top padding is no-op", func(t *testing.T) {
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 1})
+		assert.Equal(t, OutcomeNone, out.Kind)
+	})
+
+	t.Run("click past visible items is no-op", func(t *testing.T) {
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 5})
+		assert.Equal(t, OutcomeNone, out.Kind, "row past the 3 visible items")
+	})
+
+	t.Run("click respects scroll offset", func(t *testing.T) {
+		many := make([]AnnotationItem, 10)
+		for i := range many {
+			many[i] = annotItem("a.go", i+1, "+", "note")
+		}
+		mgr.OpenAnnotList(annotListSpec(many...))
+		mgr.annotLst.height = 10 // maxVisible = 4
+		mgr.annotLst.offset = 3
+
+		// clicking the first visible row (localY=2) selects item at offset
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 5, Y: 2})
+		assert.Equal(t, OutcomeAnnotationChosen, out.Kind)
+		assert.Equal(t, 4, out.AnnotationTarget.Line, "row 2 with offset 3 selects item index 3 (Line=4)")
+	})
+
+	t.Run("non-press action is no-op", func(t *testing.T) {
+		mgr.OpenAnnotList(annotListSpec(items...))
+		mgr.annotLst.height = 20
+		out := mgr.annotLst.handleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionRelease, X: 5, Y: 2})
+		assert.Equal(t, OutcomeNone, out.Kind)
+	})
+}
+
+func TestAnnotListOverlay_HandleMouse_ClickOutsideSwallowed(t *testing.T) {
+	// Manager.HandleMouse clicks outside popup bounds must not reach the overlay —
+	// verified via an integration-style test that primes bounds via Compose.
+	items := []AnnotationItem{annotItem("a.go", 1, "+", "note")}
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec(items...))
+
+	ctx := annotRenderCtx()
+	base := makeBase(ctx.Width, ctx.Height)
+	_ = mgr.Compose(base, ctx) // primes bounds
+
+	require.NotZero(t, mgr.bounds.w)
+	require.NotZero(t, mgr.bounds.h)
+
+	// click far outside the popup rectangle
+	out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress, X: 0, Y: 0})
+	assert.Equal(t, OutcomeNone, out.Kind, "click outside popup must not select")
+	assert.True(t, mgr.Active(), "click outside must not close the overlay")
+}
+
+func TestAnnotListOverlay_HandleMouse_ClickInsideTranslatesCoords(t *testing.T) {
+	items := []AnnotationItem{
+		annotItem("a.go", 10, "+", "first"),
+		annotItem("b.go", 20, "-", "second"),
+	}
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec(items...))
+
+	ctx := annotRenderCtx()
+	base := makeBase(ctx.Width, ctx.Height)
+	_ = mgr.Compose(base, ctx) // primes bounds
+
+	// click on first item row — in screen coords that's bounds.y + 2
+	out := mgr.HandleMouse(tea.MouseMsg{
+		Button: tea.MouseButtonLeft,
+		Action: tea.MouseActionPress,
+		X:      mgr.bounds.x + 5,
+		Y:      mgr.bounds.y + 2,
+	})
+	assert.Equal(t, OutcomeAnnotationChosen, out.Kind, "click on first item row should select")
+	require.NotNil(t, out.AnnotationTarget)
+	assert.Equal(t, "a.go", out.AnnotationTarget.File)
+	assert.False(t, mgr.Active(), "OutcomeAnnotationChosen auto-closes the overlay")
+}
+
 func TestAnnotListOverlay_HandleKey_OtherKeysConsumed(t *testing.T) {
 	items := []AnnotationItem{annotItem("a.go", 1, "+", "note")}
 	mgr := NewManager()
