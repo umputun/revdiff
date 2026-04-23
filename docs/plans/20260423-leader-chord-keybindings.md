@@ -416,20 +416,20 @@ Three identical two-statement clears (`m.keys.chordPending = ""; m.keys.hint = "
 
 ### Task 11: Verify acceptance criteria
 
-- [ ] verify chord parser accepts `ctrl+w>x` and `alt+t>n`
-- [ ] verify parser rejects `g>g`, `ctrl+w>x>y`, `ctrl+w>` with appropriate warnings
-- [ ] verify standalone `ctrl+w` is dropped when chord `ctrl+w>x` exists
-- [ ] verify pressing leader key enters pending state with status hint
-- [ ] verify pressing bound second key dispatches the action
-- [ ] verify pressing unbound second key shows "Unknown chord" hint
-- [ ] verify pressing esc cancels chord silently
-- [ ] verify entering search/annotate/filter/overlay clears chord state
-- [ ] verify chord works under non-Latin keyboard layout (second key translates via layoutResolve)
-- [ ] verify Dump round-trips chord bindings without loss
-- [ ] verify help overlay (`?`) shows chord keys verbatim alongside single-key bindings
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
-- [ ] verify test coverage for new code is >= existing project coverage for affected packages (`make test` reports per-package coverage)
+- [x] verify chord parser accepts `ctrl+w>x` and `alt+t>n`
+- [x] verify parser rejects `g>g`, `ctrl+w>x>y`, `ctrl+w>` with appropriate warnings
+- [x] verify standalone `ctrl+w` is dropped when chord `ctrl+w>x` exists
+- [x] verify pressing leader key enters pending state with status hint
+- [x] verify pressing bound second key dispatches the action
+- [x] verify pressing unbound second key shows "Unknown chord" hint
+- [x] verify pressing esc cancels chord silently
+- [x] verify entering search/annotate/filter/overlay clears chord state
+- [x] verify chord works under non-Latin keyboard layout (second key translates via layoutResolve)
+- [x] verify Dump round-trips chord bindings without loss
+- [x] verify help overlay (`?`) shows chord keys verbatim alongside single-key bindings
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
+- [x] verify test coverage for new code is >= existing project coverage for affected packages (`make test` reports per-package coverage)
 
 ### Task 12: Final — update CLAUDE.md and move plan to completed
 
