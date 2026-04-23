@@ -501,21 +501,21 @@ func (m *Model) bottomAlignViewportOnCursor() {
 **Files:**
 - Modify: `app/ui/vimmotion_test.go` (or create `app/ui/vimmotion_integration_test.go` if growing past ~300 lines and vimmotion_test.go is full)
 
-- [ ] add `TestVimMotion_FullFlow_5j` — `modes.vimMotion = true`, start at cursor 0, send `5`, `j`, assert cursor at 5, count/hint cleared
-- [ ] add `TestVimMotion_FullFlow_gg` — send `g`, `g`, assert cursor at 0, leader/hint cleared
-- [ ] add `TestVimMotion_FullFlow_G_Bare` — send `G` with no count (count==0), assert cursor at last line, count/hint still zero
-- [ ] add `TestVimMotion_FullFlow_5G` — send `5`, `G`, assert cursor at line 5 (0-indexed: 4), count/hint cleared
-- [ ] add `TestVimMotion_FullFlow_zz` — cursor mid-file, send `z`, `z`, assert viewport centered, leader/hint cleared
-- [ ] add `TestVimMotion_FullFlow_zt` — send `z`, `t`, assert top-aligned
-- [ ] add `TestVimMotion_FullFlow_zb` — send `z`, `b`, assert bottom-aligned
-- [ ] add `TestVimMotion_FullFlow_ZZ` — send `Z`, `Z`, assert quit (return tea.Quit or equivalent)
-- [ ] add `TestVimMotion_FullFlow_ZQ` — send `Z`, `Q`, assert discard-quit
-- [ ] add `TestVimMotion_LeaderCancelled` — send `g`, `esc`, assert leader cleared, cursor unchanged
-- [ ] add `TestVimMotion_UnknownChord` — send `g`, `x`, assert leader cleared, hint="Unknown: gx", cursor unchanged
-- [ ] add `TestVimMotion_CountThenUnrelatedKey` — send `5`, `q`, assert quit fires (5 dropped silently)
-- [ ] add `TestVimMotion_MotionInTreePane` — `m.layout.focus = paneTree`, send `5`, `j`, assert falls through (vim motion is diff-only)
-- [ ] add `TestVimMotion_ZQuitFromTreePane` — `m.layout.focus = paneTree`, send `Z`, `Z`, assert quit (Z is pane-agnostic)
-- [ ] run `make test` — must pass before task 10
+- [x] add `TestVimMotion_FullFlow_5j` — `modes.vimMotion = true`, start at cursor 0, send `5`, `j`, assert cursor at 5, count/hint cleared
+- [x] add `TestVimMotion_FullFlow_gg` — send `g`, `g`, assert cursor at 0, leader/hint cleared
+- [x] add `TestVimMotion_FullFlow_G_Bare` — send `G` with no count (count==0), assert cursor at last line, count/hint still zero
+- [x] add `TestVimMotion_FullFlow_5G` — send `5`, `G`, assert cursor at line 5 (0-indexed: 4), count/hint cleared
+- [x] add `TestVimMotion_FullFlow_zz` — cursor mid-file, send `z`, `z`, assert viewport centered, leader/hint cleared
+- [x] add `TestVimMotion_FullFlow_zt` — send `z`, `t`, assert top-aligned
+- [x] add `TestVimMotion_FullFlow_zb` — send `z`, `b`, assert bottom-aligned
+- [x] add `TestVimMotion_FullFlow_ZZ` — send `Z`, `Z`, assert quit (return tea.Quit or equivalent)
+- [x] add `TestVimMotion_FullFlow_ZQ` — send `Z`, `Q`, assert discard-quit
+- [x] add `TestVimMotion_LeaderCancelled` — send `g`, `esc`, assert leader cleared, cursor unchanged
+- [x] add `TestVimMotion_UnknownChord` — send `g`, `x`, assert leader cleared, hint="Unknown: gx", cursor unchanged
+- [x] add `TestVimMotion_CountThenUnrelatedKey` — send `5`, `q`, assert quit fires (5 dropped silently)
+- [x] add `TestVimMotion_MotionInTreePane` — `m.layout.focus = paneTree`, send `5`, `j`, assert falls through (vim motion is diff-only)
+- [x] add `TestVimMotion_ZQuitFromTreePane` — `m.layout.focus = paneTree`, send `Z`, `Z`, assert quit (Z is pane-agnostic)
+- [x] run `make test` — must pass before task 10
 
 ### Task 10: Help overlay + documentation updates
 

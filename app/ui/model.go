@@ -772,10 +772,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// vim-motion interceptor: runs AFTER handleModalKey so modals consume keys
 	// first (digits and letters belong to the modal's textinput when active),
 	// and BEFORE keymap.Resolve so vim chords/counts preempt normal bindings.
+	// propagate the interceptor's model on fall-through so state cleared inside
+	// the interceptor (e.g., count dropped after an unrelated key like "5q")
+	// is visible to the standard keymap path that runs next.
 	if m.modes.vimMotion {
-		if model, cmd, handled := m.interceptVimMotion(msg); handled {
+		model, cmd, handled := m.interceptVimMotion(msg)
+		if handled {
 			return model, cmd
 		}
+		m = model.(Model)
 	}
 
 	action := m.keymap.Resolve(msg.String())
