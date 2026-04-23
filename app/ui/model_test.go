@@ -841,7 +841,7 @@ func TestDispatchAction_OverlayOpen(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	require.False(t, m.overlay.Active(), "precondition: no overlay active")
 
-	result, cmd := m.dispatchAction(keymap.ActionHelp, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	result, cmd := m.dispatchAction(keymap.ActionHelp)
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "help action should open help overlay")
 	assert.Nil(t, cmd)
@@ -883,7 +883,7 @@ func TestDispatchAction_Resolves(t *testing.T) {
 			m := testModel([]string{"a.go"}, nil)
 			m.tree = testNewFileTree([]string{"a.go"})
 			m.file.name = "a.go" // enables togglePane to switch to diff
-			result, cmd := m.dispatchAction(tc.action, tea.KeyMsg{})
+			result, cmd := m.dispatchAction(tc.action)
 			tc.verify(t, result.(Model), cmd)
 		})
 	}
@@ -901,7 +901,7 @@ func TestDispatchAction_PaneNavFallback_Diff(t *testing.T) {
 	m.file.lines = lines
 	m.nav.diffCursor = 0
 
-	result, _ := m.dispatchAction(keymap.ActionDown, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	result, _ := m.dispatchAction(keymap.ActionDown)
 	model := result.(Model)
 	assert.Equal(t, 1, model.nav.diffCursor, "ActionDown should route to handleDiffAction and move cursor")
 }
@@ -912,7 +912,7 @@ func TestDispatchAction_PaneNavFallback_Tree(t *testing.T) {
 	m.layout.focus = paneTree
 	require.Equal(t, "a.go", m.tree.SelectedFile(), "precondition: first file selected")
 
-	result, _ := m.dispatchAction(keymap.ActionDown, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	result, _ := m.dispatchAction(keymap.ActionDown)
 	model := result.(Model)
 	assert.Equal(t, "b.go", model.tree.SelectedFile(), "ActionDown should route to handleTreeAction and move selection")
 }
@@ -984,6 +984,45 @@ func TestHandleChordSecond_LayoutFallback(t *testing.T) {
 	require.NotNil(t, cmd, "layout-fallback match must dispatch the bound action")
 	_, ok := cmd().(tea.QuitMsg)
 	assert.True(t, ok, "Cyrillic ч on ctrl+w pending must resolve ctrl+w>x chord")
+}
+
+func TestHandleChordSecond_DispatchesToTOCWhenFocused(t *testing.T) {
+	// regression: when TOC is focused, chord-resolved actions must flow through
+	// the pre-resolved action path and NOT be re-resolved from the synthesized
+	// second-stage key (which would turn `x` into whatever `x` is bound to
+	// standalone, losing the chord action). `x` is unbound by default, so the
+	// buggy path would be a no-op; the correct path honors the pre-resolved
+	// ActionDown and advances the TOC cursor.
+	mdLines := []diff.DiffLine{
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},
+		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
+	}
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionDown)
+
+	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+	m.keymap = km
+	m.file.singleFile = true
+	m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+	require.NotNil(t, m.file.mdTOC)
+	m.file.name = "README.md"
+	m.file.lines = mdLines
+	m.layout.focus = paneTree
+	// entries: [0]=README.md(lineIdx=0), [1]=First(lineIdx=0), [2]=Second(lineIdx=2).
+	// seed cursor at [1] so ActionDown advances to [2] with an observably different lineIdx.
+	m.file.mdTOC.Move(sidepane.MotionDown)
+	m.keys.chordPending = "ctrl+w"
+
+	before, _ := m.file.mdTOC.CurrentLineIdx()
+	require.Equal(t, 0, before, "precondition: cursor at First entry (lineIdx=0)")
+
+	result, _ := m.handleChordSecond("x")
+	model := result.(Model)
+
+	after, _ := model.file.mdTOC.CurrentLineIdx()
+	assert.Equal(t, 2, after, "chord-resolved ActionDown must advance TOC cursor to Second entry (lineIdx=2)")
+	assert.Empty(t, model.keys.chordPending, "chordPending must clear after TOC dispatch")
 }
 
 func TestTransientHint_ChordHintLowestPriority(t *testing.T) {

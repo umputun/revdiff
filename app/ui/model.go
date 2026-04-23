@@ -759,15 +759,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m.dispatchAction(action, msg)
+	return m.dispatchAction(action)
 }
 
 // dispatchAction routes a resolved keymap action through overlay-open, the
 // global action switch, and the pane-specific nav fallback. It is the unified
 // dispatch path shared by keymap-resolved single keys (handleKey) and by
-// chord-resolved actions (handleChordSecond). The msg parameter is forwarded
-// to pane-nav handlers for context.
-func (m Model) dispatchAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// chord-resolved actions (handleChordSecond).
+func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	if model, ok := m.handleOverlayOpen(action); ok {
 		return model, nil
 	}
@@ -807,9 +806,9 @@ func (m Model) dispatchAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, 
 	// pane-specific navigation
 	switch m.layout.focus {
 	case paneTree:
-		return m.handleTreeAction(action, msg)
+		return m.handleTreeAction(action)
 	case paneDiff:
-		return m.handleDiffAction(action, msg)
+		return m.handleDiffAction(action)
 	}
 	return m, nil
 }
@@ -913,8 +912,7 @@ func (m Model) handleChordSecond(keyStr string) (tea.Model, tea.Cmd) {
 		m.keys.hint = "Unknown chord: " + prefix + ">" + keyStr
 		return m, nil
 	}
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
-	return m.dispatchAction(action, msg)
+	return m.dispatchAction(action)
 }
 
 // handleReload handles the ActionReload key. In stdin mode the feature is
