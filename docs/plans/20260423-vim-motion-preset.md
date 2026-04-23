@@ -560,25 +560,25 @@ Scroll actions (`ActionScrollCenter`/`ActionScrollTop`/`ActionScrollBottom`) hav
 
 ### Task 11: Verify acceptance criteria
 
-- [ ] `--vim-motion` flag parses from CLI, env (`VIM_MOTION`), config (`vim-motion = true`)
-- [ ] with `--vim-motion` on: `<N>j`, `<N>k`, `<N>G`, `gg`, `G`, `zz`, `zt`, `zb`, `ZZ`, `ZQ` all work as specified
-- [ ] with `--vim-motion` off: NO vim-motion behavior; existing bindings untouched
-- [ ] bare `G` (no count) jumps to last line; `5G` jumps to line 5
-- [ ] `esc` cancels pending leader silently
-- [ ] Unknown second key shows "Unknown: <chord>" hint
-- [ ] digits over 9999 are clamped
-- [ ] `0` alone doesn't trigger vim accumulator
-- [ ] count + unrelated key (e.g., `5q`) falls through to quit
-- [ ] entering search/annotate/overlay: modal consumes keys, vim interceptor does not fire (verified by Task 7 tests)
-- [ ] ctrl+w chord still works when vim-motion is on (orthogonal)
-- [ ] pending-reload (`R` then `y/n`) preempts vim (not broken by vim-motion)
-- [ ] motion keys in tree pane fall through (not intercepted)
-- [ ] `ZZ`/`ZQ` work from any pane
-- [ ] help overlay (`?`) with `--vim-motion` on shows a "Vim motion" section listing all 8 preset bindings; without the flag, no such section appears
-- [ ] vim motion composes cleanly with compact mode and collapsed mode: `jumpToLineN` operates on the currently-visible `diffLines`, so line numbers are relative to the current view (compact shrinks the diff before parsing; collapsed hides rendered rows but doesn't change `diffLines` length)
-- [ ] run full test suite: `make test`
-- [ ] run linter: `make lint`
-- [ ] verify `--dump-config` includes `vim-motion` key (via `make run -- --dump-config` or similar)
+- [x] `--vim-motion` flag parses from CLI, env (`VIM_MOTION`), config (`vim-motion = true`)
+- [x] with `--vim-motion` on: `<N>j`, `<N>k`, `<N>G`, `gg`, `G`, `zz`, `zt`, `zb`, `ZZ`, `ZQ` all work as specified
+- [x] with `--vim-motion` off: NO vim-motion behavior; existing bindings untouched
+- [x] bare `G` (no count) jumps to last line; `5G` jumps to line 5
+- [x] `esc` cancels pending leader silently
+- [x] Unknown second key shows "Unknown: <chord>" hint
+- [x] digits over 9999 are clamped
+- [x] `0` alone doesn't trigger vim accumulator
+- [x] count + unrelated key (e.g., `5q`) falls through to quit
+- [x] entering search/annotate/overlay: modal consumes keys, vim interceptor does not fire (verified by Task 7 tests)
+- [x] ctrl+w chord still works when vim-motion is on (orthogonal)
+- [x] pending-reload (`R` then `y/n`) preempts vim (not broken by vim-motion)
+- [x] motion keys in tree pane fall through (not intercepted)
+- [x] `ZZ`/`ZQ` work from any pane
+- [x] help overlay (`?`) with `--vim-motion` on shows a "Vim motion" section listing all 8 preset bindings; without the flag, no such section appears
+- [x] vim motion composes cleanly with compact mode and collapsed mode: `jumpToLineN` operates on the currently-visible `diffLines`, so line numbers are relative to the current view (compact shrinks the diff before parsing; collapsed hides rendered rows but doesn't change `diffLines` length)
+- [x] run full test suite: `make test`
+- [x] run linter: `make lint`
+- [x] verify `--dump-config` includes `vim-motion` key (via `make run -- --dump-config` or similar)
 
 ### Task 12: Final — update CLAUDE.md and move plan
 
