@@ -379,7 +379,12 @@ var reverseAliases = map[string]string{
 
 // dumpKeyName converts a canonical key string to a user-friendly name for dump output.
 // keys that are whitespace-only need special handling so the output can be reloaded.
+// chord keys are split on ">" and each half is dumped independently so that an embedded
+// literal space in either half is rewritten to its "space" alias, preserving the round-trip.
 func dumpKeyName(key string) string {
+	if leader, second, ok := strings.Cut(key, ">"); ok {
+		return dumpKeyName(leader) + ">" + dumpKeyName(second)
+	}
 	if alias, ok := reverseAliases[key]; ok {
 		return alias
 	}
@@ -415,6 +420,11 @@ func normalizeKey(key string) string {
 	// ctrl+ prefixed keys are always lowercase in bubbletea
 	if strings.HasPrefix(lower, "ctrl+") {
 		return lower
+	}
+	// alt+ prefixed keys: lowercase only the "alt+" prefix; preserve post-prefix
+	// case because bubbletea distinguishes alt+t from alt+T (shift-modifier matters)
+	if strings.HasPrefix(lower, "alt+") {
+		return "alt+" + key[4:]
 	}
 	// preserve original case for single chars (j vs J matters)
 	return key

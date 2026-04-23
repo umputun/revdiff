@@ -305,6 +305,7 @@ func TestNormalizeKey(t *testing.T) {
 		{"escape", "esc"}, {"return", "enter"}, // alias
 		{"space", " "},                             // alias
 		{"ctrl+d", "ctrl+d"}, {"Ctrl+D", "ctrl+d"}, // ctrl always lowercase
+		{"alt+t", "alt+t"}, {"Alt+T", "alt+T"}, {"ALT+t", "alt+t"}, // alt+: prefix lowered, suffix case preserved
 		{"esc", "esc"}, {"enter", "enter"}, {"tab", "tab"}, // pass-through
 	}
 	for _, tt := range tests {
@@ -414,6 +415,17 @@ func TestParse_ChordBinding_AltLeader(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, maps, 1)
 	assert.Equal(t, "alt+t>n", maps[0].key)
+}
+
+func TestParse_ChordBinding_AltLeaderCapitalizedPrefix(t *testing.T) {
+	// user-typed "Alt+T" must normalize the "Alt+" prefix to "alt+" (matches bubbletea),
+	// while preserving the "T" case because alt+T and alt+t are distinct in bubbletea.
+	input := strings.NewReader("map Alt+T>n theme_select\n")
+	maps, _, err := parse(input)
+	require.NoError(t, err)
+	require.Len(t, maps, 1)
+	assert.Equal(t, "alt+T>n", maps[0].key)
+	assert.Equal(t, ActionThemeSelect, maps[0].action)
 }
 
 func TestParse_ChordBinding_RejectsNonModifierLeader(t *testing.T) {
@@ -606,6 +618,31 @@ func TestDump_customBindings(t *testing.T) {
 	// x should appear as quit binding, q should not
 	assert.Contains(t, output, "map x quit")
 	assert.NotContains(t, output, "map q quit")
+}
+
+func TestDump_chordWithSpaceSecondStageRoundTrip(t *testing.T) {
+	// chord binding with "space" as the second stage must round-trip: the literal
+	// space stored as "ctrl+w> " needs to dump as "ctrl+w>space" so that a later
+	// reload re-parses into the same chord key.
+	km := &Keymap{bindings: make(map[string]Action), descriptions: defaultDescriptions()}
+	km.Bind("ctrl+w> ", ActionMarkReviewed)
+
+	var buf strings.Builder
+	require.NoError(t, km.Dump(&buf))
+	output := buf.String()
+
+	assert.Contains(t, output, "map ctrl+w>space mark_reviewed", "chord second-stage space must dump as 'space' alias")
+	assert.NotContains(t, output, "map ctrl+w>  mark_reviewed", "no double-space output (would break reload)")
+
+	// round-trip: parse the dump and verify the chord binding survives
+	maps, _, err := parse(strings.NewReader(output))
+	require.NoError(t, err)
+
+	rebuilt := &Keymap{bindings: make(map[string]Action), descriptions: defaultDescriptions()}
+	for _, m := range maps {
+		rebuilt.Bind(m.key, m.action)
+	}
+	assert.Equal(t, ActionMarkReviewed, rebuilt.ResolveChord("ctrl+w", " "), "chord with space must survive dump -> parse round-trip")
 }
 
 func TestDump_spaceKeyRoundTrip(t *testing.T) {
