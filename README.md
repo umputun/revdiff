@@ -302,6 +302,7 @@ Positional arguments support several forms:
 | `--word-diff` | Highlight intra-line word-level changes in paired add/remove lines, env: `REVDIFF_WORD_DIFF` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--no-mouse` | Disable mouse support (scroll wheel, click), env: `REVDIFF_NO_MOUSE` | `false` |
+| `--vim-motion` | Enable vim-style motion preset (counts, `gg`, `G`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`), env: `REVDIFF_VIM_MOTION` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
 | `--dump-theme` | Print currently resolved colors as theme file to stdout and exit | |
@@ -719,7 +720,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 <details>
 <summary>Available actions (click to expand)</summary>
 
-**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`
+**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`
 
 **File/Hunk:** `next_item`, `prev_item`, `next_hunk`, `prev_hunk`
 
@@ -734,6 +735,26 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 
 </details>
+
+### Vim-motion Preset
+
+Opt-in vim-style motion layer activated via `--vim-motion`, `REVDIFF_VIM_MOTION=true`, or `vim-motion = true` in the config file. Off by default — when off, existing single-key bindings are unchanged.
+
+| Keys | Action |
+|------|--------|
+| `<N>j` / `<N>k` | Move cursor N lines down/up (diff pane, 1-9999) |
+| `gg` | Jump to first line (diff pane) |
+| `G` | Jump to last line (diff pane) |
+| `<N>G` | Goto line N (diff pane) |
+| `zz` | Center viewport on cursor (diff pane) |
+| `zt` | Align viewport top on cursor (diff pane) |
+| `zb` | Align viewport bottom on cursor (diff pane) |
+| `ZZ` | Quit (any pane) |
+| `ZQ` | Discard annotations and quit (any pane) |
+
+When the preset is on, the digits `0`-`9` and the leader keys `g`, `z`, `Z` are intercepted before the regular keymap, so any standalone binding on those keys is overridden while the flag is active. `<N>j`/`<N>k`/`<N>G` and `gg`/`zz`/`zt`/`zb` apply to the diff pane only — in the file tree they fall through to the normal bindings. `ZZ` and `ZQ` work from any pane. Press `Esc` to silently cancel a pending leader; an unknown second key surfaces a transient `Unknown: <chord>` hint in the status bar. A bare digit `0` is not consumed (falls through to whatever binding is mapped); counts over 9999 are clamped. Modal keys (search input, annotation input, overlay navigation) always take precedence over the interceptor, and `ctrl+*`/`alt+*` chord bindings keep working orthogonally.
+
+The help overlay (`?`) shows a dedicated **Vim motion** section listing all eight preset bindings when `--vim-motion` is on; when off, the section is hidden.
 
 ### Output Format
 

@@ -49,6 +49,9 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 
 // buildHelpSpec builds an overlay.HelpSpec from the keymap's help sections,
 // converting raw key names to display names and inserting the TOC section.
+// When the vim-motion preset is active, appends a synthetic "Vim motion"
+// section listing the 8 preset bindings (which have no entries in the base
+// keymap since they're only reachable through the interceptor).
 func (m Model) buildHelpSpec() overlay.HelpSpec {
 	sections := m.keymap.HelpSections()
 	var result []overlay.HelpSection
@@ -66,7 +69,30 @@ func (m Model) buildHelpSpec() overlay.HelpSpec {
 			result = append(result, m.buildTOCHelpSection())
 		}
 	}
+	if m.modes.vimMotion {
+		result = append(result, m.buildVimMotionHelpSection())
+	}
 	return overlay.HelpSpec{Sections: result}
+}
+
+// buildVimMotionHelpSection returns the synthetic help section for the
+// vim-motion preset. Keys are hardcoded because these bindings are not part
+// of the configurable keymap — they are driven by the interceptor in
+// vimmotion.go, not by defaultBindings.
+func (m Model) buildVimMotionHelpSection() overlay.HelpSection {
+	return overlay.HelpSection{
+		Title: "Vim motion",
+		Entries: []overlay.HelpEntry{
+			{Keys: "N j / N k", Description: "move cursor N lines down/up"},
+			{Keys: "gg", Description: "jump to first line"},
+			{Keys: "G / N G", Description: "jump to last line / goto line N"},
+			{Keys: "zz", Description: "center viewport on cursor"},
+			{Keys: "zt", Description: "align viewport top"},
+			{Keys: "zb", Description: "align viewport bottom"},
+			{Keys: "ZZ", Description: "quit"},
+			{Keys: "ZQ", Description: "discard and quit"},
+		},
+	}
 }
 
 // buildTOCHelpSection returns the Markdown TOC contextual help section.

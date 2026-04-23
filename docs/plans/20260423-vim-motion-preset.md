@@ -529,7 +529,7 @@ func (m *Model) bottomAlignViewportOnCursor() {
 
 Scroll actions (`ActionScrollCenter`/`ActionScrollTop`/`ActionScrollBottom`) have no default single-key bindings, so `keymap.KeysFor()` returns empty for them and the help overlay would render them with no keys. Fix by augmenting `buildHelpSpec` to append a synthetic "Vim motion" section when `m.modes.vimMotion` is on — listing the 8 preset bindings with hardcoded key strings.
 
-- [ ] in `buildHelpSpec` (handlers.go:52), after the existing `km.HelpSections()`-based section build, append a conditional section when `m.modes.vimMotion`:
+- [x] in `buildHelpSpec` (handlers.go:52), after the existing `km.HelpSections()`-based section build, append a conditional section when `m.modes.vimMotion`:
   ```go
   if m.modes.vimMotion {
       result = append(result, overlay.HelpSection{
@@ -548,15 +548,15 @@ Scroll actions (`ActionScrollCenter`/`ActionScrollTop`/`ActionScrollBottom`) hav
   }
   ```
   (Adjust struct field names to match the actual `overlay.HelpEntry` shape — verify names during implementation; likely `Keys` and `Description` or similar.)
-- [ ] write `TestBuildHelpSpec_VimMotionSectionOff` — `modes.vimMotion = false`, call `buildHelpSpec`, assert no "Vim motion" section
-- [ ] write `TestBuildHelpSpec_VimMotionSectionOn` — `modes.vimMotion = true`, call `buildHelpSpec`, assert a "Vim motion" section is present with all 8 entries
-- [ ] in `README.md`, add a "Vim-motion preset" subsection under the existing keybindings section. Cover: enable via `--vim-motion` CLI flag, `VIM_MOTION` env var, or `vim-motion = true` in config; list all bindings in a table (same layout as the existing keybindings table); note that vim-motion keys (`g`, `z`, `Z`, digits) override any standalone single-key bindings when the flag is on; note that `ZZ`/`ZQ` work in any pane, motion keys are diff-pane only
-- [ ] mirror the README addition in `site/docs.html` (same content, HTML-formatted)
-- [ ] manual check: `diff <(sed -n '/vim-motion/,/^## /p' README.md) <(sed -n '/vim-motion/,/<h2/p' site/docs.html)` — content should match (allow for HTML tag differences; same bindings, same flag names, same semantics)
-- [ ] add identical paragraph to `.claude-plugin/skills/revdiff/references/usage.md`
-- [ ] copy BYTE-IDENTICAL to `plugins/codex/skills/revdiff/references/usage.md` (per `feedback_revdiff-docs-sync-plugins.md`)
-- [ ] verify: `diff .claude-plugin/skills/revdiff/references/usage.md plugins/codex/skills/revdiff/references/usage.md` shows no differences (or only pre-existing differences)
-- [ ] run `make test` — must pass before task 11
+- [x] write `TestBuildHelpSpec_VimMotionSectionOff` — `modes.vimMotion = false`, call `buildHelpSpec`, assert no "Vim motion" section
+- [x] write `TestBuildHelpSpec_VimMotionSectionOn` — `modes.vimMotion = true`, call `buildHelpSpec`, assert a "Vim motion" section is present with all 8 entries
+- [x] in `README.md`, add a "Vim-motion preset" subsection under the existing keybindings section. Cover: enable via `--vim-motion` CLI flag, `VIM_MOTION` env var, or `vim-motion = true` in config; list all bindings in a table (same layout as the existing keybindings table); note that vim-motion keys (`g`, `z`, `Z`, digits) override any standalone single-key bindings when the flag is on; note that `ZZ`/`ZQ` work in any pane, motion keys are diff-pane only
+- [x] mirror the README addition in `site/docs.html` (same content, HTML-formatted)
+- [x] manual check: `diff <(sed -n '/vim-motion/,/^## /p' README.md) <(sed -n '/vim-motion/,/<h2/p' site/docs.html)` — content should match (allow for HTML tag differences; same bindings, same flag names, same semantics)
+- [x] add identical paragraph to `.claude-plugin/skills/revdiff/references/usage.md`
+- [x] copy BYTE-IDENTICAL to `plugins/codex/skills/revdiff/references/usage.md` (per `feedback_revdiff-docs-sync-plugins.md`)
+- [x] verify: `diff .claude-plugin/skills/revdiff/references/usage.md plugins/codex/skills/revdiff/references/usage.md` shows no differences (or only pre-existing differences)
+- [x] run `make test` — must pass before task 11
 
 ### Task 11: Verify acceptance criteria
 

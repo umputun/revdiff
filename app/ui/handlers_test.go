@@ -771,3 +771,39 @@ func TestModel_ToggleCompactMode_CursorResetsAfterReload(t *testing.T) {
 	// after skipInitialDividers, cursor should skip index 0 (divider) and land on 1
 	assert.Equal(t, 1, model.nav.diffCursor, "cursor must reset to first non-divider line after compact re-fetch")
 }
+
+func TestBuildHelpSpec_VimMotionSectionOff(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = false
+
+	spec := m.buildHelpSpec()
+	for _, sec := range spec.Sections {
+		assert.NotEqual(t, "Vim motion", sec.Title,
+			"help overlay must not include a Vim motion section when --vim-motion is off")
+	}
+}
+
+func TestBuildHelpSpec_VimMotionSectionOn(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.modes.vimMotion = true
+
+	spec := m.buildHelpSpec()
+	var vimSection *overlay.HelpSection
+	for i := range spec.Sections {
+		if spec.Sections[i].Title == "Vim motion" {
+			vimSection = &spec.Sections[i]
+			break
+		}
+	}
+	require.NotNil(t, vimSection, "help overlay must include a Vim motion section when --vim-motion is on")
+	require.Len(t, vimSection.Entries, 8, "Vim motion section must list all 8 preset bindings")
+
+	// verify each expected binding is present by key string
+	wantKeys := []string{"N j / N k", "gg", "G / N G", "zz", "zt", "zb", "ZZ", "ZQ"}
+	for i, want := range wantKeys {
+		assert.Equal(t, want, vimSection.Entries[i].Keys,
+			"entry %d key string mismatch", i)
+		assert.NotEmpty(t, vimSection.Entries[i].Description,
+			"entry %d must have a description", i)
+	}
+}
