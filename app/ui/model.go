@@ -734,11 +734,31 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePendingReload(msg)
 	}
 
+	// chord-second guard: a second key arriving while a chord is pending must
+	// be consumed as the chord's second stage, regardless of any modal that
+	// would otherwise eat it. Modal-entry paths clear chord state explicitly,
+	// so coexistence should not occur in normal flow — this guard is
+	// defense-in-depth.
+	if m.keys.chordPending != "" {
+		return m.handleChordSecond(msg.String())
+	}
+
 	if handled, model, cmd := m.handleModalKey(msg); handled {
 		return model, cmd
 	}
 
 	action := m.keymap.Resolve(msg.String())
+
+	// chord-first guard: an unresolved key that is a registered chord leader
+	// enters pending state. Load-time conflict resolution guarantees no key is
+	// bound both as a standalone action and a chord prefix, so action is empty
+	// whenever IsChordLeader returns true; the guard stays purely additive.
+	if action == "" && m.keymap.IsChordLeader(msg.String()) {
+		m.keys.chordPending = msg.String()
+		m.keys.hint = "Pending: " + msg.String() + ", esc to cancel"
+		return m, nil
+	}
+
 	return m.dispatchAction(action, msg)
 }
 

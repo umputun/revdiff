@@ -346,13 +346,13 @@ This is a pure refactor — no behavior change. Required because chord-resolved 
 - Modify: `app/ui/model.go`
 - Modify: `app/ui/model_test.go`
 
-- [ ] in `handleKey` (model.go:711), insert chord-second guard immediately after the pending-reload check (model.go:719-721) and BEFORE the `handleModalKey` call (model.go:723): `if m.keys.chordPending != "" { return m.handleChordSecond(msg.String()) }`
-- [ ] in `handleKey`, insert chord-first guard immediately after `action := m.keymap.Resolve(msg.String())` (model.go:727) and BEFORE the `dispatchAction` call (replacing the old `handleOverlayOpen` line at model.go:729 — see Task 5 refactor): `if action == "" && m.keymap.IsChordLeader(msg.String()) { m.keys.chordPending = msg.String(); m.keys.hint = "Pending: " + msg.String() + ", esc to cancel"; return m, nil }`
-- [ ] write `TestHandleKey_EntersChordPending` — bind `ctrl+w>x`, send `tea.KeyMsg{Type: tea.KeyCtrlW}`, assert `m.keys.chordPending == "ctrl+w"` + `m.keys.hint == "Pending: ctrl+w, esc to cancel"`
-- [ ] write `TestHandleKey_ChordSecondCoexistenceGuard` — defense-in-depth test: set `m.keys.chordPending = "ctrl+w"` AND `m.search.active = true` simultaneously (simulating buggy coexistence), send a printable key like `x`, assert chord-second resolves (action dispatched if `ctrl+w>x` bound; otherwise hint set) and search input is NOT mutated
-- [ ] write `TestHandleKey_ChordIgnoredWhenPendingReload` — set `m.reload.pending = true`, send a chord leader key, assert reload-confirmation handler runs (chord not entered, chordPending stays empty)
-- [ ] write `TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord` — sanity check: bind `ctrl+w` standalone (not a chord), send `ctrl+w`, assert standalone action fires + chordPending stays empty (verifies `action == ""` guard prevents accidental chord-entry on non-chord-leader keys)
-- [ ] run `make test` — must pass before task 8
+- [x] in `handleKey` (model.go:711), insert chord-second guard immediately after the pending-reload check (model.go:719-721) and BEFORE the `handleModalKey` call (model.go:723): `if m.keys.chordPending != "" { return m.handleChordSecond(msg.String()) }`
+- [x] in `handleKey`, insert chord-first guard immediately after `action := m.keymap.Resolve(msg.String())` (model.go:727) and BEFORE the `dispatchAction` call (replacing the old `handleOverlayOpen` line at model.go:729 — see Task 5 refactor): `if action == "" && m.keymap.IsChordLeader(msg.String()) { m.keys.chordPending = msg.String(); m.keys.hint = "Pending: " + msg.String() + ", esc to cancel"; return m, nil }`
+- [x] write `TestHandleKey_EntersChordPending` — bind `ctrl+w>x`, send `tea.KeyMsg{Type: tea.KeyCtrlW}`, assert `m.keys.chordPending == "ctrl+w"` + `m.keys.hint == "Pending: ctrl+w, esc to cancel"`
+- [x] write `TestHandleKey_ChordSecondCoexistenceGuard` — defense-in-depth test: set `m.keys.chordPending = "ctrl+w"` AND `m.search.active = true` simultaneously (simulating buggy coexistence), send a printable key like `x`, assert chord-second resolves (action dispatched if `ctrl+w>x` bound; otherwise hint set) and search input is NOT mutated
+- [x] write `TestHandleKey_ChordIgnoredWhenPendingReload` — set `m.reload.pending = true`, send a chord leader key, assert reload-confirmation handler runs (chord not entered, chordPending stays empty)
+- [x] write `TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord` — sanity check: bind `ctrl+w` standalone (not a chord), send `ctrl+w`, assert standalone action fires + chordPending stays empty (verifies `action == ""` guard prevents accidental chord-entry on non-chord-leader keys)
+- [x] run `make test` — must pass before task 8
 
 ### Task 8: Clear chord state when entering modal/overlay modes
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1003,4 +1004,78 @@ func TestTransientHint_ChordHintLowestPriority(t *testing.T) {
 			assert.Equal(t, tc.want, m.transientHint())
 		})
 	}
+}
+
+func TestHandleKey_EntersChordPending(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
+	model := result.(Model)
+
+	assert.Equal(t, "ctrl+w", model.keys.chordPending, "leader key must set chordPending")
+	assert.Equal(t, "Pending: ctrl+w, esc to cancel", model.keys.hint, "status hint must announce pending chord")
+	assert.Nil(t, cmd, "entering pending state must not produce a tea.Cmd")
+}
+
+func TestHandleKey_ChordSecondCoexistenceGuard(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	// simulate buggy coexistence: chord pending AND search active at the same time.
+	// the chord-second guard runs BEFORE handleModalKey, so the second key must
+	// resolve as chord-second and must NOT leak into the search textinput.
+	m.keys.chordPending = "ctrl+w"
+	m.search.active = true
+	m.search.input = textinput.New()
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "chord-second guard must clear chordPending")
+	assert.Empty(t, model.search.input.Value(), "search textinput must NOT receive the chord-second key")
+	require.NotNil(t, cmd, "resolved chord must dispatch ActionQuit")
+	_, ok := cmd().(tea.QuitMsg)
+	assert.True(t, ok, "chord-second must dispatch the bound ActionQuit even with search active")
+}
+
+func TestHandleKey_ChordIgnoredWhenPendingReload(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+	// simulate the state produced by pressing R with annotations present
+	m.reload.applicable = true
+	m.reload.pending = true
+	m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
+
+	// send the chord leader; handlePendingReload must intercept first, so the
+	// chord-first guard never runs and chordPending stays empty.
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "chord-first guard must not fire while reload is pending")
+	assert.False(t, model.reload.pending, "non-y key cancels pending reload")
+	assert.Equal(t, "Reload canceled", model.reload.hint, "reload-cancel hint must be set")
+}
+
+func TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord(t *testing.T) {
+	km := keymap.Default()
+	// bind ctrl+w as a standalone action (no chord binding for ctrl+w>*)
+	km.Bind("ctrl+w", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "standalone-bound leader must not enter chord-pending state")
+	assert.Empty(t, model.keys.hint, "no chord hint when the key resolves to a standalone action")
+	require.NotNil(t, cmd, "standalone ActionQuit must dispatch")
+	_, ok := cmd().(tea.QuitMsg)
+	assert.True(t, ok, "ctrl+w must fire the standalone ActionQuit")
 }
