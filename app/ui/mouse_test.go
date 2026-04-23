@@ -629,7 +629,7 @@ func TestModel_HandleMouse_WheelScrollsCommitInfoOverlay(t *testing.T) {
 	}
 	mgr.OpenCommitInfo(overlay.CommitInfoSpec{Applicable: true, Commits: commits})
 	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
-	_ = mgr.Compose(strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height), ctx)
+	_ = mgr.Compose(makeOverlayBase(m.layout.width, m.layout.height), ctx)
 	require.True(t, m.overlay.Active())
 	// park diff cursor mid-stream: if wheel leaks through, it would change
 	// this value; overlay consuming the wheel leaves it intact.
@@ -676,7 +676,7 @@ func TestModel_HandleMouse_WheelScrollsThemeSelectOverlay(t *testing.T) {
 		{Name: "a"}, {Name: "b"},
 	}, ActiveName: "a"})
 	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
-	_ = mgr.Compose(strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height), ctx)
+	_ = mgr.Compose(makeOverlayBase(m.layout.width, m.layout.height), ctx)
 	m.nav.diffCursor = 0
 
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
@@ -685,32 +685,51 @@ func TestModel_HandleMouse_WheelScrollsThemeSelectOverlay(t *testing.T) {
 	assert.Equal(t, 0, model.nav.diffCursor)
 }
 
+// makeOverlayBase builds a base screen string for priming Manager.bounds via
+// Compose. Joins blank lines with "\n" (no trailing newline) so lipgloss.Width
+// and len(Split) match production View() output; Repeat("line\n", N) would add
+// a phantom trailing row and shift centering math.
+func makeOverlayBase(width, height int) string {
+	line := strings.Repeat(" ", width)
+	lines := make([]string, height)
+	for i := range lines {
+		lines[i] = line
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestModel_HandleMouse_ClickConfirmsThemeSelect(t *testing.T) {
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 	})
+	// real catalog so openThemeSelector builds entries and confirmThemeByName
+	// can Resolve + Persist; otherwise themePreview stays nil and the dispatch
+	// is a silent no-op (which the assertion must not hide).
+	m.themes = newTestThemeCatalog()
+	m.activeThemeName = "revdiff"
+	m.openThemeSelector()
+	require.NotNil(t, m.themePreview, "openThemeSelector must initialize the preview session")
+
 	mgr, ok := m.overlay.(*overlay.Manager)
 	require.True(t, ok)
-
-	mgr.OpenThemeSelect(overlay.ThemeSelectSpec{Items: []overlay.ThemeItem{
-		{Name: "a"}, {Name: "b"},
-	}, ActiveName: "a"})
-	// prime bounds via Compose so Manager.HandleMouse can translate screen to popup-local
 	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
-	base := strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height)
-	_ = mgr.Compose(base, ctx)
+	_ = mgr.Compose(makeOverlayBase(m.layout.width, m.layout.height), ctx)
 
-	// we need the popup's screen coords — derive from the manager by reading bounds
-	// via the same Compose output. Since we can't read Manager.bounds from outside the
-	// overlay package, the simplest verification: send a click at the screen center
-	// (popup is centered by Compose) and verify the outcome path runs. The actual
-	// row math is exercised by overlay-package tests; here we verify the Model-side
-	// side-effect pathway (confirmThemeByName is invoked and overlay closes).
-	centerX, centerY := m.layout.width/2, m.layout.height/2
-	result, _ := m.Update(leftPressAt(centerX, centerY))
+	// themeselect layout with 3 entries on a 120x40 viewport: popup spans rows
+	// 15-23 (9 rows total = top border, top pad, filter, blank, 3 entries, bot
+	// pad, bot border). entries are at screen y=19, 20, 21. click the second
+	// entry ("dracula") so confirmThemeByName changes activeThemeName from its
+	// initial "revdiff".
+	clickX, clickY := 60, 20
+	result, _ := m.Update(leftPressAt(clickX, clickY))
 	model := result.(Model)
 
-	assert.False(t, model.overlay.Active(), "click inside popup on an entry row should confirm and close the overlay")
+	assert.False(t, model.overlay.Active(), "confirm outcome closes the overlay")
+	// real Model-side effects of confirmThemeByName — not just the overlay-close
+	// that Manager auto-fires. themePreview is cleared and activeThemeName is set
+	// to the confirmed entry ("dracula", not the initial "revdiff").
+	assert.Nil(t, model.themePreview, "confirmThemeByName must clear the preview session")
+	assert.Equal(t, "dracula", model.activeThemeName, "confirmThemeByName must set activeThemeName to the clicked entry")
 }
 
 func TestModel_HandleMouse_ClickJumpsAnnotList(t *testing.T) {
@@ -721,21 +740,34 @@ func TestModel_HandleMouse_ClickJumpsAnnotList(t *testing.T) {
 	mgr, ok := m.overlay.(*overlay.Manager)
 	require.True(t, ok)
 
+	// multiple items so the popup is tall enough that a deterministic click
+	// coordinate lands on an item row regardless of centering rounding.
 	items := []overlay.AnnotationItem{
-		{AnnotationTarget: overlay.AnnotationTarget{File: "b.go", Line: 1, ChangeType: "+"}, Comment: "one"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 1, ChangeType: "+"}, Comment: "filler-0"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 2, ChangeType: "+"}, Comment: "filler-1"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "b.go", Line: 1, ChangeType: "+"}, Comment: "target"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 3, ChangeType: "+"}, Comment: "filler-3"},
+		{AnnotationTarget: overlay.AnnotationTarget{File: "a.go", Line: 4, ChangeType: "+"}, Comment: "filler-4"},
 	}
 	mgr.OpenAnnotList(overlay.AnnotListSpec{Items: items})
 	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
-	base := strings.Repeat(strings.Repeat(" ", m.layout.width)+"\n", m.layout.height)
-	_ = mgr.Compose(base, ctx)
+	_ = mgr.Compose(makeOverlayBase(m.layout.width, m.layout.height), ctx)
 
-	// click at screen center — the centered annotlist popup is small, so center
-	// hits the first item row. verifies Manager.HandleMouse → annotlist → jump path.
-	centerX, centerY := m.layout.width/2, m.layout.height/2
-	result, _ := m.Update(leftPressAt(centerX, centerY))
+	// annotlist layout with 5 items on a 120x40 viewport: popup width = 70,
+	// popup height = 5 items + 4 chrome = 9 rows. centered at startX=(120-70)/2=25,
+	// startY=(40-9)/2=15. items[2] (b.go, the cross-file target) is at screen
+	// y = startY + 2 + 2 = 19.
+	clickX, clickY := 60, 19
+	result, _ := m.Update(leftPressAt(clickX, clickY))
 	model := result.(Model)
 
-	assert.False(t, model.overlay.Active(), "click on item row should jump and auto-close")
+	assert.False(t, model.overlay.Active(), "jump outcome closes the overlay")
+	// cross-file target (b.go != current a.go) — jumpToAnnotationTarget must
+	// set pendingAnnotJump before loadSelectedIfChanged fires. this is the
+	// real Model-side effect; Manager.HandleMouse alone would not set it.
+	require.NotNil(t, model.pendingAnnotJump, "jumpToAnnotationTarget must set pendingAnnotJump for cross-file target")
+	assert.Equal(t, "b.go", model.pendingAnnotJump.File)
+	assert.Equal(t, 1, model.pendingAnnotJump.Line)
 }
 
 func TestModel_HandleMouse_ClearsTransientHints(t *testing.T) {
