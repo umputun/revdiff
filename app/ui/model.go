@@ -815,22 +815,39 @@ func (m Model) dispatchAction(action keymap.Action, msg tea.KeyMsg) (tea.Model, 
 }
 
 func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
+	// clear chord state on any overlay-opening action so a pending chord never
+	// coexists with an active overlay. the non-overlay default case short-circuits
+	// below without touching chord state.
 	switch action {
 	case keymap.ActionHelp:
+		m.clearChordState()
 		m.overlay.OpenHelp(m.buildHelpSpec())
 		return m, true
 	case keymap.ActionAnnotList:
+		m.clearChordState()
 		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
 		return m, true
 	case keymap.ActionThemeSelect:
+		m.clearChordState()
 		m.openThemeSelector()
 		return m, true
 	case keymap.ActionCommitInfo:
+		m.clearChordState()
 		m.handleCommitInfo()
 		return m, true
 	default:
 		return m, false
 	}
+}
+
+// clearChordState clears both chord-pending and the chord hint, enforcing the
+// invariant that the two fields are always cleared together. Called by modal-
+// entry paths (startSearch, startAnnotation, handleOverlayOpen) so chord state
+// never coexists with an active modal — the early chord-second guard in
+// handleKey is defense-in-depth against accidental coexistence.
+func (m *Model) clearChordState() {
+	m.keys.chordPending = ""
+	m.keys.hint = ""
 }
 
 // handleCommitInfo opens the commit-info overlay when the feature is available

@@ -51,6 +51,7 @@ func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinp
 
 // startAnnotation enters annotation input mode for the current cursor line.
 func (m *Model) startAnnotation() tea.Cmd {
+	m.clearChordState()
 	dl, ok := m.cursorDiffLine()
 	if !ok || dl.ChangeType == diff.ChangeDivider {
 		return nil

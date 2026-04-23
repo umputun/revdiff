@@ -1079,3 +1079,111 @@ func TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord(t *testing.T) {
 	_, ok := cmd().(tea.QuitMsg)
 	assert.True(t, ok, "ctrl+w must fire the standalone ActionQuit")
 }
+
+func TestClearChordState(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	m.clearChordState()
+
+	assert.Empty(t, m.keys.chordPending, "chordPending must be cleared")
+	assert.Empty(t, m.keys.hint, "hint must be cleared alongside chordPending")
+}
+
+func TestHandleOverlayOpen_HelpClearsChord(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionHelp)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionHelp must be handled by handleOverlayOpen")
+	assert.Empty(t, model.keys.chordPending, "help overlay entry must clear chordPending")
+	assert.Empty(t, model.keys.hint, "help overlay entry must clear chord hint")
+	assert.True(t, model.overlay.Active(), "help overlay must be open")
+	assert.Equal(t, overlay.KindHelp, model.overlay.Kind())
+}
+
+func TestHandleOverlayOpen_AnnotListClearsChord(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionAnnotList)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionAnnotList must be handled by handleOverlayOpen")
+	assert.Empty(t, model.keys.chordPending, "annot-list overlay entry must clear chordPending")
+	assert.Empty(t, model.keys.hint, "annot-list overlay entry must clear chord hint")
+	assert.True(t, model.overlay.Active(), "annot-list overlay must be open")
+	assert.Equal(t, overlay.KindAnnotList, model.overlay.Kind())
+}
+
+func TestHandleOverlayOpen_ThemeSelectClearsChord(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.themes = newTestThemeCatalog()
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionThemeSelect must be handled by handleOverlayOpen")
+	assert.Empty(t, model.keys.chordPending, "theme-select overlay entry must clear chordPending")
+	assert.Empty(t, model.keys.hint, "theme-select overlay entry must clear chord hint")
+	assert.True(t, model.overlay.Active(), "theme-select overlay must be open")
+	assert.Equal(t, overlay.KindThemeSelect, model.overlay.Kind())
+}
+
+func TestHandleOverlayOpen_CommitInfoClearsChord(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.commits.source = &fakeCommitLog{}
+	m.commits.applicable = true
+	m.commits.loaded = true
+	m.commits.list = []diff.CommitInfo{{Hash: "abc"}}
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, handled := m.handleOverlayOpen(keymap.ActionCommitInfo)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionCommitInfo must be handled by handleOverlayOpen")
+	assert.Empty(t, model.keys.chordPending, "commit-info overlay entry must clear chordPending")
+	assert.Empty(t, model.keys.hint, "commit-info overlay entry must clear chord hint")
+	assert.True(t, model.overlay.Active(), "commit-info overlay must be open")
+	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
+}
+
+func TestStartSearch_ClearsChord(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	m.startSearch()
+
+	assert.Empty(t, m.keys.chordPending, "startSearch must clear chordPending")
+	assert.Empty(t, m.keys.hint, "startSearch must clear chord hint")
+	assert.True(t, m.search.active, "startSearch must enter searching mode")
+}
+
+func TestStartAnnotation_ClearsChord(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 5, Content: "line5", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	m.startAnnotation()
+
+	assert.Empty(t, m.keys.chordPending, "startAnnotation must clear chordPending")
+	assert.Empty(t, m.keys.hint, "startAnnotation must clear chord hint")
+	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
+}

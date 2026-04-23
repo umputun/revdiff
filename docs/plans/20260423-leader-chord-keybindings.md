@@ -366,18 +366,18 @@ The actual modal-entry sites are exactly three: `startSearch` (search.go:11), `s
 
 Three identical two-statement clears (`m.keys.chordPending = ""; m.keys.hint = ""`) are spread across three sites with a shared invariant (both fields must be cleared together). Add a private helper to keep them consistent.
 
-- [ ] add private method `func (m *Model) clearChordState() { m.keys.chordPending = ""; m.keys.hint = "" }` in `app/ui/model.go` (or `chord.go` if extracted)
-- [ ] in `startSearch` (search.go:11), call `m.clearChordState()` at the top
-- [ ] in `startAnnotation` (annotate.go:53), call `m.clearChordState()` at the top
-- [ ] in `handleOverlayOpen` (model.go:775), call `m.clearChordState()` at the top (before the switch — covers all 4 overlay kinds at one site)
-- [ ] write `TestClearChordState` — set both fields, call `clearChordState()`, assert both cleared
-- [ ] write `TestHandleOverlayOpen_HelpClearsChord` — set chordPending+hint, call `handleOverlayOpen(ActionHelp)`, assert both cleared + overlay opened
-- [ ] write `TestHandleOverlayOpen_AnnotListClearsChord` — same with `ActionAnnotList`
-- [ ] write `TestHandleOverlayOpen_ThemeSelectClearsChord` — same with `ActionThemeSelect`
-- [ ] write `TestHandleOverlayOpen_CommitInfoClearsChord` — same with `ActionCommitInfo`
-- [ ] write `TestStartSearch_ClearsChord` — set chordPending+hint, call `startSearch`, assert both cleared
-- [ ] write `TestStartAnnotation_ClearsChord` — set chordPending+hint, call `startAnnotation`, assert both cleared
-- [ ] run `make test` — must pass before task 9
+- [x] add private method `func (m *Model) clearChordState() { m.keys.chordPending = ""; m.keys.hint = "" }` in `app/ui/model.go` (or `chord.go` if extracted)
+- [x] in `startSearch` (search.go:11), call `m.clearChordState()` at the top
+- [x] in `startAnnotation` (annotate.go:53), call `m.clearChordState()` at the top
+- [x] in `handleOverlayOpen` (model.go:775), call `m.clearChordState()` at the top (before the switch — covers all 4 overlay kinds at one site)
+- [x] write `TestClearChordState` — set both fields, call `clearChordState()`, assert both cleared
+- [x] write `TestHandleOverlayOpen_HelpClearsChord` — set chordPending+hint, call `handleOverlayOpen(ActionHelp)`, assert both cleared + overlay opened
+- [x] write `TestHandleOverlayOpen_AnnotListClearsChord` — same with `ActionAnnotList`
+- [x] write `TestHandleOverlayOpen_ThemeSelectClearsChord` — same with `ActionThemeSelect`
+- [x] write `TestHandleOverlayOpen_CommitInfoClearsChord` — same with `ActionCommitInfo`
+- [x] write `TestStartSearch_ClearsChord` — set chordPending+hint, call `startSearch`, assert both cleared
+- [x] write `TestStartAnnotation_ClearsChord` — set chordPending+hint, call `startAnnotation`, assert both cleared
+- [x] run `make test` — must pass before task 9
 
 ### Task 9: Integration test matrix — handleKey precedence
 
