@@ -384,7 +384,7 @@ Three identical two-statement clears (`m.keys.chordPending = ""; m.keys.hint = "
 **Files:**
 - Modify: `app/ui/model_test.go` (or create `app/ui/chord_test.go` if it grows past ~150 lines and the existing model_test.go is large)
 
-- [ ] add table-driven test `TestHandleKey_ChordPrecedence` covering the dispatch matrix:
+- [x] add table-driven test `TestHandleKey_ChordPrecedence` covering the dispatch matrix:
   | initial state | key sent | expected outcome |
   |---|---|---|
   | clean | leader | chord pending set, hint shown, no action |
@@ -396,8 +396,8 @@ Three identical two-statement clears (`m.keys.chordPending = ""; m.keys.hint = "
   | search active | leader | `handleModalKey` consumes key (textinput owns it), chord NOT entered |
   | overlay active | leader | `handleModalKey` routes to overlay's HandleKey, chord NOT entered |
   | pending reload | leader | `handlePendingReload` intercepts, chord NOT entered |
-- [ ] add `TestHandleKey_NonKeyMessagesPreserveChordState` — set chordPending, send a non-key message (e.g., `tea.WindowSizeMsg`, `filesLoadedMsg`, `blameLoadedMsg`), assert chordPending stays set (non-key messages route through `Update`, not `handleKey`, so they cannot affect chord state — this test locks in that invariant via direct `Update` invocation)
-- [ ] run `make test` — must pass before task 10
+- [x] add `TestHandleKey_NonKeyMessagesPreserveChordState` — set chordPending, send a non-key message (e.g., `tea.WindowSizeMsg`, `filesLoadedMsg`, `blameLoadedMsg`), assert chordPending stays set (non-key messages route through `Update`, not `handleKey`, so they cannot affect chord state — this test locks in that invariant via direct `Update` invocation)
+- [x] run `make test` — must pass before task 10
 
 ### Task 10: Documentation updates (README, docs.html, plugin reference docs)
 

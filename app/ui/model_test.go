@@ -1187,3 +1187,178 @@ func TestStartAnnotation_ClearsChord(t *testing.T) {
 	assert.Empty(t, m.keys.hint, "startAnnotation must clear chord hint")
 	assert.True(t, m.annot.annotating, "startAnnotation must enter annotating mode")
 }
+
+func TestHandleKey_ChordPrecedence(t *testing.T) {
+	leader := tea.KeyMsg{Type: tea.KeyCtrlW}
+	boundSecond := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+	unboundSecond := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
+	escKey := tea.KeyMsg{Type: tea.KeyEsc}
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, m *Model)
+		send  tea.KeyMsg
+		check func(t *testing.T, after Model, cmd tea.Cmd)
+	}{
+		{
+			name:  "clean state, leader sets pending",
+			setup: func(t *testing.T, m *Model) {},
+			send:  leader,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Equal(t, "ctrl+w", after.keys.chordPending, "leader must set chordPending")
+				assert.Equal(t, "Pending: ctrl+w, esc to cancel", after.keys.hint, "pending hint must be set")
+				assert.Nil(t, cmd, "entering pending state must not produce a tea.Cmd")
+			},
+		},
+		{
+			name: "chord pending, bound second dispatches",
+			setup: func(t *testing.T, m *Model) {
+				m.keys.chordPending = "ctrl+w"
+				m.keys.hint = "Pending: ctrl+w, esc to cancel"
+			},
+			send: boundSecond,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chordPending must clear after dispatch")
+				assert.Empty(t, after.keys.hint, "hint must clear after successful dispatch")
+				require.NotNil(t, cmd, "resolved chord must dispatch ActionQuit")
+				_, ok := cmd().(tea.QuitMsg)
+				assert.True(t, ok, "second-stage 'x' must dispatch ctrl+w>x → ActionQuit")
+			},
+		},
+		{
+			name: "chord pending, unbound second sets Unknown chord hint",
+			setup: func(t *testing.T, m *Model) {
+				m.keys.chordPending = "ctrl+w"
+				m.keys.hint = "Pending: ctrl+w, esc to cancel"
+			},
+			send: unboundSecond,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chordPending must clear after unbound second")
+				assert.Equal(t, "Unknown chord: ctrl+w>q", after.keys.hint, "unbound second must set Unknown chord hint")
+				assert.Nil(t, cmd, "unbound chord must not dispatch any action")
+			},
+		},
+		{
+			name: "chord pending, esc cancels silently",
+			setup: func(t *testing.T, m *Model) {
+				m.keys.chordPending = "ctrl+w"
+				m.keys.hint = "Pending: ctrl+w, esc to cancel"
+			},
+			send: escKey,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "esc must clear chordPending")
+				assert.Empty(t, after.keys.hint, "esc must clear hint silently (no Unknown chord message)")
+				assert.Nil(t, cmd, "esc must not dispatch any action")
+			},
+		},
+		{
+			name: "chord pending, leader again consumed as second-stage (Unknown chord)",
+			setup: func(t *testing.T, m *Model) {
+				m.keys.chordPending = "ctrl+w"
+				m.keys.hint = "Pending: ctrl+w, esc to cancel"
+			},
+			send: leader,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chord-second must consume the leader and clear pending")
+				assert.Equal(t, "Unknown chord: ctrl+w>ctrl+w", after.keys.hint, "leader>leader is unbound, must surface Unknown chord")
+				assert.Nil(t, cmd, "unbound chord must not dispatch any action")
+			},
+		},
+		{
+			name: "annotate active, leader does not enter chord",
+			setup: func(t *testing.T, m *Model) {
+				m.annot.annotating = true
+				m.annot.input = textinput.New()
+			},
+			send: leader,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chord-first guard must not fire while annotating (modal eats the key)")
+				assert.Empty(t, after.keys.hint, "no chord hint when modal owns the key")
+				assert.True(t, after.annot.annotating, "annotation mode stays active")
+			},
+		},
+		{
+			name: "search active, leader does not enter chord",
+			setup: func(t *testing.T, m *Model) {
+				m.search.active = true
+				m.search.input = textinput.New()
+			},
+			send: leader,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chord-first guard must not fire while searching (modal eats the key)")
+				assert.Empty(t, after.keys.hint, "no chord hint when modal owns the key")
+				assert.True(t, after.search.active, "search mode stays active")
+			},
+		},
+		{
+			name: "overlay active, leader does not enter chord",
+			setup: func(t *testing.T, m *Model) {
+				m.overlay.OpenHelp(m.buildHelpSpec())
+			},
+			send: leader,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chord-first guard must not fire while overlay is active (handleModalKey routes to overlay)")
+				assert.Empty(t, after.keys.hint, "no chord hint when overlay owns the key")
+				assert.True(t, after.overlay.Active(), "overlay stays active")
+			},
+		},
+		{
+			name: "pending reload, leader cancels reload (chord not entered)",
+			setup: func(t *testing.T, m *Model) {
+				m.reload.applicable = true
+				m.reload.pending = true
+				m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
+			},
+			send: leader,
+			check: func(t *testing.T, after Model, cmd tea.Cmd) {
+				assert.Empty(t, after.keys.chordPending, "chord-first guard must not fire while reload is pending")
+				assert.False(t, after.reload.pending, "non-y key cancels pending reload")
+				assert.Equal(t, "Reload canceled", after.reload.hint, "reload-cancel hint must replace pending prompt")
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			km := keymap.Default()
+			km.Bind("ctrl+w>x", keymap.ActionQuit)
+			m := testModel([]string{"a.go"}, nil)
+			m.keymap = km
+			tc.setup(t, &m)
+
+			result, cmd := m.Update(tc.send)
+			after := result.(Model)
+			tc.check(t, after, cmd)
+		})
+	}
+}
+
+func TestHandleKey_NonKeyMessagesPreserveChordState(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  tea.Msg
+	}{
+		{name: "WindowSizeMsg", msg: tea.WindowSizeMsg{Width: 100, Height: 40}},
+		// stale seq makes the handlers short-circuit without touching unrelated state
+		{name: "filesLoadedMsg", msg: filesLoadedMsg{seq: 99999}},
+		{name: "blameLoadedMsg", msg: blameLoadedMsg{file: "a.go", seq: 99999}},
+		{name: "commitsLoadedMsg", msg: commitsLoadedMsg{seq: 99999}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			km := keymap.Default()
+			km.Bind("ctrl+w>x", keymap.ActionQuit)
+			m := testModel([]string{"a.go"}, nil)
+			m.keymap = km
+			m.keys.chordPending = "ctrl+w"
+			m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+			result, _ := m.Update(tc.msg)
+			after := result.(Model)
+
+			assert.Equal(t, "ctrl+w", after.keys.chordPending, "chordPending must survive non-key messages (route through Update, not handleKey)")
+			assert.Equal(t, "Pending: ctrl+w, esc to cancel", after.keys.hint, "chord hint must survive non-key messages")
+		})
+	}
+}
