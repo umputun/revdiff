@@ -15,7 +15,7 @@ import (
 
 func TestParseUnifiedDiff_SimpleAdd(t *testing.T) {
 	raw := readFixture(t, "simple_add.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 
 	// expected: context, blank, context, add, add, add, context, context
@@ -57,7 +57,7 @@ func TestParseUnifiedDiff_SimpleAdd(t *testing.T) {
 
 func TestParseUnifiedDiff_SimpleRemove(t *testing.T) {
 	raw := readFixture(t, "simple_remove.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, lines, "expected non-empty result")
 
@@ -78,7 +78,7 @@ func TestParseUnifiedDiff_SimpleRemove(t *testing.T) {
 
 func TestParseUnifiedDiff_MultiHunk(t *testing.T) {
 	raw := readFixture(t, "multi_hunk.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 
 	// verify dividers carry line-count labels.
@@ -190,7 +190,7 @@ func TestParseUnifiedDiff_GapLabels(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			lines, err := parseUnifiedDiff(tc.raw)
+			lines, err := parseUnifiedDiff(tc.raw, 0)
 			require.NoError(t, err)
 
 			var got []string
@@ -204,9 +204,86 @@ func TestParseUnifiedDiff_GapLabels(t *testing.T) {
 	}
 }
 
+// TestParseUnifiedDiff_TrailingDivider covers trailing divider emission driven
+// by the totalOldLines parameter — the caller-supplied total line count of the
+// pre-change file. 0 (unknown) skips the trailing divider; positive values emit
+// a divider only when the last hunk does not reach EOF.
+func TestParseUnifiedDiff_TrailingDivider(t *testing.T) {
+	tests := []struct {
+		name           string
+		raw            string
+		totalOldLines  int
+		wantDividers   []string
+	}{
+		{
+			name: "trailing plural — hunk ends at line 10, total 300",
+			raw: "--- a\n+++ b\n" +
+				"@@ -8,3 +8,3 @@\n a\n-b\n+B\n",
+			// prevOldEnd=11, trailing = 300-11+1 = 290.
+			totalOldLines: 300,
+			wantDividers:  []string{"⋯ 7 lines ⋯", "⋯ 290 lines ⋯"},
+		},
+		{
+			name: "trailing singular — total is one past last hunk",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,3 +1,3 @@\n a\n-b\n+B\n",
+			// prevOldEnd=4, trailing = 5-4+1 = 2? let me recompute: trailing = totalOldLines - prevOldEnd + 1 = 5-4+1 = 2.
+			// so this one has gap=2 (two lines). adjusted below.
+			totalOldLines: 4,
+			// prevOldEnd=4, gap = 4-4+1 = 1
+			wantDividers: []string{"⋯ 1 line ⋯"},
+		},
+		{
+			name: "no trailing — last hunk covers to EOF",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,3 +1,3 @@\n a\n-b\n+B\n",
+			// prevOldEnd=4, total=3, 4>3 → no trailing.
+			totalOldLines: 3,
+			wantDividers:  nil,
+		},
+		{
+			name: "totalOldLines=0 → no trailing (unknown)",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,3 +1,3 @@\n a\n-b\n+B\n",
+			totalOldLines: 0,
+			wantDividers:  nil,
+		},
+		{
+			name: "leading + between + trailing",
+			raw: "--- a\n+++ b\n" +
+				"@@ -5,2 +5,2 @@\n a\n+b\n" +
+				"@@ -15,2 +15,2 @@\n c\n+d\n",
+			// leading: 4 lines. between: prevOldEnd=7, next=15 → 8. trailing: prevOldEnd=17, total=50 → 34.
+			totalOldLines: 50,
+			wantDividers:  []string{"⋯ 4 lines ⋯", "⋯ 8 lines ⋯", "⋯ 34 lines ⋯"},
+		},
+		{
+			name: "empty diff with totalOldLines set emits nothing (no hunks)",
+			raw:  "",
+			// no hunks processed → prevOldEnd stays 1 → trailing skipped by guard.
+			totalOldLines: 100,
+			wantDividers:  nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lines, err := parseUnifiedDiff(tc.raw, tc.totalOldLines)
+			require.NoError(t, err)
+
+			var got []string
+			for _, l := range lines {
+				if l.ChangeType == ChangeDivider {
+					got = append(got, l.Content)
+				}
+			}
+			assert.Equal(t, tc.wantDividers, got)
+		})
+	}
+}
+
 func TestParseUnifiedDiff_MixedChanges(t *testing.T) {
 	raw := readFixture(t, "mixed_changes.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 
 	types := make([]ChangeType, 0, len(lines))
@@ -230,14 +307,14 @@ func TestParseUnifiedDiff_MixedChanges(t *testing.T) {
 }
 
 func TestParseUnifiedDiff_Empty(t *testing.T) {
-	lines, err := parseUnifiedDiff("")
+	lines, err := parseUnifiedDiff("", 0)
 	require.NoError(t, err)
 	assert.Empty(t, lines)
 }
 
 func TestParseUnifiedDiff_Binary(t *testing.T) {
 	raw := readFixture(t, "binary.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, BinaryPlaceholder, lines[0].Content)
@@ -249,7 +326,7 @@ func TestParseUnifiedDiff_Binary(t *testing.T) {
 
 func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
 	raw := "diff --git a/new.bin b/new.bin\nnew file mode 100644\nindex 0000000..dd12d3a\nBinary files /dev/null and b/new.bin differ\n"
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(new binary file)", lines[0].Content)
@@ -258,7 +335,7 @@ func TestParseUnifiedDiff_BinaryNewFile(t *testing.T) {
 
 func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
 	raw := "diff --git a/old.bin b/old.bin\ndeleted file mode 100644\nindex 2dfe7e4..0000000\nBinary files a/old.bin and /dev/null differ\n"
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(deleted binary file)", lines[0].Content)
@@ -267,7 +344,7 @@ func TestParseUnifiedDiff_BinaryDeleted(t *testing.T) {
 
 func TestParseUnifiedDiff_LineNumbers(t *testing.T) {
 	raw := readFixture(t, "simple_add.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 
 	// additions should have OldNum=0
@@ -289,7 +366,7 @@ func TestParseUnifiedDiff_LineNumbers(t *testing.T) {
 
 func TestParseUnifiedDiff_RemoveLineNumbers(t *testing.T) {
 	raw := readFixture(t, "simple_remove.diff")
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err)
 
 	for _, l := range lines {
@@ -410,7 +487,7 @@ func TestParseUnifiedDiff_LongLine(t *testing.T) {
 	longContent := strings.Repeat("x", 100_000)
 	raw := "diff --git a/big.js b/big.js\n--- a/big.js\n+++ b/big.js\n@@ -1,1 +1,2 @@\n context\n+" + longContent + "\n"
 
-	lines, err := parseUnifiedDiff(raw)
+	lines, err := parseUnifiedDiff(raw, 0)
 	require.NoError(t, err, "should handle lines up to 1MB without error")
 
 	var hasAdd bool

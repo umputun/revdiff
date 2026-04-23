@@ -391,7 +391,7 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
 	}
 
-	lines, err := parseUnifiedDiff(out)
+	lines, err := parseUnifiedDiff(out, g.totalOldLines(ref, file, staged))
 	if err != nil {
 		return nil, err
 	}
@@ -404,6 +404,39 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 	}
 
 	return lines, nil
+}
+
+// totalOldLines returns the line count of the pre-change version of file, used by
+// parseUnifiedDiff to emit a trailing divider. Returns 0 when the old-side file is
+// unavailable (new files, bad refs, etc.) — the parser treats 0 as "unknown" and
+// skips the trailing divider.
+//
+// Old-side resolution:
+//   - ref empty + staged      → HEAD (git diff --cached compares HEAD against index)
+//   - ref empty + not staged  → index (git diff compares index against working tree)
+//   - ref contains "..|..."  → left operand (git diff A..B → A)
+//   - single ref              → use as-is
+func (g *Git) totalOldLines(ref, file string, staged bool) int {
+	oldRef := ref
+	if left, _, ok := strings.Cut(ref, ".."); ok {
+		oldRef = left
+	}
+	if oldRef == "" && staged {
+		oldRef = "HEAD"
+	}
+	// `git show :path` (empty oldRef) shows the index version of the file
+	out, err := g.runGit("show", oldRef+":"+file)
+	if err != nil {
+		return 0
+	}
+	if out == "" {
+		return 0
+	}
+	n := strings.Count(out, "\n")
+	if !strings.HasSuffix(out, "\n") {
+		n++ // file without trailing newline
+	}
+	return n
 }
 
 // gitContextArg returns the -U argument for git diff given the caller's requested
@@ -562,6 +595,19 @@ func (g *Git) formatSize(bytes int64) string {
 // so the parser can compute the old-side end of each hunk.
 var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
 
+// appendGapDivider appends a "⋯ N lines ⋯" divider to lines when gap is positive.
+// Used for leading, between-hunks, and trailing dividers — same format, different
+// source of the gap count. Returns lines unchanged when gap <= 0 (nothing to show).
+func appendGapDivider(lines []DiffLine, gap int) []DiffLine {
+	switch {
+	case gap == 1:
+		return append(lines, DiffLine{ChangeType: ChangeDivider, Content: "⋯ 1 line ⋯"})
+	case gap > 1:
+		return append(lines, DiffLine{ChangeType: ChangeDivider, Content: fmt.Sprintf("⋯ %d lines ⋯", gap)})
+	}
+	return lines
+}
+
 // binaryFilesRe matches git's "Binary files ... differ" line for binary diffs.
 // Assumes English locale; non-English git may localize this message.
 var binaryFilesRe = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
@@ -570,7 +616,12 @@ var binaryFilesRe = regexp.MustCompile(`^Binary files .+ and .+ differ$`)
 // it handles the diff header, hunk headers, and content lines.
 // for binary diffs ("Binary files ... differ"), it returns a single placeholder DiffLine.
 // intended for single-file diffs; multi-file diffs are not fully supported.
-func parseUnifiedDiff(raw string) ([]DiffLine, error) {
+//
+// totalOldLines is the total line count of the pre-change file, used to emit a
+// trailing "⋯ N lines ⋯" divider after the last hunk when it does not reach EOF.
+// Pass 0 when unknown (context-only sources, tests, or any case where the caller
+// cannot cheaply determine the old file's size) — trailing divider is then skipped.
+func parseUnifiedDiff(raw string, totalOldLines int) ([]DiffLine, error) {
 	var lines []DiffLine
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), MaxLineLength)
@@ -625,12 +676,7 @@ func parseUnifiedDiff(raw string) ([]DiffLine, error) {
 			// Leading divider (first hunk) uses prevOldEnd=1 initialization; between-hunks use
 			// prevOldEnd from prior iteration. Gap uses hunk-header metadata not oldNum, so
 			// insertion-only hunks (@@ -K,0 ...) compute correctly; oldNum stays put on `+` lines.
-			switch gap := oldStart - prevOldEnd; {
-			case gap == 1:
-				lines = append(lines, DiffLine{ChangeType: ChangeDivider, Content: "⋯ 1 line ⋯"})
-			case gap > 1:
-				lines = append(lines, DiffLine{ChangeType: ChangeDivider, Content: fmt.Sprintf("⋯ %d lines ⋯", gap)})
-			}
+			lines = appendGapDivider(lines, oldStart-prevOldEnd)
 			// prevOldEnd = line number AFTER the current hunk on the old side. Normal hunks
 			// (oldLen>0) cover [oldStart, oldStart+oldLen). Insertion-only hunks (oldLen==0,
 			// e.g. @@ -K,0 ...) insert between old lines K and K+1 — handled by max(oldLen,1).
@@ -678,6 +724,13 @@ func parseUnifiedDiff(raw string) ([]DiffLine, error) {
 
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan diff: %w", err)
+	}
+
+	// trailing divider: unchanged lines after the last hunk on the old side.
+	// Emitted only when the caller supplied totalOldLines AND at least one hunk
+	// was processed (prevOldEnd > 1 means a hunk advanced it past the initial value).
+	if totalOldLines > 0 && prevOldEnd > 1 {
+		lines = appendGapDivider(lines, totalOldLines-prevOldEnd+1)
 	}
 
 	return lines, nil
