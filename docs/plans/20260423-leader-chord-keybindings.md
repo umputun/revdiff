@@ -293,11 +293,11 @@ Example: `Pending: ctrl+w, esc to cancel`. Verbatim — no case transformation.
 **Files:**
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] verify (no code change expected) `Dump()` writes chord bindings as `map ctrl+w>x close_file` — they're flat strings already
-- [ ] verify `KeysFor(action)` returns chord keys sorted alphabetically alongside single-key bindings
-- [ ] write `TestDump_RoundTripsChords` — define a Keymap with mixed single + chord bindings, Dump to a buffer, Parse the buffer back, assert resulting Keymap has identical bindings (use `reflect.DeepEqual` on `bindings` map)
-- [ ] write `TestKeysFor_IncludesChordKeys` — action with both `x` and `ctrl+w>x` bindings returns `["ctrl+w>x", "x"]` (ASCII alphabetic: `'c' (0x63)` < `'x' (0x78)`); HelpSections joins as `ctrl+w>x / x`
-- [ ] run `make test` — must pass before task 5
+- [x] verify (no code change expected) `Dump()` writes chord bindings as `map ctrl+w>x close_file` — they're flat strings already
+- [x] verify `KeysFor(action)` returns chord keys sorted alphabetically alongside single-key bindings
+- [x] write `TestDump_RoundTripsChords` — define a Keymap with mixed single + chord bindings, Dump to a buffer, Parse the buffer back, assert resulting Keymap has identical bindings (use `reflect.DeepEqual` on `bindings` map)
+- [x] write `TestKeysFor_IncludesChordKeys` — action with both `x` and `ctrl+w>x` bindings returns `["ctrl+w>x", "x"]` (ASCII alphabetic: `'c' (0x63)` < `'x' (0x78)`); HelpSections joins as `ctrl+w>x / x`
+- [x] run `make test` — must pass before task 5
 
 ### Task 5: Extract dispatchAction helper + split pane-nav handlers
 

@@ -895,3 +895,57 @@ func TestParse_casePreservedForSingleChars(t *testing.T) {
 	assert.Equal(t, "N", maps[0].key)
 	assert.Equal(t, "n", maps[1].key)
 }
+
+func TestDump_RoundTripsChords(t *testing.T) {
+	// build a Keymap with a mix of single-key and chord bindings, dump, parse,
+	// rebuild, and assert the bindings are structurally identical.
+	km := &Keymap{bindings: make(map[string]Action), descriptions: defaultDescriptions()}
+	km.Bind("j", ActionDown)
+	km.Bind("q", ActionQuit)
+	km.Bind("ctrl+w>x", ActionQuit)
+	km.Bind("alt+t>n", ActionNextItem)
+	km.Bind("ctrl+w>h", ActionHelp)
+
+	var buf strings.Builder
+	require.NoError(t, km.Dump(&buf))
+	output := buf.String()
+
+	// chord keys appear verbatim in dump output
+	assert.Contains(t, output, "map ctrl+w>x quit")
+	assert.Contains(t, output, "map alt+t>n next_item")
+	assert.Contains(t, output, "map ctrl+w>h help")
+
+	// parse the output back
+	maps, unmaps, err := parse(strings.NewReader(output))
+	require.NoError(t, err)
+	assert.Empty(t, unmaps)
+
+	rebuilt := &Keymap{bindings: make(map[string]Action), descriptions: defaultDescriptions()}
+	for _, m := range maps {
+		rebuilt.Bind(m.key, m.action)
+	}
+
+	// full structural equality on bindings
+	assert.Equal(t, km.bindings, rebuilt.bindings, "dump -> parse -> rebuild must preserve bindings exactly")
+}
+
+func TestKeysFor_IncludesChordKeys(t *testing.T) {
+	km := Default()
+	km.Bind("ctrl+w>x", ActionQuit)
+
+	keys := km.KeysFor(ActionQuit)
+	// ASCII sort: 'c' (0x63) < 'q' (0x71); chord sorts before "q"
+	assert.Equal(t, []string{"ctrl+w>x", "q"}, keys)
+
+	// HelpSections joins the same slice with " / "
+	sections := km.HelpSections()
+	var joined string
+	for _, sec := range sections {
+		for _, entry := range sec.Entries {
+			if entry.Action == ActionQuit {
+				joined = entry.Keys
+			}
+		}
+	}
+	assert.Equal(t, "ctrl+w>x / q", joined)
+}
