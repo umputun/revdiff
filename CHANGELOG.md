@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.24.0 - 2026-04-23
+
+### New Features
+
+- leader-based chord keybindings (kitty-style ctrl+w>x) #143 @umputun
+- mouse wheel and click support in overlay popups #144 @umputun
+
 ## v0.23.0 - 2026-04-22
 
 ### New Features
