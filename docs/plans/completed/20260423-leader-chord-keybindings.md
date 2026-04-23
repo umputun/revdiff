@@ -436,8 +436,8 @@ Three identical two-statement clears (`m.keys.chordPending = ""; m.keys.hint = "
 **Files:**
 - Modify: `CLAUDE.md`
 
-- [ ] add a brief entry in CLAUDE.md's "Gotchas" or "Architecture" section noting that chord keybindings exist, leaders must be ctrl/alt, and chord state lives on `keyState` (not `navigationState`)
-- [ ] move this plan file to `docs/plans/completed/20260423-leader-chord-keybindings.md`
+- [x] add a brief entry in CLAUDE.md's "Gotchas" or "Architecture" section noting that chord keybindings exist, leaders must be ctrl/alt, and chord state lives on `keyState` (not `navigationState`)
+- [x] move this plan file to `docs/plans/completed/20260423-leader-chord-keybindings.md`
 
 ## Task Order (revised)
 
