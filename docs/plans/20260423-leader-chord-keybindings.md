@@ -327,18 +327,18 @@ This is a pure refactor — no behavior change. Required because chord-resolved 
 - Modify: `app/ui/view.go` (add `m.keys.hint` to `transientHint()` priority chain)
 - Modify: `app/ui/model_test.go` (or create `app/ui/chord_test.go` if growing)
 
-- [ ] add `keyState` struct in `app/ui/model.go` with two fields: `chordPending string` and `hint string`; godoc comment notes it's separate from `navigationState` because chord state is key-dispatch concern, not cursor/scroll concern (per architect feedback — avoid `navigationState` becoming a grab-bag)
-- [ ] add `keys keyState` field to Model struct (plain struct, not pointer)
-- [ ] in `view.go` `transientHint()`, add a new case `case m.keys.hint != "": return m.keys.hint` AFTER the existing commits/reload/compact cases (lowest priority — chord hints lose to in-flight reload/compact toggles)
-- [ ] in `handleKey` (model.go:714-716), add `m.keys.hint = ""` to the existing hint-clear block
-- [ ] add `handleChordSecond(keyStr string) (tea.Model, tea.Cmd)` method with VALUE receiver (matches `handlePendingReload` pattern at model.go:767): clears `m.keys.chordPending` and `m.keys.hint` on the local copy; returns `m, nil` on esc; calls `m.keymap.ResolveChord(prefix, keyStr)` and dispatches via `m.dispatchAction(action, /* synthesize msg */)` if non-empty; sets `m.keys.hint = "Unknown chord: " + prefix + ">" + keyStr` otherwise; returns updated `m` so bubbletea picks up state changes
-- [ ] for the `dispatchAction` call inside `handleChordSecond`, synthesize a placeholder `tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}` (the second-stage key as msg context); pane-nav handlers that consult `msg.String()` will see the literal second key, which is correct context for any chord-bound nav action
-- [ ] write `TestHandleChordSecond_ResolvedDispatches` — set chordPending, call handleChordSecond with bound key, assert action invoked (via dispatchAction) + chordPending cleared + hint cleared
-- [ ] write `TestHandleChordSecond_UnboundShowsHint` — set chordPending, call with unbound key, assert `m.keys.hint == "Unknown chord: ctrl+w>q"` + chordPending cleared + no action invoked
-- [ ] write `TestHandleChordSecond_EscCancels` — set chordPending, call with "esc", assert chordPending cleared + hint cleared + no action invoked
-- [ ] write `TestHandleChordSecond_LayoutFallback` — chord `ctrl+w>x` bound, set chordPending to `ctrl+w`, call with `ч`, assert action invoked (verifies ResolveChord's layout-fallback path)
-- [ ] write `TestTransientHint_ChordHintLowestPriority` — set `m.commits.hint = "x"` AND `m.keys.hint = "y"`, assert `transientHint()` returns "x" (commits wins)
-- [ ] run `make test` — must pass before task 7
+- [x] add `keyState` struct in `app/ui/model.go` with two fields: `chordPending string` and `hint string`; godoc comment notes it's separate from `navigationState` because chord state is key-dispatch concern, not cursor/scroll concern (per architect feedback — avoid `navigationState` becoming a grab-bag)
+- [x] add `keys keyState` field to Model struct (plain struct, not pointer)
+- [x] in `view.go` `transientHint()`, add a new case `case m.keys.hint != "": return m.keys.hint` AFTER the existing commits/reload/compact cases (lowest priority — chord hints lose to in-flight reload/compact toggles)
+- [x] in `handleKey` (model.go:714-716), add `m.keys.hint = ""` to the existing hint-clear block
+- [x] add `handleChordSecond(keyStr string) (tea.Model, tea.Cmd)` method with VALUE receiver (matches `handlePendingReload` pattern at model.go:767): clears `m.keys.chordPending` and `m.keys.hint` on the local copy; returns `m, nil` on esc; calls `m.keymap.ResolveChord(prefix, keyStr)` and dispatches via `m.dispatchAction(action, /* synthesize msg */)` if non-empty; sets `m.keys.hint = "Unknown chord: " + prefix + ">" + keyStr` otherwise; returns updated `m` so bubbletea picks up state changes
+- [x] for the `dispatchAction` call inside `handleChordSecond`, synthesize a placeholder `tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}` (the second-stage key as msg context); pane-nav handlers that consult `msg.String()` will see the literal second key, which is correct context for any chord-bound nav action
+- [x] write `TestHandleChordSecond_ResolvedDispatches` — set chordPending, call handleChordSecond with bound key, assert action invoked (via dispatchAction) + chordPending cleared + hint cleared
+- [x] write `TestHandleChordSecond_UnboundShowsHint` — set chordPending, call with unbound key, assert `m.keys.hint == "Unknown chord: ctrl+w>q"` + chordPending cleared + no action invoked
+- [x] write `TestHandleChordSecond_EscCancels` — set chordPending, call with "esc", assert chordPending cleared + hint cleared + no action invoked
+- [x] write `TestHandleChordSecond_LayoutFallback` — chord `ctrl+w>x` bound, set chordPending to `ctrl+w`, call with `ч`, assert action invoked (verifies ResolveChord's layout-fallback path)
+- [x] write `TestTransientHint_ChordHintLowestPriority` — set `m.commits.hint = "x"` AND `m.keys.hint = "y"`, assert `transientHint()` returns "x" (commits wins)
+- [x] run `make test` — must pass before task 7
 
 ### Task 7: handleKey integration — chord-first + chord-second guards
 

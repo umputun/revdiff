@@ -345,6 +345,18 @@ type compactState struct {
 	hint       string // transient status-bar message; cleared on next key press
 }
 
+// keyState holds transient key-dispatch state for the leader-chord feature.
+// It lives separate from navigationState because chord state is a key-dispatch
+// concern, not a cursor/scroll concern — keeping the two split prevents
+// navigationState from growing into a grab-bag. chordPending holds the leader
+// key while waiting for the second-stage key ("" otherwise); hint is a
+// transient status-bar message ("Pending: …" while waiting, "Unknown chord: …"
+// on a miss) cleared on the next key press.
+type keyState struct {
+	chordPending string // leader key while waiting for the second-stage key; "" otherwise
+	hint         string // transient status-bar message; cleared on next key press
+}
+
 // annotationState holds annotation input lifecycle state.
 type annotationState struct {
 	annotating         bool            // true when annotation text input is active
@@ -389,6 +401,7 @@ type Model struct {
 	commits     commitsState      // eagerly loaded commit log for the commit-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 	compact     compactState      // applicability + transient hint for compact diff mode
+	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
@@ -714,6 +727,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.commits.hint = ""
 	m.reload.hint = ""
 	m.compact.hint = ""
+	m.keys.hint = ""
 
 	// pending-reload intercept: y confirms, any other key cancels
 	if m.reload.pending {
@@ -843,6 +857,27 @@ func (m Model) handlePendingReload(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.reload.hint = "Reload canceled"
 	return m, nil
+}
+
+// handleChordSecond dispatches the second-stage key of a pending chord. esc
+// cancels silently, an unbound second key surfaces an "Unknown chord" hint,
+// and a resolved action flows through dispatchAction so chord-bound actions
+// reach the same handlers as keymap-resolved single keys. The local copy of
+// Model carries the cleared chord state back to bubbletea.
+func (m Model) handleChordSecond(keyStr string) (tea.Model, tea.Cmd) {
+	prefix := m.keys.chordPending
+	m.keys.chordPending = ""
+	m.keys.hint = ""
+	if keyStr == "esc" {
+		return m, nil
+	}
+	action := m.keymap.ResolveChord(prefix, keyStr)
+	if action == "" {
+		m.keys.hint = "Unknown chord: " + prefix + ">" + keyStr
+		return m, nil
+	}
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
+	return m.dispatchAction(action, msg)
 }
 
 // handleReload handles the ActionReload key. In stdin mode the feature is

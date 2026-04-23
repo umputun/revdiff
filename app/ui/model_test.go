@@ -915,3 +915,92 @@ func TestDispatchAction_PaneNavFallback_Tree(t *testing.T) {
 	model := result.(Model)
 	assert.Equal(t, "b.go", model.tree.SelectedFile(), "ActionDown should route to handleTreeAction and move selection")
 }
+
+func TestHandleChordSecond_ResolvedDispatches(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, cmd := m.handleChordSecond("x")
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "chordPending must clear after dispatch")
+	assert.Empty(t, model.keys.hint, "hint must clear after successful dispatch")
+	require.NotNil(t, cmd, "resolved ActionQuit must produce a tea.Cmd")
+	_, ok := cmd().(tea.QuitMsg)
+	assert.True(t, ok, "resolved chord must dispatch ActionQuit through dispatchAction")
+}
+
+func TestHandleChordSecond_UnboundShowsHint(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, cmd := m.handleChordSecond("q")
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "chordPending must clear after unbound second")
+	assert.Equal(t, "Unknown chord: ctrl+w>q", model.keys.hint, "unbound second key must set Unknown chord hint")
+	assert.Nil(t, cmd, "unbound chord must not produce a tea.Cmd")
+}
+
+func TestHandleChordSecond_EscCancels(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, cmd := m.handleChordSecond("esc")
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "esc must clear chordPending")
+	assert.Empty(t, model.keys.hint, "esc must clear hint silently (no Unknown chord message)")
+	assert.Nil(t, cmd, "esc must not dispatch any action")
+}
+
+func TestHandleChordSecond_LayoutFallback(t *testing.T) {
+	km := keymap.Default()
+	km.Bind("ctrl+w>x", keymap.ActionQuit)
+	m := testModel([]string{"a.go"}, nil)
+	m.keymap = km
+	m.keys.chordPending = "ctrl+w"
+
+	// Cyrillic 'ч' sits on the same physical key as Latin 'x' on a QWERTY layout;
+	// ResolveChord's layout-resolve fallback must translate it and find the binding.
+	result, cmd := m.handleChordSecond("ч")
+	model := result.(Model)
+
+	assert.Empty(t, model.keys.chordPending, "chordPending must clear even when resolved via layout fallback")
+	assert.Empty(t, model.keys.hint, "hint must clear on successful layout-fallback dispatch")
+	require.NotNil(t, cmd, "layout-fallback match must dispatch the bound action")
+	_, ok := cmd().(tea.QuitMsg)
+	assert.True(t, ok, "Cyrillic ч on ctrl+w pending must resolve ctrl+w>x chord")
+}
+
+func TestTransientHint_ChordHintLowestPriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		setHint func(m *Model)
+		want    string
+	}{
+		{name: "keys hint alone", setHint: func(m *Model) { m.keys.hint = "Unknown chord: ctrl+w>q" }, want: "Unknown chord: ctrl+w>q"},
+		{name: "commits beats keys", setHint: func(m *Model) { m.commits.hint = "no commits"; m.keys.hint = "chord hint" }, want: "no commits"},
+		{name: "reload beats keys", setHint: func(m *Model) { m.reload.hint = "Reloaded"; m.keys.hint = "chord hint" }, want: "Reloaded"},
+		{name: "compact beats keys", setHint: func(m *Model) { m.compact.hint = "compact off"; m.keys.hint = "chord hint" }, want: "compact off"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			tc.setHint(&m)
+			assert.Equal(t, tc.want, m.transientHint())
+		})
+	}
+}

@@ -99,7 +99,9 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 
 // transientHint returns the first non-empty transient status-bar hint. hints
 // are cleared on the next key press (see handleKey). priority matches the
-// display order: commits > reload > compact. returns "" when no hint is set.
+// display order: commits > reload > compact > keys. returns "" when no hint
+// is set. chord (keys) hints are lowest priority — an in-flight reload or a
+// compact-mode toggle wins, since chord hints are user-driven and recoverable.
 func (m Model) transientHint() string {
 	switch {
 	case m.commits.hint != "":
@@ -108,6 +110,8 @@ func (m Model) transientHint() string {
 		return m.reload.hint
 	case m.compact.hint != "":
 		return m.compact.hint
+	case m.keys.hint != "":
+		return m.keys.hint
 	}
 	return ""
 }
