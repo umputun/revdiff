@@ -28,6 +28,9 @@ const (
 	ActionEnd              Action = "end"
 	ActionScrollLeft       Action = "scroll_left"
 	ActionScrollRight      Action = "scroll_right"
+	ActionScrollCenter     Action = "scroll_center"
+	ActionScrollTop        Action = "scroll_top"
+	ActionScrollBottom     Action = "scroll_bottom"
 	ActionNextItem         Action = "next_item"
 	ActionPrevItem         Action = "prev_item"
 	ActionNextHunk         Action = "next_hunk"
@@ -68,6 +71,7 @@ var validActions = map[Action]bool{
 	ActionDown: true, ActionUp: true, ActionPageDown: true, ActionPageUp: true,
 	ActionHalfPageDown: true, ActionHalfPageUp: true, ActionHome: true, ActionEnd: true,
 	ActionScrollLeft: true, ActionScrollRight: true,
+	ActionScrollCenter: true, ActionScrollTop: true, ActionScrollBottom: true,
 	ActionNextItem: true, ActionPrevItem: true, ActionNextHunk: true, ActionPrevHunk: true,
 	ActionTogglePane: true, ActionFocusTree: true, ActionFocusDiff: true,
 	ActionSearch:  true,
@@ -127,6 +131,9 @@ func defaultDescriptions() []HelpEntry {
 		{ActionEnd, "go to bottom", "Navigation"},
 		{ActionScrollLeft, "scroll left", "Navigation"},
 		{ActionScrollRight, "scroll right / focus diff", "Navigation"},
+		{ActionScrollCenter, "center viewport on cursor", "Navigation"},
+		{ActionScrollTop, "align viewport top", "Navigation"},
+		{ActionScrollBottom, "align viewport bottom", "Navigation"},
 
 		// file/hunk
 		{ActionNextItem, "next file / search match", "File/Hunk"},

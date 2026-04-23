@@ -343,13 +343,13 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/keymap/keymap.go`
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] add `ActionScrollCenter`, `ActionScrollTop`, `ActionScrollBottom` Action constants
-- [ ] add all three to `navigationActions` allowlist so `handleDiffAction` will route them
-- [ ] add all three to `helpEntries` with descriptions like "center viewport on cursor", "align viewport top", "align viewport bottom" under "Navigation" category
-- [ ] no default single-key bindings — leave out of the `defaultBindings` map
-- [ ] write `TestActionScrollConstants_InNavigationActions` — assert all three are true in the allowlist
-- [ ] write `TestActionScrollConstants_InHelpEntries` — assert all three have help entries
-- [ ] run `make test` — must pass before task 2
+- [x] add `ActionScrollCenter`, `ActionScrollTop`, `ActionScrollBottom` Action constants
+- [x] add all three to `navigationActions` allowlist so `handleDiffAction` will route them
+- [x] add all three to `helpEntries` with descriptions like "center viewport on cursor", "align viewport top", "align viewport bottom" under "Navigation" category
+- [x] no default single-key bindings — leave out of the `defaultBindings` map
+- [x] write `TestActionScrollConstants_InNavigationActions` — assert all three are true in the allowlist
+- [x] write `TestActionScrollConstants_InHelpEntries` — assert all three have help entries
+- [x] run `make test` — must pass before task 2
 
 ### Task 2: Add bottomAlignViewportOnCursor + jumpToLineN helpers
 

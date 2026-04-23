@@ -244,6 +244,43 @@ func TestActionToggleCompact_HelpEntry(t *testing.T) {
 	assert.True(t, found, "ActionToggleCompact should have a help entry")
 }
 
+func TestActionScrollConstants_InNavigationActions(t *testing.T) {
+	// the three scroll-align actions must be recognized as valid so keybindings
+	// files can map custom keys to them (e.g. "map z scroll_center").
+	assert.True(t, IsValidAction(ActionScrollCenter))
+	assert.True(t, IsValidAction(ActionScrollTop))
+	assert.True(t, IsValidAction(ActionScrollBottom))
+}
+
+func TestActionScrollConstants_InHelpEntries(t *testing.T) {
+	entries := defaultDescriptions()
+	wants := map[Action]string{
+		ActionScrollCenter: "center viewport on cursor",
+		ActionScrollTop:    "align viewport top",
+		ActionScrollBottom: "align viewport bottom",
+	}
+	found := make(map[Action]bool, len(wants))
+	for _, e := range entries {
+		if desc, ok := wants[e.Action]; ok {
+			assert.Equal(t, desc, e.Description, "description mismatch for %q", e.Action)
+			assert.Equal(t, "Navigation", e.Section, "section mismatch for %q", e.Action)
+			found[e.Action] = true
+		}
+	}
+	for a := range wants {
+		assert.True(t, found[a], "action %q should have a help entry", a)
+	}
+}
+
+func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
+	// vim-motion interceptor is the only way to reach these actions by default;
+	// there must be NO single-key bindings in defaultBindings.
+	km := Default()
+	for _, a := range []Action{ActionScrollCenter, ActionScrollTop, ActionScrollBottom} {
+		assert.Empty(t, km.KeysFor(a), "action %q must have no default bindings", a)
+	}
+}
+
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))
