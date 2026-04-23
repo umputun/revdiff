@@ -271,6 +271,56 @@ func TestCommitInfoOverlay_HandleKeyClose(t *testing.T) {
 	})
 }
 
+func TestCommitInfoOverlay_HandleMouse_WheelScrollsOffset(t *testing.T) {
+	commits := make([]diff.CommitInfo, 0, 20)
+	for i := range 20 {
+		commits = append(commits, makeCommit("hash", "a", "subject", "body", time.Time{}))
+		_ = i
+	}
+	mgr := NewManager()
+	mgr.OpenCommitInfo(CommitInfoSpec{Applicable: true, Commits: commits})
+	// render once so viewport height + content are realized; offset stays 0
+	_ = mgr.commitInfo.render(commitInfoRenderCtx(), mgr)
+	require.Equal(t, 0, mgr.commitInfo.offset)
+
+	t.Run("wheel down advances offset by commitInfoWheelStep", func(t *testing.T) {
+		mgr.commitInfo.offset = 0
+		out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		assert.Equal(t, OutcomeNone, out.Kind)
+		assert.Equal(t, commitInfoWheelStep, mgr.commitInfo.offset)
+	})
+
+	t.Run("wheel up decreases offset and clamps at 0", func(t *testing.T) {
+		mgr.commitInfo.offset = 1
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+		assert.Equal(t, 0, mgr.commitInfo.offset, "clamped to zero when step exceeds offset")
+	})
+
+	t.Run("shift+wheel uses half viewport step", func(t *testing.T) {
+		mgr.commitInfo.offset = 0
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true})
+		want := max(mgr.commitInfo.viewportHeight(mgr.commitInfo.height)/2, 1)
+		assert.Equal(t, want, mgr.commitInfo.offset)
+	})
+
+	t.Run("non-press wheel ignored", func(t *testing.T) {
+		mgr.commitInfo.offset = 5
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionRelease})
+		assert.Equal(t, 5, mgr.commitInfo.offset, "release action must not scroll")
+	})
+
+	t.Run("non-wheel button ignored", func(t *testing.T) {
+		mgr.commitInfo.offset = 5
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+		assert.Equal(t, 5, mgr.commitInfo.offset, "left click does not scroll")
+	})
+
+	t.Run("overlay stays open after wheel", func(t *testing.T) {
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		assert.True(t, mgr.Active())
+	})
+}
+
 func TestCommitInfoOverlay_UnhandledKey(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenCommitInfo(CommitInfoSpec{Applicable: true})

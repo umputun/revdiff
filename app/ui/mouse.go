@@ -3,6 +3,7 @@ package ui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
@@ -94,8 +95,7 @@ func (m Model) hitTest(x, y int) hitZone {
 // scrolling follows the cursor.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// swallow during modal states — input belongs to the modal, not the
-	// viewport beneath. overlay must also swallow so wheel does not scroll
-	// through a popup. hints are preserved here so the modal prompt (e.g.
+	// viewport beneath. hints are preserved here so the modal prompt (e.g.
 	// reload's "press y to confirm") stays visible while the event is
 	// discarded. in the keyboard path the prompt is also replaced by a new
 	// hint from handlePendingReload, but mouse events don't transition the
@@ -104,7 +104,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.overlay.Active() {
-		return m, nil
+		return m.handleOverlayMouse(msg)
 	}
 
 	// transient hints persist for exactly one render cycle; any mouse event
@@ -147,6 +147,27 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		// right, middle, back, forward, none — no-op for this pass.
 		return m, nil
 	}
+}
+
+// handleOverlayMouse routes a mouse event to the active overlay. wheel events
+// drive the overlay's own scroll/cursor navigation; clicks and other buttons
+// are consumed so they don't leak through to the panes underneath. outcomes
+// that need model-side side effects (theme preview/confirm/cancel, annotation
+// jump) are dispatched through the same helpers as the keyboard path.
+func (m Model) handleOverlayMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	out := m.overlay.HandleMouse(msg)
+	switch out.Kind {
+	case overlay.OutcomeAnnotationChosen:
+		return m.jumpToAnnotationTarget(out.AnnotationTarget)
+	case overlay.OutcomeThemePreview:
+		m.previewThemeByName(out.ThemeChoice.Name)
+	case overlay.OutcomeThemeConfirmed:
+		m.confirmThemeByName(out.ThemeChoice.Name)
+	case overlay.OutcomeThemeCanceled:
+		m.cancelThemeSelect()
+	case overlay.OutcomeClosed, overlay.OutcomeNone:
+	}
+	return m, nil
 }
 
 // wheelStepFor returns the wheel scroll step. Plain wheel scrolls by the

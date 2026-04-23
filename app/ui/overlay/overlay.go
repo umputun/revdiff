@@ -216,6 +216,37 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 	return out
 }
 
+// HandleMouse routes a mouse event to the active overlay. wheel events drive
+// per-overlay scroll/cursor navigation; clicks and other buttons are consumed
+// so they don't leak through to the diff/tree panes. returns Outcome{Kind:
+// OutcomeNone} when no overlay is active. mirrors HandleKey: outcomes that
+// imply dismissal auto-close, though wheel events currently never do.
+func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
+	var out Outcome
+	switch m.kind {
+	case KindNone:
+		return Outcome{}
+	case KindHelp:
+		out = m.help.handleMouse(msg)
+	case KindAnnotList:
+		out = m.annotLst.handleMouse(msg)
+	case KindThemeSelect:
+		out = m.themeSel.handleMouse(msg)
+	case KindCommitInfo:
+		out = m.commitInfo.handleMouse(msg)
+	default:
+		return Outcome{}
+	}
+
+	switch out.Kind {
+	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled:
+		m.Close()
+	case OutcomeNone, OutcomeThemePreview: // no state change
+	}
+
+	return out
+}
+
 // Compose renders the active overlay on top of base using centered compositing.
 // returns base unchanged when no overlay is active.
 func (m *Manager) Compose(base string, ctx RenderCtx) string {

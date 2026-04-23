@@ -154,25 +154,55 @@ func (a *annotListOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outco
 
 	switch action {
 	case keymap.ActionUp:
-		if a.cursor > 0 {
-			a.cursor--
-			if a.cursor < a.offset {
-				a.offset = a.cursor
-			}
-		}
+		a.moveCursorBy(-1)
 		return Outcome{Kind: OutcomeNone}
 
 	case keymap.ActionDown:
-		if a.cursor < len(a.items)-1 {
-			a.cursor++
-			maxVis := a.maxVisible(a.height)
-			if a.cursor >= a.offset+maxVis {
-				a.offset = a.cursor - maxVis + 1
-			}
-		}
+		a.moveCursorBy(1)
 		return Outcome{Kind: OutcomeNone}
 
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
+}
+
+// moveCursorBy shifts the cursor by delta (positive = down, negative = up),
+// clamped to [0, len(items)-1]. offset follows the cursor using the same
+// "scroll by one when cursor leaves the visible window" policy as keyboard
+// navigation.
+func (a *annotListOverlay) moveCursorBy(delta int) {
+	if len(a.items) == 0 {
+		return
+	}
+	target := min(max(a.cursor+delta, 0), len(a.items)-1)
+	a.cursor = target
+	if a.cursor < a.offset {
+		a.offset = a.cursor
+	}
+	maxVis := a.maxVisible(a.height)
+	if a.cursor >= a.offset+maxVis {
+		a.offset = a.cursor - maxVis + 1
+	}
+}
+
+// handleMouse moves the cursor in response to wheel events. plain wheel steps
+// one entry at a time (matches a single-notch feel); shift+wheel steps by half
+// the visible page. non-wheel buttons and non-press actions are ignored.
+func (a *annotListOverlay) handleMouse(msg tea.MouseMsg) Outcome {
+	if msg.Action != tea.MouseActionPress {
+		return Outcome{Kind: OutcomeNone}
+	}
+	step := 1
+	if msg.Shift {
+		step = max(a.maxVisible(a.height)/2, 1)
+	}
+	switch msg.Button {
+	case tea.MouseButtonWheelDown:
+		a.moveCursorBy(step)
+	case tea.MouseButtonWheelUp:
+		a.moveCursorBy(-step)
+	default:
+		return Outcome{Kind: OutcomeNone}
+	}
+	return Outcome{Kind: OutcomeNone}
 }

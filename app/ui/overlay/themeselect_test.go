@@ -292,6 +292,74 @@ func TestThemeSelectOverlay_HandleKey_ActionThemeSelectCancels(t *testing.T) {
 	assert.False(t, mgr.Active())
 }
 
+func TestThemeSelectOverlay_HandleMouse_WheelMovesCursor(t *testing.T) {
+	t.Run("wheel down previews next theme", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenThemeSelect(themeSpec())
+		_ = mgr.themeSel.render(themeRenderCtx(), mgr) // ensure height is set for maxVisible
+		require.Equal(t, 0, mgr.themeSel.cursor)
+
+		out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		assert.Equal(t, OutcomeThemePreview, out.Kind)
+		require.NotNil(t, out.ThemeChoice)
+		assert.Equal(t, "catppuccin-mocha", out.ThemeChoice.Name)
+		assert.Equal(t, 1, mgr.themeSel.cursor)
+		assert.True(t, mgr.Active())
+	})
+
+	t.Run("wheel up previews previous theme", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenThemeSelect(themeSpec())
+		_ = mgr.themeSel.render(themeRenderCtx(), mgr)
+		mgr.themeSel.cursor = 2
+		mgr.themeSel.lastPreviewedName = "dracula"
+
+		out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+		assert.Equal(t, OutcomeThemePreview, out.Kind)
+		require.NotNil(t, out.ThemeChoice)
+		assert.Equal(t, "catppuccin-mocha", out.ThemeChoice.Name)
+		assert.Equal(t, 1, mgr.themeSel.cursor)
+	})
+
+	t.Run("wheel at last entry is no-op", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenThemeSelect(themeSpec())
+		_ = mgr.themeSel.render(themeRenderCtx(), mgr)
+		mgr.themeSel.cursor = len(themeItems()) - 1
+
+		out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		assert.Equal(t, OutcomeNone, out.Kind)
+		assert.Equal(t, len(themeItems())-1, mgr.themeSel.cursor)
+	})
+
+	t.Run("shift+wheel uses half-page step", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenThemeSelect(themeSpec())
+		_ = mgr.themeSel.render(themeRenderCtx(), mgr)
+		start := mgr.themeSel.cursor
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true})
+		step := max(mgr.themeSel.maxVisible()/2, 1)
+		want := min(start+step, len(mgr.themeSel.entries)-1)
+		assert.Equal(t, want, mgr.themeSel.cursor)
+	})
+
+	t.Run("non-press wheel ignored", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenThemeSelect(themeSpec())
+		_ = mgr.themeSel.render(themeRenderCtx(), mgr)
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionRelease})
+		assert.Equal(t, 0, mgr.themeSel.cursor)
+	})
+
+	t.Run("non-wheel button ignored", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenThemeSelect(themeSpec())
+		_ = mgr.themeSel.render(themeRenderCtx(), mgr)
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+		assert.Equal(t, 0, mgr.themeSel.cursor)
+	})
+}
+
 func TestThemeSelectOverlay_HandleKey_PreviewDedup(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenThemeSelect(themeSpec())

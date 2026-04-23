@@ -268,6 +268,37 @@ func (c *commitInfoOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outc
 // scrollEndSentinel is a large offset value that render clamps to the last page.
 const scrollEndSentinel = 1 << 30
 
+// commitInfoWheelStep is the offset delta applied per plain wheel notch. matches
+// the diff-pane wheelStep used in app/ui/mouse.go for a consistent feel.
+const commitInfoWheelStep = 3
+
+// handleMouse scrolls the popup in response to wheel events. plain wheel moves
+// by commitInfoWheelStep lines; shift+wheel moves by half the viewport height.
+// non-wheel buttons and non-press actions are ignored — clicks outside the box
+// do not dismiss the overlay (symmetric with the other overlays). render
+// clamps the resulting offset, so only the lower bound is enforced here.
+func (c *commitInfoOverlay) handleMouse(msg tea.MouseMsg) Outcome {
+	if msg.Action != tea.MouseActionPress {
+		return Outcome{Kind: OutcomeNone}
+	}
+	step := commitInfoWheelStep
+	if msg.Shift {
+		step = max(c.viewportHeight(c.height)/2, 1)
+	}
+	switch msg.Button {
+	case tea.MouseButtonWheelDown:
+		c.offset += step
+	case tea.MouseButtonWheelUp:
+		c.offset -= step
+		if c.offset < 0 {
+			c.offset = 0
+		}
+	default:
+		return Outcome{Kind: OutcomeNone}
+	}
+	return Outcome{Kind: OutcomeNone}
+}
+
 // splitBodyLines splits the commit body into individual lines, normalizing CR/LF
 // endings. trailing blank lines are dropped so we don't emit dangling padding.
 func (c *commitInfoOverlay) splitBodyLines(body string) []string {

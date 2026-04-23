@@ -310,6 +310,79 @@ func TestAnnotListOverlay_HandleKey_ScrollUp(t *testing.T) {
 	assert.Equal(t, 2, mgr.annotLst.offset, "offset should scroll up to follow cursor")
 }
 
+func TestAnnotListOverlay_HandleMouse_WheelMovesCursor(t *testing.T) {
+	items := make([]AnnotationItem, 10)
+	for i := range items {
+		items[i] = annotItem("a.go", i+1, "+", "note")
+	}
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec(items...))
+	mgr.annotLst.height = 10 // maxVisible ends up = max(min(10, 10-6), 1) = 4
+
+	t.Run("wheel down advances cursor by one", func(t *testing.T) {
+		mgr.annotLst.cursor = 0
+		mgr.annotLst.offset = 0
+		out := mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		assert.Equal(t, OutcomeNone, out.Kind)
+		assert.Equal(t, 1, mgr.annotLst.cursor)
+	})
+
+	t.Run("wheel up retreats cursor by one", func(t *testing.T) {
+		mgr.annotLst.cursor = 3
+		mgr.annotLst.offset = 0
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+		assert.Equal(t, 2, mgr.annotLst.cursor)
+	})
+
+	t.Run("wheel clamps at boundaries", func(t *testing.T) {
+		mgr.annotLst.cursor = 0
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+		assert.Equal(t, 0, mgr.annotLst.cursor, "cursor already at 0 does not go negative")
+
+		mgr.annotLst.cursor = 9
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		assert.Equal(t, 9, mgr.annotLst.cursor, "cursor at last item does not exceed bounds")
+	})
+
+	t.Run("wheel down past visible window scrolls offset", func(t *testing.T) {
+		mgr.annotLst.cursor = 0
+		mgr.annotLst.offset = 0
+		for range 4 {
+			mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+		}
+		assert.Equal(t, 4, mgr.annotLst.cursor)
+		assert.Equal(t, 1, mgr.annotLst.offset, "offset follows cursor past visible window")
+	})
+
+	t.Run("shift+wheel uses half visible step", func(t *testing.T) {
+		mgr.annotLst.cursor = 0
+		mgr.annotLst.offset = 0
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true})
+		want := max(mgr.annotLst.maxVisible(mgr.annotLst.height)/2, 1)
+		assert.Equal(t, want, mgr.annotLst.cursor)
+	})
+
+	t.Run("non-press wheel ignored", func(t *testing.T) {
+		mgr.annotLst.cursor = 2
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionRelease})
+		assert.Equal(t, 2, mgr.annotLst.cursor)
+	})
+
+	t.Run("non-wheel button ignored", func(t *testing.T) {
+		mgr.annotLst.cursor = 2
+		mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+		assert.Equal(t, 2, mgr.annotLst.cursor)
+	})
+}
+
+func TestAnnotListOverlay_HandleMouse_EmptyList(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec())
+	mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	assert.True(t, mgr.Active(), "overlay stays open")
+	assert.Equal(t, 0, mgr.annotLst.cursor)
+}
+
 func TestAnnotListOverlay_HandleKey_OtherKeysConsumed(t *testing.T) {
 	items := []AnnotationItem{annotItem("a.go", 1, "+", "note")}
 	mgr := NewManager()

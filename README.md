@@ -663,8 +663,9 @@ revdiff enables mouse tracking by default so the scroll wheel and left-click wor
 - **Left-click in the tree**: focuses the tree and selects/loads the clicked entry (same as pressing `j`/`k` to land there). Clicking a directory row moves the cursor but does not load a file.
 - **Left-click in the diff**: focuses the diff and moves the cursor to the clicked line. Enables a "click, then `a`" annotation flow.
 - **Left-click in the TOC pane** (single-file markdown): focuses the TOC and selects the clicked header.
+- **Scroll wheel in overlay popups** (commit info, annotations, themes): scrolls the popup content or moves its cursor. Shift+wheel uses a half-page step. In the theme selector, wheel previews each theme live. Help overlay has no scrollable content so wheel is ignored.
 
-Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Modal states (annotation input, search input, confirm discard, reload confirm, open overlay) swallow mouse events so they cannot interfere with text entry or popups.
+Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks inside overlay popups are swallowed — dismiss an overlay with `Esc` or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.
 
 **Text selection trade-off** — once mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection:
 

@@ -103,6 +103,7 @@ type overlayManager interface {
 	OpenCommitInfo(spec overlay.CommitInfoSpec)
 	Close()
 	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
+	HandleMouse(msg tea.MouseMsg) overlay.Outcome
 	Compose(base string, ctx overlay.RenderCtx) string
 }
 

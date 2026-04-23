@@ -602,17 +602,39 @@ func TestModel_HandleMouse_SwallowedWhileOverlayOpen(t *testing.T) {
 	require.True(t, m.overlay.Active())
 	m.nav.diffCursor = 0
 
-	// wheel must not close the overlay nor move cursor
+	// wheel over help is a no-op — overlay stays open and diff cursor is unchanged
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "overlay must stay open after wheel event")
-	assert.Equal(t, 0, model.nav.diffCursor)
+	assert.Equal(t, 0, model.nav.diffCursor, "wheel must not leak through to diff pane")
 
-	// click must also be swallowed
+	// click while overlay active is swallowed — no focus change or cursor move
 	result, _ = m.Update(leftPressAt(60, 12))
 	model = result.(Model)
 	assert.True(t, model.overlay.Active(), "overlay must stay open after click")
 	assert.Equal(t, 0, model.nav.diffCursor)
+}
+
+func TestModel_HandleMouse_WheelScrollsCommitInfoOverlay(t *testing.T) {
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
+	})
+	mgr, ok := m.overlay.(*overlay.Manager)
+	require.True(t, ok, "test expects the real overlay.Manager")
+
+	commits := make([]diff.CommitInfo, 0, 20)
+	for range 20 {
+		commits = append(commits, diff.CommitInfo{Hash: "abc", Author: "a", Subject: "subject", Body: "body"})
+	}
+	mgr.OpenCommitInfo(overlay.CommitInfoSpec{Applicable: true, Commits: commits})
+	require.True(t, m.overlay.Active())
+	m.nav.diffCursor = 0
+
+	// wheel down over the commit-info popup scrolls the popup, not the diff
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	assert.True(t, model.overlay.Active(), "commit-info overlay stays open after wheel")
+	assert.Equal(t, 0, model.nav.diffCursor, "diff cursor must not move while overlay consumes wheel")
 }
 
 func TestModel_HandleMouse_ClearsTransientHints(t *testing.T) {

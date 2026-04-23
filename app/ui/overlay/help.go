@@ -122,6 +122,13 @@ func (h *helpOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 	return Outcome{Kind: OutcomeNone}
 }
 
+// handleMouse is a no-op — the help overlay has no scrollable state. wheel
+// and click events are simply consumed so they do not leak through to the
+// diff/tree panes underneath.
+func (h *helpOverlay) handleMouse(_ tea.MouseMsg) Outcome {
+	return Outcome{Kind: OutcomeNone}
+}
+
 // helpColors returns ANSI color sequences for help overlay rendering.
 func helpColors(resolver Resolver) (reset, header, key string) {
 	return string(style.ResetFg), string(resolver.Color(style.ColorKeyAccentFg)),

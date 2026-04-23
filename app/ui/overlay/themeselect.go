@@ -200,22 +200,13 @@ func (t *themeSelectOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Out
 		return Outcome{Kind: OutcomeNone}
 
 	case tea.KeyUp:
-		if t.cursor > 0 {
-			t.cursor--
-			if t.cursor < t.offset {
-				t.offset = t.cursor
-			}
+		if t.moveCursorBy(-1) {
 			return t.previewOutcome()
 		}
 		return Outcome{Kind: OutcomeNone}
 
 	case tea.KeyDown:
-		if t.cursor < len(t.entries)-1 {
-			t.cursor++
-			maxVis := t.maxVisible()
-			if t.cursor >= t.offset+maxVis {
-				t.offset = t.cursor - maxVis + 1
-			}
+		if t.moveCursorBy(1) {
 			return t.previewOutcome()
 		}
 		return Outcome{Kind: OutcomeNone}
@@ -228,6 +219,56 @@ func (t *themeSelectOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Out
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
+}
+
+// moveCursorBy shifts the cursor by delta (positive = down, negative = up),
+// clamped to [0, len(entries)-1]. offset follows the cursor using the same
+// window-scroll policy as keyboard navigation. returns true when the cursor
+// moved, false when it was already at the edge or the entry list is empty.
+func (t *themeSelectOverlay) moveCursorBy(delta int) bool {
+	if len(t.entries) == 0 {
+		return false
+	}
+	target := min(max(t.cursor+delta, 0), len(t.entries)-1)
+	if target == t.cursor {
+		return false
+	}
+	t.cursor = target
+	if t.cursor < t.offset {
+		t.offset = t.cursor
+	}
+	maxVis := t.maxVisible()
+	if t.cursor >= t.offset+maxVis {
+		t.offset = t.cursor - maxVis + 1
+	}
+	return true
+}
+
+// handleMouse moves the cursor in response to wheel events and returns a
+// preview outcome so the main model can restyle the background diff live.
+// plain wheel steps one entry, shift+wheel steps by half the visible page.
+// non-wheel buttons and non-press actions are ignored.
+func (t *themeSelectOverlay) handleMouse(msg tea.MouseMsg) Outcome {
+	if msg.Action != tea.MouseActionPress {
+		return Outcome{Kind: OutcomeNone}
+	}
+	step := 1
+	if msg.Shift {
+		step = max(t.maxVisible()/2, 1)
+	}
+	var moved bool
+	switch msg.Button {
+	case tea.MouseButtonWheelDown:
+		moved = t.moveCursorBy(step)
+	case tea.MouseButtonWheelUp:
+		moved = t.moveCursorBy(-step)
+	default:
+		return Outcome{Kind: OutcomeNone}
+	}
+	if !moved {
+		return Outcome{Kind: OutcomeNone}
+	}
+	return t.previewOutcome()
 }
 
 // previewOutcome returns a theme preview outcome with dedup — if the current

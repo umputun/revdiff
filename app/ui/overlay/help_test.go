@@ -205,6 +205,23 @@ func TestHelpOverlay_HandleKey_OtherKeysBlocked(t *testing.T) {
 	}
 }
 
+func TestHelpOverlay_HandleMouse_NoOp(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenHelp(helpSpec())
+
+	events := []tea.MouseMsg{
+		{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress},
+		{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress},
+		{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true},
+		{Button: tea.MouseButtonLeft, Action: tea.MouseActionPress},
+	}
+	for _, ev := range events {
+		out := mgr.HandleMouse(ev)
+		assert.Equal(t, OutcomeNone, out.Kind, "mouse event %+v should be consumed", ev)
+		assert.True(t, mgr.Active(), "help overlay must stay open through mouse event")
+	}
+}
+
 func TestHelpOverlay_HandleKey_DismissAction(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenHelp(helpSpec())
