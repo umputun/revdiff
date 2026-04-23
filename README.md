@@ -705,7 +705,7 @@ Then edit to taste. Modal keys (annotation input, search input, confirm discard)
 **Chord bindings (ctrl/alt leader):** bind a two-stage chord by joining the leader and second key with `>`. The leader must be a `ctrl+*` or `alt+*` combo; the second stage is any single key. Only two stages are supported.
 
 ```
-map ctrl+w>x close_file
+map ctrl+w>x mark_reviewed
 map alt+t>n theme_select
 ```
 

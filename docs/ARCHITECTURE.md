@@ -176,6 +176,8 @@ Chroma-based syntax highlighter. Produces foreground-only ANSI output (no backgr
 
 Handlers use `m.keymap.Resolve(msg.String())` instead of raw key strings. Modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded. Overlay key dispatch uses keymap actions for j/k/up/down but keeps `enter` and `esc` hardcoded.
 
+Two-stage chord bindings (kitty-style, e.g. `map ctrl+w>x mark_reviewed`) are supported with a ctrl+/alt+ leader restriction. Storage is flat strings in `bindings` (`"ctrl+w>x" → Action`); a lazy `chordPrefixCache` provides O(1) `IsChordLeader` lookups. `Load` resolves conflicts by dropping a standalone whose key is also a chord leader. `ResolveChord` applies the same Latin layout-resolve fallback as `Resolve` for the second-stage key. Chord dispatch lives in `app/ui` on `keyState` (`handleChordSecond`, `clearChordState`) and flows through the shared `dispatchAction` path so chord-resolved actions share handlers with single-key actions.
+
 Help overlay dynamically rendered from `m.keymap.HelpSections()`.
 
 ### app/theme/ — theme system

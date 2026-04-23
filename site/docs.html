@@ -539,7 +539,7 @@ unmap q</code></div>
         <p>Modal keys (annotation input, search input, confirm discard) are not remappable.</p>
         <h3>Chord bindings (ctrl/alt leader)</h3>
         <p>Bind a two-stage chord by joining the leader and second key with <code>&gt;</code>. The leader must be a <code>ctrl+*</code> or <code>alt+*</code> combo; the second stage is any single key. Only two stages are supported.</p>
-        <div class="code-block"><code>map ctrl+w&gt;x close_file
+        <div class="code-block"><code>map ctrl+w&gt;x mark_reviewed
 map alt+t&gt;n theme_select</code></div>
         <p>When the leader is pressed, the status bar shows <code>Pending: ctrl+w, esc to cancel</code>; press the second key to dispatch, or <code>esc</code> to cancel silently. Binding a key as both a standalone action and a chord prefix drops the standalone binding (the chord wins, with a warning). Chord bindings work under non-Latin keyboard layouts &mdash; the second-stage key is translated via the same layout-resolve fallback as single-key bindings.</p>
         <h3>Available actions</h3>
