@@ -457,13 +457,42 @@ func TestParse_ChordBinding_RejectsEmptyHalves(t *testing.T) {
 	cases := []string{
 		"map ctrl+w> quit\n",
 		"map >x quit\n",
-		"map > quit\n",
 	}
 	for _, c := range cases {
 		t.Run(c, func(t *testing.T) {
 			maps, _, err := parse(strings.NewReader(c))
 			require.NoError(t, err)
 			assert.Empty(t, maps, "input %q should parse to no map entries", c)
+		})
+	}
+}
+
+func TestParse_GreaterThanStandalone(t *testing.T) {
+	// the bare ">" key is a valid standalone binding and must not be confused
+	// with chord syntax; only rawKey values containing ">" AND longer than a
+	// single character trigger chord parsing
+	input := strings.NewReader("map > quit\nunmap >\n")
+	maps, unmaps, err := parse(input)
+	require.NoError(t, err)
+	assert.Equal(t, []mapEntry{{key: ">", action: ActionQuit}}, maps)
+	assert.Equal(t, []string{">"}, unmaps)
+}
+
+func TestParse_ChordBinding_RejectsEscSecondStage(t *testing.T) {
+	// esc is reserved for chord cancel in handleChordSecond; a chord with esc
+	// as the second stage would parse but never fire, so reject at parse time
+	// to make the silent failure loud. cover both the canonical "esc" and the
+	// "escape" alias (normalizeKey folds both to "esc")
+	cases := []string{
+		"map ctrl+w>esc quit\n",
+		"map ctrl+w>escape quit\n",
+		"map alt+t>esc quit\n",
+	}
+	for _, c := range cases {
+		t.Run(c, func(t *testing.T) {
+			maps, _, err := parse(strings.NewReader(c))
+			require.NoError(t, err)
+			assert.Empty(t, maps, "input %q must be rejected", c)
 		})
 	}
 }

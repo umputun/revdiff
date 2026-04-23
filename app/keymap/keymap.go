@@ -432,9 +432,10 @@ func normalizeKey(key string) string {
 
 // parseChordKey validates and normalizes a chord key of the form "<leader>><second>".
 // Returns the normalized chord key and true on success, or "" and false after logging
-// a warning for empty halves, three-stage chords, or non-ctrl/alt leaders. Leader case
-// is normalized via normalizeKey (ctrl+/alt+ lowercased); second-stage case is preserved
-// so that ctrl+w>x and ctrl+w>X remain distinct.
+// a warning for empty halves, three-stage chords, non-ctrl/alt leaders, or esc as the
+// second-stage key (reserved for cancel). Leader case is normalized via normalizeKey
+// (ctrl+/alt+ lowercased); second-stage case is preserved so that ctrl+w>x and ctrl+w>X
+// remain distinct.
 func parseChordKey(rawKey string, lineNum int) (string, bool) {
 	parts := strings.SplitN(rawKey, ">", 2)
 	leader, second := parts[0], parts[1]
@@ -451,7 +452,12 @@ func parseChordKey(rawKey string, lineNum int) (string, bool) {
 		log.Printf("[WARN] keybindings:%d: chord leader must be ctrl+ or alt+ combo, skipping", lineNum)
 		return "", false
 	}
-	return leaderNorm + ">" + normalizeKey(second), true
+	secondNorm := normalizeKey(second)
+	if secondNorm == "esc" {
+		log.Printf("[WARN] keybindings:%d: esc cannot be a chord second-stage key (reserved for cancel), skipping", lineNum)
+		return "", false
+	}
+	return leaderNorm + ">" + secondNorm, true
 }
 
 // parse reads keybinding definitions from r and returns map entries and unmap keys.
@@ -486,7 +492,7 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 				log.Printf("[WARN] keybindings:%d: unknown action %q, skipping", lineNum, action)
 				continue
 			}
-			if strings.Contains(rawKey, ">") {
+			if strings.Contains(rawKey, ">") && rawKey != ">" {
 				key, ok := parseChordKey(rawKey, lineNum)
 				if !ok {
 					continue
@@ -497,7 +503,7 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 			maps = append(maps, mapEntry{key: normalizeKey(rawKey), action: action})
 		case "unmap":
 			rawKey := fields[1]
-			if strings.Contains(rawKey, ">") {
+			if strings.Contains(rawKey, ">") && rawKey != ">" {
 				key, ok := parseChordKey(rawKey, lineNum)
 				if !ok {
 					continue
