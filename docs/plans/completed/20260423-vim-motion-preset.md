@@ -165,7 +165,7 @@ Rename all three `clearChordState` callsites (`startSearch`, `startAnnotation`, 
 **Config** — one new bool field on the existing options struct in `app/config.go`:
 
 ```go
-VimMotion bool `long:"vim-motion" env:"VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)" ini-name:"vim-motion"`
+VimMotion bool `long:"vim-motion" env:"REVDIFF_VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)" ini-name:"vim-motion"`
 ```
 
 Default false. Wired through `ModelConfig.VimMotion` (new field on `ModelConfig`), and `NewModel` copies it into `m.modes.vimMotion` alongside `m.modes.compact` etc. — matches the existing `modeState` convention for user-togglable view flags (model.go:273–292). Guard uses `m.modes.vimMotion`.

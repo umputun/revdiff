@@ -143,14 +143,17 @@ func (m Model) resolveVimLeader(keyStr string) (tea.Model, tea.Cmd) {
 func (m Model) repeatDiffAction(action keymap.Action, n int) tea.Model {
 	m.vim.count = 0
 	m.vim.hint = ""
+	// precompute hunks once; passing into the per-step helpers avoids the
+	// O(N × len(diff)) rescan that would happen if each step called findHunks.
+	hunks := m.findHunks()
 	switch action {
 	case keymap.ActionDown:
 		for range n {
-			m.moveDiffCursorDown()
+			m.moveDiffCursorDownWithHunks(hunks)
 		}
 	case keymap.ActionUp:
 		for range n {
-			m.moveDiffCursorUp()
+			m.moveDiffCursorUpWithHunks(hunks)
 		}
 	default:
 		return m
