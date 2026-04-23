@@ -81,14 +81,17 @@ func TestParseUnifiedDiff_MultiHunk(t *testing.T) {
 	lines, err := parseUnifiedDiff(raw)
 	require.NoError(t, err)
 
-	// verify divider exists between hunks
-	var dividers int
+	// verify dividers carry line-count labels.
+	// fixture: hunk 1 at @@ -2,3, hunk 2 at @@ -10,3.
+	//   - leading divider: line 1 precedes first hunk → 1 line.
+	//   - between-hunks: prevOldEnd=5 after hunk 1, next at 10 → 5 lines skipped.
+	var dividers []string
 	for _, l := range lines {
 		if l.ChangeType == ChangeDivider {
-			dividers++
+			dividers = append(dividers, l.Content)
 		}
 	}
-	assert.Equal(t, 1, dividers, "expected 1 divider between two hunks")
+	assert.Equal(t, []string{"⋯ 1 line ⋯", "⋯ 5 lines ⋯"}, dividers, "expected leading + between-hunks dividers")
 
 	// verify additions in both hunks
 	var additions []string
@@ -98,6 +101,107 @@ func TestParseUnifiedDiff_MultiHunk(t *testing.T) {
 		}
 	}
 	assert.Equal(t, []string{`import "os"`, "    os.Exit(0)"}, additions)
+}
+
+// TestParseUnifiedDiff_GapLabels exercises every gap-label branch through the
+// real parser (not a helper in isolation). Covers: plural gaps, singular gap,
+// omitted-length hunk headers (@@ -N +N @@), insertion-only hunks (@@ -K,0 ...),
+// start-of-file insertion (@@ -0,0 ...), and three-hunk chains.
+func TestParseUnifiedDiff_GapLabels(t *testing.T) {
+	tests := []struct {
+		name     string
+		raw      string
+		dividers []string
+	}{
+		{
+			name: "plural gap, standard two-hunk",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,3 +1,3 @@\n a\n-b\n+B\n" +
+				"@@ -10,3 +10,3 @@\n x\n-y\n+Y\n",
+			dividers: []string{"⋯ 6 lines ⋯"},
+		},
+		{
+			name: "singular gap",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,3 +1,3 @@\n a\n-b\n+B\n" +
+				"@@ -5,3 +5,3 @@\n x\n-y\n+Y\n",
+			dividers: []string{"⋯ 1 line ⋯"},
+		},
+		{
+			name: "omitted length (implicit 1) on both sides",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1 +1 @@\n-old\n+new\n" +
+				"@@ -5 +5 @@\n-old2\n+new2\n",
+			dividers: []string{"⋯ 3 lines ⋯"},
+		},
+		{
+			name: "insertion-only prior hunk (oldLen==0, mid-file)",
+			raw: "--- a\n+++ b\n" +
+				"@@ -5,0 +6,2 @@\n+x\n+y\n" +
+				"@@ -10,3 +12,3 @@\n p\n-q\n+Q\n",
+			// leading: lines 1..4 before first hunk = 4 lines.
+			// between: prior hunk inserts between old lines 5 and 6 (prevOldEnd=6), next at 10 → gap=4.
+			dividers: []string{"⋯ 4 lines ⋯", "⋯ 4 lines ⋯"},
+		},
+		{
+			name: "insertion-only prior hunk at start (@@ -0,0)",
+			raw: "--- a\n+++ b\n" +
+				"@@ -0,0 +1,2 @@\n+x\n+y\n" +
+				"@@ -5,3 +7,3 @@\n p\n-q\n+Q\n",
+			// prior hunk prepends; next untouched old line is 1. gap = 5 - 1 = 4.
+			dividers: []string{"⋯ 4 lines ⋯"},
+		},
+		{
+			name: "three-hunk chain, multiple dividers",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,2 +1,2 @@\n a\n-b\n+B\n" +
+				"@@ -5,2 +5,2 @@\n p\n-q\n+Q\n" +
+				"@@ -20,2 +20,2 @@\n x\n-y\n+Y\n",
+			dividers: []string{"⋯ 2 lines ⋯", "⋯ 13 lines ⋯"},
+		},
+		{
+			name: "leading divider when first hunk starts after line 1",
+			raw: "--- a\n+++ b\n" +
+				"@@ -48,3 +48,3 @@\n ctx\n-old\n+new\n",
+			// 47 unchanged lines precede the first hunk.
+			dividers: []string{"⋯ 47 lines ⋯"},
+		},
+		{
+			name: "no leading divider when first hunk starts at line 1",
+			raw: "--- a\n+++ b\n" +
+				"@@ -1,3 +1,3 @@\n ctx\n-old\n+new\n",
+			dividers: nil,
+		},
+		{
+			name: "leading + between-hunks dividers",
+			raw: "--- a\n+++ b\n" +
+				"@@ -10,2 +10,2 @@\n a\n+b\n" +
+				"@@ -20,2 +20,2 @@\n c\n+d\n",
+			// 9 lines before first hunk; 8 lines between (prevOldEnd=12, next oldStart=20).
+			dividers: []string{"⋯ 9 lines ⋯", "⋯ 8 lines ⋯"},
+		},
+		{
+			name: "new file (first hunk @@ -0,0 ...) suppresses leading divider",
+			raw: "--- /dev/null\n+++ b\n" +
+				"@@ -0,0 +1,2 @@\n+x\n+y\n",
+			// oldStart=0, gap = 0-1 = -1, no divider.
+			dividers: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lines, err := parseUnifiedDiff(tc.raw)
+			require.NoError(t, err)
+
+			var got []string
+			for _, l := range lines {
+				if l.ChangeType == ChangeDivider {
+					got = append(got, l.Content)
+				}
+			}
+			assert.Equal(t, tc.dividers, got)
+		})
+	}
 }
 
 func TestParseUnifiedDiff_MixedChanges(t *testing.T) {

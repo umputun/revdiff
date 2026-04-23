@@ -557,8 +557,10 @@ func (g *Git) formatSize(bytes int64) string {
 	}
 }
 
-// hunkHeaderRe matches unified diff hunk headers like @@ -1,5 +1,7 @@
-var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+// hunkHeaderRe matches unified diff hunk headers like @@ -1,5 +1,7 @@.
+// Lengths are optional per git's spec (omitted means length 1) and are captured
+// so the parser can compute the old-side end of each hunk.
+var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
 
 // binaryFilesRe matches git's "Binary files ... differ" line for binary diffs.
 // Assumes English locale; non-English git may localize this message.
@@ -576,7 +578,9 @@ func parseUnifiedDiff(raw string) ([]DiffLine, error) {
 	// skip diff header lines (---, +++, diff --git, index, etc.)
 	inHeader := true
 	var oldNum, newNum int
-	firstHunk := true
+	// prevOldEnd = next untouched old-side line. Initialized to 1 so the first hunk's
+	// leading divider uses the same `oldStart - prevOldEnd` formula as between-hunks gaps.
+	prevOldEnd := 1
 	var isNewFile, isDeletedFile bool
 
 	for scanner.Scan() {
@@ -608,16 +612,29 @@ func parseUnifiedDiff(raw string) ([]DiffLine, error) {
 		// parse hunk header
 		if m := hunkHeaderRe.FindStringSubmatch(line); m != nil {
 			oldStart, errOld := strconv.Atoi(m[1])
-			newStart, errNew := strconv.Atoi(m[2])
+			newStart, errNew := strconv.Atoi(m[3])
 			if errOld != nil || errNew != nil {
 				return nil, fmt.Errorf("parse hunk header %q: old=%w new=%w", line, errOld, errNew)
 			}
+			// Atoi("") returns 0 with error; regex guarantees m[2] is digits when non-empty.
+			// Both the omitted-length case (git spec: implicit 1) and the literal `,0` (insertion-only)
+			// end up at oldLen=0 here, and max(oldLen,1) below resolves both to the same advance.
+			oldLen, _ := strconv.Atoi(m[2])
 
-			// add divider between non-adjacent hunks (when using normal context, not -U1000000)
-			if !firstHunk {
-				lines = append(lines, DiffLine{ChangeType: ChangeDivider, Content: "..."})
+			// emit divider representing unchanged lines BEFORE this hunk.
+			// Leading divider (first hunk) uses prevOldEnd=1 initialization; between-hunks use
+			// prevOldEnd from prior iteration. Gap uses hunk-header metadata not oldNum, so
+			// insertion-only hunks (@@ -K,0 ...) compute correctly; oldNum stays put on `+` lines.
+			switch gap := oldStart - prevOldEnd; {
+			case gap == 1:
+				lines = append(lines, DiffLine{ChangeType: ChangeDivider, Content: "⋯ 1 line ⋯"})
+			case gap > 1:
+				lines = append(lines, DiffLine{ChangeType: ChangeDivider, Content: fmt.Sprintf("⋯ %d lines ⋯", gap)})
 			}
-			firstHunk = false
+			// prevOldEnd = line number AFTER the current hunk on the old side. Normal hunks
+			// (oldLen>0) cover [oldStart, oldStart+oldLen). Insertion-only hunks (oldLen==0,
+			// e.g. @@ -K,0 ...) insert between old lines K and K+1 — handled by max(oldLen,1).
+			prevOldEnd = oldStart + max(oldLen, 1)
 
 			oldNum = oldStart
 			newNum = newStart
