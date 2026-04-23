@@ -281,6 +281,7 @@ type modeState struct {
 	showUntracked  bool           // true when untracked files are shown in tree
 	compact        bool           // true when diffs are fetched with small context around changes
 	compactContext int            // number of context lines around changes when compact is enabled
+	vimMotion      bool           // true when the --vim-motion preset is active (gates the vim-motion interceptor in handleKey)
 }
 
 // navigationState holds cursor and navigation-adjacent state.
@@ -546,6 +547,11 @@ type ModelConfig struct {
 	// contextualize). Computed once in main.go and copied into Model state.
 	// Follows the same pattern as CommitsApplicable.
 	CompactApplicable bool
+	// VimMotion enables the vim-style motion preset (counts, gg, G, zz/zt/zb,
+	// ZZ/ZQ). When true, the vim-motion interceptor in handleKey runs between
+	// the modal-key handler and keymap.Resolve. Copied into modes.vimMotion at
+	// construction; the feature is gated on that field everywhere.
+	VimMotion bool
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -650,6 +656,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			showUntracked:  false,
 			compact:        cfg.Compact && cfg.CompactApplicable,
 			compactContext: cfg.CompactContext,
+			vimMotion:      cfg.VimMotion,
 		},
 		commits: commitsState{
 			source:     cls,

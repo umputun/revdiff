@@ -388,16 +388,16 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/config_test.go`
 - Modify: `app/renderer_setup.go` (wire through to ModelConfig)
 
-- [ ] add `VimMotion bool` field to the options struct with go-flags/env/ini tags as specified in Solution Overview
-- [ ] thread the value through to `ModelConfig.VimMotion` in `renderer_setup.go` (or wherever ModelConfig is built — verify during implementation; may be `main.go`)
-- [ ] add `VimMotion bool` field to `ModelConfig` struct in `app/ui/model.go`
-- [ ] add `vimMotion bool` field to `modeState` struct (model.go:273–292, alongside `compact`, `wrap`, `lineNumbers`, `showBlame`, `wordDiff`, `showUntracked`); godoc comment notes it gates the vim-motion interceptor
-- [ ] in `NewModel`, copy `cfg.VimMotion` into `m.modes.vimMotion` alongside the existing modes copy block
-- [ ] write `TestConfig_VimMotionFlag` — parse args with `--vim-motion`, assert opts.VimMotion is true
-- [ ] write `TestConfig_VimMotionDefault` — parse args without the flag, assert opts.VimMotion is false
-- [ ] write `TestConfig_VimMotionEnv` — set VIM_MOTION=true, parse args, assert true
-- [ ] write `TestConfig_VimMotionIni` — use dump-config flow or ini parser test convention, assert round-trip
-- [ ] run `make test` — must pass before task 5
+- [x] add `VimMotion bool` field to the options struct with go-flags/env/ini tags as specified in Solution Overview
+- [x] thread the value through to `ModelConfig.VimMotion` in `renderer_setup.go` (or wherever ModelConfig is built — verify during implementation; may be `main.go`)
+- [x] add `VimMotion bool` field to `ModelConfig` struct in `app/ui/model.go`
+- [x] add `vimMotion bool` field to `modeState` struct (model.go:273–292, alongside `compact`, `wrap`, `lineNumbers`, `showBlame`, `wordDiff`, `showUntracked`); godoc comment notes it gates the vim-motion interceptor
+- [x] in `NewModel`, copy `cfg.VimMotion` into `m.modes.vimMotion` alongside the existing modes copy block
+- [x] write `TestConfig_VimMotionFlag` — parse args with `--vim-motion`, assert opts.VimMotion is true
+- [x] write `TestConfig_VimMotionDefault` — parse args without the flag, assert opts.VimMotion is false
+- [x] write `TestConfig_VimMotionEnv` — set VIM_MOTION=true, parse args, assert true
+- [x] write `TestConfig_VimMotionIni` — use dump-config flow or ini parser test convention, assert round-trip
+- [x] run `make test` — must pass before task 5
 
 ### Task 5: Add vimState struct + hint wiring in transientHint
 

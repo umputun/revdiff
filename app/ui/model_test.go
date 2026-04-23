@@ -417,6 +417,24 @@ func TestModel_CompactModeFromConfig(t *testing.T) {
 	})
 }
 
+func TestModel_VimMotionFromConfig(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	store := annotation.NewStore()
+
+	t.Run("vim motion enabled via config", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{VimMotion: true, TreeWidthRatio: 2})
+		assert.True(t, m.modes.vimMotion, "vim motion flag must be copied into modeState")
+	})
+
+	t.Run("vim motion disabled by default", func(t *testing.T) {
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{TreeWidthRatio: 2})
+		assert.False(t, m.modes.vimMotion)
+	})
+}
+
 func TestModel_LineNumbersFromConfig(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
