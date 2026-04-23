@@ -2596,3 +2596,117 @@ func TestModel_DiffLineNum(t *testing.T) {
 	assert.Equal(t, 3, m.diffLineNum(diff.DiffLine{NewNum: 3, ChangeType: diff.ChangeAdd}))
 	assert.Equal(t, 7, m.diffLineNum(diff.DiffLine{OldNum: 7, ChangeType: diff.ChangeRemove}))
 }
+
+func TestBottomAlignViewportOnCursor_PlacesCursorAtBottom(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 50
+
+	model.bottomAlignViewportOnCursor()
+	pageHeight := model.layout.viewport.Height
+	require.Positive(t, pageHeight)
+
+	cursorY := model.cursorViewportY()
+	assert.Equal(t, cursorY-pageHeight+1, model.layout.viewport.YOffset,
+		"bottom-align should put cursor on last visible row")
+	assert.Equal(t, pageHeight-1, cursorY-model.layout.viewport.YOffset,
+		"cursor should be at visual row pageHeight-1 (bottom row)")
+}
+
+func TestBottomAlignViewportOnCursor_ShortFile(t *testing.T) {
+	// diff much shorter than viewport — offset must clamp at 0, no scrolling
+	lines := make([]diff.DiffLine, 5)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 2
+
+	model.bottomAlignViewportOnCursor()
+	assert.Equal(t, 0, model.layout.viewport.YOffset,
+		"short file should leave offset at 0 (no scroll needed)")
+}
+
+func TestJumpToLineN_WithinBounds(t *testing.T) {
+	lines := make([]diff.DiffLine, 100)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+
+	model.jumpToLineN(50)
+	assert.Equal(t, 49, model.nav.diffCursor, "jumpToLineN(50) should place cursor at index 49 (1-indexed → 0-indexed)")
+	assert.False(t, model.annot.cursorOnAnnotation, "jump should clear cursorOnAnnotation")
+}
+
+func TestJumpToLineN_ClampsLow(t *testing.T) {
+	lines := make([]diff.DiffLine, 50)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 25
+
+	model.jumpToLineN(0)
+	assert.Equal(t, 0, model.nav.diffCursor, "jumpToLineN(0) should clamp to first line")
+
+	model.nav.diffCursor = 25
+	model.jumpToLineN(-10)
+	assert.Equal(t, 0, model.nav.diffCursor, "jumpToLineN(-10) should clamp to first line")
+}
+
+func TestJumpToLineN_ClampsHigh(t *testing.T) {
+	lines := make([]diff.DiffLine, 50)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+
+	model.jumpToLineN(99999)
+	assert.Equal(t, 49, model.nav.diffCursor, "jumpToLineN(99999) should clamp to last line (index 49)")
+}
+
+func TestJumpToLineN_EmptyDiff(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": nil})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = 3
+	before := model.nav.diffCursor
+
+	assert.NotPanics(t, func() { model.jumpToLineN(5) })
+	assert.Equal(t, before, model.nav.diffCursor, "empty diff should leave cursor unchanged")
+}

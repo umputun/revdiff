@@ -284,6 +284,32 @@ func (m *Model) topAlignViewportOnCursor() {
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
+// bottomAlignViewportOnCursor scrolls the viewport to place the cursor on the last visible row.
+// mirror of topAlignViewportOnCursor with the offset flipped by viewport height.
+func (m *Model) bottomAlignViewportOnCursor() {
+	cursorY := m.cursorViewportY()
+	m.layout.viewport.SetYOffset(max(0, cursorY-m.layout.viewport.Height+1))
+	m.layout.viewport.SetContent(m.renderDiff())
+}
+
+// jumpToLineN moves the diff cursor to line n (1-indexed), clamped to [1, total],
+// then centers the viewport on the new cursor position. no-op when the diff is empty.
+func (m *Model) jumpToLineN(n int) {
+	total := len(m.file.lines)
+	if total == 0 {
+		return
+	}
+	if n < 1 {
+		n = 1
+	}
+	if n > total {
+		n = total
+	}
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = n - 1
+	m.centerViewportOnCursor()
+}
+
 // findHunks scans diffLines and returns a slice of hunk start indices.
 // a hunk is a contiguous group of added/removed lines. the returned index
 // is the first line of each such group.

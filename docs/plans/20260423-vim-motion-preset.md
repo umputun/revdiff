@@ -357,16 +357,16 @@ func (m *Model) bottomAlignViewportOnCursor() {
 - Modify: `app/ui/diffnav.go`
 - Modify: `app/ui/diffnav_test.go`
 
-- [ ] add `bottomAlignViewportOnCursor()` as a mirror of `topAlignViewportOnCursor` (diffnav.go:281) — compute offset so cursor lands on last visible row
-- [ ] add `jumpToLineN(n int)` that clamps `n` to `[1, len(diffLines)]`, sets `m.nav.diffCursor = n-1`, calls `centerViewportOnCursor`
-- [ ] godoc both new methods
-- [ ] write `TestBottomAlignViewportOnCursor_PlacesCursorAtBottom` — cursor mid-file, call method, assert offset puts cursor on last visible row
-- [ ] write `TestBottomAlignViewportOnCursor_ShortFile` — diff shorter than viewport, assert graceful behavior (no scroll needed)
-- [ ] write `TestJumpToLineN_WithinBounds` — diff has 100 lines, call `jumpToLineN(50)`, assert cursor at 49 (0-indexed)
-- [ ] write `TestJumpToLineN_ClampsLow` — call `jumpToLineN(0)`, assert cursor at 0 (clamps to first line)
-- [ ] write `TestJumpToLineN_ClampsHigh` — call `jumpToLineN(99999)`, assert cursor at last line
-- [ ] write `TestJumpToLineN_EmptyDiff` — empty diff, call `jumpToLineN(5)`, assert no panic, cursor unchanged
-- [ ] run `make test` — must pass before task 3
+- [x] add `bottomAlignViewportOnCursor()` as a mirror of `topAlignViewportOnCursor` (diffnav.go:281) — compute offset so cursor lands on last visible row
+- [x] add `jumpToLineN(n int)` that clamps `n` to `[1, len(diffLines)]`, sets `m.nav.diffCursor = n-1`, calls `centerViewportOnCursor`
+- [x] godoc both new methods
+- [x] write `TestBottomAlignViewportOnCursor_PlacesCursorAtBottom` — cursor mid-file, call method, assert offset puts cursor on last visible row
+- [x] write `TestBottomAlignViewportOnCursor_ShortFile` — diff shorter than viewport, assert graceful behavior (no scroll needed)
+- [x] write `TestJumpToLineN_WithinBounds` — diff has 100 lines, call `jumpToLineN(50)`, assert cursor at 49 (0-indexed)
+- [x] write `TestJumpToLineN_ClampsLow` — call `jumpToLineN(0)`, assert cursor at 0 (clamps to first line)
+- [x] write `TestJumpToLineN_ClampsHigh` — call `jumpToLineN(99999)`, assert cursor at last line
+- [x] write `TestJumpToLineN_EmptyDiff` — empty diff, call `jumpToLineN(5)`, assert no panic, cursor unchanged
+- [x] run `make test` — must pass before task 3
 
 ### Task 3: Wire scroll actions into handleDiffAction
 
