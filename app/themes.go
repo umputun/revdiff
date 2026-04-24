@@ -232,10 +232,12 @@ func colorsFromTheme(th theme.Theme) style.Colors {
 }
 
 // patchConfigTheme updates the theme setting in the INI config file at tc.configPath.
-// if a "theme = " line exists, it replaces the value. otherwise appends it
-// just before the first non-[Application Options] section header so the new
-// entry lands inside the default section (the INI parser would assign it to
-// the most recent [section] header above).
+// if a "theme = " line already lives in the [Application Options] / default scope,
+// the value is replaced in place. if the line sits in a wrong section (a config
+// corrupted by the pre-fix persist path that wrote past a trailing named section),
+// the stray line is removed and a fresh "theme = ..." is inserted just before the
+// first non-[Application Options] section header so the INI parser attributes it
+// to the default scope. with no existing line, the insert path runs unconditionally.
 func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	if strings.ContainsAny(themeName, "\r\n") {
 		return fmt.Errorf("invalid theme name %q: must not contain newlines", themeName)
@@ -256,49 +258,68 @@ func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	}
 
 	lines := strings.Split(string(data), "\n")
-	found := false
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// match "theme = ..." or "theme=..." but not commented-out lines
-		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
-			continue
+	idx, inDefault := tc.scanThemeLine(lines)
+	if idx >= 0 && inDefault {
+		lines[idx] = "theme = " + themeName
+	} else {
+		if idx >= 0 {
+			// stray "theme = ..." inside a wrong section (config corrupted by the
+			// pre-fix persist path); delete it and re-insert in the default scope.
+			lines = slices.Delete(lines, idx, idx+1)
 		}
-		key, _, ok := strings.Cut(trimmed, "=")
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(key) == "theme" {
-			lines[i] = "theme = " + themeName
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		// find the first [section] header that is not [Application Options]; the
-		// new line must go before it so the INI parser attributes it to the default
-		// section. if no such header exists, append at EOF.
-		insertIdx := len(lines)
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if !strings.HasPrefix(trimmed, "[") || !strings.HasSuffix(trimmed, "]") {
-				continue
-			}
-			name := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
-			if strings.EqualFold(name, "Application Options") {
-				continue
-			}
-			insertIdx = i
-			break
-		}
-		for insertIdx > 0 && strings.TrimSpace(lines[insertIdx-1]) == "" {
-			insertIdx--
-		}
-		lines = slices.Insert(lines, insertIdx, "theme = "+themeName)
+		lines = slices.Insert(lines, tc.defaultSectionInsertIdx(lines), "theme = "+themeName)
 	}
 
 	if err := fsutil.AtomicWriteFile(tc.configPath, []byte(strings.Join(lines, "\n"))); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	return nil
+}
+
+// scanThemeLine walks lines tracking the active INI section and reports the index
+// of the first "theme = ..." line along with whether it lives in the default scope
+// ([Application Options] or the unnamed top-of-file section). returns (-1, false)
+// when no theme line is found.
+func (tc *themeCatalog) scanThemeLine(lines []string) (idx int, inDefaultSection bool) {
+	currentSection := ""
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			currentSection = strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, ";") {
+			continue
+		}
+		key, _, ok := strings.Cut(trimmed, "=")
+		if !ok || strings.TrimSpace(key) != "theme" {
+			continue
+		}
+		return i, currentSection == "" || strings.EqualFold(currentSection, "Application Options")
+	}
+	return -1, false
+}
+
+// defaultSectionInsertIdx returns the line index where a new default-scope entry
+// should be placed: immediately before the first [section] header whose name is
+// not [Application Options], backed up over any trailing blank lines. returns
+// len(lines) (EOF) when the file has no such named section.
+func (tc *themeCatalog) defaultSectionInsertIdx(lines []string) int {
+	idx := len(lines)
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "[") || !strings.HasSuffix(trimmed, "]") {
+			continue
+		}
+		name := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+		if strings.EqualFold(name, "Application Options") {
+			continue
+		}
+		idx = i
+		break
+	}
+	for idx > 0 && strings.TrimSpace(lines[idx-1]) == "" {
+		idx--
+	}
+	return idx
 }

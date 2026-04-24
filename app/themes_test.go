@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jessevdk/go-flags"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -761,4 +762,74 @@ func TestPatchConfigTheme_appendsInsideApplicationOptions(t *testing.T) {
 	assert.Contains(t, result, "theme = nord")
 	// theme line must be after the [Application Options] header
 	assert.Less(t, strings.Index(result, "[Application Options]"), strings.Index(result, "theme = nord"))
+	// existing keys must be preserved
+	assert.Contains(t, result, "wrap = true")
+	assert.Contains(t, result, "compact = true")
+}
+
+// reproduces the upgrade path from issue #148: a config already corrupted by
+// the pre-fix persist (theme = X sitting inside a trailing named section) must
+// be healed, not just replaced in place.
+func TestPatchConfigTheme_healsMisplacedThemeLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	content := "[Application Options]\nwrap = true\n\n[color options]\n;color-word-add-bg = #1a8f00\ntheme = dracula\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	result := string(data)
+
+	themeIdx := strings.Index(result, "theme = nord")
+	colorIdx := strings.Index(result, "[color options]")
+	require.NotEqual(t, -1, themeIdx, "new theme line must be present: %q", result)
+	require.NotEqual(t, -1, colorIdx, "[color options] header must be preserved: %q", result)
+	assert.Less(t, themeIdx, colorIdx, "theme = nord must precede [color options]: %q", result)
+	assert.NotContains(t, result, "theme = dracula", "stale theme line must be removed: %q", result)
+	assert.Contains(t, result, "wrap = true")
+	assert.Contains(t, result, ";color-word-add-bg = #1a8f00")
+}
+
+// parsePatchedConfig parses a patched INI file through go-flags the same way the
+// production code does (see loadConfigFile in config.go), so tests can assert the
+// patched file not only looks right textually but actually resolves opts.Theme
+// with no "unknown option" warning from go-flags.
+func parsePatchedConfig(t *testing.T, path string) (options, error) {
+	t.Helper()
+	var opts options
+	p := flags.NewParser(&opts, flags.Default)
+	iniParser := flags.NewIniParser(p)
+	if err := iniParser.ParseFile(path); err != nil {
+		return opts, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return opts, nil
+}
+
+// testdata fixtures round-trip through patchConfigTheme + flags.NewIniParser.
+// this is the assertion that would have caught issue #148 in the first place.
+func TestPatchConfigTheme_testdataRoundTrip(t *testing.T) {
+	tests := []struct {
+		name    string
+		fixture string // path under app/testdata/themes/
+	}{
+		{name: "good config (theme already in [Application Options])", fixture: "good.ini"},
+		{name: "no theme line, trailing [color options]", fixture: "no_theme.ini"},
+		{name: "corrupted config (theme inside [color options])", fixture: "corrupted.ini"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("testdata", "themes", tc.fixture))
+			require.NoError(t, err)
+
+			path := filepath.Join(t.TempDir(), "config")
+			require.NoError(t, os.WriteFile(path, raw, 0o600)) //nolint:gosec // test fixture roundtrip
+
+			require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
+
+			opts, parseErr := parsePatchedConfig(t, path)
+			require.NoError(t, parseErr, "patched file must parse without go-flags error (this is the #148 invariant)")
+			assert.Equal(t, "nord", opts.Theme, "Theme must be populated from the default section after patch")
+		})
+	}
 }
