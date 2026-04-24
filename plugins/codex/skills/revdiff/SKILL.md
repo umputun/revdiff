@@ -1,6 +1,6 @@
 ---
 name: revdiff
-description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
+description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff <file>", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 argument-hint: 'optional: ref(s), "all files", or file path'
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
@@ -31,6 +31,8 @@ Use `$SCRIPT_DIR` in place of script paths throughout this skill.
 - "hg review with revdiff", "review jj change"
 - "revdiff all files", "review all files", "browse all files"
 - "revdiff all files exclude vendor"
+- "revdiff README.md", "revdiff docs/plan.md", "revdiff /tmp/notes.txt" — single-file review (`--only` mode)
+- "review this file", "annotate this file", "review file with revdiff"
 
 ## Answering Questions
 
@@ -79,10 +81,13 @@ If not found, guide installation:
 - Skip ref detection entirely, go directly to Step 2
 - Example: "all files exclude vendor" → `--all-files --exclude=vendor`
 
-**File review mode**: If `$ARGUMENTS` is a file path (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`):
+**File review mode**: If `$ARGUMENTS` is a single token that points at a file on disk (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`, `README.md`, `main.go`, `file.blah`), treat it as file review:
+- Decide with `test -f "$ARGUMENTS"` — if the file exists, it's file review mode
+- Also treat as file review if the token starts with `/` or `./`, or contains `/` and has a file extension (e.g., `src/app.go`), even when the file is not yet reachable from the current directory
 - Skip ref detection entirely
 - Go directly to Step 2 with `--only=<filepath>` (no ref argument)
 - Works both inside and outside a VCS repo — revdiff reads the file from disk as context-only
+- Ambiguous token (e.g., `main` — both a branch name and a potential filename without extension) → prefer ref mode; ask the user only if neither `test -f` nor `git rev-parse --verify` resolves
 
 **Ref mode**: If `$ARGUMENTS` contains explicit ref(s) (e.g., `HEAD~1`, `main`, or `main feature` for two-ref diff), use as-is.
 
@@ -250,4 +255,13 @@ User: "revdiff all files exclude vendor"
 → launch revdiff with --all-files --exclude=vendor
 → user browses all tracked files, annotates as needed
 → same annotation loop as above
+```
+
+```
+User: "revdiff docs/plans/feature.md"
+→ test -f docs/plans/feature.md succeeds → file review mode
+→ launch revdiff with --only=docs/plans/feature.md (context-only view, no ref)
+→ user annotates prose: "section 'Open questions':3 - drop this, resolved"
+→ user quits
+→ same annotation loop as above (applies to the file content)
 ```
