@@ -196,7 +196,7 @@ func (tc *themeCatalog) Persist(name string) error {
 	if tc.configPath == "" {
 		return nil
 	}
-	return patchConfigTheme(tc.configPath, name)
+	return tc.patchConfigTheme(name)
 }
 
 // optsToStyleColors converts opts.Colors fields to a style.Colors struct.
@@ -231,20 +231,23 @@ func colorsFromTheme(th theme.Theme) style.Colors {
 	}
 }
 
-// patchConfigTheme updates the theme setting in the INI config file.
-// if a "theme = " line exists, it replaces the value. Otherwise appends it.
-func patchConfigTheme(configPath, themeName string) error {
+// patchConfigTheme updates the theme setting in the INI config file at tc.configPath.
+// if a "theme = " line exists, it replaces the value. otherwise appends it
+// just before the first non-[Application Options] section header so the new
+// entry lands inside the default section (the INI parser would assign it to
+// the most recent [section] header above).
+func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	if strings.ContainsAny(themeName, "\r\n") {
 		return fmt.Errorf("invalid theme name %q: must not contain newlines", themeName)
 	}
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(tc.configPath), 0o750); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	data, err := os.ReadFile(configPath) //nolint:gosec // path from user's config
+	data, err := os.ReadFile(tc.configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if writeErr := fsutil.AtomicWriteFile(configPath, []byte("theme = "+themeName+"\n")); writeErr != nil {
+			if writeErr := fsutil.AtomicWriteFile(tc.configPath, []byte("theme = "+themeName+"\n")); writeErr != nil {
 				return fmt.Errorf("writing config: %w", writeErr)
 			}
 			return nil
@@ -272,15 +275,29 @@ func patchConfigTheme(configPath, themeName string) error {
 	}
 
 	if !found {
-		// append before trailing empty lines
+		// find the first [section] header that is not [Application Options]; the
+		// new line must go before it so the INI parser attributes it to the default
+		// section. if no such header exists, append at EOF.
 		insertIdx := len(lines)
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "[") || !strings.HasSuffix(trimmed, "]") {
+				continue
+			}
+			name := strings.TrimSpace(trimmed[1 : len(trimmed)-1])
+			if strings.EqualFold(name, "Application Options") {
+				continue
+			}
+			insertIdx = i
+			break
+		}
 		for insertIdx > 0 && strings.TrimSpace(lines[insertIdx-1]) == "" {
 			insertIdx--
 		}
 		lines = slices.Insert(lines, insertIdx, "theme = "+themeName)
 	}
 
-	if err := fsutil.AtomicWriteFile(configPath, []byte(strings.Join(lines, "\n"))); err != nil {
+	if err := fsutil.AtomicWriteFile(tc.configPath, []byte(strings.Join(lines, "\n"))); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	return nil

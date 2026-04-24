@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -602,7 +603,7 @@ func TestPatchConfigTheme_existingKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	require.NoError(t, os.WriteFile(path, []byte("wrap = true\ntheme = dracula\nblame = false\n"), 0o600))
 
-	require.NoError(t, patchConfigTheme(path, "nord"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
@@ -616,7 +617,7 @@ func TestPatchConfigTheme_noExistingKey(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	require.NoError(t, os.WriteFile(path, []byte("wrap = true\nblame = false\n"), 0o600))
 
-	require.NoError(t, patchConfigTheme(path, "nord"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
@@ -627,7 +628,7 @@ func TestPatchConfigTheme_noExistingKey(t *testing.T) {
 func TestPatchConfigTheme_createsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 
-	require.NoError(t, patchConfigTheme(path, "dracula"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("dracula"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
@@ -637,7 +638,7 @@ func TestPatchConfigTheme_createsFile(t *testing.T) {
 func TestPatchConfigTheme_createsParentDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing", "config")
 
-	require.NoError(t, patchConfigTheme(path, "dracula"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("dracula"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
@@ -648,7 +649,7 @@ func TestPatchConfigTheme_skipsCommentedOut(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	require.NoError(t, os.WriteFile(path, []byte("# theme = dracula\nwrap = true\n"), 0o600))
 
-	require.NoError(t, patchConfigTheme(path, "nord"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
@@ -660,7 +661,7 @@ func TestPatchConfigTheme_semicolonComment(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config")
 	require.NoError(t, os.WriteFile(path, []byte("; theme = dracula\n"), 0o600))
 
-	require.NoError(t, patchConfigTheme(path, "nord"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
@@ -679,7 +680,7 @@ func TestPatchConfigTheme_rejectsNewlines(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := patchConfigTheme(path, tc.themeName)
+			err := (&themeCatalog{configPath: path}).patchConfigTheme(tc.themeName)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "must not contain newlines")
 		})
@@ -691,11 +692,73 @@ func TestPatchConfigTheme_preservesFormatting(t *testing.T) {
 	content := "wrap = true\n\n# Colors\ncolor-accent = #ff0000\ntheme = old\n\n"
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 
-	require.NoError(t, patchConfigTheme(path, "new"))
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("new"))
 
 	data, err := os.ReadFile(path) //nolint:gosec // test
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "theme = new")
 	assert.Contains(t, string(data), "# Colors")
 	assert.Contains(t, string(data), "color-accent = #ff0000")
+}
+
+// reproduces issue #148: appending theme = ... after a trailing [color options] section
+// must land inside [Application Options], not inside [color options].
+func TestPatchConfigTheme_insertsBeforeNamedSection(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name:    "application options then color options",
+			content: "[Application Options]\nwrap = true\ncompact = true\n\n[color options]\n;color-word-add-bg = #1a8f00\n",
+		},
+		{
+			name:    "only color options section",
+			content: "[color options]\n;color-word-add-bg = #1a8f00\n",
+		},
+		{
+			name:    "application options with trailing blank lines before named section",
+			content: "[Application Options]\nwrap = true\n\n\n[color options]\n",
+		},
+		{
+			name:    "case-insensitive application options header",
+			content: "[application options]\nwrap = true\n\n[color options]\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config")
+			require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o600))
+
+			require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
+
+			data, err := os.ReadFile(path) //nolint:gosec // test
+			require.NoError(t, err)
+			result := string(data)
+
+			themeIdx := strings.Index(result, "theme = nord")
+			colorIdx := strings.Index(result, "[color options]")
+			require.NotEqual(t, -1, themeIdx, "theme = nord must be present: %q", result)
+			require.NotEqual(t, -1, colorIdx, "[color options] header must be preserved: %q", result)
+			assert.Less(t, themeIdx, colorIdx, "theme = nord must precede [color options], got: %q", result)
+		})
+	}
+}
+
+// when file already has [Application Options] but no other named sections,
+// appending at EOF is correct (stays inside [Application Options]).
+func TestPatchConfigTheme_appendsInsideApplicationOptions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	content := "[Application Options]\nwrap = true\ncompact = true\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	result := string(data)
+	assert.Contains(t, result, "[Application Options]")
+	assert.Contains(t, result, "theme = nord")
+	// theme line must be after the [Application Options] header
+	assert.Less(t, strings.Index(result, "[Application Options]"), strings.Index(result, "theme = nord"))
 }
