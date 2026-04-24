@@ -210,10 +210,10 @@ func TestParseUnifiedDiff_GapLabels(t *testing.T) {
 // a divider only when the last hunk does not reach EOF.
 func TestParseUnifiedDiff_TrailingDivider(t *testing.T) {
 	tests := []struct {
-		name           string
-		raw            string
-		totalOldLines  int
-		wantDividers   []string
+		name          string
+		raw           string
+		totalOldLines int
+		wantDividers  []string
 	}{
 		{
 			name: "trailing plural — hunk ends at line 10, total 300",

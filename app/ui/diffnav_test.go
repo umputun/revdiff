@@ -2739,12 +2739,12 @@ func TestJumpToLineN_SyncsTOCActiveSection(t *testing.T) {
 	// must refresh the TOC highlight so the rendered active-section indicator
 	// tracks the new cursor location.
 	mdLines := []diff.DiffLine{
-		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},  // idx 0
-		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},     // idx 1
+		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},   // idx 0
+		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},      // idx 1
 		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext}, // idx 2
-		{NewNum: 4, Content: "text", ChangeType: diff.ChangeContext},     // idx 3
+		{NewNum: 4, Content: "text", ChangeType: diff.ChangeContext},      // idx 3
 		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext}, // idx 4
-		{NewNum: 6, Content: "text", ChangeType: diff.ChangeContext},     // idx 5
+		{NewNum: 6, Content: "text", ChangeType: diff.ChangeContext},      // idx 5
 	}
 	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
 	m.file.singleFile = true
