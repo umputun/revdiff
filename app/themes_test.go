@@ -791,6 +791,32 @@ func TestPatchConfigTheme_healsMisplacedThemeLine(t *testing.T) {
 	assert.Contains(t, result, ";color-word-add-bg = #1a8f00")
 }
 
+// reproduces the hand-repair duplicate scenario flagged in post-merge review:
+// a user whose config was originally corrupted (theme = X in [color options])
+// adds a correct theme = Y in [Application Options] manually without deleting
+// the stray. the next patch must update the default line AND remove the stray,
+// otherwise go-flags keeps erroring on "unknown option: theme".
+func TestPatchConfigTheme_removesStrayDuplicates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config")
+	content := "[Application Options]\nwrap = true\ntheme = dracula\n\n[color options]\ntheme = solarized-dark\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+
+	require.NoError(t, (&themeCatalog{configPath: path}).patchConfigTheme("nord"))
+
+	opts, parseErr := parsePatchedConfig(t, path)
+	require.NoError(t, parseErr, "patched file must parse without go-flags error even with prior duplicates")
+	assert.Equal(t, "nord", opts.Theme)
+
+	data, err := os.ReadFile(path) //nolint:gosec // test
+	require.NoError(t, err)
+	result := string(data)
+	assert.NotContains(t, result, "theme = dracula", "original default-scope value must be replaced")
+	assert.NotContains(t, result, "theme = solarized-dark", "stray line inside [color options] must be removed")
+	assert.Contains(t, result, "wrap = true")
+	// exactly one theme line must remain
+	assert.Equal(t, 1, strings.Count(result, "\ntheme = "), "exactly one theme entry must remain: %q", result)
+}
+
 // parsePatchedConfig parses a patched INI file through go-flags the same way the
 // production code does (see loadConfigFile in config.go), so tests can assert the
 // patched file not only looks right textually but actually resolves opts.Theme
@@ -816,6 +842,7 @@ func TestPatchConfigTheme_testdataRoundTrip(t *testing.T) {
 		{name: "good config (theme already in [Application Options])", fixture: "good.ini"},
 		{name: "no theme line, trailing [color options]", fixture: "no_theme.ini"},
 		{name: "corrupted config (theme inside [color options])", fixture: "corrupted.ini"},
+		{name: "duplicate (one valid, one stray in [color options])", fixture: "duplicate.ini"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -232,12 +232,13 @@ func colorsFromTheme(th theme.Theme) style.Colors {
 }
 
 // patchConfigTheme updates the theme setting in the INI config file at tc.configPath.
-// if a "theme = " line already lives in the [Application Options] / default scope,
-// the value is replaced in place. if the line sits in a wrong section (a config
-// corrupted by the pre-fix persist path that wrote past a trailing named section),
-// the stray line is removed and a fresh "theme = ..." is inserted just before the
-// first non-[Application Options] section header so the INI parser attributes it
-// to the default scope. with no existing line, the insert path runs unconditionally.
+// every "theme = ..." line sitting outside the default scope ([Application Options]
+// or the unnamed top-of-file section) is removed — these are strays from configs
+// corrupted by the pre-fix persist path, and leaving any of them behind keeps
+// go-flags erroring with "unknown option: theme" even after a successful patch.
+// if a default-scope line exists its value is replaced in place; otherwise a
+// fresh "theme = ..." is inserted just before the first non-[Application Options]
+// section header so the INI parser attributes it to the default scope.
 func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	if strings.ContainsAny(themeName, "\r\n") {
 		return fmt.Errorf("invalid theme name %q: must not contain newlines", themeName)
@@ -258,15 +259,21 @@ func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	}
 
 	lines := strings.Split(string(data), "\n")
-	idx, inDefault := tc.scanThemeLine(lines)
-	if idx >= 0 && inDefault {
-		lines[idx] = "theme = " + themeName
-	} else {
-		if idx >= 0 {
-			// stray "theme = ..." inside a wrong section (config corrupted by the
-			// pre-fix persist path); delete it and re-insert in the default scope.
-			lines = slices.Delete(lines, idx, idx+1)
+	defaultIdx, strayIdxs := tc.scanThemeLines(lines)
+	// always remove every "theme = ..." that sits outside the default scope so a
+	// config previously poisoned by the old persist path is fully healed (not
+	// just patched in one spot while go-flags keeps erroring on a remaining stray).
+	// deleting in reverse order keeps earlier indices stable.
+	for i := len(strayIdxs) - 1; i >= 0; i-- {
+		stray := strayIdxs[i]
+		lines = slices.Delete(lines, stray, stray+1)
+		if defaultIdx > stray {
+			defaultIdx--
 		}
+	}
+	if defaultIdx >= 0 {
+		lines[defaultIdx] = "theme = " + themeName
+	} else {
 		lines = slices.Insert(lines, tc.defaultSectionInsertIdx(lines), "theme = "+themeName)
 	}
 
@@ -276,11 +283,16 @@ func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	return nil
 }
 
-// scanThemeLine walks lines tracking the active INI section and reports the index
-// of the first "theme = ..." line along with whether it lives in the default scope
-// ([Application Options] or the unnamed top-of-file section). returns (-1, false)
-// when no theme line is found.
-func (tc *themeCatalog) scanThemeLine(lines []string) (idx int, inDefaultSection bool) {
+// scanThemeLines walks lines tracking the active INI section and reports every
+// "theme = ..." occurrence, splitting them into the first one found in the
+// default scope ([Application Options] or the unnamed top-of-file section) and
+// a list of stray ones sitting inside other sections. defaultIdx is -1 when no
+// default-scope line exists; strayIdxs is nil when nothing is misplaced.
+// reporting every stray (not just the first) lets callers fully heal configs
+// corrupted by the pre-fix persist path — otherwise a leftover stray still
+// makes go-flags error on startup.
+func (tc *themeCatalog) scanThemeLines(lines []string) (defaultIdx int, strayIdxs []int) {
+	defaultIdx = -1
 	currentSection := ""
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -295,9 +307,14 @@ func (tc *themeCatalog) scanThemeLine(lines []string) (idx int, inDefaultSection
 		if !ok || strings.TrimSpace(key) != "theme" {
 			continue
 		}
-		return i, currentSection == "" || strings.EqualFold(currentSection, "Application Options")
+		inDefault := currentSection == "" || strings.EqualFold(currentSection, "Application Options")
+		if inDefault && defaultIdx < 0 {
+			defaultIdx = i
+			continue
+		}
+		strayIdxs = append(strayIdxs, i)
 	}
-	return -1, false
+	return defaultIdx, strayIdxs
 }
 
 // defaultSectionInsertIdx returns the line index where a new default-scope entry
