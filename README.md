@@ -12,6 +12,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
 - Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
+- Vertical scrollbar thumb: a thicker `┃` segment on the diff pane's right border indicates the visible portion of long files; thumb size and position track scroll progress automatically
 - Line numbers: side-by-side old/new line number gutter for diffs, single column for full-context files, toggle with `L`
 - Mercurial support: auto-detects hg repos, translates git-style refs (HEAD, HEAD~N) to Mercurial revsets
 - Jujutsu support: auto-detects jj repos (including colocated git+jj), translates git-style refs to jj revsets (`HEAD` → `@-`, `HEAD~N` → `@` plus N+1 dashes); `--all-files` supported

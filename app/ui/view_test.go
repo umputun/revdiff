@@ -1388,6 +1388,86 @@ func TestModel_ViewNotReady(t *testing.T) {
 	assert.Equal(t, "loading...", m.View())
 }
 
+func TestModel_ViewScrollbarThumb(t *testing.T) {
+	// testModel does not dispatch a WindowSizeMsg, so viewport.Height defaults
+	// to 0; set it manually to make the scrollbar code path active.
+	const vh = 30
+	const vw = 80
+
+	t.Run("thumb appears when content scrollable", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.file.name = "a.go"
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent(strings.Repeat("filler line\n", 200))
+
+		view := m.View()
+		assert.Contains(t, view, scrollbarThumbRune, "scrollbar thumb should appear when content exceeds viewport")
+	})
+
+	t.Run("no thumb when content fits", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.file.name = "a.go"
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent("one\ntwo\nthree\n")
+
+		view := m.View()
+		assert.NotContains(t, view, scrollbarThumbRune, "no thumb when content fits in viewport")
+	})
+
+	t.Run("thumb appears in single-file mode", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.tree = testNewFileTree([]string{"main.go"})
+		m.file.singleFile = true
+		m.layout.treeWidth = 0
+		m.file.name = "main.go"
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = m.layout.width - 2
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent(strings.Repeat("filler\n", 200))
+
+		view := m.View()
+		assert.Contains(t, view, scrollbarThumbRune, "single-file mode should also show thumb")
+	})
+
+	t.Run("thumb position shifts with YOffset", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.file.name = "a.go"
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent(strings.Repeat("filler\n", 500))
+
+		m.layout.viewport.SetYOffset(0)
+		viewTop := m.View()
+
+		m.layout.viewport.SetYOffset(450) // near bottom
+		viewBottom := m.View()
+
+		topRows := []int{}
+		for i, line := range strings.Split(viewTop, "\n") {
+			if strings.Contains(line, scrollbarThumbRune) {
+				topRows = append(topRows, i)
+			}
+		}
+		bottomRows := []int{}
+		for i, line := range strings.Split(viewBottom, "\n") {
+			if strings.Contains(line, scrollbarThumbRune) {
+				bottomRows = append(bottomRows, i)
+			}
+		}
+		require.NotEmpty(t, topRows)
+		require.NotEmpty(t, bottomRows)
+		assert.Less(t, topRows[0], bottomRows[0], "thumb should move down as YOffset increases")
+	})
+}
+
 func TestModel_LineNumberSegment(t *testing.T) {
 	t.Run("context line", func(t *testing.T) {
 		lines := []diff.DiffLine{
