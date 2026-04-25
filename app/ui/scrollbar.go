@@ -33,6 +33,13 @@ const (
 // viewport has zero height. preserves the ANSI envelope around the replaced
 // rune since both track and thumb share the same UTF-8 byte width and
 // lipgloss renders the right border as the line's last │ rune.
+//
+// also no-ops when the rendered pane's line count differs from the expected
+// shape (top border + header + vh viewport rows + bottom border). this is a
+// safety net for cases where lipgloss soft-wraps content unexpectedly —
+// e.g., narrow terminals where applyHorizontalScroll cannot truncate body
+// rows because gutters consume the full content width. better to show no
+// thumb than a misplaced one.
 func (m Model) applyScrollbar(rendered string) string {
 	total := m.layout.viewport.TotalLineCount()
 	vh := m.layout.viewport.Height
@@ -40,16 +47,30 @@ func (m Model) applyScrollbar(rendered string) string {
 		return rendered
 	}
 
+	lines := strings.Split(rendered, "\n")
+	// shape check: rendered pane must have at least 2+vh+1 rows (top + header
+	// + vh viewport rows + bottom) and at most paneHeight()+2 rows (lipgloss
+	// outer height with padding). more than the upper bound means content
+	// soft-wrapped somewhere (header or body) and the thumb would land on
+	// non-viewport rows; bail. less than the lower bound means the caller
+	// passed a truncated render; bail. tests using synthetic input hit the
+	// minimum bound; production hits the maximum (vh = paneHeight()-1).
+	minRows := scrollbarFirstViewportRow + vh + 1
+	maxRows := max(minRows, m.paneHeight()+2)
+	if len(lines) < minRows || len(lines) > maxRows {
+		return rendered
+	}
+
 	thumbSize := min(vh, max(1, vh*vh/total))
 
-	// total > vh (early-return above) and thumbSize is clamped to vh-1 max
-	// for any total > vh (since vh*vh/total < vh by integer division), so
-	// maxStart >= 1 always reaches here. no zero-divisor guard needed.
+	// the divisor below (total - vh) is guaranteed > 0 by the early-return
+	// above; no zero-divisor guard needed. when vh == 1, thumbSize == 1 and
+	// maxStart == 0, so thumbStart resolves to 0 regardless of yOff and the
+	// single thumb row anchors at the only viewport row.
 	maxStart := vh - thumbSize
 	yOff := m.layout.viewport.YOffset
 	thumbStart := min(maxStart, yOff*maxStart/(total-vh))
 
-	lines := strings.Split(rendered, "\n")
 	for i := range vh {
 		if i < thumbStart || i >= thumbStart+thumbSize {
 			continue

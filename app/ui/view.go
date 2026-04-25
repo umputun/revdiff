@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
@@ -109,16 +110,63 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
 }
 
-// truncateHeaderTitle shortens the diff pane header text with a left-side
-// ellipsis so the rendered header fits in exactly one visual row of width
-// paneW. preserves the leading single-cell space the header always renders
-// with. matches the status-bar truncation strategy (keep the meaningful end
-// of long file paths). returns " "+title unchanged when it already fits.
-// extreme-narrow paneW values (≤ 1) fall back to a best-effort string that
-// still respects the width budget — these widths are not produced by any
-// realistic terminal layout, but the helper must not overflow.
+// sanitizeFilenameForDisplay strips control characters (C0 < 0x20, DEL,
+// C1 0x80–0x9F) and the Unicode replacement character (U+FFFD, produced
+// when iterating invalid UTF-8 bytes) so a filename containing newline,
+// tab, ESC, or other non-printing bytes cannot break header/status-bar
+// layout. POSIX permits these bytes in paths; ingesting them raw lets
+// crafted paths re-wrap the diff header (and re-break the scrollbar's
+// single-line invariant) or inject terminal escape sequences.
+func sanitizeFilenameForDisplay(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r < 0x20, r == 0x7F, r >= 0x80 && r <= 0x9F:
+			return -1
+		case r == utf8.RuneError:
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// truncateLeftToWidth left-truncates s with a leading "…" so it fits in
+// budget visual columns, preserving the meaningful end. returns s unchanged
+// when it already fits, "" when budget <= 0, "…" when budget == 1.
+func truncateLeftToWidth(s string, budget int) string {
+	if lipgloss.Width(s) <= budget {
+		return s
+	}
+	if budget <= 0 {
+		return ""
+	}
+	if budget == 1 {
+		return "…"
+	}
+	tailBudget := budget - 1 // 1 cell for the leading "…"
+	runes := []rune(s)
+	w, cutIdx := 0, len(runes)
+	for i := len(runes) - 1; i >= 0; i-- {
+		rw := runewidth.RuneWidth(runes[i])
+		if w+rw > tailBudget {
+			break
+		}
+		w += rw
+		cutIdx = i
+	}
+	return "…" + string(runes[cutIdx:])
+}
+
+// truncateHeaderTitle returns the diff pane header text shortened to fit
+// in exactly one visual row of width paneW, prefixed with the leading
+// single-cell space the header always renders with. control characters
+// (newline, ESC, etc.) are stripped first so crafted filenames cannot
+// re-wrap the header. left-truncation keeps the meaningful end of long
+// paths. extreme-narrow paneW values (≤ 1) fall back to a best-effort
+// string that still respects the width budget; these are not produced by
+// any realistic terminal layout but the helper must not overflow.
 func (m Model) truncateHeaderTitle(title string, paneW int) string {
-	full := " " + title
+	clean := sanitizeFilenameForDisplay(title)
+	full := " " + clean
 	if lipgloss.Width(full) <= paneW {
 		return full
 	}
@@ -128,18 +176,8 @@ func (m Model) truncateHeaderTitle(title string, paneW int) string {
 	if paneW == 1 {
 		return "…"
 	}
-	budget := paneW - 2 // 1 cell for leading space, 1 for "…"
-	runes := []rune(title)
-	w, cutIdx := 0, len(runes)
-	for i := len(runes) - 1; i >= 0; i-- {
-		rw := runewidth.RuneWidth(runes[i])
-		if w+rw > budget {
-			break
-		}
-		w += rw
-		cutIdx = i
-	}
-	return " …" + string(runes[cutIdx:])
+	// paneW >= 2: " " + truncateLeftToWidth(clean, paneW-1) fits in paneW
+	return " " + truncateLeftToWidth(clean, paneW-1)
 }
 
 // transientHint returns the first non-empty transient status-bar hint. hints
@@ -244,25 +282,11 @@ func (m Model) statusBarText() string {
 		left = strings.Join(segments, sep)
 	}
 	if lipgloss.Width(left) > available && m.file.name != "" {
-		// truncate filename from left, keeping end of path.
-		// uses display-width measurement to handle wide characters (CJK, emoji)
+		// truncate filename from left, keeping end of path. uses display-width
+		// measurement to handle wide characters (CJK, emoji)
 		statsStr := m.fileStatsText()
 		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
-		name := m.file.name
-		if lipgloss.Width(name) > nameMax {
-			budget := nameMax - 1 // reserve 1 cell for "…"
-			runes := []rune(name)
-			w, cutIdx := 0, len(runes)
-			for i := len(runes) - 1; i >= 0; i-- {
-				rw := runewidth.RuneWidth(runes[i])
-				if w+rw > budget {
-					break
-				}
-				w += rw
-				cutIdx = i
-			}
-			name = "…" + string(runes[cutIdx:])
-		}
+		name := truncateLeftToWidth(m.file.name, nameMax)
 		left = name + sep + statsStr
 	}
 

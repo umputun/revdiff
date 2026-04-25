@@ -93,15 +93,25 @@ func TestApplyScrollbar_ThumbAtBottom(t *testing.T) {
 func TestApplyScrollbar_ThumbProportionalSize(t *testing.T) {
 	m := testModel(nil, nil)
 	m.layout.viewport.Height = 20
-	// 40 total lines, viewport 20 → thumb size = 20*20/40 = 10
+	// 40 total lines, viewport 20 → thumb size = 20*20/40 = 10, maxStart = 10
 	m.layout.viewport.SetContent(strings.Repeat("x\n", 39))
-	m.layout.viewport.SetYOffset(0)
 
-	out := m.applyScrollbar(buildPaneRender(20, 20))
-	rows := thumbRows(out)
-	// thumb spans the first 10 viewport rows, contiguous, anchored at top
-	want := []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
-	assert.Equal(t, want, rows)
+	tests := []struct {
+		name string
+		yOff int
+		want []int // rendered row indices (inclusive)
+	}{
+		{name: "top", yOff: 0, want: []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11}},             // thumbStart = 0
+		{name: "midway", yOff: 10, want: []int{7, 8, 9, 10, 11, 12, 13, 14, 15, 16}},    // 10*10/20=5
+		{name: "bottom", yOff: 20, want: []int{12, 13, 14, 15, 16, 17, 18, 19, 20, 21}}, // 20*10/20=10
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m.layout.viewport.SetYOffset(tt.yOff)
+			out := m.applyScrollbar(buildPaneRender(20, 20))
+			assert.Equal(t, tt.want, thumbRows(out))
+		})
+	}
 }
 
 func TestApplyScrollbar_ThumbMinimumSizeOne(t *testing.T) {
@@ -177,11 +187,16 @@ func TestApplyScrollbar_NeverModifiesCorners(t *testing.T) {
 	m := testModel(nil, nil)
 	m.layout.viewport.Height = 5
 	m.layout.viewport.SetContent(strings.Repeat("x\n", 19))
-	m.layout.viewport.SetYOffset(15) // fully scrolled — would put thumb on last row
+	m.layout.viewport.SetYOffset(15) // fully scrolled — thumb on last viewport row
 
 	in := buildPaneRender(5, 10)
 	out := m.applyScrollbar(in)
 	lines := strings.Split(out, "\n")
+
+	// positive assertion first: thumb must actually have been placed.
+	// without this the corner-safety check below could be satisfied by a
+	// no-op applyScrollbar that simply did nothing.
+	require.Equal(t, []int{6}, thumbRows(out), "thumb must land on last viewport row (rendered index 6) at fully-scrolled")
 
 	// top border row 0 contains corners ┌ and ┐, never replaced
 	assert.Contains(t, lines[0], "┌")
@@ -339,5 +354,90 @@ func TestApplyScrollbar_ViewportHeightOne(t *testing.T) {
 		rows := thumbRows(out)
 		require.Len(t, rows, 1, "yOff=%d must have exactly one thumb row", yOff)
 		assert.Equal(t, scrollbarFirstViewportRow, rows[0], "yOff=%d thumb must stay on the only viewport row", yOff)
+	}
+}
+
+// codex iter-2 C2: defensive bail when the rendered pane has more rows
+// than paneHeight()+2 (the lipgloss outer-height ceiling). this catches
+// body-wrap cases where applyHorizontalScroll cannot truncate because
+// gutters consume the full content width — without this check, the thumb
+// would land on the wrong rows.
+func TestApplyScrollbar_BailsOnUnexpectedLineCount(t *testing.T) {
+	m := testModel(nil, nil)
+	// shrink the layout so paneHeight() is small enough that a synthetic
+	// over-long render exceeds it. testModel sets layout.height=40 →
+	// paneHeight()=37 (40 - 2 borders - 1 status bar). drop to 8 → 5.
+	m.layout.height = 8 // paneHeight() = 5
+	m.layout.viewport.Height = 3
+	m.layout.viewport.SetContent(strings.Repeat("x\n", 99)) // forces thumb
+	m.layout.viewport.SetYOffset(0)
+
+	// expected outer rows = paneHeight() + 2 = 7. produce 10 — applyScrollbar must bail.
+	tooManyLines := strings.Join([]string{
+		"┌──────────┐",
+		"│header    │",
+		"│body wrap1│",
+		"│body wrap2│", // extra rows beyond paneHeight()+2
+		"│body wrap3│",
+		"│body 1    │",
+		"│body 2    │",
+		"│body 3    │",
+		"│body 4    │",
+		"└──────────┘",
+	}, "\n")
+
+	out := m.applyScrollbar(tooManyLines)
+	assert.Equal(t, tooManyLines, out, "applyScrollbar must no-op when line count exceeds paneHeight()+2")
+	assert.NotContains(t, out, scrollbarThumbRune)
+}
+
+func TestSanitizeFilenameForDisplay(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "clean ascii", in: "main.go", want: "main.go"},
+		{name: "newline stripped", in: "foo\nbar.go", want: "foobar.go"},
+		{name: "carriage return stripped", in: "foo\rbar.go", want: "foobar.go"},
+		{name: "tab stripped", in: "foo\tbar.go", want: "foobar.go"},
+		{name: "esc stripped", in: "foo\x1b[31mbar\x1b[0m.go", want: "foo[31mbar[0m.go"},
+		{name: "del stripped", in: "foo\x7fbar.go", want: "foobar.go"},
+		{name: "c1 control stripped", in: "foo\x9bbar.go", want: "foobar.go"},
+		{name: "cjk preserved", in: "テスト/ファイル.go", want: "テスト/ファイル.go"},
+		{name: "spaces preserved", in: "my file.go", want: "my file.go"},
+		{name: "empty", in: "", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeFilenameForDisplay(tt.in))
+		})
+	}
+}
+
+func TestTruncateLeftToWidth(t *testing.T) {
+	tests := []struct {
+		name   string
+		s      string
+		budget int
+		want   string
+	}{
+		{name: "fits exactly", s: "abcd", budget: 4, want: "abcd"},
+		{name: "fits with room", s: "abcd", budget: 10, want: "abcd"},
+		{name: "truncates from left", s: "very/long/path/file.go", budget: 10, want: "…h/file.go"},
+		{name: "wide chars by display width", s: "テスト.go", budget: 5, want: "….go"},
+		{name: "budget zero", s: "anything", budget: 0, want: ""},
+		{name: "budget negative", s: "anything", budget: -3, want: ""},
+		{name: "budget one", s: "anything", budget: 1, want: "…"},
+		{name: "empty string", s: "", budget: 5, want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateLeftToWidth(tt.s, tt.budget)
+			assert.Equal(t, tt.want, got)
+			if tt.budget >= 0 {
+				assert.LessOrEqual(t, lipgloss.Width(got), tt.budget, "must fit budget")
+			}
+		})
 	}
 }

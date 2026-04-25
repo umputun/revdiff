@@ -1553,15 +1553,29 @@ func TestModel_TruncateHeaderTitle(t *testing.T) {
 		{name: "fits with room", title: "a.go", paneW: 80, want: " a.go"},
 		{name: "truncates from left", title: "very/long/path/to/file.go", paneW: 12, want: " …to/file.go"},
 		{name: "wide chars truncate by display width", title: "テスト.go", paneW: 6, want: " ….go"},
+		{name: "boundary paneW=2", title: "abc", paneW: 2, want: " …"},
+		{name: "boundary paneW=3 keeps last char", title: "abc", paneW: 3, want: " …c"},
+		{name: "boundary paneW=4 fits", title: "abc", paneW: 4, want: " abc"},
 		{name: "extreme narrow paneW=1 returns single ellipsis", title: "anything", paneW: 1, want: "…"},
 		{name: "extreme narrow paneW=0 returns empty", title: "anything", paneW: 0, want: ""},
+		{name: "negative paneW returns empty", title: "anything", paneW: -5, want: ""},
 		{name: "empty title fits", title: "", paneW: 10, want: " "},
+		// codex iter-2 C1: control-character-bearing filenames must be sanitized
+		// before width budgeting so they cannot re-wrap the diff header.
+		{name: "newline in title stripped", title: "foo\nbar.go", paneW: 80, want: " foobar.go"},
+		{name: "esc sequence in title stripped", title: "\x1b[31mevil\x1b[0m.go", paneW: 80, want: " [31mevil[0m.go"},
+		{name: "tab in title stripped", title: "tab\there.go", paneW: 80, want: " tabhere.go"},
+		{name: "long title with newline still truncates", title: "very/long/path/" + "\n" + "to/some/file.go", paneW: 12, want: " …me/file.go"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := m.truncateHeaderTitle(tt.title, tt.paneW)
 			assert.Equal(t, tt.want, got)
-			assert.LessOrEqual(t, lipgloss.Width(got), tt.paneW, "truncated header must fit in paneW")
+			if tt.paneW > 0 {
+				assert.LessOrEqual(t, lipgloss.Width(got), tt.paneW, "truncated header must fit in paneW")
+			}
+			// invariant the scrollbar relies on: result must be a single line
+			assert.NotContains(t, got, "\n", "header must never contain newlines")
 		})
 	}
 }

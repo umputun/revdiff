@@ -294,7 +294,14 @@ diffLines + highlightedLines
           → skip removed lines
           → buildModifiedSet() for modify vs pure-add styling
 
-  → viewport.SetContent() → terminal
+  → viewport.SetContent()
+  → View():
+    ├── truncateHeaderTitle() (sanitize + left-truncate filename to 1 row)
+    ├── lipgloss.JoinVertical(header, viewport.View())
+    ├── padContentBg() (pre-render: pane bg fill on assembled content)
+    ├── lipgloss.Render() with Border() + Width()/Height()
+    └── applyScrollbar() (post-render: thumb glyph on right-border rows)
+  → terminal
 ```
 
 Each rendering feature (line numbers, blame, word-diff, search, wrap, collapsed) is orthogonal — can be independently toggled.
