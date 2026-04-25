@@ -226,16 +226,16 @@ func TestApplyScrollbar_PreservesLineCount(t *testing.T) {
 
 func TestApplyScrollbar_SafeWhenLinesShorterThanExpected(t *testing.T) {
 	// defensive: if some upstream change shortens the rendered output, the
-	// function must not panic.
+	// function must no-op without panic and without applying the thumb.
 	m := testModel(nil, nil)
 	m.layout.viewport.Height = 100
 	m.layout.viewport.SetContent(strings.Repeat("x\n", 999))
 	m.layout.viewport.SetYOffset(0)
 
-	short := buildPaneRender(3, 10) // 6 lines total
+	short := buildPaneRender(3, 10) // 6 lines total, less than required minRows
 	out := m.applyScrollbar(short)
-	// no panic; output length unchanged
-	assert.Len(t, strings.Split(out, "\n"), len(strings.Split(short, "\n")))
+	assert.Equal(t, short, out, "must no-op when line count is below the minimum bound")
+	assert.NotContains(t, out, scrollbarThumbRune, "no thumb when shape is below expected minimum")
 }
 
 // G3: lock in the bold SGR contract so a future edit that drops the
@@ -404,13 +404,20 @@ func TestSanitizeFilenameForDisplay(t *testing.T) {
 		{name: "esc stripped", in: "foo\x1b[31mbar\x1b[0m.go", want: "foo[31mbar[0m.go"},
 		{name: "del stripped", in: "foo\x7fbar.go", want: "foobar.go"},
 		{name: "c1 control stripped", in: "foo\x9bbar.go", want: "foobar.go"},
+		{name: "rtl override stripped", in: "good\u202egp.os", want: "goodgp.os"},
+		{name: "lri stripped", in: "a\u2066b.go", want: "ab.go"},
+		{name: "pdi stripped", in: "a\u2069b.go", want: "ab.go"},
+		{name: "zwj stripped", in: "a\u200dlogo.go", want: "alogo.go"},
+		{name: "zwsp stripped", in: "a\u200bb.go", want: "ab.go"},
+		{name: "bom stripped", in: "\ufefffile.go", want: "file.go"},
 		{name: "cjk preserved", in: "テスト/ファイル.go", want: "テスト/ファイル.go"},
 		{name: "spaces preserved", in: "my file.go", want: "my file.go"},
 		{name: "empty", in: "", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, sanitizeFilenameForDisplay(tt.in))
+			m := testModel(nil, nil)
+			assert.Equal(t, tt.want, m.sanitizeFilenameForDisplay(tt.in))
 		})
 	}
 }
@@ -433,7 +440,8 @@ func TestTruncateLeftToWidth(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := truncateLeftToWidth(tt.s, tt.budget)
+			m := testModel(nil, nil)
+			got := m.truncateLeftToWidth(tt.s, tt.budget)
 			assert.Equal(t, tt.want, got)
 			if tt.budget >= 0 {
 				assert.LessOrEqual(t, lipgloss.Width(got), tt.budget, "must fit budget")

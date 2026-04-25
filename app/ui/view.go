@@ -63,12 +63,12 @@ func (m Model) View() string {
 	case m.file.singleFile && m.file.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
 		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
-		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph)
+		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph, diffPaneW)
 
 	default:
 		annotated := m.annotatedFiles()
 		treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.layout.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
-		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph)
+		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph, diffPaneW)
 	}
 
 	mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver})
@@ -83,7 +83,10 @@ func (m Model) View() string {
 
 // renderTwoPaneLayout renders a two-pane layout with left (tree/TOC) and right (diff) content.
 // applies focus-based pane styles, background padding, and joins horizontally.
-func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) string {
+// diffPaneW is the inner width caller passed to truncateHeaderTitle and must
+// match the lipgloss Width() applied here — single source of truth for the
+// scrollbar's single-line-header invariant.
+func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph, diffPaneW int) string {
 	treeStyle := m.resolver.Style(style.StyleKeyTreePane)
 	diffStyle := m.resolver.Style(style.StyleKeyDiffPane)
 	if m.layout.focus == paneTree {
@@ -92,9 +95,8 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 		diffStyle = m.resolver.Style(style.StyleKeyDiffPaneActive)
 	}
 
-	diffW := m.layout.width - m.layout.treeWidth - 4
 	leftContent = m.padContentBg(leftContent, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
-	diffContent = m.padContentBg(diffContent, diffW, m.resolver.Color(style.ColorKeyDiffPaneBg))
+	diffContent = m.padContentBg(diffContent, diffPaneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 
 	leftPane := treeStyle.
 		Width(m.layout.treeWidth).
@@ -102,7 +104,7 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 		Render(leftContent)
 
 	diffPane := diffStyle.
-		Width(diffW).
+		Width(diffPaneW).
 		Height(ph).
 		Render(diffContent)
 	diffPane = m.applyScrollbar(diffPane)
@@ -110,19 +112,31 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
 }
 
-// sanitizeFilenameForDisplay strips control characters (C0 < 0x20, DEL,
-// C1 0x80–0x9F) and the Unicode replacement character (U+FFFD, produced
-// when iterating invalid UTF-8 bytes) so a filename containing newline,
-// tab, ESC, or other non-printing bytes cannot break header/status-bar
-// layout. POSIX permits these bytes in paths; ingesting them raw lets
-// crafted paths re-wrap the diff header (and re-break the scrollbar's
-// single-line invariant) or inject terminal escape sequences.
-func sanitizeFilenameForDisplay(s string) string {
+// sanitizeFilenameForDisplay strips characters that would break or spoof
+// header/status-bar layout: C0 controls (< 0x20), DEL (0x7F), C1 controls
+// (0x80–0x9F), the Unicode replacement character (U+FFFD), and Unicode
+// format/bidi controls (RTL/LTR overrides U+202A–U+202E, isolates
+// U+2066–U+2069, ZWJ/ZWNJ U+200D/U+200C, ZWSP U+200B, BOM U+FEFF).
+// POSIX permits the C0/C1 bytes in paths; ingesting them raw lets crafted
+// paths re-wrap the diff header (and re-break the scrollbar's single-line
+// invariant) or inject terminal escape sequences. The bidi/format strip
+// is a defense-in-depth measure against filename spoofing — the chars
+// are zero-width so they do not affect width math, but they can make a
+// path render as something the user did not actually approve.
+func (m Model) sanitizeFilenameForDisplay(s string) string {
 	return strings.Map(func(r rune) rune {
 		switch {
 		case r < 0x20, r == 0x7F, r >= 0x80 && r <= 0x9F:
 			return -1
 		case r == utf8.RuneError:
+			return -1
+		case r >= 0x200B && r <= 0x200F: // ZWSP, ZWNJ, ZWJ, LRM, RLM
+			return -1
+		case r >= 0x202A && r <= 0x202E: // bidi overrides + embeddings
+			return -1
+		case r >= 0x2066 && r <= 0x2069: // bidi isolates
+			return -1
+		case r == 0xFEFF: // BOM / ZWNBSP
 			return -1
 		}
 		return r
@@ -132,7 +146,7 @@ func sanitizeFilenameForDisplay(s string) string {
 // truncateLeftToWidth left-truncates s with a leading "…" so it fits in
 // budget visual columns, preserving the meaningful end. returns s unchanged
 // when it already fits, "" when budget <= 0, "…" when budget == 1.
-func truncateLeftToWidth(s string, budget int) string {
+func (m Model) truncateLeftToWidth(s string, budget int) string {
 	if lipgloss.Width(s) <= budget {
 		return s
 	}
@@ -161,23 +175,20 @@ func truncateLeftToWidth(s string, budget int) string {
 // single-cell space the header always renders with. control characters
 // (newline, ESC, etc.) are stripped first so crafted filenames cannot
 // re-wrap the header. left-truncation keeps the meaningful end of long
-// paths. extreme-narrow paneW values (≤ 1) fall back to a best-effort
-// string that still respects the width budget; these are not produced by
-// any realistic terminal layout but the helper must not overflow.
+// paths. extreme-narrow paneW values (≤ 1) delegate to truncateLeftToWidth
+// without the leading space; these are not produced by any realistic
+// terminal layout but the helper must not overflow.
 func (m Model) truncateHeaderTitle(title string, paneW int) string {
-	clean := sanitizeFilenameForDisplay(title)
+	clean := m.sanitizeFilenameForDisplay(title)
 	full := " " + clean
 	if lipgloss.Width(full) <= paneW {
 		return full
 	}
-	if paneW <= 0 {
-		return ""
-	}
-	if paneW == 1 {
-		return "…"
+	if paneW <= 1 {
+		return m.truncateLeftToWidth(clean, paneW)
 	}
 	// paneW >= 2: " " + truncateLeftToWidth(clean, paneW-1) fits in paneW
-	return " " + truncateLeftToWidth(clean, paneW-1)
+	return " " + m.truncateLeftToWidth(clean, paneW-1)
 }
 
 // transientHint returns the first non-empty transient status-bar hint. hints
@@ -226,9 +237,12 @@ func (m Model) statusBarText() string {
 	// build left-side segments
 	var segments []string
 
-	// filename and diff stats segments
-	if m.file.name != "" {
-		segments = append(segments, m.file.name, m.fileStatsText())
+	// filename and diff stats segments. sanitize the filename so crafted
+	// paths (newline/ESC/bidi controls) cannot break or spoof status-bar
+	// layout — same defense-in-depth applied to the diff header.
+	cleanName := m.sanitizeFilenameForDisplay(m.file.name)
+	if cleanName != "" {
+		segments = append(segments, cleanName, m.fileStatsText())
 	}
 
 	// hunk position (always shown in diff pane when there are hunks)
@@ -281,13 +295,12 @@ func (m Model) statusBarText() string {
 		segments = m.statusSegmentsMinimal()
 		left = strings.Join(segments, sep)
 	}
-	if lipgloss.Width(left) > available && m.file.name != "" {
+	if lipgloss.Width(left) > available && cleanName != "" {
 		// truncate filename from left, keeping end of path. uses display-width
 		// measurement to handle wide characters (CJK, emoji)
 		statsStr := m.fileStatsText()
 		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
-		name := truncateLeftToWidth(m.file.name, nameMax)
-		left = name + sep + statsStr
+		left = m.truncateLeftToWidth(cleanName, nameMax) + sep + statsStr
 	}
 
 	return m.joinStatusSections(left, right, sep)
@@ -451,8 +464,8 @@ func (m Model) statusModeIcons() string {
 // statusSegmentsNoSearch returns left segments without search position (for narrow terminals).
 func (m Model) statusSegmentsNoSearch() []string {
 	var segments []string
-	if m.file.name != "" {
-		segments = append(segments, m.file.name, m.fileStatsText())
+	if name := m.sanitizeFilenameForDisplay(m.file.name); name != "" {
+		segments = append(segments, name, m.fileStatsText())
 	}
 	if hs := m.hunkSegment(); hs != "" {
 		segments = append(segments, hs)
@@ -466,8 +479,8 @@ func (m Model) statusSegmentsNoSearch() []string {
 // statusSegmentsMinimal returns left segments with only filename and stats.
 func (m Model) statusSegmentsMinimal() []string {
 	var segments []string
-	if m.file.name != "" {
-		segments = append(segments, m.file.name, m.fileStatsText())
+	if name := m.sanitizeFilenameForDisplay(m.file.name); name != "" {
+		segments = append(segments, name, m.fileStatsText())
 	}
 	return segments
 }

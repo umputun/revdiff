@@ -1541,6 +1541,39 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 	})
 }
 
+// codex iter-3 C1: crafted filenames must not break or spoof the status
+// bar layout. iter-2 added sanitizeFilenameForDisplay but only wired it
+// into the diff header; iter-3 wires it into status-bar segments too.
+func TestModel_StatusBarSanitizesFilename(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		// chars that must NOT appear anywhere in the rendered status bar
+		forbidden []string
+	}{
+		{name: "newline", filename: "foo\nbar.go", forbidden: []string{"\n"}},
+		{name: "carriage return", filename: "foo\rbar.go", forbidden: []string{"\r"}},
+		{name: "tab", filename: "foo\tbar.go", forbidden: []string{"\t"}},
+		{name: "esc", filename: "foo\x1b[31mevil\x1b[0m.go", forbidden: []string{"\x1b[31m", "\x1b[0m"}},
+		{name: "rtl override", filename: "good\u202egp.os", forbidden: []string{"\u202e"}},
+		{name: "bom", filename: "\ufeffbom.go", forbidden: []string{"\ufeff"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel([]string{tt.filename}, nil)
+			m.tree = testNewFileTree([]string{tt.filename})
+			m.file.name = tt.filename
+			m.layout.focus = paneDiff
+			status := m.statusBarText()
+			for _, c := range tt.forbidden {
+				assert.NotContains(t, status, c, "status bar must strip control/format byte %q", c)
+			}
+			// status bar must remain a single visual line
+			assert.NotContains(t, status, "\n", "status bar must never contain a literal newline")
+		})
+	}
+}
+
 func TestModel_TruncateHeaderTitle(t *testing.T) {
 	m := testModel(nil, nil)
 	tests := []struct {
