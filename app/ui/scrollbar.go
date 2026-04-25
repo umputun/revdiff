@@ -31,8 +31,11 @@ const (
 // thicker thumb glyph (heavy-vertical, bold) to indicate scroll position.
 // no-op when the diff content fits the viewport (nothing to scroll) or the
 // viewport has zero height. preserves the ANSI envelope around the replaced
-// rune since both track and thumb share the same UTF-8 byte width and
-// lipgloss renders the right border as the line's last │ rune.
+// rune: lipgloss renders the right border as the line's last │ rune, so
+// strings.LastIndex finds the rune position and the slice operation swaps
+// only that rune — the prefix/suffix bytes (border fg/bg ANSI) stay intact
+// regardless of the thumb's added SGR wrap. glyphs ┃ and │ are both 1 cell
+// wide so display geometry is unchanged.
 //
 // also no-ops when the rendered pane's line count differs from the expected
 // shape (top border + header + vh viewport rows + bottom border). this is a
