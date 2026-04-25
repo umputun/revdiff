@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -97,7 +98,10 @@ func TestApplyScrollbar_ThumbProportionalSize(t *testing.T) {
 	m.layout.viewport.SetYOffset(0)
 
 	out := m.applyScrollbar(buildPaneRender(20, 20))
-	assert.Equal(t, 10, countThumb(out))
+	rows := thumbRows(out)
+	// thumb spans the first 10 viewport rows, contiguous, anchored at top
+	want := []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+	assert.Equal(t, want, rows)
 }
 
 func TestApplyScrollbar_ThumbMinimumSizeOne(t *testing.T) {
@@ -213,8 +217,127 @@ func TestApplyScrollbar_SafeWhenLinesShorterThanExpected(t *testing.T) {
 	m.layout.viewport.SetContent(strings.Repeat("x\n", 999))
 	m.layout.viewport.SetYOffset(0)
 
-	short := buildPaneRender(3, 10) // only 5 lines total
+	short := buildPaneRender(3, 10) // 6 lines total
 	out := m.applyScrollbar(short)
 	// no panic; output length unchanged
 	assert.Len(t, strings.Split(out, "\n"), len(strings.Split(short, "\n")))
+}
+
+// G3: lock in the bold SGR contract so a future edit that drops the
+// \x1b[1m...\x1b[22m wrap in scrollbarThumbRune is caught explicitly. the
+// project's CLAUDE.md gotcha entry treats the bold envelope as load-bearing
+// (it brightens the accent color to make the thumb pop without resetting
+// the border background) — this assertion makes that promise testable.
+func TestApplyScrollbar_ThumbWrappedInBoldSGR(t *testing.T) {
+	assert.True(t, strings.HasPrefix(scrollbarThumbRune, "\x1b[1m"), "thumb must start with bold SGR")
+	assert.True(t, strings.HasSuffix(scrollbarThumbRune, "\x1b[22m"), "thumb must end with intensity-only reset")
+	assert.Contains(t, scrollbarThumbRune, "┃", "thumb glyph must be heavy-vertical")
+	assert.NotContains(t, scrollbarThumbRune, "\x1b[0m", "thumb must not use full reset (would kill BorderBackground)")
+}
+
+// G4: cover the idx<0 branch — a viewport row that does not contain the
+// track rune is silently skipped instead of mutating the wrong byte. happens
+// in practice when a future caller passes content shorter or differently
+// shaped than the lipgloss-rendered pane assumed by applyScrollbar.
+func TestApplyScrollbar_RowWithoutTrackRune(t *testing.T) {
+	m := testModel(nil, nil)
+	m.layout.viewport.Height = 3
+	m.layout.viewport.SetContent(strings.Repeat("x\n", 99)) // forces thumb
+	m.layout.viewport.SetYOffset(0)
+
+	// row 2 (first viewport row) has no │ — must be skipped without panic
+	rendered := strings.Join([]string{
+		"┌────────┐",
+		"│header  │",
+		"plain row no border",
+		"│body    │",
+		"│body    │",
+		"└────────┘",
+	}, "\n")
+
+	out := m.applyScrollbar(rendered)
+	lines := strings.Split(out, "\n")
+	require.Len(t, lines, 6)
+	assert.Equal(t, "plain row no border", lines[2], "row without │ is left intact")
+	assert.NotContains(t, lines[2], scrollbarThumbRune)
+}
+
+// T2/G5: a viewport row whose content contains literal │ (e.g., reviewing a
+// markdown table or box-drawing source) must not have its body │ touched —
+// only the rightmost (border) │ is replaced. locks in the assumption
+// documented in scrollbar.go's godoc.
+func TestApplyScrollbar_BodyContainingTrackRune(t *testing.T) {
+	m := testModel(nil, nil)
+	m.layout.viewport.Height = 3
+	m.layout.viewport.SetContent(strings.Repeat("x\n", 99))
+	m.layout.viewport.SetYOffset(0)
+
+	rendered := strings.Join([]string{
+		"┌──────────────┐",
+		"│header        │",
+		"│ a │ b │ c    │", // body with multiple │
+		"│ a │ b │ c    │",
+		"│ a │ b │ c    │",
+		"└──────────────┘",
+	}, "\n")
+
+	out := m.applyScrollbar(rendered)
+	lines := strings.Split(out, "\n")
+	// row 2 has 4 track runes total: 1 left border + 2 body separators + 1 right border
+	// applyScrollbar should replace only the rightmost (border) one
+	assert.Equal(t, 3, strings.Count(lines[2], "│"), "body │ separators must be intact, only right border replaced")
+	assert.True(t, strings.HasSuffix(lines[2], scrollbarThumbRune), "thumb sits where the right border was")
+}
+
+// T1: integration test that runs applyScrollbar against the real lipgloss
+// pane render path (with Border + BorderForeground + BorderBackground), so a
+// future lipgloss change to the right-border emission shape is caught here.
+func TestApplyScrollbar_AgainstRealLipglossOutput(t *testing.T) {
+	m := testModel(nil, nil)
+	const innerW = 20
+	const innerH = 6
+	m.layout.viewport.Height = innerH - 1 // 1 row reserved for the header
+	m.layout.viewport.SetContent(strings.Repeat("x\n", 99))
+	m.layout.viewport.SetYOffset(0)
+
+	header := lipgloss.NewStyle().Render(" header.go")
+	body := strings.Repeat("body\n", innerH-1)
+	content := lipgloss.JoinVertical(lipgloss.Left, header, body)
+
+	rendered := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("#ff8800")).
+		BorderBackground(lipgloss.Color("#202020")).
+		Width(innerW).
+		Height(innerH).
+		Render(content)
+
+	out := m.applyScrollbar(rendered)
+	require.NotEqual(t, rendered, out, "thumb must be applied")
+	assert.Contains(t, out, scrollbarThumbRune, "real lipgloss output must accept the thumb substitution")
+
+	// line count and per-line display width unchanged
+	inLines := strings.Split(rendered, "\n")
+	outLines := strings.Split(out, "\n")
+	require.Len(t, outLines, len(inLines))
+	for i := range inLines {
+		assert.Equal(t, lipgloss.Width(inLines[i]), lipgloss.Width(outLines[i]), "row %d width must be unchanged", i)
+	}
+}
+
+// G8: smallest non-trivial viewport. with vh=1 the thumb has nowhere to
+// move; this test pins down "no movement, single-row thumb" so a future
+// off-by-one in the maxStart math can't sneak in.
+func TestApplyScrollbar_ViewportHeightOne(t *testing.T) {
+	m := testModel(nil, nil)
+	m.layout.viewport.Height = 1
+	m.layout.viewport.SetContent(strings.Repeat("x\n", 99)) // 100 lines
+
+	for _, yOff := range []int{0, 50, 99} {
+		m.layout.viewport.SetYOffset(yOff)
+		out := m.applyScrollbar(buildPaneRender(1, 10))
+		rows := thumbRows(out)
+		require.Len(t, rows, 1, "yOff=%d must have exactly one thumb row", yOff)
+		assert.Equal(t, scrollbarFirstViewportRow, rows[0], "yOff=%d thumb must stay on the only viewport row", yOff)
+	}
 }

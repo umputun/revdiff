@@ -102,6 +102,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `loaders.go` | Async file/blame loading, loaded-message handlers, data helpers |
 | `diffview.go` | Diff line rendering, gutters, line styling, search highlights |
 | `diffnav.go` | Cursor movement, hunk navigation, viewport sync, horizontal scroll |
+| `scrollbar.go` | Vertical scrollbar thumb post-processing on the rendered diff pane (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
 | `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic |

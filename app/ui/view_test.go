@@ -1442,30 +1442,128 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 		m.layout.focus = paneDiff
 		m.layout.viewport.Width = vw
 		m.layout.viewport.Height = vh
+		// 501 total lines, vh=30, thumbSize = 30*30/501 = 1
 		m.layout.viewport.SetContent(strings.Repeat("filler\n", 500))
 
+		collect := func(view string) []int {
+			rows := []int{}
+			for i, line := range strings.Split(view, "\n") {
+				if strings.Contains(line, scrollbarThumbRune) {
+					rows = append(rows, i)
+				}
+			}
+			return rows
+		}
+
 		m.layout.viewport.SetYOffset(0)
-		viewTop := m.View()
+		topRows := collect(m.View())
+		require.Len(t, topRows, 1, "thumb size must be 1 row")
+		assert.Equal(t, scrollbarFirstViewportRow, topRows[0], "yOff=0 must put thumb on first viewport row")
 
-		m.layout.viewport.SetYOffset(450) // near bottom
-		viewBottom := m.View()
-
-		topRows := []int{}
-		for i, line := range strings.Split(viewTop, "\n") {
-			if strings.Contains(line, scrollbarThumbRune) {
-				topRows = append(topRows, i)
-			}
-		}
-		bottomRows := []int{}
-		for i, line := range strings.Split(viewBottom, "\n") {
-			if strings.Contains(line, scrollbarThumbRune) {
-				bottomRows = append(bottomRows, i)
-			}
-		}
-		require.NotEmpty(t, topRows)
-		require.NotEmpty(t, bottomRows)
-		assert.Less(t, topRows[0], bottomRows[0], "thumb should move down as YOffset increases")
+		m.layout.viewport.SetYOffset(471) // fully scrolled (total - vh = 471)
+		bottomRows := collect(m.View())
+		require.Len(t, bottomRows, 1, "thumb size invariant under offset")
+		assert.Equal(t, scrollbarFirstViewportRow+vh-1, bottomRows[0], "fully-scrolled must put thumb on last viewport row")
 	})
+
+	t.Run("thumb appears with paneTree focus", func(t *testing.T) {
+		// G7: scrollbar must work regardless of which pane has focus. with
+		// paneTree focus the diff pane uses StyleKeyDiffPane (inactive border
+		// color) instead of StyleKeyDiffPaneActive (accent). lipgloss might in
+		// principle emit the inactive border via a different code path; assert
+		// the thumb still lands.
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.file.name = "a.go"
+		m.layout.focus = paneTree
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent(strings.Repeat("filler line\n", 200))
+
+		view := m.View()
+		assert.Contains(t, view, scrollbarThumbRune, "scrollbar thumb must appear even when tree pane has focus")
+	})
+
+	t.Run("thumb appears in markdown TOC layout", func(t *testing.T) {
+		// G6: single-file markdown with TOC routes through renderTwoPaneLayout
+		// (different switch arm than the file-tree default). cover that path.
+		tocLines := []diff.DiffLine{
+			{Content: "# Header 1", ChangeType: diff.ChangeContext, NewNum: 1},
+			{Content: "", ChangeType: diff.ChangeContext, NewNum: 2},
+			{Content: "## Header 2", ChangeType: diff.ChangeContext, NewNum: 3},
+		}
+		m := testModel([]string{"plan.md"}, nil)
+		m.tree = testNewFileTree([]string{"plan.md"})
+		m.file.singleFile = true
+		m.file.mdTOC = testParseTOCFactory()(tocLines, "plan.md")
+		require.NotNil(t, m.file.mdTOC, "test factory must produce a TOC")
+		m.file.name = "plan.md"
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent(strings.Repeat("body\n", 200))
+
+		view := m.View()
+		assert.Contains(t, view, scrollbarThumbRune, "scrollbar must work in markdown TOC layout")
+	})
+
+	t.Run("long filename does not push thumb past viewport rows", func(t *testing.T) {
+		// C1 regression: before truncateHeaderTitle was added, lipgloss
+		// soft-wrapped a too-long header onto multiple rows, which pushed the
+		// real viewport rows past the hardcoded scrollbarFirstViewportRow=2
+		// offset. truncating the header guarantees the layout invariant.
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.file.name = strings.Repeat("very/long/path/segment-", 40) + "structure.go"
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent(strings.Repeat("filler\n", 200))
+		m.layout.viewport.SetYOffset(0)
+
+		view := m.View()
+		thumbRowsFound := []int{}
+		for i, line := range strings.Split(view, "\n") {
+			if strings.Contains(line, scrollbarThumbRune) {
+				thumbRowsFound = append(thumbRowsFound, i)
+			}
+		}
+		require.NotEmpty(t, thumbRowsFound, "thumb must appear despite long filename")
+		assert.Equal(t, scrollbarFirstViewportRow, thumbRowsFound[0],
+			"long filename must be truncated so thumb still starts at row %d (header stays single-line)",
+			scrollbarFirstViewportRow)
+
+		// header row (index 1) must contain the truncation ellipsis, proving
+		// the header was actually shortened rather than emitted whole
+		lines := strings.Split(view, "\n")
+		require.Greater(t, len(lines), 1)
+		assert.Contains(t, lines[1], "…", "long header must be truncated with ellipsis")
+	})
+}
+
+func TestModel_TruncateHeaderTitle(t *testing.T) {
+	m := testModel(nil, nil)
+	tests := []struct {
+		name  string
+		title string
+		paneW int
+		want  string
+	}{
+		{name: "fits exactly", title: "a.go", paneW: 5, want: " a.go"},
+		{name: "fits with room", title: "a.go", paneW: 80, want: " a.go"},
+		{name: "truncates from left", title: "very/long/path/to/file.go", paneW: 12, want: " …to/file.go"},
+		{name: "wide chars truncate by display width", title: "テスト.go", paneW: 6, want: " ….go"},
+		{name: "extreme narrow paneW=1 returns single ellipsis", title: "anything", paneW: 1, want: "…"},
+		{name: "extreme narrow paneW=0 returns empty", title: "anything", paneW: 0, want: ""},
+		{name: "empty title fits", title: "", paneW: 10, want: " "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.truncateHeaderTitle(tt.title, tt.paneW)
+			assert.Equal(t, tt.want, got)
+			assert.LessOrEqual(t, lipgloss.Width(got), tt.paneW, "truncated header must fit in paneW")
+		})
+	}
 }
 
 func TestModel_LineNumberSegment(t *testing.T) {

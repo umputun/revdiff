@@ -28,22 +28,33 @@ func (m Model) View() string {
 
 	ph := m.paneHeight()
 
+	// determine diff pane inner width up front so the header can be truncated
+	// to a single visual row before lipgloss renders. without truncation, a
+	// long filename causes lipgloss to soft-wrap the header onto multiple
+	// rows, which would push viewport rows past applyScrollbar's hardcoded
+	// scrollbarFirstViewportRow offset.
+	var diffPaneW int
+	if m.treePaneHidden() {
+		diffPaneW = m.layout.width - 2
+	} else {
+		diffPaneW = m.layout.width - m.layout.treeWidth - 4
+	}
+
 	// diff pane title
 	diffTitle := "no file selected"
 	if m.file.name != "" {
 		diffTitle = m.file.name
 	}
-	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(" " + diffTitle)
+	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(m.truncateHeaderTitle(diffTitle, diffPaneW))
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.layout.viewport.View())
 
 	var mainView string
 	switch {
 	case m.treePaneHidden():
 		// tree pane hidden (user toggle or single-file without TOC): diff uses full width
-		paneW := m.layout.width - 2
-		diffContent = m.padContentBg(diffContent, paneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
+		diffContent = m.padContentBg(diffContent, diffPaneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 		diffPane := m.resolver.Style(style.StyleKeyDiffPaneActive).
-			Width(paneW).
+			Width(diffPaneW).
 			Height(ph).
 			Render(diffContent)
 		mainView = m.applyScrollbar(diffPane)
@@ -96,6 +107,39 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph int) stri
 	diffPane = m.applyScrollbar(diffPane)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
+}
+
+// truncateHeaderTitle shortens the diff pane header text with a left-side
+// ellipsis so the rendered header fits in exactly one visual row of width
+// paneW. preserves the leading single-cell space the header always renders
+// with. matches the status-bar truncation strategy (keep the meaningful end
+// of long file paths). returns " "+title unchanged when it already fits.
+// extreme-narrow paneW values (≤ 1) fall back to a best-effort string that
+// still respects the width budget — these widths are not produced by any
+// realistic terminal layout, but the helper must not overflow.
+func (m Model) truncateHeaderTitle(title string, paneW int) string {
+	full := " " + title
+	if lipgloss.Width(full) <= paneW {
+		return full
+	}
+	if paneW <= 0 {
+		return ""
+	}
+	if paneW == 1 {
+		return "…"
+	}
+	budget := paneW - 2 // 1 cell for leading space, 1 for "…"
+	runes := []rune(title)
+	w, cutIdx := 0, len(runes)
+	for i := len(runes) - 1; i >= 0; i-- {
+		rw := runewidth.RuneWidth(runes[i])
+		if w+rw > budget {
+			break
+		}
+		w += rw
+		cutIdx = i
+	}
+	return " …" + string(runes[cutIdx:])
 }
 
 // transientHint returns the first non-empty transient status-bar hint. hints
