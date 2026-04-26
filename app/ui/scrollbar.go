@@ -36,15 +36,20 @@ const (
 	diffScrollbarFirstViewportRow = 2
 )
 
+// scrollbarSpec describes a scrollable pane's viewport for thumb placement.
+// callers (applyScrollbar / applyNavigationScrollbar) populate it from their
+// respective scroll-state sources; applyPaneScrollbar is otherwise pane-agnostic.
 type scrollbarSpec struct {
-	total            int
-	height           int
-	offset           int
-	firstViewportRow int
+	total            int // total content rows in the scrollable region
+	height           int // visible row count (vh) inside the pane
+	offset           int // first visible row index (0-based) into the content
+	firstViewportRow int // line index in the rendered pane where the viewport's first row sits
 }
 
 // applyScrollbar replaces the right-border rune of diff viewport rows with a
 // thicker thumb glyph (heavy-vertical, bold) to indicate scroll position.
+// see applyPaneScrollbar for no-op cases, layout-shape invariants, and ANSI
+// envelope handling.
 func (m Model) applyScrollbar(rendered string) string {
 	return m.applyPaneScrollbar(rendered, scrollbarSpec{
 		total:            m.layout.viewport.TotalLineCount(),
@@ -55,7 +60,10 @@ func (m Model) applyScrollbar(rendered string) string {
 }
 
 // applyNavigationScrollbar replaces the right-border rune of tree/TOC rows with
-// the same thumb used by the diff pane.
+// the same thumb used by the diff pane. state must come from the component's
+// ScrollState() AFTER Render(), so Offset reflects the latest cursor/scroll
+// position; passing a stale ScrollState would silently misposition the thumb.
+// see applyPaneScrollbar for no-op cases and ANSI envelope handling.
 func (m Model) applyNavigationScrollbar(rendered string, state sidepane.ScrollState) string {
 	return m.applyPaneScrollbar(rendered, scrollbarSpec{
 		total:            state.Total,

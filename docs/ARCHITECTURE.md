@@ -228,8 +228,8 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `styleRenderer` | `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` | `style.Renderer` |
 | `sgrProcessor` | `Reemit()` | `style.SGR` |
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
-| `FileTreeComponent` | 15 methods (navigation, query, mutation, render) | `sidepane.FileTree` |
-| `TOCComponent` | 7 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
+| `FileTreeComponent` | 17 methods (navigation, query, mutation, scroll-state, render) | `sidepane.FileTree` |
+| `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenCommitInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 | `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |

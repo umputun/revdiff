@@ -1522,6 +1522,26 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 		assert.Equal(t, navigationScrollbarFirstViewportRow+m.paneHeight()-1, rows[0], "tree thumb reaches last content row")
 	})
 
+	t.Run("navigation tree thumb appears with paneDiff focus", func(t *testing.T) {
+		// inactive-border style emits a different ANSI envelope around the right
+		// border │ than the active style. the rune-level slice replacement must
+		// land correctly regardless of the surrounding bytes.
+		files := make([]string, 1000)
+		for i := range files {
+			files[i] = fmt.Sprintf("pkg/file-%04d.go", i)
+		}
+		m := testModel(files, nil)
+		m.tree = testNewFileTree(files)
+		m.file.name = files[0]
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent("diff fits\n")
+
+		view := m.View()
+		assert.Contains(t, view, scrollbarThumbRune, "navigation thumb must appear even when diff pane has focus")
+	})
+
 	t.Run("navigation TOC thumb appears when TOC scrollable", func(t *testing.T) {
 		lines := make([]diff.DiffLine, 1000)
 		for i := range lines {
