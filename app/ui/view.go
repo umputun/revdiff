@@ -33,7 +33,7 @@ func (m Model) View() string {
 	// to a single visual row before lipgloss renders. without truncation, a
 	// long filename causes lipgloss to soft-wrap the header onto multiple
 	// rows, which would push viewport rows past applyScrollbar's hardcoded
-	// scrollbarFirstViewportRow offset.
+	// diffScrollbarFirstViewportRow offset.
 	var diffPaneW int
 	if m.treePaneHidden() {
 		diffPaneW = m.layout.width - 2
@@ -63,12 +63,12 @@ func (m Model) View() string {
 	case m.file.singleFile && m.file.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
 		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
-		mainView = m.renderTwoPaneLayout(tocContent, diffContent, ph, diffPaneW)
+		mainView = m.renderTwoPaneLayout(tocContent, diffContent, m.file.mdTOC.ScrollState(), ph, diffPaneW)
 
 	default:
 		annotated := m.annotatedFiles()
 		treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.layout.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
-		mainView = m.renderTwoPaneLayout(treeContent, diffContent, ph, diffPaneW)
+		mainView = m.renderTwoPaneLayout(treeContent, diffContent, m.tree.ScrollState(), ph, diffPaneW)
 	}
 
 	mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver})
@@ -82,11 +82,11 @@ func (m Model) View() string {
 }
 
 // renderTwoPaneLayout renders a two-pane layout with left (tree/TOC) and right (diff) content.
-// applies focus-based pane styles, background padding, and joins horizontally.
+// applies focus-based pane styles, background padding, scrollbars, and joins horizontally.
 // diffPaneW is the inner width caller passed to truncateHeaderTitle and must
 // match the lipgloss Width() applied here — single source of truth for the
 // scrollbar's single-line-header invariant.
-func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph, diffPaneW int) string {
+func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll sidepane.ScrollState, ph, diffPaneW int) string {
 	treeStyle := m.resolver.Style(style.StyleKeyTreePane)
 	diffStyle := m.resolver.Style(style.StyleKeyDiffPane)
 	if m.layout.focus == paneTree {
@@ -102,6 +102,7 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, ph, diffPane
 		Width(m.layout.treeWidth).
 		Height(ph).
 		Render(leftContent)
+	leftPane = m.applyNavigationScrollbar(leftPane, leftScroll)
 
 	diffPane := diffStyle.
 		Width(diffPaneW).

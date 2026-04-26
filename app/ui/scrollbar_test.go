@@ -7,6 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
 // buildPaneRender returns a synthetic lipgloss-shaped pane render with vh
@@ -18,6 +20,20 @@ func buildPaneRender(vh, innerWidth int) string {
 	body := strings.Repeat(" ", innerWidth)
 	lines := make([]string, 0, vh+3)
 	lines = append(lines, "┌"+pad+"┐", "│"+body+"│") // top border + header
+	for range vh {
+		lines = append(lines, "│"+body+"│")
+	}
+	lines = append(lines, "└"+pad+"┘")
+	return strings.Join(lines, "\n")
+}
+
+// buildNavigationPaneRender returns a synthetic lipgloss-shaped navigation pane render.
+// layout: top border, vh content rows, bottom border.
+func buildNavigationPaneRender(vh, innerWidth int) string {
+	pad := strings.Repeat("─", innerWidth)
+	body := strings.Repeat(" ", innerWidth)
+	lines := make([]string, 0, vh+2)
+	lines = append(lines, "┌"+pad+"┐")
 	for range vh {
 		lines = append(lines, "│"+body+"│")
 	}
@@ -144,7 +160,7 @@ func TestApplyScrollbar_ThumbMovesWithOffset(t *testing.T) {
 		out := m.applyScrollbar(buildPaneRender(10, 20))
 		rows := thumbRows(out)
 		require.Len(t, rows, 1, "yOff=%d", tt.yOff)
-		assert.Equal(t, scrollbarFirstViewportRow+tt.wantRow0, rows[0], "yOff=%d", tt.yOff)
+		assert.Equal(t, diffScrollbarFirstViewportRow+tt.wantRow0, rows[0], "yOff=%d", tt.yOff)
 	}
 }
 
@@ -353,7 +369,7 @@ func TestApplyScrollbar_ViewportHeightOne(t *testing.T) {
 		out := m.applyScrollbar(buildPaneRender(1, 10))
 		rows := thumbRows(out)
 		require.Len(t, rows, 1, "yOff=%d must have exactly one thumb row", yOff)
-		assert.Equal(t, scrollbarFirstViewportRow, rows[0], "yOff=%d thumb must stay on the only viewport row", yOff)
+		assert.Equal(t, diffScrollbarFirstViewportRow, rows[0], "yOff=%d thumb must stay on the only viewport row", yOff)
 	}
 }
 
@@ -389,6 +405,33 @@ func TestApplyScrollbar_BailsOnUnexpectedLineCount(t *testing.T) {
 	out := m.applyScrollbar(tooManyLines)
 	assert.Equal(t, tooManyLines, out, "applyScrollbar must no-op when line count exceeds paneHeight()+2")
 	assert.NotContains(t, out, scrollbarThumbRune)
+}
+
+func TestApplyNavigationScrollbar(t *testing.T) {
+	m := testModel(nil, nil)
+	m.layout.height = 13 // paneHeight = 10 (13 - 2 borders - 1 status bar)
+	ph := m.paneHeight()
+	in := buildNavigationPaneRender(ph, 20)
+
+	t.Run("top", func(t *testing.T) {
+		out := m.applyNavigationScrollbar(in, sidepane.ScrollState{Total: 100, Offset: 0})
+		rows := thumbRows(out)
+		require.Len(t, rows, 1)
+		assert.Equal(t, navigationScrollbarFirstViewportRow, rows[0], "navigation thumb starts on first content row")
+	})
+
+	t.Run("bottom", func(t *testing.T) {
+		out := m.applyNavigationScrollbar(in, sidepane.ScrollState{Total: 100, Offset: 90})
+		rows := thumbRows(out)
+		require.Len(t, rows, 1)
+		assert.Equal(t, navigationScrollbarFirstViewportRow+ph-1, rows[0], "navigation thumb reaches last content row")
+	})
+
+	t.Run("fits", func(t *testing.T) {
+		out := m.applyNavigationScrollbar(in, sidepane.ScrollState{Total: ph, Offset: 0})
+		assert.Equal(t, in, out)
+		assert.NotContains(t, out, scrollbarThumbRune)
+	})
 }
 
 func TestSanitizeFilenameForDisplay(t *testing.T) {

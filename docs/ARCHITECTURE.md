@@ -102,7 +102,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `loaders.go` | Async file/blame loading, loaded-message handlers, data helpers |
 | `diffview.go` | Diff line rendering, gutters, line styling, search highlights |
 | `diffnav.go` | Cursor movement, hunk navigation, viewport sync, horizontal scroll |
-| `scrollbar.go` | Vertical scrollbar thumb post-processing on the rendered diff pane (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
+| `scrollbar.go` | Vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
 | `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic |
@@ -300,7 +300,12 @@ diffLines + highlightedLines
     ├── lipgloss.JoinVertical(header, viewport.View())
     ├── padContentBg() (pre-render: pane bg fill on assembled content)
     ├── lipgloss.Render() with Border() + Width()/Height()
-    └── applyScrollbar() (post-render: thumb glyph on right-border rows)
+    └── applyScrollbar() (post-render: thumb glyph on diff right-border rows)
+
+sidepane.Render() (file tree or markdown TOC)
+  → padContentBg()
+  → lipgloss.Render() with Border() + Width()/Height()
+  → applyNavigationScrollbar() (post-render: thumb glyph on navigation right-border rows)
   → terminal
 ```
 

@@ -300,6 +300,12 @@ func (ft *FileTree) ToggleReviewed(path string) {
 	}
 }
 
+// ScrollState returns the file tree's current visible window state.
+// call after Render or EnsureVisible so Offset reflects the latest cursor position.
+func (ft *FileTree) ScrollState() ScrollState {
+	return ScrollState{Total: len(ft.entries), Offset: ft.offset}
+}
+
 // Render produces the file tree display string, showing only entries visible within the given height.
 // it adjusts the internal offset so the cursor stays within the visible window.
 func (ft *FileTree) Render(r FileTreeRender) string {

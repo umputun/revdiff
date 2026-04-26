@@ -187,6 +187,8 @@ type FileTreeComponent interface {
 	RefreshFilter(annotated map[string]bool)
 	// ToggleReviewed toggles the reviewed mark for the given file path.
 	ToggleReviewed(path string)
+	// ScrollState reports the file tree's visible window after rendering.
+	ScrollState() sidepane.ScrollState
 	// Render renders the file tree into a string for display.
 	Render(r sidepane.FileTreeRender) string
 }
@@ -210,6 +212,8 @@ type TOCComponent interface {
 	UpdateActiveSection(diffCursor int)
 	// SyncCursorToActiveSection sets cursor to activeSection when activeSection >= 0.
 	SyncCursorToActiveSection()
+	// ScrollState reports the TOC's visible window after rendering.
+	ScrollState() sidepane.ScrollState
 	// Render renders the TOC into a string for display.
 	Render(r sidepane.TOCRender) string
 }

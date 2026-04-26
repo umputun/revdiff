@@ -60,6 +60,12 @@ type FileTreeRender struct {
 	Renderer  Renderer
 }
 
+// ScrollState reports the visible window state for a sidepane component.
+type ScrollState struct {
+	Total  int // total logical rows in the sidepane
+	Offset int // first visible logical row
+}
+
 // TOCRender holds parameters for TOC.Render.
 type TOCRender struct {
 	Width    int
