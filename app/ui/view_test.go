@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1458,12 +1459,12 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 		m.layout.viewport.SetYOffset(0)
 		topRows := collect(m.View())
 		require.Len(t, topRows, 1, "thumb size must be 1 row")
-		assert.Equal(t, scrollbarFirstViewportRow, topRows[0], "yOff=0 must put thumb on first viewport row")
+		assert.Equal(t, diffScrollbarFirstViewportRow, topRows[0], "yOff=0 must put thumb on first viewport row")
 
 		m.layout.viewport.SetYOffset(471) // fully scrolled (total - vh = 471)
 		bottomRows := collect(m.View())
 		require.Len(t, bottomRows, 1, "thumb size invariant under offset")
-		assert.Equal(t, scrollbarFirstViewportRow+vh-1, bottomRows[0], "fully-scrolled must put thumb on last viewport row")
+		assert.Equal(t, diffScrollbarFirstViewportRow+vh-1, bottomRows[0], "fully-scrolled must put thumb on last viewport row")
 	})
 
 	t.Run("thumb appears with paneTree focus", func(t *testing.T) {
@@ -1482,6 +1483,84 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 
 		view := m.View()
 		assert.Contains(t, view, scrollbarThumbRune, "scrollbar thumb must appear even when tree pane has focus")
+	})
+
+	t.Run("navigation tree thumb appears when file list scrollable", func(t *testing.T) {
+		files := make([]string, 1000)
+		for i := range files {
+			files[i] = fmt.Sprintf("pkg/file-%04d.go", i)
+		}
+		m := testModel(files, nil)
+		m.tree = testNewFileTree(files)
+		m.file.name = files[0]
+		m.layout.focus = paneTree
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent("diff fits\n")
+
+		rows := thumbRows(m.View())
+		require.Len(t, rows, 1, "only the navigation pane should have a thumb")
+		assert.Equal(t, navigationScrollbarFirstViewportRow, rows[0], "tree thumb starts on first content row")
+	})
+
+	t.Run("navigation tree thumb position shifts with cursor", func(t *testing.T) {
+		files := make([]string, 1000)
+		for i := range files {
+			files[i] = fmt.Sprintf("pkg/file-%04d.go", i)
+		}
+		m := testModel(files, nil)
+		m.tree = testNewFileTree(files)
+		m.tree.Move(sidepane.MotionLast)
+		m.file.name = files[0]
+		m.layout.focus = paneTree
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent("diff fits\n")
+
+		rows := thumbRows(m.View())
+		require.Len(t, rows, 1, "only the navigation pane should have a thumb")
+		assert.Equal(t, navigationScrollbarFirstViewportRow+m.paneHeight()-1, rows[0], "tree thumb reaches last content row")
+	})
+
+	t.Run("navigation tree thumb appears with paneDiff focus", func(t *testing.T) {
+		// inactive-border style emits a different ANSI envelope around the right
+		// border │ than the active style. the rune-level slice replacement must
+		// land correctly regardless of the surrounding bytes.
+		files := make([]string, 1000)
+		for i := range files {
+			files[i] = fmt.Sprintf("pkg/file-%04d.go", i)
+		}
+		m := testModel(files, nil)
+		m.tree = testNewFileTree(files)
+		m.file.name = files[0]
+		m.layout.focus = paneDiff
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent("diff fits\n")
+
+		view := m.View()
+		assert.Contains(t, view, scrollbarThumbRune, "navigation thumb must appear even when diff pane has focus")
+	})
+
+	t.Run("navigation TOC thumb appears when TOC scrollable", func(t *testing.T) {
+		lines := make([]diff.DiffLine, 1000)
+		for i := range lines {
+			lines[i] = diff.DiffLine{Content: fmt.Sprintf("# Section %04d", i), ChangeType: diff.ChangeContext, NewNum: i + 1}
+		}
+		m := testModel([]string{"plan.md"}, nil)
+		m.tree = testNewFileTree([]string{"plan.md"})
+		m.file.singleFile = true
+		m.file.mdTOC = testParseTOCFactory()(lines, "plan.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "plan.md"
+		m.layout.focus = paneTree
+		m.layout.viewport.Width = vw
+		m.layout.viewport.Height = vh
+		m.layout.viewport.SetContent("diff fits\n")
+
+		rows := thumbRows(m.View())
+		require.Len(t, rows, 1, "only the TOC pane should have a thumb")
+		assert.Equal(t, navigationScrollbarFirstViewportRow, rows[0], "TOC thumb starts on first content row")
 	})
 
 	t.Run("thumb appears in markdown TOC layout", func(t *testing.T) {
@@ -1510,7 +1589,7 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 	t.Run("long filename does not push thumb past viewport rows", func(t *testing.T) {
 		// C1 regression: before truncateHeaderTitle was added, lipgloss
 		// soft-wrapped a too-long header onto multiple rows, which pushed the
-		// real viewport rows past the hardcoded scrollbarFirstViewportRow=2
+		// real viewport rows past the hardcoded diffScrollbarFirstViewportRow=2
 		// offset. truncating the header guarantees the layout invariant.
 		m := testModel([]string{"a.go"}, nil)
 		m.tree = testNewFileTree([]string{"a.go"})
@@ -1529,9 +1608,9 @@ func TestModel_ViewScrollbarThumb(t *testing.T) {
 			}
 		}
 		require.NotEmpty(t, thumbRowsFound, "thumb must appear despite long filename")
-		assert.Equal(t, scrollbarFirstViewportRow, thumbRowsFound[0],
+		assert.Equal(t, diffScrollbarFirstViewportRow, thumbRowsFound[0],
 			"long filename must be truncated so thumb still starts at row %d (header stays single-line)",
-			scrollbarFirstViewportRow)
+			diffScrollbarFirstViewportRow)
 
 		// header row (index 1) must contain the truncation ellipsis, proving
 		// the header was actually shortened rather than emitted whole

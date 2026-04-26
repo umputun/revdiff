@@ -191,6 +191,12 @@ func (t *TOC) SyncCursorToActiveSection() {
 	}
 }
 
+// ScrollState returns the TOC's current visible window state.
+// call after Render or EnsureVisible so Offset reflects active-section visibility.
+func (t *TOC) ScrollState() ScrollState {
+	return ScrollState{Total: len(t.entries), Offset: t.offset}
+}
+
 // Render produces the TOC display string with indentation by level.
 // the highlighted entry uses FileSelected style in both modes:
 // when TOC is focused it highlights the cursor, when diff is focused it highlights the active section.

@@ -705,6 +705,61 @@ func TestTOC_SelectByVisibleRow(t *testing.T) {
 	})
 }
 
+func TestTOC_ScrollState(t *testing.T) {
+	t.Run("empty TOC reports zero total and zero offset", func(t *testing.T) {
+		toc := &TOC{}
+		s := toc.ScrollState()
+		assert.Equal(t, 0, s.Total)
+		assert.Equal(t, 0, s.Offset)
+	})
+
+	t.Run("fresh TOC starts at offset zero", func(t *testing.T) {
+		toc := &TOC{entries: []tocEntry{
+			{title: "A", level: 1, lineIdx: 0},
+			{title: "B", level: 1, lineIdx: 10},
+			{title: "C", level: 1, lineIdx: 20},
+		}}
+		s := toc.ScrollState()
+		assert.Equal(t, 3, s.Total)
+		assert.Equal(t, 0, s.Offset)
+	})
+
+	t.Run("offset reflects post-EnsureVisible state when cursor moves", func(t *testing.T) {
+		entries := make([]tocEntry, 30)
+		for i := range entries {
+			entries[i] = tocEntry{title: fmt.Sprintf("S%02d", i), level: 1, lineIdx: i * 10}
+		}
+		toc := &TOC{entries: entries, cursor: 0}
+		toc.Move(MotionLast)
+		assert.Equal(t, 0, toc.ScrollState().Offset, "offset is stale before EnsureVisible")
+
+		toc.EnsureVisible(10)
+		s := toc.ScrollState()
+		assert.Equal(t, 30, s.Total)
+		assert.Positive(t, s.Offset, "EnsureVisible scrolls to keep cursor visible")
+		assert.LessOrEqual(t, s.Offset, 30-10)
+	})
+
+	t.Run("offset reflects active-section visibility when diff has focus", func(t *testing.T) {
+		// when not focused, Render aligns offset to activeSection rather than cursor.
+		// ScrollState read AFTER Render must report the activeSection-driven offset.
+		entries := make([]tocEntry, 30)
+		for i := range entries {
+			entries[i] = tocEntry{title: fmt.Sprintf("S%02d", i), level: 1, lineIdx: i * 10}
+		}
+		toc := &TOC{entries: entries, cursor: 0}
+		toc.UpdateActiveSection(280) // resolves to last entry (lineIdx 290 > 280, so previous index 28)
+		require.GreaterOrEqual(t, toc.activeSection, 20, "active section should land near the end")
+
+		res := style.NewResolver(style.Colors{Normal: "#d0d0d0", Muted: "#6c6c6c"})
+		_ = toc.Render(TOCRender{Width: 30, Height: 10, Focused: false, Resolver: res})
+
+		s := toc.ScrollState()
+		assert.Positive(t, s.Offset, "Render must scroll the viewport to keep activeSection visible when diff has focus")
+		assert.Equal(t, 0, toc.cursor, "cursor must be restored after the focus-driven render")
+	})
+}
+
 func TestFencePrefix(t *testing.T) {
 	tests := []struct {
 		name    string

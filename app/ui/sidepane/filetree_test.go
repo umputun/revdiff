@@ -1,6 +1,7 @@
 package sidepane
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -707,6 +708,55 @@ func TestFileTreeRebuild(t *testing.T) {
 		assert.True(t, ft2.FilterActive())
 		ft2.Rebuild(fileEntries("a.go", "c.go"))
 		assert.True(t, ft2.FilterActive(), "filter state should be preserved across rebuild")
+	})
+}
+
+func TestFileTree_ScrollState(t *testing.T) {
+	t.Run("empty tree reports zero total and zero offset", func(t *testing.T) {
+		ft := NewFileTree(nil)
+		s := ft.ScrollState()
+		assert.Equal(t, 0, s.Total)
+		assert.Equal(t, 0, s.Offset)
+	})
+
+	t.Run("fresh tree starts at offset zero", func(t *testing.T) {
+		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		s := ft.ScrollState()
+		assert.Equal(t, len(ft.entries), s.Total, "total counts all entries (dirs + files)")
+		assert.Equal(t, 0, s.Offset)
+	})
+
+	t.Run("offset updates after EnsureVisible when cursor moves past viewport", func(t *testing.T) {
+		paths := make([]string, 50)
+		for i := range paths {
+			paths[i] = fmt.Sprintf("pkg/file-%02d.go", i)
+		}
+		ft := NewFileTree(fileEntries(paths...))
+		ft.Move(MotionLast)
+		// offset is stale until EnsureVisible runs
+		assert.Equal(t, 0, ft.ScrollState().Offset, "offset is stale before EnsureVisible")
+
+		ft.EnsureVisible(10)
+		s := ft.ScrollState()
+		assert.Equal(t, len(ft.entries), s.Total)
+		assert.Positive(t, s.Offset, "EnsureVisible scrolls to keep cursor visible")
+		assert.LessOrEqual(t, s.Offset, len(ft.entries)-10)
+	})
+
+	t.Run("offset reflects post-Render state via the Render path", func(t *testing.T) {
+		paths := make([]string, 50)
+		for i := range paths {
+			paths[i] = fmt.Sprintf("pkg/file-%02d.go", i)
+		}
+		ft := NewFileTree(fileEntries(paths...))
+		ft.Move(MotionLast)
+
+		res := style.NewResolver(style.Colors{Normal: "#d0d0d0", Muted: "#6c6c6c"})
+		rnd := style.NewRenderer(res)
+		_ = ft.Render(FileTreeRender{Width: 30, Height: 10, Resolver: res, Renderer: rnd})
+
+		s := ft.ScrollState()
+		assert.Positive(t, s.Offset, "Render calls EnsureVisible which moves offset")
 	})
 }
 

@@ -102,7 +102,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `loaders.go` | Async file/blame loading, loaded-message handlers, data helpers |
 | `diffview.go` | Diff line rendering, gutters, line styling, search highlights |
 | `diffnav.go` | Cursor movement, hunk navigation, viewport sync, horizontal scroll |
-| `scrollbar.go` | Vertical scrollbar thumb post-processing on the rendered diff pane (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
+| `scrollbar.go` | Vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
 | `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic |
@@ -228,8 +228,8 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `styleRenderer` | `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` | `style.Renderer` |
 | `sgrProcessor` | `Reemit()` | `style.SGR` |
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
-| `FileTreeComponent` | 15 methods (navigation, query, mutation, render) | `sidepane.FileTree` |
-| `TOCComponent` | 7 methods (navigation, cursor/section query+set, render) | `sidepane.TOC` |
+| `FileTreeComponent` | 17 methods (navigation, query, mutation, scroll-state, render) | `sidepane.FileTree` |
+| `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenCommitInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 | `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
@@ -300,7 +300,12 @@ diffLines + highlightedLines
     ├── lipgloss.JoinVertical(header, viewport.View())
     ├── padContentBg() (pre-render: pane bg fill on assembled content)
     ├── lipgloss.Render() with Border() + Width()/Height()
-    └── applyScrollbar() (post-render: thumb glyph on right-border rows)
+    └── applyScrollbar() (post-render: thumb glyph on diff right-border rows)
+
+sidepane.Render() (file tree or markdown TOC)
+  → padContentBg()
+  → lipgloss.Render() with Border() + Width()/Height()
+  → applyNavigationScrollbar() (post-render: thumb glyph on navigation right-border rows)
   → terminal
 ```
 
