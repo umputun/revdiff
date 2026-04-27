@@ -68,10 +68,10 @@ func TestManager_OpenClose(t *testing.T) {
 		assert.False(t, mgr.Active())
 	})
 
-	t.Run("commitInfo", func(t *testing.T) {
-		mgr.OpenCommitInfo(CommitInfoSpec{Applicable: true})
+	t.Run("info", func(t *testing.T) {
+		mgr.OpenInfo(InfoSpec{CommitsApplicable: true, CommitsLoaded: true})
 		assert.True(t, mgr.Active())
-		assert.Equal(t, KindCommitInfo, mgr.Kind())
+		assert.Equal(t, KindInfo, mgr.Kind())
 		mgr.Close()
 		assert.False(t, mgr.Active())
 	})

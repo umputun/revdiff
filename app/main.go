@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -98,6 +99,7 @@ func run(opts options) error {
 		blamer       ui.Blamer
 		untrackedFn  func() ([]string, error)
 		commitLogger diff.CommitLogger
+		vcsType      diff.VCSType
 		err          error
 	)
 
@@ -105,6 +107,11 @@ func run(opts options) error {
 	if !opts.NoMouse {
 		programOptions = append(programOptions, tea.WithMouseCellMotion())
 	}
+	description, err := resolveDescription(opts)
+	if err != nil {
+		return err
+	}
+
 	if opts.Stdin {
 		var tty *os.File
 		renderer, tty, err = prepareStdinMode(opts, os.Stdin)
@@ -125,6 +132,7 @@ func run(opts options) error {
 		blamer = setup.blamer
 		untrackedFn = setup.untrackedFn
 		commitLogger = setup.commitLogger
+		vcsType = setup.vcsType
 	}
 
 	if opts.Annotations != "" {
@@ -178,6 +186,7 @@ func run(opts options) error {
 		ShowBlame:         opts.Blame,
 		WordDiff:          opts.WordDiff,
 		VimMotion:         opts.VimMotion,
+		ReviewInfo:        reviewInfoFromOptions(opts, workDir, vcsType, description),
 		TabWidth:          opts.TabWidth,
 		Ref:               opts.ref(),
 		Staged:            opts.Staged,
@@ -237,8 +246,8 @@ func reloadApplicable(opts options) bool {
 	return !opts.Stdin
 }
 
-// commitsApplicable returns true when the current invocation can show a
-// commit-info popup: a VCS-backed log source must be present and the mode
+// commitsApplicable returns true when the unified info popup can include a
+// commit-log section: a VCS-backed log source must be present and the mode
 // must be ref-based (no stdin, staged, all-files, or empty ref). Computed
 // once in the composition root so the Model does not re-derive from CLI
 // flags. --only is fine when combined with a ref in a real repo; the empty
@@ -269,4 +278,91 @@ func compactApplicable(opts options, r ui.Renderer) bool {
 		return false
 	}
 	return true
+}
+
+func reviewInfoFromOptions(opts options, workDir string, vcsType diff.VCSType, description string) ui.ReviewInfoConfig {
+	ref := opts.ref()
+	effectiveStaged := opts.Staged && vcsType == diff.VCSGit
+	vcs := string(vcsType)
+	if opts.Stdin {
+		vcs = "stdin"
+	} else if vcs == "" {
+		vcs = "none"
+	}
+	stdinDisplayName := ""
+	if opts.Stdin {
+		stdinDisplayName = stdinName(opts.StdinName)
+	}
+	return ui.ReviewInfoConfig{
+		Enabled:        true,
+		Description:    description,
+		VCS:            vcs,
+		WorkDir:        workDir,
+		Ref:            ref,
+		StdinName:      stdinDisplayName,
+		Stdin:          opts.Stdin,
+		Staged:         effectiveStaged,
+		AllFiles:       opts.AllFiles,
+		Only:           append([]string(nil), opts.Only...),
+		Include:        append([]string(nil), opts.Include...),
+		Exclude:        append([]string(nil), opts.Exclude...),
+		Compact:        opts.Compact,
+		CompactContext: opts.CompactContext,
+	}
+}
+
+// maxDescriptionFileSize bounds --description-file reads. The popup is meant
+// for a few paragraphs of prose context, not for arbitrary content, so 256KB
+// is well above any realistic review description while keeping memory and
+// later highlighting work bounded. Files exceeding the cap fail fast rather
+// than load partially or OOM the highlighter.
+const maxDescriptionFileSize = 256 * 1024
+
+// resolveDescription returns the prose-description text for the info popup
+// from either --description (literal string) or --description-file (path to
+// a markdown file). parseArgs rejects the case where both flags are set; the
+// resolver enforces the same invariant for defense-in-depth so any direct
+// programmatic call sees the same contract. Returns "" when neither flag is
+// set, which leaves the description section hidden in the popup.
+//
+// File-handling hardening: stats BEFORE opening (os.Open on a FIFO blocks
+// until a writer connects, so the IsRegular guard would never be reached if
+// we opened first), rejects anything that is not a regular file (FIFOs,
+// devices, sockets, directories — Stat().Size() is not meaningful there and
+// ReadFile may block forever or exhaust memory), then bounds the actual read
+// with io.LimitReader so the size cap applies to the stream itself, not just
+// to the possibly-stale Stat().Size() value. The window between Stat and
+// Open is small and the worst case if a regular file is replaced with a
+// FIFO mid-flight is the same blocking we used to have unconditionally.
+func resolveDescription(opts options) (string, error) {
+	if opts.Description != "" && opts.DescriptionFile != "" {
+		return "", errors.New("--description and --description-file are mutually exclusive")
+	}
+	if opts.DescriptionFile == "" {
+		return opts.Description, nil
+	}
+	fi, err := os.Stat(opts.DescriptionFile)
+	if err != nil {
+		return "", fmt.Errorf("stat --description-file: %w", err)
+	}
+	if !fi.Mode().IsRegular() {
+		return "", fmt.Errorf("--description-file %q must be a regular file", opts.DescriptionFile)
+	}
+	f, err := os.Open(opts.DescriptionFile)
+	if err != nil {
+		return "", fmt.Errorf("open --description-file: %w", err)
+	}
+	defer f.Close()
+
+	// LimitReader caps the read at maxDescriptionFileSize+1 so we can detect
+	// "exceeds cap" by checking len(data) > maxDescriptionFileSize after the
+	// read, regardless of what Stat reported.
+	data, err := io.ReadAll(io.LimitReader(f, maxDescriptionFileSize+1))
+	if err != nil {
+		return "", fmt.Errorf("read --description-file: %w", err)
+	}
+	if len(data) > maxDescriptionFileSize {
+		return "", fmt.Errorf("--description-file %q exceeds %d-byte cap", opts.DescriptionFile, maxDescriptionFileSize)
+	}
+	return string(data), nil
 }

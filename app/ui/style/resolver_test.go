@@ -151,7 +151,7 @@ func TestResolver_Style(t *testing.T) {
 		{"help box", StyleKeyHelpBox},
 		{"theme select box", StyleKeyThemeSelectBox},
 		{"theme select box focused", StyleKeyThemeSelectBoxFocused},
-		{"commit info box", StyleKeyCommitInfoBox},
+		{"info box", StyleKeyInfoBox},
 	}
 
 	for _, tt := range tests {
@@ -343,28 +343,28 @@ func TestPlainResolver_WordDiffBg(t *testing.T) {
 	assert.Empty(t, string(r.WordDiffBg(diff.ChangeRemove)))
 }
 
-func TestResolver_StyleKeyCommitInfoBox(t *testing.T) {
+func TestResolver_StyleKeyInfoBox(t *testing.T) {
 	t.Run("full colors draws border and background", func(t *testing.T) {
 		r := NewResolver(fullColorsForTesting)
-		s := r.Style(StyleKeyCommitInfoBox)
+		s := r.Style(StyleKeyInfoBox)
 		rendered := s.Render("x")
 		// border decoration or background should make the output differ from input
-		assert.NotEqual(t, "x", rendered, "commit info box should render with border/background")
+		assert.NotEqual(t, "x", rendered, "info box should render with border/background")
 		// diff bg is set, so background escape should be present
 		assert.Contains(t, rendered, "\x1b[", "styled output should contain ANSI escapes")
 	})
 
 	t.Run("sparse colors still render border", func(t *testing.T) {
 		r := NewResolver(sparseColorsForTesting)
-		s := r.Style(StyleKeyCommitInfoBox)
+		s := r.Style(StyleKeyInfoBox)
 		rendered := s.Render("x")
-		assert.NotEqual(t, "x", rendered, "commit info box should render border even without DiffBg")
+		assert.NotEqual(t, "x", rendered, "info box should render border even without DiffBg")
 	})
 
 	t.Run("plain resolver preserves border", func(t *testing.T) {
 		r := PlainResolver()
-		s := r.Style(StyleKeyCommitInfoBox)
+		s := r.Style(StyleKeyInfoBox)
 		rendered := s.Render("x")
-		assert.NotEqual(t, "x", rendered, "plain commit info box should still have border decoration")
+		assert.NotEqual(t, "x", rendered, "plain info box should still have border decoration")
 	})
 }

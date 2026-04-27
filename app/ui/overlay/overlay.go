@@ -30,7 +30,7 @@ const (
 	KindHelp             // help overlay
 	KindAnnotList        // annotation list popup
 	KindThemeSelect      // theme selector popup
-	KindCommitInfo       // commit info popup
+	KindInfo             // unified info popup (description + session + commits)
 )
 
 // OutcomeKind describes what happened after a key press in an overlay.
@@ -120,29 +120,60 @@ type ThemeChoice struct {
 	Name string
 }
 
-// CommitInfoSpec describes the commit info popup content.
-// Applicable is false when the current mode (stdin/staged/all-files/no-ref)
-// precludes a meaningful commit list; the overlay renders a hint in that case.
-// --only paired with a ref in a real repo is applicable; the standalone --only
-// case is excluded upstream because commitLogger is nil when there's no VCS.
-// Truncated is true when the commit list was capped at diff.MaxCommits entries.
-// Err is a non-nil VCS CommitLog error to surface to the user; takes precedence
-// over the empty-list and applicability messages when set.
-type CommitInfoSpec struct {
-	Commits    []diff.CommitInfo
-	Applicable bool
-	Truncated  bool
-	Err        error
+// InfoSpec describes the unified info popup, composed of three optional
+// sections rendered top-to-bottom: an agent-supplied prose description (#130
+// — empty hides the section), invocation/session info from --description-less
+// review-info plumbing (Rows; always shown when non-empty), and the commit log
+// for the current ref range (Commits; gated by CommitsApplicable so modes
+// without a meaningful range — stdin/staged/all-files/file-only — hide the
+// commits section entirely instead of rendering "no commits in this mode").
+//
+// CommitsApplicable=false hides the commits section so the popup is never a
+// dead-end: the session section explains the mode, and there's no need to
+// duplicate that as a "no commits" message.
+//
+// Truncated marks the commit list as capped at diff.MaxCommits entries.
+// CommitsErr surfaces a CommitLog fetch error inside the commits section,
+// taking precedence over the empty-list message; it does not gate the popup.
+type InfoSpec struct {
+	// HeaderText is rendered as the centered top-border label. Typically a
+	// compact mode summary ("vs HEAD~3", "stdin patch.diff", "working tree").
+	// Empty falls back to the literal " info " title.
+	HeaderText string
+	// FooterText is rendered as a centered bottom-border label, used to
+	// surface aggregate stats (files, +/-, status, vcs) without spending
+	// body rows on them. Empty leaves the bottom border bare. Both
+	// header and footer gracefully no-op when too wide for the popup.
+	FooterText        string
+	Description       string
+	Rows              []InfoRow
+	Commits           []diff.CommitInfo
+	CommitsApplicable bool
+	CommitsLoaded     bool
+	Truncated         bool
+	CommitsErr        error
+}
+
+// InfoRow is a label/value line rendered in the session section of the info
+// popup. MutedSuffix is an optional secondary text rendered after Value in
+// the muted foreground color, used for "name (path)"-style rows where the
+// primary token (project name, file basename) deserves prominence and the
+// secondary token (full path) is contextual. Empty MutedSuffix renders as
+// a plain Value row.
+type InfoRow struct {
+	Label       string
+	Value       string
+	MutedSuffix string
 }
 
 // Manager coordinates overlay lifecycle: open/close, key routing, and render composition.
 // Only one overlay can be active at a time.
 type Manager struct {
-	kind       Kind
-	help       helpOverlay
-	annotLst   annotListOverlay
-	themeSel   themeSelectOverlay
-	commitInfo commitInfoOverlay
+	kind     Kind
+	help     helpOverlay
+	annotLst annotListOverlay
+	themeSel themeSelectOverlay
+	info     infoOverlay
 	// bounds is the popup rectangle on screen as of the last Compose call;
 	// used by HandleMouse to hit-test clicks and translate to popup-local coords.
 	bounds popupBounds
@@ -195,11 +226,24 @@ func (m *Manager) OpenThemeSelect(spec ThemeSelectSpec) {
 	m.themeSel.open(spec)
 }
 
-// OpenCommitInfo activates the commit info popup with the given spec.
-func (m *Manager) OpenCommitInfo(spec CommitInfoSpec) {
+// OpenInfo activates the unified info popup with the given spec.
+func (m *Manager) OpenInfo(spec InfoSpec) {
 	m.Close()
-	m.kind = KindCommitInfo
-	m.commitInfo.open(spec)
+	m.kind = KindInfo
+	m.info.open(spec)
+}
+
+// UpdateInfo replaces the active info popup's spec without resetting
+// the user's scroll position. Used when async data (review-stats fetch,
+// commit-log fetch) lands while the popup is open — the popup re-reads
+// the new spec on the next render and the user sees the loading state
+// flip to loaded inline. No-op when the active overlay is not the info popup,
+// so callers can fire it unconditionally without checking Kind() first.
+func (m *Manager) UpdateInfo(spec InfoSpec) {
+	if m.kind != KindInfo {
+		return
+	}
+	m.info.spec = spec
 }
 
 // HandleKey routes a key press to the active overlay and returns the outcome.
@@ -216,8 +260,8 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 		out = m.annotLst.handleKey(msg, action)
 	case KindThemeSelect:
 		out = m.themeSel.handleKey(msg, action)
-	case KindCommitInfo:
-		out = m.commitInfo.handleKey(msg, action)
+	case KindInfo:
+		out = m.info.handleKey(msg, action)
 	default:
 		return Outcome{}
 	}
@@ -262,8 +306,8 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 		out = m.annotLst.handleMouse(msg)
 	case KindThemeSelect:
 		out = m.themeSel.handleMouse(msg)
-	case KindCommitInfo:
-		out = m.commitInfo.handleMouse(msg)
+	case KindInfo:
+		out = m.info.handleMouse(msg)
 	default: // KindNone handled by the early return above
 		return Outcome{}
 	}
@@ -290,8 +334,8 @@ func (m *Manager) Compose(base string, ctx RenderCtx) string {
 		fg = m.annotLst.render(ctx, m)
 	case KindThemeSelect:
 		fg = m.themeSel.render(ctx, m)
-	case KindCommitInfo:
-		fg = m.commitInfo.render(ctx, m)
+	case KindInfo:
+		fg = m.info.render(ctx, m)
 	}
 	return m.overlayCenter(base, fg, ctx.Width)
 }
@@ -335,25 +379,55 @@ func (m *Manager) overlayCenter(bg, fg string, width int) string {
 // accentFg is an ANSI fg escape for border characters, paneBg is an ANSI bg escape
 // for the border background (both from Resolver.Color lookups). Either may be empty.
 func (m *Manager) injectBorderTitle(box, title string, popupWidth int, accentFg, paneBg string) string {
+	return injectBorderEdgeText(box, title, popupWidth, accentFg, paneBg, true)
+}
+
+// injectBorderFooter replaces part of the bottom border line with a centered
+// label. Mirrors injectBorderTitle but operates on the last row of the rendered
+// box. Used by the unified info popup to surface aggregate stats (file count,
+// line totals, status histogram) without occupying body rows. Gracefully
+// no-ops when the footer text would not fit (popupWidth too small).
+func (m *Manager) injectBorderFooter(box, footer string, popupWidth int, accentFg, paneBg string) string {
+	return injectBorderEdgeText(box, footer, popupWidth, accentFg, paneBg, false)
+}
+
+// injectBorderEdgeText is the shared body for top/bottom border-label injection.
+// isTop=true rewrites the first line using the top-border glyphs, false rewrites
+// the last line using the bottom-border glyphs. The geometry math (centering,
+// left/right pad lengths, fit check) is identical between the two — only the
+// target row index and the corner/line glyphs differ, so collapsing this lets
+// changes to the centering rule (e.g. minimum margin) stay in one place.
+func injectBorderEdgeText(box, text string, popupWidth int, accentFg, paneBg string, isTop bool) string {
 	boxLines := strings.Split(box, "\n")
 	if len(boxLines) == 0 {
 		return box
 	}
+	idx := 0
+	if !isTop {
+		idx = len(boxLines) - 1
+	}
 
-	topLine := boxLines[0]
-	topWidth := lipgloss.Width(topLine)
-	titleWidth := lipgloss.Width(title)
-
-	if titleWidth >= topWidth-4 {
+	line := boxLines[idx]
+	lineWidth := lipgloss.Width(line)
+	textWidth := lipgloss.Width(text)
+	if textWidth >= lineWidth-4 {
 		return box
 	}
 
-	titleStart := max((topWidth-titleWidth)/2, 2)
+	textStart := max((lineWidth-textWidth)/2, 2)
 
 	border := lipgloss.NormalBorder()
+	leftCorner := border.TopLeft
+	rightCorner := border.TopRight
+	mid := border.Top
+	if !isTop {
+		leftCorner = border.BottomLeft
+		rightCorner = border.BottomRight
+		mid = border.Bottom
+	}
 
-	leftLen := titleStart - 1
-	rightLen := max(popupWidth-titleStart-titleWidth+1, 0)
+	leftLen := textStart - 1
+	rightLen := max(popupWidth-textStart-textWidth+1, 0)
 
 	bgSeq := ""
 	bgReset := ""
@@ -367,15 +441,15 @@ func (m *Manager) injectBorderTitle(box, title string, popupWidth int, accentFg,
 		fgSeq = accentFg
 		fgReset = resetFg
 	}
-	newTop := bgSeq + fgSeq +
-		border.TopLeft +
-		strings.Repeat(border.Top, leftLen) +
-		title +
-		strings.Repeat(border.Top, rightLen) +
-		border.TopRight +
+	newLine := bgSeq + fgSeq +
+		leftCorner +
+		strings.Repeat(mid, leftLen) +
+		text +
+		strings.Repeat(mid, rightLen) +
+		rightCorner +
 		fgReset + bgReset
 
-	boxLines[0] = newTop
+	boxLines[idx] = newLine
 	return strings.Join(boxLines, "\n")
 }
 

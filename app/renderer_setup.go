@@ -11,6 +11,7 @@ import (
 
 type vcsSetup struct {
 	renderer     ui.Renderer
+	vcsType      diff.VCSType
 	gitRoot      string // set only when VCS is git; used by history module to run git commands
 	workDir      string
 	blamer       ui.Blamer
@@ -33,7 +34,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		if err != nil {
 			return vcsSetup{}, err
 		}
-		return vcsSetup{renderer: r, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles, commitLogger: g}, nil
+		return vcsSetup{renderer: r, vcsType: diff.VCSGit, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles, commitLogger: g}, nil
 	case diff.VCSHg:
 		if opts.Staged {
 			fmt.Fprintln(os.Stderr, "warning: --staged ignored in mercurial repository (no staging area)")
@@ -43,7 +44,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		if err != nil {
 			return vcsSetup{}, err
 		}
-		return vcsSetup{renderer: r, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles, commitLogger: h}, nil
+		return vcsSetup{renderer: r, vcsType: diff.VCSHg, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles, commitLogger: h}, nil
 	case diff.VCSJJ:
 		if opts.Staged {
 			fmt.Fprintln(os.Stderr, "warning: --staged ignored in jujutsu repository (no staging area)")
@@ -53,7 +54,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		if err != nil {
 			return vcsSetup{}, err
 		}
-		return vcsSetup{renderer: r, workDir: workDir, blamer: jj, untrackedFn: jj.UntrackedFiles, commitLogger: jj}, nil
+		return vcsSetup{renderer: r, vcsType: diff.VCSJJ, workDir: workDir, blamer: jj, untrackedFn: jj.UntrackedFiles, commitLogger: jj}, nil
 	default:
 		r, workDir, err := makeNoVCSRenderer(opts.Only, cwd)
 		if err != nil {

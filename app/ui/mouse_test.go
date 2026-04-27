@@ -616,7 +616,7 @@ func TestModel_HandleMouse_SwallowedWhileOverlayOpen(t *testing.T) {
 	assert.Equal(t, 0, model.nav.diffCursor)
 }
 
-func TestModel_HandleMouse_WheelScrollsCommitInfoOverlay(t *testing.T) {
+func TestModel_HandleMouse_WheelScrollsInfoOverlay(t *testing.T) {
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 	})
@@ -627,7 +627,7 @@ func TestModel_HandleMouse_WheelScrollsCommitInfoOverlay(t *testing.T) {
 	for range 20 {
 		commits = append(commits, diff.CommitInfo{Hash: "abc", Author: "a", Subject: "subject", Body: "body"})
 	}
-	mgr.OpenCommitInfo(overlay.CommitInfoSpec{Applicable: true, Commits: commits})
+	mgr.OpenInfo(overlay.InfoSpec{CommitsApplicable: true, CommitsLoaded: true, Commits: commits})
 	ctx := overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver}
 	_ = mgr.Compose(makeOverlayBase(m.layout.width, m.layout.height), ctx)
 	require.True(t, m.overlay.Active())
@@ -637,9 +637,9 @@ func TestModel_HandleMouse_WheelScrollsCommitInfoOverlay(t *testing.T) {
 
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
-	assert.True(t, model.overlay.Active(), "commit-info overlay stays open after wheel")
+	assert.True(t, model.overlay.Active(), "info overlay stays open after wheel")
 	assert.Equal(t, 5, model.nav.diffCursor, "diff cursor must stay put — wheel is consumed by overlay, not the pane beneath")
-	// exact offset advancement is verified by TestCommitInfoOverlay_HandleMouse_WheelScrollsOffset
+	// exact offset advancement is verified by TestInfoOverlay_HandleMouse_WheelScrollsOffset
 	// in the overlay package (has access to the private offset field).
 }
 

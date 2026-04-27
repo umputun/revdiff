@@ -40,7 +40,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
 		{"u", ActionToggleUntracked},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
-		{"i", ActionCommitInfo},
+		{"i", ActionInfo},
 		{"R", ActionReload},
 	}
 	for _, tt := range tests {
@@ -284,44 +284,73 @@ func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))
-	assert.True(t, IsValidAction(ActionCommitInfo))
+	assert.True(t, IsValidAction(ActionInfo))
+	assert.True(t, IsValidAction(Action("commit_info")), "deprecated alias must validate")
 	assert.False(t, IsValidAction(Action("nonexistent")))
 	assert.False(t, IsValidAction(Action("")))
 }
 
-func TestCommitInfo_roundTrip(t *testing.T) {
+func TestResolveAction_deprecatedCommitInfoAlias(t *testing.T) {
+	// pre-v0.27 keybinding files use "commit_info"; the action was renamed
+	// to "info" when the popup expanded. Existing user configs must keep
+	// working — the parser rewrites the alias to the canonical name.
+	canonical, deprecated, ok := resolveAction(Action("commit_info"))
+	require.True(t, ok)
+	assert.True(t, deprecated)
+	assert.Equal(t, ActionInfo, canonical)
+
+	// canonical name resolves to itself with no deprecation flag
+	canonical, deprecated, ok = resolveAction(ActionInfo)
+	require.True(t, ok)
+	assert.False(t, deprecated)
+	assert.Equal(t, ActionInfo, canonical)
+
+	// unknown action stays unknown
+	_, _, ok = resolveAction(Action("totally_made_up"))
+	assert.False(t, ok)
+}
+
+func TestParse_acceptsDeprecatedCommitInfoAlias(t *testing.T) {
+	maps, _, err := parse(strings.NewReader("map i commit_info\n"))
+	require.NoError(t, err)
+	require.Len(t, maps, 1)
+	assert.Equal(t, "i", maps[0].key)
+	assert.Equal(t, ActionInfo, maps[0].action, "alias must rewrite to canonical action")
+}
+
+func TestInfo_roundTrip(t *testing.T) {
 	// default binding resolves correctly
 	km := Default()
-	assert.Equal(t, ActionCommitInfo, km.Resolve("i"))
+	assert.Equal(t, ActionInfo, km.Resolve("i"))
 
 	// action appears in help sections
 	sections := km.HelpSections()
 	found := false
 	for _, s := range sections {
 		for _, e := range s.Entries {
-			if e.Action == ActionCommitInfo {
-				assert.NotEmpty(t, e.Description, "commit info action should have description")
+			if e.Action == ActionInfo {
+				assert.NotEmpty(t, e.Description, "info action should have description")
 				assert.Contains(t, e.Keys, "i")
 				found = true
 			}
 		}
 	}
-	assert.True(t, found, "commit info action should appear in help sections")
+	assert.True(t, found, "info action should appear in help sections")
 
 	// dump → parse round-trips the binding
 	var buf strings.Builder
 	require.NoError(t, km.Dump(&buf))
-	assert.Contains(t, buf.String(), "map i commit_info")
+	assert.Contains(t, buf.String(), "map i info")
 
 	maps, _, err := parse(strings.NewReader(buf.String()))
 	require.NoError(t, err)
 	var matched bool
 	for _, m := range maps {
-		if m.key == "i" && m.action == ActionCommitInfo {
+		if m.key == "i" && m.action == ActionInfo {
 			matched = true
 		}
 	}
-	assert.True(t, matched, "parsed dump should contain i → commit_info")
+	assert.True(t, matched, "parsed dump should contain i → info")
 }
 
 func TestKeysFor_sorted(t *testing.T) {

@@ -150,18 +150,25 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 
 // triggerReload triggers a full reload of the file list, current file diff,
 // and commit log. It bumps filesLoadSeq and commits.loadSeq to invalidate any
-// in-flight loads, clears the commit cache so the overlay shows the loading
-// hint (not stale data) while the re-fetch is in flight, then re-runs the same
-// parallel pipeline as startup via tea.Batch. The selected file in the tree is
-// restored by SelectByPath in handleFilesLoaded; the diff cursor resets to
-// the top of the file. Named triggerReload (not reload) to avoid shadowing
-// the Model.reload field.
+// in-flight loads, clears the commit cache and review-stats cache so the
+// overlay shows loading state (not stale data) while the re-fetch is in
+// flight, then re-runs the same parallel pipeline as startup via tea.Batch.
+// The selected file in the tree is restored by SelectByPath in
+// handleFilesLoaded; the diff cursor resets to the top of the file. Named
+// triggerReload (not reload) to avoid shadowing the Model.reload field.
 func (m *Model) triggerReload() tea.Cmd {
 	m.filesLoadSeq++
 	m.file.loadSeq++ // invalidate in-flight fileLoadedMsg from pre-reload selection
 	m.commits.loadSeq++
 	m.commits.loaded = false
 	m.commits.list = nil
+	m.filesLoaded = false
+	m.review.adds = 0
+	m.review.removes = 0
+	m.review.partial = false
+	m.review.statsLoaded = false
+	m.review.statsRequested = false
+	m.review.statsLoadSeq++ // invalidate any in-flight stats fetch
 	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
@@ -183,9 +190,16 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		log.Printf("[WARN] %s", w)
 	}
 	entries := m.filterOnly(msg.entries)
+	statsPending := m.review.statsRequested && !m.review.statsLoaded
+	m.setReviewEntries(entries)
+	var statsCmd tea.Cmd
+	if statsPending {
+		statsCmd = m.triggerReviewStats()
+	}
+	m.refreshInfoOverlay()
 	if len(entries) == 0 && len(m.cfg.only) > 0 {
 		m.layout.viewport.SetContent("no files match --only filter")
-		return m, nil
+		return m, statsCmd
 	}
 	m.tree.Rebuild(entries)
 	if m.tree.FilterActive() {
@@ -200,7 +214,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.file.lines = nil
 		m.file.highlighted = nil
 		m.layout.viewport.SetContent("")
-		return m, nil
+		return m, statsCmd
 	}
 	if m.file.singleFile {
 		m.layout.focus = paneDiff
@@ -213,9 +227,9 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	// auto-select first file
 	if f := m.tree.SelectedFile(); f != "" {
 		m.file.loadSeq++
-		return m, m.loadFileDiff(f)
+		return m, tea.Batch(m.loadFileDiff(f), statsCmd)
 	}
-	return m, nil
+	return m, statsCmd
 }
 
 // handleCommitsLoaded processes the result of loadCommits, populating the
@@ -223,6 +237,10 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 // loads (triggered by R reload) via the seq tag, mirroring handleFilesLoaded.
 // An error is cached the same way as success: loaded is set to true so the
 // overlay shows the error once instead of re-triggering the fetch.
+//
+// When the info popup is already open, refreshes its spec so the
+// "loading commits…" placeholder flips to the rendered list inline; the
+// popup's scroll offset is preserved across the refresh.
 func (m Model) handleCommitsLoaded(msg commitsLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.seq != m.commits.loadSeq {
 		return m, nil
@@ -231,6 +249,7 @@ func (m Model) handleCommitsLoaded(msg commitsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.commits.err = msg.err
 	m.commits.truncated = msg.truncated
 	m.commits.loaded = true
+	m.refreshInfoOverlay()
 	return m, nil
 }
 
@@ -421,17 +440,7 @@ func (m Model) workDirRel(path string) string {
 
 // computeFileStats counts added and removed lines in the current file.
 func (m *Model) computeFileStats() {
-	m.file.adds, m.file.removes = 0, 0
-	for _, dl := range m.file.lines {
-		switch dl.ChangeType {
-		case diff.ChangeAdd:
-			m.file.adds++
-		case diff.ChangeRemove:
-			m.file.removes++
-		case diff.ChangeContext, diff.ChangeDivider:
-			// not counted in stats
-		}
-	}
+	m.file.adds, m.file.removes = diff.CountChanges(m.file.lines)
 }
 
 // fileStatsText returns the stats segment for the status bar.

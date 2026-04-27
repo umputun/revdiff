@@ -29,6 +29,7 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/editor"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/review"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
@@ -100,7 +101,8 @@ type overlayManager interface {
 	OpenHelp(spec overlay.HelpSpec)
 	OpenAnnotList(spec overlay.AnnotListSpec)
 	OpenThemeSelect(spec overlay.ThemeSelectSpec)
-	OpenCommitInfo(spec overlay.CommitInfoSpec)
+	OpenInfo(spec overlay.InfoSpec)
+	UpdateInfo(spec overlay.InfoSpec)
 	Close()
 	HandleKey(msg tea.KeyMsg, action keymap.Action) overlay.Outcome
 	HandleMouse(msg tea.MouseMsg) overlay.Outcome
@@ -108,10 +110,10 @@ type overlayManager interface {
 }
 
 // commitLogSource is what Model needs to enumerate commits in the current ref range
-// for the commit-info overlay. Implemented by diff.Git, diff.Hg, and diff.Jj via
-// the diff.CommitLogger capability interface; nil means the feature is unavailable
-// (e.g. stdin mode, FileReader, DirectoryReader, or any wrapper that hides the
-// underlying VCS). Defined on the consumer side per Go convention.
+// for the info popup's commit-log section. Implemented by diff.Git, diff.Hg, and
+// diff.Jj via the diff.CommitLogger capability interface; nil means the section
+// is unavailable (e.g. stdin mode, FileReader, DirectoryReader, or any wrapper
+// that hides the underlying VCS). Defined on the consumer side per Go convention.
 type commitLogSource interface {
 	CommitLog(ref string) ([]diff.CommitInfo, error)
 }
@@ -304,19 +306,21 @@ type searchState struct {
 	matchSet map[int]bool    // set of file.lines indices that match, computed per render
 }
 
-// commitsState holds the commit log for the commit-info overlay, fetched
+// commitsState holds the commit log for the info popup, fetched
 // eagerly at startup (and on R reload) via loadCommits under tea.Batch. loaded
-// flips to true once the first commitsLoadedMsg lands (success or failure) so
-// handleCommitInfo only reads cached state — pressing `i` before the fetch
-// resolves shows a transient "loading commits…" hint instead of triggering a
-// fetch. loadSeq is bumped before each new load; handleCommitsLoaded drops
-// messages whose seq no longer matches, discarding stale in-flight results
-// after a reload. applicable mirrors ModelConfig.CommitsApplicable, copied at
-// construction so the handler can short-circuit without consulting CLI flags.
-// hint holds a transient status-bar message shown once (until the next key
-// press) — set when the user triggers ActionCommitInfo in a mode where the
-// feature is unavailable, so the key press has visible feedback instead of
-// appearing inert.
+// flips to true once the first commitsLoadedMsg lands (success or failure).
+// handleInfo always opens the popup and reads cached state; if the user
+// presses `i` before the fetch resolves, the commits section renders an
+// inline "loading commits…" placeholder that flips to the rendered list as
+// soon as commitsLoadedMsg arrives (refreshInfoOverlay pushes the new spec
+// into the open overlay). loadSeq is bumped before each new load;
+// handleCommitsLoaded drops messages whose seq no longer matches, discarding
+// stale in-flight results after a reload. applicable mirrors
+// ModelConfig.CommitsApplicable, copied at construction so the handler can
+// short-circuit without consulting CLI flags. hint holds a transient
+// status-bar message; preserved for legacy hint-channel uses (see
+// view.statusHint) but no longer set by handleInfo itself, since the popup
+// no longer surfaces a transient hint.
 type commitsState struct {
 	source     commitLogSource   // VCS-backed log source; nil disables the feature
 	applicable bool              // true when current mode supports a commit list
@@ -326,6 +330,61 @@ type commitsState struct {
 	err        error             // last fetch error; surfaces in the overlay
 	hint       string            // transient status-bar message; cleared on next key press
 	loadSeq    uint64            // bumped before each new commit-log load; stale commitsLoadedMsg (seq mismatch) is dropped
+}
+
+// ReviewInfoConfig carries startup invocation details for the unified info
+// overlay (description + session info + commits, all keyed off `i`). It is
+// assembled in main from CLI/VCS setup data and copied into the model so
+// the overlay can explain what the user is currently reviewing without
+// re-deriving command-line semantics inside the UI package. Description is
+// the agent-supplied prose plumbed by --description (issue #130); empty
+// disables the description section.
+//
+// Enabled gates the entire review-info subsystem: header, footer, stats
+// trigger, and mode-derived rows. Production constructs the config via
+// reviewInfoFromOptions which always sets Enabled=true; the zero value
+// (Enabled=false) is the off-switch focused tests use when they want the
+// commit-only popup without the surrounding review summary.
+type ReviewInfoConfig struct {
+	Enabled        bool
+	Description    string
+	VCS            string
+	WorkDir        string
+	Ref            string
+	StdinName      string
+	Stdin          bool
+	Staged         bool
+	AllFiles       bool
+	Only           []string
+	Include        []string
+	Exclude        []string
+	Compact        bool
+	CompactContext int
+}
+
+// reviewInfoState stores the review-info overlay summary and whole-review
+// aggregate counts. The status histogram is populated synchronously with
+// filesLoadedMsg; aggregate adds/removes are fetched asynchronously the FIRST
+// time the user opens the review-info overlay (lazy load) via
+// reviewStatsLoadedMsg, then cached until the next reload. statsLoadSeq
+// invalidates in-flight stats fetches across reloads (mirrors filesLoadSeq /
+// commits.loadSeq). partial is true when one or more per-file fallback paths
+// failed; the overlay surfaces it next to the count rather than silently
+// treating those files as zero. The cached entries slice is what the lazy
+// fetch iterates over — copied at file-load time so the fetch is independent
+// of any later mutation to the file tree.
+type reviewInfoState struct {
+	cfg                    ReviewInfoConfig
+	entries                []diff.FileEntry
+	statusCounts           map[diff.FileStatus]int
+	adds                   int
+	removes                int
+	statsLoaded            bool
+	statsRequested         bool
+	partial                bool
+	statsLoadSeq           uint64
+	err                    error
+	descriptionHighlighted string // result of precomputeDescriptionHighlight; computed once in NewModel because the description is static for the model's lifetime
 }
 
 // reloadState holds the pending-confirmation state for the R reload feature.
@@ -416,7 +475,8 @@ type Model struct {
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
 	search      searchState       // search lifecycle state
 	annot       annotationState   // annotation input lifecycle state
-	commits     commitsState      // eagerly loaded commit log for the commit-info overlay
+	commits     commitsState      // eagerly loaded commit log for the info popup
+	review      reviewInfoState   // invocation summary + whole-review aggregate stats for the review-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 	compact     compactState      // applicability + transient hint for compact diff mode
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
@@ -471,6 +531,17 @@ type commitsLoadedMsg struct {
 	truncated bool
 }
 
+// reviewStatsLoadedMsg is sent when aggregate line statistics for the current
+// review scope have been counted. seq matches review.statsLoadSeq at the time
+// the load was issued; mismatched messages are dropped (e.g. after a reload
+// invalidates the in-flight fetch). The embedded review.Stats carries
+// adds/removes/partial/err so additions to that struct flow through without
+// touching the message shape.
+type reviewStatsLoadedMsg struct {
+	seq uint64
+	review.Stats
+}
+
 // ModelConfig holds all dependencies and configuration for NewModel.
 // All dependencies (Renderer, Store, Highlighter, StyleResolver, StyleRenderer, SGR, WordDiffer, Overlay,
 // NewFileTree, ParseTOC, Themes) are required and must be constructed by the caller.
@@ -514,10 +585,10 @@ type ModelConfig struct {
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
 	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
 	Editor        ExternalEditor           // external-editor driver (nil uses app/editor.Editor{})
-	// CommitLog enumerates commits in the current ref range for the commit-info
-	// overlay. When nil, NewModel attempts to derive the source by type-asserting
-	// the Renderer against diff.CommitLogger; if the assertion fails, the feature
-	// is unavailable and the `i` hotkey acts as a no-op. Pass a typed-nil
+	// CommitLog enumerates commits in the current ref range for the info popup's
+	// commit-log section. When nil, NewModel attempts to derive the source by
+	// type-asserting the Renderer against diff.CommitLogger; if the assertion
+	// fails, the section is unavailable and the `i` popup hides it. Pass a typed-nil
 	// (e.g. var c *Foo; cfg.CommitLog = c) and the typed-nil is collapsed to
 	// nil before the type-assertion fallback runs (mirrors the Editor guard).
 	CommitLog commitLogSource
@@ -540,7 +611,7 @@ type ModelConfig struct {
 	WorkDir          string   // working directory for resolving absolute --only paths
 	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
 	// CommitsApplicable is the composition-root verdict on whether the current
-	// invocation supports a commit-info popup. Computed once in main.go from the
+	// invocation supports the info popup's commit-log section. Computed once in main.go from the
 	// full option set (stdin, staged, only, all-files, ref) and copied into Model
 	// state. Model does not re-derive from CLI flags because modelConfigState
 	// today does not carry stdin/all-files; keeping the computation in the
@@ -569,6 +640,11 @@ type ModelConfig struct {
 	// the modal-key handler and keymap.Resolve. Copied into modes.vimMotion at
 	// construction; the feature is gated on that field everywhere.
 	VimMotion bool
+	// ReviewInfo populates the review-info overlay with invocation scope, filters, and
+	// aggregate file/line stats. Leave Enabled false to preserve the legacy
+	// commit-only popup behavior used by focused tests — every derived path
+	// (footer, rows, stats trigger) honors this single off-switch.
+	ReviewInfo ReviewInfoConfig
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -679,6 +755,10 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			source:     cls,
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
+		review: reviewInfoState{
+			cfg:                    cfg.ReviewInfo,
+			descriptionHighlighted: precomputeDescriptionHighlight(cfg.Highlighter, cfg.ReviewInfo.Description),
+		},
 		reload:          reloadState{applicable: cfg.ReloadApplicable},
 		compact:         compactState{applicable: cfg.CompactApplicable},
 		loadUntracked:   cfg.LoadUntracked,
@@ -720,6 +800,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFilesLoaded(msg)
 	case commitsLoadedMsg:
 		return m.handleCommitsLoaded(msg)
+	case reviewStatsLoadedMsg:
+		return m.handleReviewStatsLoaded(msg)
 	case fileLoadedMsg:
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
@@ -807,8 +889,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // dispatch path shared by keymap-resolved single keys (handleKey) and by
 // chord-resolved actions (handleChordSecond).
 func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
-	if model, ok := m.handleOverlayOpen(action); ok {
-		return model, nil
+	if model, cmd, ok := m.handleOverlayOpen(action); ok {
+		return model, cmd
 	}
 
 	switch action {
@@ -853,7 +935,7 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
+func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, tea.Cmd, bool) {
 	// clear pending input state on any overlay-opening action so a pending chord
 	// or vim-motion count/leader never coexists with an active overlay. the
 	// non-overlay default case short-circuits below without touching state.
@@ -861,21 +943,21 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, bool) {
 	case keymap.ActionHelp:
 		m.clearPendingInputState()
 		m.overlay.OpenHelp(m.buildHelpSpec())
-		return m, true
+		return m, nil, true
 	case keymap.ActionAnnotList:
 		m.clearPendingInputState()
 		m.overlay.OpenAnnotList(m.buildAnnotListSpec())
-		return m, true
+		return m, nil, true
 	case keymap.ActionThemeSelect:
 		m.clearPendingInputState()
 		m.openThemeSelector()
-		return m, true
-	case keymap.ActionCommitInfo:
+		return m, nil, true
+	case keymap.ActionInfo:
 		m.clearPendingInputState()
-		m.handleCommitInfo()
-		return m, true
+		cmd := m.handleInfo()
+		return m, cmd, true
 	default:
-		return m, false
+		return m, nil, false
 	}
 }
 
@@ -891,27 +973,18 @@ func (m *Model) clearPendingInputState() {
 	m.vim = vimState{}
 }
 
-// handleCommitInfo opens the commit-info overlay when the feature is available
-// in the current mode, otherwise sets a transient status-bar hint so the key
-// press produces visible feedback instead of appearing inert. Reads from the
-// cache populated eagerly by loadCommits at startup / reload; if the fetch has
-// not yet landed (commits.loaded=false), shows a transient "loading commits…"
-// hint instead of opening the overlay.
-func (m *Model) handleCommitInfo() {
-	if !m.commits.applicable || m.commits.source == nil {
-		m.commits.hint = "no commits in this mode"
-		return
-	}
-	if !m.commits.loaded {
-		m.commits.hint = "loading commits…"
-		return
-	}
-	m.overlay.OpenCommitInfo(overlay.CommitInfoSpec{
-		Commits:    m.commits.list,
-		Applicable: true,
-		Truncated:  m.commits.truncated,
-		Err:        m.commits.err,
-	})
+// handleInfo opens the unified info popup. The popup is always shown
+// (no more "no commits in this mode" dead-end) — the session section
+// describes the mode, and the commits section is hidden via
+// CommitsApplicable=false when the current mode (stdin/staged/all-files/
+// no-ref/file-only without VCS) cannot enumerate commits. On the first open
+// since the last reload, kicks off the lazy aggregate-stats fetch; the
+// session section's "lines" row shows "loading…" until reviewStatsLoadedMsg
+// arrives. Subsequent opens read from cache and return nil.
+func (m *Model) handleInfo() tea.Cmd {
+	cmd := m.triggerReviewStats()
+	m.overlay.OpenInfo(m.buildInfoSpec())
+	return cmd
 }
 
 // applyReloadCleanup clears annotations and turns off the annotated-only

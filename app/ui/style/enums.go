@@ -81,5 +81,5 @@ const (
 	styleKeyHelpBox               // help overlay box
 	styleKeyThemeSelectBox        // theme selector box
 	styleKeyThemeSelectBoxFocused // theme selector focused state
-	styleKeyCommitInfoBox         // commit info overlay box
+	styleKeyInfoBox               // info overlay box (description + session metadata + commits)
 )

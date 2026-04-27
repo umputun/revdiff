@@ -1197,7 +1197,7 @@ func TestHandleOverlayOpen_HelpClearsChord(t *testing.T) {
 	m.keys.chordPending = "ctrl+w"
 	m.keys.hint = "Pending: ctrl+w, esc to cancel"
 
-	result, handled := m.handleOverlayOpen(keymap.ActionHelp)
+	result, _, handled := m.handleOverlayOpen(keymap.ActionHelp)
 	model := result.(Model)
 
 	assert.True(t, handled, "ActionHelp must be handled by handleOverlayOpen")
@@ -1212,7 +1212,7 @@ func TestHandleOverlayOpen_AnnotListClearsChord(t *testing.T) {
 	m.keys.chordPending = "ctrl+w"
 	m.keys.hint = "Pending: ctrl+w, esc to cancel"
 
-	result, handled := m.handleOverlayOpen(keymap.ActionAnnotList)
+	result, _, handled := m.handleOverlayOpen(keymap.ActionAnnotList)
 	model := result.(Model)
 
 	assert.True(t, handled, "ActionAnnotList must be handled by handleOverlayOpen")
@@ -1228,7 +1228,7 @@ func TestHandleOverlayOpen_ThemeSelectClearsChord(t *testing.T) {
 	m.keys.chordPending = "ctrl+w"
 	m.keys.hint = "Pending: ctrl+w, esc to cancel"
 
-	result, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
+	result, _, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
 	model := result.(Model)
 
 	assert.True(t, handled, "ActionThemeSelect must be handled by handleOverlayOpen")
@@ -1238,7 +1238,7 @@ func TestHandleOverlayOpen_ThemeSelectClearsChord(t *testing.T) {
 	assert.Equal(t, overlay.KindThemeSelect, model.overlay.Kind())
 }
 
-func TestHandleOverlayOpen_CommitInfoClearsChord(t *testing.T) {
+func TestHandleOverlayOpen_InfoClearsChord(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.commits.source = &fakeCommitLog{}
 	m.commits.applicable = true
@@ -1247,14 +1247,14 @@ func TestHandleOverlayOpen_CommitInfoClearsChord(t *testing.T) {
 	m.keys.chordPending = "ctrl+w"
 	m.keys.hint = "Pending: ctrl+w, esc to cancel"
 
-	result, handled := m.handleOverlayOpen(keymap.ActionCommitInfo)
+	result, _, handled := m.handleOverlayOpen(keymap.ActionInfo)
 	model := result.(Model)
 
-	assert.True(t, handled, "ActionCommitInfo must be handled by handleOverlayOpen")
-	assert.Empty(t, model.keys.chordPending, "commit-info overlay entry must clear chordPending")
-	assert.Empty(t, model.keys.hint, "commit-info overlay entry must clear chord hint")
-	assert.True(t, model.overlay.Active(), "commit-info overlay must be open")
-	assert.Equal(t, overlay.KindCommitInfo, model.overlay.Kind())
+	assert.True(t, handled, "ActionInfo must be handled by handleOverlayOpen")
+	assert.Empty(t, model.keys.chordPending, "info overlay entry must clear chordPending")
+	assert.Empty(t, model.keys.hint, "info overlay entry must clear chord hint")
+	assert.True(t, model.overlay.Active(), "info overlay must be open")
+	assert.Equal(t, overlay.KindInfo, model.overlay.Kind())
 }
 
 func TestStartSearch_ClearsChord(t *testing.T) {
@@ -1353,7 +1353,7 @@ func TestHandleOverlayOpen_ClearsVimState_Help(t *testing.T) {
 	m.vim.leader = "g"
 	m.vim.hint = "g…"
 
-	result, handled := m.handleOverlayOpen(keymap.ActionHelp)
+	result, _, handled := m.handleOverlayOpen(keymap.ActionHelp)
 	model := result.(Model)
 
 	assert.True(t, handled, "ActionHelp must be handled by handleOverlayOpen")
@@ -1370,7 +1370,7 @@ func TestHandleOverlayOpen_ClearsVimState_ThemeSelect(t *testing.T) {
 	m.vim.leader = "Z"
 	m.vim.hint = "Z…"
 
-	result, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
+	result, _, handled := m.handleOverlayOpen(keymap.ActionThemeSelect)
 	model := result.(Model)
 
 	assert.True(t, handled, "ActionThemeSelect must be handled by handleOverlayOpen")
