@@ -41,6 +41,8 @@ Then uncomment and edit the values you want to change.
 | `--init-all-themes` | | Write all gallery themes (bundled + community) to themes dir and exit | |
 | `--install-theme` | | Install theme(s) from gallery or local file (repeatable) | |
 | `-A`, `--all-files` | | Browse all tracked files (git and jj only), not just diffs (CLI-only, not saved in config) | `false` |
+| `--description` | | Prose context shown in the info popup (markdown; CLI-only, not saved in config) | |
+| `--description-file` | | Read the info-popup description from this file (markdown; CLI-only, not saved in config) | |
 | `-I`, `--include` | `REVDIFF_INCLUDE` | Include only files matching prefix (may be repeated; comma-separated in env) | |
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
@@ -136,6 +138,6 @@ unmap q
 map ctrl+d half_page_down
 ```
 
-Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `commit_info`, `quit`, `discard_quit`, `help`, `dismiss`
+Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `info`, `quit`, `discard_quit`, `help`, `dismiss`
 
 Modal keys (annotation input, search input, confirm discard) are not remappable.

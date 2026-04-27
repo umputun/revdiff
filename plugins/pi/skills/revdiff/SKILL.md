@@ -29,6 +29,7 @@ Examples:
 /revdiff --all-files --include src
 /revdiff --all-files --exclude vendor
 /revdiff --only README.md
+/revdiff HEAD~3 --description="why this refactor matters"
 ```
 
 Behavior:

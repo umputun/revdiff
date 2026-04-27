@@ -26,7 +26,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Filter file tree to show only annotated files
 - Status line with filename, diff stats, hunk position, line number, and mode indicators
 - Help overlay (`?`) showing all keybindings organized by section
-- Commit info popup (`i`) showing subject + body of every commit in the current ref range (git/hg/jj), useful for restoring the narrative context when reviewing PR-style diffs
+- Info popup (`i`) showing launch scope (mode, VCS, ref, filters, file/status counts, aggregate `+/-` line stats), the optional `--description` prose, and the commit log subject + body for every commit in the current ref range (git/hg/jj) — useful for restoring narrative context when reviewing PR-style diffs
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - All-files mode: browse and annotate all tracked files with `--all-files` (git `ls-files` or jj `file list`), filter with `--include` and `--exclude`
 - No-VCS file review: `--only` files outside a VCS repo (or not in any diff) are shown as context-only with full annotation support
@@ -314,6 +314,8 @@ Positional arguments support several forms:
 | `-A`, `--all-files` | Browse all tracked files, not just diffs (git or jj) | `false` |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
+| `--description` | Prose context shown in the info popup (markdown; for multi-line text, use a multi-line quoted shell string or `--description-file`) | |
+| `--description-file` | Read the info-popup description from this file (markdown) | |
 | `-I`, `--include` | Include only files matching prefix, may be repeated, env: `REVDIFF_INCLUDE` (comma-separated) | |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
@@ -543,6 +545,22 @@ printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
 git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md
 ```
 
+### Review Description
+
+Use `--description` (or `--description-file=path.md`) to attach prose context to a review. The text is rendered at the top of the info popup (`i` key), with the same markdown highlighting used for `.md` files in the diff view. Useful when an agent (or a script) launches revdiff on your behalf and you come back to it later — the popup tells you what the change is and why.
+
+```bash
+revdiff HEAD~3 --description="# Refactor auth middleware
+
+Drop session-token storage to meet new compliance requirements.
+See ticket SEC-441 for context."
+
+# longer descriptions: keep the markdown in a file
+revdiff HEAD~3 --description-file=.review-description.md
+```
+
+`--description` and `--description-file` are mutually exclusive. The description section is hidden when neither is set, so the flag is purely additive — existing invocations are unchanged.
+
 ### Markdown TOC Navigation
 
 When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md` or `printf '# title\n' | revdiff --stdin --stdin-name plan.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
@@ -639,7 +657,7 @@ While the annotation input is active, press `Ctrl+E` to hand off the current tex
 | `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
 | `?` | Toggle help overlay showing all keybindings |
-| `i` | Toggle commit info popup (subject + body of commits in the current ref range; git/hg/jj only) |
+| `i` | Toggle info popup — review scope (mode, VCS, ref, filters, file/status counts, aggregate `+/-` stats) plus the commit log for the current ref range when applicable |
 | `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
@@ -673,7 +691,7 @@ revdiff enables mouse tracking by default so the scroll wheel and left-click wor
 - **Left-click in the tree**: focuses the tree and selects/loads the clicked entry (same as pressing `j`/`k` to land there). Clicking a directory row moves the cursor but does not load a file.
 - **Left-click in the diff**: focuses the diff and moves the cursor to the clicked line. Enables a "click, then `a`" annotation flow.
 - **Left-click in the TOC pane** (single-file markdown): focuses the TOC and selects the clicked header.
-- **Scroll wheel in overlay popups** (commit info, annotations, themes): scrolls the popup content or moves its cursor. Shift+wheel uses a half-page step. In the theme selector, wheel previews each theme live. Help overlay has no scrollable or selectable content so mouse events are ignored.
+- **Scroll wheel in overlay popups** (info, annotations, themes): scrolls the popup content or moves its cursor. Shift+wheel uses a half-page step. In the theme selector, wheel previews each theme live. Help overlay has no scrollable or selectable content so mouse events are ignored.
 - **Left-click in the annotation popup**: jumps to the clicked annotation (same as pressing `Enter`).
 - **Left-click in the theme popup**: confirms the clicked theme (same as pressing `Enter`). Clicks on the filter row or blank separator are ignored.
 
@@ -739,7 +757,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
 
-**View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `commit_info`, `reload`
+**View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `info`, `reload`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 

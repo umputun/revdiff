@@ -61,6 +61,7 @@
         <a href="#all-files">All-files mode</a>
         <a href="#context-only">Context-only review</a>
         <a href="#scratch-buffer">Scratch-buffer review</a>
+        <a href="#description">Review description</a>
         <a href="#markdown-toc">Markdown TOC</a>
         <a href="#beyond-code-review">Beyond code review</a>
         <a href="#zed-integration">Zed integration</a>
@@ -234,6 +235,17 @@ revdiff --all-files --exclude vendor --exclude mocks</code></div>
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
 git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
 
+        <h2 id="description">Review description</h2>
+        <p>Use <code>--description</code> (or <code>--description-file=path.md</code>) to attach prose context to a review. The text is rendered at the top of the info popup (<code>i</code> key) using the same markdown-highlighting path as <code>.md</code> files in the diff view. Useful when an agent or a script launches revdiff on your behalf and you come back to it later — the popup tells you what the change is and why.</p>
+        <div class="code-block"><code>revdiff HEAD~3 --description="# Refactor auth middleware
+
+Drop session-token storage to meet new compliance requirements.
+See ticket SEC-441 for context."
+
+# longer descriptions: keep the markdown in a file
+revdiff HEAD~3 --description-file=.review-description.md</code></div>
+        <p><code>--description</code> and <code>--description-file</code> are mutually exclusive. The description section is hidden when neither is set, so the flag is purely additive.</p>
+
         <h2 id="markdown-toc">Markdown TOC navigation</h2>
         <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. This works for <code>--only</code> files and for <code>--stdin</code> when <code>--stdin-name</code> ends with <code>.md</code> or <code>.markdown</code>. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
 
@@ -363,6 +375,8 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>-A, --all-files</code></td><td>Browse all tracked files (git and jj only)</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin</code></td><td>Review stdin as a scratch buffer</td><td><code>false</code></td></tr>
                 <tr><td><code>--stdin-name</code></td><td>Synthetic file name for stdin content</td><td><code>scratch-buffer</code></td></tr>
+                <tr><td><code>--description</code></td><td>Prose context shown in the info popup (markdown)</td><td></td></tr>
+                <tr><td><code>--description-file</code></td><td>Read the info-popup description from this file (markdown)</td><td></td></tr>
                 <tr><td><code>-I, --include</code></td><td>Include only files matching prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
@@ -498,7 +512,7 @@ color-border = #6272a4
                 <tr><td><code>T</code></td><td>Theme selector with live preview</td></tr>
                 <tr><td><code>f</code></td><td>Filter: all files / annotated only</td></tr>
                 <tr><td><code>?</code></td><td>Help overlay</td></tr>
-                <tr><td><code>i</code></td><td>Commit info popup (subject + body of commits in the current ref range; git/hg/jj only)</td></tr>
+                <tr><td><code>i</code></td><td>Info popup &mdash; review scope (mode, VCS, ref, filters, file/status counts, aggregate <code>+/-</code> stats) plus the commit log for the current ref range when applicable</td></tr>
                 <tr><td><code>R</code></td><td>Reload diff from VCS (warns if annotations exist)</td></tr>
                 <tr><td><code>q</code></td><td>Quit, output annotations</td></tr>
                 <tr><td><code>Q</code></td><td>Discard annotations and quit</td></tr>
@@ -533,7 +547,7 @@ color-border = #6272a4
             <li><strong>Left-click in the tree</strong> &mdash; focuses the tree and selects/loads the clicked entry (same as pressing <code>j</code>/<code>k</code> to land there). Clicking a directory row moves the cursor but does not load a file.</li>
             <li><strong>Left-click in the diff</strong> &mdash; focuses the diff and moves the cursor to the clicked line. Enables a &ldquo;click, then <code>a</code>&rdquo; annotation flow.</li>
             <li><strong>Left-click in the TOC pane</strong> (single-file markdown) &mdash; focuses the TOC and selects the clicked header.</li>
-            <li><strong>Scroll wheel in overlay popups</strong> (commit info, annotations, themes) &mdash; scrolls the popup content or moves its cursor. Shift+wheel uses a half-page step. In the theme selector, wheel previews each theme live. Help overlay has no scrollable or selectable content so mouse events are ignored.</li>
+            <li><strong>Scroll wheel in overlay popups</strong> (info, annotations, themes) &mdash; scrolls the popup content or moves its cursor. Shift+wheel uses a half-page step. In the theme selector, wheel previews each theme live. Help overlay has no scrollable or selectable content so mouse events are ignored.</li>
             <li><strong>Left-click in the annotation popup</strong> &mdash; jumps to the clicked annotation (same as pressing <code>Enter</code>).</li>
             <li><strong>Left-click in the theme popup</strong> &mdash; confirms the clicked theme (same as pressing <code>Enter</code>). Clicks on the filter row or blank separator are ignored.</li>
         </ul>
@@ -568,7 +582,7 @@ map alt+t&gt;n theme_select</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>commit_info</code>, <code>reload</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <h2 id="vim-motion">Vim-motion preset</h2>

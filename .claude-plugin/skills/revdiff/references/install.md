@@ -62,6 +62,6 @@ chmod +x "${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh"
 
 For example, to open revdiff in a fresh kitty window instead of an overlay, copy the bundled launcher and replace the existing `kitty @ launch` overlay block with a `kitty --detach --title "revdiff"` invocation, reusing the existing `$REVDIFF_CMD` variable (which is already correctly quoted) — do **not** rebuild the command line from `$*`.
 
-The override receives the same positional arguments the bundled launcher does (`[base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix]`). Read stdout into the calling skill the same way the bundled launcher does — print captured annotations to stdout on exit.
+The override receives the same positional arguments the bundled launcher does (`[base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]`). Read stdout into the calling skill the same way the bundled launcher does — print captured annotations to stdout on exit.
 
 **Failure mode**: if the resolver finds no launcher in any layer (user / bundled), the skill's command substitution produces an empty string and bash reports `: command not found` with exit 127. The resolver's stderr (`error: launcher not found in override chain: launch-revdiff.sh`) is preserved — check it to confirm the override file is present and executable in one of the two layers above.

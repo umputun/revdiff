@@ -76,7 +76,7 @@ Handles all interaction with version control systems and diff parsing.
 - `Hg` — runs `hg diff --git`, parses unified diff output
 - `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
 
-**CommitLogger capability** (`CommitLog(ref string) ([]CommitInfo, error)`) — an additive capability interface implemented by `Git`/`Hg`/`Jj` and consumed by the `i` commit-info overlay. Separate from the base `Renderer` so non-VCS renderers (`FileReader`, `DirectoryReader`, `StdinReader`) stay unaffected. Each VCS translates the pre-combined ref string to its own log syntax (`X..HEAD` for git, `X::.` for hg, `X..@` for jj), caps results at 500 commits, and strips raw `\x1b` bytes from subject/body at parse time so the overlay can render without re-scanning for ANSI injection. Hg uses ASCII US/RS separators (`\x1f`/`\x1e`) because literal NUL is invalid in argv; git and jj use NUL/SOH via stdout.
+**CommitLogger capability** (`CommitLog(ref string) ([]CommitInfo, error)`) — an additive capability interface implemented by `Git`/`Hg`/`Jj` and consumed by the `i` info overlay. Separate from the base `Renderer` so non-VCS renderers (`FileReader`, `DirectoryReader`, `StdinReader`) stay unaffected. Each VCS translates the pre-combined ref string to its own log syntax (`X..HEAD` for git, `X::.` for hg, `X..@` for jj), caps results at 500 commits, and strips raw `\x1b` bytes from subject/body at parse time so the overlay can render without re-scanning for ANSI injection. Hg uses ASCII US/RS separators (`\x1f`/`\x1e`) because literal NUL is invalid in argv; git and jj use NUL/SOH via stdout.
 - `FileReader` — reads standalone files as full-context (no VCS needed)
 - `DirectoryReader` — lists all tracked files via a pluggable lister (`git ls-files` by default; `NewJjDirectoryReader` uses `jj file list`) for `--all-files` mode
 - `StdinReader` — reads from stdin as scratch buffer
@@ -154,9 +154,9 @@ Layered popup system with mutual exclusivity (one overlay at a time).
 - **`helpOverlay`** — two-column keybinding help popup
 - **`annotListOverlay`** — scrollable annotation list with cross-file jump
 - **`themeSelectOverlay`** — theme picker with fzf-style filter, live swatch preview
-- **`commitInfoOverlay`** (`commitinfo.go`) — scrollable read-only pager showing subject + body of every commit in the current ref range. Populated eagerly at startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R` reload. `handleCommitInfo` only reads cached state — a transient "loading commits…" hint fires if the user presses `i` before the fetch lands. Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" / error-italic / "no commits in this mode" placeholders for edge cases.
+- **`infoOverlay`** (`info.go`) — unified info popup (description + session details + commit log). Description prose comes from `--description` / `--description-file`, sanitized to strip ANSI/control bytes, then highlighted via the markdown chroma path once at `NewModel` time and cached on `reviewInfoState.descriptionHighlighted` (the description is static, so re-highlighting on every overlay refresh would just produce identical bytes). Session metadata (mode, scope, filters, file/status counts, aggregate `+/-`) lives in the popup's top/bottom borders; commit log shows subject + body of every commit in the current ref range. Commits are populated eagerly at startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R` reload. `handleInfo` always opens the popup; if the user presses `i` before the fetch lands, the commits section renders an inline "loading commits…" placeholder which flips to the rendered list when `commitsLoadedMsg` arrives (`refreshInfoOverlay` pushes a fresh spec into the open overlay). Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" centered for the empty-list case and a truncated, italicized one-liner for fetch errors (`infoErrMaxLen` caps total length to keep the popup bounded against megabyte stderr).
 
-`Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies. `Manager.HandleMouse()` mirrors the same shape for wheel and click events: `app/ui/mouse.go::handleOverlayMouse` delegates when an overlay is active so commit-info scrolls, annotlist/themeselect move their cursors (themeselect emits `OutcomeThemePreview` to restyle the background live), and help treats wheel as a no-op. Left-click in annotlist selects the clicked row and emits `OutcomeAnnotationChosen`; left-click in themeselect emits `OutcomeThemeConfirmed` on entry rows (filter and blank separator are no-ops). Click hit-testing uses the last-composed popup bounds recorded in `Manager.bounds` during `Compose()`; clicks outside the popup rectangle are swallowed so accidental clicks don't dismiss the overlay.
+`Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies. `Manager.HandleMouse()` mirrors the same shape for wheel and click events: `app/ui/mouse.go::handleOverlayMouse` delegates when an overlay is active so info scrolls, annotlist/themeselect move their cursors (themeselect emits `OutcomeThemePreview` to restyle the background live), and help treats wheel as a no-op. Left-click in annotlist selects the clicked row and emits `OutcomeAnnotationChosen`; left-click in themeselect emits `OutcomeThemeConfirmed` on entry rows (filter and blank separator are no-ops). Click hit-testing uses the last-composed popup bounds recorded in `Manager.bounds` during `Compose()`; clicks outside the popup rectangle are swallowed so accidental clicks don't dismiss the overlay.
 
 ### app/ui/worddiff/ — intra-line diff engine
 
@@ -230,7 +230,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
 | `FileTreeComponent` | 17 methods (navigation, query, mutation, scroll-state, render) | `sidepane.FileTree` |
 | `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
-| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenCommitInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
+| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 | `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
 
@@ -334,16 +334,16 @@ User presses 'a' on diff line
 
 ```
 User presses '?' / '@' / 'T' / 'i'
-  → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect/OpenCommitInfo
-      (for 'i': commits are fetched eagerly at startup via loadCommits()
-       running in parallel with loadFiles() under tea.Batch from Init();
-       triggerReload() re-fires both together. handleCommitsLoaded caches
-       the result under a seq-guard (m.commits.loadSeq) that drops stale
-       messages after a reload. handleCommitInfo only reads cached state —
-       if the fetch has not yet landed, it sets a transient "loading
-       commits…" hint instead of opening the overlay. When not applicable —
-       stdin/staged/only/all-files/no-ref — Model sets a transient
-       status-bar hint and skips the open entirely.)
+  → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect/OpenInfo
+      (for 'i': review scope is assembled from ReviewInfoConfig and current
+       file-load state; aggregate +/- stats are fetched lazily on first open
+       via loadReviewStats() and pushed into the open popup with UpdateInfo().
+       Commits are fetched eagerly at startup via loadCommits(), running in
+       parallel with loadFiles() under tea.Batch from Init(); triggerReload()
+       re-fires both together. handleCommitsLoaded caches the result under a
+       seq-guard (m.commits.loadSeq) and refreshes the open popup. The info
+       popup always opens; modes without a meaningful commit range hide the
+       commits section instead of treating `i` as a no-op.)
   → overlay.Manager activates popup, blocks other overlays
   → key events route through Manager.HandleKey() → Outcome
   → Model switches on OutcomeKind:
