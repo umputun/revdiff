@@ -127,6 +127,12 @@ func run(opts options) error {
 		commitLogger = setup.commitLogger
 	}
 
+	if opts.Annotations != "" {
+		if perr := preloadAnnotations(opts.Annotations, store, renderer, opts.ref(), opts.Staged, untrackedFn, workDir, os.Stderr); perr != nil {
+			return perr
+		}
+	}
+
 	// construct the three style types per D15: Resolver first, Renderer from Resolver, SGR is zero-value
 	styleColors := optsToStyleColors(opts)
 	var res style.Resolver
