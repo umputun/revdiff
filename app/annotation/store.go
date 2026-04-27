@@ -2,6 +2,7 @@ package annotation
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 )
@@ -110,6 +111,22 @@ func (s *Store) Files() []string {
 	}
 	sort.Strings(files)
 	return files
+}
+
+// Load parses markdown produced by FormatOutput from r and adds each recovered
+// annotation via Add (so duplicate file/line/type pairs apply last-write-wins).
+// It is the symmetric inverse of FormatOutput on the API surface; callers that
+// need to filter records (e.g. drop orphans against a diff) should use Parse
+// directly and Add the survivors themselves.
+func (s *Store) Load(r io.Reader) error {
+	records, err := Parse(r)
+	if err != nil {
+		return err
+	}
+	for _, a := range records {
+		s.Add(a)
+	}
+	return nil
 }
 
 // FormatOutput produces the structured output format for stdout.

@@ -24,79 +24,98 @@ var headerRe = regexp.MustCompile(`^## (.+?)(?::(\d+)(?:-(\d+))?)? \((file-level
 // returned as separate records; callers feed them through Store.Add to apply
 // last-write-wins semantics.
 //
-// A line beginning with "## " that does not match the header grammar is a hard
-// error rather than a silent skip — the format is bidirectional and a stray
-// header indicates a malformed input.
+// A line beginning with "## " that does NOT match the header grammar is folded
+// into the body of the current record so hand-authored or LLM-generated bodies
+// can mention "## something" without escaping. If such a line appears before
+// any record header, it is reported as an error.
 func Parse(r io.Reader) ([]Annotation, error) {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	p := parser{scanner: bufio.NewScanner(r)}
+	p.scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	return p.parse()
+}
 
-	var (
-		out          []Annotation
-		current      *Annotation
-		body         []string
-		seenHeader   bool
-		nonBlankSeen bool
-	)
+type parser struct {
+	scanner *bufio.Scanner
 
-	flush := func() {
-		if current == nil {
-			return
-		}
-		// The format always emits a trailing newline after the body. Strip
-		// exactly one trailing empty line that came from the format separator.
-		if n := len(body); n > 0 && body[n-1] == "" {
-			body = body[:n-1]
-		}
-		current.Comment = strings.Join(body, "\n")
-		out = append(out, *current)
-		current = nil
-		body = nil
-	}
+	out          []Annotation
+	current      *Annotation
+	body         []string
+	seenHeader   bool
+	nonBlankSeen bool
+}
 
-	for scanner.Scan() {
-		line := scanner.Text()
+func (p *parser) parse() ([]Annotation, error) {
+	for p.scanner.Scan() {
+		line := p.scanner.Text()
 		if strings.HasPrefix(line, "## ") {
-			ann, err := parseHeader(line)
+			ann, err := p.parseHeader(line)
 			if err != nil {
-				return nil, err
+				// non-grammar "## " line inside a record: treat as body content
+				// (post-strip of any leading-space escape) so authored bodies
+				// can mention "## foo" without escaping. Before the first
+				// header, propagate the error.
+				if !p.seenHeader {
+					return nil, err
+				}
+				p.appendBody(line)
+				continue
 			}
-			flush()
-			seenHeader = true
-			current = &ann
+			p.flush()
+			p.seenHeader = true
+			p.current = &ann
 			continue
 		}
 
-		if !seenHeader {
+		if !p.seenHeader {
 			if strings.TrimSpace(line) == "" {
 				continue
 			}
-			nonBlankSeen = true
+			p.nonBlankSeen = true
 			break
 		}
 
-		// Inverse of escapeHeaderLines: strip exactly one leading space from
-		// body lines whose first non-space content begins with "## ".
-		if strings.HasPrefix(line, " ") && strings.HasPrefix(strings.TrimLeft(line, " "), "## ") {
-			line = line[1:]
-		}
-		body = append(body, line)
+		p.appendBody(line)
 	}
-	if err := scanner.Err(); err != nil {
+	if err := p.scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan annotations: %w", err)
 	}
 
-	if !seenHeader && nonBlankSeen {
+	if !p.seenHeader && p.nonBlankSeen {
 		return nil, errors.New("annotation input has content before any header")
 	}
 
-	flush()
-	return out, nil
+	p.flush()
+	return p.out, nil
+}
+
+// appendBody adds a body line, stripping the inverse of escapeHeaderLines:
+// exactly one leading space when the line's first non-space content begins
+// with "## ".
+func (p *parser) appendBody(line string) {
+	if strings.HasPrefix(line, " ") && strings.HasPrefix(strings.TrimLeft(line, " "), "## ") {
+		line = line[1:]
+	}
+	p.body = append(p.body, line)
+}
+
+func (p *parser) flush() {
+	if p.current == nil {
+		return
+	}
+	// FormatOutput always emits a trailing newline after the body. Strip
+	// exactly one trailing empty line that came from the format separator.
+	if n := len(p.body); n > 0 && p.body[n-1] == "" {
+		p.body = p.body[:n-1]
+	}
+	p.current.Comment = strings.Join(p.body, "\n")
+	p.out = append(p.out, *p.current)
+	p.current = nil
+	p.body = nil
 }
 
 // parseHeader parses a single "## ..." header line into an Annotation.
 // returns an error if the line does not match the expected grammar.
-func parseHeader(line string) (Annotation, error) {
+func (p *parser) parseHeader(line string) (Annotation, error) {
 	m := headerRe.FindStringSubmatch(line)
 	if m == nil {
 		return Annotation{}, fmt.Errorf("malformed annotation header: %q", line)

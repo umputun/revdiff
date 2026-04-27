@@ -173,6 +173,27 @@ func TestParse_RoundTrip(t *testing.T) {
 	assert.Equal(t, s.FormatOutput(), got.FormatOutput())
 }
 
+func TestParse_UnescapedHashInBodyToleratedAfterHeader(t *testing.T) {
+	// LLM- or hand-authored bodies can include lines starting with "## "
+	// without the leading-space escape. After a record header is in scope,
+	// such lines are folded into the body rather than rejected.
+	in := "## a.go:1 (+)\nbody before\n## not actually a header\nbody after\n"
+	got, err := Parse(strings.NewReader(in))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "body before\n## not actually a header\nbody after", got[0].Comment)
+}
+
+func TestStore_Load_RoundTrip(t *testing.T) {
+	src := NewStore()
+	src.Add(Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+	src.Add(Annotation{File: "a.go", Line: 5, Type: "+", Comment: "line note"})
+
+	dst := NewStore()
+	require.NoError(t, dst.Load(strings.NewReader(src.FormatOutput())))
+	assert.Equal(t, src.FormatOutput(), dst.FormatOutput())
+}
+
 func TestParse_RoundTripPreservesIndentedHashHeader(t *testing.T) {
 	// Body lines whose non-space prefix is "## " must round-trip without
 	// losing leading whitespace, regardless of indent depth.
