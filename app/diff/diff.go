@@ -120,6 +120,12 @@ const commitLogFormat = "%H%x1f%an <%ae>%x1f%cI%x1f%s%n%b"
 //nolint:gocritic // explicit ASCII 0x20..0x2F range for CSI intermediate bytes
 var ansiCSIRe = regexp.MustCompile("\x1b\\[[0-9;?]*[\x20-\x2f]*[a-zA-Z~]")
 
+// SanitizeCommitText is the exported alias for sanitizeCommitText. Used by
+// callers outside the diff package (e.g. preloaded annotation comments) that
+// need the same control-byte / ANSI / C1 stripping applied before content
+// reaches a terminal renderer.
+func SanitizeCommitText(s string) string { return sanitizeCommitText(s) }
+
 // sanitizeCommitText neutralizes bytes that could trigger terminal side effects
 // when a crafted commit Author/Subject/Body is rendered verbatim inside the
 // overlay. Used by VCS CommitLog parsers so the overlay renderer can treat the
