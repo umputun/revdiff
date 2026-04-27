@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.27.0 - 2026-04-27
+
+### New Features
+
+- --annotations flag preloads annotations from FormatOutput markdown #156 @tushkanin
+- review info popup (i) with --description and aggregate stats #155 @melonamin
+
+### Improvements
+
+- shorten style.css cache TTL to 5 minutes 8425200
+- optimize images, self-host fonts, fix CLS a663ef5
+
+### Bug Fixes
+
+- restore sticky sidebar by scoping mobile-only overflow 643aafa
+
 ## v0.26.1 - 2026-04-26
 
 ### New Features
