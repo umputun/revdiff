@@ -152,18 +152,19 @@ func (s *Store) FormatOutput() string {
 	return buf.String()
 }
 
-// escapeHeaderLines prefixes any body line that starts with "## " (the
-// record-header form) with a single space so parsers splitting on "## " record
-// headers cannot confuse a body line for a new record header. Other heading
-// forms like "### subheader" are not escaped since they cannot collide with
-// the record-header split marker.
+// escapeHeaderLines prefixes any body line whose first non-space content is
+// "## " with a single extra space. The parser inverts this by stripping one
+// leading space from any body line that, after left-trimming, begins with
+// "## ". Escaping pre-indented variants (e.g. " ## ") keeps the round-trip
+// symmetric for arbitrary user content. Other heading forms like "### " are
+// not escaped since they cannot collide with the record-header split marker.
 func (s *Store) escapeHeaderLines(body string) string {
 	if !strings.Contains(body, "## ") {
 		return body
 	}
 	lines := strings.Split(body, "\n")
 	for i, line := range lines {
-		if strings.HasPrefix(line, "## ") {
+		if strings.HasPrefix(strings.TrimLeft(line, " "), "## ") {
 			lines[i] = " " + line
 		}
 	}
