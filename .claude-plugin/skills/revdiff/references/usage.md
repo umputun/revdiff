@@ -246,6 +246,10 @@ Comment body lines starting with `## ` (the record-header form) are prefixed wit
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
 
+## Preloading Annotations
+
+Use `--annotations=PATH` to preload the annotation store from a markdown file in the same `-o` format. The format is bidirectional: any file written by `-o` can be read back via `--annotations` for round-trip workflows — review, quit, edit the file externally, relaunch, and continue from the preloaded state.
+
 ## Review History
 
 When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.

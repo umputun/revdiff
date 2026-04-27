@@ -1,6 +1,6 @@
 ---
 name: revdiff
-description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff <file>", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
+description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff <file>", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 argument-hint: 'optional: ref(s), "all files", or file path'
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
@@ -18,6 +18,7 @@ Review diffs with inline annotations using revdiff TUI in a terminal overlay. Wo
 - "revdiff all files exclude vendor"
 - "revdiff README.md", "revdiff docs/plan.md", "revdiff /tmp/notes.txt" — single-file review (`--only` mode)
 - "review this file", "annotate this file", "review file with revdiff"
+- "open this review in revdiff", "show review in revdiff", "review in revdiff" — open an in-session review (preload mode)
 
 ## Answering Questions
 
@@ -36,6 +37,10 @@ ${CLAUDE_SKILL_DIR}/scripts/read-latest-history.sh
 ```
 
 The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file found. Each history file contains a header (path, refs, and — when available — a git commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. The `commit:` line and diff block are captured from git only; in hg/jj repos the diff block will be empty and no commit hash is recorded. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
+
+## Opening an In-Session Review
+
+When the user asks to open an in-session review in revdiff (the conversation already contains review comments produced earlier in the session), write those comments to a temp file (e.g. `/tmp/revdiff-review-XXXXXX.md`) using the format documented in `references/usage.md` ("Output Format" section), then run the normal launcher flow (Step 1 ref detection, Step 2 invocation) with `--annotations=<temp-path>` appended. Step 3 onward handles the curated annotations as usual.
 
 ## How It Works
 

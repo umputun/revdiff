@@ -318,6 +318,7 @@ Positional arguments support several forms:
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
+| `--annotations` | Preload annotations from a markdown file in `-o` format | |
 | `--history-dir` | Directory for review history auto-saves, env: `REVDIFF_HISTORY_DIR` | `~/.config/revdiff/history/` |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
 | `--keys` | Path to keybindings file, env: `REVDIFF_KEYS` | `~/.config/revdiff/keybindings` |
@@ -484,7 +485,14 @@ printf '# Plan\n\nShip it\n' | revdiff --stdin --stdin-name plan.md
 
 # capture annotations from generated output
 some-command | revdiff --stdin --output /tmp/annotations.txt
+
+# round-trip: capture, edit externally, reload
+revdiff -o review.md HEAD~1
+$EDITOR review.md
+revdiff --annotations=review.md HEAD~1
 ```
+
+`--annotations` reads the same markdown format that `-o` writes (see [Output Format](#output-format) below), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source — each record is `## path/to/file.go:LINE (+)` followed by the comment body — then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with `q` to write the final set to stdout (or to `-o`).
 
 ### All-Files Mode
 

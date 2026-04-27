@@ -202,7 +202,13 @@ revdiff --only=docs/notes.txt
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
 
 <span class="code-comment"># capture annotations from generated output</span>
-some-command | revdiff --stdin --output /tmp/annotations.txt</code></div>
+some-command | revdiff --stdin --output /tmp/annotations.txt
+
+<span class="code-comment"># round-trip: capture, edit externally, reload</span>
+revdiff -o review.md HEAD~1
+$EDITOR review.md
+revdiff --annotations=review.md HEAD~1</code></div>
+        <p><code>--annotations</code> reads the same markdown format that <code>-o</code> writes (see <a href="#output-format">Output format</a>), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source &mdash; each record is <code>## path/to/file.go:LINE (+)</code> followed by the comment body &mdash; then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with <code>q</code> to write the final set to stdout (or to <code>-o</code>).</p>
 
         <h2 id="all-files">All-files mode</h2>
         <p>Use <code>--all-files</code> (or <code>-A</code>) to browse all tracked files, not just files with changes. This turns revdiff into a general-purpose code annotation tool. All files are shown in context-only mode with full annotation and syntax highlighting support.</p>
@@ -361,6 +367,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>-X, --exclude</code></td><td>Exclude files by prefix (repeatable)</td><td></td></tr>
                 <tr><td><code>-F, --only</code></td><td>Show only matching files</td><td></td></tr>
                 <tr><td><code>-o, --output</code></td><td>Write annotations to file</td><td></td></tr>
+                <tr><td><code>--annotations</code></td><td>Preload annotations from a markdown file in <code>-o</code> format</td><td></td></tr>
                 <tr><td><code>--history-dir</code></td><td>Directory for review history auto-saves</td><td><code>~/.config/revdiff/history/</code></td></tr>
                 <tr><td><code>--keys</code></td><td>Path to keybindings file</td><td><code>~/.config/revdiff/keybindings</code></td></tr>
                 <tr><td><code>--dump-keys</code></td><td>Print effective keybindings and exit</td><td></td></tr>
