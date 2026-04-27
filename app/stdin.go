@@ -40,6 +40,9 @@ func validateStdinFlags(opts options) error {
 	if len(opts.Include) > 0 {
 		return errors.New("--stdin cannot be used with --include")
 	}
+	if opts.Annotations != "" {
+		return errors.New("--stdin cannot be used with --annotations")
+	}
 	return nil
 }
 
