@@ -28,8 +28,8 @@ const (
 	fullContextSentinel = 1000000
 
 	// fullFileContext is the -U value treated as "give me the full file"; use
-	// gitContextArg / hgContextArg helpers at call sites to choose between full-file
-	// and small-context based on the caller's contextLines value.
+	// unifiedContextArg (git/hg) or jjContextArg at call sites to choose
+	// between full-file and small-context based on the caller's contextLines value.
 	fullFileContext = "-U1000000"
 
 	// MaxLineLength is the maximum line length (in bytes) that scanners will accept.
@@ -77,13 +77,29 @@ func FileEntryPaths(entries []FileEntry) []string {
 	return paths
 }
 
+// CountChanges tallies ChangeAdd and ChangeRemove lines in a DiffLine slice.
+// ChangeContext and ChangeDivider are excluded; new ChangeType values would
+// also fall through, which is the safe default for a line-stat counter.
+func CountChanges(lines []DiffLine) (adds, removes int) {
+	for _, dl := range lines {
+		switch dl.ChangeType {
+		case ChangeAdd:
+			adds++
+		case ChangeRemove:
+			removes++
+		case ChangeContext, ChangeDivider:
+		}
+	}
+	return adds, removes
+}
+
 // MaxCommits is the hard cap on the number of commits returned by any CommitLogger
 // implementation. Callers should treat a result of exactly MaxCommits entries as
-// potentially truncated and surface that to the user (e.g. via CommitInfoSpec.Truncated).
+// potentially truncated and surface that to the user (e.g. via overlay.InfoSpec.Truncated).
 const MaxCommits = 500
 
 // CommitInfo holds metadata and message fields for a single commit in a ref range.
-// Author, Subject, and Body are pre-sanitized by sanitizeCommitText so overlay
+// Author, Subject, and Body are pre-sanitized by SanitizeCommitText so overlay
 // renderers can treat them as literal text without a second sanitization pass.
 type CommitInfo struct {
 	Hash    string    // full hash or VCS change id
@@ -115,21 +131,17 @@ type CommitLogger interface {
 const commitLogFormat = "%H%x1f%an <%ae>%x1f%cI%x1f%s%n%b"
 
 // ansiCSIRe matches complete ANSI CSI escape sequences (ESC [ ... final-byte).
-// Used by sanitizeCommitText to neutralize ANSI injection via crafted commit messages.
+// Used by SanitizeCommitText to neutralize ANSI injection via crafted commit messages.
 //
 //nolint:gocritic // explicit ASCII 0x20..0x2F range for CSI intermediate bytes
 var ansiCSIRe = regexp.MustCompile("\x1b\\[[0-9;?]*[\x20-\x2f]*[a-zA-Z~]")
 
-// SanitizeCommitText is the exported alias for sanitizeCommitText. Used by
-// callers outside the diff package (e.g. preloaded annotation comments) that
-// need the same control-byte / ANSI / C1 stripping applied before content
-// reaches a terminal renderer.
-func SanitizeCommitText(s string) string { return sanitizeCommitText(s) }
-
-// sanitizeCommitText neutralizes bytes that could trigger terminal side effects
+// SanitizeCommitText neutralizes bytes that could trigger terminal side effects
 // when a crafted commit Author/Subject/Body is rendered verbatim inside the
 // overlay. Used by VCS CommitLog parsers so the overlay renderer can treat the
-// fields as literal text without a second pass.
+// fields as literal text without a second pass. Also reused by review-info
+// description and detail-row sanitization so all untrusted text routes through
+// one strip path with identical semantics.
 //
 // Strips:
 //   - ANSI CSI sequences (ESC [ ... final-byte) and stray ESC bytes
@@ -152,7 +164,7 @@ func SanitizeCommitText(s string) string { return sanitizeCommitText(s) }
 // utf8.DecodeRuneInString so valid UTF-8 multi-byte sequences (CJK, emoji)
 // pass through unchanged even when their continuation bytes fall in the C1
 // byte range.
-func sanitizeCommitText(s string) string {
+func SanitizeCommitText(s string) string {
 	if !hasUnsafeContent(s) {
 		return s
 	}
@@ -182,7 +194,7 @@ func sanitizeCommitText(s string) string {
 	return b.String()
 }
 
-// hasUnsafeContent is a fast-path check used by sanitizeCommitText to skip the
+// hasUnsafeContent is a fast-path check used by SanitizeCommitText to skip the
 // full rune scan when s contains no ESC byte, no unsafe rune, and no invalid
 // UTF-8 byte.
 func hasUnsafeContent(s string) bool {
@@ -203,7 +215,7 @@ func hasUnsafeContent(s string) bool {
 }
 
 // isUnsafeRune reports whether r should be dropped from commit metadata before
-// rendering. See sanitizeCommitText for the full rationale; briefly: TAB, LF,
+// rendering. See SanitizeCommitText for the full rationale; briefly: TAB, LF,
 // and printable runes are kept, everything else in the C0/DEL/C1 ranges
 // (including CR) is dropped.
 func isUnsafeRune(r rune) bool {
@@ -254,7 +266,7 @@ func NewGit(workDir string) *Git {
 //
 // The result is capped at MaxCommits entries. Callers should treat a result
 // of exactly MaxCommits length as potentially truncated and signal that to
-// the user via CommitInfoSpec.Truncated.
+// the user via overlay.InfoSpec.Truncated.
 //
 // Author, Subject, and Body are sanitized (ANSI escape sequences, C0/DEL/C1
 // control bytes, and VCS framing delimiters stripped) to neutralize terminal
@@ -310,9 +322,9 @@ func (g *Git) parseCommitLog(raw string) []CommitInfo {
 		subject, body := splitCommitDesc(fields[3])
 		ci := CommitInfo{
 			Hash:    fields[0],
-			Author:  sanitizeCommitText(fields[1]),
-			Subject: sanitizeCommitText(subject),
-			Body:    sanitizeCommitText(body),
+			Author:  SanitizeCommitText(fields[1]),
+			Subject: SanitizeCommitText(subject),
+			Body:    SanitizeCommitText(body),
 		}
 		if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
 			ci.Date = t
@@ -390,7 +402,7 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 // context; positive values below the sentinel request that many lines on each side of a hunk.
 func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, gitContextArg(contextLines), "--", file)
+	args = append(args, unifiedContextArg(contextLines), "--", file)
 
 	out, err := g.runGit(args...)
 	if err != nil {
@@ -451,10 +463,11 @@ func (g *Git) totalOldLines(ref, file string, staged bool) int {
 	return countLines(out)
 }
 
-// gitContextArg returns the -U argument for git diff given the caller's requested
-// context size. A non-positive contextLines or one at or above fullContextSentinel
-// returns the full-file arg; any other value returns -U<contextLines>.
-func gitContextArg(contextLines int) string {
+// unifiedContextArg returns the -U argument for unified-diff tools (git, hg)
+// given the caller's requested context size. A non-positive contextLines or one
+// at or above fullContextSentinel returns the full-file arg; any other value
+// returns -U<contextLines>.
+func unifiedContextArg(contextLines int) string {
 	if contextLines <= 0 || contextLines >= fullContextSentinel {
 		return fullFileContext
 	}

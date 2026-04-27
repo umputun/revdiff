@@ -108,7 +108,7 @@ func (p *preloader) load(records []annotation.Annotation) error {
 		// Sanitize the comment text before it reaches Store.Add: the
 		// preload source is user- or LLM-supplied and may carry stray
 		// ANSI / CR-overwrite / C1 bytes that Renderer.AnnotationInline
-		// wraps into the TUI verbatim. Mirrors diff.sanitizeCommitText
+		// wraps into the TUI verbatim. Mirrors diff.SanitizeCommitText
 		// usage on commit Author/Subject/Body.
 		a.Comment = diff.SanitizeCommitText(a.Comment)
 

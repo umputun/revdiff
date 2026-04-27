@@ -291,7 +291,7 @@ func (j *Jj) translateRef(ref string) string {
 //
 // The result is capped at MaxCommits entries. Callers should treat a result of
 // exactly MaxCommits length as potentially truncated and signal that to the
-// user via CommitInfoSpec.Truncated.
+// user via overlay.InfoSpec.Truncated.
 //
 // jj is queried with `-n MaxCommits+1` to absorb the synthetic working-copy @
 // placeholder that ranges like X..@ include. parseCommitLog drops that
@@ -378,15 +378,15 @@ func (j *Jj) parseCommitLog(raw string) []CommitInfo {
 		isWorkingCopy := fields[3] == "1"
 		desc := strings.TrimRight(fields[4], "\n")
 		subject, body := splitCommitDesc(desc)
-		subject = sanitizeCommitText(subject)
-		body = sanitizeCommitText(body)
+		subject = SanitizeCommitText(subject)
+		body = SanitizeCommitText(body)
 		if isWorkingCopy && subject == "" && body == "" {
 			// synthetic working-copy @ placeholder created by `jj new` — see godoc
 			continue
 		}
 		ci := CommitInfo{
 			Hash:    fields[0],
-			Author:  sanitizeCommitText(fields[1]),
+			Author:  SanitizeCommitText(fields[1]),
 			Subject: subject,
 			Body:    body,
 		}

@@ -152,7 +152,7 @@ func (h *Hg) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, e
 	args := make([]string, 0, 5+len(rArgs))
 	args = append(args, "diff", "--git", "--color=never")
 	args = append(args, rArgs...)
-	args = append(args, hgContextArg(contextLines), "--", file)
+	args = append(args, unifiedContextArg(contextLines), "--", file)
 
 	out, err := h.runHg(args...)
 	if err != nil {
@@ -198,16 +198,6 @@ func (h *Hg) totalOldLines(ref, file string) int {
 	return countLines(out)
 }
 
-// hgContextArg returns the -U argument for hg diff given the caller's requested
-// context size. A non-positive contextLines or one at or above fullContextSentinel
-// returns the full-file arg; any other value returns -U<contextLines>.
-func hgContextArg(contextLines int) string {
-	if contextLines <= 0 || contextLines >= fullContextSentinel {
-		return fullFileContext
-	}
-	return fmt.Sprintf("-U%d", contextLines)
-}
-
 // translateRef converts git-style refs to mercurial revset syntax.
 // HEAD -> ".", HEAD~N -> ".~N", HEAD^ -> ".^", HEAD^N (N>1) -> "pN(.)".
 func translateRef(ref string) string {
@@ -239,7 +229,7 @@ func translateRef(ref string) string {
 //
 // The result is capped at MaxCommits entries. Callers should treat a result of
 // exactly MaxCommits length as potentially truncated and signal that to the
-// user via CommitInfoSpec.Truncated.
+// user via overlay.InfoSpec.Truncated.
 //
 // Author, Subject, and Body are sanitized (ANSI escape sequences, C0/DEL/C1
 // control bytes, and VCS framing delimiters stripped) to neutralize terminal
@@ -309,9 +299,9 @@ func (h *Hg) parseCommitLog(raw string) []CommitInfo {
 		subject, body := splitCommitDesc(fields[3])
 		ci := CommitInfo{
 			Hash:    fields[0],
-			Author:  sanitizeCommitText(fields[1]),
-			Subject: sanitizeCommitText(subject),
-			Body:    sanitizeCommitText(body),
+			Author:  SanitizeCommitText(fields[1]),
+			Subject: SanitizeCommitText(subject),
+			Body:    SanitizeCommitText(body),
 		}
 		if t, err := time.Parse(time.RFC3339, fields[2]); err == nil {
 			ci.Date = t

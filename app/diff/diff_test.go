@@ -901,7 +901,7 @@ func TestGit_ParseCommitLog(t *testing.T) {
 
 	t.Run("subject containing \\x1f absorbs into final field and US byte is sanitized", func(t *testing.T) {
 		// crafted subject with US byte embedded — SplitN(4) absorbs all trailing
-		// \x1f into the last field; sanitizeCommitText then drops the US byte so
+		// \x1f into the last field; SanitizeCommitText then drops the US byte so
 		// the rendered subject has no framing artifacts
 		raw := "hash\x1fauthor\x1f2026-04-10T12:00:00-04:00\x1fsubject\x1fwith-us\nactual body\x00"
 		got := g.parseCommitLog(raw)
@@ -931,7 +931,7 @@ func TestGit_ParseCommitLog(t *testing.T) {
 	})
 
 	t.Run("author with crafted US byte collapses into shifted fields but stays sanitized", func(t *testing.T) {
-		// delimiter injection in author shifts downstream fields. sanitizeCommitText
+		// delimiter injection in author shifts downstream fields. SanitizeCommitText
 		// still strips any ESC/BEL/C1 bytes in whatever content ends up in each
 		// parsed slot, so no terminal-control sequence reaches the overlay
 		raw := "hash\x1fEvil\x1fname\x1fwith\x1b[31mred\x1b[0m <e@x>\nbody\x00"
@@ -1055,7 +1055,7 @@ func TestSanitizeCommitText(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, sanitizeCommitText(tt.in))
+			assert.Equal(t, tt.want, SanitizeCommitText(tt.in))
 		})
 	}
 }
@@ -1238,7 +1238,7 @@ func TestGit_UntrackedFiles(t *testing.T) {
 	// .gitignore itself is untracked since we just created it
 }
 
-func TestGitContextArg(t *testing.T) {
+func TestUnifiedContextArg(t *testing.T) {
 	tests := []struct {
 		name         string
 		contextLines int
@@ -1254,7 +1254,7 @@ func TestGitContextArg(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, gitContextArg(tt.contextLines))
+			assert.Equal(t, tt.want, unifiedContextArg(tt.contextLines))
 		})
 	}
 }
@@ -1313,4 +1313,30 @@ func TestGit_FileDiff_SmallContext(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 19, fullCtx, "expected 19 context lines with full-file context")
+}
+
+func TestCountChanges(t *testing.T) {
+	tests := []struct {
+		name        string
+		lines       []DiffLine
+		wantAdds    int
+		wantRemoves int
+	}{
+		{name: "empty", lines: nil, wantAdds: 0, wantRemoves: 0},
+		{name: "all context", lines: []DiffLine{{ChangeType: ChangeContext}, {ChangeType: ChangeContext}}, wantAdds: 0, wantRemoves: 0},
+		{name: "dividers ignored", lines: []DiffLine{{ChangeType: ChangeDivider}, {ChangeType: ChangeAdd}}, wantAdds: 1, wantRemoves: 0},
+		{name: "mixed", lines: []DiffLine{
+			{ChangeType: ChangeAdd}, {ChangeType: ChangeAdd}, {ChangeType: ChangeAdd},
+			{ChangeType: ChangeRemove},
+			{ChangeType: ChangeContext},
+			{ChangeType: ChangeDivider},
+		}, wantAdds: 3, wantRemoves: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adds, removes := CountChanges(tt.lines)
+			assert.Equal(t, tt.wantAdds, adds, "adds")
+			assert.Equal(t, tt.wantRemoves, removes, "removes")
+		})
+	}
 }
