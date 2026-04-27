@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -89,6 +90,9 @@ var validActions = map[Action]bool{
 // from "commit_info" to "info" when the popup expanded to cover description
 // and aggregate stats; honoring the old name lets pre-existing
 // ~/.config/revdiff/keybindings files keep working without manual edits.
+// The parser surfaces a single [WARN] per deprecated alias for the lifetime
+// of the process (see warnOnceDeprecatedAlias) so that a file with several
+// "map ... commit_info" lines does not spam the log.
 var deprecatedActionAliases = map[Action]Action{
 	"commit_info": ActionInfo,
 }
@@ -116,6 +120,23 @@ func resolveAction(a Action) (canonical Action, deprecated, ok bool) {
 		return alias, true, true
 	}
 	return "", false, false
+}
+
+// loggedDeprecatedAliases tracks which deprecated aliases have already
+// surfaced a [WARN] line during the program's lifetime. Process-wide so a
+// keybindings file with several occurrences of "map i commit_info" produces
+// exactly one warning instead of one per line; mirrors the behavior promised
+// by the PR introducing the alias.
+var loggedDeprecatedAliases sync.Map
+
+// warnOnceDeprecatedAlias logs a deprecation warning the first time alias is
+// observed in the running process. Subsequent calls with the same alias are
+// no-ops. Called from parse() when resolveAction reports deprecated=true.
+func warnOnceDeprecatedAlias(alias, canonical Action) {
+	if _, loaded := loggedDeprecatedAliases.LoadOrStore(string(alias), struct{}{}); loaded {
+		return
+	}
+	log.Printf("[WARN] keybindings: action %q is deprecated, use %q", alias, canonical)
 }
 
 // HelpEntry describes a single action for the help overlay.
@@ -412,7 +433,7 @@ func (km *Keymap) Dump(w io.Writer) error {
 		for _, entry := range sec.Entries {
 			keys := km.KeysFor(entry.Action)
 			for _, k := range keys {
-				if _, err := fmt.Fprintf(w, "map %s %s\n", dumpKeyName(k), entry.Action); err != nil {
+				if _, err := fmt.Fprintf(w, "map %s %s\n", km.dumpKeyName(k), entry.Action); err != nil {
 					return fmt.Errorf("dump keybindings: %w", err)
 				}
 			}
@@ -431,9 +452,9 @@ var reverseAliases = map[string]string{
 // keys that are whitespace-only need special handling so the output can be reloaded.
 // chord keys are split on ">" and each half is dumped independently so that an embedded
 // literal space in either half is rewritten to its "space" alias, preserving the round-trip.
-func dumpKeyName(key string) string {
+func (km *Keymap) dumpKeyName(key string) string {
 	if leader, second, ok := strings.Cut(key, ">"); ok {
-		return dumpKeyName(leader) + ">" + dumpKeyName(second)
+		return km.dumpKeyName(leader) + ">" + km.dumpKeyName(second)
 	}
 	if alias, ok := reverseAliases[key]; ok {
 		return alias
@@ -544,7 +565,7 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 				continue
 			}
 			if deprecated {
-				log.Printf("[WARN] keybindings:%d: action %q is deprecated, use %q", lineNum, rawAction, action)
+				warnOnceDeprecatedAlias(rawAction, action)
 			}
 			if strings.Contains(rawKey, ">") && rawKey != ">" {
 				key, ok := parseChordKey(rawKey, lineNum)

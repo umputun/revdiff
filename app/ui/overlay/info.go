@@ -42,6 +42,14 @@ type infoOverlay struct {
 	height int // last known terminal height, updated on render
 }
 
+// renderedRow is the post-sanitize, post-truncate label/value pair built by
+// buildDetailRows and consumed by renderDetailRow. value carries any
+// muted-suffix already inlined as raw ANSI.
+type renderedRow struct {
+	label string
+	value string
+}
+
 func (c *infoOverlay) open(spec InfoSpec) {
 	c.spec = spec
 	c.offset = 0
@@ -73,12 +81,13 @@ func (c *infoOverlay) render(ctx RenderCtx, mgr *Manager) string {
 
 	title := " info "
 	if h := strings.TrimSpace(c.spec.HeaderText); h != "" {
-		title = " " + sanitizeInfoText(c.spec.HeaderText) + " "
+		title = " " + c.sanitizeInfoText(c.spec.HeaderText) + " "
 	}
-	box = mgr.injectBorderTitle(box, title, popupWidth, accentFg, paneBg)
+	edge := borderEdgeText{popupWidth: popupWidth, accentFg: accentFg, paneBg: paneBg}
+	box = mgr.injectBorderTitle(box, title, edge)
 
 	if f := strings.TrimSpace(c.spec.FooterText); f != "" {
-		box = mgr.injectBorderFooter(box, " "+sanitizeInfoText(c.spec.FooterText)+" ", popupWidth, accentFg, paneBg)
+		box = mgr.injectBorderFooter(box, " "+c.sanitizeInfoText(c.spec.FooterText)+" ", edge)
 	}
 	return box
 }
@@ -137,7 +146,7 @@ func (c *infoOverlay) buildDescriptionSection(innerWidth int, resolver Resolver)
 		return nil
 	}
 	out := []string{c.sectionHeader("description", innerWidth, resolver)}
-	for _, raw := range splitLines(c.spec.Description) {
+	for _, raw := range c.splitLines(c.spec.Description) {
 		if raw == "" {
 			out = append(out, c.padLine("", innerWidth))
 			continue
@@ -166,24 +175,20 @@ func (c *infoOverlay) buildDetailRows(innerWidth int, resolver Resolver) []strin
 	muted := string(resolver.Color(style.ColorKeyMutedFg))
 	reset := string(style.ResetFg)
 
-	type renderedRow struct {
-		label string
-		value string // value text with any muted-suffix already inlined as raw ANSI
-	}
 	visible := make([]renderedRow, 0, len(c.spec.Rows))
 	for _, row := range c.spec.Rows {
-		label := sanitizeInfoText(row.Label)
+		label := c.sanitizeInfoText(row.Label)
 		// row values can carry upstream-supplied text (raw VCS-stderr in the
 		// stats-unavailable row, --only/--include/--exclude flag values), so
 		// cap them at the same limit as CommitsErr to keep popup rendering
 		// bounded. Truncation runs after sanitize so the cap counts visible
 		// runes, not stripped escapes.
-		value := truncateForDisplay(sanitizeInfoText(row.Value), infoErrMaxLen)
+		value := c.truncateForDisplay(c.sanitizeInfoText(row.Value), infoErrMaxLen)
 		if label == "" || value == "" {
 			continue
 		}
-		if suffix := sanitizeInfoText(row.MutedSuffix); suffix != "" {
-			value += "  " + muted + truncateForDisplay(suffix, infoErrMaxLen) + reset
+		if suffix := c.sanitizeInfoText(row.MutedSuffix); suffix != "" {
+			value += "  " + muted + c.truncateForDisplay(suffix, infoErrMaxLen) + reset
 		}
 		visible = append(visible, renderedRow{label: label, value: value})
 	}
@@ -201,9 +206,25 @@ func (c *infoOverlay) buildDetailRows(innerWidth int, resolver Resolver) []strin
 
 	out := []string{c.sectionHeader("details", innerWidth, resolver)}
 	for _, row := range visible {
-		out = append(out, c.renderDetailRow(row.label, row.value, labelW, innerWidth, muted, reset)...)
+		out = append(out, c.renderDetailRow(row, detailRowLayout{
+			labelW:     labelW,
+			innerWidth: innerWidth,
+			muted:      muted,
+			reset:      reset,
+		})...)
 	}
 	return out
+}
+
+// detailRowLayout carries the shared per-row layout values used by
+// renderDetailRow. Bundled into a struct because the prior 6-positional shape
+// (label, value, labelW, innerWidth, muted, reset) made silent reorder bugs
+// possible (label/value and muted/reset are same-typed pairs).
+type detailRowLayout struct {
+	labelW     int
+	innerWidth int
+	muted      string
+	reset      string
 }
 
 // renderDetailRow wraps a single label/value pair to innerWidth, returning
@@ -211,18 +232,18 @@ func (c *infoOverlay) buildDetailRows(innerWidth int, resolver Resolver) []strin
 // followed by two spaces of gutter; continuation lines align under the value
 // with whitespace of the same total width. Caller is responsible for upstream
 // label-width computation across the rendered rows.
-func (c *infoOverlay) renderDetailRow(label, value string, labelW, innerWidth int, muted, reset string) []string {
-	prefix := muted + padPlain(label, labelW) + reset + "  "
-	contPrefix := strings.Repeat(" ", labelW+2)
-	valueWidth := max(innerWidth-labelW-2, 1)
-	wrapped := c.wrapLine(value, valueWidth)
+func (c *infoOverlay) renderDetailRow(row renderedRow, layout detailRowLayout) []string {
+	prefix := layout.muted + c.padPlain(row.label, layout.labelW) + layout.reset + "  "
+	contPrefix := strings.Repeat(" ", layout.labelW+2)
+	valueWidth := max(layout.innerWidth-layout.labelW-2, 1)
+	wrapped := c.wrapLine(row.value, valueWidth)
 	out := make([]string, 0, len(wrapped))
 	for i, line := range wrapped {
 		if i == 0 {
-			out = append(out, c.padLine(prefix+line, innerWidth))
+			out = append(out, c.padLine(prefix+line, layout.innerWidth))
 			continue
 		}
-		out = append(out, c.padLine(contPrefix+line, innerWidth))
+		out = append(out, c.padLine(contPrefix+line, layout.innerWidth))
 	}
 	return out
 }
@@ -248,7 +269,7 @@ func (c *infoOverlay) buildCommitsSection(innerWidth int, resolver Resolver) []s
 		// whitespace runs into single spaces so the centered-message
 		// single-line layout assumption holds, and truncate caps total length
 		// so a hostile stderr cannot blow up popup rendering.
-		msg := truncateForDisplay(strings.Join(strings.Fields(c.spec.CommitsErr.Error()), " "), infoErrMaxLen)
+		msg := c.truncateForDisplay(strings.Join(strings.Fields(c.spec.CommitsErr.Error()), " "), infoErrMaxLen)
 		out = append(out, c.centeredMessage(msg, innerWidth, true)...)
 		return out
 	case len(c.spec.Commits) == 0:
@@ -483,7 +504,7 @@ func (c *infoOverlay) handleMouse(msg tea.MouseMsg) Outcome {
 // splitBodyLines splits the commit body into individual lines, normalizing CR/LF
 // endings. trailing blank lines are dropped so we don't emit dangling padding.
 func (c *infoOverlay) splitBodyLines(body string) []string {
-	lines := strings.Split(NormalizeNewlines(body), "\n")
+	lines := strings.Split(normalizeNewlines(body), "\n")
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -504,14 +525,12 @@ func (c *infoOverlay) shortHash(hash string) string {
 // as empty entries (so paragraph breaks render). Trailing blanks are kept;
 // the section builder turns them into padded empty lines, which are visually
 // indistinguishable from the section's bottom margin.
-func splitLines(s string) []string {
-	return strings.Split(NormalizeNewlines(s), "\n")
+func (c *infoOverlay) splitLines(s string) []string {
+	return strings.Split(normalizeNewlines(s), "\n")
 }
 
-// NormalizeNewlines converts CRLF and lone CR to LF. Exported so callers
-// outside the overlay package (e.g. description text in app/ui) can share
-// the single normalization step before their own per-line processing.
-func NormalizeNewlines(s string) string {
+// normalizeNewlines converts CRLF and lone CR to LF.
+func normalizeNewlines(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	return strings.ReplaceAll(s, "\r", "\n")
 }
@@ -519,7 +538,7 @@ func NormalizeNewlines(s string) string {
 // padPlain right-pads s with spaces up to width using lipgloss.Width for the
 // measurement so wide-rune labels (CJK etc.) line up. no-op when s already
 // meets or exceeds width.
-func padPlain(s string, width int) string {
+func (c *infoOverlay) padPlain(s string, width int) string {
 	w := lipgloss.Width(s)
 	if w >= width {
 		return s
@@ -531,7 +550,7 @@ func padPlain(s string, width int) string {
 // when truncation occurs. Operates on runes (not bytes) so multi-byte UTF-8
 // stays well-formed. Used for upstream-supplied error text whose length is
 // not otherwise bounded (raw VCS stderr can be megabytes).
-func truncateForDisplay(s string, limit int) string {
+func (c *infoOverlay) truncateForDisplay(s string, limit int) string {
 	if limit <= 0 {
 		return ""
 	}
@@ -547,11 +566,12 @@ func truncateForDisplay(s string, limit int) string {
 // diff.SanitizeCommitText so all untrusted text in the overlay routes through
 // one strip path with identical semantics (full ANSI CSI sequences, ESC,
 // C0/DEL/C1 controls, VCS framing delimiters, invalid UTF-8). After stripping,
-// surviving LF and TAB are collapsed to a single space so multi-line values
+// each surviving LF or TAB is mapped to a single space so multi-line values
 // (e.g. workdir paths copied with embedded newlines) render on one row;
-// repeated normal spaces inside paths or patterns are preserved as-is.
+// runs of LF/TAB therefore expand to runs of spaces, and repeated normal
+// spaces inside paths or patterns are preserved as-is.
 // Trailing/leading whitespace is stripped at the boundary.
-func sanitizeInfoText(s string) string {
+func (c *infoOverlay) sanitizeInfoText(s string) string {
 	s = diff.SanitizeCommitText(s)
 	s = strings.Map(func(r rune) rune {
 		if r == '\n' || r == '\t' {

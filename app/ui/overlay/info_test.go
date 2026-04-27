@@ -633,16 +633,19 @@ func TestSanitizeInfoText_stripsFullCSISequences(t *testing.T) {
 	// Earlier sanitizer dropped only the ESC byte and left "[31m...[0m" payload
 	// visible. After routing through diff.SanitizeCommitText, the entire CSI
 	// sequence is removed.
-	got := sanitizeInfoText("\x1b[31mhello\x1b[0m world")
+	c := &infoOverlay{}
+	got := c.sanitizeInfoText("\x1b[31mhello\x1b[0m world")
 	assert.Equal(t, "hello world", got)
 	assert.NotContains(t, got, "[31m")
 	assert.NotContains(t, got, "[0m")
 }
 
-func TestSanitizeInfoText_collapsesWhitespaceToSpace(t *testing.T) {
-	// Surviving LF and TAB after sanitization collapse to single spaces so
-	// values with embedded newlines still render on one row.
-	got := sanitizeInfoText("foo\nbar\tbaz")
+func TestSanitizeInfoText_mapsLFAndTABToSpaces(t *testing.T) {
+	// Each surviving LF or TAB after sanitization is mapped to a single space
+	// so values with embedded newlines render on one row. Runs of LF/TAB
+	// expand to runs of spaces (no whitespace-run collapsing).
+	c := &infoOverlay{}
+	got := c.sanitizeInfoText("foo\nbar\tbaz")
 	assert.Equal(t, "foo bar baz", got)
 }
 

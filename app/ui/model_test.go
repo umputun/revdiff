@@ -1050,7 +1050,6 @@ func TestTransientHint_ChordHintLowestPriority(t *testing.T) {
 		want    string
 	}{
 		{name: "keys hint alone", setHint: func(m *Model) { m.keys.hint = "Unknown chord: ctrl+w>q" }, want: "Unknown chord: ctrl+w>q"},
-		{name: "commits beats keys", setHint: func(m *Model) { m.commits.hint = "no commits"; m.keys.hint = "chord hint" }, want: "no commits"},
 		{name: "reload beats keys", setHint: func(m *Model) { m.reload.hint = "Reloaded"; m.keys.hint = "chord hint" }, want: "Reloaded"},
 		{name: "compact beats keys", setHint: func(m *Model) { m.compact.hint = "compact off"; m.keys.hint = "chord hint" }, want: "compact off"},
 	}
@@ -1070,7 +1069,6 @@ func TestTransientHint_VimLowestPriority(t *testing.T) {
 		want    string
 	}{
 		{name: "vim hint alone", setHint: func(m *Model) { m.vim.hint = "5" }, want: "5"},
-		{name: "commits beats vim", setHint: func(m *Model) { m.commits.hint = "no commits"; m.vim.hint = "5" }, want: "no commits"},
 		{name: "reload beats vim", setHint: func(m *Model) { m.reload.hint = "Reloaded"; m.vim.hint = "5" }, want: "Reloaded"},
 		{name: "compact beats vim", setHint: func(m *Model) { m.compact.hint = "compact off"; m.vim.hint = "5" }, want: "compact off"},
 		{name: "keys beats vim", setHint: func(m *Model) { m.keys.hint = "Pending: ctrl+w"; m.vim.hint = "5" }, want: "Pending: ctrl+w"},

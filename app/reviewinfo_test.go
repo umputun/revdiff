@@ -16,52 +16,52 @@ import (
 func TestReviewInfoFromOptions(t *testing.T) {
 	t.Run("stdin overrides VCS as 'stdin'", func(t *testing.T) {
 		opts := options{Stdin: true, StdinName: "buf"}
-		info := reviewInfoFromOptions(opts, "/repo", diff.VCSGit, "")
+		info := reviewInfoFromOptions(opts, reviewInfoInputs{workDir: "/repo", vcsType: diff.VCSGit})
 		assert.Equal(t, "stdin", info.VCS)
 		assert.Equal(t, "buf", info.StdinName)
 		assert.True(t, info.Stdin)
 	})
 
 	t.Run("missing VCS becomes 'none'", func(t *testing.T) {
-		info := reviewInfoFromOptions(options{}, "/tmp", "", "")
+		info := reviewInfoFromOptions(options{}, reviewInfoInputs{workDir: "/tmp"})
 		assert.Equal(t, "none", info.VCS)
 	})
 
 	t.Run("VCS string is propagated", func(t *testing.T) {
-		info := reviewInfoFromOptions(options{}, "/repo", diff.VCSJJ, "")
+		info := reviewInfoFromOptions(options{}, reviewInfoInputs{workDir: "/repo", vcsType: diff.VCSJJ})
 		assert.Equal(t, string(diff.VCSJJ), info.VCS)
 	})
 
 	t.Run("staged is ignored for VCSes without staging area", func(t *testing.T) {
-		info := reviewInfoFromOptions(options{Staged: true}, "/repo", diff.VCSHg, "")
+		info := reviewInfoFromOptions(options{Staged: true}, reviewInfoInputs{workDir: "/repo", vcsType: diff.VCSHg})
 		assert.False(t, info.Staged)
 	})
 
 	t.Run("staged is preserved for git", func(t *testing.T) {
-		info := reviewInfoFromOptions(options{Staged: true}, "/repo", diff.VCSGit, "")
+		info := reviewInfoFromOptions(options{Staged: true}, reviewInfoInputs{workDir: "/repo", vcsType: diff.VCSGit})
 		assert.True(t, info.Staged)
 	})
 
 	t.Run("list slices are decoupled from caller", func(t *testing.T) {
 		opts := options{Only: []string{"a", "b"}}
-		info := reviewInfoFromOptions(opts, "", "", "")
+		info := reviewInfoFromOptions(opts, reviewInfoInputs{})
 		// mutating the original must not affect the captured slice
 		opts.Only[0] = "x"
 		assert.Equal(t, []string{"a", "b"}, info.Only, "Only must be defensively copied")
 	})
 
 	t.Run("description is propagated", func(t *testing.T) {
-		info := reviewInfoFromOptions(options{}, "", "", "agent says hi\n\nrefactor done")
+		info := reviewInfoFromOptions(options{}, reviewInfoInputs{description: "agent says hi\n\nrefactor done"})
 		assert.Equal(t, "agent says hi\n\nrefactor done", info.Description)
 	})
 
-	t.Run("enabled is always true from constructor", func(t *testing.T) {
+	t.Run("constructor returns non-nil config", func(t *testing.T) {
 		// reviewInfoFromOptions is the production constructor; it must always
-		// return Enabled=true so the review-info subsystem activates. Only
-		// focused tests using the zero-value config rely on Enabled=false as
-		// the off-switch.
-		info := reviewInfoFromOptions(options{}, "", "", "")
-		assert.True(t, info.Enabled)
+		// return a non-nil pointer so the review-info subsystem activates.
+		// Focused tests pass nil directly to ModelConfig.ReviewInfo and bypass
+		// this constructor entirely; nil is the off-switch.
+		info := reviewInfoFromOptions(options{}, reviewInfoInputs{})
+		assert.NotNil(t, info)
 	})
 }
 

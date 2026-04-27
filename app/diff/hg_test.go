@@ -34,6 +34,7 @@ func hgCmd(t *testing.T, dir string, args ...string) {
 }
 
 func TestTranslateRef(t *testing.T) {
+	h := &Hg{}
 	tests := []struct {
 		name string
 		ref  string
@@ -52,7 +53,7 @@ func TestTranslateRef(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, translateRef(tt.ref))
+			assert.Equal(t, tt.want, h.translateRef(tt.ref))
 		})
 	}
 }
@@ -429,7 +430,7 @@ func TestHg_StatusToFileStatus(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.status, func(t *testing.T) {
-			assert.Equal(t, tt.want, h.hgStatusToFileStatus(tt.status))
+			assert.Equal(t, tt.want, h.statusToFileStatus(tt.status))
 		})
 	}
 }

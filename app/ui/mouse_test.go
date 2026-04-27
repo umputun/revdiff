@@ -774,13 +774,11 @@ func TestModel_HandleMouse_ClearsTransientHints(t *testing.T) {
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 	})
-	m.commits.hint = "loading commits..."
 	m.reload.hint = "press y to reload"
 	m.compact.hint = "not applicable"
 
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
-	assert.Empty(t, model.commits.hint)
 	assert.Empty(t, model.reload.hint)
 	assert.Empty(t, model.compact.hint)
 }

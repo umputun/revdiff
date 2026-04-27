@@ -317,10 +317,7 @@ type searchState struct {
 // handleCommitsLoaded drops messages whose seq no longer matches, discarding
 // stale in-flight results after a reload. applicable mirrors
 // ModelConfig.CommitsApplicable, copied at construction so the handler can
-// short-circuit without consulting CLI flags. hint holds a transient
-// status-bar message; preserved for legacy hint-channel uses (see
-// view.statusHint) but no longer set by handleInfo itself, since the popup
-// no longer surfaces a transient hint.
+// short-circuit without consulting CLI flags.
 type commitsState struct {
 	source     commitLogSource   // VCS-backed log source; nil disables the feature
 	applicable bool              // true when current mode supports a commit list
@@ -328,25 +325,23 @@ type commitsState struct {
 	list       []diff.CommitInfo // cached commits (may be empty after a successful empty-range fetch)
 	truncated  bool              // true when the list was capped at diff.MaxCommits
 	err        error             // last fetch error; surfaces in the overlay
-	hint       string            // transient status-bar message; cleared on next key press
 	loadSeq    uint64            // bumped before each new commit-log load; stale commitsLoadedMsg (seq mismatch) is dropped
 }
 
 // ReviewInfoConfig carries startup invocation details for the unified info
 // overlay (description + session info + commits, all keyed off `i`). It is
-// assembled in main from CLI/VCS setup data and copied into the model so
-// the overlay can explain what the user is currently reviewing without
-// re-deriving command-line semantics inside the UI package. Description is
-// the agent-supplied prose plumbed by --description (issue #130); empty
-// disables the description section.
+// assembled in main from CLI/VCS setup data and threaded into the model
+// (ModelConfig.ReviewInfo) so the overlay can explain what the user is
+// currently reviewing without re-deriving command-line semantics inside the
+// UI package. Description is the agent-supplied prose plumbed by
+// --description (issue #130); empty disables the description section.
 //
-// Enabled gates the entire review-info subsystem: header, footer, stats
-// trigger, and mode-derived rows. Production constructs the config via
-// reviewInfoFromOptions which always sets Enabled=true; the zero value
-// (Enabled=false) is the off-switch focused tests use when they want the
-// commit-only popup without the surrounding review summary.
+// The config is consumed via a *ReviewInfoConfig pointer; nil disables the
+// entire review-info subsystem (header, footer, stats trigger, mode-derived
+// rows). Production always supplies a non-nil config via reviewInfoFromOptions;
+// focused tests pass nil to exercise the legacy commit-only popup without the
+// surrounding review summary.
 type ReviewInfoConfig struct {
-	Enabled        bool
 	Description    string
 	VCS            string
 	WorkDir        string
@@ -374,7 +369,7 @@ type ReviewInfoConfig struct {
 // fetch iterates over — copied at file-load time so the fetch is independent
 // of any later mutation to the file tree.
 type reviewInfoState struct {
-	cfg                    ReviewInfoConfig
+	cfg                    *ReviewInfoConfig
 	entries                []diff.FileEntry
 	statusCounts           map[diff.FileStatus]int
 	adds                   int
@@ -403,8 +398,8 @@ type reloadState struct {
 // FileReader) and shrinking context makes no sense. hint is a transient
 // status-bar message set when the toggle fires in an unavailable mode, so
 // the key press has visible feedback; cleared on the next key press, matching
-// the commits.hint / reload.hint lifecycle. The user-controlled toggle state
-// (on/off, context size) lives on modeState alongside the other view toggles.
+// the reload.hint lifecycle. The user-controlled toggle state (on/off,
+// context size) lives on modeState alongside the other view toggles.
 type compactState struct {
 	applicable bool   // true when current mode supports compact diffs
 	hint       string // transient status-bar message; cleared on next key press
@@ -641,10 +636,10 @@ type ModelConfig struct {
 	// construction; the feature is gated on that field everywhere.
 	VimMotion bool
 	// ReviewInfo populates the review-info overlay with invocation scope, filters, and
-	// aggregate file/line stats. Leave Enabled false to preserve the legacy
-	// commit-only popup behavior used by focused tests — every derived path
-	// (footer, rows, stats trigger) honors this single off-switch.
-	ReviewInfo ReviewInfoConfig
+	// aggregate file/line stats. Pass nil to preserve the legacy commit-only popup
+	// behavior used by focused tests — every derived path (footer, rows, stats
+	// trigger) treats nil as the off-switch.
+	ReviewInfo *ReviewInfoConfig
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -709,6 +704,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		ed = editor.Editor{}
 	}
 	cls := resolveCommitLogSource(cfg.CommitLog, cfg.Renderer)
+	reviewCfg := cloneReviewInfoConfig(cfg.ReviewInfo)
 
 	return Model{
 		resolver:     cfg.StyleResolver,
@@ -756,8 +752,8 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			applicable: cfg.CommitsApplicable && cls != nil,
 		},
 		review: reviewInfoState{
-			cfg:                    cfg.ReviewInfo,
-			descriptionHighlighted: precomputeDescriptionHighlight(cfg.Highlighter, cfg.ReviewInfo.Description),
+			cfg:                    reviewCfg,
+			descriptionHighlighted: precomputeDescriptionHighlight(cfg.Highlighter, descriptionFromConfig(reviewCfg)),
 		},
 		reload:          reloadState{applicable: cfg.ReloadApplicable},
 		compact:         compactState{applicable: cfg.CompactApplicable},
@@ -831,7 +827,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// transient hints persist for exactly one render cycle; any key that reaches
 	// this point dismisses the last hint before the new action runs.
-	m.commits.hint = ""
 	m.reload.hint = ""
 	m.compact.hint = ""
 	m.keys.hint = ""
@@ -1288,6 +1283,39 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// descriptionFromConfig safely reads the description prose out of an optional
+// ReviewInfoConfig. nil cfg yields "" so precomputeDescriptionHighlight
+// short-circuits on the empty path.
+func descriptionFromConfig(cfg *ReviewInfoConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Description
+}
+
+// cloneReviewInfoConfig returns a deep copy of cfg so the model owns its own
+// review-info state. NewModel stores the pointer on reviewInfoState and also
+// derives a one-shot descriptionHighlighted cache from it; without a clone,
+// any later mutation through the caller's reference would alias model state
+// and silently desynchronize the cache from cfg.Description. nil passes
+// through unchanged so the "review-info disabled" off-switch is preserved.
+func cloneReviewInfoConfig(cfg *ReviewInfoConfig) *ReviewInfoConfig {
+	if cfg == nil {
+		return nil
+	}
+	cp := *cfg
+	if cfg.Only != nil {
+		cp.Only = append([]string(nil), cfg.Only...)
+	}
+	if cfg.Include != nil {
+		cp.Include = append([]string(nil), cfg.Include...)
+	}
+	if cfg.Exclude != nil {
+		cp.Exclude = append([]string(nil), cfg.Exclude...)
+	}
+	return &cp
 }
 
 // resolveCommitLogSource picks the commit-log source for the model from an

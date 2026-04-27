@@ -367,7 +367,6 @@ func TestModel_HandleInfo_OpensOverlayWhenApplicable(t *testing.T) {
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "i should open the overlay when applicable")
 	assert.Equal(t, overlay.KindInfo, model.overlay.Kind())
-	assert.Empty(t, model.commits.hint, "applicable path does not set a hint")
 }
 
 func TestModel_HandleInfo_OpensOverlayEvenWhenCommitsHidden(t *testing.T) {
@@ -386,7 +385,6 @@ func TestModel_HandleInfo_OpensOverlayEvenWhenCommitsHidden(t *testing.T) {
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "overlay must open in every mode — commits section hides itself")
 	assert.Equal(t, overlay.KindInfo, model.overlay.Kind())
-	assert.Empty(t, model.commits.hint, "no transient hint — the section handles its own state")
 	assert.Equal(t, 0, fake.calls, "no commits fetch when feature is not applicable")
 }
 
@@ -398,7 +396,6 @@ func TestModel_HandleInfo_OpensOverlayWhenSourceNil(t *testing.T) {
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "overlay opens even with no commit source — session section still useful")
-	assert.Empty(t, model.commits.hint)
 }
 
 func TestModel_HandleInfo_StoresErrorInSpec(t *testing.T) {
@@ -429,7 +426,6 @@ func TestModel_HandleInfo_OpensImmediatelyDuringLoad(t *testing.T) {
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
 	model := result.(Model)
 	assert.True(t, model.overlay.Active(), "overlay opens immediately even while commits are loading")
-	assert.Empty(t, model.commits.hint, "no transient hint — the section header signals loading")
 }
 
 func TestModel_ReloadHint_ShownInStatusBar(t *testing.T) {
@@ -658,15 +654,7 @@ func TestModel_CompactHint_ClearsOnNextKey(t *testing.T) {
 }
 
 func TestModel_TransientHint_Priority(t *testing.T) {
-	t.Run("commits wins over reload and compact", func(t *testing.T) {
-		m := testModel([]string{"a.go"}, nil)
-		m.commits.hint = "commits msg"
-		m.reload.hint = "reload msg"
-		m.compact.hint = "compact msg"
-		assert.Equal(t, "commits msg", m.transientHint())
-	})
-
-	t.Run("reload wins over compact when commits empty", func(t *testing.T) {
+	t.Run("reload wins over compact", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
 		m.reload.hint = "reload msg"
 		m.compact.hint = "compact msg"

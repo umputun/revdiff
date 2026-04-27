@@ -25,16 +25,13 @@ func (m *Model) setReviewEntries(entries []diff.FileEntry) {
 		}
 	}
 	// reset aggregate-line state — a reload invalidates any prior fetch.
-	// The entries snapshot is only consumed by loadReviewStats, so skip the
-	// copy in modes where stats never run (focused tests with Enabled=false,
-	// or --all-files where line counts are not computed). Otherwise copy so a
-	// later mutation of the file tree's slice (sort, truncate, append) cannot
-	// change what the lazy stats fetch iterates over.
-	if m.review.cfg.Enabled && !m.review.cfg.AllFiles {
-		m.review.entries = append([]diff.FileEntry(nil), entries...)
-	} else {
-		m.review.entries = entries
-	}
+	// Always snapshot the entries slice: the stats fetch iterates it, and the
+	// footer/header read len() from the same field. Sharing the caller's
+	// backing array would let a later sort/append/truncate change what we see
+	// through this header. The slice is small (per-file entries) so the copy
+	// is cheap, and a single code path avoids drift between stats-on and
+	// stats-off modes.
+	m.review.entries = append([]diff.FileEntry(nil), entries...)
 	m.review.adds = 0
 	m.review.removes = 0
 	m.review.partial = false
@@ -49,14 +46,14 @@ func (m *Model) setReviewEntries(entries []diff.FileEntry) {
 // from cache; a reload (which calls setReviewEntries again) flips
 // statsRequested back to false so the next open re-fetches. Returns nil when
 // stats are not applicable (AllFiles or focused-test mode where the config is
-// disabled), already in flight, or opened before the file list has loaded. In
-// the last case statsRequested remains true so handleFilesLoaded can schedule
-// the deferred fetch once entries are known.
+// nil), already in flight, or opened before the file list has loaded. In the
+// last case statsRequested remains true so handleFilesLoaded can schedule the
+// deferred fetch once entries are known.
 func (m *Model) triggerReviewStats() tea.Cmd {
 	if m.review.statsRequested {
 		return nil
 	}
-	if !m.review.cfg.Enabled || m.review.cfg.AllFiles {
+	if m.review.cfg == nil || m.review.cfg.AllFiles {
 		m.review.statsLoaded = true
 		m.review.statsRequested = true
 		return nil
@@ -81,18 +78,21 @@ func (m *Model) triggerReviewStats() tea.Cmd {
 // stats-loading honors the same hg/jj fallback as the popup header/footer.
 // Reading m.cfg.staged directly would diverge from what the user sees.
 func (m Model) loadReviewStats(entries []diff.FileEntry) tea.Cmd {
-	if !m.review.cfg.Enabled || m.review.cfg.AllFiles || len(entries) == 0 {
+	if m.review.cfg == nil || m.review.cfg.AllFiles || len(entries) == 0 {
 		return nil
 	}
 	seq := m.review.statsLoadSeq
-	ref := m.cfg.ref
-	staged := m.review.cfg.Staged
-	differ := m.diffRenderer
-	workDir := m.cfg.workDir
+	req := review.StatsRequest{
+		Differ:  m.diffRenderer,
+		Ref:     m.cfg.ref,
+		Staged:  m.review.cfg.Staged,
+		WorkDir: m.cfg.workDir,
+		Entries: entries,
+	}
 	return func() tea.Msg {
 		return reviewStatsLoadedMsg{
 			seq:   seq,
-			Stats: review.ComputeStats(differ, ref, staged, workDir, entries),
+			Stats: review.ComputeStats(req),
 		}
 	}
 }
@@ -144,7 +144,7 @@ func (m Model) buildInfoSpec() overlay.InfoSpec {
 	return overlay.InfoSpec{
 		HeaderText:        m.reviewHeaderText(),
 		FooterText:        m.reviewFooterText(),
-		Description:       m.highlightDescription(),
+		Description:       m.review.descriptionHighlighted,
 		Rows:              m.reviewRows(),
 		Commits:           m.commits.list,
 		CommitsApplicable: m.commits.applicable && m.commits.source != nil,
@@ -152,15 +152,6 @@ func (m Model) buildInfoSpec() overlay.InfoSpec {
 		Truncated:         m.commits.truncated,
 		CommitsErr:        m.commits.err,
 	}
-}
-
-// highlightDescription returns the cached, pre-highlighted description text.
-// The actual chroma run happens once at Model construction (see
-// precomputeDescriptionHighlight) because the description is static for the
-// model's lifetime — re-highlighting on every overlay refresh wasted CPU on a
-// path that produced byte-identical output every time.
-func (m Model) highlightDescription() string {
-	return m.review.descriptionHighlighted
 }
 
 // precomputeDescriptionHighlight runs the description prose through the
@@ -186,6 +177,9 @@ func precomputeDescriptionHighlight(h SyntaxHighlighter, desc string) string {
 		diffLines[i] = diff.DiffLine{Content: line, ChangeType: diff.ChangeContext}
 	}
 	highlighted := h.HighlightLines("description.md", diffLines)
+	if highlighted == nil {
+		return strings.Join(rawLines, "\n")
+	}
 	return strings.Join(highlighted, "\n")
 }
 
@@ -201,14 +195,16 @@ func precomputeDescriptionHighlight(h SyntaxHighlighter, desc string) string {
 //	stdin: patch.diff           — --stdin <name>
 //	stdin scratch buffer        — --stdin without a name
 //	all tracked files           — --all-files
+//	standalone files            — --only without a VCS (file-only review)
 //
-// Returns "" in focused-test mode (no review-info config); the overlay
-// then falls back to a plain " info " title.
+// Returns "" in focused-test mode (cfg == nil); the overlay then falls back
+// to a plain " info " title.
 func (m Model) reviewHeaderText() string {
 	cfg := m.review.cfg
-	switch {
-	case !cfg.Enabled:
+	if cfg == nil {
 		return ""
+	}
+	switch {
 	case cfg.Stdin:
 		if cfg.StdinName != "" {
 			return "stdin: " + cfg.StdinName
@@ -218,6 +214,10 @@ func (m Model) reviewHeaderText() string {
 		return "all tracked files"
 	case cfg.Staged:
 		return "staged changes"
+	case cfg.VCS == "none":
+		// no-VCS file-only review: there is no working tree or ref scope, so
+		// the default "working tree changes" phrasing would mislead.
+		return "standalone files"
 	case cfg.Ref == "":
 		return "working tree changes"
 	case strings.Contains(cfg.Ref, ".."):
@@ -231,13 +231,13 @@ func (m Model) reviewHeaderText() string {
 // popup's bottom border. Pieces are joined with " · " in this order:
 // file count, line totals, file-status histogram, vcs name. Pieces that
 // don't apply in the current mode (e.g. line totals while in --all-files
-// mode) are dropped silently. Empty when ReviewInfoConfig.Enabled is false
-// regardless of file count, matching reviewHeaderText and triggerReviewStats:
-// Enabled=false is the off-switch for the entire review-info subsystem, so
-// every derived render path must honor it consistently or "loading…" can
-// stick on the footer forever (triggerReviewStats short-circuits there).
+// mode) are dropped silently. Empty when m.review.cfg is nil regardless of
+// file count, matching reviewHeaderText and triggerReviewStats: cfg == nil
+// is the off-switch for the entire review-info subsystem, so every derived
+// render path must honor it consistently or "loading…" can stick on the
+// footer forever (triggerReviewStats short-circuits there).
 func (m Model) reviewFooterText() string {
-	if !m.review.cfg.Enabled {
+	if m.review.cfg == nil {
 		return ""
 	}
 	parts := []string{m.reviewFilesText()}
@@ -262,14 +262,17 @@ func (m Model) reviewFooterText() string {
 // or none at all in stdin mode where workDir is empty.
 func (m Model) reviewRows() []overlay.InfoRow {
 	cfg := m.review.cfg
+	if cfg == nil {
+		return nil
+	}
 	var rows []overlay.InfoRow
-	if f := reviewListFlag(cfg.Only); f != "" {
+	if f := m.reviewListFlag(cfg.Only); f != "" {
 		rows = append(rows, overlay.InfoRow{Label: "only", Value: f})
 	}
-	if f := reviewListFlag(cfg.Include); f != "" {
+	if f := m.reviewListFlag(cfg.Include); f != "" {
 		rows = append(rows, overlay.InfoRow{Label: "include", Value: f})
 	}
-	if f := reviewListFlag(cfg.Exclude); f != "" {
+	if f := m.reviewListFlag(cfg.Exclude); f != "" {
 		rows = append(rows, overlay.InfoRow{Label: "exclude", Value: f})
 	}
 	if cfg.Compact {
@@ -290,13 +293,14 @@ func (m Model) reviewRows() []overlay.InfoRow {
 
 func (m Model) reviewFilesText() string {
 	n := len(m.review.entries)
+	allFiles := m.review.cfg != nil && m.review.cfg.AllFiles
 	if n == 1 {
-		if m.review.cfg.AllFiles {
+		if allFiles {
 			return "1 tracked file"
 		}
 		return "1 file"
 	}
-	if m.review.cfg.AllFiles {
+	if allFiles {
 		return fmt.Sprintf("%d tracked files", n)
 	}
 	return fmt.Sprintf("%d files", n)
@@ -304,7 +308,7 @@ func (m Model) reviewFilesText() string {
 
 func (m Model) reviewLinesText() string {
 	switch {
-	case m.review.cfg.AllFiles:
+	case m.review.cfg != nil && m.review.cfg.AllFiles:
 		return "not calculated in all-files mode"
 	case !m.review.statsLoaded:
 		return "loading…"
@@ -346,7 +350,7 @@ func (m Model) reviewStatusText() string {
 	return strings.Join(parts, " ")
 }
 
-func reviewListFlag(values []string) string {
+func (m Model) reviewListFlag(values []string) string {
 	if len(values) == 0 {
 		return ""
 	}

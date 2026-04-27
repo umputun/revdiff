@@ -116,7 +116,7 @@ func (t *themeSelectOverlay) render(ctx RenderCtx, mgr *Manager) string {
 
 	accentFg := string(ctx.Resolver.Color(style.ColorKeyAccentFg))
 	paneBg := string(ctx.Resolver.Color(style.ColorKeyDiffPaneBg))
-	box = mgr.injectBorderTitle(box, title, popupWidth, accentFg, paneBg)
+	box = mgr.injectBorderTitle(box, title, borderEdgeText{popupWidth: popupWidth, accentFg: accentFg, paneBg: paneBg})
 
 	return box
 }

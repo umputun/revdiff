@@ -52,7 +52,7 @@ func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 
 	accentFg := string(ctx.Resolver.Color(style.ColorKeyAccentFg))
 	paneBg := string(ctx.Resolver.Color(style.ColorKeyDiffPaneBg))
-	box = mgr.injectBorderTitle(box, title, popupWidth, accentFg, paneBg)
+	box = mgr.injectBorderTitle(box, title, borderEdgeText{popupWidth: popupWidth, accentFg: accentFg, paneBg: paneBg})
 
 	return box
 }
@@ -67,7 +67,7 @@ func (a *annotListOverlay) emptyOverlay(popupWidth int, resolver Resolver, mgr *
 	title := " annotations (0) "
 	accentFg := string(resolver.Color(style.ColorKeyAccentFg))
 	paneBg := string(resolver.Color(style.ColorKeyDiffPaneBg))
-	box = mgr.injectBorderTitle(box, title, popupWidth, accentFg, paneBg)
+	box = mgr.injectBorderTitle(box, title, borderEdgeText{popupWidth: popupWidth, accentFg: accentFg, paneBg: paneBg})
 	return box
 }
 

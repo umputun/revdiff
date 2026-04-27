@@ -36,16 +36,16 @@ func (h *Hg) blameTargetRef(ref string) string {
 		if left == "" || right == "" {
 			return ""
 		}
-		return translateRef(right)
+		return h.translateRef(right)
 	}
 	if left, right, ok := strings.Cut(ref, ".."); ok {
 		if left == "" || right == "" {
 			return ""
 		}
-		return translateRef(right)
+		return h.translateRef(right)
 	}
 	if ref != "" {
-		return translateRef(ref)
+		return h.translateRef(ref)
 	}
 	return ""
 }

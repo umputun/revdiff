@@ -109,7 +109,6 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// transient hints persist for exactly one render cycle; any mouse event
 	// that reaches this point dismisses the last hint, mirroring handleKey.
-	m.commits.hint = ""
 	m.reload.hint = ""
 	m.compact.hint = ""
 

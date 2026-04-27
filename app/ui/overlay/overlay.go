@@ -375,11 +375,23 @@ func (m *Manager) overlayCenter(bg, fg string, width int) string {
 	return strings.Join(bgLines, "\n")
 }
 
+// borderEdgeText carries the geometry/color values shared by the top and
+// bottom border-label injectors. Bundled into a struct so the per-call site
+// (one for the title, one for the footer) does not have to repeat five
+// positional args — the prior shape made same-typed-string swaps (accentFg
+// vs paneBg) silent at the type system.
+type borderEdgeText struct {
+	popupWidth int
+	accentFg   string // ANSI fg escape for border characters; "" for plain
+	paneBg     string // ANSI bg escape for the border background; "" for plain
+}
+
 // injectBorderTitle replaces part of the top border line with a centered title.
-// accentFg is an ANSI fg escape for border characters, paneBg is an ANSI bg escape
-// for the border background (both from Resolver.Color lookups). Either may be empty.
-func (m *Manager) injectBorderTitle(box, title string, popupWidth int, accentFg, paneBg string) string {
-	return injectBorderEdgeText(box, title, popupWidth, accentFg, paneBg, true)
+// edge.accentFg is an ANSI fg escape for border characters, edge.paneBg is an
+// ANSI bg escape for the border background (both from Resolver.Color lookups).
+// Either may be empty.
+func (m *Manager) injectBorderTitle(box, title string, edge borderEdgeText) string {
+	return m.injectBorderEdgeText(box, title, edge, true)
 }
 
 // injectBorderFooter replaces part of the bottom border line with a centered
@@ -387,8 +399,8 @@ func (m *Manager) injectBorderTitle(box, title string, popupWidth int, accentFg,
 // box. Used by the unified info popup to surface aggregate stats (file count,
 // line totals, status histogram) without occupying body rows. Gracefully
 // no-ops when the footer text would not fit (popupWidth too small).
-func (m *Manager) injectBorderFooter(box, footer string, popupWidth int, accentFg, paneBg string) string {
-	return injectBorderEdgeText(box, footer, popupWidth, accentFg, paneBg, false)
+func (m *Manager) injectBorderFooter(box, footer string, edge borderEdgeText) string {
+	return m.injectBorderEdgeText(box, footer, edge, false)
 }
 
 // injectBorderEdgeText is the shared body for top/bottom border-label injection.
@@ -397,7 +409,7 @@ func (m *Manager) injectBorderFooter(box, footer string, popupWidth int, accentF
 // left/right pad lengths, fit check) is identical between the two — only the
 // target row index and the corner/line glyphs differ, so collapsing this lets
 // changes to the centering rule (e.g. minimum margin) stay in one place.
-func injectBorderEdgeText(box, text string, popupWidth int, accentFg, paneBg string, isTop bool) string {
+func (m *Manager) injectBorderEdgeText(box, text string, edge borderEdgeText, isTop bool) string {
 	boxLines := strings.Split(box, "\n")
 	if len(boxLines) == 0 {
 		return box
@@ -427,18 +439,18 @@ func injectBorderEdgeText(box, text string, popupWidth int, accentFg, paneBg str
 	}
 
 	leftLen := textStart - 1
-	rightLen := max(popupWidth-textStart-textWidth+1, 0)
+	rightLen := max(edge.popupWidth-textStart-textWidth+1, 0)
 
 	bgSeq := ""
 	bgReset := ""
-	if paneBg != "" {
-		bgSeq = paneBg
+	if edge.paneBg != "" {
+		bgSeq = edge.paneBg
 		bgReset = string(style.ResetBg)
 	}
 	fgSeq := ""
 	fgReset := ""
-	if accentFg != "" {
-		fgSeq = accentFg
+	if edge.accentFg != "" {
+		fgSeq = edge.accentFg
 		fgReset = resetFg
 	}
 	newLine := bgSeq + fgSeq +

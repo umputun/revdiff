@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,20 +76,6 @@ func TestSafeWorkDirPath_SymlinkInsideWorkDirAccepted(t *testing.T) {
 	assert.True(t, ok, "symlink staying inside workDir must be accepted")
 }
 
-// resolveWorkDir mirrors what ComputeStats does once at the top of its loop.
-// Tests that exercise safeWorkDirPath go through this helper so the test API
-// matches the production call shape.
-func resolveWorkDir(workDir string) string {
-	if workDir == "" {
-		return ""
-	}
-	r, err := filepath.EvalSymlinks(workDir)
-	if err != nil {
-		return ""
-	}
-	return r
-}
-
 // fakeDiffer is a stub FileDiffer for ComputeStats tests.
 type fakeDiffer struct {
 	fn func(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)
@@ -111,7 +99,7 @@ func TestComputeStats_AggregatesAddsAndRemoves(t *testing.T) {
 			{ChangeType: diff.ChangeDivider},
 		}, nil
 	}}
-	got := ComputeStats(differ, "", false, "", entries)
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
 	assert.Equal(t, 4, got.Adds, "two files × two adds each")
 	assert.Equal(t, 2, got.Removes, "two files × one remove each")
 	assert.False(t, got.Partial)
@@ -132,7 +120,7 @@ func TestComputeStats_FirstErrorStopsAndReturns(t *testing.T) {
 		}
 		return []diff.DiffLine{{ChangeType: diff.ChangeAdd}}, nil
 	}}
-	got := ComputeStats(differ, "", false, "", entries)
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
 	require.ErrorIs(t, got.Err, wantErr)
 	assert.Equal(t, 2, calls, "should stop after the failing call, not iterate further")
 }
@@ -145,7 +133,7 @@ func TestComputeStats_StagedFallbackForAddedFile(t *testing.T) {
 		}
 		return []diff.DiffLine{{ChangeType: diff.ChangeAdd}, {ChangeType: diff.ChangeAdd}}, nil
 	}}
-	got := ComputeStats(differ, "", false, "", entries)
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
 	assert.Equal(t, 2, got.Adds, "must fall back to staged content for empty primary diff on FileAdded")
 	assert.False(t, got.Partial)
 	assert.NoError(t, got.Err)
@@ -159,9 +147,29 @@ func TestComputeStats_StagedFallbackErrorMarksPartial(t *testing.T) {
 		}
 		return nil, nil
 	}}
-	got := ComputeStats(differ, "", false, "", entries)
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
 	assert.True(t, got.Partial, "staged fallback failure must mark stats partial")
 	assert.NoError(t, got.Err, "fallback failures are non-fatal")
+}
+
+func TestComputeStats_UntrackedReadBypassesPrimaryDiffError(t *testing.T) {
+	root := t.TempDir()
+	rel := "new.txt"
+	require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte("one\ntwo\n"), 0o600))
+	entries := []diff.FileEntry{{Path: rel, Status: diff.FileUntracked}}
+	called := false
+	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		called = true
+		return nil, errors.New("vcs does not know untracked file")
+	}}
+
+	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
+
+	assert.False(t, called, "untracked files should use the filesystem fallback without calling FileDiff")
+	require.NoError(t, got.Err)
+	assert.False(t, got.Partial)
+	assert.Equal(t, 2, got.Adds)
+	assert.Equal(t, 0, got.Removes)
 }
 
 func TestComputeStats_UntrackedReadOutsideWorkDirMarksPartial(t *testing.T) {
@@ -172,7 +180,7 @@ func TestComputeStats_UntrackedReadOutsideWorkDirMarksPartial(t *testing.T) {
 	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
 		return nil, nil
 	}}
-	got := ComputeStats(differ, "", false, t.TempDir(), entries)
+	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: t.TempDir(), Entries: entries})
 	assert.True(t, got.Partial)
 	assert.Equal(t, 0, got.Adds)
 	assert.Equal(t, 0, got.Removes)
@@ -192,7 +200,48 @@ func TestComputeStats_OversizedUntrackedFileSkipped(t *testing.T) {
 	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
 		return nil, nil
 	}}
-	got := ComputeStats(differ, "", false, root, entries)
+	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
 	assert.True(t, got.Partial, "oversized untracked file must mark stats partial")
 	assert.Equal(t, 0, got.Adds, "oversized untracked file must not contribute to totals")
+}
+
+func TestComputeStats_NonRegularUntrackedFileSkipped(t *testing.T) {
+	// FIFOs, sockets and other non-regular paths that survive the VCS listing
+	// must be skipped: Stat().Size() is not meaningful and reading would
+	// either block or balloon memory. The file is excluded from totals and
+	// stats are marked partial.
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFOs are not supported on Windows")
+	}
+	root := t.TempDir()
+	fifo := filepath.Join(root, "pipe")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Skipf("mkfifo unsupported: %v", err)
+	}
+	entries := []diff.FileEntry{{Path: "pipe", Status: diff.FileUntracked}}
+	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		return nil, nil
+	}}
+	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
+	assert.True(t, got.Partial, "non-regular untracked file must mark stats partial")
+	assert.Equal(t, 0, got.Adds)
+}
+
+func TestComputeStats_BinaryUntrackedFileSkipped(t *testing.T) {
+	// Untracked binaries hit ReadFileAsAdded and come back as a single
+	// IsBinary placeholder row that contributes 0/0 to CountChanges. Stats
+	// must mark partial rather than treating the file as fully accounted.
+	root := t.TempDir()
+	bin := filepath.Join(root, "blob.bin")
+	// embed a NUL byte so the binary detector inside diff.readReaderAsContext
+	// classifies the file as binary.
+	require.NoError(t, os.WriteFile(bin, []byte{0x00, 0x01, 0x02, 0x03}, 0o600))
+	entries := []diff.FileEntry{{Path: "blob.bin", Status: diff.FileUntracked}}
+	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		return nil, nil
+	}}
+	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
+	assert.True(t, got.Partial, "binary untracked file must mark stats partial")
+	assert.Equal(t, 0, got.Adds)
+	assert.Equal(t, 0, got.Removes)
 }
