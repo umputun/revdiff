@@ -11,6 +11,34 @@ import (
 	"github.com/umputun/revdiff/app/ui"
 )
 
+// maxAnnotationsFileSize caps the bytes read from --annotations. Annotation
+// files aggregate many records (LLM reviews, history exports) so 1 MiB is a
+// generous practical ceiling; anything larger almost certainly indicates the
+// flag was pointed at the wrong file.
+const maxAnnotationsFileSize = 1 << 20
+
+// preloader bundles the inputs and warning sink for --annotations preload.
+// All helpers are methods so call-sites stay free of the wide parameter
+// lists earlier shapes accumulated.
+type preloader struct {
+	store       *annotation.Store
+	renderer    ui.Renderer
+	ref         string
+	staged      bool
+	untrackedFn func() ([]string, error)
+	workDir     string
+	warnOut     io.Writer
+
+	// lineCache memoises the (line, change-type) set per file so
+	// repeated annotations on the same file do not re-fetch its diff.
+	lineCache map[string]map[lineKey]struct{}
+}
+
+type lineKey struct {
+	line int
+	kind string
+}
+
 // preloadAnnotations parses the markdown file at path (same format as
 // Store.FormatOutput) and feeds each record through store.Add after dropping
 // orphans against the resolved diff. file-level records (Line == 0) require
@@ -23,54 +51,100 @@ import (
 func preloadAnnotations(path string, store *annotation.Store, renderer ui.Renderer, ref string, staged bool,
 	untrackedFn func() ([]string, error), workDir string, warnOut io.Writer,
 ) error {
-	f, err := os.Open(path) //nolint:gosec // user-supplied path is intentional
-	if err != nil {
-		return fmt.Errorf("open annotations file: %w", err)
-	}
-	defer f.Close()
-
-	records, err := annotation.Parse(f)
-	if err != nil {
-		return fmt.Errorf("parse annotations: %w", err)
-	}
-
-	known, err := resolveKnownFiles(renderer, ref, staged, untrackedFn, warnOut)
+	records, err := readAnnotationsFile(path)
 	if err != nil {
 		return err
 	}
 
-	// cache parsed FileDiff per file so we don't re-fetch on each annotation
-	lineCache := make(map[string]map[lineKey]struct{})
+	p := &preloader{
+		store:       store,
+		renderer:    renderer,
+		ref:         ref,
+		staged:      staged,
+		untrackedFn: untrackedFn,
+		workDir:     workDir,
+		warnOut:     warnOut,
+		lineCache:   make(map[string]map[lineKey]struct{}),
+	}
+	return p.load(records)
+}
+
+// readAnnotationsFile rejects non-regular files (FIFO, device, anything that
+// would block os.Open) and oversize inputs before parsing. The size guard
+// runs first against info.Size() so we never start scanning a 100 MiB file
+// just to reject it; io.LimitReader is layered on top as belt-and-braces in
+// case the file grows between Stat and Open.
+func readAnnotationsFile(path string) ([]annotation.Annotation, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("open annotations file: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("open annotations file: %s: not a regular file", path)
+	}
+	if info.Size() > maxAnnotationsFileSize {
+		return nil, fmt.Errorf("annotations file %s exceeds %d bytes (got %d)", path, maxAnnotationsFileSize, info.Size())
+	}
+	f, err := os.Open(path) //nolint:gosec // user-supplied path is intentional
+	if err != nil {
+		return nil, fmt.Errorf("open annotations file: %w", err)
+	}
+	defer f.Close()
+
+	records, err := annotation.Parse(io.LimitReader(f, maxAnnotationsFileSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("parse annotations: %w", err)
+	}
+	return records, nil
+}
+
+func (p *preloader) load(records []annotation.Annotation) error {
+	known, err := p.resolveKnownFiles()
+	if err != nil {
+		return err
+	}
 
 	for _, a := range records {
+		// Sanitize the comment text before it reaches Store.Add: the
+		// preload source is user- or LLM-supplied and may carry stray
+		// ANSI / CR-overwrite / C1 bytes that Renderer.AnnotationInline
+		// wraps into the TUI verbatim. Mirrors diff.sanitizeCommitText
+		// usage on commit Author/Subject/Body.
+		a.Comment = diff.SanitizeCommitText(a.Comment)
+
 		status, ok := known[a.File]
 		if !ok {
-			_, _ = fmt.Fprintf(warnOut, "warning: --annotations: file %q not in diff, dropping annotation\n", a.File)
+			p.warnf("warning: --annotations: file %q not in diff, dropping annotation\n", a.File)
 			continue
 		}
 		if a.Line == 0 {
-			store.Add(a)
+			p.store.Add(a)
 			continue
 		}
-		lines := lookupLineSet(renderer, ref, staged, workDir, a.File, status, lineCache, warnOut)
+		lines := p.lookupLineSet(a.File, status)
 		if _, ok := lines[lineKey{line: a.Line, kind: a.Type}]; !ok {
-			_, _ = fmt.Fprintf(warnOut, "warning: --annotations: %s:%d (%s) not in diff, dropping\n", a.File, a.Line, a.Type)
+			p.warnf("warning: --annotations: %s:%d (%s) not in diff, dropping\n", a.File, a.Line, a.Type)
 			continue
 		}
-		store.Add(a)
+		p.store.Add(a)
 	}
 	return nil
 }
 
-// resolveKnownFiles returns the set of paths the preload should accept,
-// mirroring ui.loadFiles: when running with no ref and no --staged, staged-only
-// FileAdded entries are folded in if the unstaged set is empty, and untracked
-// files (when untrackedFn is provided) are always folded in so the
-// show-untracked UI toggle round-trips.
-func resolveKnownFiles(renderer ui.Renderer, ref string, staged bool, untrackedFn func() ([]string, error),
-	warnOut io.Writer,
-) (map[string]diff.FileStatus, error) {
-	files, err := renderer.ChangedFiles(ref, staged)
+// resolveKnownFiles returns the set of paths the preload should accept.
+// Mirrors ui.loadFiles' assembly of the visible file set with one deliberate
+// divergence: untracked files are always folded in here, whereas the UI only
+// surfaces them when its show-untracked toggle is on. The preload is
+// upstream of the toggle, so it has to accept either viewing mode for the
+// round-trip to be lossless.
+//
+// When running with no ref and no --staged, staged-only FileAdded entries
+// are folded in if the unstaged set is empty (matches the UI's empty-diff
+// fallback). Files renamed since the annotations file was generated are
+// keyed under their old path and will orphan-drop here — a known limitation
+// of the path-based format.
+func (p *preloader) resolveKnownFiles() (map[string]diff.FileStatus, error) {
+	files, err := p.renderer.ChangedFiles(p.ref, p.staged)
 	if err != nil {
 		return nil, fmt.Errorf("resolve diff for annotation preload: %w", err)
 	}
@@ -78,25 +152,23 @@ func resolveKnownFiles(renderer ui.Renderer, ref string, staged bool, untrackedF
 	for _, fe := range files {
 		known[fe.Path] = fe.Status
 	}
-	// fold in untracked files so annotations against them round-trip; matches
-	// ui.loadFiles which appends FileUntracked entries from loadUntracked.
-	if untrackedFn != nil {
-		if ut, utErr := untrackedFn(); utErr != nil {
-			_, _ = fmt.Fprintf(warnOut, "warning: --annotations: list untracked files: %v\n", utErr)
+	if p.untrackedFn != nil {
+		if ut, utErr := p.untrackedFn(); utErr != nil {
+			p.warnf("warning: --annotations: list untracked files: %v\n", utErr)
 		} else {
-			for _, p := range ut {
-				if _, ok := known[p]; !ok {
-					known[p] = diff.FileUntracked
+			for _, path := range ut {
+				if _, ok := known[path]; !ok {
+					known[path] = diff.FileUntracked
 				}
 			}
 		}
 	}
-	if ref != "" || staged || len(files) > 0 {
+	if p.ref != "" || p.staged || len(files) > 0 {
 		return known, nil
 	}
-	stagedFiles, sErr := renderer.ChangedFiles("", true)
+	stagedFiles, sErr := p.renderer.ChangedFiles("", true)
 	if sErr != nil {
-		_, _ = fmt.Fprintf(warnOut, "warning: --annotations: resolve staged files: %v\n", sErr)
+		p.warnf("warning: --annotations: resolve staged files: %v\n", sErr)
 		return known, nil
 	}
 	for _, fe := range stagedFiles {
@@ -114,10 +186,8 @@ func resolveKnownFiles(renderer ui.Renderer, ref string, staged bool, untrackedF
 // miss. Mirrors ui.resolveEmptyDiff: staged-only FileAdded entries retry with
 // --cached when the request was unstaged, and FileUntracked entries are read
 // from disk as all-added lines.
-func lookupLineSet(renderer ui.Renderer, ref string, staged bool, workDir, file string, status diff.FileStatus,
-	cache map[string]map[lineKey]struct{}, warnOut io.Writer,
-) map[lineKey]struct{} {
-	if lines, ok := cache[file]; ok {
+func (p *preloader) lookupLineSet(file string, status diff.FileStatus) map[lineKey]struct{} {
+	if lines, ok := p.lineCache[file]; ok {
 		return lines
 	}
 	var (
@@ -126,35 +196,34 @@ func lookupLineSet(renderer ui.Renderer, ref string, staged bool, workDir, file 
 		used string
 	)
 	switch {
-	case status == diff.FileUntracked && workDir != "":
+	case status == diff.FileUntracked && p.workDir != "":
 		used = "read"
-		dl, err = diff.ReadFileAsAdded(filepath.Join(workDir, file))
+		dl, err = diff.ReadFileAsAdded(filepath.Join(p.workDir, file))
 	default:
 		used = "diff"
-		fileStaged := staged
-		if !staged && ref == "" && status == diff.FileAdded {
+		fileStaged := p.staged
+		if !p.staged && p.ref == "" && status == diff.FileAdded {
 			fileStaged = true
 		}
-		dl, err = renderer.FileDiff(ref, file, fileStaged, 0)
+		dl, err = p.renderer.FileDiff(p.ref, file, fileStaged, 0)
 	}
 	var lines map[lineKey]struct{}
 	if err != nil {
-		_, _ = fmt.Fprintf(warnOut, "warning: --annotations: %s diff for %q: %v\n", used, file, err)
+		p.warnf("warning: --annotations: %s diff for %q: %v\n", used, file, err)
 		lines = map[lineKey]struct{}{}
 	} else {
 		lines = buildLineSet(dl)
 	}
-	cache[file] = lines
+	p.lineCache[file] = lines
 	return lines
 }
 
-type lineKey struct {
-	line int
-	kind string
+func (p *preloader) warnf(format string, args ...any) {
+	_, _ = fmt.Fprintf(p.warnOut, format, args...)
 }
 
 // buildLineSet maps each renderable diff line to its (line-number, change-type)
-// key. mirrors Model.diffLineNum: removals key on OldNum, all other change
+// key. Mirrors Model.diffLineNum: removals key on OldNum, all other change
 // types key on NewNum.
 func buildLineSet(lines []diff.DiffLine) map[lineKey]struct{} {
 	out := make(map[lineKey]struct{}, len(lines))
@@ -176,3 +245,4 @@ func buildLineSet(lines []diff.DiffLine) map[lineKey]struct{} {
 	}
 	return out
 }
+

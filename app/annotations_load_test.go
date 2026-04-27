@@ -5,6 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -68,7 +71,7 @@ func TestPreloadAnnotations_ChangedFilesError(t *testing.T) {
 func TestPreloadAnnotations_DropsOrphans(t *testing.T) {
 	body := "## a.go (file-level)\nfile-level note\n\n" +
 		"## a.go:5 (+)\nline-add note\n\n" +
-		"## a.go:99 (+)\northerwise valid file but bad line\n\n" +
+		"## a.go:99 (+)\notherwise valid file but bad line\n\n" +
 		"## ghost.go (file-level)\nghost\n\n" +
 		"## ghost.go:1 (+)\nghost line\n"
 	path := writeTempAnnotations(t, body)
@@ -226,6 +229,65 @@ func TestPreloadAnnotations_UntrackedListError(t *testing.T) {
 	require.NoError(t, preloadAnnotations(path, store, r, "", false, untracked, "", warn))
 	assert.Equal(t, 1, store.Count(), "tracked annotations survive when untracked listing fails")
 	assert.Contains(t, warn.String(), "list untracked files")
+}
+
+func TestPreloadAnnotations_RejectsNonRegularFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("FIFO not portable")
+	}
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "fifo")
+	require.NoError(t, syscall.Mkfifo(fifo, 0o600))
+
+	store := annotation.NewStore()
+	r := &mocks.RendererMock{}
+	err := preloadAnnotations(fifo, store, r, "", false, nil, "", &bytes.Buffer{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a regular file")
+}
+
+func TestPreloadAnnotations_RejectsOversizeFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big.md")
+	// header + body that scrolls past the 1 MiB cap
+	body := "## a.go:1 (+)\n" + strings.Repeat("x", maxAnnotationsFileSize+10) + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+
+	store := annotation.NewStore()
+	r := &mocks.RendererMock{}
+	err := preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds")
+}
+
+func TestPreloadAnnotations_SanitizesCommentText(t *testing.T) {
+	// Stray ANSI / CR-overwrite bytes in the source file must be stripped
+	// before reaching Store.Add — the TUI renderer wraps comment text in
+	// ANSI italic without a second pass.
+	body := "## a.go:5 (+)\nrogue \x1b[31mred\x1b[0m and \rcr-overwrite\n"
+	path := writeTempAnnotations(t, body)
+	store := annotation.NewStore()
+	r := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
+		},
+		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) {
+			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
+		},
+	}
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	got := store.Get("a.go")
+	require.Len(t, got, 1)
+	assert.NotContains(t, got[0].Comment, "\x1b")
+	assert.NotContains(t, got[0].Comment, "\r")
+	assert.Contains(t, got[0].Comment, "rogue red")
+	assert.Contains(t, got[0].Comment, "cr-overwrite")
+}
+
+func TestValidateStdinFlags_RejectsAnnotations(t *testing.T) {
+	opts := options{Stdin: true, Annotations: "/tmp/n.md"}
+	err := validateStdinFlags(opts)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--annotations")
 }
 
 func TestPreloadAnnotations_EmptyFile(t *testing.T) {
