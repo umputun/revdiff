@@ -69,6 +69,8 @@ func (r Resolver) Color(k ColorKey) Color {
 		return Color(ansiColor(r.colors.AddFg, 38))
 	case ColorKeyRemoveLineFg:
 		return Color(ansiColor(r.colors.RemoveFg, 38))
+	case ColorKeyModifyLineFg:
+		return Color(ansiColor(r.colors.ModifyFg, 38))
 	case ColorKeyNormalFg:
 		return Color(ansiColor(r.colors.Normal, 38))
 	case ColorKeySelectedFg:
@@ -95,6 +97,23 @@ func (r Resolver) LineBg(change diff.ChangeType) Color {
 		return Color(ansiColor(r.colors.AddBg, 48))
 	case diff.ChangeRemove:
 		return Color(ansiColor(r.colors.RemoveBg, 48))
+	default:
+		return ""
+	}
+}
+
+// LineFg returns the ANSI foreground escape sequence for a diff change type.
+// Used to color the +/-/~ prefix when chroma highlighting is active and the
+// highlighted line style intentionally omits foreground (chroma owns content fg).
+// ChangeAdd → AddFg, ChangeRemove → RemoveFg, everything else → empty.
+// Modify lines (collapsed mode) are synthesized in the UI layer and not a
+// diff change type — call Color(ColorKeyModifyLineFg) directly for those.
+func (r Resolver) LineFg(change diff.ChangeType) Color {
+	switch change {
+	case diff.ChangeAdd:
+		return Color(ansiColor(r.colors.AddFg, 38))
+	case diff.ChangeRemove:
+		return Color(ansiColor(r.colors.RemoveFg, 38))
 	default:
 		return ""
 	}

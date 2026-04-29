@@ -219,6 +219,33 @@ func TestResolver_LineBg(t *testing.T) {
 	}
 }
 
+func TestResolver_LineFg(t *testing.T) {
+	r := NewResolver(fullColorsForTesting)
+
+	tests := []struct {
+		name   string
+		change diff.ChangeType
+		want   bool // true if non-empty expected
+	}{
+		{"add", diff.ChangeAdd, true},
+		{"remove", diff.ChangeRemove, true},
+		{"context", diff.ChangeContext, false},
+		{"divider", diff.ChangeDivider, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := r.LineFg(tt.change)
+			if tt.want {
+				assert.NotEmpty(t, string(got), "expected non-empty LineFg for %s", tt.change)
+				assert.Contains(t, string(got), "\033[38;2;", "expected ANSI fg sequence")
+			} else {
+				assert.Empty(t, string(got), "expected empty LineFg for %s", tt.change)
+			}
+		})
+	}
+}
+
 func TestResolver_LineStyle(t *testing.T) {
 	r := NewResolver(fullColorsForTesting)
 

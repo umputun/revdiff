@@ -105,8 +105,10 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 	numGutter, blGutter := m.lineGutters(dl)
 
 	bgColor := m.resolver.Color(style.ColorKeyAddLineBg)
+	prefixFg := m.resolver.LineFg(diff.ChangeAdd)
 	if modified {
 		bgColor = m.resolver.Color(style.ColorKeyModifyLineBg)
+		prefixFg = m.resolver.Color(style.ColorKeyModifyLineFg)
 	}
 
 	// wrap mode: break long lines at word boundaries with continuation markers
@@ -115,13 +117,14 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 			gutter: gutter, numGutter: numGutter, blGutter: blGutter,
 			isCursor: isCursor, hasHighlight: hasHighlight,
 			lineStyle: lineStyle, hlStyle: lineHlStyle, bgColor: bgColor,
+			prefixFg: prefixFg,
 		})
 		return
 	}
 
 	content := lineStyle.Render(gutter + lineContent)
 	if hasHighlight {
-		content = lineHlStyle.Render(gutter + textContent)
+		content = lineHlStyle.Render(m.wrapPrefixForHighlight(gutter, prefixFg, true) + textContent)
 	}
 	content = m.applyHorizontalScroll(content, bgColor)
 	content = m.extendLineBg(content, bgColor)
@@ -139,7 +142,7 @@ type wrappedLineCtx struct {
 	gutter, numGutter, blGutter string
 	isCursor, hasHighlight      bool
 	lineStyle, hlStyle          lipgloss.Style
-	bgColor                     style.Color
+	bgColor, prefixFg           style.Color
 }
 
 // renderWrappedCollapsedLine renders a collapsed add line with word wrapping, producing continuation lines with ↪ markers.
@@ -158,7 +161,7 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string
 
 		var styled string
 		if ctx.hasHighlight {
-			styled = ctx.hlStyle.Render(prefix + vl)
+			styled = ctx.hlStyle.Render(m.wrapPrefixForHighlight(prefix, ctx.prefixFg, true) + vl)
 		} else {
 			styled = ctx.lineStyle.Render(prefix + vl)
 		}

@@ -491,6 +491,18 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 	}
 }
 
+// wrapPrefixForHighlight wraps the +/-/~ prefix in explicit raw ANSI fg when
+// chroma highlighting is on. Highlighted line styles intentionally set only
+// background (chroma owns per-token fg for content), so the prefix would
+// otherwise inherit the terminal default fg and may render invisibly on
+// light theme backgrounds.
+func (m Model) wrapPrefixForHighlight(prefix string, fg style.Color, hasHighlight bool) string {
+	if !hasHighlight || fg == "" {
+		return prefix
+	}
+	return string(fg) + prefix + string(style.ResetFg)
+}
+
 // highlightSearchMatches wraps each occurrence of the search term in the visible text
 // with ANSI background color sequence (preserving syntax foreground within matches).
 // works with both plain text and ANSI-coded content by stripping ANSI to find match positions.
@@ -549,7 +561,7 @@ func (m Model) styleDiffContent(changeType diff.ChangeType, prefix, content stri
 	if isSearchMatch && m.search.term != "" {
 		content = m.highlightSearchMatches(content, changeType)
 	}
-
+	prefix = m.wrapPrefixForHighlight(prefix, m.resolver.LineFg(changeType), hasHighlight)
 	return m.resolver.LineStyle(changeType, hasHighlight).Render(prefix + content)
 }
 

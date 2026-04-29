@@ -26,6 +26,9 @@ import (
 //			LineBgFunc: func(change diff.ChangeType) style.Color {
 //				panic("mock out the LineBg method")
 //			},
+//			LineFgFunc: func(change diff.ChangeType) style.Color {
+//				panic("mock out the LineFg method")
+//			},
 //			LineStyleFunc: func(change diff.ChangeType, highlighted bool) lipgloss.Style {
 //				panic("mock out the LineStyle method")
 //			},
@@ -50,6 +53,9 @@ type styleResolverMock struct {
 
 	// LineBgFunc mocks the LineBg method.
 	LineBgFunc func(change diff.ChangeType) style.Color
+
+	// LineFgFunc mocks the LineFg method.
+	LineFgFunc func(change diff.ChangeType) style.Color
 
 	// LineStyleFunc mocks the LineStyle method.
 	LineStyleFunc func(change diff.ChangeType, highlighted bool) lipgloss.Style
@@ -77,6 +83,11 @@ type styleResolverMock struct {
 			// Change is the change argument value.
 			Change diff.ChangeType
 		}
+		// LineFg holds details about calls to the LineFg method.
+		LineFg []struct {
+			// Change is the change argument value.
+			Change diff.ChangeType
+		}
 		// LineStyle holds details about calls to the LineStyle method.
 		LineStyle []struct {
 			// Change is the change argument value.
@@ -98,6 +109,7 @@ type styleResolverMock struct {
 	lockColor       sync.RWMutex
 	lockIndicatorBg sync.RWMutex
 	lockLineBg      sync.RWMutex
+	lockLineFg      sync.RWMutex
 	lockLineStyle   sync.RWMutex
 	lockStyle       sync.RWMutex
 	lockWordDiffBg  sync.RWMutex
@@ -196,6 +208,38 @@ func (mock *styleResolverMock) LineBgCalls() []struct {
 	mock.lockLineBg.RLock()
 	calls = mock.calls.LineBg
 	mock.lockLineBg.RUnlock()
+	return calls
+}
+
+// LineFg calls LineFgFunc.
+func (mock *styleResolverMock) LineFg(change diff.ChangeType) style.Color {
+	if mock.LineFgFunc == nil {
+		panic("styleResolverMock.LineFgFunc: method is nil but styleResolver.LineFg was just called")
+	}
+	callInfo := struct {
+		Change diff.ChangeType
+	}{
+		Change: change,
+	}
+	mock.lockLineFg.Lock()
+	mock.calls.LineFg = append(mock.calls.LineFg, callInfo)
+	mock.lockLineFg.Unlock()
+	return mock.LineFgFunc(change)
+}
+
+// LineFgCalls gets all the calls that were made to LineFg.
+// Check the length with:
+//
+//	len(mockedstyleResolver.LineFgCalls())
+func (mock *styleResolverMock) LineFgCalls() []struct {
+	Change diff.ChangeType
+} {
+	var calls []struct {
+		Change diff.ChangeType
+	}
+	mock.lockLineFg.RLock()
+	calls = mock.calls.LineFg
+	mock.lockLineFg.RUnlock()
 	return calls
 }
 

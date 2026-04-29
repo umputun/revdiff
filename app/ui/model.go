@@ -63,6 +63,7 @@ type styleResolver interface {
 	Color(k style.ColorKey) style.Color
 	Style(k style.StyleKey) lipgloss.Style
 	LineBg(change diff.ChangeType) style.Color
+	LineFg(change diff.ChangeType) style.Color
 	LineStyle(change diff.ChangeType, highlighted bool) lipgloss.Style
 	WordDiffBg(change diff.ChangeType) style.Color
 	IndicatorBg(change diff.ChangeType) style.Color

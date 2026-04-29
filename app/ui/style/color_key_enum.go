@@ -46,6 +46,7 @@ var _colorKeyParseMap = map[string]ColorKey{
 	"searchbg":     ColorKeySearchBg,
 	"addlinefg":    ColorKeyAddLineFg,
 	"removelinefg": ColorKeyRemoveLineFg,
+	"modifylinefg": ColorKeyModifyLineFg,
 	"normalfg":     ColorKeyNormalFg,
 	"selectedfg":   ColorKeySelectedFg,
 }
@@ -87,8 +88,9 @@ var (
 	ColorKeySearchBg     = ColorKey{name: "SearchBg", value: 12}
 	ColorKeyAddLineFg    = ColorKey{name: "AddLineFg", value: 13}
 	ColorKeyRemoveLineFg = ColorKey{name: "RemoveLineFg", value: 14}
-	ColorKeyNormalFg     = ColorKey{name: "NormalFg", value: 15}
-	ColorKeySelectedFg   = ColorKey{name: "SelectedFg", value: 16}
+	ColorKeyModifyLineFg = ColorKey{name: "ModifyLineFg", value: 15}
+	ColorKeyNormalFg     = ColorKey{name: "NormalFg", value: 16}
+	ColorKeySelectedFg   = ColorKey{name: "SelectedFg", value: 17}
 )
 
 // ColorKeyValues contains all possible enum values
@@ -108,6 +110,7 @@ var ColorKeyValues = []ColorKey{
 	ColorKeySearchBg,
 	ColorKeyAddLineFg,
 	ColorKeyRemoveLineFg,
+	ColorKeyModifyLineFg,
 	ColorKeyNormalFg,
 	ColorKeySelectedFg,
 }
@@ -129,6 +132,7 @@ var ColorKeyNames = []string{
 	"SearchBg",
 	"AddLineFg",
 	"RemoveLineFg",
+	"ModifyLineFg",
 	"NormalFg",
 	"SelectedFg",
 }
@@ -184,6 +188,8 @@ var _ = func() bool {
 	var _ colorKey = colorKeyAddLineFg
 	// This avoids "defined but not used" linter error for colorKeyRemoveLineFg
 	var _ colorKey = colorKeyRemoveLineFg
+	// This avoids "defined but not used" linter error for colorKeyModifyLineFg
+	var _ colorKey = colorKeyModifyLineFg
 	// This avoids "defined but not used" linter error for colorKeyNormalFg
 	var _ colorKey = colorKeyNormalFg
 	// This avoids "defined but not used" linter error for colorKeySelectedFg
