@@ -6,7 +6,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jessevdk/go-flags"
+	"github.com/muesli/termenv"
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
@@ -83,6 +85,17 @@ func main() {
 }
 
 func run(opts options) error {
+	// force lipgloss to truecolor when colors are enabled. revdiff's raw-ANSI
+	// helpers (style.ansiColor) always emit truecolor, but lipgloss respects
+	// the termenv-detected profile, which can downgrade to ANSI256 / ANSI in
+	// tmux or terminals where TERM/COLORTERM detection regresses. The mismatch
+	// makes lipgloss-rendered colors (pane borders, file tree fg) look wrong
+	// while raw-ANSI paths (line prefix wrap, overlay title injection) render
+	// correctly. Forcing truecolor unifies the two paths.
+	if !opts.NoColors {
+		lipgloss.SetColorProfile(termenv.TrueColor)
+	}
+
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
 	keysPath := opts.Keys
