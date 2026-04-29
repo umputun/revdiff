@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.27.1 - 2026-04-29
+
+### Improvements
+
+- colorblind-friendly gallery themes (light + dark) #157 @krajcik
+
+### Bug Fixes
+
+- render +/-/~ prefix with explicit fg on highlighted lines c406355
+- force lipgloss truecolor profile to match raw-ANSI helpers 5d729f6
+- wrap theme list non-selected names in normal fg ANSI 752138b
+- widen border luminance on colorblind-light fe52088
+- use search-match fg for prefix on collapsed search-match lines 37f1fea
+- marketplace install command in plugin install instructions #159 @umputun
+
 ## v0.27.0 - 2026-04-27
 
 ### New Features
