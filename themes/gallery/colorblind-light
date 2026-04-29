@@ -2,7 +2,7 @@
 # description: high-contrast red-green colorblind-friendly light palette adapted from GNU Modus
 # author: Nikita Krajcik
 
-chroma-style = xcode
+chroma-style = modus-operandi
 color-accent = #0031a9
 color-border = #595959
 color-normal = #000000
