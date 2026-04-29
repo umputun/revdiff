@@ -1,0 +1,26 @@
+# name: colorblind-dark
+# description: high-contrast red-green colorblind-friendly dark palette adapted from GNU Modus
+# author: Nikita Krajcik
+
+chroma-style = modus-vivendi
+color-accent = #2fafff
+color-border = #646464
+color-normal = #ffffff
+color-muted = #989898
+color-selected-fg = #f0f0f0
+color-selected-bg = #2a2a6a
+color-annotation = #ffa00f
+color-cursor-fg = #efef00
+color-cursor-bg = #1a1a1a
+color-add-fg = #c4d5ff
+color-add-bg = #003066
+color-remove-fg = #d4d48f
+color-remove-bg = #3d3d00
+color-modify-fg = #e3cfff
+color-modify-bg = #2f123f
+color-tree-bg = #000000
+color-diff-bg = #1a1a1a
+color-status-fg = #f0f0f0
+color-status-bg = #2a2a6a
+color-search-fg = #000000
+color-search-bg = #efef00

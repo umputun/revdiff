@@ -1,0 +1,26 @@
+# name: colorblind-light
+# description: high-contrast red-green colorblind-friendly light palette adapted from GNU Modus
+# author: Nikita Krajcik
+
+chroma-style = xcode
+color-accent = #0031a9
+color-border = #595959
+color-normal = #000000
+color-muted = #595959
+color-selected-fg = #0f0f0f
+color-selected-bg = #d0d6ff
+color-annotation = #973300
+color-cursor-fg = #0000ff
+color-cursor-bg = #f3f3f3
+color-add-fg = #303099
+color-add-bg = #e8edff
+color-remove-fg = #553d00
+color-remove-bg = #f4f099
+color-modify-fg = #6f1343
+color-modify-bg = #eecfdf
+color-tree-bg = #ffffff
+color-diff-bg = #f3f3f3
+color-status-fg = #0f0f0f
+color-status-bg = #d0d6ff
+color-search-fg = #000000
+color-search-bg = #f3d000
