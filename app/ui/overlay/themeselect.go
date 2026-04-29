@@ -163,7 +163,15 @@ func (t *themeSelectOverlay) formatEntry(item ThemeItem, width int, selected boo
 		return styled
 	}
 
-	return "  " + swatch + " " + name
+	// wrap the name in raw normal-fg ANSI: the swatch resets fg after rendering
+	// its own colored glyph, so name would otherwise inherit terminal default fg
+	// and render invisibly on a session whose default fg matches the theme's
+	// pane background (e.g. light kitty session on a light theme).
+	normal := string(resolver.Color(style.ColorKeyNormalFg))
+	if normal == "" {
+		return "  " + swatch + " " + name
+	}
+	return "  " + swatch + " " + normal + name + string(style.ResetFg)
 }
 
 func (t *themeSelectOverlay) maxVisible() int {
