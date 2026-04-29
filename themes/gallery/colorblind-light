@@ -4,7 +4,7 @@
 
 chroma-style = modus-operandi
 color-accent = #0031a9
-color-border = #595959
+color-border = #b0b0b0
 color-normal = #000000
 color-muted = #595959
 color-selected-fg = #0f0f0f
