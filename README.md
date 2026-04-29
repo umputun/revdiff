@@ -113,7 +113,7 @@ Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iT
 ```bash
 # add marketplace and install
 /plugin marketplace add umputun/revdiff
-/plugin install revdiff@umputun-revdiff
+/plugin install revdiff@revdiff
 ```
 
 **Use with `/revdiff` command:**
@@ -161,7 +161,7 @@ The plugin supports the full review loop: annotate → plan → fix → re-revie
 A separate `revdiff-planning` plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again — looping until you're satisfied.
 
 ```bash
-/plugin install revdiff-planning@umputun-revdiff
+/plugin install revdiff-planning@revdiff
 ```
 
 This plugin is independent from the main `revdiff` plugin and does not conflict with other planning plugins (e.g., `planning` from `cc-thingz`).

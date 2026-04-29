@@ -6,7 +6,7 @@ Claude Code plugin that intercepts `ExitPlanMode` and opens the proposed plan in
 
 ```bash
 /plugin marketplace add umputun/revdiff
-/plugin install revdiff-planning@umputun-revdiff
+/plugin install revdiff-planning@revdiff
 ```
 
 Requires the `revdiff` binary in `PATH` and one of: tmux, Zellij, kitty, wezterm, cmux, ghostty (macOS), iTerm2 (macOS), or Emacs vterm.

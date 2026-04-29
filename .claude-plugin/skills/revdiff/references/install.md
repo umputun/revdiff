@@ -11,7 +11,7 @@ brew install umputun/apps/revdiff
 
 ```bash
 /plugin marketplace add umputun/revdiff
-/plugin install revdiff@umputun-revdiff
+/plugin install revdiff@revdiff
 ```
 
 Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, Zellij, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm).
@@ -33,7 +33,7 @@ Terminals using CLI tools (tmux, Zellij, kitty, wezterm, cmux) are not affected.
 Automatically opens revdiff when Claude exits plan mode for interactive annotation:
 
 ```bash
-/plugin install revdiff-planning@umputun-revdiff
+/plugin install revdiff-planning@revdiff
 ```
 
 ### Overrides

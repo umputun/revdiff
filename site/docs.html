@@ -609,7 +609,7 @@ map alt+t&gt;n theme_select</code></div>
         <p>revdiff ships with a Claude Code plugin for interactive code review directly from a Claude session. The plugin launches revdiff as a terminal overlay, captures annotations, and feeds them back to Claude for processing.</p>
         <div class="code-block"><code><span class="code-comment"># add marketplace and install</span>
 /plugin marketplace add umputun/revdiff
-/plugin install revdiff@umputun-revdiff</code></div>
+/plugin install revdiff@revdiff</code></div>
 
         <h2 id="plugin-terminals">Terminal support</h2>
         <p>The plugin requires one of the following terminals since Claude Code itself cannot display interactive TUI applications. The overlay runs revdiff in a separate terminal layer on top of the current session.</p>
@@ -663,7 +663,7 @@ map alt+t&gt;n theme_select</code></div>
 
         <h2 id="plugin-planning">Plan review plugin</h2>
         <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again, looping until you're satisfied.</p>
-        <div class="code-block"><code>/plugin install revdiff-planning@umputun-revdiff</code></div>
+        <div class="code-block"><code>/plugin install revdiff-planning@revdiff</code></div>
         <p>This plugin is independent from the main <code>revdiff</code> plugin and does not conflict with other planning plugins.</p>
 
         <h2 id="plugin-overrides">Custom launchers</h2>
