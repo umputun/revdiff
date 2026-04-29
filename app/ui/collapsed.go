@@ -110,6 +110,13 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		bgColor = m.resolver.Color(style.ColorKeyModifyLineBg)
 		prefixFg = m.resolver.Color(style.ColorKeyModifyLineFg)
 	}
+	if isSearchMatch {
+		// match the non-highlighted search-match path which uses the search-match
+		// lipgloss style (fg + bg). when chroma highlighting is on, lineHlStyle
+		// drops the foreground for chroma to own content fg, so the prefix wrap
+		// must inject search-fg explicitly.
+		prefixFg = m.resolver.Color(style.ColorKeySearchFg)
+	}
 
 	// wrap mode: break long lines at word boundaries with continuation markers
 	if m.modes.wrap {

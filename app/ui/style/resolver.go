@@ -71,6 +71,8 @@ func (r Resolver) Color(k ColorKey) Color {
 		return Color(ansiColor(r.colors.RemoveFg, 38))
 	case ColorKeyModifyLineFg:
 		return Color(ansiColor(r.colors.ModifyFg, 38))
+	case ColorKeySearchFg:
+		return Color(ansiColor(r.colors.SearchFg, 38))
 	case ColorKeyNormalFg:
 		return Color(ansiColor(r.colors.Normal, 38))
 	case ColorKeySelectedFg:

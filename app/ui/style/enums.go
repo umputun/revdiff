@@ -28,6 +28,7 @@ const (
 	colorKeyAddLineFg
 	colorKeyRemoveLineFg
 	colorKeyModifyLineFg
+	colorKeySearchFg
 	colorKeyNormalFg
 	colorKeySelectedFg
 )
