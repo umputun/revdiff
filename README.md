@@ -312,6 +312,7 @@ Positional arguments support several forms:
 | `--init-all-themes` | Write all gallery themes (bundled + community) to themes dir and exit | |
 | `--install-theme` | Install theme(s) from gallery or local file path and exit (repeatable) | |
 | `-A`, `--all-files` | Browse all tracked files, not just diffs (git or jj) | `false` |
+| `--compare` | Diff two arbitrary files: `--compare=old:new` (uses `git diff --no-index`; no VCS repo needed) | |
 | `--stdin` | Review stdin as a scratch buffer (piped or redirected input only) | `false` |
 | `--stdin-name` | Synthetic file name for stdin content; enables extension-based highlighting/TOC | `scratch-buffer` |
 | `--description` | Prose context shown in the info popup (markdown; for multi-line text, use a multi-line quoted shell string or `--description-file`) | |
@@ -482,6 +483,9 @@ revdiff --only=/tmp/plan.md
 # review a file that has no VCS changes (context-only view with annotations)
 revdiff --only=docs/notes.txt
 
+# diff two arbitrary files (no VCS repo needed)
+revdiff --compare=/tmp/plan-old.md:docs/plans/plan.md
+
 # review arbitrary piped text as a scratch buffer
 printf '# Plan\n\nShip it\n' | revdiff --stdin --stdin-name plan.md
 
@@ -530,6 +534,17 @@ Two scenarios trigger this mode:
 
 1. **Inside a repo (git/hg/jj)** - `--only` files not in the diff are read from disk and shown alongside any changed files
 2. **Outside a VCS repo** - `--only` is required; files are read directly from disk
+
+### Two-File Diff
+
+Use `--compare=old:new` to diff two arbitrary files on disk using `git diff --no-index`. No VCS repository is required — this works anywhere `git` is installed.
+
+```bash
+revdiff --compare=/tmp/plan-old.md:docs/plans/plan.md
+revdiff --compare=a.txt:b.txt
+```
+
+`--compare` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, and `--exclude`. All standard diff features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.
 
 ### Scratch-Buffer Review
 

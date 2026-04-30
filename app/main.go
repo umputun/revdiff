@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,11 +99,7 @@ func run(opts options) error {
 
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
-	keysPath := opts.Keys
-	if keysPath == "" {
-		keysPath = defaultKeysPath()
-	}
-	km := keymap.LoadOrDefault(keysPath)
+	km := keymap.LoadOrDefault(resolveKeysPath(opts))
 
 	var (
 		renderer     ui.Renderer
@@ -124,7 +121,16 @@ func run(opts options) error {
 		return err
 	}
 
-	if opts.Stdin {
+	switch {
+	case opts.Compare != "":
+		var absOld, absNew string
+		absOld, absNew, err = resolveComparePaths(opts.Compare)
+		if err != nil {
+			return err
+		}
+		renderer = diff.NewCompareReader(absOld, absNew)
+		workDir = filepath.Dir(absNew)
+	case opts.Stdin:
 		var tty *os.File
 		renderer, tty, err = prepareStdinMode(opts, os.Stdin)
 		if err != nil {
@@ -132,7 +138,7 @@ func run(opts options) error {
 		}
 		defer tty.Close()
 		programOptions = append(programOptions, tea.WithInput(tty))
-	} else {
+	default:
 		var setup vcsSetup
 		setup, err = setupVCSRenderer(opts)
 		if err != nil {
@@ -260,6 +266,17 @@ func run(opts options) error {
 // been consumed and cannot be re-read. All other modes support reload.
 func reloadApplicable(opts options) bool {
 	return !opts.Stdin
+}
+
+// resolveKeysPath returns the effective keybindings file path, falling back
+// to defaultKeysPath() when --keys was not set. Extracted from run() to keep
+// its cyclomatic complexity under the gocyclo limit after compare-mode
+// dispatch was added.
+func resolveKeysPath(opts options) string {
+	if opts.Keys == "" {
+		return defaultKeysPath()
+	}
+	return opts.Keys
 }
 
 // commitsApplicable returns true when the unified info popup can include a

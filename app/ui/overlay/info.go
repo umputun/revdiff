@@ -417,7 +417,7 @@ func (c *infoOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 
 	full := c.viewportHeight(c.height)
 	half := max(full/2, 1)
-	switch action { //nolint:exhaustive // navigation subset; other actions fall through to rune handling below
+	switch action { //nolint:exhaustive // navigation subset; other actions fall through to rune handling
 	case keymap.ActionDown:
 		c.offset++
 		return Outcome{Kind: OutcomeNone}

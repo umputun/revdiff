@@ -834,3 +834,4 @@ func TestParseArgs_InstallThemeFlag(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dracula", "nord"}, opts.InstallTheme)
 }
+

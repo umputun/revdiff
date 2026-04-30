@@ -349,6 +349,7 @@ type ReviewInfoConfig struct {
 	Ref            string
 	StdinName      string
 	Stdin          bool
+	Compare        bool
 	Staged         bool
 	AllFiles       bool
 	Only           []string

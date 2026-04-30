@@ -194,6 +194,7 @@ func precomputeDescriptionHighlight(h SyntaxHighlighter, desc string) string {
 //	ref range: main..feature    — explicit range syntax
 //	stdin: patch.diff           — --stdin <name>
 //	stdin scratch buffer        — --stdin without a name
+//	two-file diff               — --compare=old:new
 //	all tracked files           — --all-files
 //	standalone files            — --only without a VCS (file-only review)
 //
@@ -210,6 +211,8 @@ func (m Model) reviewHeaderText() string {
 			return "stdin: " + cfg.StdinName
 		}
 		return "stdin scratch buffer"
+	case cfg.Compare:
+		return "two-file diff"
 	case cfg.AllFiles:
 		return "all tracked files"
 	case cfg.Staged:

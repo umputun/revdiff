@@ -271,6 +271,7 @@ func TestReviewHeaderText(t *testing.T) {
 		{name: "ref range", cfg: &ReviewInfoConfig{Ref: "main..feature"}, want: "ref range: main..feature"},
 		{name: "single ref", cfg: &ReviewInfoConfig{Ref: "HEAD~3"}, want: "changes against HEAD~3"},
 		{name: "no-VCS file-only review", cfg: &ReviewInfoConfig{VCS: "none"}, want: "standalone files"},
+		{name: "compare mode", cfg: &ReviewInfoConfig{Compare: true, VCS: "none"}, want: "two-file diff"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
