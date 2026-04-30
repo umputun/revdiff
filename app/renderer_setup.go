@@ -36,6 +36,9 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		}
 		return vcsSetup{renderer: r, vcsType: diff.VCSGit, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles, commitLogger: g}, nil
 	case diff.VCSHg:
+		if opts.AllChanges {
+			return vcsSetup{}, errors.New("--all-changes is not supported in mercurial repositories")
+		}
 		if opts.Staged {
 			fmt.Fprintln(os.Stderr, "warning: --staged ignored in mercurial repository (no staging area)")
 		}
@@ -46,6 +49,9 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		}
 		return vcsSetup{renderer: r, vcsType: diff.VCSHg, workDir: workDir, blamer: h, untrackedFn: h.UntrackedFiles, commitLogger: h}, nil
 	case diff.VCSJJ:
+		if opts.AllChanges {
+			return vcsSetup{}, errors.New("--all-changes is not supported in jujutsu repositories")
+		}
 		if opts.Staged {
 			fmt.Fprintln(os.Stderr, "warning: --staged ignored in jujutsu repository (no staging area)")
 		}
@@ -56,6 +62,9 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		}
 		return vcsSetup{renderer: r, vcsType: diff.VCSJJ, workDir: workDir, blamer: jj, untrackedFn: jj.UntrackedFiles, commitLogger: jj}, nil
 	default:
+		if opts.AllChanges {
+			return vcsSetup{}, errors.New("--all-changes requires a git repository")
+		}
 		r, workDir, err := makeNoVCSRenderer(opts.Only, cwd)
 		if err != nil {
 			return vcsSetup{}, err

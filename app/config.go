@@ -35,6 +35,7 @@ type options struct {
 	VimMotion        bool     `long:"vim-motion" ini-name:"vim-motion" env:"REVDIFF_VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git and jj only)"`
+	AllChanges       bool     `long:"all-changes" no-ini:"true" description:"show staged, unstaged, and untracked as separate groups (git only)"`
 	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
 	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
 	Annotations      string   `long:"annotations" no-ini:"true" description:"preload annotations from a markdown file written by -o (round-trip)"`
@@ -125,6 +126,21 @@ func parseArgs(args []string) (options, error) {
 		}
 		if len(opts.Only) > 0 {
 			return options{}, errors.New("--all-files cannot be used with --only")
+		}
+	}
+
+	if opts.AllChanges {
+		if opts.Refs.Base != "" || opts.Refs.Against != "" {
+			return options{}, errors.New("--all-changes cannot be used with refs")
+		}
+		if opts.Staged {
+			return options{}, errors.New("--all-changes cannot be used with --staged")
+		}
+		if opts.AllFiles {
+			return options{}, errors.New("--all-changes cannot be used with --all-files")
+		}
+		if opts.Stdin {
+			return options{}, errors.New("--all-changes cannot be used with --stdin")
 		}
 	}
 

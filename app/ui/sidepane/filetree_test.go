@@ -22,8 +22,18 @@ func fileEntries(paths ...string) []diff.FileEntry {
 	return entries
 }
 
+// singleGroup wraps paths into a single unnamed FileEntryGroup (normal mode).
+func singleGroup(paths ...string) []FileEntryGroup {
+	return []FileEntryGroup{{Entries: fileEntries(paths...)}}
+}
+
+// singleGroupEntries wraps pre-built FileEntry values into a single unnamed group.
+func singleGroupEntries(entries ...diff.FileEntry) []FileEntryGroup {
+	return []FileEntryGroup{{Entries: entries}}
+}
+
 func TestFileTree_BuildEntries(t *testing.T) {
-	ft := NewFileTree(fileEntries("internal/handler.go", "internal/store.go", "main.go"))
+	ft := NewFileTree(singleGroup("internal/handler.go", "internal/store.go", "main.go"))
 
 	assert.Len(t, ft.entries, 5) // 2 dirs (./, internal/) + 3 files
 	assert.True(t, ft.entries[0].isDir)
@@ -43,7 +53,7 @@ func TestFileTree_BuildEntriesEmpty(t *testing.T) {
 }
 
 func TestFileTree_SelectedFile(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go"))
 
 	assert.Equal(t, "a.go", ft.SelectedFile())
 
@@ -52,7 +62,7 @@ func TestFileTree_SelectedFile(t *testing.T) {
 }
 
 func TestFileTree_MoveDownUp(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 
 	assert.Equal(t, "a.go", ft.SelectedFile())
 
@@ -78,7 +88,7 @@ func TestFileTree_MoveDownUp(t *testing.T) {
 }
 
 func TestFileTree_NextPrevFile(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 
 	ft.StepFile(DirectionNext)
 	assert.Equal(t, "b.go", ft.SelectedFile())
@@ -102,20 +112,20 @@ func TestFileTree_NextPrevFile(t *testing.T) {
 
 func TestFileTree_HasNextPrevFile(t *testing.T) {
 	t.Run("single file", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go"))
+		ft := NewFileTree(singleGroup("a.go"))
 		assert.False(t, ft.HasFile(DirectionNext))
 		assert.False(t, ft.HasFile(DirectionPrev))
 	})
 
 	t.Run("first file", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		assert.Equal(t, "a.go", ft.SelectedFile())
 		assert.True(t, ft.HasFile(DirectionNext))
 		assert.False(t, ft.HasFile(DirectionPrev))
 	})
 
 	t.Run("middle file", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		ft.Move(MotionDown)
 		assert.Equal(t, "b.go", ft.SelectedFile())
 		assert.True(t, ft.HasFile(DirectionNext))
@@ -123,7 +133,7 @@ func TestFileTree_HasNextPrevFile(t *testing.T) {
 	})
 
 	t.Run("last file", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		ft.Move(MotionLast)
 		assert.Equal(t, "c.go", ft.SelectedFile())
 		assert.False(t, ft.HasFile(DirectionNext))
@@ -132,7 +142,7 @@ func TestFileTree_HasNextPrevFile(t *testing.T) {
 }
 
 func TestFileTree_ToggleFilter(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 	annotated := map[string]bool{"a.go": true, "c.go": true}
 
 	ft.ToggleFilter(annotated)
@@ -162,7 +172,7 @@ func TestFileTree_ToggleFilter(t *testing.T) {
 }
 
 func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go"))
 	annotated := map[string]bool{}
 
 	ft.ToggleFilter(annotated)
@@ -171,7 +181,7 @@ func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
 }
 
 func TestFileTree_Render(t *testing.T) {
-	ft := NewFileTree(fileEntries("internal/handler.go", "main.go"))
+	ft := NewFileTree(singleGroup("internal/handler.go", "main.go"))
 	ft.cursor = 1 // select handler.go
 	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 	rnd := style.NewRenderer(res)
@@ -191,17 +201,17 @@ func TestFileTree_RenderEmpty(t *testing.T) {
 }
 
 func TestFileTree_SetFiles(t *testing.T) {
-	ft := NewFileTree(fileEntries("b.go", "c.go", "d.go"))
+	ft := NewFileTree(singleGroup("b.go", "c.go", "d.go"))
 	assert.Equal(t, "b.go", ft.SelectedFile())
 }
 
 func TestFileTree_SetFilesNewList(t *testing.T) {
-	ft := NewFileTree(fileEntries("x.go", "y.go"))
+	ft := NewFileTree(singleGroup("x.go", "y.go"))
 	assert.Equal(t, "x.go", ft.SelectedFile())
 }
 
 func TestFileTree_DirectoryGrouping(t *testing.T) {
-	ft := NewFileTree(fileEntries("cmd/main.go", "internal/handler.go", "internal/store.go"))
+	ft := NewFileTree(singleGroup("cmd/main.go", "internal/handler.go", "internal/store.go"))
 
 	assert.Len(t, ft.entries, 5)
 	assert.Equal(t, "cmd/", ft.entries[0].name)
@@ -214,14 +224,14 @@ func TestFileTree_DirectoryGrouping(t *testing.T) {
 }
 
 func TestFileTree_FileIndices(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go"))
 	indices := ft.fileIndices()
 	// dir at 0, files at 1 and 2
 	assert.Equal(t, []int{1, 2}, indices)
 }
 
 func TestFileTree_RefreshFilter(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 
 	ft.ToggleFilter(map[string]bool{"a.go": true})
 	assert.True(t, ft.FilterActive())
@@ -246,7 +256,7 @@ func TestFileTree_RefreshFilter(t *testing.T) {
 }
 
 func TestFileTree_RefreshFilterNoAnnotations(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go"))
 	ft.ToggleFilter(map[string]bool{"a.go": true})
 	assert.True(t, ft.FilterActive())
 
@@ -264,7 +274,7 @@ func TestFileTree_RefreshFilterNoAnnotations(t *testing.T) {
 }
 
 func TestFileTree_RefreshFilterPreservesCursor(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 	ft.ToggleFilter(map[string]bool{"a.go": true, "b.go": true})
 	assert.True(t, ft.FilterActive())
 
@@ -278,7 +288,7 @@ func TestFileTree_RefreshFilterPreservesCursor(t *testing.T) {
 }
 
 func TestFileTree_RefreshFilterNotActive(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go"))
 	assert.False(t, ft.FilterActive())
 
 	// refresh when filter is not active should be a no-op
@@ -295,12 +305,11 @@ func TestFileTree_RefreshFilterNotActive(t *testing.T) {
 }
 
 func TestFileTree_PageDown(t *testing.T) {
-	files := fileEntries(
+	ft := NewFileTree(singleGroup(
 		"cmd/main.go", "cmd/flags.go",
 		"internal/a.go", "internal/b.go", "internal/c.go", "internal/d.go",
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
-	)
-	ft := NewFileTree(files)
+	))
 	assert.Equal(t, "cmd/flags.go", ft.SelectedFile(), "cursor should start on first file (flags.go)")
 
 	ft.Move(MotionPageDown, 3)
@@ -314,12 +323,11 @@ func TestFileTree_PageDown(t *testing.T) {
 }
 
 func TestFileTree_PageUp(t *testing.T) {
-	files := fileEntries(
+	ft := NewFileTree(singleGroup(
 		"cmd/main.go", "cmd/flags.go",
 		"internal/a.go", "internal/b.go", "internal/c.go", "internal/d.go",
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
-	)
-	ft := NewFileTree(files)
+	))
 
 	ft.Move(MotionLast)
 	assert.Equal(t, "internal/h.go", ft.SelectedFile())
@@ -335,7 +343,7 @@ func TestFileTree_PageUp(t *testing.T) {
 }
 
 func TestFileTree_PageDownAccountsForDirHeaders(t *testing.T) {
-	ft := NewFileTree(fileEntries("a/x.go", "a/y.go", "b/x.go", "b/y.go", "c/x.go", "c/y.go"))
+	ft := NewFileTree(singleGroup("a/x.go", "a/y.go", "b/x.go", "b/y.go", "c/x.go", "c/y.go"))
 	assert.Equal(t, "a/x.go", ft.SelectedFile())
 
 	ft.Move(MotionPageDown, 3)
@@ -346,7 +354,7 @@ func TestFileTree_PageDownAccountsForDirHeaders(t *testing.T) {
 }
 
 func TestFileTree_MoveToFirstLast(t *testing.T) {
-	ft := NewFileTree(fileEntries("cmd/main.go", "internal/a.go", "internal/b.go", "internal/c.go"))
+	ft := NewFileTree(singleGroup("cmd/main.go", "internal/a.go", "internal/b.go", "internal/c.go"))
 
 	assert.Equal(t, "cmd/main.go", ft.SelectedFile())
 
@@ -366,7 +374,7 @@ func TestFileTree_MoveToFirstLast(t *testing.T) {
 }
 
 func TestFileTree_RenderIndentation(t *testing.T) {
-	ft := NewFileTree(fileEntries("cmd/main.go", "internal/handler.go", "internal/store.go"))
+	ft := NewFileTree(singleGroup("cmd/main.go", "internal/handler.go", "internal/store.go"))
 	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 	rnd := style.NewRenderer(res)
 
@@ -392,7 +400,7 @@ func TestFileTree_RenderIndentation(t *testing.T) {
 }
 
 func TestFileTree_EnsureVisible(t *testing.T) {
-	ft := NewFileTree(fileEntries(
+	ft := NewFileTree(singleGroup(
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
 		"b/1.go", "b/2.go", "b/3.go", "b/4.go", "b/5.go",
 	))
@@ -412,7 +420,7 @@ func TestFileTree_EnsureVisible(t *testing.T) {
 }
 
 func TestFileTree_RenderViewport(t *testing.T) {
-	ft := NewFileTree(fileEntries(
+	ft := NewFileTree(singleGroup(
 		"a/1.go", "a/2.go", "a/3.go", "a/4.go", "a/5.go",
 		"b/1.go", "b/2.go", "b/3.go",
 	))
@@ -431,7 +439,7 @@ func TestFileTree_RenderViewport(t *testing.T) {
 }
 
 func TestFileTree_EnsureVisibleResetsOffsetWhenTreeFitsViewport(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 
 	ft.offset = 3
 	ft.cursor = 3 // cursor at c.go
@@ -442,20 +450,20 @@ func TestFileTree_EnsureVisibleResetsOffsetWhenTreeFitsViewport(t *testing.T) {
 
 func TestFileTree_SelectByPath(t *testing.T) {
 	t.Run("selects existing file", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("internal/handler.go", "internal/store.go", "main.go"))
+		ft := NewFileTree(singleGroup("internal/handler.go", "internal/store.go", "main.go"))
 		ok := ft.SelectByPath("internal/store.go")
 		assert.True(t, ok)
 		assert.Equal(t, "internal/store.go", ft.SelectedFile())
 	})
 
 	t.Run("returns false for non-existent file", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go"))
 		ok := ft.SelectByPath("c.go")
 		assert.False(t, ok)
 	})
 
 	t.Run("does not select directory entries", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("internal/a.go"))
+		ft := NewFileTree(singleGroup("internal/a.go"))
 		ok := ft.SelectByPath("internal/")
 		assert.False(t, ok)
 	})
@@ -463,7 +471,7 @@ func TestFileTree_SelectByPath(t *testing.T) {
 
 func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	t.Run("first row at offset zero selects first entry", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go"))
 		// entries: ["./", "a.go", "b.go"]
 		ok := ft.SelectByVisibleRow(0)
 		assert.True(t, ok)
@@ -471,7 +479,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	})
 
 	t.Run("row within visible range selects matching entry", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		// entries: ["./", "a.go", "b.go", "c.go"], offset=0
 		ok := ft.SelectByVisibleRow(2)
 		assert.True(t, ok)
@@ -480,7 +488,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	})
 
 	t.Run("row with non-zero offset adds offset", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go", "d.go", "e.go"))
 		// entries: ["./", "a.go", "b.go", "c.go", "d.go", "e.go"]
 		ft.offset = 3
 		ok := ft.SelectByVisibleRow(1)
@@ -490,7 +498,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	})
 
 	t.Run("click past end returns false and does not modify cursor", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go"))
 		// entries: ["./", "a.go", "b.go"] — only 3 entries
 		prev := ft.cursor
 		ok := ft.SelectByVisibleRow(10)
@@ -499,7 +507,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	})
 
 	t.Run("click on directory row succeeds", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("internal/a.go"))
+		ft := NewFileTree(singleGroup("internal/a.go"))
 		// entries: ["internal/", "a.go"] — first is directory
 		ok := ft.SelectByVisibleRow(0)
 		assert.True(t, ok)
@@ -510,7 +518,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	})
 
 	t.Run("negative row returns false and does not modify cursor", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go"))
 		prev := ft.cursor
 		ok := ft.SelectByVisibleRow(-1)
 		assert.False(t, ok)
@@ -524,7 +532,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	})
 
 	t.Run("row past end with offset returns false", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		ft.offset = 2
 		prev := ft.cursor
 		// entries has 4 items (./, a.go, b.go, c.go); offset=2, row=5 -> idx=7, out of range
@@ -535,7 +543,7 @@ func TestFileTree_SelectByVisibleRow(t *testing.T) {
 }
 
 func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
-	ft := NewFileTree(fileEntries(".claude-plugin/skills/revdiff/references/config.md"))
+	ft := NewFileTree(singleGroup(".claude-plugin/skills/revdiff/references/config.md"))
 	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 	rnd := style.NewRenderer(res)
 
@@ -546,7 +554,7 @@ func TestFileTree_RenderTruncatesLongDirNames(t *testing.T) {
 }
 
 func TestFileTree_RenderTruncatesLongFileNames(t *testing.T) {
-	ft := NewFileTree(fileEntries("docs/plans/completed/20260402-status-line-help-overlay.md"))
+	ft := NewFileTree(singleGroup("docs/plans/completed/20260402-status-line-help-overlay.md"))
 	res := style.PlainResolver()
 	rnd := style.NewRenderer(res)
 
@@ -566,12 +574,11 @@ func TestFileTree_RenderTruncatesLongFileNames(t *testing.T) {
 }
 
 func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
-	files := fileEntries(
+	ft := NewFileTree(singleGroup(
 		"cmd/main.go", "cmd/flags.go",
 		"internal/a.go", "internal/b.go", "internal/c.go", "internal/d.go",
 		"internal/e.go", "internal/f.go", "internal/g.go", "internal/h.go",
-	)
-	ft := NewFileTree(files)
+	))
 	res := style.NewResolver(style.Colors{Accent: "#5f87ff", Border: "#585858", Normal: "#d0d0d0", Muted: "#6c6c6c", SelectedFg: "#ffffaf", SelectedBg: "#303030", Annotation: "#ffd700", CursorBg: "#3a3a3a", AddFg: "#87d787", AddBg: "#022800", RemoveFg: "#ff8787", RemoveBg: "#3D0100"})
 	rnd := style.NewRenderer(res)
 
@@ -589,7 +596,7 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 }
 
 func TestFileTree_ToggleReviewed(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 
 	assert.Equal(t, 0, ft.ReviewedCount())
 
@@ -611,7 +618,7 @@ func TestFileTree_ToggleReviewed(t *testing.T) {
 }
 
 func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go"))
 	res := style.PlainResolver()
 	rnd := style.NewRenderer(res)
 
@@ -630,7 +637,7 @@ func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
 }
 
 func TestFileTree_RenderFileEntryRestoresNormalForegroundAfterColoredPrefix(t *testing.T) {
-	ft := NewFileTree([]diff.FileEntry{{Path: "a.go", Status: diff.FileAdded}})
+	ft := NewFileTree(singleGroupEntries(diff.FileEntry{Path: "a.go", Status: diff.FileAdded}))
 	ft.cursor = 0 // keep the file unselected so the inline ANSI path is used
 	ft.ToggleReviewed("a.go")
 
@@ -665,7 +672,7 @@ func TestFileTree_TruncateDirName(t *testing.T) {
 }
 
 func TestFileTreeRebuild(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 	ft.ToggleReviewed("a.go")
 	ft.ToggleReviewed("b.go")
 	ft.Move(MotionLast)
@@ -673,7 +680,7 @@ func TestFileTreeRebuild(t *testing.T) {
 	assert.Equal(t, 2, ft.ReviewedCount())
 
 	t.Run("reviewed map preserved for files still present", func(t *testing.T) {
-		ft.Rebuild(fileEntries("a.go", "b.go", "d.go"))
+		ft.Rebuild(singleGroup("a.go", "b.go", "d.go"))
 		assert.True(t, ft.reviewed["a.go"], "a.go was reviewed and still present")
 		assert.True(t, ft.reviewed["b.go"], "b.go was reviewed and still present")
 		assert.Equal(t, 2, ft.ReviewedCount())
@@ -682,7 +689,7 @@ func TestFileTreeRebuild(t *testing.T) {
 	t.Run("reviewed map pruned for removed files", func(t *testing.T) {
 		ft.ToggleReviewed("d.go")
 		assert.Equal(t, 3, ft.ReviewedCount())
-		ft.Rebuild(fileEntries("a.go", "e.go"))
+		ft.Rebuild(singleGroup("a.go", "e.go"))
 		assert.True(t, ft.reviewed["a.go"], "a.go still present")
 		assert.False(t, ft.reviewed["b.go"], "b.go was removed")
 		assert.False(t, ft.reviewed["d.go"], "d.go was removed")
@@ -690,23 +697,23 @@ func TestFileTreeRebuild(t *testing.T) {
 	})
 
 	t.Run("cursor resets to first file entry", func(t *testing.T) {
-		ft.Rebuild(fileEntries("x.go", "y.go", "z.go"))
+		ft.Rebuild(singleGroup("x.go", "y.go", "z.go"))
 		assert.Equal(t, "x.go", ft.SelectedFile())
 		assert.Equal(t, 0, ft.offset)
 	})
 
 	t.Run("fileStatuses refreshed from new entries", func(t *testing.T) {
-		ft.Rebuild([]diff.FileEntry{{Path: "m.go", Status: diff.FileModified}, {Path: "n.go", Status: diff.FileAdded}})
+		ft.Rebuild(singleGroupEntries(diff.FileEntry{Path: "m.go", Status: diff.FileModified}, diff.FileEntry{Path: "n.go", Status: diff.FileAdded}))
 		assert.Equal(t, diff.FileModified, ft.FileStatus("m.go"))
 		assert.Equal(t, diff.FileAdded, ft.FileStatus("n.go"))
 		assert.Equal(t, diff.FileStatus(""), ft.FileStatus("x.go"), "old statuses should be cleared")
 	})
 
 	t.Run("filter state preserved", func(t *testing.T) {
-		ft2 := NewFileTree(fileEntries("a.go", "b.go"))
+		ft2 := NewFileTree(singleGroup("a.go", "b.go"))
 		ft2.ToggleFilter(map[string]bool{"a.go": true})
 		assert.True(t, ft2.FilterActive())
-		ft2.Rebuild(fileEntries("a.go", "c.go"))
+		ft2.Rebuild(singleGroup("a.go", "c.go"))
 		assert.True(t, ft2.FilterActive(), "filter state should be preserved across rebuild")
 	})
 }
@@ -720,7 +727,7 @@ func TestFileTree_ScrollState(t *testing.T) {
 	})
 
 	t.Run("fresh tree starts at offset zero", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		s := ft.ScrollState()
 		assert.Equal(t, len(ft.entries), s.Total, "total counts all entries (dirs + files)")
 		assert.Equal(t, 0, s.Offset)
@@ -731,7 +738,7 @@ func TestFileTree_ScrollState(t *testing.T) {
 		for i := range paths {
 			paths[i] = fmt.Sprintf("pkg/file-%02d.go", i)
 		}
-		ft := NewFileTree(fileEntries(paths...))
+		ft := NewFileTree(singleGroup(paths...))
 		ft.Move(MotionLast)
 		// offset is stale until EnsureVisible runs
 		assert.Equal(t, 0, ft.ScrollState().Offset, "offset is stale before EnsureVisible")
@@ -748,7 +755,7 @@ func TestFileTree_ScrollState(t *testing.T) {
 		for i := range paths {
 			paths[i] = fmt.Sprintf("pkg/file-%02d.go", i)
 		}
-		ft := NewFileTree(fileEntries(paths...))
+		ft := NewFileTree(singleGroup(paths...))
 		ft.Move(MotionLast)
 
 		res := style.NewResolver(style.Colors{Normal: "#d0d0d0", Muted: "#6c6c6c"})
@@ -761,17 +768,17 @@ func TestFileTree_ScrollState(t *testing.T) {
 }
 
 func TestFileTreeRebuildThenSelectByPath(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 
 	t.Run("select existing file after rebuild", func(t *testing.T) {
-		ft.Rebuild(fileEntries("x.go", "y.go", "z.go"))
+		ft.Rebuild(singleGroup("x.go", "y.go", "z.go"))
 		ok := ft.SelectByPath("y.go")
 		assert.True(t, ok)
 		assert.Equal(t, "y.go", ft.SelectedFile())
 	})
 
 	t.Run("select deleted file stays on first file", func(t *testing.T) {
-		ft.Rebuild(fileEntries("p.go", "q.go"))
+		ft.Rebuild(singleGroup("p.go", "q.go"))
 		ok := ft.SelectByPath("y.go")
 		assert.False(t, ok)
 		assert.Equal(t, "p.go", ft.SelectedFile())
@@ -779,7 +786,7 @@ func TestFileTreeRebuildThenSelectByPath(t *testing.T) {
 }
 
 func TestFileTreeMove_Exhaustive(t *testing.T) {
-	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 	for _, m := range MotionValues {
 		t.Run("no count/"+m.String(), func(t *testing.T) {
 			assert.NotPanics(t, func() { ft.Move(m) })
@@ -792,22 +799,133 @@ func TestFileTreeMove_Exhaustive(t *testing.T) {
 
 func TestFileTreeMove_VariadicCount(t *testing.T) {
 	t.Run("page down with no count defaults to 1", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		ft.Move(MotionPageDown)
 		assert.Equal(t, "b.go", ft.SelectedFile())
 	})
 
 	t.Run("page down with explicit count", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		ft.Move(MotionPageDown, 5)
 		assert.Equal(t, "c.go", ft.SelectedFile())
 	})
 
 	t.Run("count ignored for non-page motions", func(t *testing.T) {
-		ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+		ft := NewFileTree(singleGroup("a.go", "b.go", "c.go"))
 		ft.Move(MotionDown, 99)
 		assert.Equal(t, "b.go", ft.SelectedFile(), "count should be ignored for MotionDown")
 	})
+}
+
+func TestFileTree_Groups(t *testing.T) {
+	groups := []FileEntryGroup{
+		{Label: "Staged Changes", Staged: true, Entries: fileEntries("a.go", "b.go")},
+		{Label: "Changes", Staged: false, Entries: fileEntries("c.go")},
+		{Label: "Untracked", Staged: false, Entries: fileEntries("d.go")},
+	}
+	ft := NewFileTree(groups)
+
+	t.Run("group header entries are not selectable", func(t *testing.T) {
+		for i, e := range ft.entries {
+			if e.isGroup {
+				assert.Empty(t, e.path, "group header entry %d should have no path", i)
+			}
+		}
+	})
+
+	t.Run("cursor starts on first file, skipping group header", func(t *testing.T) {
+		assert.Equal(t, "a.go", ft.SelectedFile())
+		assert.True(t, ft.SelectedFileStaged(), "first file is in Staged group")
+	})
+
+	t.Run("navigation skips group headers and directory entries", func(t *testing.T) {
+		ft.Move(MotionDown)
+		assert.Equal(t, "b.go", ft.SelectedFile())
+		assert.True(t, ft.SelectedFileStaged())
+
+		ft.Move(MotionDown)
+		assert.Equal(t, "c.go", ft.SelectedFile())
+		assert.False(t, ft.SelectedFileStaged(), "c.go is in Changes group")
+
+		ft.Move(MotionDown)
+		assert.Equal(t, "d.go", ft.SelectedFile())
+		assert.False(t, ft.SelectedFileStaged())
+	})
+
+	t.Run("TotalFiles counts all files across groups", func(t *testing.T) {
+		assert.Equal(t, 4, ft.TotalFiles())
+	})
+
+	t.Run("render contains group labels", func(t *testing.T) {
+		res := style.PlainResolver()
+		rnd := style.NewRenderer(res)
+		result := ft.Render(FileTreeRender{Width: 40, Height: 100, Resolver: res, Renderer: rnd})
+		assert.Contains(t, result, "Staged Changes")
+		assert.Contains(t, result, "Changes")
+		assert.Contains(t, result, "Untracked")
+	})
+
+	t.Run("empty label group renders no header", func(t *testing.T) {
+		ft2 := NewFileTree(singleGroup("x.go"))
+		for _, e := range ft2.entries {
+			assert.False(t, e.isGroup, "single unnamed group should have no group header")
+		}
+	})
+
+	t.Run("HasFile skips group headers", func(t *testing.T) {
+		ft3 := NewFileTree(groups)
+		ft3.Move(MotionFirst)
+		assert.True(t, ft3.HasFile(DirectionNext))
+		assert.False(t, ft3.HasFile(DirectionPrev))
+	})
+
+	t.Run("SelectByPath lands on first match across groups", func(t *testing.T) {
+		ok := ft.SelectByPath("c.go")
+		assert.True(t, ok)
+		assert.Equal(t, "c.go", ft.SelectedFile())
+		assert.False(t, ft.SelectedFileStaged())
+	})
+}
+
+func TestFileTree_GroupsFilterPreservesHeaders(t *testing.T) {
+	groups := []FileEntryGroup{
+		{Label: "Staged Changes", Staged: true, Entries: fileEntries("a.go")},
+		{Label: "Changes", Staged: false, Entries: fileEntries("b.go", "c.go")},
+	}
+	ft := NewFileTree(groups)
+	ft.ToggleFilter(map[string]bool{"b.go": true})
+
+	assert.True(t, ft.FilterActive())
+
+	// count group headers and file entries separately
+	var groupHeaders, files int
+	for _, e := range ft.entries {
+		switch {
+		case e.isGroup:
+			groupHeaders++
+		case e.isFile():
+			files++
+		}
+	}
+	// both group headers remain even though Staged group has no files after filtering
+	assert.Equal(t, 2, groupHeaders, "group headers preserved even when group has no matching files")
+	assert.Equal(t, 1, files, "only annotated files shown")
+}
+
+func TestFileTree_SelectedFileStaged_OnHeader(t *testing.T) {
+	groups := []FileEntryGroup{
+		{Label: "Staged", Staged: true, Entries: fileEntries("a.go")},
+	}
+	ft := NewFileTree(groups)
+	// force cursor onto a group header entry
+	for i, e := range ft.entries {
+		if e.isGroup {
+			ft.cursor = i
+			break
+		}
+	}
+	assert.False(t, ft.SelectedFileStaged(), "staged returns false when cursor is on group header")
+	assert.Empty(t, ft.SelectedFile(), "SelectedFile returns empty when cursor is on group header")
 }
 
 func TestNewFileTree_Nil(t *testing.T) {

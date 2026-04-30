@@ -2216,7 +2216,7 @@ func TestModel_PendingHunkJump_FirstHunk(t *testing.T) {
 		"b.go": bLines,
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -2247,7 +2247,7 @@ func TestModel_PendingHunkJump_LastHunk(t *testing.T) {
 		"b.go": bLines,
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -2270,7 +2270,7 @@ func TestModel_PendingHunkJump_ClearedOnManualNav(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -2293,7 +2293,7 @@ func loadFileIntoModel(t *testing.T, files []string, diffs map[string][]diff.Dif
 	for i, f := range files {
 		entries[i] = diff.FileEntry{Path: f}
 	}
-	result, _ := m.Update(filesLoadedMsg{entries: entries})
+	result, _ := m.Update(testFilesLoadedMsg(entries...))
 	m = result.(Model)
 	loadMsg := m.loadFileDiff(files[0])()
 	result, _ = m.Update(loadMsg)
@@ -2531,7 +2531,7 @@ func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testin
 		"b.go": lines,
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -2553,7 +2553,7 @@ func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)

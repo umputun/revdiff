@@ -12,12 +12,22 @@ import (
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
+// FileEntryGroup is a named group of file entries shown as a labeled section in the tree.
+// Label empty means no header row is rendered (normal single-group mode).
+// Staged controls the staged flag passed to FileDiff for every file in this group.
+type FileEntryGroup struct {
+	Label   string
+	Staged  bool
+	Entries []diff.FileEntry
+}
+
 // FileTree manages the list of changed files grouped by directory.
 type FileTree struct {
-	entries      []treeEntry                // flat list of directories and files for display
+	entries      []treeEntry                // flat list of groups, directories and files for display
 	cursor       int                        // currently highlighted entry index
 	offset       int                        // first visible entry index for viewport scrolling
-	allFiles     []string                   // original full file paths
+	allFiles     []string                   // derived flat list of all file paths (for TotalFiles / filter)
+	allGroups    []FileEntryGroup           // stored for filter/rebuild operations
 	filter       bool                       // when true, show only annotated files
 	reviewed     map[string]bool            // files marked as reviewed by the user
 	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
@@ -25,10 +35,12 @@ type FileTree struct {
 
 // treeEntry represents a single line in the file tree display.
 type treeEntry struct {
-	name  string // display name (directory name or file basename)
-	path  string // full file path (empty for directory entries)
-	isDir bool
-	depth int // indentation level
+	name    string // display name (group label, directory name, or file basename)
+	path    string // full file path (empty for directory and group entries)
+	isDir   bool
+	isGroup bool // group header row
+	staged  bool // inherited from the group; used by SelectedFileStaged
+	depth   int  // indentation level
 }
 
 // renderCtx holds rendering context for a file tree entry,
@@ -39,37 +51,34 @@ type renderCtx struct {
 	rnd            Renderer
 }
 
-// NewFileTree builds a FileTree from a list of changed file entries.
-// handles entries == nil gracefully, returning a valid empty *FileTree.
-func NewFileTree(entries []diff.FileEntry) *FileTree {
-	paths := diff.FileEntryPaths(entries)
-	ft := &FileTree{allFiles: paths, reviewed: make(map[string]bool), fileStatuses: make(map[string]diff.FileStatus)}
-	ft.entries = ft.buildEntries(paths)
-
-	// store file statuses from entries
-	for _, e := range entries {
-		if e.Status != "" {
-			ft.fileStatuses[e.Path] = e.Status
-		}
-	}
-
-	// position cursor on first file entry
-	for i, e := range ft.entries {
-		if !e.isDir {
-			ft.cursor = i
-			break
-		}
-	}
+// NewFileTree builds a FileTree from a slice of entry groups.
+// handles nil gracefully, returning a valid empty *FileTree.
+func NewFileTree(groups []FileEntryGroup) *FileTree {
+	ft := &FileTree{reviewed: make(map[string]bool), fileStatuses: make(map[string]diff.FileStatus)}
+	ft.rebuildFrom(groups)
 	return ft
 }
 
 // SelectedFile returns the full path of the currently selected file,
-// or empty string if a directory is selected or entries are empty.
+// or empty string if a group/directory header is selected or entries are empty.
 func (ft *FileTree) SelectedFile() string {
 	if ft.cursor < 0 || ft.cursor >= len(ft.entries) {
 		return ""
 	}
 	return ft.entries[ft.cursor].path
+}
+
+// SelectedFileStaged returns the staged flag of the currently selected file's group.
+// Returns false when cursor is on a group/directory header or entries are empty.
+func (ft *FileTree) SelectedFileStaged() bool {
+	if ft.cursor < 0 || ft.cursor >= len(ft.entries) {
+		return false
+	}
+	e := ft.entries[ft.cursor]
+	if !e.isFile() {
+		return false
+	}
+	return e.staged
 }
 
 // TotalFiles returns the count of original file paths (before filtering).
@@ -98,13 +107,13 @@ func (ft *FileTree) HasFile(dir Direction) bool {
 	switch dir {
 	case DirectionNext:
 		for i := ft.cursor + 1; i < len(ft.entries); i++ {
-			if !ft.entries[i].isDir {
+			if ft.entries[i].isFile() {
 				return true
 			}
 		}
 	case DirectionPrev:
 		for i := ft.cursor - 1; i >= 0; i-- {
-			if !ft.entries[i].isDir {
+			if ft.entries[i].isFile() {
 				return true
 			}
 		}
@@ -153,9 +162,10 @@ func (ft *FileTree) StepFile(dir Direction) {
 
 // SelectByPath sets the cursor to the file entry matching the given path.
 // returns true if the file was found and cursor moved, false otherwise.
+// When the same path appears in multiple groups, selects the first occurrence.
 func (ft *FileTree) SelectByPath(path string) bool {
 	for i, e := range ft.entries {
-		if !e.isDir && e.path == path {
+		if e.isFile() && e.path == path {
 			ft.cursor = i
 			return true
 		}
@@ -184,27 +194,16 @@ func (ft *FileTree) EnsureVisible(height int) {
 	ensureVisible(&ft.cursor, &ft.offset, len(ft.entries), height)
 }
 
-// Rebuild rebuilds the file tree from new entries in-place.
+// Rebuild rebuilds the file tree from new entry groups in-place.
 // preserves reviewed map (pruned to files still present), resets cursor/offset,
 // positions cursor on first file entry, and preserves filter state.
-// entries are rebuilt from all files regardless of filter flag;
+// entries are rebuilt from all groups regardless of filter flag;
 // call RefreshFilter afterward when FilterActive returns true.
-func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
-	paths := diff.FileEntryPaths(entries)
-	ft.allFiles = paths
-
-	// build new file status map from entries
-	newStatuses := make(map[string]diff.FileStatus, len(entries))
-	for _, e := range entries {
-		if e.Status != "" {
-			newStatuses[e.Path] = e.Status
-		}
-	}
-	ft.fileStatuses = newStatuses
-
-	// prune reviewed map: drop keys no longer in entries
-	fileSet := make(map[string]struct{}, len(paths))
-	for _, f := range paths {
+func (ft *FileTree) Rebuild(groups []FileEntryGroup) {
+	// prune reviewed map: drop keys no longer present
+	newAllFiles := flatFiles(groups)
+	fileSet := make(map[string]struct{}, len(newAllFiles))
+	for _, f := range newAllFiles {
 		fileSet[f] = struct{}{}
 	}
 	for path := range ft.reviewed {
@@ -213,39 +212,27 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 		}
 	}
 
-	// rebuild entries list with all files; filter state is preserved but can't be applied
-	// without annotated map here — refreshFilter will be called separately if needed
-	ft.entries = ft.buildEntries(paths)
-
-	// reset cursor/offset and position on first file entry
-	ft.cursor = 0
-	ft.offset = 0
-	for i, e := range ft.entries {
-		if !e.isDir {
-			ft.cursor = i
-			break
-		}
-	}
+	ft.rebuildFrom(groups)
 }
 
 // ToggleFilter switches between showing all files and only annotated files.
 func (ft *FileTree) ToggleFilter(annotatedFiles map[string]bool) {
 	ft.filter = !ft.filter
 	if ft.filter {
-		filtered := ft.filterFiles(annotatedFiles)
-		if len(filtered) == 0 {
+		filtered := filteredGroups(ft.allGroups, annotatedFiles)
+		if flatFileCount(filtered) == 0 {
 			ft.filter = false // nothing to filter, stay on all
 			return
 		}
 		ft.entries = ft.buildEntries(filtered)
 	} else {
-		ft.entries = ft.buildEntries(ft.allFiles)
+		ft.entries = ft.buildEntries(ft.allGroups)
 	}
 
 	// position cursor on first file
 	ft.cursor = 0
 	for i, e := range ft.entries {
-		if !e.isDir {
+		if e.isFile() {
 			ft.cursor = i
 			return
 		}
@@ -261,11 +248,11 @@ func (ft *FileTree) RefreshFilter(annotatedFiles map[string]bool) {
 	// capture selected file before rebuilding entries
 	prevFile := ft.SelectedFile()
 
-	filtered := ft.filterFiles(annotatedFiles)
-	if len(filtered) == 0 {
+	filtered := filteredGroups(ft.allGroups, annotatedFiles)
+	if flatFileCount(filtered) == 0 {
 		// no annotated files left, switch back to all files
 		ft.filter = false
-		ft.entries = ft.buildEntries(ft.allFiles)
+		ft.entries = ft.buildEntries(ft.allGroups)
 	} else {
 		ft.entries = ft.buildEntries(filtered)
 	}
@@ -281,7 +268,7 @@ func (ft *FileTree) RefreshFilter(annotatedFiles map[string]bool) {
 		}
 	}
 	for i, e := range ft.entries {
-		if !e.isDir {
+		if e.isFile() {
 			ft.cursor = i
 			return
 		}
@@ -322,9 +309,13 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 		e := ft.entries[idx]
 		var line string
 
-		if e.isDir {
+		switch {
+		case e.isGroup:
+			rendered := r.Resolver.Style(style.StyleKeyDirEntry).Render(" " + ft.truncateDirName(e.name, r.Width-3))
+			line = "\x1b[1m" + rendered + "\x1b[22m"
+		case e.isDir:
 			line = r.Resolver.Style(style.StyleKeyDirEntry).Render(" " + ft.truncateDirName(e.name, r.Width-3))
-		} else {
+		default:
 			line = ft.renderFileEntry(e, idx, r.Width, rc)
 		}
 
@@ -336,44 +327,84 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 	return b.String()
 }
 
-// buildEntries groups files by directory and creates a flat entry list.
-func (ft *FileTree) buildEntries(files []string) []treeEntry {
-	if len(files) == 0 {
+// rebuildFrom replaces all tree state from the given groups.
+// updates allGroups, allFiles, fileStatuses, entries, cursor, and offset.
+func (ft *FileTree) rebuildFrom(groups []FileEntryGroup) {
+	ft.allGroups = groups
+	ft.allFiles = flatFiles(groups)
+
+	newStatuses := make(map[string]diff.FileStatus)
+	for _, g := range groups {
+		for _, e := range g.Entries {
+			if e.Status != "" {
+				newStatuses[e.Path] = e.Status
+			}
+		}
+	}
+	ft.fileStatuses = newStatuses
+
+	ft.entries = ft.buildEntries(groups)
+
+	ft.cursor = 0
+	ft.offset = 0
+	for i, e := range ft.entries {
+		if e.isFile() {
+			ft.cursor = i
+			break
+		}
+	}
+}
+
+// buildEntries builds the flat treeEntry list from a slice of groups.
+// For each group with a non-empty label, a group header entry is inserted first.
+// Files within each group are then organized by directory as before.
+func (ft *FileTree) buildEntries(groups []FileEntryGroup) []treeEntry {
+	var entries []treeEntry
+	for _, g := range groups {
+		if g.Label != "" {
+			entries = append(entries, treeEntry{name: g.Label, isGroup: true, staged: g.Staged})
+		}
+		entries = append(entries, ft.buildDirEntries(g.Entries, g.Staged)...)
+	}
+	return entries
+}
+
+// buildDirEntries groups a flat file list by directory and returns treeEntry rows.
+func (ft *FileTree) buildDirEntries(fileEntries []diff.FileEntry, staged bool) []treeEntry {
+	if len(fileEntries) == 0 {
 		return nil
 	}
 
-	// group files by directory
 	dirFiles := make(map[string][]string)
 	var dirs []string
-	for _, f := range files {
-		dir := filepath.Dir(f)
+	for _, e := range fileEntries {
+		dir := filepath.Dir(e.Path)
 		if _, ok := dirFiles[dir]; !ok {
 			dirs = append(dirs, dir)
 		}
-		dirFiles[dir] = append(dirFiles[dir], f)
+		dirFiles[dir] = append(dirFiles[dir], e.Path)
 	}
 	sort.Strings(dirs)
 
-	entries := make([]treeEntry, 0, len(dirs)+len(files))
+	entries := make([]treeEntry, 0, len(dirs)+len(fileEntries))
 	for _, dir := range dirs {
-		// add directory entry
 		dirName := dir
 		if dirName == "." {
 			dirName = "./"
 		} else {
 			dirName = dir + "/"
 		}
-		entries = append(entries, treeEntry{name: dirName, isDir: true, depth: 0})
+		entries = append(entries, treeEntry{name: dirName, isDir: true, staged: staged, depth: 0})
 
-		// add file entries under this directory, sorted
 		dirFileList := dirFiles[dir]
 		sort.Strings(dirFileList)
 		for _, f := range dirFileList {
 			entries = append(entries, treeEntry{
-				name:  filepath.Base(f),
-				path:  f,
-				isDir: false,
-				depth: 1,
+				name:   filepath.Base(f),
+				path:   f,
+				isDir:  false,
+				staged: staged,
+				depth:  1,
 			})
 		}
 	}
@@ -443,22 +474,11 @@ func (ft *FileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) s
 	return rc.res.Style(style.StyleKeyFileEntry).Render(name)
 }
 
-// filterFiles returns the subset of allFiles that have annotations.
-func (ft *FileTree) filterFiles(annotatedFiles map[string]bool) []string {
-	var filtered []string
-	for _, f := range ft.allFiles {
-		if annotatedFiles[f] {
-			filtered = append(filtered, f)
-		}
-	}
-	return filtered
-}
-
-// fileIndices returns indices of all file (non-directory) entries.
+// fileIndices returns indices of all file (non-directory, non-group) entries.
 func (ft *FileTree) fileIndices() []int {
 	var indices []int
 	for i, e := range ft.entries {
-		if !e.isDir {
+		if e.isFile() {
 			indices = append(indices, i)
 		}
 	}
@@ -485,20 +505,20 @@ func (ft *FileTree) truncateDirName(name string, maxWidth int) string {
 	return "…" + string(runes[start:])
 }
 
-// moveDown moves cursor to the next file entry (skips directories).
+// moveDown moves cursor to the next file entry (skips directories and group headers).
 func (ft *FileTree) moveDown() {
 	for i := ft.cursor + 1; i < len(ft.entries); i++ {
-		if !ft.entries[i].isDir {
+		if ft.entries[i].isFile() {
 			ft.cursor = i
 			return
 		}
 	}
 }
 
-// moveUp moves cursor to the previous file entry (skips directories).
+// moveUp moves cursor to the previous file entry (skips directories and group headers).
 func (ft *FileTree) moveUp() {
 	for i := ft.cursor - 1; i >= 0; i-- {
-		if !ft.entries[i].isDir {
+		if ft.entries[i].isFile() {
 			ft.cursor = i
 			return
 		}
@@ -536,7 +556,7 @@ func (ft *FileTree) pageUp(n int) {
 // moveToFirst moves cursor to the first file entry.
 func (ft *FileTree) moveToFirst() {
 	for i, e := range ft.entries {
-		if !e.isDir {
+		if e.isFile() {
 			ft.cursor = i
 			return
 		}
@@ -546,7 +566,7 @@ func (ft *FileTree) moveToFirst() {
 // moveToLast moves cursor to the last file entry.
 func (ft *FileTree) moveToLast() {
 	for i := len(ft.entries) - 1; i >= 0; i-- {
-		if !ft.entries[i].isDir {
+		if ft.entries[i].isFile() {
 			ft.cursor = i
 			return
 		}
@@ -581,4 +601,45 @@ func (ft *FileTree) prevFile() {
 		}
 	}
 	ft.cursor = files[len(files)-1] // wrap around
+}
+
+// isFile reports whether this entry is a selectable file (not a dir or group header).
+func (e treeEntry) isFile() bool {
+	return !e.isDir && !e.isGroup
+}
+
+// flatFiles derives a flat list of all file paths from a slice of groups.
+func flatFiles(groups []FileEntryGroup) []string {
+	var paths []string
+	for _, g := range groups {
+		for _, e := range g.Entries {
+			paths = append(paths, e.Path)
+		}
+	}
+	return paths
+}
+
+// filteredGroups returns a copy of groups where each group's Entries contains
+// only files present in annotatedFiles. Empty groups are preserved (header still shown).
+func filteredGroups(groups []FileEntryGroup, annotatedFiles map[string]bool) []FileEntryGroup {
+	result := make([]FileEntryGroup, len(groups))
+	for i, g := range groups {
+		filtered := make([]diff.FileEntry, 0, len(g.Entries))
+		for _, e := range g.Entries {
+			if annotatedFiles[e.Path] {
+				filtered = append(filtered, e)
+			}
+		}
+		result[i] = FileEntryGroup{Label: g.Label, Staged: g.Staged, Entries: filtered}
+	}
+	return result
+}
+
+// flatFileCount returns the total number of file entries across all groups.
+func flatFileCount(groups []FileEntryGroup) int {
+	n := 0
+	for _, g := range groups {
+		n += len(g.Entries)
+	}
+	return n
 }

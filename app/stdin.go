@@ -34,6 +34,9 @@ func validateStdinFlags(opts options) error {
 	if opts.AllFiles {
 		return errors.New("--stdin cannot be used with --all-files")
 	}
+	if opts.AllChanges {
+		return errors.New("--stdin cannot be used with --all-changes")
+	}
 	if len(opts.Exclude) > 0 {
 		return errors.New("--stdin cannot be used with --exclude")
 	}

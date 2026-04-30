@@ -85,7 +85,7 @@ func TestModel_ReviewStatsLazyOnFirstOpen(t *testing.T) {
 	m := testNewModel(t, r, annotation.NewStore(), noopHighlighter(), ModelConfig{ReviewInfo: &ReviewInfoConfig{}})
 
 	// drive the files-loaded path directly so FileDiff calls reflect post-load state
-	result, _ := m.Update(filesLoadedMsg{entries: entries})
+	result, _ := m.Update(testFilesLoadedMsg(entries...))
 	m = result.(Model)
 	assert.False(t, m.review.statsRequested, "stats must not be requested before the overlay is opened")
 
@@ -122,7 +122,7 @@ func TestModel_ReviewStatsEarlyInfoOpenFetchesAfterFilesLoad(t *testing.T) {
 	assert.True(t, m.review.statsRequested)
 	assert.False(t, m.review.statsLoaded)
 
-	result, cmd := m.Update(filesLoadedMsg{entries: entries})
+	result, cmd := m.Update(testFilesLoadedMsg(entries...))
 	m = result.(Model)
 	require.NotNil(t, cmd, "filesLoaded after an early info open must include the deferred stats fetch")
 

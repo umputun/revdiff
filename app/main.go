@@ -193,12 +193,13 @@ func run(opts options) error {
 		TabWidth:        opts.TabWidth,
 		Ref:             opts.ref(),
 		Staged:          opts.Staged,
+		AllChanges:      opts.AllChanges,
 		TreeWidthRatio:  opts.TreeWidth,
 		Only:            opts.Only,
 		WorkDir:         workDir,
 		ActiveThemeName: themes.catalog.ActiveName(opts.Theme),
-		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
-			return sidepane.NewFileTree(entries)
+		NewFileTree: func(groups []sidepane.FileEntryGroup) ui.FileTreeComponent {
+			return sidepane.NewFileTree(groups)
 		},
 		ParseTOC: func(lines []diff.DiffLine, filename string) ui.TOCComponent {
 			toc := sidepane.ParseTOC(lines, filename)

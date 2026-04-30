@@ -21,7 +21,7 @@ import (
 func TestModel_FilesLoaded(t *testing.T) {
 	m := testModel(nil, nil)
 
-	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "internal/handler.go"}, {Path: "internal/store.go"}, {Path: "main.go"}}})
+	result, cmd := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "internal/handler.go"}, diff.FileEntry{Path: "internal/store.go"}, diff.FileEntry{Path: "main.go"}))
 	model := result.(Model)
 
 	// tree should be populated with 3 files
@@ -52,7 +52,7 @@ func TestModel_FilesLoaded_DropsStaleResponses(t *testing.T) {
 
 	// stale response (seq=0) arrives first — must be dropped
 	stale := []diff.FileEntry{{Path: "stale.go"}}
-	result, cmd := m.Update(filesLoadedMsg{seq: 0, entries: stale})
+	result, cmd := m.Update(testFilesLoadedMsgSeq(0, stale...))
 	model := result.(Model)
 	assert.Nil(t, cmd)
 	assert.False(t, model.filesLoaded, "stale response must not flip filesLoaded")
@@ -61,7 +61,7 @@ func TestModel_FilesLoaded_DropsStaleResponses(t *testing.T) {
 
 	// fresh response (seq=1) arrives — accepted
 	fresh := []diff.FileEntry{{Path: "fresh.go"}}
-	result, _ = m.Update(filesLoadedMsg{seq: 1, entries: fresh})
+	result, _ = m.Update(testFilesLoadedMsgSeq(1, fresh...))
 	model = result.(Model)
 	assert.True(t, model.filesLoaded)
 	assert.Equal(t, 1, model.tree.TotalFiles())
@@ -80,7 +80,7 @@ func TestModel_ToggleUntrackedBumpsFilesLoadSeq(t *testing.T) {
 
 func TestModel_FilesLoadedMultipleFiles(t *testing.T) {
 	m := testModel(nil, nil)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}, diff.FileEntry{Path: "c.go"}))
 	model := result.(Model)
 
 	assert.False(t, model.file.singleFile, "singleFile should be false for multiple files")
@@ -326,7 +326,7 @@ func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
 	m.layout.height = 24
 	m.layout.viewport = viewport.New(76, 20)
 
-	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "ui/model.go"}, {Path: "diff/diff.go"}}})
+	result, cmd := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "ui/model.go"}, diff.FileEntry{Path: "diff/diff.go"}))
 	model := result.(Model)
 	assert.Nil(t, cmd, "should not trigger file load when no files match")
 	assert.Contains(t, model.layout.viewport.View(), "no files match --only filter")
@@ -365,8 +365,8 @@ func TestModel_UntrackedToggle(t *testing.T) {
 		// execute loadFiles command — should include untracked file
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		paths := make([]string, 0, len(flMsg.entries))
-		for _, e := range flMsg.entries {
+		paths := make([]string, 0, len(flMsg.flatEntries()))
+		for _, e := range flMsg.flatEntries() {
 			paths = append(paths, e.Path)
 		}
 		assert.Contains(t, paths, "main.go")
@@ -408,7 +408,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 		cmd := m.loadFiles()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Len(t, flMsg.entries, 1, "should only have the original file, no untracked")
+		assert.Len(t, flMsg.flatEntries(), 1, "should only have the original file, no untracked")
 	})
 
 	t.Run("dedup: untracked file already in staged list", func(t *testing.T) {
@@ -436,7 +436,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 		cmd := m.loadFiles()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Len(t, flMsg.entries, 2, "newfile.go should not be duplicated")
+		assert.Len(t, flMsg.flatEntries(), 2, "newfile.go should not be duplicated")
 	})
 }
 
@@ -463,9 +463,9 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 		cmd := m.Init()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Len(t, flMsg.entries, 1)
-		assert.Equal(t, "newfile.go", flMsg.entries[0].Path)
-		assert.Equal(t, diff.FileAdded, flMsg.entries[0].Status)
+		assert.Len(t, flMsg.flatEntries(), 1)
+		assert.Equal(t, "newfile.go", flMsg.flatEntries()[0].Path)
+		assert.Equal(t, diff.FileAdded, flMsg.flatEntries()[0].Status)
 	})
 
 	t.Run("staged-only files not duplicated when already in unstaged list", func(t *testing.T) {
@@ -489,7 +489,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 		cmd := m.Init()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Len(t, flMsg.entries, 1, "main.go should not be duplicated")
+		assert.Len(t, flMsg.flatEntries(), 1, "main.go should not be duplicated")
 	})
 
 	t.Run("staged-only new files are not merged when unstaged changes exist", func(t *testing.T) {
@@ -513,7 +513,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 		cmd := m.Init()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Equal(t, []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, flMsg.entries)
+		assert.Equal(t, []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, flMsg.flatEntries())
 	})
 
 	t.Run("staged fetch failure logged as warning", func(t *testing.T) {
@@ -537,7 +537,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 		cmd := m.Init()
 		msg := cmd()
 		flMsg := msg.(filesLoadedMsg)
-		assert.Empty(t, flMsg.entries)
+		assert.Empty(t, flMsg.flatEntries())
 		assert.Len(t, flMsg.warnings, 1, "staged fetch error should be in warnings")
 		assert.Contains(t, flMsg.warnings[0], "git error")
 	})
@@ -735,7 +735,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 
 func TestModel_FilesLoadedSingleFile(t *testing.T) {
 	m := testModel(nil, nil)
-	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
+	result, cmd := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "main.go"}))
 	model := result.(Model)
 
 	assert.True(t, model.file.singleFile, "singleFile should be true for one file")
@@ -751,7 +751,7 @@ func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
 	assert.True(t, m.ready, "model should be ready after resize")
 
 	// now load single file — viewport width should be recalculated
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "main.go"}))
 	model := result.(Model)
 	assert.True(t, model.file.singleFile)
 	assert.Equal(t, 0, model.layout.treeWidth, "treeWidth should be 0 in single-file mode")
@@ -858,7 +858,7 @@ func TestModel_FileLoadedTOCViewportWidth(t *testing.T) {
 	// simulate initial resize then single-file load
 	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = resized.(Model)
-	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "README.md"}}})
+	loaded, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "README.md"}))
 	m = loaded.(Model)
 	require.True(t, m.file.singleFile)
 	require.Equal(t, 0, m.layout.treeWidth, "treeWidth starts at 0 in single-file mode")

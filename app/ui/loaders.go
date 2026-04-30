@@ -10,60 +10,129 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 // loadFiles returns a command that fetches the list of changed files from the renderer.
-// it also appends staged-only and untracked files when applicable.
+// In --all-changes mode, fetches staged, unstaged, and untracked in parallel goroutines
+// and returns them as three labeled groups. In normal mode, returns a single group.
 // the caller must bump m.filesLoadSeq before invoking loadFiles when issuing a new
 // reload (e.g. toggleUntracked); the captured seq tags every emitted filesLoadedMsg
 // so handleFilesLoaded can drop stale results from earlier in-flight loads.
 func (m Model) loadFiles() tea.Cmd {
 	seq := m.filesLoadSeq
+	renderer := m.diffRenderer
+	cfg := m.cfg
+	loadUntracked := m.loadUntracked
+	showUntracked := m.modes.showUntracked
 	return func() tea.Msg {
-		var warnings []string
-		entries, err := m.diffRenderer.ChangedFiles(m.cfg.ref, m.cfg.staged)
-		if err != nil {
-			return filesLoadedMsg{seq: seq, entries: entries, err: err}
+		if cfg.allChanges {
+			return loadAllChanges(seq, renderer, loadUntracked)
 		}
-		// include staged-only files (new files added to index but not yet committed)
-		// only when there are no unstaged entries; otherwise unstaged review should stay focused
-		// on actual unstaged changes.
-		if m.cfg.ref == "" && !m.cfg.staged && len(entries) == 0 {
-			stagedEntries, stagedErr := m.diffRenderer.ChangedFiles("", true)
-			if stagedErr != nil {
-				warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
-			} else {
-				stagedSet := make(map[string]bool)
-				for _, e := range entries {
-					stagedSet[e.Path] = true
-				}
-				for _, se := range stagedEntries {
-					if !stagedSet[se.Path] && se.Status == diff.FileAdded {
-						entries = append(entries, se)
-					}
-				}
-			}
-		}
-		// append untracked files when toggle is on (skip files already in entries to avoid dupes)
-		if m.modes.showUntracked && m.loadUntracked != nil {
-			ut, utErr := m.loadUntracked()
-			if utErr != nil {
-				warnings = append(warnings, fmt.Sprintf("untracked files: %v", utErr))
-			} else {
-				entrySet := make(map[string]bool, len(entries))
-				for _, e := range entries {
-					entrySet[e.Path] = true
-				}
-				for _, f := range ut {
-					if !entrySet[f] {
-						entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
-					}
-				}
-			}
-		}
-		return filesLoadedMsg{seq: seq, entries: entries, warnings: warnings}
+		return loadNormalMode(seq, renderer, cfg, showUntracked, loadUntracked)
 	}
+}
+
+// loadAllChanges fetches staged, unstaged, and untracked files in parallel and
+// returns them as three labeled FileEntryGroup entries. Empty groups are kept.
+func loadAllChanges(seq uint64, renderer Renderer, loadUntracked func() ([]string, error)) filesLoadedMsg {
+	type result struct {
+		entries []diff.FileEntry
+		err     error
+	}
+	stagedCh := make(chan result, 1)
+	unstagedCh := make(chan result, 1)
+	untrackedCh := make(chan result, 1)
+
+	go func() {
+		entries, err := renderer.ChangedFiles("", true)
+		stagedCh <- result{entries, err}
+	}()
+	go func() {
+		entries, err := renderer.ChangedFiles("", false)
+		unstagedCh <- result{entries, err}
+	}()
+	go func() {
+		if loadUntracked == nil {
+			untrackedCh <- result{}
+			return
+		}
+		paths, err := loadUntracked()
+		var entries []diff.FileEntry
+		for _, p := range paths {
+			entries = append(entries, diff.FileEntry{Path: p, Status: diff.FileUntracked})
+		}
+		untrackedCh <- result{entries, err}
+	}()
+
+	staged := <-stagedCh
+	unstaged := <-unstagedCh
+	untracked := <-untrackedCh
+
+	var warnings []string
+	if staged.err != nil {
+		warnings = append(warnings, fmt.Sprintf("staged files: %v", staged.err))
+	}
+	if unstaged.err != nil {
+		warnings = append(warnings, fmt.Sprintf("unstaged files: %v", unstaged.err))
+	}
+	if untracked.err != nil {
+		warnings = append(warnings, fmt.Sprintf("untracked files: %v", untracked.err))
+	}
+
+	groups := []sidepane.FileEntryGroup{
+		{Label: "Staged Changes", Staged: true, Entries: staged.entries},
+		{Label: "Changes", Staged: false, Entries: unstaged.entries},
+		{Label: "Untracked", Staged: false, Entries: untracked.entries},
+	}
+	return filesLoadedMsg{seq: seq, groups: groups, warnings: warnings}
+}
+
+// loadNormalMode fetches files for the standard single-group mode.
+func loadNormalMode(seq uint64, renderer Renderer, cfg modelConfigState, showUntracked bool, loadUntracked func() ([]string, error)) filesLoadedMsg {
+	var warnings []string
+	entries, err := renderer.ChangedFiles(cfg.ref, cfg.staged)
+	if err != nil {
+		return filesLoadedMsg{seq: seq, groups: []sidepane.FileEntryGroup{{Entries: entries}}, err: err}
+	}
+	// include staged-only files (new files added to index but not yet committed)
+	// only when there are no unstaged entries; otherwise unstaged review should stay focused
+	// on actual unstaged changes.
+	if cfg.ref == "" && !cfg.staged && len(entries) == 0 {
+		stagedEntries, stagedErr := renderer.ChangedFiles("", true)
+		if stagedErr != nil {
+			warnings = append(warnings, fmt.Sprintf("staged files: %v", stagedErr))
+		} else {
+			stagedSet := make(map[string]bool)
+			for _, e := range entries {
+				stagedSet[e.Path] = true
+			}
+			for _, se := range stagedEntries {
+				if !stagedSet[se.Path] && se.Status == diff.FileAdded {
+					entries = append(entries, se)
+				}
+			}
+		}
+	}
+	// append untracked files when toggle is on (skip files already in entries to avoid dupes)
+	if showUntracked && loadUntracked != nil {
+		ut, utErr := loadUntracked()
+		if utErr != nil {
+			warnings = append(warnings, fmt.Sprintf("untracked files: %v", utErr))
+		} else {
+			entrySet := make(map[string]bool, len(entries))
+			for _, e := range entries {
+				entrySet[e.Path] = true
+			}
+			for _, f := range ut {
+				if !entrySet[f] {
+					entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
+				}
+			}
+		}
+	}
+	return filesLoadedMsg{seq: seq, groups: []sidepane.FileEntryGroup{{Entries: entries}}, warnings: warnings}
 }
 
 // loadCommits returns a command that fetches the commit log for the current ref range.
@@ -91,11 +160,14 @@ func (m Model) loadCommits() tea.Cmd {
 }
 
 // loadFileDiff returns a command that fetches the diff lines for the given file.
+// staged is captured from m.file.staged at dispatch time (not m.cfg.staged) so
+// that --all-changes mode can load staged and unstaged files from the same tree.
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
+	staged := m.file.staged
 	contextLines := m.currentContextLines()
 	return func() tea.Msg {
-		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged, contextLines)
+		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, staged, contextLines)
 		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
 	}
 }
@@ -131,7 +203,7 @@ func (m Model) loadBlame(file string) tea.Cmd {
 	}
 	seq := m.file.loadSeq
 	ref := m.cfg.ref
-	staged := m.cfg.staged
+	staged := m.file.staged
 	return func() tea.Msg {
 		data, err := m.blamer.FileBlame(ref, file, staged)
 		return blameLoadedMsg{file: file, seq: seq, data: data, err: err}
@@ -142,6 +214,7 @@ func (m Model) loadBlame(file string) tea.Cmd {
 func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	m.tree.EnsureVisible(m.treePageSize())
 	if f := m.tree.SelectedFile(); f != "" && f != m.file.name {
+		m.file.staged = m.resolveFileStagedFlag()
 		m.file.loadSeq++
 		return m, m.loadFileDiff(f)
 	}
@@ -189,7 +262,8 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	for _, w := range msg.warnings {
 		log.Printf("[WARN] %s", w)
 	}
-	entries := m.filterOnly(msg.entries)
+	filteredGroups := m.filterOnlyGroups(msg.groups)
+	entries := deduplicateEntries(flatEntriesFromGroups(filteredGroups))
 	statsPending := m.review.statsRequested && !m.review.statsLoaded
 	m.setReviewEntries(entries)
 	var statsCmd tea.Cmd
@@ -201,7 +275,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.layout.viewport.SetContent("no files match --only filter")
 		return m, statsCmd
 	}
-	m.tree.Rebuild(entries)
+	m.tree.Rebuild(filteredGroups)
 	if m.tree.FilterActive() {
 		m.tree.RefreshFilter(m.annotatedFiles())
 	}
@@ -226,6 +300,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 
 	// auto-select first file
 	if f := m.tree.SelectedFile(); f != "" {
+		m.file.staged = m.resolveFileStagedFlag()
 		m.file.loadSeq++
 		return m, tea.Batch(m.loadFileDiff(f), statsCmd)
 	}
@@ -332,7 +407,7 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 		return
 	}
 	// staged-only files: retry with git diff --cached
-	if !m.cfg.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
+	if !m.file.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
 		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true, m.currentContextLines()); err == nil && len(cachedLines) > 0 {
 			m.file.lines = cachedLines
 			return
@@ -384,6 +459,56 @@ func (m Model) computeBlameAuthorLen() int {
 		maxLen = 1
 	}
 	return maxLen
+}
+
+// resolveFileStagedFlag returns the staged flag to use for loading the selected file.
+// In --all-changes mode it reads the group flag from the tree selection; otherwise uses cfg.staged.
+func (m Model) resolveFileStagedFlag() bool {
+	if m.cfg.allChanges {
+		return m.tree.SelectedFileStaged()
+	}
+	return m.cfg.staged
+}
+
+// filterOnlyGroups applies --only filtering to each group's entries, keeping all group
+// headers even when their entry list becomes empty (so empty groups remain visible).
+func (m Model) filterOnlyGroups(groups []sidepane.FileEntryGroup) []sidepane.FileEntryGroup {
+	if len(m.cfg.only) == 0 {
+		return groups
+	}
+	filtered := make([]sidepane.FileEntryGroup, len(groups))
+	for i, g := range groups {
+		filtered[i] = sidepane.FileEntryGroup{
+			Label:   g.Label,
+			Staged:  g.Staged,
+			Entries: m.filterOnly(g.Entries),
+		}
+	}
+	return filtered
+}
+
+// flatEntriesFromGroups returns all file entries from all groups as a flat slice.
+func flatEntriesFromGroups(groups []sidepane.FileEntryGroup) []diff.FileEntry {
+	var entries []diff.FileEntry
+	for _, g := range groups {
+		entries = append(entries, g.Entries...)
+	}
+	return entries
+}
+
+// deduplicateEntries returns a new slice with duplicate paths removed (first-occurrence wins).
+// Used before setReviewEntries in --all-changes mode where the same file can appear in
+// both "Staged Changes" and "Changes" groups.
+func deduplicateEntries(entries []diff.FileEntry) []diff.FileEntry {
+	seen := make(map[string]bool, len(entries))
+	out := make([]diff.FileEntry, 0, len(entries))
+	for _, e := range entries {
+		if !seen[e.Path] {
+			seen[e.Path] = true
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // filterOnly returns only files matching the --only patterns, or all files if no filter is set.

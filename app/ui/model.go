@@ -181,8 +181,10 @@ type FileTreeComponent interface {
 	SelectByVisibleRow(row int) bool
 	// EnsureVisible adjusts offset so the cursor is within the visible range.
 	EnsureVisible(height int)
-	// Rebuild rebuilds the file tree from new entries in-place.
-	Rebuild(entries []diff.FileEntry)
+	// SelectedFileStaged returns the staged flag of the currently selected file's group.
+	SelectedFileStaged() bool
+	// Rebuild rebuilds the file tree from new entry groups in-place.
+	Rebuild(groups []sidepane.FileEntryGroup)
 	// ToggleFilter toggles between showing all files and only annotated files.
 	ToggleFilter(annotated map[string]bool)
 	// RefreshFilter updates the filtered view with the current annotation state.
@@ -246,6 +248,7 @@ type loadedFileState struct {
 	lineNumWidth     int                    // digit width for line number columns
 	singleColLineNum bool                   // true for full-context files: one line-number column
 	loadSeq          uint64                 // monotonic counter to identify the latest load request
+	staged           bool                   // staged flag captured at loadFileDiff dispatch time
 	mdTOC            TOCComponent           // markdown table-of-contents (nil when not applicable)
 	singleFile       bool                   // true when diff contains exactly one file
 }
@@ -254,7 +257,8 @@ type loadedFileState struct {
 // these values are set once at startup and not changed during runtime.
 type modelConfigState struct {
 	ref              string   // git ref for diff
-	staged           bool     // show staged changes
+	staged           bool     // show staged changes (--staged flag)
+	allChanges       bool     // show staged, unstaged, and untracked as separate groups (--all-changes)
 	only             []string // filter to show only matching files
 	workDir          string   // working directory for resolving absolute --only paths
 	noColors         bool     // keep monochrome output when previewing or applying themes
@@ -513,9 +517,18 @@ type blameLoadedMsg struct {
 // filesLoadedMsg is sent when the changed file list is loaded.
 type filesLoadedMsg struct {
 	seq      uint64 // matches m.filesLoadSeq at the time the load was issued; mismatched messages are dropped
-	entries  []diff.FileEntry
+	groups   []sidepane.FileEntryGroup
 	err      error
 	warnings []string // non-fatal issues (staged/untracked fetch failures)
+}
+
+// flatEntries returns all file entries from all groups as a flat slice.
+func (msg filesLoadedMsg) flatEntries() []diff.FileEntry {
+	var all []diff.FileEntry
+	for _, g := range msg.groups {
+		all = append(all, g.Entries...)
+	}
+	return all
 }
 
 // commitsLoadedMsg is sent when the commit log for the current ref range is loaded.
@@ -560,10 +573,10 @@ type ModelConfig struct {
 
 	// --- Sidepane factories (required, wired from main.go) ---
 
-	// NewFileTree constructs a fresh FileTreeComponent from the file list.
+	// NewFileTree constructs a fresh FileTreeComponent from a slice of entry groups.
 	// Injected by main.go (typically a closure wrapping sidepane.NewFileTree).
 	// Required — NewModel returns an error when nil.
-	NewFileTree func(entries []diff.FileEntry) FileTreeComponent
+	NewFileTree func(groups []sidepane.FileEntryGroup) FileTreeComponent
 
 	// ParseTOC parses markdown headers from diff lines into a TOCComponent.
 	// Returns nil when no headers are found. The closure must collapse typed-nil
@@ -591,6 +604,7 @@ type ModelConfig struct {
 	// --- Configuration values ---
 	Ref              string
 	Staged           bool
+	AllChanges       bool // show staged, unstaged, and untracked as separate groups (--all-changes)
 	TreeWidthRatio   int
 	TabWidth         int      // number of spaces per tab character
 	NoColors         bool     // disable all colors including syntax highlighting
@@ -724,6 +738,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		cfg: modelConfigState{
 			ref:              cfg.Ref,
 			staged:           cfg.Staged,
+			allChanges:       cfg.AllChanges,
 			only:             cfg.Only,
 			workDir:          cfg.WorkDir,
 			noColors:         cfg.NoColors,

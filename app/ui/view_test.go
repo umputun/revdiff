@@ -23,7 +23,7 @@ func TestModel_ResizeInSingleFileMode(t *testing.T) {
 	// set up single-file mode via filesLoadedMsg
 	resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = resized.(Model)
-	loaded, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
+	loaded, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "main.go"}))
 	m = loaded.(Model)
 	require.True(t, m.file.singleFile)
 
@@ -782,7 +782,7 @@ func TestModel_SingleFileMultiFileModeUnchanged(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	model := result.(Model)
-	result, _ = model.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ = model.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	model = result.(Model)
 
 	assert.False(t, model.file.singleFile, "multi-file should not be in single-file mode")

@@ -36,9 +36,9 @@ func plainRenderer() *mocks.RendererMock {
 
 // testFileTreeFactory returns the sidepane factory closures for NewFileTree and ParseTOC,
 // suitable for injection into ModelConfig in tests.
-func testFileTreeFactory() func(entries []diff.FileEntry) FileTreeComponent {
-	return func(entries []diff.FileEntry) FileTreeComponent {
-		return sidepane.NewFileTree(entries)
+func testFileTreeFactory() func(groups []sidepane.FileEntryGroup) FileTreeComponent {
+	return func(groups []sidepane.FileEntryGroup) FileTreeComponent {
+		return sidepane.NewFileTree(groups)
 	}
 }
 
@@ -76,6 +76,17 @@ func tocActiveLineIdx(t *testing.T, toc TOCComponent) int {
 	return tocLineIdx(t, toc)
 }
 
+// testFilesLoadedMsg wraps entries into a filesLoadedMsg with a single unnamed group,
+// matching normal (non-all-changes) mode behavior in tests.
+func testFilesLoadedMsg(entries ...diff.FileEntry) filesLoadedMsg {
+	return filesLoadedMsg{groups: []sidepane.FileEntryGroup{{Entries: entries}}}
+}
+
+// testFilesLoadedMsgSeq is like testFilesLoadedMsg but with an explicit seq value.
+func testFilesLoadedMsgSeq(seq uint64, entries ...diff.FileEntry) filesLoadedMsg {
+	return filesLoadedMsg{seq: seq, groups: []sidepane.FileEntryGroup{{Entries: entries}}}
+}
+
 // testNewFileTree creates a sidepane.FileTree from a list of file paths,
 // replacing the old testNewFileTree([]string{...}) pattern in tests.
 func testNewFileTree(files []string) *sidepane.FileTree {
@@ -83,7 +94,7 @@ func testNewFileTree(files []string) *sidepane.FileTree {
 	for i, f := range files {
 		entries[i] = diff.FileEntry{Path: f}
 	}
-	return sidepane.NewFileTree(entries)
+	return sidepane.NewFileTree([]sidepane.FileEntryGroup{{Entries: entries}})
 }
 
 // fakeThemeCatalog is a no-op ThemeCatalog for tests that don't exercise theme selection.
@@ -270,7 +281,7 @@ func TestModel_Init(t *testing.T) {
 	msg := cmd()
 	flm, ok := msg.(filesLoadedMsg)
 	require.True(t, ok)
-	assert.Equal(t, []string{"a.go", "b.go"}, diff.FileEntryPaths(flm.entries))
+	assert.Equal(t, []string{"a.go", "b.go"}, diff.FileEntryPaths(flm.groups[0].Entries))
 	assert.NoError(t, flm.err)
 }
 
@@ -292,7 +303,7 @@ func TestModel_InitialLoadingState_NoEmptyFlash(t *testing.T) {
 	assert.Equal(t, "loading files...", m.View())
 
 	// filesLoadedMsg arrives; loading state must end
-	result, _ = m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ = m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	assert.True(t, m.filesLoaded)
 	got := m.View()

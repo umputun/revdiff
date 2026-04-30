@@ -146,7 +146,7 @@ func TestModel_JumpToAnnotationTarget_SameFile(t *testing.T) {
 	m := testModel([]string{"a.go"}, diffs)
 
 	// simulate file load
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -185,7 +185,7 @@ func TestModel_JumpToAnnotationTarget_CrossFile(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, diffs)
 
 	// load files and first file
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -219,7 +219,7 @@ func TestModel_JumpToAnnotation_StalePendingGuard(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, diffs)
 
 	// load files and first file
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -259,7 +259,7 @@ func TestModel_PendingAnnotJump_ClearedByTreeNav(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 1}},
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -287,7 +287,7 @@ func TestModel_PendingAnnotJump_ClearedByFilterToggle(t *testing.T) {
 		"b.go": {{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 1}},
 	}
 	m := testModel([]string{"a.go", "b.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}, diff.FileEntry{Path: "b.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -313,7 +313,7 @@ func TestModel_PositionOnAnnotation_CollapsedMode(t *testing.T) {
 		},
 	}
 	m := testModel([]string{"a.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
@@ -343,7 +343,7 @@ func TestModel_PositionOnAnnotation_DeleteOnlyHunk(t *testing.T) {
 		},
 	}
 	m := testModel([]string{"a.go"}, diffs)
-	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	result, _ := m.Update(testFilesLoadedMsg(diff.FileEntry{Path: "a.go"}))
 	m = result.(Model)
 	msg := m.loadFileDiff("a.go")()
 	result, _ = m.Update(msg)
