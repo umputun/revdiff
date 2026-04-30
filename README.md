@@ -1,5 +1,7 @@
 # <img src="site/assets/logo.png" alt="" width="28">&nbsp;revdiff &nbsp;<a href="https://github.com/umputun/revdiff/actions/workflows/ci.yml"><img src="https://github.com/umputun/revdiff/actions/workflows/ci.yml/badge.svg" alt="build"></a> <a href="https://coveralls.io/github/umputun/revdiff?branch=master"><img src="https://coveralls.io/repos/github/umputun/revdiff/badge.svg?branch=master" alt="Coverage Status"></a> <a href="https://goreportcard.com/report/github.com/umputun/revdiff"><img src="https://goreportcard.com/badge/github.com/umputun/revdiff" alt="Go Report Card"></a>
 
+> **Fork** of [umputun/revdiff](https://github.com/umputun/revdiff) — adds `--all-changes` mode (staged + unstaged + untracked as separate groups).
+
 TUI for reviewing diffs, files, and documents with inline annotations. Outputs structured annotations to stdout on quit, making it easy to pipe results into AI agents, scripts, or other tools.
 
 Built for a specific use case: reviewing code changes, plans, and documents without leaving a terminal-based AI coding session (e.g., Claude Code). Just enough UI to navigate diffs and files, annotate specific lines, and return the results to the calling process - no more, no less.
@@ -28,6 +30,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Help overlay (`?`) showing all keybindings organized by section
 - Info popup (`i`) showing launch scope (mode, VCS, ref, filters, file/status counts, aggregate `+/-` line stats), the optional `--description` prose, and the commit log subject + body for every commit in the current ref range (git/hg/jj) — useful for restoring narrative context when reviewing PR-style diffs
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
+- All-changes mode: review staged, unstaged, and untracked files simultaneously as separate labeled groups in the file tree with `--all-changes` (git only)
 - All-files mode: browse and annotate all tracked files with `--all-files` (git `ls-files` or jj `file list`), filter with `--include` and `--exclude`
 - No-VCS file review: `--only` files outside a VCS repo (or not in any diff) are shown as context-only with full annotation support
 - Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
@@ -289,6 +292,7 @@ Positional arguments support several forms:
 | `base` | Git ref to diff against | uncommitted changes |
 | `against` | Second git ref for two-ref diff | |
 | `--staged` | Show staged changes, env: `REVDIFF_STAGED` | `false` |
+| `--all-changes` | Show staged, unstaged, and untracked as separate groups (git only), env: `REVDIFF_ALL_CHANGES` | `false` |
 | `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `2` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
@@ -461,6 +465,9 @@ revdiff main..feature
 # review only specific files
 revdiff --only=model.go --only=README.md
 
+# review staged, unstaged, and untracked files as separate groups (git only)
+revdiff --all-changes
+
 # browse all git-tracked files in a project
 revdiff --all-files
 
@@ -521,6 +528,24 @@ exclude = mocks
 ```
 
 Or via environment variables (comma-separated): `REVDIFF_INCLUDE=src`, `REVDIFF_EXCLUDE=vendor,mocks`.
+
+### All-Changes Mode
+
+Use `--all-changes` to review staged, unstaged, and untracked changes in a single session. The file tree shows three labeled groups — **Staged Changes**, **Changes**, and **Untracked** — each with its own file list. Empty groups are always shown so the layout stays predictable.
+
+```bash
+revdiff --all-changes
+```
+
+Selecting a file from **Staged Changes** loads the staged diff (`git diff --cached`); selecting from **Changes** loads the unstaged diff (`git diff`); selecting from **Untracked** shows the file content as all-added lines.
+
+`--all-changes` is git-only and mutually exclusive with `--staged`, `--all-files`, `--stdin`, and refs. It can be persisted in the config file:
+
+```ini
+all-changes = true
+```
+
+Or via environment variable: `REVDIFF_ALL_CHANGES=true`.
 
 ### Context-Only File Review
 
