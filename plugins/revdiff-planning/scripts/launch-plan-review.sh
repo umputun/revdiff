@@ -110,6 +110,7 @@ KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd=current)
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
@@ -140,6 +141,7 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
     if [ ${#WEZTERM_CLI[@]} -gt 0 ]; then
         SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
         rm -f "$SENTINEL"
+        trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
 
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent 90 \
             --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; rc=\$?; printf %s \"\$rc\" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")" >/dev/null 2>&1
