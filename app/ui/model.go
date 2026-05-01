@@ -264,6 +264,7 @@ type modelConfigState struct {
 	crossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	treeWidthRatio   int      // 1-10 units for file tree panel
 	tabSpaces        string   // spaces to replace tabs with
+	wrapIndent       int      // extra indent (in columns) for wrap continuation rows; 0 disables
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -598,6 +599,7 @@ type ModelConfig struct {
 	NoStatusBar      bool     // hide the status bar
 	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
 	Wrap             bool     // enable line wrapping
+	WrapIndent       int      // extra indent (cols) for wrap continuation rows; 0 disables
 	Collapsed        bool     // start in collapsed diff mode
 	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool     // show line numbers in diff gutter
@@ -733,6 +735,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			crossFileHunks:   cfg.CrossFileHunks,
 			treeWidthRatio:   cfg.TreeWidthRatio,
 			tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
+			wrapIndent:       max(0, cfg.WrapIndent),
 		},
 		layout: layoutState{
 			focus: paneTree,

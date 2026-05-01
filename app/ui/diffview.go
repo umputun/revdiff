@@ -377,16 +377,21 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 
 	visualLines := m.wrapContent(textContent, m.wrapWidth())
 	for i, vl := range visualLines {
-		prefix := " ↪ "
 		ng := numBlank
 		bg := blBlank
+		var styled string
 		if i == 0 {
-			prefix = m.linePrefix(dl.ChangeType)
 			ng = numGutter
 			bg = blGutter
+			styled = m.styleDiffContent(dl.ChangeType, m.linePrefix(dl.ChangeType), vl, hasHighlight, isSearchMatch)
+		} else {
+			// non-collapsed wrap path applies search highlight per-word via
+			// highlightSearchMatches inside styleDiffContent (the surrounding lipgloss
+			// LineStyle stays add/remove/context, never SearchMatch), so the marker
+			// does not need the no-colors reverse-video fallback even on a search-matched
+			// row — pass false.
+			styled = m.styledWrapMarker(m.resolver.LineBg(dl.ChangeType), false) + m.styleDiffContent(dl.ChangeType, "", vl, hasHighlight, isSearchMatch)
 		}
-
-		styled := m.styleDiffContent(dl.ChangeType, prefix, vl, hasHighlight, isSearchMatch)
 		styled = m.extendLineBg(styled, m.resolver.LineBg(dl.ChangeType))
 
 		cursor := " "
@@ -495,12 +500,71 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 // chroma highlighting is on. Highlighted line styles intentionally set only
 // background (chroma owns per-token fg for content), so the prefix would
 // otherwise inherit the terminal default fg and may render invisibly on
-// light theme backgrounds.
+// light theme backgrounds. an empty prefix is returned unchanged so callers
+// passing "" (e.g. wrap-mode continuation rows that style the marker themselves)
+// don't pay for an empty fg-set + fg-reset SGR pair on every row.
 func (m Model) wrapPrefixForHighlight(prefix string, fg style.Color, hasHighlight bool) string {
-	if !hasHighlight || fg == "" {
+	if !hasHighlight || fg == "" || prefix == "" {
 		return prefix
 	}
 	return string(fg) + prefix + string(style.ResetFg)
+}
+
+// styledWrapMarker returns the " ↪ " continuation marker styled with MutedFg
+// on the given line background via raw ANSI, optionally followed by N bg-padded
+// spaces (where N is m.effectiveWrapIndent — the configured wrapIndent unless
+// the pane is too narrow to keep enough content width, see wrapWidth) so
+// continuation content visually hangs under the first row's content rather than
+// aligning with new bullets/items at the same column. matches the muted treatment
+// of «/» horizontal scroll indicators (see scrollIndicatorANSI) — both gutter-chrome
+// glyphs use ColorKeyMutedFg via raw ANSI rather than going through lipgloss so
+// they do not inherit chroma syntax color or change-line foreground. the two
+// helpers stay separate because scrollIndicatorANSI also handles split bg semantics
+// (line-bg space + DiffBg glyph) that the wrap marker does not need (the wrap
+// marker is gutter-only chrome, never overlaid on content). an empty bg here
+// falls back to DiffPaneBg so context rows (which have no LineBg) still match
+// the surrounding pane.
+//
+// searchMatch toggles the no-colors behavior: when true and --no-colors is on,
+// the marker emits a reverse-video wrap to match the SearchMatch lipgloss style
+// (which renders as Reverse in plain mode), preventing a plain ↪ marker from
+// sitting on a reverse-video content row. in colored mode the caller already
+// flipped bg to SearchBg, so searchMatch is a no-op on the colored path.
+//
+// in --no-colors mode without search match, all color lookups return empty and
+// the marker degrades to plain " ↪ " plus the indent spaces.
+func (m Model) styledWrapMarker(bg style.Color, searchMatch bool) string {
+	if m.cfg.noColors && searchMatch {
+		indent := m.effectiveWrapIndent()
+		pad := ""
+		if indent > 0 {
+			pad = strings.Repeat(" ", indent)
+		}
+		return "\033[7m ↪ " + pad + "\033[27m"
+	}
+	if bg == "" {
+		bg = m.resolver.Color(style.ColorKeyDiffPaneBg)
+	}
+	muted := m.resolver.Color(style.ColorKeyMutedFg)
+	indent := m.effectiveWrapIndent()
+	var b strings.Builder
+	if bg != "" {
+		b.WriteString(string(bg))
+	}
+	if muted != "" {
+		b.WriteString(string(muted))
+	}
+	b.WriteString(" ↪ ")
+	if muted != "" {
+		b.WriteString("\033[39m")
+	}
+	if indent > 0 {
+		b.WriteString(strings.Repeat(" ", indent))
+	}
+	if bg != "" {
+		b.WriteString("\033[49m")
+	}
+	return b.String()
 }
 
 // highlightSearchMatches wraps each occurrence of the search term in the visible text
@@ -657,11 +721,41 @@ func (m Model) annotationContinuationIndent(firstLogicalLine string) string {
 	}
 }
 
-const wrapGutterWidth = 3 // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
+const (
+	wrapGutterWidth = 3  // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
+	wrapMinContent  = 10 // minimum content width per visual row when wrap-indent is active
+)
 
-// wrapWidth returns the available width for wrapped content (diff content minus gutter prefix and extra gutters).
+// wrapWidth returns the available width for wrapped content (diff content minus
+// gutter prefix and extra gutters). when wrapIndent > 0, an additional indent is
+// reserved so continuation rows can prepend that many spaces after the ↪ marker
+// without overflowing the pane. as a side effect, the first visual row also
+// wraps at the indent-reduced width — content that would otherwise fit edge-to-edge
+// can wrap one row earlier than necessary. acceptable trade-off vs. the complexity
+// of asymmetric wrapping (different widths per visual row).
+//
+// guards against pathologically large wrapIndent values (or narrow terminals) that
+// would push content below wrapMinContent: in that case the indent is silently
+// disabled for this render so wrap mode stays usable. wrap mode skips horizontal
+// scroll, so a sub-zero return here would let long lines overflow the pane.
 func (m Model) wrapWidth() int {
-	return m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	base := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	if base-m.cfg.wrapIndent < wrapMinContent {
+		return base
+	}
+	return base - m.cfg.wrapIndent
+}
+
+// effectiveWrapIndent returns the wrap-indent that is actually applied for the
+// current pane width. mirrors the clamp in wrapWidth so the styledWrapMarker's
+// indent padding stays in sync — when wrapWidth disables the indent due to a
+// narrow pane, the marker likewise emits no indent padding.
+func (m Model) effectiveWrapIndent() int {
+	base := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+	if base-m.cfg.wrapIndent < wrapMinContent {
+		return 0
+	}
+	return m.cfg.wrapIndent
 }
 
 // diffContentWidth returns the available width for diff line content.

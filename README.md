@@ -10,7 +10,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Full-file diff view with syntax highlighting
 - Intra-line word-diff: highlights the specific changed words within paired add/remove lines using a brighter background overlay, off by default — enable with `--word-diff` or toggle with `W`
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
-- Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`
+- Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`; optional `--wrap-indent N` for hanging-indent continuations (handy for markdown lists)
 - Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
 - Vertical scrollbar thumb: a thicker `┃` segment on pane right borders indicates the visible portion of long diffs, file trees, and markdown TOCs; thumb size and position track scroll progress automatically
 - Line numbers: side-by-side old/new line number gutter for diffs, single column for full-context files, toggle with `L`
@@ -294,6 +294,7 @@ Positional arguments support several forms:
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
 | `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
+| `--wrap-indent` | Indent wrap continuation rows by N columns so they hang under the first row's content (helps when reviewing markdown lists where unindented continuation can be misread as a new bullet), env: `REVDIFF_WRAP_INDENT` | `0` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--compact` | Start in compact diff mode (small context around changes), env: `REVDIFF_COMPACT` | `false` |
 | `--compact-context` | Number of context lines around changes when in compact mode, env: `REVDIFF_COMPACT_CONTEXT` | `5` |
