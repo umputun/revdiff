@@ -190,6 +190,7 @@ func run(opts options) error {
 		NoStatusBar:       opts.NoStatusBar,
 		NoConfirmDiscard:  opts.NoConfirmDiscard,
 		Wrap:              opts.Wrap,
+		WrapIndent:        opts.WrapIndent,
 		Collapsed:         opts.Collapsed,
 		Compact:           opts.Compact,
 		CompactContext:    opts.CompactContext,

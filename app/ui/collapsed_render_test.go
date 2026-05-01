@@ -294,6 +294,63 @@ func TestModel_CollapsedWrapPureAddLine(t *testing.T) {
 	assert.Contains(t, rendered, " ↪ ", "wrapped continuation should have ↪ marker")
 }
 
+func TestModel_CollapsedWrapSearchMatchUsesSearchBg(t *testing.T) {
+	colors := style.Colors{
+		AddBg: "#1a3320", AddFg: "#87d787",
+		RemoveBg: "#331a1a", RemoveFg: "#ff8787",
+		Muted: "#999999", DiffBg: "#112233",
+		SearchBg: "#665522", SearchFg: "#ffffff",
+	}
+	res := style.NewResolver(colors)
+	searchBg := "\033[48;2;102;85;34m" // #665522
+	addBg := "\033[48;2;26;51;32m"     // #1a3320
+
+	t.Run("collapsed add line continuation", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = make(map[int]bool)
+		m.modes.wrap = true
+		m.layout.width = 40
+		m.layout.treeWidth = 0
+		m.file.lines = []diff.DiffLine{
+			{NewNum: 1, Content: "this line is long enough to wrap a couple of times in a narrow pane", ChangeType: diff.ChangeAdd},
+		}
+		m.search.term = "this"
+		m.search.matches = []int{0}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, " ↪ ", "expected wrapped continuation marker")
+		assert.Contains(t, rendered, searchBg, "search-matched continuation marker must carry SearchBg")
+		assert.NotContains(t, rendered, addBg, "search-matched continuation must not leak the add-line bg seam")
+	})
+
+	t.Run("delete placeholder continuation", func(t *testing.T) {
+		m := testModel(nil, nil)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.sgr = style.SGR{}
+		m.modes.collapsed.enabled = true
+		m.modes.collapsed.expandedHunks = make(map[int]bool)
+		m.modes.wrap = true
+		m.layout.width = 18
+		m.layout.treeWidth = 0
+		m.file.lines = []diff.DiffLine{
+			{OldNum: 1, Content: "del1", ChangeType: diff.ChangeRemove},
+			{OldNum: 2, Content: "del2", ChangeType: diff.ChangeRemove},
+			{OldNum: 3, Content: "del3", ChangeType: diff.ChangeRemove},
+		}
+		m.search.term = "this"
+		m.search.matches = []int{0}
+
+		rendered := m.renderDiff()
+		assert.Contains(t, rendered, " ↪ ", "expected placeholder continuation marker")
+		assert.Contains(t, rendered, searchBg, "search-matched placeholder continuation must carry SearchBg")
+	})
+}
+
 func TestModel_CollapsedWrapDeletePlaceholder(t *testing.T) {
 	t.Run("wrapping", func(t *testing.T) {
 		m := testModel(nil, nil)

@@ -604,6 +604,159 @@ func TestModel_ApplyHorizontalScrollIndicatorInNoColorsMode(t *testing.T) {
 	assert.Contains(t, ansi.Strip(result), "»", "indicator glyph should still be visible in no-colors mode")
 }
 
+func TestModel_StyledWrapMarker(t *testing.T) {
+	colors := style.Colors{DiffBg: "#112233", AddBg: "#1a3320", RemoveBg: "#331a1a", Muted: "#999999"}
+	res := style.NewResolver(colors)
+	m := testModel(nil, nil)
+	m.resolver = res
+
+	mutedFg := "\033[38;2;153;153;153m" // #999999
+	diffBg := "\033[48;2;17;34;51m"     // #112233
+	addBg := "\033[48;2;26;51;32m"      // #1a3320
+	removeBg := "\033[48;2;51;26;26m"   // #331a1a
+
+	tests := []struct {
+		name    string
+		bg      style.Color
+		wantBg  string
+		wantStr string // visible glyph
+	}{
+		{name: "context (empty bg falls back to diff bg)", bg: "", wantBg: diffBg, wantStr: " ↪ "},
+		{name: "add line bg", bg: style.Color(addBg), wantBg: addBg, wantStr: " ↪ "},
+		{name: "remove line bg", bg: style.Color(removeBg), wantBg: removeBg, wantStr: " ↪ "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := m.styledWrapMarker(tt.bg, false)
+			assert.Equal(t, tt.wantStr, ansi.Strip(got), "visible content must be exactly ' ↪ '")
+			assert.Contains(t, got, mutedFg, "marker must use muted fg, matching « » indicators")
+			assert.Contains(t, got, tt.wantBg, "marker must carry the resolved line bg")
+			assert.Contains(t, got, "\033[39m", "marker must reset fg so following content keeps its own color")
+			assert.Contains(t, got, "\033[49m", "marker must reset bg so following content keeps its own bg")
+		})
+	}
+
+	t.Run("no-colors mode degrades to plain marker", func(t *testing.T) {
+		plain := testModel(nil, nil)
+		plain.resolver = style.PlainResolver()
+		plain.cfg.noColors = true
+		got := plain.styledWrapMarker("", false)
+		assert.Equal(t, " ↪ ", got, "without colors the marker should carry no ANSI sequences")
+	})
+
+	t.Run("no-colors search-match emits reverse video", func(t *testing.T) {
+		plain := testModel(nil, nil)
+		plain.resolver = style.PlainResolver()
+		plain.cfg.noColors = true
+		got := plain.styledWrapMarker("", true)
+		assert.Contains(t, got, "\033[7m", "search-matched marker must wrap in reverse video so it matches the SearchMatch lipgloss style in plain mode")
+		assert.Contains(t, got, "\033[27m", "search-matched marker must close the reverse video")
+		assert.Equal(t, " ↪ ", ansi.Strip(got), "visible glyph stays the same")
+	})
+
+	t.Run("colored search-match path is identical to non-search (caller already flipped bg)", func(t *testing.T) {
+		mc := testModel(nil, nil)
+		mc.resolver = res
+		searchBg := style.Color("\033[48;2;102;85;34m")
+		gotSearch := mc.styledWrapMarker(searchBg, true)
+		gotNoSearch := mc.styledWrapMarker(searchBg, false)
+		assert.Equal(t, gotNoSearch, gotSearch, "colored path must not branch on searchMatch — caller controls bg")
+	})
+
+	t.Run("wrap indent appends bg-padded spaces", func(t *testing.T) {
+		indent := testModel(nil, nil)
+		indent.resolver = res
+		indent.cfg.wrapIndent = 4
+		got := indent.styledWrapMarker(style.Color(addBg), false)
+		assert.Equal(t, " ↪     ", ansi.Strip(got), "marker plus 4 indent spaces visible")
+		assert.Contains(t, got, addBg, "indent padding stays on line bg")
+		assert.Equal(t, 1, strings.Count(got, "\033[49m"), "single bg reset at end of marker+indent")
+	})
+
+	t.Run("no-colors search-match honors wrap indent", func(t *testing.T) {
+		plain := testModel(nil, nil)
+		plain.resolver = style.PlainResolver()
+		plain.cfg.noColors = true
+		plain.cfg.wrapIndent = 3
+		got := plain.styledWrapMarker("", true)
+		assert.Equal(t, " ↪    ", ansi.Strip(got), "reverse-video marker must include the configured indent")
+	})
+
+	t.Run("oversized indent on narrow pane clamps to zero", func(t *testing.T) {
+		narrow := testModel(nil, nil)
+		narrow.resolver = res
+		narrow.layout.width = 30
+		narrow.layout.treeWidth = 0
+		narrow.file.singleFile = true
+		narrow.cfg.wrapIndent = 200 // far larger than the available content width
+		got := narrow.styledWrapMarker(style.Color(addBg), false)
+		assert.Equal(t, " ↪ ", ansi.Strip(got), "clamp must drop the indent padding when pane is too narrow")
+		assert.Equal(t, 0, narrow.effectiveWrapIndent(), "effectiveWrapIndent should report 0 when clamped")
+	})
+}
+
+func TestModel_WrapWidthClampsLargeIndent(t *testing.T) {
+	m := testModel(nil, nil)
+	m.layout.width = 120
+	m.layout.treeWidth = 0
+	m.file.singleFile = true
+
+	base := m.diffContentWidth() - wrapGutterWidth - m.gutterExtra()
+
+	tests := []struct {
+		name      string
+		indent    int
+		wantWidth int
+		wantEff   int
+	}{
+		{name: "indent 0 returns full base", indent: 0, wantWidth: base, wantEff: 0},
+		{name: "indent 4 reserves room", indent: 4, wantWidth: base - 4, wantEff: 4},
+		{name: "indent at boundary keeps wrapMinContent", indent: base - wrapMinContent, wantWidth: wrapMinContent, wantEff: base - wrapMinContent},
+		{name: "indent past boundary clamps to base", indent: base - wrapMinContent + 1, wantWidth: base, wantEff: 0},
+		{name: "indent equal to base clamps to base", indent: base, wantWidth: base, wantEff: 0},
+		{name: "indent way past base clamps to base", indent: base * 10, wantWidth: base, wantEff: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m.cfg.wrapIndent = tt.indent
+			assert.Equal(t, tt.wantWidth, m.wrapWidth(), "wrapWidth must guard against narrow panes")
+			assert.Equal(t, tt.wantEff, m.effectiveWrapIndent(), "effectiveWrapIndent stays in sync with wrapWidth's clamp")
+		})
+	}
+}
+
+func TestModel_NewModelClampsNegativeWrapIndent(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{WrapIndent: -7})
+	assert.Equal(t, 0, m.cfg.wrapIndent, "negative WrapIndent must clamp to 0 at construction")
+}
+
+func TestModel_WrappedLineCountReactsToIndent(t *testing.T) {
+	m := testModel(nil, nil)
+	m.layout.width = 60
+	m.layout.treeWidth = 0
+	m.file.singleFile = true
+	m.modes.wrap = true
+
+	// content sized so it fits in one row at indent=0 but spills to a second row at indent>=8
+	contentLen := m.diffContentWidth() - wrapGutterWidth - 1
+	textContent := strings.Repeat("x", contentLen)
+	m.file.lines = []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: textContent}}
+	m.file.highlighted = []string{textContent}
+	m.file.intraRanges = make([][]worddiff.Range, 1)
+
+	m.cfg.wrapIndent = 0
+	noIndentRows := m.wrappedLineCount(0)
+
+	m.cfg.wrapIndent = 8
+	withIndentRows := m.wrappedLineCount(0)
+
+	assert.Greater(t, withIndentRows, noIndentRows, "non-zero wrapIndent must produce more visual rows when content crosses the new wrap boundary")
+}
+
 func TestModel_PlainStyles(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },

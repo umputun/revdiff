@@ -114,8 +114,13 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		// match the non-highlighted search-match path which uses the search-match
 		// lipgloss style (fg + bg). when chroma highlighting is on, lineHlStyle
 		// drops the foreground for chroma to own content fg, so the prefix wrap
-		// must inject search-fg explicitly.
+		// must inject search-fg explicitly. bgColor must also flip to SearchBg so
+		// the wrapped continuation marker (rendered outside lipgloss via styledWrapMarker)
+		// and the right-side extendLineBg padding stay on the same bg as the lineStyle
+		// content — otherwise wrap continuation markers and the trailing pad show a
+		// visible bg seam when a row is search-matched.
 		prefixFg = m.resolver.Color(style.ColorKeySearchFg)
+		bgColor = m.resolver.Color(style.ColorKeySearchBg)
 	}
 
 	// wrap mode: break long lines at word boundaries with continuation markers
@@ -123,7 +128,8 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 		m.renderWrappedCollapsedLine(b, textContent, wrappedLineCtx{
 			gutter: gutter, numGutter: numGutter, blGutter: blGutter,
 			isCursor: isCursor, hasHighlight: hasHighlight,
-			lineStyle: lineStyle, hlStyle: lineHlStyle, bgColor: bgColor,
+			isSearchMatch: isSearchMatch,
+			lineStyle:     lineStyle, hlStyle: lineHlStyle, bgColor: bgColor,
 			prefixFg: prefixFg,
 		})
 		return
@@ -148,6 +154,7 @@ func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffL
 type wrappedLineCtx struct {
 	gutter, numGutter, blGutter string
 	isCursor, hasHighlight      bool
+	isSearchMatch               bool // true when the row is search-matched; drives no-colors marker fallback
 	lineStyle, hlStyle          lipgloss.Style
 	bgColor, prefixFg           style.Color
 }
@@ -157,29 +164,40 @@ func (m Model) renderWrappedCollapsedLine(b *strings.Builder, textContent string
 	numBlank, blBlank := m.gutterBlanks()
 	visualLines := m.wrapContent(textContent, m.wrapWidth())
 	for i, vl := range visualLines {
-		prefix := " ↪ "
+		isFirst := i == 0
 		ng := numBlank
 		bg := blBlank
-		if i == 0 {
-			prefix = ctx.gutter
+		if isFirst {
 			ng = ctx.numGutter
 			bg = ctx.blGutter
 		}
 
-		var styled string
-		if ctx.hasHighlight {
-			styled = ctx.hlStyle.Render(m.wrapPrefixForHighlight(prefix, ctx.prefixFg, true) + vl)
-		} else {
-			styled = ctx.lineStyle.Render(prefix + vl)
-		}
+		styled := m.styleCollapsedWrapVisual(ctx, vl, isFirst)
 		styled = m.extendLineBg(styled, ctx.bgColor)
 
 		cursor := " "
-		if i == 0 && ctx.isCursor {
+		if isFirst && ctx.isCursor {
 			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
 		b.WriteString(cursor + ng + bg + styled + "\n")
 	}
+}
+
+// styleCollapsedWrapVisual styles a single visual row of a wrapped collapsed line.
+// the first row uses ctx.gutter; continuation rows prepend a muted ↪ marker so it
+// reads as gutter chrome rather than inheriting the line foreground.
+func (m Model) styleCollapsedWrapVisual(ctx wrappedLineCtx, vl string, isFirst bool) string {
+	if isFirst {
+		if ctx.hasHighlight {
+			return ctx.hlStyle.Render(m.wrapPrefixForHighlight(ctx.gutter, ctx.prefixFg, true) + vl)
+		}
+		return ctx.lineStyle.Render(ctx.gutter + vl)
+	}
+	marker := m.styledWrapMarker(ctx.bgColor, ctx.isSearchMatch)
+	if ctx.hasHighlight {
+		return marker + ctx.hlStyle.Render(vl)
+	}
+	return marker + ctx.lineStyle.Render(vl)
 }
 
 // deletePlaceholderText returns the text shown for a delete-only hunk placeholder starting at hunkStart.
@@ -218,10 +236,16 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	text := m.deletePlaceholderText(hunkStart)
 
 	lineStyle := m.resolver.Style(style.StyleKeyLineRemove)
-	if m.search.matchSet[idx] {
+	bgColor := m.resolver.Color(style.ColorKeyRemoveLineBg)
+	isSearchMatch := m.search.matchSet[idx]
+	if isSearchMatch {
+		// flip both lineStyle and the bg used by the wrap-continuation marker
+		// and extendLineBg padding so the placeholder renders consistently on
+		// SearchBg (otherwise the marker on the wrapped row carries removeBg
+		// while the content carries SearchBg — visible seam).
 		lineStyle = m.resolver.Style(style.StyleKeySearchMatch)
+		bgColor = m.resolver.Color(style.ColorKeySearchBg)
 	}
-	removeBg := m.resolver.Color(style.ColorKeyRemoveLineBg)
 
 	isCursor := m.isCursorLine(idx)
 
@@ -233,16 +257,17 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 		numBlank, blBlank := m.gutterBlanks()
 		visualLines := m.wrapContent(text, m.wrapWidth())
 		for i, vl := range visualLines {
-			prefix := " ↪ "
 			ng := numBlank
 			bg := blBlank
+			var styled string
 			if i == 0 {
-				prefix = " - "
 				ng = numGutter
 				bg = blGutter
+				styled = lineStyle.Render(" - " + vl)
+			} else {
+				styled = m.styledWrapMarker(bgColor, isSearchMatch) + lineStyle.Render(vl)
 			}
-			styled := lineStyle.Render(prefix + vl)
-			styled = m.extendLineBg(styled, removeBg)
+			styled = m.extendLineBg(styled, bgColor)
 
 			cursor := " "
 			if i == 0 && isCursor {
@@ -254,8 +279,8 @@ func (m Model) renderDeletePlaceholder(b *strings.Builder, idx, hunkStart int) {
 	}
 
 	content := lineStyle.Render(" - " + text)
-	content = m.applyHorizontalScroll(content, removeBg)
-	content = m.extendLineBg(content, removeBg)
+	content = m.applyHorizontalScroll(content, bgColor)
+	content = m.extendLineBg(content, bgColor)
 
 	cursor := " "
 	if isCursor {

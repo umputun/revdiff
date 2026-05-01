@@ -117,6 +117,37 @@ func TestParseArgs_Wrap(t *testing.T) {
 	})
 }
 
+func TestParseArgs_WrapIndent(t *testing.T) {
+	t.Run("default is zero", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, 0, opts.WrapIndent)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--wrap-indent=4"))
+		require.NoError(t, err)
+		assert.Equal(t, 4, opts.WrapIndent)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_WRAP_INDENT", "2")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, 2, opts.WrapIndent)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nwrap-indent = 3\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, 3, opts.WrapIndent)
+	})
+}
+
 func TestParseArgs_Collapsed(t *testing.T) {
 	t.Run("flag", func(t *testing.T) {
 		opts, err := parseArgs(append(noConfigArgs(t), "--collapsed"))
@@ -613,6 +644,7 @@ func TestDumpConfig(t *testing.T) {
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
 	assert.Contains(t, output, "cross-file-hunks = false")
 	assert.Contains(t, output, "no-mouse = false")
+	assert.Contains(t, output, "wrap-indent = 0")
 	assert.Contains(t, output, "[color options]")
 	assert.Contains(t, output, "color-accent = #D5895F")
 	assert.NotContains(t, output, "\ncolors =", "should not have spurious colors= line")
