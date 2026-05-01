@@ -30,10 +30,12 @@ elif [ $# -eq 2 ]; then
     NEW_ABS=$(cd "$(dirname "$NEW_FILE")" && echo "$(pwd)/$(basename "$NEW_FILE")")
     REVDIFF_ARG="--compare=$OLD_ABS:$NEW_ABS"
     PLAN_FILE="$NEW_FILE"
+    COMPARE_MODE=1
 else
     echo "usage: launch-plan-review.sh <plan-file-path> | <old-path> <new-path>" >&2
     exit 1
 fi
+COMPARE_MODE="${COMPARE_MODE:-0}"
 
 # resolve revdiff to absolute path so overlay shells can find it
 REVDIFF_BIN=$(command -v revdiff 2>/dev/null || true)
@@ -52,6 +54,12 @@ OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "$REVDIFF_ARG") $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
+# in compare mode, default to --collapsed so the user reads the new state with
+# new-line highlights instead of full +/- diff visual clutter — better UX for
+# rolling plan-revision review where each round is a focused list of edits
+if [ "$COMPARE_MODE" = "1" ]; then
+    REVDIFF_CMD="$REVDIFF_CMD $(sq --collapsed)"
+fi
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
 # tmux: display-popup -E blocks until command exits
