@@ -706,6 +706,94 @@ func TestModel_HandleAnnotNav_AllNonJumpableTerminates(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
+// jumping to a line-level annotation must land the cursor ON the annotation
+// comment sub-row (cursorOnAnnotation=true), not on the diff line above it.
+// The diff line and the comment sub-row render as separate visual rows; without
+// cursorOnAnnotation the highlight sits one row above the comment, which is
+// what users perceive as "cursor lands one line above the annotation."
+// Both }/{ and the @ popup go through positionOnAnnotation, so this single
+// invariant covers both navigation paths.
+func TestModel_HandleAnnotNav_CursorLandsOnAnnotationRow(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeAdd, Content: "L1", OldNum: 0, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "L2", OldNum: 0, NewNum: 2},
+		{ChangeType: diff.ChangeAdd, Content: "L3", OldNum: 0, NewNum: 3},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	m = result.(Model)
+	loadMsg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(loadMsg)
+	m = result.(Model)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: "+", Comment: "target"})
+
+	t.Run("} sets cursorOnAnnotation when landing on a line-level annotation", func(t *testing.T) {
+		m.nav.diffCursor = 0
+		m.annot.cursorOnAnnotation = false
+		result, _ := m.handleAnnotNav(true)
+		model := result.(Model)
+		assert.Equal(t, 2, model.nav.diffCursor, "cursor must be on the annotated diff line")
+		assert.True(t, model.annot.cursorOnAnnotation, "cursor must render on the annotation comment sub-row, not the diff line above it")
+	})
+
+	t.Run("{ sets cursorOnAnnotation when landing on a line-level annotation", func(t *testing.T) {
+		m.nav.diffCursor = 2
+		m.annot.cursorOnAnnotation = false
+		// add a second annotation so { has somewhere to go
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "earlier"})
+		result, _ := m.handleAnnotNav(false)
+		model := result.(Model)
+		assert.Equal(t, 0, model.nav.diffCursor)
+		assert.True(t, model.annot.cursorOnAnnotation, "cursor must render on the annotation comment sub-row")
+	})
+}
+
+// jumpToAnnotationTarget is the shared entry point for the @ popup's
+// selection callback and for the }/{ walker. The same cursor-on-annotation
+// invariant must apply to popup-driven jumps.
+func TestModel_JumpToAnnotationTarget_CursorLandsOnAnnotationRow(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeAdd, Content: "L1", OldNum: 0, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "L2", OldNum: 0, NewNum: 2},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	m = result.(Model)
+	loadMsg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(loadMsg)
+	m = result.(Model)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "popup target"})
+
+	m.annot.cursorOnAnnotation = false
+	result, _ = m.jumpToAnnotationTarget(&overlay.AnnotationTarget{File: "a.go", ChangeType: "+", Line: 2})
+	model := result.(Model)
+	assert.Equal(t, 1, model.nav.diffCursor)
+	assert.True(t, model.annot.cursorOnAnnotation, "@ popup selection must land cursor on annotation comment row")
+}
+
+// file-level annotations use diffCursor=-1 which already represents the
+// annotation row directly. cursorOnAnnotation must NOT be set in that case
+// (it applies only to line-level annotation sub-rows, not the file-level row).
+func TestModel_HandleAnnotNav_FileLevelDoesNotSetCursorOnAnnotation(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeAdd, Content: "L1", OldNum: 0, NewNum: 1},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	m = result.(Model)
+	loadMsg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(loadMsg)
+	m = result.(Model)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file-level"})
+
+	m.nav.diffCursor = 0
+	m.annot.cursorOnAnnotation = false
+	result, _ = m.handleAnnotNav(false) // backward to file-level
+	model := result.(Model)
+	assert.Equal(t, -1, model.nav.diffCursor, "file-level position is diffCursor=-1")
+	assert.False(t, model.annot.cursorOnAnnotation, "file-level annotation row uses diffCursor=-1, not the cursorOnAnnotation flag")
+}
+
 func TestModel_HandleAnnotNav_DefaultBindings(t *testing.T) {
 	km := keymap.Default()
 	assert.Equal(t, keymap.ActionNextAnnotation, km.Resolve("}"))

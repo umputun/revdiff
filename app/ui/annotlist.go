@@ -78,8 +78,13 @@ func (m Model) tryJumpToAnnotationTarget(target *overlay.AnnotationTarget) (tea.
 }
 
 // positionOnAnnotation moves the cursor to the given annotation's line, re-renders, and centers the viewport.
-// in collapsed mode, expands the hunk containing the target line so removed lines are visible.
+// In collapsed mode, expands the hunk containing the target line so removed lines are visible.
+// For line-level annotations the cursor lands on the annotation comment sub-row (cursorOnAnnotation=true),
+// matching what `j`/`k` navigation produces when stepping onto an annotated line. File-level annotations
+// (Line=0) use diffCursor=-1 which already represents the annotation row directly. Without this flag the
+// cursor would land on the diff line above the comment, leaving navigation visually one row off the target.
 func (m *Model) positionOnAnnotation(a annotation.Annotation) {
+	m.annot.cursorOnAnnotation = false
 	if a.Line == 0 {
 		m.nav.diffCursor = -1
 	} else {
@@ -87,6 +92,10 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 		if idx >= 0 {
 			m.nav.diffCursor = idx
 			m.ensureHunkExpanded(idx)
+			hunks := m.findHunks()
+			if !m.isCollapsedHidden(idx, hunks) && !m.isDeleteOnlyPlaceholder(idx, hunks) {
+				m.annot.cursorOnAnnotation = true
+			}
 		}
 	}
 	m.layout.focus = paneDiff
