@@ -81,21 +81,28 @@ func TestParseArgs_CompareFlag(t *testing.T) {
 }
 
 func TestParseArgs_CompareConflicts(t *testing.T) {
-	common := []string{"--compare-old=/tmp/a", "--compare-new=/tmp/b"}
+	// real files so a future stat-first reordering would not silently green
+	// these tests — the assertion under test is the conflict, not the stat.
+	dir := t.TempDir()
+	oldFile := filepath.Join(dir, "a.md")
+	newFile := filepath.Join(dir, "b.md")
+	require.NoError(t, os.WriteFile(oldFile, []byte("a"), 0o600))
+	require.NoError(t, os.WriteFile(newFile, []byte("b"), 0o600))
+	common := []string{"--compare-old=" + oldFile, "--compare-new=" + newFile}
 	tests := []struct {
 		name string
 		args []string
 		want string
 	}{
-		{name: "refs base", args: append(common, "HEAD~1"), want: "--compare-old/--compare-new cannot be used with refs"},
-		{name: "refs two", args: append(common, "main", "feature"), want: "--compare-old/--compare-new cannot be used with refs"},
-		{name: "staged", args: append(common, "--staged"), want: "--compare-old/--compare-new cannot be used with --staged"},
-		{name: "only", args: append(common, "--only", "main.go"), want: "--compare-old/--compare-new cannot be used with --only"},
-		{name: "all-files", args: append(common, "--all-files"), want: "--compare-old/--compare-new cannot be used with --all-files"},
-		{name: "stdin", args: append(common, "--stdin"), want: "--compare-old/--compare-new cannot be used with --stdin"},
-		{name: "include", args: append(common, "--include", "src"), want: "--compare-old/--compare-new cannot be used with --include"},
-		{name: "exclude", args: append(common, "--exclude", "vendor"), want: "--compare-old/--compare-new cannot be used with --exclude"},
-		{name: "annotations", args: append(common, "--annotations", "/tmp/a.md"), want: "--compare-old/--compare-new cannot be used with --annotations"},
+		{name: "refs base", args: append(append([]string{}, common...), "HEAD~1"), want: "--compare-old/--compare-new cannot be used with refs"},
+		{name: "refs two", args: append(append([]string{}, common...), "main", "feature"), want: "--compare-old/--compare-new cannot be used with refs"},
+		{name: "staged", args: append(append([]string{}, common...), "--staged"), want: "--compare-old/--compare-new cannot be used with --staged"},
+		{name: "only", args: append(append([]string{}, common...), "--only", "main.go"), want: "--compare-old/--compare-new cannot be used with --only"},
+		{name: "all-files", args: append(append([]string{}, common...), "--all-files"), want: "--compare-old/--compare-new cannot be used with --all-files"},
+		{name: "stdin", args: append(append([]string{}, common...), "--stdin"), want: "--compare-old/--compare-new cannot be used with --stdin"},
+		{name: "include", args: append(append([]string{}, common...), "--include", "src"), want: "--compare-old/--compare-new cannot be used with --include"},
+		{name: "exclude", args: append(append([]string{}, common...), "--exclude", "vendor"), want: "--compare-old/--compare-new cannot be used with --exclude"},
+		{name: "annotations", args: append(append([]string{}, common...), "--annotations", "/tmp/a.md"), want: "--compare-old/--compare-new cannot be used with --annotations"},
 	}
 
 	for _, tt := range tests {
