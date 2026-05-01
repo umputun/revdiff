@@ -2,10 +2,14 @@
 # launch revdiff for plan file review via terminal overlay.
 # usage:
 #   launch-plan-review.sh <plan-file-path>           # --only mode
-#   launch-plan-review.sh <old-path> <new-path>      # --compare mode
+#   launch-plan-review.sh <old-path> <new-path>      # --compare-old/--compare-new mode
 # output: annotations from revdiff stdout (empty if no annotations)
 
 set -euo pipefail
+
+# Keep sq() defined here so REVDIFF_ARGS can pre-quote arguments before the
+# REVDIFF_CMD template assembles the full shell command line.
+sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 if [ $# -eq 1 ]; then
     PLAN_FILE="$1"
@@ -14,7 +18,7 @@ if [ $# -eq 1 ]; then
         exit 1
     fi
     PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
-    REVDIFF_ARG="--only=$PLAN_ABS"
+    REVDIFF_ARGS="$(sq "--only=$PLAN_ABS")"
 elif [ $# -eq 2 ]; then
     OLD_FILE="$1"
     NEW_FILE="$2"
@@ -28,7 +32,7 @@ elif [ $# -eq 2 ]; then
     fi
     OLD_ABS=$(cd "$(dirname "$OLD_FILE")" && echo "$(pwd)/$(basename "$OLD_FILE")")
     NEW_ABS=$(cd "$(dirname "$NEW_FILE")" && echo "$(pwd)/$(basename "$NEW_FILE")")
-    REVDIFF_ARG="--compare=$OLD_ABS:$NEW_ABS"
+    REVDIFF_ARGS="$(sq "--compare-old=$OLD_ABS") $(sq "--compare-new=$NEW_ABS")"
     PLAN_FILE="$NEW_FILE"
     COMPARE_MODE=1
 else
@@ -47,13 +51,10 @@ fi
 TMPBASE="${TMPDIR:-/tmp}"
 CWD="$(pwd)"
 
-# Keep sq() local so this launcher works when revdiff-planning is packaged
-# as a standalone plugin without access to the repo's shared helper scripts.
-sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "$REVDIFF_ARG") $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
+REVDIFF_CMD="$(sq "$REVDIFF_BIN") $REVDIFF_ARGS $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
 # in compare mode, default to --collapsed so the user reads the new state with
 # new-line highlights instead of full +/- diff visual clutter — better UX for
 # rolling plan-revision review where each round is a focused list of edits
