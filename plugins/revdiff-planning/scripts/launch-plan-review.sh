@@ -1,19 +1,37 @@
 #!/usr/bin/env bash
 # launch revdiff for plan file review via terminal overlay.
-# usage: launch-plan-review.sh <plan-file-path>
+# usage:
+#   launch-plan-review.sh <plan-file-path>           # --only mode
+#   launch-plan-review.sh <old-path> <new-path>      # --compare mode
 # output: annotations from revdiff stdout (empty if no annotations)
 
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
-    echo "usage: launch-plan-review.sh <plan-file-path>" >&2
-    exit 1
-fi
-
-PLAN_FILE="$1"
-
-if [ ! -f "$PLAN_FILE" ]; then
-    echo "error: file not found: $PLAN_FILE" >&2
+if [ $# -eq 1 ]; then
+    PLAN_FILE="$1"
+    if [ ! -f "$PLAN_FILE" ]; then
+        echo "error: file not found: $PLAN_FILE" >&2
+        exit 1
+    fi
+    PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
+    REVDIFF_ARG="--only=$PLAN_ABS"
+elif [ $# -eq 2 ]; then
+    OLD_FILE="$1"
+    NEW_FILE="$2"
+    if [ ! -f "$OLD_FILE" ]; then
+        echo "error: file not found: $OLD_FILE" >&2
+        exit 1
+    fi
+    if [ ! -f "$NEW_FILE" ]; then
+        echo "error: file not found: $NEW_FILE" >&2
+        exit 1
+    fi
+    OLD_ABS=$(cd "$(dirname "$OLD_FILE")" && echo "$(pwd)/$(basename "$OLD_FILE")")
+    NEW_ABS=$(cd "$(dirname "$NEW_FILE")" && echo "$(pwd)/$(basename "$NEW_FILE")")
+    REVDIFF_ARG="--compare=$OLD_ABS:$NEW_ABS"
+    PLAN_FILE="$NEW_FILE"
+else
+    echo "usage: launch-plan-review.sh <plan-file-path> | <old-path> <new-path>" >&2
     exit 1
 fi
 
@@ -33,10 +51,7 @@ sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-# make plan path absolute for the overlay shell
-PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
-
-REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "--only=$PLAN_ABS") $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
+REVDIFF_CMD="$(sq "$REVDIFF_BIN") $(sq "$REVDIFF_ARG") $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
 # tmux: display-popup -E blocks until command exits

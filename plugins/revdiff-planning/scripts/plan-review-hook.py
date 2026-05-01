@@ -18,11 +18,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# marker placed by the agent on the first line of a revised plan to point at
+# the previous revision's snapshot, e.g.
+#   <!-- previous revision: /tmp/plan-rev-AAA.md -->
+# the hook strips this line before saving the new snapshot and uses the path
+# to drive --compare mode.
+MARKER_RE = re.compile(r"^<!--\s*previous revision:\s*(.+?)\s*-->\s*$")
 
 
 def read_plan_from_stdin() -> str:
@@ -112,32 +120,58 @@ def main() -> None:
         make_response("ask", "launch-plan-review.sh not found")
         return
 
-    # write plan to temp file
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".md", prefix="plan-review-", delete=False
-    ) as tmp:
-        tmp.write(plan_content)
-        tmp_path = Path(tmp.name)
+    # parse optional first-line marker pointing at the previous snapshot.
+    # marker is always stripped from the saved snapshot when it matches the
+    # regex; the path is used for --compare only when the file still exists,
+    # otherwise we fall back to --only mode (treats stale marker as no marker).
+    first_line, sep, rest = plan_content.partition("\n")
+    m = MARKER_RE.match(first_line)
+    if m:
+        candidate = Path(m.group(1))
+        old_snap: Path | None = candidate if candidate.is_file() else None
+        stripped = rest if sep else ""
+    else:
+        old_snap = None
+        stripped = plan_content
 
-    try:
-        result = subprocess.run(
-            [str(launcher), str(tmp_path)],
-            capture_output=True, text=True, timeout=345600,
-            env={**os.environ},
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", prefix="plan-rev-", delete=False
+    ) as tmp:
+        tmp.write(stripped)
+        new_snap = Path(tmp.name)
+
+    if old_snap is not None:
+        args = [str(launcher), str(old_snap), str(new_snap)]
+    else:
+        args = [str(launcher), str(new_snap)]
+
+    result = subprocess.run(
+        args,
+        capture_output=True, text=True, timeout=345600,
+        env={**os.environ},
+    )
+
+    # old snapshot is no longer needed once the compare has been viewed —
+    # next iteration will compare new_snap against an even-newer revision
+    if old_snap is not None:
+        old_snap.unlink(missing_ok=True)
+
+    annotations = result.stdout.strip()
+    if annotations:
+        # keep new_snap on disk — next ExitPlanMode call will compare against it
+        make_response(
+            "deny",
+            "user reviewed the plan in revdiff and added annotations. "
+            "each annotation references a specific line and contains the user's feedback.\n\n"
+            f"{annotations}\n\n"
+            "adjust the plan to address each annotation, then call ExitPlanMode again.\n\n"
+            "IMPORTANT: the very first line of your revised plan MUST be exactly:\n"
+            f"<!-- previous revision: {new_snap} -->\n"
+            "this lets revdiff show only what changed in your revision.",
         )
-        annotations = result.stdout.strip()
-        if not annotations:
-            make_response("ask", "plan reviewed, no annotations")
-        else:
-            make_response(
-                "deny",
-                "user reviewed the plan in revdiff and added annotations. "
-                "each annotation references a specific line and contains the user's feedback.\n\n"
-                f"{annotations}\n\n"
-                "adjust the plan to address each annotation, then call ExitPlanMode again.",
-            )
-    finally:
-        tmp_path.unlink(missing_ok=True)
+    else:
+        new_snap.unlink(missing_ok=True)
+        make_response("ask", "plan reviewed, no annotations")
 
 
 if __name__ == "__main__":
