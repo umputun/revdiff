@@ -639,8 +639,9 @@ func TestModel_StyledWrapMarker(t *testing.T) {
 	t.Run("no-colors mode degrades to plain marker", func(t *testing.T) {
 		plain := testModel(nil, nil)
 		plain.resolver = style.PlainResolver()
+		plain.cfg.noColors = true
 		got := plain.styledWrapMarker("", false)
-		assert.Equal(t, " ↪ ", got, "without colors the marker should be plain ascii")
+		assert.Equal(t, " ↪ ", got, "without colors the marker should carry no ANSI sequences")
 	})
 
 	t.Run("no-colors search-match emits reverse video", func(t *testing.T) {
@@ -753,7 +754,7 @@ func TestModel_WrappedLineCountReactsToIndent(t *testing.T) {
 	m.cfg.wrapIndent = 8
 	withIndentRows := m.wrappedLineCount(0)
 
-	assert.Greater(t, withIndentRows, noIndentRows, "non-zero wrapIndent should not reduce row count for an already-fitting line")
+	assert.Greater(t, withIndentRows, noIndentRows, "non-zero wrapIndent must produce more visual rows when content crosses the new wrap boundary")
 }
 
 func TestModel_PlainStyles(t *testing.T) {

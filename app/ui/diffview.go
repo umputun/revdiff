@@ -500,7 +500,7 @@ func (m Model) linePrefix(changeType diff.ChangeType) string {
 // chroma highlighting is on. Highlighted line styles intentionally set only
 // background (chroma owns per-token fg for content), so the prefix would
 // otherwise inherit the terminal default fg and may render invisibly on
-// light theme backgrounds. an empty prefix is returned unchanged so callers
+// light theme backgrounds. An empty prefix is returned unchanged so callers
 // passing "" (e.g. wrap-mode continuation rows that style the marker themselves)
 // don't pay for an empty fg-set + fg-reset SGR pair on every row.
 func (m Model) wrapPrefixForHighlight(prefix string, fg style.Color, hasHighlight bool) string {
@@ -515,23 +515,23 @@ func (m Model) wrapPrefixForHighlight(prefix string, fg style.Color, hasHighligh
 // spaces (where N is m.effectiveWrapIndent — the configured wrapIndent unless
 // the pane is too narrow to keep enough content width, see wrapWidth) so
 // continuation content visually hangs under the first row's content rather than
-// aligning with new bullets/items at the same column. matches the muted treatment
+// aligning with new bullets/items at the same column. Matches the muted treatment
 // of «/» horizontal scroll indicators (see scrollIndicatorANSI) — both gutter-chrome
 // glyphs use ColorKeyMutedFg via raw ANSI rather than going through lipgloss so
-// they do not inherit chroma syntax color or change-line foreground. the two
+// they do not inherit chroma syntax color or change-line foreground. The two
 // helpers stay separate because scrollIndicatorANSI also handles split bg semantics
 // (line-bg space + DiffBg glyph) that the wrap marker does not need (the wrap
-// marker is gutter-only chrome, never overlaid on content). an empty bg here
+// marker is gutter-only chrome, never overlaid on content). An empty bg here
 // falls back to DiffPaneBg so context rows (which have no LineBg) still match
 // the surrounding pane.
 //
 // searchMatch toggles the no-colors behavior: when true and --no-colors is on,
 // the marker emits a reverse-video wrap to match the SearchMatch lipgloss style
 // (which renders as Reverse in plain mode), preventing a plain ↪ marker from
-// sitting on a reverse-video content row. in colored mode the caller already
+// sitting on a reverse-video content row. In colored mode the caller already
 // flipped bg to SearchBg, so searchMatch is a no-op on the colored path.
 //
-// in --no-colors mode without search match, all color lookups return empty and
+// In --no-colors mode without search match, all color lookups return empty and
 // the marker degrades to plain " ↪ " plus the indent spaces.
 func (m Model) styledWrapMarker(bg style.Color, searchMatch bool) string {
 	if m.cfg.noColors && searchMatch {
