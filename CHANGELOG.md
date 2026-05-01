@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.28.0 - 2026-05-01
+
+### New Features
+
+- navigate annotations across files with }/{ keys #162 @umputun
+
 ## v0.27.1 - 2026-04-29
 
 ### Improvements
