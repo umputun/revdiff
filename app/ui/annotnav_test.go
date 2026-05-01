@@ -13,6 +13,19 @@ import (
 	"github.com/umputun/revdiff/app/ui/overlay"
 )
 
+// pickAdjacentAnnotation is a test-only wrapper that resolves the starting
+// flat-list index via startingFlatIndex (the production walker entry point)
+// and returns the annotation at that index. Production code walks indexes
+// directly inside handleAnnotNav for O(N) navigation; this wrapper keeps
+// the table-driven picking-algorithm tests intact as algorithm documentation.
+func pickAdjacentAnnotation(flat []annotation.Annotation, cur cursorAnnotKey, forward bool) (annotation.Annotation, bool) {
+	idx := startingFlatIndex(flat, cur, forward)
+	if idx < 0 || idx >= len(flat) {
+		return annotation.Annotation{}, false
+	}
+	return flat[idx], true
+}
+
 func TestPickAdjacentAnnotation(t *testing.T) {
 	a1 := annotation.Annotation{File: "a.go", Line: 5, Type: "+"}
 	a2 := annotation.Annotation{File: "a.go", Line: 10, Type: "+"}
@@ -189,7 +202,7 @@ func TestModel_CurrentAnnotKey(t *testing.T) {
 		assert.False(t, key.onAnnot)
 	})
 
-	t.Run("ChangeDivider row collapses to line -1 so file-level annot stays reachable", func(t *testing.T) {
+	t.Run("leading ChangeDivider collapses to line -1 so file-level annot stays reachable", func(t *testing.T) {
 		// dividers carry OldNum=NewNum=0; without the guard they would
 		// alias the file-level annotation key and cause forward navigation
 		// from the divider to skip the same-file file-level annotation.
@@ -205,6 +218,94 @@ func TestModel_CurrentAnnotKey(t *testing.T) {
 		assert.Equal(t, -1, key.line)
 		assert.Empty(t, key.typ)
 		assert.False(t, key.onAnnot)
+	})
+
+	t.Run("middle ChangeDivider inherits position from preceding non-divider line", func(t *testing.T) {
+		// without this, a mouse-click on a middle divider would map to
+		// line=-1 and forward } would jump back to the file-level/first
+		// same-file annotation instead of to the next annotation after
+		// the divider's logical position.
+		divLines := []diff.DiffLine{
+			{ChangeType: diff.ChangeAdd, Content: "first", OldNum: 0, NewNum: 5},
+			{ChangeType: diff.ChangeDivider, Content: "⋯ 10 lines ⋯", OldNum: 0, NewNum: 0},
+			{ChangeType: diff.ChangeAdd, Content: "later", OldNum: 0, NewNum: 16},
+		}
+		dm := testModel([]string{"a.go"}, nil)
+		dm.file.name = "a.go"
+		dm.file.lines = divLines
+		dm.nav.diffCursor = 1 // on the divider
+		key := dm.currentAnnotKey()
+		assert.Equal(t, 5, key.line, "middle divider must inherit preceding line number")
+		assert.Equal(t, "+", key.typ, "middle divider must inherit preceding type")
+		assert.False(t, key.onAnnot)
+	})
+
+	t.Run("trailing ChangeDivider inherits position from preceding non-divider line", func(t *testing.T) {
+		divLines := []diff.DiffLine{
+			{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 5},
+			{ChangeType: diff.ChangeDivider, Content: "⋯ 3 lines ⋯", OldNum: 0, NewNum: 0},
+		}
+		dm := testModel([]string{"a.go"}, nil)
+		dm.file.name = "a.go"
+		dm.file.lines = divLines
+		dm.nav.diffCursor = 1 // trailing divider
+		key := dm.currentAnnotKey()
+		assert.Equal(t, 5, key.line)
+		assert.Equal(t, "+", key.typ)
+	})
+
+	t.Run("consecutive dividers walk back through them to reach a non-divider", func(t *testing.T) {
+		divLines := []diff.DiffLine{
+			{ChangeType: diff.ChangeAdd, Content: "added", OldNum: 0, NewNum: 5},
+			{ChangeType: diff.ChangeDivider, Content: "⋯ 3 lines ⋯", OldNum: 0, NewNum: 0},
+			{ChangeType: diff.ChangeDivider, Content: "⋯ 2 lines ⋯", OldNum: 0, NewNum: 0},
+		}
+		dm := testModel([]string{"a.go"}, nil)
+		dm.file.name = "a.go"
+		dm.file.lines = divLines
+		dm.nav.diffCursor = 2 // on the second of two consecutive dividers
+		key := dm.currentAnnotKey()
+		assert.Equal(t, 5, key.line, "must walk past intermediate divider to reach line 5")
+	})
+}
+
+// pin the divider middle/trailing fix at the integration level: clicking on
+// a middle divider then pressing } must jump to the next annotation strictly
+// after the divider's logical position, not back to the file-level/first
+// same-file annotation.
+func TestModel_HandleAnnotNav_FromMiddleDivider(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeAdd, Content: "L5", OldNum: 0, NewNum: 5},
+		{ChangeType: diff.ChangeDivider, Content: "⋯ 10 lines ⋯", OldNum: 0, NewNum: 0},
+		{ChangeType: diff.ChangeAdd, Content: "L16", OldNum: 0, NewNum: 16},
+		{ChangeType: diff.ChangeAdd, Content: "L17", OldNum: 0, NewNum: 17},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "a.go"}}})
+	m = result.(Model)
+	loadMsg := m.loadFileDiff("a.go")()
+	result, _ = m.Update(loadMsg)
+	m = result.(Model)
+
+	// annotations: file-level, line 5 (before divider), line 17 (after divider)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 5, Type: "+", Comment: "before"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 17, Type: "+", Comment: "after"})
+
+	t.Run("forward from middle divider lands on next annotation past divider", func(t *testing.T) {
+		m.nav.diffCursor = 1 // middle divider
+		result, _ := m.handleAnnotNav(true)
+		model := result.(Model)
+		// expected: line 17 = index 3
+		assert.Equal(t, 3, model.nav.diffCursor, "} from middle divider must jump past line 5 to line 17")
+	})
+
+	t.Run("backward from middle divider lands on annotation at-or-before logical position", func(t *testing.T) {
+		m.nav.diffCursor = 1 // middle divider
+		result, _ := m.handleAnnotNav(false)
+		model := result.(Model)
+		// expected: line 5 = index 0
+		assert.Equal(t, 0, model.nav.diffCursor, "{ from middle divider must reach line 5")
 	})
 }
 
