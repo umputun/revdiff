@@ -178,7 +178,15 @@ def main() -> None:
         new_snap = Path(tmp.name)
 
     if old_snap is not None:
-        args = [str(launcher), str(old_snap), str(new_snap)]
+        # arg order in compare mode is (new, old), NOT (old, new). a stale
+        # 1-arg launcher (pre-compare-mode user override copied from master
+        # before this feature shipped) silently picks $1 as PLAN_FILE; putting
+        # new_snap first means the stale launcher degrades to --only of the
+        # NEW revision (legacy UX, zero regression) instead of opening the
+        # OLD revision the user already reviewed last round. the bundled
+        # 2-arg branch in launch-plan-review.sh relabels accordingly and
+        # composes --compare-old=$OLD --compare-new=$NEW for revdiff itself.
+        args = [str(launcher), str(new_snap), str(old_snap)]
     else:
         args = [str(launcher), str(new_snap)]
 
@@ -225,7 +233,11 @@ def main() -> None:
             "each annotation references a specific line and contains the user's feedback.\n\n"
             f"{annotations}\n\n"
             "adjust the plan to address each annotation, then call ExitPlanMode again.\n\n"
-            "IMPORTANT: the very first line of your revised plan MUST be exactly:\n"
+            "IMPORTANT: the very first line of your revised plan MUST be exactly the "
+            "marker below. Do NOT substitute any other plan-rev-*.md path you may have "
+            "seen earlier in this conversation — older markers belong to unrelated "
+            "planning tasks, and pointing at them would compare your revision against "
+            "the wrong baseline.\n"
             f"<!-- previous revision: {new_snap} -->\n"
             "this lets revdiff show only what changed in your revision.",
         )

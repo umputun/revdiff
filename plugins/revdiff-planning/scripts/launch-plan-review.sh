@@ -2,7 +2,13 @@
 # launch revdiff for plan file review via terminal overlay.
 # usage:
 #   launch-plan-review.sh <plan-file-path>           # --only mode
-#   launch-plan-review.sh <old-path> <new-path>      # --compare-old/--compare-new mode
+#   launch-plan-review.sh <new-path> <old-path>      # --compare-old/--compare-new mode
+#
+# arg order in compare mode is (new, old), NOT (old, new): a stale 1-arg
+# launcher (pre-compare-mode user override copied from master before this
+# feature shipped) silently picks $1 as PLAN_FILE. Putting <new> first means
+# the stale launcher degrades to --only of the NEW revision (legacy UX, no
+# regression) instead of opening the OLD revision the user already reviewed.
 # output: annotations from revdiff stdout (empty if no annotations)
 
 set -euo pipefail
@@ -20,23 +26,23 @@ if [ $# -eq 1 ]; then
     PLAN_ABS=$(cd "$(dirname "$PLAN_FILE")" && echo "$(pwd)/$(basename "$PLAN_FILE")")
     REVDIFF_ARGS="$(sq "--only=$PLAN_ABS")"
 elif [ $# -eq 2 ]; then
-    OLD_FILE="$1"
-    NEW_FILE="$2"
-    if [ ! -f "$OLD_FILE" ]; then
-        echo "error: file not found: $OLD_FILE" >&2
-        exit 1
-    fi
+    NEW_FILE="$1"
+    OLD_FILE="$2"
     if [ ! -f "$NEW_FILE" ]; then
         echo "error: file not found: $NEW_FILE" >&2
         exit 1
     fi
-    OLD_ABS=$(cd "$(dirname "$OLD_FILE")" && echo "$(pwd)/$(basename "$OLD_FILE")")
+    if [ ! -f "$OLD_FILE" ]; then
+        echo "error: file not found: $OLD_FILE" >&2
+        exit 1
+    fi
     NEW_ABS=$(cd "$(dirname "$NEW_FILE")" && echo "$(pwd)/$(basename "$NEW_FILE")")
+    OLD_ABS=$(cd "$(dirname "$OLD_FILE")" && echo "$(pwd)/$(basename "$OLD_FILE")")
     REVDIFF_ARGS="$(sq "--compare-old=$OLD_ABS") $(sq "--compare-new=$NEW_ABS")"
     PLAN_FILE="$NEW_FILE"
     COMPARE_MODE=1
 else
-    echo "usage: launch-plan-review.sh <plan-file-path> | <old-path> <new-path>" >&2
+    echo "usage: launch-plan-review.sh <plan-file-path> | <new-path> <old-path>" >&2
     exit 1
 fi
 COMPARE_MODE="${COMPARE_MODE:-0}"

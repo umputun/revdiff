@@ -58,4 +58,17 @@ chmod +x "${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh"
 # edit "${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh" to taste
 ```
 
-The override receives the same positional arguments the bundled launcher does — `<plan-file>` for the first round (`--only` mode) and `<old-snap> <new-snap>` for subsequent rounds (compare mode). Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The hook treats a non-zero exit as launcher failure and preserves the previous snapshot so the next attempt can resume the rolling chain.
+### Launcher contract
+
+The override receives the same positional arguments the bundled launcher does:
+
+| Form | Args | Mode |
+|---|---|---|
+| First round (or fallback) | `<plan-file>` | `--only` (single-revision review) |
+| Subsequent rounds | `<new-revision> <old-revision>` | compare (rolling diff against the previous snapshot) |
+
+In compare mode the **new revision comes first**, prior revision second. This ordering is deliberate: a stale 1-arg override (e.g. one copied from master before compare mode shipped) silently picks `$1` as its plan file. Putting the new revision first makes that stale launcher degrade to a single-file review of the new content — the legacy UX, no functional regression — instead of opening the prior revision the user already reviewed.
+
+If you want compare-mode highlighting in your own custom launcher, add a 2-arg branch that builds `--compare-old="$2" --compare-new="$1"` and passes it through to revdiff. The bundled `launch-plan-review.sh` is a worked example.
+
+Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The hook treats a non-zero exit as launcher failure and preserves the previous snapshot so the next attempt can resume the rolling chain.

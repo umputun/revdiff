@@ -20,8 +20,16 @@ func TestParseArgs_CompareFlag(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, oldFile, opts.CompareOld)
 		assert.Equal(t, newFile, opts.CompareNew)
-		assert.NotEmpty(t, opts.compareAbsOld)
-		assert.NotEmpty(t, opts.compareAbsNew)
+		// compareAbsOld/New should equal filepath.Abs of the input paths —
+		// the contract validateCompareFlag actually produces. NotEmpty would
+		// confirm population but not correctness (e.g. swapped fields would
+		// pass a NotEmpty check silently).
+		expectedOldAbs, err := filepath.Abs(oldFile)
+		require.NoError(t, err)
+		expectedNewAbs, err := filepath.Abs(newFile)
+		require.NoError(t, err)
+		assert.Equal(t, expectedOldAbs, opts.compareAbsOld)
+		assert.Equal(t, expectedNewAbs, opts.compareAbsNew)
 	})
 
 	t.Run("same paths allowed", func(t *testing.T) {
