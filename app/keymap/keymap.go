@@ -44,6 +44,8 @@ const (
 	ActionAnnotateFile     Action = "annotate_file"
 	ActionDeleteAnnotation Action = "delete_annotation"
 	ActionAnnotList        Action = "annot_list"
+	ActionNextAnnotation   Action = "next_annotation"
+	ActionPrevAnnotation   Action = "prev_annotation"
 	ActionToggleCollapsed  Action = "toggle_collapsed"
 	ActionToggleCompact    Action = "toggle_compact"
 	ActionToggleWrap       Action = "toggle_wrap"
@@ -77,6 +79,7 @@ var validActions = map[Action]bool{
 	ActionTogglePane: true, ActionFocusTree: true, ActionFocusDiff: true,
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
+	ActionNextAnnotation: true, ActionPrevAnnotation: true,
 	ActionToggleCollapsed: true, ActionToggleCompact: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
 	ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
@@ -204,6 +207,8 @@ func defaultDescriptions() []HelpEntry {
 		{ActionAnnotateFile, "annotate file", "Annotations"},
 		{ActionDeleteAnnotation, "delete annotation", "Annotations"},
 		{ActionAnnotList, "annotation list", "Annotations"},
+		{ActionNextAnnotation, "next annotation (across files)", "Annotations"},
+		{ActionPrevAnnotation, "previous annotation (across files)", "Annotations"},
 
 		// view toggles
 		{ActionToggleCollapsed, "toggle collapsed view", "View"},
@@ -258,6 +263,8 @@ func defaultBindings() map[string]Action {
 		"A":      ActionAnnotateFile,
 		"d":      ActionDeleteAnnotation,
 		"@":      ActionAnnotList,
+		"}":      ActionNextAnnotation,
+		"{":      ActionPrevAnnotation,
 		"v":      ActionToggleCollapsed,
 		"C":      ActionToggleCompact,
 		"w":      ActionToggleWrap,

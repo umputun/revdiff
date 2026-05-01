@@ -245,4 +245,3 @@ func buildLineSet(lines []diff.DiffLine) map[lineKey]struct{} {
 	}
 	return out
 }
-

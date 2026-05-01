@@ -105,7 +105,8 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `scrollbar.go` | Vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
 | `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
-| `annotlist.go` | Annotation list spec building, cross-file jump logic |
+| `annotlist.go` | Annotation list spec building, cross-file jump logic (`jumpToAnnotationTarget` for the `@` popup, `tryJumpToAnnotationTarget` returning a jumped-bool for the `}`/`{` walker) |
+| `annotnav.go` | Cross-file annotation navigation (`}` / `{`): builds the flat annotation list, computes adjacent target via exact-match or insertion-point fallback, retries through non-jumpable targets so a hidden annotation cannot trap the walker |
 | `editor.go` | `$EDITOR` handoff for multi-line annotations: `openEditor()` wraps `app/editor.Editor` in `tea.ExecProcess`, `editorFinishedMsg` dispatch, `handleEditorFinished` routing (save / cancel / error-preserve) |
 | `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `search.go` | Search input handling, match computation, navigation |

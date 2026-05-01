@@ -8,7 +8,12 @@ import (
 )
 
 // buildAnnotListItems builds a flat list of all annotations across all files.
-// items are ordered by file name then line number, as returned by the store.
+// Items are ordered by file name then line number, as returned by the store
+// (alphabetical via Store.Files, line-ascending via Store.Get with file-level
+// Line=0 first within each file). This combined ordering is load-bearing: both
+// the @ popup and the }/{ walker in annotnav.go iterate this exact sequence,
+// so changes to Store.Files / Store.Get ordering must keep the two consumers
+// in sync.
 func (m *Model) buildAnnotListItems() []annotation.Annotation {
 	files := m.store.Files()
 	items := make([]annotation.Annotation, 0, m.store.Count())
@@ -31,26 +36,45 @@ func (m Model) buildAnnotListSpec() overlay.AnnotListSpec {
 	return overlay.AnnotListSpec{Items: items}
 }
 
-// jumpToAnnotationTarget jumps to an annotation target returned by the overlay manager.
+// jumpToAnnotationTarget jumps to an annotation target returned by the overlay
+// manager. Existing entry point used by the @ popup and the mouse handler;
+// preserves the original silent-fail-on-unreachable behavior.
 func (m Model) jumpToAnnotationTarget(target *overlay.AnnotationTarget) (tea.Model, tea.Cmd) {
+	model, cmd, _ := m.tryJumpToAnnotationTarget(target)
+	return model, cmd
+}
+
+// tryJumpToAnnotationTarget attempts to jump and reports whether the jump
+// was actually issued. ok=false is returned when the target cannot be reached:
+// cross-file path is not present in the file tree (filtered, hidden by
+// --include/--exclude, or untracked-with-toggle-off), or same-file
+// non-file-level line is not in the loaded diff (e.g. compact mode shrank
+// context away). Used by the }/{ navigator to skip non-jumpable targets and
+// keep walking instead of getting trapped on a target that silently no-ops.
+// Single-file mode always rejects cross-file targets — there is nowhere to go.
+func (m Model) tryJumpToAnnotationTarget(target *overlay.AnnotationTarget) (tea.Model, tea.Cmd, bool) {
 	if target == nil {
-		return m, nil
+		return m, nil, false
 	}
 	a := annotation.Annotation{File: target.File, Line: target.Line, Type: target.ChangeType}
 
 	if a.File == m.file.name {
+		if a.Line != 0 && m.findDiffLineIndex(a.Line, a.Type) < 0 {
+			return m, nil, false
+		}
 		m.positionOnAnnotation(a)
-		return m, nil
+		return m, nil, true
 	}
 
-	m.pendingAnnotJump = &a
-	if !m.file.singleFile {
-		if !m.tree.SelectByPath(a.File) {
-			m.pendingAnnotJump = nil
-			return m, nil
-		}
+	if m.file.singleFile {
+		return m, nil, false
 	}
-	return m.loadSelectedIfChanged()
+	if !m.tree.SelectByPath(a.File) {
+		return m, nil, false
+	}
+	m.pendingAnnotJump = &a
+	model, cmd := m.loadSelectedIfChanged()
+	return model, cmd, true
 }
 
 // positionOnAnnotation moves the cursor to the given annotation's line, re-renders, and centers the viewport.

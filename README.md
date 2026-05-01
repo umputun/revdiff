@@ -636,6 +636,7 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `a` or `Enter` (diff pane) | Annotate current diff line |
 | `A` | Add file-level annotation (stored at top of diff) |
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
+| `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation |
 | `Esc` | Cancel annotation input |
@@ -755,7 +756,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **Search:** `search`
 
-**Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`
+**Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`, `next_annotation`, `prev_annotation`
 
 **View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `info`, `reload`
 

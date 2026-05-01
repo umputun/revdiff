@@ -124,6 +124,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `a` or `Enter` (diff pane) | Annotate current diff line |
 | `A` | Add file-level annotation (stored at top of diff) |
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
+| `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation |
 | `Esc` | Cancel annotation input |

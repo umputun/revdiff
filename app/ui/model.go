@@ -916,6 +916,8 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
+	case keymap.ActionNextAnnotation, keymap.ActionPrevAnnotation:
+		return m.handleAnnotNav(action == keymap.ActionNextAnnotation)
 	case keymap.ActionReload:
 		return m.handleReload()
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below

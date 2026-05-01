@@ -490,6 +490,7 @@ color-border = #6272a4
                 <tr><td><code>a</code> or <code>Enter</code></td><td>Annotate current line</td></tr>
                 <tr><td><code>A</code></td><td>Add file-level annotation</td></tr>
                 <tr><td><code>@</code></td><td>Toggle annotation list popup</td></tr>
+                <tr><td><code>}</code> / <code>{</code></td><td>Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation)</td></tr>
                 <tr><td><code>d</code></td><td>Delete annotation under cursor</td></tr>
                 <tr><td><code>Ctrl+E</code></td><td>Open <code>$EDITOR</code> for multi-line annotation (during annotation input)</td></tr>
                 <tr><td><code>Esc</code></td><td>Cancel annotation input</td></tr>
@@ -581,7 +582,7 @@ map alt+t&gt;n theme_select</code></div>
         <p><strong>File/Hunk:</strong> <code>next_item</code>, <code>prev_item</code>, <code>next_hunk</code>, <code>prev_hunk</code></p>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
-        <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code></p>
+        <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code>, <code>next_annotation</code>, <code>prev_annotation</code></p>
         <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
