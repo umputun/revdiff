@@ -31,11 +31,11 @@ func (r *CompareReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 // Exit code 1 is treated as success (files differ — the normal case for git diff).
 // ref, file, and staged are unused; paths come from the constructor.
 func (r *CompareReader) FileDiff(_, _ string, _ bool, contextLines int) ([]DiffLine, error) {
-	args := []string{"diff", "--no-index", "--no-color", "--no-ext-diff", unifiedContextArg(contextLines), r.oldPath, r.newPath}
+	args := []string{"diff", "--no-index", "--no-color", "--no-ext-diff", unifiedContextArg(contextLines), "--", r.oldPath, r.newPath}
 
 	totalOldLines := 0
 	if contextLines > 0 && contextLines < fullContextSentinel {
-		totalOldLines = countFileLines(r.oldPath)
+		totalOldLines = r.countFileLines()
 	}
 
 	cmd := exec.CommandContext(context.Background(), "git", args...) //nolint:gosec // args constructed from validated CLI paths
@@ -72,16 +72,16 @@ func (r *CompareReader) diffError(err error, out []byte) error {
 	}
 }
 
-// countFileLines returns the number of lines in the file at path using streaming
+// countFileLines returns the number of lines in r.oldPath using streaming
 // reads to avoid loading the entire file into memory.
 // A non-empty file not ending with '\n' counts as one additional line.
 // Returns 0 when the file cannot be read (treated as unknown by parseUnifiedDiff).
-func countFileLines(path string) int {
-	info, err := os.Stat(path)
+func (r *CompareReader) countFileLines() int {
+	info, err := os.Stat(r.oldPath)
 	if err != nil || !info.Mode().IsRegular() {
 		return 0
 	}
-	f, err := os.Open(path) //nolint:gosec // path comes from validated CLI flag
+	f, err := os.Open(r.oldPath)
 	if err != nil {
 		return 0
 	}

@@ -139,12 +139,13 @@ func TestCountFileLines(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, f.Close())
 
-			got := countFileLines(f.Name())
-			assert.Equal(t, tc.want, got)
+			r := NewCompareReader(f.Name(), f.Name())
+			assert.Equal(t, tc.want, r.countFileLines())
 		})
 	}
 }
 
 func TestCountFileLines_MissingFile(t *testing.T) {
-	assert.Equal(t, 0, countFileLines("/nonexistent/file.txt"))
+	r := NewCompareReader("/nonexistent/file.txt", "/nonexistent/file.txt")
+	assert.Equal(t, 0, r.countFileLines())
 }
