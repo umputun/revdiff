@@ -54,7 +54,7 @@ func reviewInfoFromOptions(opts options, in reviewInfoInputs) *ui.ReviewInfoConf
 		Ref:            ref,
 		StdinName:      stdinDisplayName,
 		Stdin:          opts.Stdin,
-		Compare:        opts.Compare != "",
+		Compare:        opts.compareAbsOld != "",
 		Staged:         effectiveStaged,
 		AllFiles:       opts.AllFiles,
 		Only:           append([]string(nil), opts.Only...),

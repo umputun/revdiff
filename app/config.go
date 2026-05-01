@@ -35,7 +35,8 @@ type options struct {
 	VimMotion        bool     `long:"vim-motion" ini-name:"vim-motion" env:"REVDIFF_VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)"`
 	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
 	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git and jj only)"`
-	Compare          string   `long:"compare" no-ini:"true" description:"diff two arbitrary files: --compare=old:new"`
+	CompareOld       string   `long:"compare-old" no-ini:"true" description:"compare mode: old file path (use with --compare-new)"`
+	CompareNew       string   `long:"compare-new" no-ini:"true" description:"compare mode: new file path (use with --compare-old)"`
 	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
 	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
 	Annotations      string   `long:"annotations" no-ini:"true" description:"preload annotations from a markdown file written by -o (round-trip)"`
@@ -83,6 +84,9 @@ type options struct {
 		SearchFg     string `long:"color-search-fg"   ini-name:"color-search-fg"   env:"REVDIFF_COLOR_SEARCH_FG"   default:"#1a1a1a" description:"search match foreground"`
 		SearchBg     string `long:"color-search-bg"   ini-name:"color-search-bg"   env:"REVDIFF_COLOR_SEARCH_BG"   default:"#4a4a00" description:"search match background"`
 	} `group:"color options"`
+
+	compareAbsOld string
+	compareAbsNew string
 }
 
 // ref returns the combined ref string from positional args.
@@ -145,9 +149,12 @@ func parseArgs(args []string) (options, error) {
 		return options{}, err
 	}
 
-	if err := validateCompareFlag(opts); err != nil {
+	absOld, absNew, err := validateCompareFlag(opts)
+	if err != nil {
 		return options{}, err
 	}
+	opts.compareAbsOld = absOld
+	opts.compareAbsNew = absNew
 
 	return opts, nil
 }

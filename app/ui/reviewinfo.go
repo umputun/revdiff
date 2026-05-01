@@ -194,7 +194,7 @@ func precomputeDescriptionHighlight(h SyntaxHighlighter, desc string) string {
 //	ref range: main..feature    — explicit range syntax
 //	stdin: patch.diff           — --stdin <name>
 //	stdin scratch buffer        — --stdin without a name
-//	two-file diff               — --compare=old:new
+//	two-file diff               — --compare-old/--compare-new
 //	all tracked files           — --all-files
 //	standalone files            — --only without a VCS (file-only review)
 //

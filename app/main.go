@@ -122,14 +122,9 @@ func run(opts options) error {
 	}
 
 	switch {
-	case opts.Compare != "":
-		var absOld, absNew string
-		absOld, absNew, err = resolveComparePaths(opts.Compare)
-		if err != nil {
-			return err
-		}
-		renderer = diff.NewCompareReader(absOld, absNew)
-		workDir = filepath.Dir(absNew)
+	case opts.compareAbsOld != "":
+		renderer = diff.NewCompareReader(opts.compareAbsOld, opts.compareAbsNew)
+		workDir = filepath.Dir(opts.compareAbsNew)
 	case opts.Stdin:
 		var tty *os.File
 		renderer, tty, err = prepareStdinMode(opts, os.Stdin)

@@ -23,7 +23,7 @@ revdiff --include src --exclude src/vendor  # include src/ but exclude src/vendo
 revdiff main --exclude vendor        # diff against main, excluding vendor
 revdiff --only=/tmp/plan.md          # review a file outside a repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no VCS changes (context-only)
-revdiff --compare=/tmp/plan-old.md:docs/plans/plan.md  # diff two arbitrary files (no VCS needed)
+revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md  # diff two arbitrary files (no VCS needed)
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md  # review piped text as markdown
 some-command | revdiff --stdin --output /tmp/annotations.txt      # annotate generated output
 ```
@@ -86,14 +86,14 @@ revdiff HEAD~3 --description-file=/tmp/review-notes.md
 
 ## Two-File Diff
 
-Use `--compare=old:new` to diff two arbitrary files on disk using `git diff --no-index`. No VCS repo needed — works anywhere `git` is installed.
+Use `--compare-old=<path>` together with `--compare-new=<path>` to diff two arbitrary files on disk using `git diff --no-index`. No VCS repo needed — works anywhere `git` is installed.
 
-- `--compare` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, and `--exclude`
+- `--compare-old` and `--compare-new` must be used together; both are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, and `--exclude`
 - All standard features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations
 
 ```bash
-revdiff --compare=/tmp/plan-old.md:docs/plans/plan.md
-revdiff --compare=a.txt:b.txt
+revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md
+revdiff --compare-old=a.txt --compare-new=b.txt
 ```
 
 ## Scratch-Buffer Review

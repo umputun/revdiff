@@ -16,81 +16,86 @@ func TestParseArgs_CompareFlag(t *testing.T) {
 		newFile := filepath.Join(dir, "b.md")
 		require.NoError(t, os.WriteFile(oldFile, []byte("old"), 0o600))
 		require.NoError(t, os.WriteFile(newFile, []byte("new"), 0o600))
-		opts, err := parseArgs(append(noConfigArgs(t), "--compare="+oldFile+":"+newFile))
+		opts, err := parseArgs(append(noConfigArgs(t), "--compare-old="+oldFile, "--compare-new="+newFile))
 		require.NoError(t, err)
-		assert.Equal(t, oldFile+":"+newFile, opts.Compare)
+		assert.Equal(t, oldFile, opts.CompareOld)
+		assert.Equal(t, newFile, opts.CompareNew)
+		assert.NotEmpty(t, opts.compareAbsOld)
+		assert.NotEmpty(t, opts.compareAbsNew)
 	})
 
 	t.Run("same paths allowed", func(t *testing.T) {
 		dir := t.TempDir()
 		f := filepath.Join(dir, "x.md")
 		require.NoError(t, os.WriteFile(f, []byte("same"), 0o600))
-		opts, err := parseArgs(append(noConfigArgs(t), "--compare="+f+":"+f))
+		opts, err := parseArgs(append(noConfigArgs(t), "--compare-old="+f, "--compare-new="+f))
 		require.NoError(t, err)
-		assert.Equal(t, f+":"+f, opts.Compare)
+		assert.Equal(t, f, opts.CompareOld)
+		assert.Equal(t, f, opts.CompareNew)
 	})
 
 	t.Run("rejects directory old path", func(t *testing.T) {
 		dir := t.TempDir()
 		f := filepath.Join(dir, "b.md")
 		require.NoError(t, os.WriteFile(f, []byte("new"), 0o600))
-		_, err := parseArgs(append(noConfigArgs(t), "--compare="+dir+":"+f))
+		_, err := parseArgs(append(noConfigArgs(t), "--compare-old="+dir, "--compare-new="+f))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--compare old path must be a regular file")
+		assert.Contains(t, err.Error(), "--compare-old must be a regular file")
 	})
 
 	t.Run("rejects directory new path", func(t *testing.T) {
 		dir := t.TempDir()
 		f := filepath.Join(dir, "a.md")
 		require.NoError(t, os.WriteFile(f, []byte("old"), 0o600))
-		_, err := parseArgs(append(noConfigArgs(t), "--compare="+f+":"+dir))
+		_, err := parseArgs(append(noConfigArgs(t), "--compare-old="+f, "--compare-new="+dir))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--compare new path must be a regular file")
+		assert.Contains(t, err.Error(), "--compare-new must be a regular file")
 	})
 
 	t.Run("rejects nonexistent old path", func(t *testing.T) {
 		dir := t.TempDir()
 		f := filepath.Join(dir, "b.md")
 		require.NoError(t, os.WriteFile(f, []byte("new"), 0o600))
-		_, err := parseArgs(append(noConfigArgs(t), "--compare="+dir+"/nonexistent.md:"+f))
+		_, err := parseArgs(append(noConfigArgs(t), "--compare-old="+dir+"/nonexistent.md", "--compare-new="+f))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--compare old path:")
+		assert.Contains(t, err.Error(), "--compare-old:")
 	})
 
-	t.Run("missing colon", func(t *testing.T) {
-		_, err := parseArgs(append(noConfigArgs(t), "--compare=/tmp/a.md"))
+	t.Run("only old set", func(t *testing.T) {
+		dir := t.TempDir()
+		f := filepath.Join(dir, "a.md")
+		require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+		_, err := parseArgs(append(noConfigArgs(t), "--compare-old="+f))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--compare requires old:new format")
+		assert.Contains(t, err.Error(), "--compare-old and --compare-new must be used together")
 	})
 
-	t.Run("empty old path", func(t *testing.T) {
-		_, err := parseArgs(append(noConfigArgs(t), "--compare=:/tmp/b.md"))
+	t.Run("only new set", func(t *testing.T) {
+		dir := t.TempDir()
+		f := filepath.Join(dir, "b.md")
+		require.NoError(t, os.WriteFile(f, []byte("x"), 0o600))
+		_, err := parseArgs(append(noConfigArgs(t), "--compare-new="+f))
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--compare requires old:new format")
-	})
-
-	t.Run("empty new path", func(t *testing.T) {
-		_, err := parseArgs(append(noConfigArgs(t), "--compare=/tmp/a.md:"))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--compare requires old:new format")
+		assert.Contains(t, err.Error(), "--compare-old and --compare-new must be used together")
 	})
 }
 
 func TestParseArgs_CompareConflicts(t *testing.T) {
+	common := []string{"--compare-old=/tmp/a", "--compare-new=/tmp/b"}
 	tests := []struct {
 		name string
 		args []string
 		want string
 	}{
-		{name: "refs base", args: []string{"--compare=/tmp/a:/tmp/b", "HEAD~1"}, want: "--compare cannot be used with refs"},
-		{name: "refs two", args: []string{"--compare=/tmp/a:/tmp/b", "main", "feature"}, want: "--compare cannot be used with refs"},
-		{name: "staged", args: []string{"--compare=/tmp/a:/tmp/b", "--staged"}, want: "--compare cannot be used with --staged"},
-		{name: "only", args: []string{"--compare=/tmp/a:/tmp/b", "--only", "main.go"}, want: "--compare cannot be used with --only"},
-		{name: "all-files", args: []string{"--compare=/tmp/a:/tmp/b", "--all-files"}, want: "--compare cannot be used with --all-files"},
-		{name: "stdin", args: []string{"--compare=/tmp/a:/tmp/b", "--stdin"}, want: "--compare cannot be used with --stdin"},
-		{name: "include", args: []string{"--compare=/tmp/a:/tmp/b", "--include", "src"}, want: "--compare cannot be used with --include"},
-		{name: "exclude", args: []string{"--compare=/tmp/a:/tmp/b", "--exclude", "vendor"}, want: "--compare cannot be used with --exclude"},
-		{name: "annotations", args: []string{"--compare=/tmp/a:/tmp/b", "--annotations", "/tmp/a.md"}, want: "--compare cannot be used with --annotations"},
+		{name: "refs base", args: append(common, "HEAD~1"), want: "--compare-old/--compare-new cannot be used with refs"},
+		{name: "refs two", args: append(common, "main", "feature"), want: "--compare-old/--compare-new cannot be used with refs"},
+		{name: "staged", args: append(common, "--staged"), want: "--compare-old/--compare-new cannot be used with --staged"},
+		{name: "only", args: append(common, "--only", "main.go"), want: "--compare-old/--compare-new cannot be used with --only"},
+		{name: "all-files", args: append(common, "--all-files"), want: "--compare-old/--compare-new cannot be used with --all-files"},
+		{name: "stdin", args: append(common, "--stdin"), want: "--compare-old/--compare-new cannot be used with --stdin"},
+		{name: "include", args: append(common, "--include", "src"), want: "--compare-old/--compare-new cannot be used with --include"},
+		{name: "exclude", args: append(common, "--exclude", "vendor"), want: "--compare-old/--compare-new cannot be used with --exclude"},
+		{name: "annotations", args: append(common, "--annotations", "/tmp/a.md"), want: "--compare-old/--compare-new cannot be used with --annotations"},
 	}
 
 	for _, tt := range tests {

@@ -250,7 +250,7 @@ func TestCommitsApplicable(t *testing.T) {
 		{name: "all-files mode", opts: options{AllFiles: true}, cl: g, want: false},
 		{name: "empty ref", opts: options{}, cl: g, want: false},
 		{name: "ref + logger applicable", opts: refOpts, cl: g, want: true},
-		{name: "compare mode", opts: options{Compare: "/tmp/a:/tmp/b"}, cl: nil, want: false},
+		{name: "compare mode", opts: options{CompareOld: "/tmp/a", CompareNew: "/tmp/b"}, cl: nil, want: false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -285,7 +285,7 @@ func TestCompactApplicable(t *testing.T) {
 		{name: "only in VCS repo (Fallback wrapping Git)", opts: options{Only: []string{"file.md"}}, renderer: fallback, want: true},
 		{name: "include wrapping git", opts: options{Include: []string{"src"}}, renderer: incl, want: true},
 		{name: "exclude wrapping git", opts: options{Exclude: []string{"vendor"}}, renderer: excl, want: true},
-		{name: "compare mode", opts: options{Compare: dir + "/old.md:" + dir + "/new.md"}, renderer: cr, want: true},
+		{name: "compare mode", opts: options{CompareOld: dir + "/old.md", CompareNew: dir + "/new.md"}, renderer: cr, want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -310,7 +310,7 @@ func TestReloadApplicable(t *testing.T) {
 		{name: "normal mode", opts: options{}, want: true},
 		{name: "staged mode", opts: options{Staged: true}, want: true},
 		{name: "all-files mode", opts: options{AllFiles: true}, want: true},
-		{name: "compare mode", opts: options{Compare: "/tmp/a:/tmp/b"}, want: true},
+		{name: "compare mode", opts: options{CompareOld: "/tmp/a", CompareNew: "/tmp/b"}, want: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
