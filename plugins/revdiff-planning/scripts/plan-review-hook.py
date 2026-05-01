@@ -151,8 +151,19 @@ def main() -> None:
         env={**os.environ},
     )
 
-    # old snapshot is no longer needed once the compare has been viewed —
-    # next iteration will compare new_snap against an even-newer revision
+    # launcher failure (terminal not available, AppleScript split failed, etc.)
+    # means the user never saw the diff. preserve old_snap so the next attempt
+    # can still resolve the marker; clean up our own orphan new_snap.
+    if result.returncode != 0:
+        new_snap.unlink(missing_ok=True)
+        make_response(
+            "ask",
+            f"plan review launcher exited {result.returncode}; plan not reviewed this round",
+        )
+        return
+
+    # launcher succeeded → user saw the compare → old_snap is no longer needed.
+    # next iteration will compare new_snap against an even-newer revision.
     if old_snap is not None:
         old_snap.unlink(missing_ok=True)
 

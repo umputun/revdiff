@@ -16,10 +16,25 @@ Requires the `revdiff` binary in `PATH` and one of: tmux, Zellij, kitty, wezterm
 The plugin registers a `PreToolUse` hook on `ExitPlanMode` that:
 
 1. Reads the plan content from the hook event JSON.
-2. Writes the plan to a temp file.
-3. Resolves `launch-plan-review.sh` through the override chain (see below).
-4. Launches revdiff in a terminal overlay against the temp plan file.
-5. Returns the annotations (if any) as the deny reason; otherwise allows the original `ExitPlanMode` to proceed.
+2. Parses the optional first-line marker pointing at the previous revision's snapshot (see [Rolling reviews](#rolling-reviews) below) and strips it from the saved content.
+3. Writes the stripped plan to a fresh `plan-rev-*.md` snapshot in `$TMPDIR`.
+4. Resolves `launch-plan-review.sh` through the override chain (see below).
+5. Launches revdiff against the new snapshot — `--compare-old=<prev> --compare-new=<new> --collapsed` when the marker resolved, `--only=<new>` otherwise.
+6. Returns the annotations (if any) as the deny reason; otherwise allows the original `ExitPlanMode` to proceed.
+
+## Rolling reviews
+
+After the first round, every iteration shows only what changed since the previous revision instead of re-rendering the whole plan. The chain is held together by an HTML-comment marker the hook tells the agent to put on the first line of its revised plan:
+
+```html
+<!-- previous revision: /tmp/plan-rev-AAA.md -->
+```
+
+The marker is stripped from the saved snapshot, and the path it points at drives `--compare`. Each chain references its own snapshot, so parallel sessions can't collide.
+
+**Snapshot lifecycle.** New snapshots are created on every invocation. The previous snapshot (`old_snap`) is deleted only when the launcher exits 0 — i.e., the user actually saw the diff. On launcher failure (no overlay terminal available, AppleScript split error, etc.) `old_snap` is preserved so the next attempt can resolve the same marker, and the user sees an `ask` response noting the launcher exit code instead of a misleading "no annotations" success. The new snapshot is kept on `deny` (so the agent's next revision can compare against it) and deleted on the clean `ask` path.
+
+**Agent-discipline failure mode.** The chain assumes the agent prepends the marker on every revised plan. If it forgets — context truncation, model swap, tool drift — the hook treats the revision as a fresh v1 and falls back to `--only`. The user sees the full file again for that round but the loop self-heals: the deny reason re-issues the marker contract every time, so the next round resumes the rolling compare. Failure is recoverable, never fatal.
 
 ## Overrides
 
@@ -43,4 +58,4 @@ chmod +x "${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh"
 # edit "${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh" to taste
 ```
 
-The override receives the same single positional argument the bundled launcher does (the absolute path to the plan file). Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is.
+The override receives the same positional arguments the bundled launcher does — `<plan-file>` for the first round (`--only` mode) and `<old-snap> <new-snap>` for subsequent rounds (compare mode). Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The hook treats a non-zero exit as launcher failure and preserves the previous snapshot so the next attempt can resume the rolling chain.
