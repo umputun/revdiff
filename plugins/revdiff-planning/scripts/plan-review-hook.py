@@ -29,8 +29,39 @@ from pathlib import Path
 # the previous revision's snapshot, e.g.
 #   <!-- previous revision: /tmp/plan-rev-AAA.md -->
 # the hook strips this line before saving the new snapshot and uses the path
-# to drive --compare mode.
-MARKER_RE = re.compile(r"^<!--\s*previous revision:\s*(.+?)\s*-->\s*$")
+# to drive --compare mode. leading whitespace before <!-- is tolerated to
+# survive common LLM drift (leading blank lines, indented code fences, etc.);
+# without that tolerance one stray space silently collapses the rolling chain.
+MARKER_RE = re.compile(r"^\s*<!--\s*previous revision:\s*(.+?)\s*-->\s*$")
+
+# snapshot prefix used by NamedTemporaryFile below. the hook only honors a
+# marker that resolves to a file under $TMPDIR with this prefix — the marker
+# string is fully agent-controlled, so without this guard a confused or hostile
+# plan could point --compare-old at any readable file (~/.ssh/id_rsa,
+# /etc/passwd, etc.) and surface its contents through the diff overlay and
+# subsequent annotations. confining to our own snapshots keeps the hook a
+# closed system.
+SNAPSHOT_PREFIX = "plan-rev-"
+
+
+def is_trusted_snapshot(p: Path) -> bool:
+    """true iff p resolves to an existing file under $TMPDIR with the
+    plan-rev-* prefix. used to vet agent-supplied marker paths before
+    handing them to revdiff/git."""
+    try:
+        resolved = p.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    if not resolved.is_file():
+        return False
+    if not resolved.name.startswith(SNAPSHOT_PREFIX):
+        return False
+    tmp_root = Path(tempfile.gettempdir()).resolve()
+    try:
+        resolved.relative_to(tmp_root)
+    except ValueError:
+        return False
+    return True
 
 
 def read_plan_from_stdin() -> str:
@@ -122,20 +153,21 @@ def main() -> None:
 
     # parse optional first-line marker pointing at the previous snapshot.
     # marker is always stripped from the saved snapshot when it matches the
-    # regex; the path is used for --compare only when the file still exists,
-    # otherwise we fall back to --only mode (treats stale marker as no marker).
+    # regex; the path is used for --compare only when it resolves to a trusted
+    # snapshot we wrote ourselves (see is_trusted_snapshot). a stale or
+    # untrusted marker silently falls back to --only mode.
     first_line, sep, rest = plan_content.partition("\n")
     m = MARKER_RE.match(first_line)
     if m:
         candidate = Path(m.group(1))
-        old_snap: Path | None = candidate if candidate.is_file() else None
+        old_snap: Path | None = candidate if is_trusted_snapshot(candidate) else None
         stripped = rest if sep else ""
     else:
         old_snap = None
         stripped = plan_content
 
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".md", prefix="plan-rev-", delete=False
+        mode="w", suffix=".md", prefix=SNAPSHOT_PREFIX, delete=False
     ) as tmp:
         tmp.write(stripped)
         new_snap = Path(tmp.name)
@@ -145,11 +177,23 @@ def main() -> None:
     else:
         args = [str(launcher), str(new_snap)]
 
-    result = subprocess.run(
-        args,
-        capture_output=True, text=True, timeout=345600,
-        env={**os.environ},
-    )
+    try:
+        result = subprocess.run(
+            args,
+            capture_output=True, text=True, timeout=345600,
+            env={**os.environ},
+        )
+    except subprocess.TimeoutExpired:
+        # 4-day timeout fired or process hung. clean up our orphan new_snap;
+        # preserve old_snap so the next attempt can still resolve the marker.
+        new_snap.unlink(missing_ok=True)
+        make_response("ask", "plan review timed out; plan not reviewed this round")
+        return
+    except OSError as exc:
+        # launcher could not start (binary missing, permission denied, etc.).
+        new_snap.unlink(missing_ok=True)
+        make_response("ask", f"plan review launcher failed to start: {exc}")
+        return
 
     # launcher failure (terminal not available, AppleScript split failed, etc.)
     # means the user never saw the diff. preserve old_snap so the next attempt

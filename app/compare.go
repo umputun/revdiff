@@ -20,29 +20,23 @@ func validateCompareFlag(opts options) (oldPath, newPath string, err error) {
 	if opts.CompareOld == "" || opts.CompareNew == "" {
 		return "", "", errors.New("--compare-old and --compare-new must be used together")
 	}
-	if opts.Refs.Base != "" || opts.Refs.Against != "" {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with refs")
+	conflicts := []struct {
+		bad  bool
+		flag string
+	}{
+		{opts.Refs.Base != "" || opts.Refs.Against != "", "refs"},
+		{opts.Staged, "--staged"},
+		{len(opts.Only) > 0, "--only"},
+		{opts.AllFiles, "--all-files"},
+		{opts.Stdin, "--stdin"},
+		{len(opts.Include) > 0, "--include"},
+		{len(opts.Exclude) > 0, "--exclude"},
+		{opts.Annotations != "", "--annotations"},
 	}
-	if opts.Staged {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --staged")
-	}
-	if len(opts.Only) > 0 {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --only")
-	}
-	if opts.AllFiles {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --all-files")
-	}
-	if opts.Stdin {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --stdin")
-	}
-	if len(opts.Include) > 0 {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --include")
-	}
-	if len(opts.Exclude) > 0 {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --exclude")
-	}
-	if opts.Annotations != "" {
-		return "", "", errors.New("--compare-old/--compare-new cannot be used with --annotations")
+	for _, c := range conflicts {
+		if c.bad {
+			return "", "", fmt.Errorf("--compare-old/--compare-new cannot be used with %s", c.flag)
+		}
 	}
 	oldInfo, err := os.Stat(opts.CompareOld)
 	if err != nil {

@@ -192,9 +192,13 @@ func TestCompareReader_FileDiff_BinaryFiles(t *testing.T) {
 	r := NewCompareReader(oldPath, newPath)
 	lines, err := r.FileDiff("", "", false, 0)
 	// git emits "Binary files X and Y differ" on stdout with exit 1; diffError
-	// treats this as success and parseUnifiedDiff produces no hunk lines (no @@
-	// header). The contract under test: no error, no panic.
+	// treats this as success and parseUnifiedDiff produces a single
+	// "(binary file)" placeholder row (Partial=true) — no add/remove rows,
+	// no @@ hunks. Contract under test: no error, exactly one placeholder.
 	require.NoError(t, err)
+	require.Len(t, lines, 1, "binary diff should produce exactly one placeholder row")
+	assert.Contains(t, strings.ToLower(lines[0].Content), "binary",
+		"placeholder content should mark the row as binary")
 	for _, l := range lines {
 		assert.NotEqual(t, ChangeAdd, l.ChangeType)
 		assert.NotEqual(t, ChangeRemove, l.ChangeType)
@@ -244,18 +248,20 @@ func TestCompareReader_FileDiff_NoTrailingNewline(t *testing.T) {
 
 func TestCompareReader_FileDiff_GitErrorSurfacesStderr(t *testing.T) {
 	// missing files trigger git diff --no-index to fail with a fatal error on
-	// stderr; diffError must surface that text rather than swallow it.
+	// stderr; diffError must surface that text rather than fall back to the
+	// bare "exit N" branch.
 	r := NewCompareReader("/nonexistent/old-only-here.txt", "/nonexistent/new-only-here.txt")
 	_, err := r.FileDiff("", "", false, 0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "git diff --no-index")
-	// stderr from git contains the missing path; ensure it is preserved.
-	assert.True(t,
-		strings.Contains(err.Error(), "old-only-here") ||
-			strings.Contains(err.Error(), "no such file") ||
-			strings.Contains(err.Error(), "exit"),
-		"git error should surface stderr content, got: %s", err.Error(),
-	)
+	// the error must carry stderr content. accept either git's path-echo or a
+	// recognizable fatal/error token; explicitly NOT the bare exit-N fallback.
+	msg := err.Error()
+	hasStderr := strings.Contains(msg, "old-only-here") ||
+		strings.Contains(msg, "no such file") ||
+		strings.Contains(msg, "fatal:") ||
+		strings.Contains(msg, "error:")
+	assert.True(t, hasStderr, "git error should surface stderr content, got: %s", msg)
 }
 
 func TestCompareReader_FileDiff_Symlinks(t *testing.T) {
@@ -270,18 +276,41 @@ func TestCompareReader_FileDiff_Symlinks(t *testing.T) {
 	require.NoError(t, os.Symlink(realOld, linkOld))
 	require.NoError(t, os.Symlink(realNew, linkNew))
 
+	countAddRemove := func(t *testing.T, lines []DiffLine) (adds, removes int) {
+		t.Helper()
+		for _, l := range lines {
+			switch l.ChangeType {
+			case ChangeAdd:
+				adds++
+			case ChangeRemove:
+				removes++
+			case ChangeContext, ChangeDivider:
+			}
+		}
+		return adds, removes
+	}
+
+	// git --no-index treats symlinks as symlink objects (mode 120000),
+	// not as their targets. Both-symlinks case diffs target paths
+	// (real-old.txt → real-new.txt). Mixed case yields two file diffs
+	// (delete the symlink object + add the regular file). Both produce
+	// at least one add and one remove; assert that, not exact counts.
 	t.Run("both symlinks", func(t *testing.T) {
 		r := NewCompareReader(linkOld, linkNew)
 		lines, err := r.FileDiff("", "", false, 0)
 		require.NoError(t, err)
-		require.NotEmpty(t, lines)
+		adds, removes := countAddRemove(t, lines)
+		assert.GreaterOrEqual(t, adds, 1, "should produce at least one add")
+		assert.GreaterOrEqual(t, removes, 1, "should produce at least one remove")
 	})
 
 	t.Run("mixed symlink and regular", func(t *testing.T) {
 		r := NewCompareReader(linkOld, realNew)
 		lines, err := r.FileDiff("", "", false, 0)
 		require.NoError(t, err)
-		require.NotEmpty(t, lines)
+		adds, removes := countAddRemove(t, lines)
+		assert.GreaterOrEqual(t, adds, 1)
+		assert.GreaterOrEqual(t, removes, 1)
 	})
 }
 
