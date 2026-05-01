@@ -51,9 +51,11 @@ func (m Model) handleAnnotNav(forward bool) (tea.Model, tea.Cmd) {
 }
 
 // cursorAnnotKey is the cursor's position in annotation space. onAnnot is
-// true when the cursor is exactly on an existing annotation row (file,
-// line, AND type all match). In that case navigation steps by index in the
-// flat list. Otherwise navigation uses an insertion-point fallback.
+// true when the cursor's diff position matches an annotation in the store
+// (file, line, AND type), regardless of whether the cursor visually sits
+// on the diff line or on the annotation comment sub-row — both point to
+// the same annotation. In that case navigation steps by index in the flat
+// list; otherwise it uses an insertion-point fallback.
 type cursorAnnotKey struct {
 	file    string
 	line    int
