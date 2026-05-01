@@ -88,7 +88,7 @@ revdiff HEAD~3 --description-file=/tmp/review-notes.md
 
 Use `--compare-old=<path>` together with `--compare-new=<path>` to diff two arbitrary files on disk using `git diff --no-index`. No VCS repo needed — works anywhere `git` is installed.
 
-- `--compare-old` and `--compare-new` must be used together; both are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, and `--exclude`
+- `--compare-old` and `--compare-new` must be used together; both are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, `--exclude`, and `--annotations`
 - All standard features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations
 
 ```bash

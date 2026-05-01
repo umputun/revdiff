@@ -44,24 +44,26 @@ MARKER_RE = re.compile(r"^\s*<!--\s*previous revision:\s*(.+?)\s*-->\s*$")
 SNAPSHOT_PREFIX = "plan-rev-"
 
 
-def is_trusted_snapshot(p: Path) -> bool:
-    """true iff p resolves to an existing file under $TMPDIR with the
-    plan-rev-* prefix. used to vet agent-supplied marker paths before
-    handing them to revdiff/git."""
+def trusted_snapshot(p: Path) -> Path | None:
+    """return the canonical path iff p resolves to an existing file under
+    $TMPDIR with the plan-rev-* prefix. callers MUST use the returned path
+    rather than the input — using the unresolved input would let a marker
+    that names a symlink pass validation here and then read a different
+    file when handed to git/revdiff (TOCTOU on the symlink target)."""
     try:
         resolved = p.resolve(strict=True)
     except (OSError, RuntimeError):
-        return False
+        return None
     if not resolved.is_file():
-        return False
+        return None
     if not resolved.name.startswith(SNAPSHOT_PREFIX):
-        return False
+        return None
     tmp_root = Path(tempfile.gettempdir()).resolve()
     try:
         resolved.relative_to(tmp_root)
     except ValueError:
-        return False
-    return True
+        return None
+    return resolved
 
 
 def read_plan_from_stdin() -> str:
@@ -159,8 +161,11 @@ def main() -> None:
     first_line, sep, rest = plan_content.partition("\n")
     m = MARKER_RE.match(first_line)
     if m:
-        candidate = Path(m.group(1))
-        old_snap: Path | None = candidate if is_trusted_snapshot(candidate) else None
+        # use the canonical resolved path returned by trusted_snapshot, NOT
+        # the raw marker string — the validator follows symlinks, and so must
+        # the launcher, or a benign-looking symlink could be re-pointed
+        # between validation and the subprocess.run call.
+        old_snap = trusted_snapshot(Path(m.group(1)))
         stripped = rest if sep else ""
     else:
         old_snap = None

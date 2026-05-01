@@ -78,7 +78,7 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     exit 0
 fi
 
-# zellij: floating pane with sentinel file for blocking
+# zellij: floating pane with sentinel file carrying revdiff's exit code
 if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
@@ -87,7 +87,7 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch $(sq "$SENTINEL")
+$REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -99,12 +99,13 @@ LAUNCHER
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "${rc:-1}"
 fi
 
-# kitty: overlay with sentinel file for blocking
+# kitty: overlay with sentinel file carrying revdiff's exit code
 KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
@@ -114,16 +115,17 @@ if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
         KITTY_ARGS+=(--match "window_id:${KITTY_WINDOW_ID}")
     fi
-    KITTY_ARGS+=(sh -c "cd $(sq "$CWD") && $REVDIFF_CMD; touch $(sq "$SENTINEL")")
+    KITTY_ARGS+=(sh -c "cd $(sq "$CWD") && $REVDIFF_CMD; rc=\$?; printf %s \"\$rc\" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")")
 
     "${KITTY_ARGS[@]}" >/dev/null 2>&1
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
     rm -f "$SENTINEL"
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "${rc:-1}"
 fi
 
 # wezterm/kaku: split-pane with sentinel file for blocking
@@ -140,14 +142,15 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
         rm -f "$SENTINEL"
 
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent 90 \
-            --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; touch $(sq "$SENTINEL")" >/dev/null 2>&1
+            --pane-id "$WEZTERM_PANE" -- sh -c "$REVDIFF_CMD; rc=\$?; printf %s \"\$rc\" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")" >/dev/null 2>&1
 
         while [ ! -f "$SENTINEL" ]; do
             sleep 0.3
         done
+        rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
         rm -f "$SENTINEL"
         cat "$OUTPUT_FILE"
-        exit 0
+        exit "${rc:-1}"
     fi
 fi
 
@@ -160,7 +163,7 @@ if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch $(sq "$SENTINEL")
+$REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -182,10 +185,11 @@ LAUNCHER
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
     cmux close-surface --surface "$CMUX_SURF" 2>/dev/null || true
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "${rc:-1}"
 fi
 
 # ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
@@ -198,7 +202,7 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch $(sq "$SENTINEL")
+$REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -224,6 +228,7 @@ APPLESCRIPT
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
     osascript - "$GHOSTTY_TERM_ID" <<'APPLESCRIPT' 2>/dev/null
 on run argv
     tell application "Ghostty" to close terminal id (item 1 of argv)
@@ -231,7 +236,7 @@ end run
 APPLESCRIPT
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "${rc:-1}"
 fi
 
 # iterm2: split pane via AppleScript (macOS only)
@@ -243,7 +248,7 @@ if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; touch "\$1"
+$REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > "\$1.tmp" && mv -f "\$1.tmp" "\$1"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -287,6 +292,7 @@ APPLESCRIPT
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
     osascript - "$ITERM_NEW_SESSION" <<'APPLESCRIPT' 2>/dev/null
 on run argv
     set sid to item 1 of argv
@@ -306,7 +312,7 @@ end run
 APPLESCRIPT
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "${rc:-1}"
 fi
 
 # emacs vterm: open revdiff in a new vterm buffer via emacsclient
@@ -316,9 +322,11 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
     trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    # FIFO carries revdiff's exit code as its first line so the outer wait
+    # can propagate the actual status instead of swallowing it as 0.
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-$REVDIFF_CMD; echo d > $(sq "$SENTINEL"); exit
+$REVDIFF_CMD; rc=\$?; echo "\$rc" > $(sq "$SENTINEL"); exit
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -352,7 +360,7 @@ LAUNCHER
           (let ((vterm-shell \"$ESCAPED_SCRIPT\"))
             (vterm-mode)))))" >/dev/null 2>&1
 
-    read -r < "$SENTINEL"
+    read -r rc < "$SENTINEL"
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     emacsclient --no-wait --eval "(progn (require 'cl-lib)
       (when-let ((f (cl-find-if (lambda (f) (string= (frame-parameter f 'name) \"$ESCAPED_TITLE\")) (frame-list))))
@@ -363,7 +371,7 @@ LAUNCHER
         (set-frame-parameter f 'revdiff-caller nil)
         (select-frame-set-input-focus f)))" >/dev/null 2>&1
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "${rc:-1}"
 fi
 
 echo "error: no overlay terminal available (requires tmux, zellij, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2

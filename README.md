@@ -545,7 +545,7 @@ revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md
 revdiff --compare-old=a.txt --compare-new=b.txt
 ```
 
-`--compare-old` and `--compare-new` must be used together and are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, and `--exclude`. All standard diff features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.
+`--compare-old` and `--compare-new` must be used together and are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, `--exclude`, and `--annotations`. All standard diff features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.
 
 ### Scratch-Buffer Review
 

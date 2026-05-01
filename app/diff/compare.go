@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,7 +76,9 @@ func (r *CompareReader) diffError(err error, out []byte) error {
 // countFileLines returns the number of lines in r.oldPath using streaming
 // reads to avoid loading the entire file into memory.
 // A non-empty file not ending with '\n' counts as one additional line.
-// Returns 0 when the file cannot be read (treated as unknown by parseUnifiedDiff).
+// Returns 0 (treated as unknown by parseUnifiedDiff) when the file cannot
+// be read in full — including mid-read errors that would otherwise yield a
+// partial, misleading count for the trailing-divider label.
 func (r *CompareReader) countFileLines() int {
 	info, err := os.Stat(r.oldPath)
 	if err != nil || !info.Mode().IsRegular() {
@@ -101,8 +104,14 @@ func (r *CompareReader) countFileLines() int {
 				endsWithNewline = false
 			}
 		}
-		if rerr != nil {
+		if rerr == io.EOF {
 			break
+		}
+		if rerr != nil {
+			// non-EOF read error: treat the whole file as unknown rather
+			// than returning a partial count that would mislabel the
+			// trailing divider.
+			return 0
 		}
 	}
 	if hasContent && !endsWithNewline {

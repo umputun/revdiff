@@ -234,7 +234,7 @@ revdiff --all-files --exclude vendor --exclude mocks</code></div>
         <p>Use <code>--compare-old=&lt;path&gt;</code> together with <code>--compare-new=&lt;path&gt;</code> to diff two arbitrary files on disk using <code>git diff --no-index</code>. No VCS repository is required &mdash; this works anywhere <code>git</code> is installed.</p>
         <div class="code-block"><code>revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md
 revdiff --compare-old=a.txt --compare-new=b.txt</code></div>
-        <p><code>--compare-old</code> and <code>--compare-new</code> must be used together and are mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, <code>--stdin</code>, <code>--include</code>, and <code>--exclude</code>. All standard features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.</p>
+        <p><code>--compare-old</code> and <code>--compare-new</code> must be used together and are mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, <code>--stdin</code>, <code>--include</code>, <code>--exclude</code>, and <code>--annotations</code>. All standard features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.</p>
 
         <h2 id="scratch-buffer">Scratch-buffer review</h2>
         <p>Use <code>--stdin</code> to review arbitrary piped or redirected text as a single synthetic file. All lines are treated as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.</p>
