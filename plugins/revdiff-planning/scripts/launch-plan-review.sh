@@ -84,7 +84,7 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
@@ -160,7 +160,7 @@ if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
@@ -199,7 +199,7 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
@@ -245,7 +245,7 @@ if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > "\$1.tmp" && mv -f "\$1.tmp" "\$1"
@@ -321,7 +321,7 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
     rm -f "$SENTINEL" && mkfifo "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     # FIFO carries revdiff's exit code as its first line so the outer wait
     # can propagate the actual status instead of swallowing it as 0.
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
