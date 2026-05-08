@@ -309,48 +309,64 @@ func TestModel_HandleMouse_WheelDown_NoopAtMaxOffset(t *testing.T) {
 	assert.Equal(t, 30, model.nav.diffCursor, "wheel-down at max offset must not change cursor")
 }
 
-func TestModel_HandleMouse_WheelInWrapMode_PinsToFirstVisibleLine(t *testing.T) {
-	// in wrap mode a long line occupies multiple visual rows. wheel scrolling that
-	// moves the viewport so that only the continuation rows of the cursor line are
-	// visible (marker row is above the viewport) must pin the cursor to the first
-	// line that starts within the new viewport, not leave the cursor on the
-	// off-screen marker row.
-	//
-	// setup: viewport height=5, content that fills at least 2 pages.
-	// line 0 is long enough to wrap into 3 visual rows; lines 1-20 are short.
-	// initial cursor=0, wheel-down by 2 rows (wheelStep < line-0 height):
-	// viewTop=2 lands inside line 0's continuation; cursor must advance to line 1.
-	const vpHeight = 5
-	const longContent = "A very long line that is definitely wider than the viewport width of five columns XXXXXXXXXXX"
-	lines := make([]diff.DiffLine, 20)
-	lines[0] = diff.DiffLine{NewNum: 1, Content: longContent, ChangeType: diff.ChangeContext}
+func TestModel_HandleMouse_WheelInWrapMode_CursorAboveViewport(t *testing.T) {
+	// in wrap mode, when wheel-down scrolls the viewport so that the cursor's first
+	// visual row (marker row) is entirely above the new viewTop, the cursor must pin
+	// to the first line whose marker row is within the new viewport.
+	// this exercises the cursorTop < viewTop && cursorBottom < viewTop path.
+	lines := make([]diff.DiffLine, 40)
+	lines[0] = diff.DiffLine{NewNum: 1, Content: strings.Repeat("X", 90), ChangeType: diff.ChangeContext}
 	for i := 1; i < len(lines); i++ {
 		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "short", ChangeType: diff.ChangeContext}
 	}
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.lines = lines
 	m.modes.wrap = true
-	// use a very narrow viewport so the long line wraps visibly.
-	m.layout.viewport = viewport.New(10, vpHeight)
 	m.layout.viewport.SetContent(m.renderDiff())
-	require.Equal(t, 0, m.nav.diffCursor)
 
-	// how many visual rows does line 0 take in this narrow viewport?
 	cursorTop, cursorBottom := m.cursorVisualRange()
-	require.Greater(t, cursorBottom, cursorTop, "line 0 must wrap into multiple rows for this test to be meaningful")
+	require.Equal(t, 0, cursorTop)
+	require.Greater(t, cursorBottom, cursorTop, "line 0 must wrap for this test to be meaningful")
+	// with wheelStep=3 past cursorBottom, cursor is entirely above the new viewport.
+	require.Less(t, cursorBottom, wheelStep, "cursorBottom must be < wheelStep to exercise the above-viewport path")
 
-	// wheel-down by 1 moves the viewport so that only a continuation row of line 0 is at the top.
-	// cursor should advance to the first line whose marker row is within the new viewport.
-	scrollAmt := cursorTop + 1 // push past the marker row but stay inside the wrapped span
-	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 8, 3, false))
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
-	_ = scrollAmt
-	// cursor must not remain at line 0 if line 0's marker row is now above the viewport.
-	if model.layout.viewport.YOffset > cursorTop {
-		assert.Positive(t, model.nav.diffCursor,
-			"cursor must advance past line 0 when its marker row is above the viewport (YOffset=%d, cursorTop=%d)",
-			model.layout.viewport.YOffset, cursorTop)
+	require.Equal(t, wheelStep, model.layout.viewport.YOffset)
+	assert.Positive(t, model.nav.diffCursor, "cursor must advance to a line whose marker row is in the new viewport")
+}
+
+func TestModel_HandleMouse_WheelInWrapMode_StraddlePinsToNextLine(t *testing.T) {
+	// in wrap mode, when wheel-down scrolls the viewport so that viewTop lands
+	// INSIDE the cursor line's wrapped span (cursorTop < viewTop <= cursorBottom),
+	// the cursor must advance past the continuation rows to the next line.
+	// this exercises the cursorBottom+1 straddle branch in pinDiffCursorTo.
+	//
+	// mouseTestModel layout: width=120, treeWidth=36 → wrapWidth≈77 chars/row.
+	// a 350-char line wraps to 5 rows (rows 0-4), so cursorBottom=4 > wheelStep=3.
+	// after wheel-down, viewTop=3 lands inside rows 0-4 → straddle fires.
+	lines := make([]diff.DiffLine, 40)
+	lines[0] = diff.DiffLine{NewNum: 1, Content: strings.Repeat("X", 350), ChangeType: diff.ChangeContext}
+	for i := 1; i < len(lines); i++ {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "short", ChangeType: diff.ChangeContext}
 	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.lines = lines
+	m.modes.wrap = true
+	m.layout.viewport.SetContent(m.renderDiff())
+
+	cursorTop, cursorBottom := m.cursorVisualRange()
+	require.Equal(t, 0, cursorTop)
+	require.Greater(t, cursorBottom, wheelStep,
+		"cursorBottom (%d) must exceed wheelStep (%d) to exercise the straddle branch", cursorBottom, wheelStep)
+
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	require.Equal(t, wheelStep, model.layout.viewport.YOffset,
+		"viewport must scroll by wheelStep")
+	// viewTop=wheelStep is inside line 0's span [0, cursorBottom]; cursor must advance to line 1.
+	assert.Equal(t, 1, model.nav.diffCursor,
+		"cursor must advance to line 1 (first line after the straddling wrapped span)")
 }
 
 func TestModel_HandleMouse_ShiftWheelHalfPage(t *testing.T) {
