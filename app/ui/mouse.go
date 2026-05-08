@@ -252,7 +252,7 @@ func (m Model) clickTree(y int) (tea.Model, tea.Cmd) {
 // scrollDiffViewportBy shifts the diff viewport's YOffset by delta and pins
 // the diff cursor to the visible range when the cursor would otherwise leave
 // the viewport. delta > 0 scrolls down, delta < 0 scrolls up. no-op when no
-// file is loaded or the requested offset is already at the clamp boundary.
+// file is loaded or the clamped target equals the current offset.
 // the content is re-rendered only when the cursor moves — a pure viewport
 // shift does not need a re-render since the rendered content is unchanged.
 func (m *Model) scrollDiffViewportBy(delta int) {
@@ -272,13 +272,24 @@ func (m *Model) scrollDiffViewportBy(delta int) {
 	m.layout.viewport.SetYOffset(target)
 }
 
-// pinDiffCursorTo clamps the diff cursor so its visual range overlaps the
-// viewport range that would be visible at newOffset. when the cursor's
-// visual range still overlaps the viewport, it is left alone. when the
-// cursor sits above the viewport, it is pinned to the topmost visible row;
-// when below, to the bottommost visible row. returns true when the cursor
-// actually changed position (idx or annotation flag), so callers know
-// whether a re-render is required.
+// pinDiffCursorTo moves the diff cursor onto the visible viewport range when it
+// would otherwise be off-screen at newOffset; when the cursor marker is already
+// within the viewport, it is left alone. when the cursor sits above the viewport,
+// it is pinned to the topmost visible row; when below, to the bottommost visible
+// row. returns true when the cursor actually changed position (idx or annotation
+// flag), so callers know whether a re-render is required.
+//
+// the in-view check uses cursorTop (first visual row, where the cursor marker is
+// rendered) rather than cursorBottom. in wrap mode a diff line spans multiple rows;
+// using cursorBottom would incorrectly treat the cursor as visible when only its
+// tail wrap-continuation rows are in the viewport while the marker row is above it.
+//
+// for the top-pin case, if the cursor line straddles the viewport top boundary
+// (cursorTop < viewTop <= cursorBottom) the target row is advanced past the
+// cursor line's last visual row so that the next line — whose marker is inside
+// the viewport — is selected. when the entire wrapped span exceeds the viewport
+// height the advance is clamped to viewBottom and the function returns false
+// (no visible alternative exists).
 func (m *Model) pinDiffCursorTo(newOffset int) bool {
 	if len(m.file.lines) == 0 {
 		return false
@@ -286,12 +297,18 @@ func (m *Model) pinDiffCursorTo(newOffset int) bool {
 	cursorTop, cursorBottom := m.cursorVisualRange()
 	viewTop := newOffset
 	viewBottom := newOffset + m.layout.viewport.Height - 1
-	if cursorBottom >= viewTop && cursorTop <= viewBottom {
-		return false
+	if cursorTop >= viewTop && cursorTop <= viewBottom {
+		return false // cursor marker already visible
 	}
 	targetRow := viewBottom
 	if cursorTop < viewTop {
-		targetRow = viewTop
+		// cursor is above the viewport; in wrap mode the cursor line may have
+		// continuation rows visible at viewTop — advance past them.
+		if cursorBottom >= viewTop {
+			targetRow = min(cursorBottom+1, viewBottom)
+		} else {
+			targetRow = viewTop
+		}
 	}
 	idx, onAnnot := m.visualRowToDiffLine(targetRow)
 	if idx == m.nav.diffCursor && onAnnot == m.annot.cursorOnAnnotation {

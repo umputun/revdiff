@@ -557,7 +557,7 @@ color-border = #6272a4
         <h2 id="mouse-support">Mouse support</h2>
         <p>revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals.</p>
         <ul>
-            <li><strong>Scroll wheel</strong> &mdash; scrolls whichever pane the cursor is over (tree/TOC or diff). Three lines per notch.</li>
+            <li><strong>Scroll wheel</strong> &mdash; scrolls whichever pane the cursor is over (tree/TOC or diff). Three lines per notch. In the diff pane the wheel scrolls the viewport only &mdash; the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen.</li>
             <li><strong>Shift+scroll</strong> &mdash; half-page scroll in whichever pane the cursor is over.</li>
             <li><strong>Left-click in the tree</strong> &mdash; focuses the tree and selects/loads the clicked entry (same as pressing <code>j</code>/<code>k</code> to land there). Clicking a directory row moves the cursor but does not load a file.</li>
             <li><strong>Left-click in the diff</strong> &mdash; focuses the diff and moves the cursor to the clicked line. Enables a &ldquo;click, then <code>a</code>&rdquo; annotation flow.</li>
