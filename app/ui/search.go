@@ -140,13 +140,8 @@ func (m *Model) recallHistory(direction int) {
 	if len(m.search.history) == 0 {
 		return
 	}
-	idx := m.search.historyIdx + direction
-	if idx < 0 {
-		idx = 0
-	}
-	if idx > len(m.search.history) {
-		idx = len(m.search.history)
-	}
+	idx := max(m.search.historyIdx+direction, 0)
+	idx = min(idx, len(m.search.history))
 	if idx == len(m.search.history) {
 		m.search.input.SetValue("")
 	} else {

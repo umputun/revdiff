@@ -1387,7 +1387,7 @@ func TestModel_SearchHistory_CapEnforced(t *testing.T) {
 	model := newSearchHistoryModel(t)
 
 	// push searchHistoryMax+1 unique entries; oldest must be dropped.
-	for i := 0; i < searchHistoryMax+1; i++ {
+	for i := range searchHistoryMax + 1 {
 		q := fmt.Sprintf("q%d", i)
 		model = submitQueryThroughInput(model, q)
 	}

@@ -139,17 +139,17 @@ Rejected alternatives (from brainstorm):
 - [x] run `go test ./app/ui/...` — must pass before next task.
 
 ### Task 2: Verify acceptance criteria
-- [ ] verify each Overview bullet is implemented:
+- [x] verify each Overview bullet is implemented:
   - Up / Ctrl+P walks backward
   - Down / Ctrl+N walks forward
   - Down past newest clears input
   - in-session only (no persistence file created, no config key added)
-- [ ] verify edge cases from Technical Details (empty history, oldest, cap, dedup, cancel-doesn't-append).
-- [ ] run full test suite: `go test ./...`.
-- [ ] run race detector: `go test -race ./...`.
-- [ ] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` from repo root.
-- [ ] run formatters: `~/.claude/format.sh` (or gofmt/goimports if not available).
-- [ ] verify no new files were created (per design — additive change only).
+- [x] verify edge cases from Technical Details (empty history, oldest, cap, dedup, cancel-doesn't-append).
+- [x] run full test suite: `go test ./...`.
+- [x] run race detector: `go test -race ./...`.
+- [x] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0` from repo root.
+- [x] run formatters: `~/.claude/format.sh` (or gofmt/goimports if not available).
+- [x] verify no new files were created (per design — additive change only).
 
 ### Task 3: [Final] Update documentation and finalize
 
