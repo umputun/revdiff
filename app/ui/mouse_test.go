@@ -212,16 +212,56 @@ func TestModel_HandleMouse_WheelInDiff(t *testing.T) {
 	}
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.lines = lines
+	m.layout.viewport.SetContent(m.renderDiff())
 
-	// pointer in diff pane (x=60 is past tree columns 0..37)
+	// wheel-down scrolls the viewport by wheelStep; the cursor at line 0
+	// is now above the visible range and is pinned to the new top.
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
-	assert.Equal(t, wheelStep, model.nav.diffCursor, "wheel-down should advance cursor by wheelStep")
+	assert.Equal(t, wheelStep, model.layout.viewport.YOffset, "wheel-down must scroll viewport by wheelStep")
+	assert.Equal(t, wheelStep, model.nav.diffCursor, "cursor must pin to top of visible range when scrolled off-screen")
 
-	// wheel-up returns cursor to top
+	// wheel-up scrolls the viewport back; cursor at line 3 stays in view, so it does not move.
 	result, _ = model.Update(wheelMsg(tea.MouseButtonWheelUp, 60, 10, false))
 	model = result.(Model)
-	assert.Equal(t, 0, model.nav.diffCursor, "wheel-up should move cursor back up by wheelStep")
+	assert.Equal(t, 0, model.layout.viewport.YOffset, "wheel-up must scroll viewport back to the top")
+	assert.Equal(t, wheelStep, model.nav.diffCursor, "cursor stays put when its visual range still overlaps the viewport")
+}
+
+func TestModel_HandleMouse_WheelInDiff_CursorStaysWhenInView(t *testing.T) {
+	// when the cursor is well inside the viewport, plain wheel scrolling that
+	// does not push the cursor out must leave the cursor on its original line.
+	lines := make([]diff.DiffLine, 60)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.lines = lines
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.nav.diffCursor = 20 // cursor sits comfortably inside the 30-row viewport
+
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	assert.Equal(t, wheelStep, model.layout.viewport.YOffset)
+	assert.Equal(t, 20, model.nav.diffCursor, "cursor must not move while still inside the viewport")
+}
+
+func TestModel_HandleMouse_WheelInDiff_NoopWhenContentFits(t *testing.T) {
+	// when the entire diff fits in the viewport (TotalLineCount <= Height),
+	// there is no room to scroll and wheel events become no-ops. cursor and
+	// YOffset both stay put.
+	lines := make([]diff.DiffLine, 5)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.lines = lines
+	m.layout.viewport.SetContent(m.renderDiff())
+
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	assert.Equal(t, 0, model.layout.viewport.YOffset, "wheel must not change YOffset when content fits")
+	assert.Equal(t, 0, model.nav.diffCursor, "wheel must not change cursor when content fits")
 }
 
 func TestModel_HandleMouse_ShiftWheelHalfPage(t *testing.T) {
@@ -232,10 +272,12 @@ func TestModel_HandleMouse_ShiftWheelHalfPage(t *testing.T) {
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.lines = lines
 	m.layout.viewport = viewport.New(80, 20) // Height=20 so half-page = 10
+	m.layout.viewport.SetContent(m.renderDiff())
 
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, true))
 	model := result.(Model)
-	assert.Equal(t, 10, model.nav.diffCursor, "shift+wheel should move cursor by viewport.Height/2")
+	assert.Equal(t, 10, model.layout.viewport.YOffset, "shift+wheel must scroll viewport by half page")
+	assert.Equal(t, 10, model.nav.diffCursor, "cursor must pin to top of visible range after half-page scroll")
 }
 
 func TestModel_HandleMouse_WheelInTreeMovesTreeCursor(t *testing.T) {
@@ -852,18 +894,18 @@ func TestModel_HandleMouse_LeftClickInTOCJumpsViewport(t *testing.T) {
 
 func TestModel_HandleMouse_WheelInDiffSyncsTOCActiveSection(t *testing.T) {
 	// mirrors the keyboard-navigation TOC-sync guarantee (diffnav.go:464):
-	// moving the diff cursor via wheel must keep mdTOC.activeSection aligned
-	// with the new cursor position, otherwise switching focus back to the TOC
-	// highlights the stale section.
+	// when wheel scrolling pushes the cursor off the top and pins it to the
+	// new top visible line, mdTOC.activeSection must follow so switching focus
+	// back to the TOC highlights the correct section. requires a diff long
+	// enough for the viewport to actually scroll.
 	files := []string{"README.md"}
-	lines := []diff.DiffLine{
-		{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "body", ChangeType: diff.ChangeContext},
-		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
-		{NewNum: 4, Content: "body", ChangeType: diff.ChangeContext},
-		{NewNum: 5, Content: "### Third", ChangeType: diff.ChangeContext},
-		{NewNum: 6, Content: "body", ChangeType: diff.ChangeContext},
+	lines := make([]diff.DiffLine, 60)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "body", ChangeType: diff.ChangeContext}
 	}
+	lines[0] = diff.DiffLine{NewNum: 1, Content: "# First", ChangeType: diff.ChangeContext}
+	lines[10] = diff.DiffLine{NewNum: 11, Content: "## Second", ChangeType: diff.ChangeContext}
+	lines[20] = diff.DiffLine{NewNum: 21, Content: "### Third", ChangeType: diff.ChangeContext}
 	m := mouseTestModel(t, files, map[string][]diff.DiffLine{"README.md": lines})
 	m.file.lines = lines
 	m.file.singleFile = true
@@ -871,18 +913,19 @@ func TestModel_HandleMouse_WheelInDiffSyncsTOCActiveSection(t *testing.T) {
 	require.NotNil(t, m.file.mdTOC)
 	m.layout.focus = paneDiff
 	m.nav.diffCursor = 0
+	m.layout.viewport.SetContent(m.renderDiff())
 
-	// wheel-down in diff pane (x=60 lands past treeWidth, y=5 > diffTopRow)
-	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 5, false))
+	// shift+wheel-down advances the viewport by half a page (15 rows);
+	// cursor at line 0 is now off the top and pins to line 15, past the
+	// "## Second" header. TOC active section must follow.
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 5, true))
 	model := result.(Model)
 
-	// after wheel, diffCursor advanced; TOC active-section must reflect it
-	require.Positive(t, model.nav.diffCursor, "wheel-down must advance diffCursor")
+	require.GreaterOrEqual(t, model.nav.diffCursor, 10, "wheel-down must scroll past the second section header")
 	model.file.mdTOC.SyncCursorToActiveSection()
 	idx, ok := model.file.mdTOC.CurrentLineIdx()
-	assert.True(t, ok, "TOC active section must be set after wheel in diff")
-	// cursor moved past line 2 (## Second at lineIdx=2); active section must be Second or Third
-	assert.GreaterOrEqual(t, idx, 2, "TOC active section must match diff cursor region after wheel")
+	assert.True(t, ok, "TOC active section must be set after wheel-driven cursor pin")
+	assert.GreaterOrEqual(t, idx, 10, "TOC active section must match diff cursor region after wheel")
 }
 
 func TestModel_HandleMouse_ClickInDiffSyncsTOCActiveSection(t *testing.T) {
