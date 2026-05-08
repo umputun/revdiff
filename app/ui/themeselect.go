@@ -100,6 +100,17 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 	m.resolver = res
 	m.renderer = style.NewRenderer(res)
 	m.sgr = style.SGR{}
+	// Rebuild the markdown renderer so glamour's baked-in Style picks up the
+	// new AnnotationFg / SearchFg / chroma style. Skipped under noColors (no
+	// colored output anyway) and when no builder was wired (--plain-annotations
+	// or tests). The legacy-fallback rows bake the resolver's AnnotationInline
+	// color in too, so the cache must be cleared either way.
+	if !m.cfg.noColors && m.annot.markdownBuilder != nil {
+		m.annot.markdown = nilOrAnnotationMarkdown(
+			m.annot.markdownBuilder(spec.Colors, spec.ChromaStyle),
+		)
+	}
+	m.invalidateAnnotationRows()
 	prevStyle := m.highlighter.StyleName()
 	chromaChanged := false
 	if spec.ChromaStyle != prevStyle {

@@ -264,6 +264,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.file.name = msg.file
 	m.file.lines = msg.lines
+	m.invalidateAnnotationRows()
 	m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
 	m.clearSearch()
 	m.computeFileStats()

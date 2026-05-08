@@ -1233,7 +1233,7 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		m := newModel()
 		var b strings.Builder
 		cursor := m.renderer.DiffCursor(m.cfg.noColors)
-		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac first\nsecond\nthird")
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac ", "first\nsecond\nthird")
 		out := b.String()
 		assert.Contains(t, out, "first", "first logical line present")
 		assert.Contains(t, out, "second", "second logical line present")
@@ -1254,7 +1254,7 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		m := newModel()
 		var b strings.Builder
 		cursor := m.renderer.DiffCursor(m.cfg.noColors)
-		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac file: alpha\nbeta")
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac file: ", "alpha\nbeta")
 		out := b.String()
 		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
 		require.Len(t, rows, 2)
@@ -1268,10 +1268,10 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		m.layout.treeWidth = 8
 		first := strings.Repeat("alpha ", 20)  // wraps multiple rows
 		second := strings.Repeat("bravo ", 20) // wraps multiple rows
-		text := "\U0001f4ac " + first + "\n" + second
+		body := first + "\n" + second
 		var b strings.Builder
 		cursor := m.renderer.DiffCursor(m.cfg.noColors)
-		m.renderWrappedAnnotation(&b, cursor, text)
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac ", body)
 		out := b.String()
 		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
 		assert.Greater(t, len(rows), 3, "both logical lines wrap beyond one row")
@@ -1285,19 +1285,18 @@ func TestModel_AnnotationContinuationIndent(t *testing.T) {
 	m := testModel(nil, nil)
 
 	tests := []struct {
-		name  string
-		first string
-		want  int // number of indent spaces
+		name   string
+		prefix string
+		want   int // number of indent spaces
 	}{
-		{"line-level emoji prefix gets 3-space indent", "\U0001f4ac line note", 3},
-		{"file-level emoji prefix gets 9-space indent", "\U0001f4ac file: note", 9},
-		{"no emoji prefix yields no indent (default branch)", "plain text", 0},
-		{"empty string yields no indent (default branch)", "", 0},
-		{"lookalike prefix without emoji yields no indent", "file: note", 0},
+		{"line-level emoji prefix gets 3-space indent", "\U0001f4ac ", 3},
+		{"file-level emoji prefix gets 9-space indent", "\U0001f4ac file: ", 9},
+		{"empty prefix yields no indent", "", 0},
+		{"plain ascii prefix matches its own width", "abc:", 4},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			indent := m.annotationContinuationIndent(tt.first)
+			indent := m.annotationContinuationIndent(tt.prefix)
 			assert.Len(t, indent, tt.want)
 			for _, r := range indent {
 				assert.Equal(t, ' ', r, "indent must be spaces only")

@@ -313,10 +313,7 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annot.annotating && m.annot.fileAnnotating {
-		line := " " + m.renderer.AnnotationInline("\U0001f4ac file: ") + m.annot.input.View()
-		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
-		line = strings.TrimRight(line, " ")
-		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
+		m.renderInProgressAnnotation(b, "\U0001f4ac file: ")
 		return
 	}
 
@@ -325,7 +322,38 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 		if m.nav.diffCursor == -1 && m.layout.focus == paneDiff {
 			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
-		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
+		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: ", fileComment)
+	}
+}
+
+// renderInProgressAnnotation writes the textarea's current view as a multi-row
+// annotation: row 0 gets the cursor cell + the styled emoji prefix, rows 1+
+// get a placeholder cursor cell + matching-width plain-space indent so the
+// body lines up under the prefix. Each row is right-padded with DiffPaneBg
+// via extendLineBg so the pane background extends to the right edge.
+//
+// We render the textarea ourselves rather than calling input.View() directly
+// because the textarea's View emits its own line-prefix padding sized for a
+// stand-alone widget — we want a tight in-pane integration matching how
+// saved annotations render.
+func (m Model) renderInProgressAnnotation(b *strings.Builder, prefix string) {
+	rows := strings.Split(m.annot.input.View(), "\n")
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
+	prefixStyled := m.renderer.AnnotationInline(prefix)
+	paneBg := m.resolver.Color(style.ColorKeyDiffPaneBg)
+
+	for i, row := range rows {
+		// strip the textarea's unstyled trailing padding so extendLineBg can
+		// re-pad the row with the diff pane bg color rather than terminal
+		// default — the same fix the legacy single-line path applied.
+		row = strings.TrimRight(row, " ")
+		head := indent
+		c := " "
+		if i == 0 {
+			c = " " // cursor cell stays a placeholder space; textarea draws its own caret
+			head = prefixStyled
+		}
+		b.WriteString(m.extendLineBg(c+head+row, paneBg) + "\n")
 	}
 }
 
@@ -650,10 +678,7 @@ func (m Model) extendLineBg(styled string, bg style.Color) string {
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annot.annotating && !m.annot.fileAnnotating && idx == m.nav.diffCursor {
-		line := " " + m.renderer.AnnotationInline("\U0001f4ac ") + m.annot.input.View()
-		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
-		line = strings.TrimRight(line, " ")
-		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
+		m.renderInProgressAnnotation(b, "\U0001f4ac ")
 		return
 	}
 	dl := m.file.lines[idx]
@@ -664,61 +689,38 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 			if idx == m.nav.diffCursor && m.annot.cursorOnAnnotation && m.layout.focus == paneDiff {
 				cursor = m.renderer.DiffCursor(m.cfg.noColors)
 			}
-			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
+			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac ", comment)
 		}
 	}
 }
 
-// renderWrappedAnnotation writes an annotation line with word wrapping.
-// annotations always wrap regardless of wrapMode since they contain prose.
-// embedded "\n" in text splits into logical lines; the first logical line carries
-// the emoji prefix baked into text, continuation logical lines receive an indent
-// sized to the emoji prefix so body columns line up.
-// each visual row is padded with DiffPaneBg via extendLineBg so themed pane
-// backgrounds extend across the full width rather than falling back to terminal
-// default on the right portion.
-func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
-	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+// renderWrappedAnnotation writes the visual rows of an annotation to b. The
+// rows already include their leading prefix (row 0) or indent (row 1+) and
+// any styling — annotationVisualRows is the chokepoint that bakes those in
+// so cursor math (wrappedAnnotationLineCount) and paint stay in lockstep.
+// This function only adds the cursor cell on row 0 and right-pads each row
+// with DiffPaneBg via extendLineBg.
+func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, prefix, body string) {
+	rows := m.annotationVisualRows(prefix, body)
+	if len(rows) == 0 {
+		return
+	}
 	paneBg := m.resolver.Color(style.ColorKeyDiffPaneBg)
-
-	logical := strings.Split(text, "\n")
-	indent := m.annotationContinuationIndent(logical[0])
-
-	first := true
-	for i, segment := range logical {
-		if i > 0 {
-			segment = indent + segment
+	for i, row := range rows {
+		c := " "
+		if i == 0 {
+			c = cursor
 		}
-		var lines []string
-		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
-			lines = m.wrapContent(segment, wrapWidth)
-		} else {
-			lines = []string{segment}
-		}
-		for _, line := range lines {
-			c := " "
-			if first {
-				c = cursor
-				first = false
-			}
-			styled := c + m.renderer.AnnotationInline(line)
-			b.WriteString(m.extendLineBg(styled, paneBg) + "\n")
-		}
+		b.WriteString(m.extendLineBg(c+row, paneBg) + "\n")
 	}
 }
 
-// annotationContinuationIndent returns leading whitespace sized to match the emoji
-// prefix on the first logical line of an annotation so continuation logical lines
-// align under the body. Uses lipgloss.Width because the emoji is double-width.
-func (m Model) annotationContinuationIndent(firstLogicalLine string) string {
-	switch {
-	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac file: "):
-		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac file: "))
-	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac "):
-		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac "))
-	default:
-		return ""
-	}
+// annotationContinuationIndent returns plain-space padding sized to the
+// width of the prefix marker so that continuation rows under an annotation
+// align with the body of the first row. Uses lipgloss.Width because the
+// emoji prefix is double-width.
+func (m Model) annotationContinuationIndent(prefix string) string {
+	return strings.Repeat(" ", lipgloss.Width(prefix))
 }
 
 const (

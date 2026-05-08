@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -525,11 +526,11 @@ func TestModel_HandleMouse_SwallowedWhileAnnotating(t *testing.T) {
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 	})
 	m.annot.annotating = true
-	m.annot.input = textinput.New()
+	m.annot.input = textarea.New()
 	m.annot.input.SetValue("draft")
 	m.nav.diffCursor = 0
 
-	// wheel must be swallowed: cursor unchanged, textinput value preserved
+	// wheel must be swallowed: cursor unchanged, textarea value preserved
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
 	assert.Equal(t, 0, model.nav.diffCursor, "wheel must not move cursor while annotating")

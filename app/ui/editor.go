@@ -42,13 +42,10 @@ type editorFinishedMsg struct {
 // fileLevel, line, changeType) are captured now so subsequent cursor movement
 // or file navigation during editing does not misroute the saved annotation.
 func (m *Model) openEditor() tea.Cmd {
+	// textarea preserves \n in its value, so the editor seeds directly from
+	// input.Value() — no existingMultiline detour needed (the legacy textinput
+	// sanitized \n to space and required the workaround).
 	content := m.annot.input.Value()
-	// when re-editing an existing multi-line annotation, the textinput is kept
-	// empty (sanitizer would flatten \n). seed the editor from the stashed
-	// original so Ctrl+E resumes with the full content, not a blank file.
-	if content == "" && m.annot.existingMultiline != "" {
-		content = m.annot.existingMultiline
-	}
 	fileName := m.file.name
 	fileLevel := m.annot.fileAnnotating
 

@@ -6,7 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -14,6 +15,21 @@ import (
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/style"
 )
+
+// annotMaxInputHeight caps the visible height of the in-progress annotation
+// textarea so a runaway paste cannot push the entire diff content off the
+// pane. Beyond this row count the textarea scrolls internally.
+const annotMaxInputHeight = 20
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
 
 // annotKeyFile is the lookup key for file-level annotations in wrappedAnnotationLineCount.
 const annotKeyFile = "file"
@@ -26,28 +42,53 @@ const annotCharLimit = 8000
 // "block" was removed as it triggers false positives in casual usage (e.g., "this code block is fine").
 var hunkKeywordRe = regexp.MustCompile(`(?i)\bhunk\b`)
 
-// newAnnotationInput creates and focuses a text input for annotation editing.
-// prefixWidth accounts for the visible prefix characters (cursor col + emoji + label + margin).
-func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinput.Model, tea.Cmd) {
-	ti := textinput.New()
-	ti.Placeholder = placeholder
-	cmd := ti.Focus()
-	ti.CharLimit = annotCharLimit
-	ti.Width = max(10, m.diffContentWidth()-prefixWidth)
+// newAnnotationInput creates and focuses a multi-line textarea for annotation
+// editing. prefixWidth accounts for the visible prefix characters (cursor col
+// + emoji + label + margin).
+//
+// Keymap follows the gum write convention (Charm's own multi-line text capture
+// tool): Enter saves (handled in handleAnnotateKey, NOT bound to InsertNewline
+// here), Ctrl+J and Alt+Enter insert newlines. Shift+Enter is terminal-
+// dependent — bubbletea v1's KeyMsg has no Shift modifier, so it cannot be
+// distinguished from plain Enter. iTerm2/ghostty/kitty users can configure
+// their terminal to send Alt+Enter when Shift+Enter is pressed; xterm/tmux
+// users should use Ctrl+J or Alt+Enter directly.
+func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textarea.Model, tea.Cmd) {
+	ta := textarea.New()
+	ta.Placeholder = placeholder
+	ta.CharLimit = annotCharLimit
+	// hide the textarea's left-edge prompt ("┃ ") and line-number gutter so
+	// the in-progress input visually matches the saved annotation rendering.
+	// MUST be set BEFORE SetWidth — textarea's SetWidth subtracts the prompt
+	// width and a 4-cell line-number reserve from the input width, so calling
+	// SetWidth with the defaults still active leaves only ~width-6 cells.
+	ta.Prompt = ""
+	ta.ShowLineNumbers = false
+	cmd := ta.Focus()
+	ta.SetWidth(max(10, m.diffContentWidth()-prefixWidth))
+	ta.SetHeight(1)
 
-	// set DiffBg on all textinput sub-styles so View() output inherits the pane background.
-	// wrapping View() externally doesn't work because lipgloss Render emits \033[0m resets.
-	// text uses Normal fg (context line color) so active input is readable on any theme
-	// and visually distinct from saved annotations (which use Annotation color + italic).
+	// match the legacy textinput styling: input text uses Normal fg (context-
+	// line color) so active input is readable on any theme and visually
+	// distinct from saved annotations (which use Annotation color + italic).
 	inputStyle := m.resolver.Style(style.StyleKeyAnnotInputText)
-	ti.PromptStyle = inputStyle
-	ti.TextStyle = inputStyle
 	cursorStyle := m.resolver.Style(style.StyleKeyAnnotInputCursor)
-	ti.Cursor.TextStyle = cursorStyle
-	ti.Cursor.Style = cursorStyle
-	ti.PlaceholderStyle = m.resolver.Style(style.StyleKeyAnnotInputPlaceholder)
+	placeholderStyle := m.resolver.Style(style.StyleKeyAnnotInputPlaceholder)
+	ta.FocusedStyle.Text = inputStyle
+	ta.FocusedStyle.Prompt = inputStyle
+	ta.FocusedStyle.CursorLine = inputStyle
+	ta.FocusedStyle.Placeholder = placeholderStyle
+	ta.Cursor.TextStyle = cursorStyle
+	ta.Cursor.Style = cursorStyle
 
-	return ti, cmd
+	// rebind keys: Enter is reserved for save (handled in handleAnnotateKey),
+	// so InsertNewline keeps only ctrl+j and alt+enter — matching gum write.
+	ta.KeyMap.InsertNewline = key.NewBinding(
+		key.WithKeys("ctrl+j", "alt+enter"),
+		key.WithHelp("ctrl+j/alt+enter", "newline"),
+	)
+
+	return ta, cmd
 }
 
 // startAnnotation enters annotation input mode for the current cursor line.
@@ -66,36 +107,29 @@ func (m *Model) startAnnotation() tea.Cmd {
 		return nil
 	}
 
-	placeholder := "annotation... (Ctrl+E for editor)"
+	placeholder := "annotation... (Ctrl+J newline · Ctrl+E editor · Enter save)"
 
-	// pre-fill with existing annotation if one exists. multi-line comments are
-	// NOT set via ti.SetValue because textinput's sanitizer collapses \n to
-	// space; instead, stash the original in existingMultiline and hint at it
-	// via the placeholder so Ctrl+E can seed the editor from it and Enter with
-	// empty input preserves it unchanged.
+	// pre-fill with existing annotation if one exists. textarea preserves \n
+	// in SetValue (unlike the legacy textinput, which sanitized it to space),
+	// so multi-line bodies seed cleanly without the existingMultiline detour.
 	lineNum := m.diffLineNum(dl)
-	var preFill, existingMultiline string
+	var preFill string
 	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == lineNum && a.Type == string(dl.ChangeType) {
-			if strings.Contains(a.Comment, "\n") {
-				existingMultiline = a.Comment
-				placeholder = "[existing multi-line — Ctrl+E to edit]"
-			} else {
-				preFill = a.Comment
-			}
+			preFill = a.Comment
 			break
 		}
 	}
 
-	ti, cmd := m.newAnnotationInput(placeholder, 6) // cursor col + emoji prefix "💬 " + border margin
+	ta, cmd := m.newAnnotationInput(placeholder, 6) // cursor col + emoji prefix "💬 " + border margin
 	if preFill != "" {
-		ti.SetValue(preFill)
+		ta.SetValue(preFill)
+		ta.SetHeight(clamp(ta.LineCount(), 1, annotMaxInputHeight))
 	}
 
-	m.annot.input = ti
+	m.annot.input = ta
 	m.annot.annotating = true
 	m.annot.fileAnnotating = false
-	m.annot.existingMultiline = existingMultiline
 	m.ensureLineAnnotationInputVisible()
 	return cmd
 }
@@ -128,34 +162,27 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		return nil
 	}
 
-	placeholder := "file-level annotation... (Ctrl+E for editor)"
+	placeholder := "file-level annotation... (Ctrl+J newline · Ctrl+E editor · Enter save)"
 
-	// pre-fill with existing file-level annotation if one exists. multi-line
-	// comments bypass ti.SetValue (textinput sanitizer flattens \n to space);
-	// instead stash in existingMultiline so Ctrl+E can seed and Enter with empty
-	// input preserves it unchanged.
-	var preFill, existingMultiline string
+	// pre-fill with existing file-level annotation if one exists. textarea
+	// preserves \n in SetValue (unlike the legacy textinput).
+	var preFill string
 	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == 0 {
-			if strings.Contains(a.Comment, "\n") {
-				existingMultiline = a.Comment
-				placeholder = "[existing multi-line — Ctrl+E to edit]"
-			} else {
-				preFill = a.Comment
-			}
+			preFill = a.Comment
 			break
 		}
 	}
 
-	ti, cmd := m.newAnnotationInput(placeholder, 12) // cursor col + "💬 file: " prefix + border margin
+	ta, cmd := m.newAnnotationInput(placeholder, 12) // cursor col + "💬 file: " prefix + border margin
 	if preFill != "" {
-		ti.SetValue(preFill)
+		ta.SetValue(preFill)
+		ta.SetHeight(clamp(ta.LineCount(), 1, annotMaxInputHeight))
 	}
 
-	m.annot.input = ti
+	m.annot.input = ta
 	m.annot.annotating = true
 	m.annot.fileAnnotating = true
-	m.annot.existingMultiline = existingMultiline
 	m.nav.diffCursor = -1 // position cursor on the file annotation line
 	m.layout.viewport.GotoTop()
 	return cmd
@@ -164,7 +191,11 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 // saveAnnotation saves the current text input as an annotation on the cursor line.
 // Thin wrapper around saveComment that reads model state for the current target.
 func (m *Model) saveAnnotation() {
-	text := m.annot.input.Value()
+	// strip leading/trailing whitespace so a stray Ctrl+J at the start or
+	// trailing newlines from "type, Ctrl+J, Enter" don't pollute the saved
+	// annotation. The legacy textinput sanitizer flattened \n entirely; the
+	// new textarea preserves them, so explicit trimming is needed.
+	text := strings.TrimSpace(m.annot.input.Value())
 	if text == "" {
 		m.cancelAnnotation()
 		return
@@ -201,7 +232,7 @@ func (m *Model) saveComment(text, fileName string, fileLevel bool, line int, cha
 		m.store.Add(annotation.Annotation{File: fileName, Line: 0, Type: "", Comment: text})
 		m.annot.annotating = false
 		m.annot.fileAnnotating = false
-		m.annot.existingMultiline = ""
+	
 		m.nav.diffCursor = -1 // position cursor on the file annotation line
 		m.tree.RefreshFilter(m.annotatedFiles())
 		m.layout.viewport.SetContent(m.renderDiff())
@@ -231,7 +262,7 @@ func (m *Model) saveComment(text, fileName string, fileLevel bool, line int, cha
 	m.store.Add(a)
 	m.annot.annotating = false
 	m.annot.fileAnnotating = false // defensive hygiene: parity with file-level branch
-	m.annot.existingMultiline = ""
+
 	m.tree.RefreshFilter(m.annotatedFiles())
 	// sync scroll so a newly added multi-row annotation stays visible when the
 	// cursor sits near the bottom of the viewport.
@@ -242,7 +273,7 @@ func (m *Model) saveComment(text, fileName string, fileLevel bool, line int, cha
 func (m *Model) cancelAnnotation() {
 	m.annot.annotating = false
 	m.annot.fileAnnotating = false
-	m.annot.existingMultiline = ""
+
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
@@ -303,15 +334,30 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 }
 
 // handleAnnotateKey handles key messages during annotation input mode.
+//
+// Key plan (mirrors gum write):
+//   - Enter (no modifier)     → save the annotation
+//   - Alt+Enter, Ctrl+J       → insert newline (handled by textarea's InsertNewline binding)
+//   - Esc                     → cancel
+//   - Ctrl+E                  → hand off to $EDITOR for editing
+//   - everything else         → forwarded to the textarea
+//
+// Shift+Enter is terminal-dependent: bubbletea v1's KeyMsg has no Shift
+// modifier, so it cannot natively distinguish Shift+Enter from Enter. Users
+// can configure their terminal to send Alt+Enter on Shift+Enter (iTerm2,
+// ghostty, kitty all support this) — at which point Shift+Enter routes
+// through the InsertNewline binding.
 func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+	switch {
+	case msg.Type == tea.KeyEnter && !msg.Alt:
+		// plain Enter saves; Alt+Enter falls through to textarea's
+		// InsertNewline binding (configured in newAnnotationInput).
 		m.saveAnnotation()
 		return m, nil
-	case tea.KeyEsc:
+	case msg.Type == tea.KeyEsc:
 		m.cancelAnnotation()
 		return m, nil
-	case tea.KeyCtrlE:
+	case msg.Type == tea.KeyCtrlE:
 		// hand off to $EDITOR for multi-line annotation input.
 		// keep annotating=true so editorFinishedMsg routes back through the annotation flow.
 		cmd := m.openEditor()
@@ -319,6 +365,10 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		var cmd tea.Cmd
 		m.annot.input, cmd = m.annot.input.Update(msg)
+		// grow the textarea's visible height to match its content so the
+		// in-progress annotation occupies the right number of diff-pane rows
+		// (capped at annotMaxInputHeight to bound layout impact).
+		m.annot.input.SetHeight(clamp(m.annot.input.LineCount(), 1, annotMaxInputHeight))
 		m.layout.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately
 		return m, cmd
 	}
@@ -330,8 +380,14 @@ func (m Model) cursorLineHasAnnotation() bool {
 	return m.cursorOnFileAnnotationLine() || m.annot.cursorOnAnnotation
 }
 
-// hasFileAnnotation checks if the current file has a file-level annotation (Line=0).
+// hasFileAnnotation checks if the current file has visible file-level
+// annotation content — either a saved annotation in the store, or an
+// in-progress textarea whose value will be saved as a file-level annotation.
+// Both cases produce rows that need to be counted by the cursor-math layer.
 func (m Model) hasFileAnnotation() bool {
+	if m.annot.annotating && m.annot.fileAnnotating {
+		return true
+	}
 	for _, a := range m.store.Get(m.file.name) {
 		if a.Line == 0 {
 			return true
@@ -378,45 +434,173 @@ func (m Model) hunkEndLine(idx int) int {
 	return m.diffLineNum(m.file.lines[last])
 }
 
-// wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
-// annotations always wrap at the pane width regardless of wrapMode.
-// multi-line comments (embedded "\n") contribute the wrapped-row count for each
-// logical line, with continuation logical lines using the indent-padded width.
+// wrappedAnnotationLineCount returns the number of visual rows an annotation
+// occupies in the diff pane. Delegates to annotationVisualRows so cursor math
+// (this function) and paint math (renderWrappedAnnotation) read from the same
+// cached row slice — see CLAUDE.md "Annotation visual-row invariant".
+//
+// While the user is actively typing into the annotation textarea (no saved
+// annotation exists yet for this line), returns the textarea's current
+// visible height instead, so the diff content below the input scrolls
+// correctly as newlines are inserted.
 func (m Model) wrappedAnnotationLineCount(key string) int {
-	var comment string
+	if rows := m.activeInputRowCount(key); rows > 0 {
+		return rows
+	}
+	prefix, body := m.annotationPrefixBody(key)
+	if body == "" {
+		return 1
+	}
+	rows := m.annotationVisualRows(prefix, body)
+	if len(rows) == 0 {
+		return 1
+	}
+	return len(rows)
+}
+
+// activeInputRowCount returns the visible row count of the in-progress
+// annotation textarea when key identifies the line currently being annotated,
+// or 0 otherwise. The textarea's Height is kept in sync with its LineCount in
+// handleAnnotateKey, so this is exactly what renderInProgressAnnotation will
+// emit. Long unwrapped logical lines may exceed Height — for those, prefer
+// Ctrl+J to insert a deliberate newline.
+func (m Model) activeInputRowCount(key string) int {
+	if !m.annot.annotating {
+		return 0
+	}
+	if m.annot.fileAnnotating {
+		if key != annotKeyFile {
+			return 0
+		}
+	} else {
+		if key == annotKeyFile {
+			return 0
+		}
+		if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
+			return 0
+		}
+		dl := m.file.lines[m.nav.diffCursor]
+		if m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType)) != key {
+			return 0
+		}
+	}
+	return clamp(m.annot.input.LineCount(), 1, annotMaxInputHeight)
+}
+
+// annotationPrefixBody returns the leading prefix ("💬 " or "💬 file: ") and
+// the raw comment body for the annotation identified by key, or ("", "") if
+// no annotation matches. The prefix is what the painter prepends to row 0 of
+// the rendered body; rows 1+ get a matching-width plain-space indent.
+func (m Model) annotationPrefixBody(key string) (prefix, body string) {
 	for _, a := range m.store.Get(m.file.name) {
 		if key == annotKeyFile && a.Line == 0 {
-			comment = "\U0001f4ac file: " + a.Comment
-			break
+			return "\U0001f4ac file: ", a.Comment
 		}
 		if key != annotKeyFile && m.annotationKey(a.Line, a.Type) == key {
-			comment = "\U0001f4ac " + a.Comment
-			break
+			return "\U0001f4ac ", a.Comment
 		}
 	}
-	if comment == "" {
-		return 1
-	}
-	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+	return "", ""
+}
 
-	logical := strings.Split(comment, "\n")
-	indent := m.annotationContinuationIndent(logical[0])
+// annotationVisualRows is the single source of truth for "what does this
+// annotation paint as." Both wrappedAnnotationLineCount and
+// renderWrappedAnnotation read from the same memoized []string here — every
+// caller that needs to count or paint an annotation MUST go through this
+// method or cursor scroll math will desync from rendered output.
+//
+// Returned rows are fully styled and include their leading prefix (row 0) or
+// matching-width indent (row 1+); the painter just prepends the cursor cell
+// and right-pads with extendLineBg. The legacy and markdown paths produce
+// rows in the same shape but with different styling: legacy wraps prefix+body
+// in a single AnnotationInline envelope (compact ANSI, matches pre-glamour
+// output exactly); markdown emits a styled prefix followed by glamour's per-
+// element styled body.
+func (m Model) annotationVisualRows(prefix, body string) []string {
+	if body == "" {
+		return nil
+	}
+	contentW := m.diffContentWidth() - 1 - lipgloss.Width(prefix)
+	if contentW < wrapMinContent {
+		contentW = wrapMinContent
+	}
+	key := annotCacheKey{body: body, prefix: prefix, width: contentW}
+	if rows, ok := m.annot.rowCache[key]; ok {
+		return rows
+	}
 
-	total := 0
-	for i, segment := range logical {
-		if i > 0 {
-			segment = indent + segment
+	var rows []string
+	if m.annot.markdown != nil {
+		bodyRows := m.annot.markdown.Render(body, contentW)
+		if len(bodyRows) > 0 {
+			rows = m.composeMarkdownRows(prefix, bodyRows)
 		}
-		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
-			total += len(m.wrapContent(segment, wrapWidth))
-			continue
+	}
+	if len(rows) == 0 {
+		rows = m.composeLegacyRows(prefix, body, contentW)
+	}
+	if rows == nil {
+		rows = []string{}
+	}
+	m.annot.rowCache[key] = rows
+	return rows
+}
+
+// composeLegacyRows returns the pre-glamour annotation rows, preserving the
+// exact shape of the original italic-prose path: each row is an
+// AnnotationInline-styled string spanning either prefix+body (row 0) or
+// indent+body (row 1+), so the entire visible content lives inside a single
+// SGR envelope per row. Embedded "\n" splits into logical lines; wrapping
+// happens at full pane-content width, ignoring indent for wrap-row
+// continuations of a single logical line (matching old-loop behavior).
+func (m Model) composeLegacyRows(prefix, body string, contentW int) []string {
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
+	wrapW := contentW + lipgloss.Width(prefix) // = pane-content - 1
+	var rows []string
+	for li, logical := range strings.Split(body, "\n") {
+		head := indent
+		if li == 0 {
+			head = prefix
 		}
-		total++
+		segment := head + logical
+		var wrapped []string
+		if wrapW > wrapMinContent && lipgloss.Width(segment) > wrapW {
+			wrapped = m.wrapContent(segment, wrapW)
+		} else {
+			wrapped = []string{segment}
+		}
+		for _, w := range wrapped {
+			rows = append(rows, m.renderer.AnnotationInline(w))
+		}
 	}
-	if total < 1 {
-		return 1
+	return rows
+}
+
+// composeMarkdownRows takes pre-styled body rows from the markdown renderer
+// and prepends a styled prefix on row 0, plain-space indent on rows 1+. The
+// prefix is wrapped in its own AnnotationInline envelope (separate from the
+// glamour-styled body) because glamour's per-element styling does not extend
+// across externally-injected text — composing them in a single envelope
+// would either re-style the body or de-style the prefix.
+func (m Model) composeMarkdownRows(prefix string, bodyRows []string) []string {
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
+	prefixStyled := m.renderer.AnnotationInline(prefix)
+	out := make([]string, len(bodyRows))
+	out[0] = prefixStyled + bodyRows[0]
+	for i := 1; i < len(bodyRows); i++ {
+		out[i] = indent + bodyRows[i]
 	}
-	return total
+	return out
+}
+
+// invalidateAnnotationRows clears the visual-row cache. Call on file load
+// (annotation set may have changed) and theme apply (styling colors may have
+// changed). Width-only changes self-invalidate via the cache key, so resize
+// does not need to clear.
+func (m *Model) invalidateAnnotationRows() {
+	for k := range m.annot.rowCache {
+		delete(m.annot.rowCache, k)
+	}
 }
 
 // hunkLineHeight returns the visual row count for a single diff line,
@@ -432,7 +616,12 @@ func (m Model) hunkLineHeight(idx int, hunks []int, annotationSet map[string]boo
 	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
 		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
-		if annotationSet[key] {
+		// Count saved annotations OR an in-progress textarea on this line:
+		// renderAnnotationOrInput emits rows for either case, so the height
+		// math must agree or cursor scroll desyncs (Ctrl+J in a brand-new
+		// annotation grows the textarea but the desync hides the new rows
+		// until the user scrolls).
+		if annotationSet[key] || m.activeInputRowCount(key) > 0 {
 			h += m.wrappedAnnotationLineCount(key)
 		}
 	}

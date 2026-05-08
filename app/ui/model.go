@@ -9,6 +9,7 @@ package ui
 //go:generate moq -out mocks/word_differ.go -pkg mocks -skip-ensure -fmt goimports . wordDiffer
 //go:generate moq -out mocks/external_editor.go -pkg mocks -skip-ensure -fmt goimports . ExternalEditor
 //go:generate moq -out mocks/commit_log_source.go -pkg mocks -skip-ensure -fmt goimports . commitLogSource
+//go:generate moq -out mocks/annotation_markdown.go -pkg mocks -skip-ensure -fmt goimports . AnnotationMarkdown
 
 // note: ThemeCatalog is not moq-generated because ThemeEntry/ThemeSpec are defined in this package,
 // creating an import cycle (ui -> mocks -> ui). Tests use manual fakes instead.
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -50,6 +52,23 @@ type SyntaxHighlighter interface {
 	HighlightLines(filename string, lines []diff.DiffLine) []string
 	SetStyle(styleName string) bool
 	StyleName() string
+}
+
+// AnnotationMarkdown renders annotation prose as glow-style ANSI rows. Each
+// returned row is a single visual line at the given width (no embedded
+// newlines). nil-implementation in ModelConfig means "fall back to the legacy
+// italic plain-text wrap path"; the implementation in app/markdown wraps
+// charmbracelet/glamour and is wired by the composition root unless
+// --plain-annotations or --no-colors is set.
+//
+// The renderer's row count is the single source of truth for the annotation's
+// visual height in the diff pane: wrappedAnnotationLineCount feeds Render's
+// output through len(), and renderWrappedAnnotation walks the same rows.
+// Adding a new caller that computes "how tall is this annotation?" without
+// going through annotationVisualRows will desync cursor scroll math — this
+// invariant is documented in CLAUDE.md.
+type AnnotationMarkdown interface {
+	Render(body string, width int) []string
 }
 
 // Blamer provides blame information for files.
@@ -434,19 +453,36 @@ type vimState struct {
 	hint   string // transient status-bar message; cleared on next key press
 }
 
-// annotationState holds annotation input lifecycle state.
+// annotationState holds annotation input lifecycle state and the
+// markdown-rendered visual-row cache.
 type annotationState struct {
-	annotating         bool            // true when annotation text input is active
-	fileAnnotating     bool            // true when annotating at file level (Line=0)
-	cursorOnAnnotation bool            // true when cursor is on the annotation sub-line (not the diff line)
-	input              textinput.Model // text input for annotations
-	// existingMultiline holds the original multi-line comment of an annotation
-	// being re-edited. textinput's sanitizer collapses \n to space, so pre-filling
-	// via SetValue would silently flatten the stored content. When set, the
-	// textinput is left empty with a hint placeholder; Ctrl+E seeds the editor
-	// from this field, and Enter with empty input preserves the existing content
-	// unchanged. Cleared on every annotation-mode exit path.
-	existingMultiline string
+	annotating         bool           // true when annotation text input is active
+	fileAnnotating     bool           // true when annotating at file level (Line=0)
+	cursorOnAnnotation bool           // true when cursor is on the annotation sub-line (not the diff line)
+	input              textarea.Model // multi-line text input for annotations
+
+	// markdown is the renderer used by annotationVisualRows. nil falls back
+	// to the legacy italic plain-text wrap path. Wired via ModelConfig.
+	markdown AnnotationMarkdown
+
+	// markdownBuilder rebuilds markdown on theme apply so AnnotationFg /
+	// chroma style / etc. changes track immediately. nil disables rebuilds.
+	markdownBuilder func(colors style.Colors, chromaStyle string) AnnotationMarkdown
+
+	// rowCache memoizes annotationVisualRows output keyed by body+prefix+width.
+	// Both wrappedAnnotationLineCount (height) and renderWrappedAnnotation
+	// (paint) read from this map — that single source of truth is what keeps
+	// the cursor-math invariant intact. Cleared on file load and theme apply.
+	rowCache map[annotCacheKey][]string
+}
+
+// annotCacheKey identifies a unique (comment, prefix, width) render. Theme
+// changes invalidate the cache by clearing the map rather than including a
+// generation in the key — a simpler and equally correct invalidation strategy.
+type annotCacheKey struct {
+	body   string
+	prefix string
+	width  int
 }
 
 // Model is the top-level bubbletea model for revdiff.
@@ -592,6 +628,21 @@ type ModelConfig struct {
 	// (e.g. var c *Foo; cfg.CommitLog = c) and the typed-nil is collapsed to
 	// nil before the type-assertion fallback runs (mirrors the Editor guard).
 	CommitLog commitLogSource
+
+	// AnnotationMarkdown renders annotation prose as glow-style ANSI rows.
+	// nil falls back to the legacy italic plain-text wrap path. Wired by the
+	// composition root unless --plain-annotations or --no-colors is set.
+	AnnotationMarkdown AnnotationMarkdown
+
+	// AnnotationMarkdownBuilder rebuilds the markdown renderer when the
+	// active theme changes — applyTheme calls it with the new resolved
+	// colors and chroma style and replaces Model.annot.markdown with the
+	// result. nil disables rebuilds (markdown stays bound to startup colors)
+	// and is the right setting for tests, --plain-annotations, and
+	// --no-colors. Production wires this so theme switching behaves the
+	// same way it does for the legacy path: AnnotationFg changes apply
+	// immediately on theme apply.
+	AnnotationMarkdownBuilder func(colors style.Colors, chromaStyle string) AnnotationMarkdown
 
 	// --- Configuration values ---
 	Ref              string
@@ -766,7 +817,23 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		compact:         compactState{applicable: cfg.CompactApplicable},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
+		annot: annotationState{
+			markdown:        nilOrAnnotationMarkdown(cfg.AnnotationMarkdown),
+			markdownBuilder: cfg.AnnotationMarkdownBuilder,
+			rowCache:        make(map[annotCacheKey][]string),
+		},
 	}, nil
+}
+
+// nilOrAnnotationMarkdown returns md unless it is a typed-nil interface value,
+// in which case it returns nil. annotationVisualRows uses == nil to gate the
+// glamour path, and a typed-nil would slip past that check and trigger a nil
+// pointer deref on first Render call.
+func nilOrAnnotationMarkdown(md AnnotationMarkdown) AnnotationMarkdown {
+	if md == nil || isNilValue(md) {
+		return nil
+	}
+	return md
 }
 
 // Store returns the annotation store for reading results after quit.

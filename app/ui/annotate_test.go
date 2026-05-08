@@ -1022,14 +1022,14 @@ func TestModel_AnnotationInputWidthNarrowTerminal(t *testing.T) {
 	cmd := m.startAnnotation()
 	assert.NotNil(t, cmd)
 	assert.True(t, m.annot.annotating)
-	assert.GreaterOrEqual(t, m.annot.input.Width, 10, "text input width should be at least 10")
+	assert.GreaterOrEqual(t, m.annot.input.Width(), 10, "text input width should be at least 10")
 
 	// file-level annotation
 	m.annot.annotating = false
 	cmd = m.startFileAnnotation()
 	assert.NotNil(t, cmd)
 	assert.True(t, m.annot.fileAnnotating)
-	assert.GreaterOrEqual(t, m.annot.input.Width, 10, "file text input width should be at least 10")
+	assert.GreaterOrEqual(t, m.annot.input.Width(), 10, "file text input width should be at least 10")
 }
 
 func TestModel_FileAnnotationInputWidthNarrowerThanLineLevel(t *testing.T) {
@@ -1049,12 +1049,12 @@ func TestModel_FileAnnotationInputWidthNarrowerThanLineLevel(t *testing.T) {
 
 	// line-level annotation
 	m.startAnnotation()
-	lineWidth := m.annot.input.Width
+	lineWidth := m.annot.input.Width()
 
 	// file-level annotation
 	m.annot.annotating = false
 	m.startFileAnnotation()
-	fileWidth := m.annot.input.Width
+	fileWidth := m.annot.input.Width()
 
 	assert.Greater(t, lineWidth, fileWidth, "file-level input should be narrower than line-level due to wider prefix")
 	assert.Equal(t, 6, lineWidth-fileWidth, "width difference should match prefix width difference (12-6=6)")
@@ -2104,18 +2104,18 @@ func TestModel_ReAnnotateMultiLineKeepsInputEmptyAndStashesOriginal(t *testing.T
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "first line\nsecond line\nthird"})
 
 	m.startAnnotation()
-	assert.Empty(t, m.annot.input.Value(), "input must stay empty so the sanitizer cannot flatten \\n into space")
-	assert.Equal(t, "first line\nsecond line\nthird", m.annot.existingMultiline, "original multi-line content stashed verbatim")
-	assert.Contains(t, m.annot.input.Placeholder, "existing multi-line", "placeholder should hint that content is stored")
+	assert.Equal(t, "first line\nsecond line\nthird", m.annot.input.Value(),
+		"textarea preserves \\n on SetValue (legacy textinput sanitizer is gone)")
 
-	// Enter with empty input must not touch the stored annotation
+	// Enter saves whatever is currently in the textarea — pre-filled here, so
+	// the round-trip preserves the multi-line content.
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model := result.(Model)
 	anns := model.store.Get("a.go")
 	require.Len(t, anns, 1)
-	assert.Equal(t, "first line\nsecond line\nthird", anns[0].Comment, "Enter on empty input must preserve existing multi-line annotation unchanged")
+	assert.Equal(t, "first line\nsecond line\nthird", anns[0].Comment,
+		"Enter on pre-filled multi-line input round-trips the content unchanged")
 	assert.False(t, model.annot.annotating, "annotation mode cleared")
-	assert.Empty(t, model.annot.existingMultiline, "existingMultiline cleared on annotation exit")
 }
 
 func TestModel_ReAnnotateMultiLineCtrlESeedsFromStash(t *testing.T) {
@@ -2136,16 +2136,16 @@ func TestModel_ReAnnotateMultiLineCtrlESeedsFromStash(t *testing.T) {
 	m.editor = fake
 
 	m.startAnnotation()
-	require.Empty(t, m.annot.input.Value())
-	require.Equal(t, "top\nmiddle\nbottom", m.annot.existingMultiline)
+	require.Equal(t, "top\nmiddle\nbottom", m.annot.input.Value(),
+		"textarea pre-fill preserves multi-line content directly")
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	model := result.(Model)
 	require.NotNil(t, cmd)
 	require.Len(t, fake.CommandCalls(), 1)
-	assert.Equal(t, "top\nmiddle\nbottom", fake.CommandCalls()[0].Content, "editor must be seeded from existingMultiline when input is empty")
+	assert.Equal(t, "top\nmiddle\nbottom", fake.CommandCalls()[0].Content,
+		"editor must be seeded from input.Value() — no existingMultiline detour needed")
 	assert.True(t, model.annot.annotating, "annotation mode remains open while editor runs")
-	assert.Equal(t, "top\nmiddle\nbottom", model.annot.existingMultiline, "stash preserved across Ctrl+E")
 }
 
 func TestModel_ReAnnotateMultiLineTypedOverwriteWins(t *testing.T) {
@@ -2170,12 +2170,10 @@ func TestModel_ReAnnotateMultiLineTypedOverwriteWins(t *testing.T) {
 	anns := model.store.Get("a.go")
 	require.Len(t, anns, 1)
 	assert.Equal(t, "new one-liner", anns[0].Comment, "explicit typed value overwrites stored multi-line")
-	assert.Empty(t, model.annot.existingMultiline, "existingMultiline cleared after save")
 }
 
 func TestModel_ReAnnotateSingleLinePreFillsAsBefore(t *testing.T) {
-	// single-line existing annotations keep the pre-fill-via-SetValue path —
-	// only multi-line comments go through the stash workaround.
+	// single-line existing annotations seed the textarea via SetValue.
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "added", ChangeType: diff.ChangeAdd},
 	}
@@ -2188,14 +2186,14 @@ func TestModel_ReAnnotateSingleLinePreFillsAsBefore(t *testing.T) {
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "plain note"})
 
 	m.startAnnotation()
-	assert.Equal(t, "plain note", m.annot.input.Value(), "single-line annotation still pre-fills the textinput")
-	assert.Empty(t, m.annot.existingMultiline, "single-line path does not populate existingMultiline")
-	assert.Contains(t, m.annot.input.Placeholder, "Ctrl+E", "placeholder unchanged for single-line re-annotation")
+	assert.Equal(t, "plain note", m.annot.input.Value(), "single-line annotation pre-fills the textarea")
+	assert.Contains(t, m.annot.input.Placeholder, "Ctrl+E", "placeholder still mentions Ctrl+E")
 }
 
-func TestModel_ReAnnotateFileLevelMultiLineStashedNotFlattened(t *testing.T) {
-	// file-level path has the same sanitizer hazard as line-level; verify it
-	// also stashes multi-line content instead of flattening via SetValue.
+func TestModel_ReAnnotateFileLevelMultiLinePreservesContent(t *testing.T) {
+	// file-level multi-line annotations seed the textarea directly — the
+	// legacy textinput sanitizer is gone, so no existingMultiline detour is
+	// needed. Ctrl+E should hand the editor the same multi-line content.
 	m := testModel([]string{"a.go"}, nil)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
@@ -2203,22 +2201,16 @@ func TestModel_ReAnnotateFileLevelMultiLineStashedNotFlattened(t *testing.T) {
 	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file\nnote\nspans"})
 
 	m.startFileAnnotation()
-	assert.Empty(t, m.annot.input.Value(), "file-level input empty when existing is multi-line")
-	assert.Equal(t, "file\nnote\nspans", m.annot.existingMultiline, "file-level stash holds full content")
+	assert.Equal(t, "file\nnote\nspans", m.annot.input.Value(),
+		"file-level multi-line content seeds the textarea directly")
 
 	fake := mockEditor("", nil)
 	m.editor = fake
-	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
-	model := result.(Model)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
 	require.NotNil(t, cmd)
 	require.Len(t, fake.CommandCalls(), 1)
-	assert.Equal(t, "file\nnote\nspans", fake.CommandCalls()[0].Content, "file-level Ctrl+E seeds from stash")
-
-	// Esc must clear the stash so it doesn't leak to a later annotation on a different line
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	model = result.(Model)
-	assert.False(t, model.annot.annotating)
-	assert.Empty(t, model.annot.existingMultiline, "Esc clears existingMultiline")
+	assert.Equal(t, "file\nnote\nspans", fake.CommandCalls()[0].Content,
+		"file-level Ctrl+E seeds from input.Value() directly")
 }
 
 func TestModel_EditorFinishedErrorWithContentStillSavesRecoveredText(t *testing.T) {
@@ -2783,4 +2775,113 @@ func TestModel_VisualRowToDiffLine_RoundTrip(t *testing.T) {
 			assert.False(t, onAnn)
 		}
 	})
+}
+
+func TestModel_AnnotationCtrlJInsertsNewline(t *testing.T) {
+	// Ctrl+J is the gum-write-style binding for "insert newline" — universal
+	// because Ctrl+J is literally LF in every terminal. Save (plain Enter)
+	// must NOT trigger here.
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	// type "a", Ctrl+J, "b" → value should be "a\nb"
+	for _, r := range "a" {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	m = result.(Model)
+	for _, r := range "b" {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+
+	assert.Equal(t, "a\nb", m.annot.input.Value(),
+		"Ctrl+J must insert a newline into the textarea value")
+	assert.True(t, m.annot.annotating, "annotation mode must remain open after Ctrl+J")
+}
+
+func TestModel_AnnotationAltEnterInsertsNewline(t *testing.T) {
+	// Alt+Enter is the second InsertNewline binding. Plain Enter saves;
+	// Alt+Enter is distinguished by KeyMsg.Alt=true and falls through to the
+	// textarea's InsertNewline binding.
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	for _, r := range "hi" {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
+	m = result.(Model)
+	for _, r := range "there" {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+
+	assert.Equal(t, "hi\nthere", m.annot.input.Value(),
+		"Alt+Enter must insert a newline; plain Enter would have saved")
+	assert.True(t, m.annot.annotating, "annotation mode must remain open after Alt+Enter")
+}
+
+func TestModel_AnnotationPlainEnterStillSaves(t *testing.T) {
+	// Plain Enter (no Alt modifier) saves — confirms the Alt-distinguishing
+	// guard in handleAnnotateKey is correct.
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	for _, r := range "note" {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(Model)
+
+	assert.False(t, m.annot.annotating, "plain Enter must save and exit annotation mode")
+	anns := m.store.Get("a.go")
+	require.Len(t, anns, 1)
+	assert.Equal(t, "note", anns[0].Comment)
+}
+
+func TestModel_ActiveInputRowCountTracksTextareaHeight(t *testing.T) {
+	// Cursor-math invariant: while annotating, wrappedAnnotationLineCount must
+	// return the textarea's current visible height (clamped) so diff content
+	// below the input scrolls correctly as newlines are inserted.
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	key := m.annotationKey(1, "+")
+	assert.Equal(t, 1, m.wrappedAnnotationLineCount(key), "single-line annotation = 1 row")
+
+	// insert two newlines → LineCount becomes 3
+	for i := 0; i < 2; i++ {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+		m = result.(Model)
+	}
+	assert.Equal(t, 3, m.wrappedAnnotationLineCount(key),
+		"after two Ctrl+J inserts, in-progress height must reflect 3 logical lines")
 }

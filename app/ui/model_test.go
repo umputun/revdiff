@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
@@ -1458,7 +1459,7 @@ func TestHandleKey_ChordPrecedence(t *testing.T) {
 			name: "annotate active, leader does not enter chord",
 			setup: func(t *testing.T, m *Model) {
 				m.annot.annotating = true
-				m.annot.input = textinput.New()
+				m.annot.input = textarea.New()
 			},
 			send: leader,
 			check: func(t *testing.T, after Model, cmd tea.Cmd) {
@@ -1603,7 +1604,7 @@ func TestHandleKey_VimMotionOn_AnnotateActiveModalWins(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.modes.vimMotion = true
 	m.annot.annotating = true
-	m.annot.input = textinput.New()
+	m.annot.input = textarea.New()
 	m.annot.input.Focus()
 
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})

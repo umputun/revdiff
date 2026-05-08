@@ -304,6 +304,7 @@ Positional arguments support several forms:
 | `--word-diff` | Highlight intra-line word-level changes in paired add/remove lines, env: `REVDIFF_WORD_DIFF` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--no-mouse` | Disable mouse support (scroll wheel, click), env: `REVDIFF_NO_MOUSE` | `false` |
+| `--plain-annotations` | Render annotation bodies as plain italic text instead of glow-style markdown (bold, inline code, fenced code blocks), env: `REVDIFF_PLAIN_ANNOTATIONS` | `false` |
 | `--vim-motion` | Enable vim-style motion preset (counts, `gg`, `G`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`), env: `REVDIFF_VIM_MOTION` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
@@ -657,10 +658,14 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
+| `Enter` (during annotation input) | Save the annotation |
+| `Ctrl+J` or `Alt+Enter` (during annotation input) | Insert a newline (multi-line entry) |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation |
 | `Esc` | Cancel annotation input |
 
-While the annotation input is active, press `Ctrl+E` to hand off the current text to an external editor for multi-line comments. Editor resolution: `$EDITOR` → `$VISUAL` → `vi`. Values with arguments work (e.g. `EDITOR="code --wait"`). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (`@`), and emitted with embedded newlines in the structured output.
+The annotation input is a multi-line text area: type freely, press `Ctrl+J` or `Alt+Enter` to insert a newline, and `Enter` (without modifiers) to save. The keymap follows the convention from Charm's `gum write` tool — Enter saves, Ctrl+J adds a newline. **Shift+Enter** is terminal-dependent: most terminals send the same byte for `Enter` and `Shift+Enter`, so bubbletea cannot distinguish them. If your terminal lets you remap `Shift+Enter` to `Alt+Enter` (iTerm2, ghostty, and kitty all support this in their key configs), `Shift+Enter` will route through the `Alt+Enter` newline binding.
+
+`Ctrl+E` hands off the current text to an external editor for richer editing. Editor resolution: `$EDITOR` → `$VISUAL` → `vi`. Values with arguments work (e.g. `EDITOR="code --wait"`). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (`@`), and emitted with embedded newlines in the structured output.
 
 **View:**
 
