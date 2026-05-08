@@ -162,18 +162,18 @@ Rejected alternatives (from brainstorm):
 
 Concrete docs-sync edits — none of these are conditional. The new behavior must appear in all four files in lockstep, and the two `usage.md` copies must remain byte-identical (md5-verified).
 
-- [ ] **README.md** — locate the search keybindings table (around lines 628-631 — `/`, `n`, `N`, `Esc` rows) and add two new rows describing the in-prompt recall keys. Suggested wording (table cells stay short):
+- [x] **README.md** — locate the search keybindings table (around lines 628-631 — `/`, `n`, `N`, `Esc` rows) and add two new rows describing the in-prompt recall keys. Suggested wording (table cells stay short):
   - `↑ / Ctrl+P` — Recall previous search query (in search prompt)
   - `↓ / Ctrl+N` — Recall next search query / clear (in search prompt)
-- [ ] **site/docs.html** — locate the matching keybindings rows (around lines 480-482) and add the same two rows in the existing `<tr><td><code>...</code></td><td>...</td></tr>` shape, with prose matching the README.
-- [ ] **`.claude-plugin/skills/revdiff/references/usage.md`** — locate the search keybindings table (around lines 115-117) and add the same two rows.
-- [ ] **`plugins/codex/skills/revdiff/references/usage.md`** — apply the identical edit (the simplest path is to copy the modified `.claude-plugin/...` file over this one). Then verify with `diff` and `md5`:
+- [x] **site/docs.html** — locate the matching keybindings rows (around lines 480-482) and add the same two rows in the existing `<tr><td><code>...</code></td><td>...</td></tr>` shape, with prose matching the README.
+- [x] **`.claude-plugin/skills/revdiff/references/usage.md`** — locate the search keybindings table (around lines 115-117) and add the same two rows.
+- [x] **`plugins/codex/skills/revdiff/references/usage.md`** — apply the identical edit (the simplest path is to copy the modified `.claude-plugin/...` file over this one). Then verify with `diff` and `md5`:
    ```
    diff .claude-plugin/skills/revdiff/references/usage.md plugins/codex/skills/revdiff/references/usage.md && echo identical
    ```
    The check must print `identical` before this step is marked done.
-- [ ] no `site/index.html` version-badge change in this PR — that bump belongs to the release that ships this feature, not to the feature PR.
-- [ ] mark all checkboxes `[x]` and move this plan: `mkdir -p docs/plans/completed && mv docs/plans/20260507-search-history.md docs/plans/completed/`.
+- [x] no `site/index.html` version-badge change in this PR — that bump belongs to the release that ships this feature, not to the feature PR.
+- [x] mark all checkboxes `[x]` and move this plan: `mkdir -p docs/plans/completed && mv docs/plans/20260507-search-history.md docs/plans/completed/`.
 
 ## Post-Completion
 *Items requiring manual intervention or external systems — informational only*

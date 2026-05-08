@@ -128,6 +128,8 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `/` | Start search in diff pane |
 | `n` | Next search match (overrides next file when search active) |
 | `N` | Previous search match |
+| `↑` / `Ctrl+P` | Recall previous search query (in search prompt) |
+| `↓` / `Ctrl+N` | Recall next search query / clear (in search prompt) |
 | `Esc` | Cancel search input / clear search results |
 
 **Annotations:**

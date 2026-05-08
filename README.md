@@ -644,6 +644,8 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `/` | Start search in diff pane |
 | `n` | Next search match (overrides next file when search active) |
 | `N` | Previous file (previous search match when searching) |
+| `↑` / `Ctrl+P` | Recall previous search query (in search prompt) |
+| `↓` / `Ctrl+N` | Recall next search query / clear (in search prompt) |
 | `Esc` | Cancel search input / clear search results |
 
 **Annotations:**
