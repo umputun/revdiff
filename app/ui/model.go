@@ -300,12 +300,14 @@ type navigationState struct {
 
 // searchState holds all search lifecycle state.
 type searchState struct {
-	active   bool            // true when search textinput is active (typing)
-	term     string          // last submitted search query
-	matches  []int           // indices into file.lines that match
-	cursor   int             // current position in matches (0-based)
-	input    textinput.Model // dedicated textinput for search
-	matchSet map[int]bool    // set of file.lines indices that match, computed per render
+	active     bool            // true when search textinput is active (typing)
+	term       string          // last submitted search query
+	matches    []int           // indices into file.lines that match
+	cursor     int             // current position in matches (0-based)
+	input      textinput.Model // dedicated textinput for search
+	matchSet   map[int]bool    // set of file.lines indices that match, computed per render
+	history    []string        // submitted queries, oldest-first; in-memory, session-scoped
+	historyIdx int             // current recall position; len(history) means "draft" slot (no recall active)
 }
 
 // commitsState holds the commit log for the info popup, fetched

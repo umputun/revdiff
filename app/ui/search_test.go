@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1311,4 +1312,315 @@ func TestModel_SearchWithTOCActive(t *testing.T) {
 		// active section should reflect the cursor position after search nav (Section entry at lineIdx=2)
 		assert.Equal(t, 2, tocActiveLineIdx(t, model.file.mdTOC), "TOC should track active section after search jump (lineIdx=2)")
 	})
+}
+
+// helper: build a model with the given diff lines and return it ready to search.
+func newSearchHistoryModel(t *testing.T) Model {
+	t.Helper()
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "alpha line", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "beta added", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "gamma context", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	return model
+}
+
+// helper: submit a query through submitSearch and return the resulting model.
+func submitQueryThroughInput(model Model, query string) Model {
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue(query)
+	model.submitSearch()
+	return model
+}
+
+func TestModel_SearchHistory_AppendsOnSubmit(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	model = submitQueryThroughInput(model, "gamma")
+
+	assert.Equal(t, []string{"alpha", "beta", "gamma"}, model.search.history)
+	assert.Equal(t, len(model.search.history), model.search.historyIdx, "historyIdx should reset to draft slot after submit")
+}
+
+func TestModel_SearchHistory_ZeroMatchQueryStillAppended(t *testing.T) {
+	// queries that match nothing must still be recallable so the user can edit and retry.
+	// this verifies the append placement is BEFORE the match scan.
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "no-such-text")
+
+	assert.Empty(t, model.search.matches, "query should produce zero matches")
+	assert.Equal(t, []string{"no-such-text"}, model.search.history, "zero-match query must still appear in history")
+}
+
+func TestModel_SearchHistory_ConsecutiveDuplicatesNotAppended(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "alpha")
+
+	assert.Equal(t, []string{"alpha"}, model.search.history, "consecutive duplicates should be deduped")
+}
+
+func TestModel_SearchHistory_NonConsecutiveDuplicateAppends(t *testing.T) {
+	// resubmitting an older entry moves it to "most recent".
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	model = submitQueryThroughInput(model, "alpha")
+
+	assert.Equal(t, []string{"alpha", "beta", "alpha"}, model.search.history)
+}
+
+func TestModel_SearchHistory_CapEnforced(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	// push searchHistoryMax+1 unique entries; oldest must be dropped.
+	for i := 0; i < searchHistoryMax+1; i++ {
+		q := fmt.Sprintf("q%d", i)
+		model = submitQueryThroughInput(model, q)
+	}
+
+	require.Len(t, model.search.history, searchHistoryMax)
+	assert.Equal(t, "q1", model.search.history[0], "oldest entry q0 should have been dropped")
+	assert.Equal(t, fmt.Sprintf("q%d", searchHistoryMax), model.search.history[searchHistoryMax-1], "newest entry should be at the tail")
+}
+
+func TestModel_SearchHistory_WhitespaceOnlyNotAppended(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model.search.active = true
+	model.search.input = textinput.New()
+	model.search.input.SetValue("   ")
+	model.submitSearch()
+
+	assert.Empty(t, model.search.history, "whitespace-only query should not be added to history")
+}
+
+func TestModel_SearchHistory_ClearSearchPreservesHistory(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	require.Len(t, model.search.history, 2)
+	idxBefore := model.search.historyIdx
+
+	model.clearSearch()
+
+	assert.Equal(t, []string{"alpha", "beta"}, model.search.history, "history must survive clearSearch")
+	assert.Equal(t, idxBefore, model.search.historyIdx, "historyIdx must survive clearSearch")
+}
+
+func TestModel_SearchHistory_StartSearchResetsIdxToDraft(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	// simulate partial recall having moved idx away from draft.
+	model.search.historyIdx = 0
+
+	model.startSearch()
+
+	assert.Equal(t, len(model.search.history), model.search.historyIdx, "startSearch must reset idx to draft slot")
+}
+
+func TestModel_SearchHistory_RecallEmptyHistoryNoop(t *testing.T) {
+	model := newSearchHistoryModel(t)
+	model.search.input = textinput.New()
+
+	// no submitted queries yet; recall in either direction must be a no-op.
+	model.recallHistory(-1)
+	assert.Empty(t, model.search.input.Value(), "input should remain empty")
+	assert.Equal(t, 0, model.search.historyIdx, "idx should not change with empty history")
+
+	model.recallHistory(+1)
+	assert.Empty(t, model.search.input.Value())
+	assert.Equal(t, 0, model.search.historyIdx)
+}
+
+func TestModel_SearchHistory_UpRecallsThroughOlderEntries(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	model = submitQueryThroughInput(model, "gamma")
+	// simulate user re-entering search prompt.
+	model.startSearch()
+
+	// first Up: most recent = "gamma".
+	model.recallHistory(-1)
+	assert.Equal(t, "gamma", model.search.input.Value())
+
+	// second Up: "beta".
+	model.recallHistory(-1)
+	assert.Equal(t, "beta", model.search.input.Value())
+
+	// third Up: "alpha".
+	model.recallHistory(-1)
+	assert.Equal(t, "alpha", model.search.input.Value())
+}
+
+func TestModel_SearchHistory_UpAtOldestStaysSticky(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	model.startSearch()
+
+	model.recallHistory(-1) // beta
+	model.recallHistory(-1) // alpha (oldest)
+	require.Equal(t, "alpha", model.search.input.Value())
+	require.Equal(t, 0, model.search.historyIdx)
+
+	// further Up at oldest is a sticky no-op.
+	model.recallHistory(-1)
+	assert.Equal(t, 0, model.search.historyIdx, "idx should stay at 0")
+	assert.Equal(t, "alpha", model.search.input.Value(), "input should still hold oldest entry")
+}
+
+func TestModel_SearchHistory_DownPastNewestClearsInput(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	model.startSearch()
+
+	model.recallHistory(-1) // beta
+	require.Equal(t, "beta", model.search.input.Value())
+
+	// Down once: past newest → draft slot, input cleared.
+	model.recallHistory(+1)
+	assert.Empty(t, model.search.input.Value(), "down past newest should clear input")
+	assert.Equal(t, len(model.search.history), model.search.historyIdx, "idx should be at draft slot")
+
+	// further Down stays at draft slot.
+	model.recallHistory(+1)
+	assert.Empty(t, model.search.input.Value())
+	assert.Equal(t, len(model.search.history), model.search.historyIdx)
+}
+
+func TestModel_SearchHistory_UpDownInteractive(t *testing.T) {
+	// exercise the same path through bubbletea Update so KeyUp/KeyDown wiring is covered.
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+
+	// re-enter search prompt via '/'.
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	require.True(t, model.search.active)
+
+	// Up: most recent = "beta".
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = result.(Model)
+	assert.Equal(t, "beta", model.search.input.Value(), "KeyUp should recall most recent")
+
+	// Up: "alpha".
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = result.(Model)
+	assert.Equal(t, "alpha", model.search.input.Value())
+
+	// Down: back to "beta".
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = result.(Model)
+	assert.Equal(t, "beta", model.search.input.Value())
+
+	// Down: draft slot, input cleared.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	model = result.(Model)
+	assert.Empty(t, model.search.input.Value(), "second KeyDown should clear input at draft slot")
+}
+
+func TestModel_SearchHistory_CtrlPCtrlNParity(t *testing.T) {
+	// Ctrl+P / Ctrl+N must behave identically to Up / Down.
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	// Ctrl+P = Up.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	model = result.(Model)
+	assert.Equal(t, "beta", model.search.input.Value())
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	model = result.(Model)
+	assert.Equal(t, "alpha", model.search.input.Value())
+
+	// Ctrl+N = Down.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	model = result.(Model)
+	assert.Equal(t, "beta", model.search.input.Value())
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
+	model = result.(Model)
+	assert.Empty(t, model.search.input.Value(), "Ctrl+N past newest should clear input")
+}
+
+func TestModel_SearchHistory_RecallThenEscThenStartFresh(t *testing.T) {
+	// recall → Esc → '/' again. the input must be empty (draft slot), not the recalled value.
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+
+	// '/' to enter search.
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	// Up: recalled value appears.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp})
+	model = result.(Model)
+	require.Equal(t, "beta", model.search.input.Value())
+
+	// Esc: cancel without submitting.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = result.(Model)
+	require.False(t, model.search.active)
+
+	// '/' again: input must be empty at draft slot, history unchanged.
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	assert.True(t, model.search.active)
+	assert.Empty(t, model.search.input.Value(), "after recall+Esc+/, input must be empty (draft slot)")
+	assert.Equal(t, len(model.search.history), model.search.historyIdx, "idx should be at draft slot after fresh /")
+	assert.Equal(t, []string{"alpha", "beta"}, model.search.history, "history should be unchanged by recall+Esc")
+}
+
+func TestModel_SearchHistory_RecalledThenSubmittedAppendsAgain(t *testing.T) {
+	// recalling an older entry and pressing Enter appends it again (moves to most recent),
+	// unless it is already the most recent (dedup).
+	model := newSearchHistoryModel(t)
+
+	model = submitQueryThroughInput(model, "alpha")
+	model = submitQueryThroughInput(model, "beta")
+	require.Equal(t, []string{"alpha", "beta"}, model.search.history)
+
+	// re-enter search, recall "alpha" (older), submit.
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp}) // beta
+	model = result.(Model)
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyUp}) // alpha
+	model = result.(Model)
+	require.Equal(t, "alpha", model.search.input.Value())
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = result.(Model)
+
+	assert.Equal(t, []string{"alpha", "beta", "alpha"}, model.search.history, "resubmitted older entry should appear again as most recent")
 }

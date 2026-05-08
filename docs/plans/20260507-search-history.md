@@ -116,13 +116,13 @@ Rejected alternatives (from brainstorm):
 - Modify: `app/ui/search.go`
 - Modify: `app/ui/search_test.go`
 
-- [ ] add `history []string` and `historyIdx int` fields to `searchState` in `app/ui/model.go`, with comments documenting the "draft = `len(history)`" convention.
-- [ ] add `searchHistoryMax = 50` const at the top of `app/ui/search.go`.
-- [ ] update `startSearch` in `app/ui/search.go` to reset `m.search.historyIdx = len(m.search.history)` after creating the textinput.
-- [ ] update `submitSearch` in `app/ui/search.go` to dedup-append the trimmed query (skip if equal to last entry), enforce the cap by re-slicing from the tail, and reset `historyIdx` to `len(history)` on the success path.
-- [ ] add `recallHistory(direction int)` method on `*Model` in `app/ui/search.go` that clamps `historyIdx`, calls `input.SetValue` (empty at draft slot, else `history[idx]`), and `input.CursorEnd`.
-- [ ] update `handleSearchKey` in `app/ui/search.go` to intercept `tea.KeyUp`/`tea.KeyCtrlP` and `tea.KeyDown`/`tea.KeyCtrlN` before the `default:` forward, calling `recallHistory` with `-1` / `+1`.
-- [ ] write tests in `app/ui/search_test.go`:
+- [x] add `history []string` and `historyIdx int` fields to `searchState` in `app/ui/model.go`, with comments documenting the "draft = `len(history)`" convention.
+- [x] add `searchHistoryMax = 50` const at the top of `app/ui/search.go`.
+- [x] update `startSearch` in `app/ui/search.go` to reset `m.search.historyIdx = len(m.search.history)` after creating the textinput.
+- [x] update `submitSearch` in `app/ui/search.go` to dedup-append the trimmed query (skip if equal to last entry), enforce the cap by re-slicing from the tail, and reset `historyIdx` to `len(history)` on the success path.
+- [x] add `recallHistory(direction int)` method on `*Model` in `app/ui/search.go` that clamps `historyIdx`, calls `input.SetValue` (empty at draft slot, else `history[idx]`), and `input.CursorEnd`.
+- [x] update `handleSearchKey` in `app/ui/search.go` to intercept `tea.KeyUp`/`tea.KeyCtrlP` and `tea.KeyDown`/`tea.KeyCtrlN` before the `default:` forward, calling `recallHistory` with `-1` / `+1`.
+- [x] write tests in `app/ui/search_test.go`:
   - submitting unique queries appends to history, idx resets to `len(history)`.
   - submitting a query with **zero matches** still appends to history (verifies append placement is before the match scan).
   - consecutive duplicate submit does not grow history.
@@ -136,7 +136,7 @@ Rejected alternatives (from brainstorm):
   - **recall-then-Esc transition**: enter search, press Up to recall, press Esc, press `/` again — input must be empty (draft slot) and `historyIdx == len(history)`.
   - empty-input submit (whitespace only) does not append to history.
   - `clearSearch` does not touch history fields (history slice and idx survive a `clearSearch` call).
-- [ ] run `go test ./app/ui/...` — must pass before next task.
+- [x] run `go test ./app/ui/...` — must pass before next task.
 
 ### Task 2: Verify acceptance criteria
 - [ ] verify each Overview bullet is implemented:

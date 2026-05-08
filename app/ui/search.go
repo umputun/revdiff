@@ -7,6 +7,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// searchHistoryMax bounds the retained per-session search-query history.
+// when exceeded, oldest entries are dropped.
+const searchHistoryMax = 50
+
 // startSearch creates a search textinput and enters searching mode.
 func (m *Model) startSearch() tea.Cmd {
 	m.clearPendingInputState()
@@ -17,6 +21,7 @@ func (m *Model) startSearch() tea.Cmd {
 	ti.Width = max(10, m.layout.width-m.layout.treeWidth-10)
 	m.search.input = ti
 	m.search.active = true
+	m.search.historyIdx = len(m.search.history)
 	return cmd
 }
 
@@ -32,6 +37,7 @@ func (m *Model) submitSearch() {
 	}
 
 	m.search.term = strings.ToLower(query)
+	m.appendSearchHistory(query)
 	m.search.matches = nil
 	m.search.cursor = 0
 
@@ -110,6 +116,46 @@ func (m *Model) cancelSearch() {
 	m.search.active = false
 }
 
+// appendSearchHistory records query in the in-session history. consecutive
+// duplicates are skipped (less-style dedup). when the cap is exceeded, the
+// oldest entries are dropped. historyIdx is reset to the draft slot so the
+// next recall starts from "no recall active".
+func (m *Model) appendSearchHistory(query string) {
+	if n := len(m.search.history); n > 0 && m.search.history[n-1] == query {
+		m.search.historyIdx = len(m.search.history)
+		return
+	}
+	m.search.history = append(m.search.history, query)
+	if len(m.search.history) > searchHistoryMax {
+		m.search.history = m.search.history[len(m.search.history)-searchHistoryMax:]
+	}
+	m.search.historyIdx = len(m.search.history)
+}
+
+// recallHistory walks the in-session search history. direction -1 walks toward
+// older queries, +1 walks toward newer. clamps to [0, len(history)]; the
+// upper bound represents the "draft" slot (input cleared, no recall active).
+// no-op when history is empty.
+func (m *Model) recallHistory(direction int) {
+	if len(m.search.history) == 0 {
+		return
+	}
+	idx := m.search.historyIdx + direction
+	if idx < 0 {
+		idx = 0
+	}
+	if idx > len(m.search.history) {
+		idx = len(m.search.history)
+	}
+	if idx == len(m.search.history) {
+		m.search.input.SetValue("")
+	} else {
+		m.search.input.SetValue(m.search.history[idx])
+	}
+	m.search.input.CursorEnd()
+	m.search.historyIdx = idx
+}
+
 // realignSearchCursor updates searchCursor to the nearest visible match at or after diffCursor.
 // called after adjustCursorIfHidden moves diffCursor so the [X/Y] display stays accurate
 // and n/N navigation starts from the correct position.
@@ -173,6 +219,12 @@ func (m Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyEsc:
 		m.cancelSearch()
+		return m, nil
+	case tea.KeyUp, tea.KeyCtrlP:
+		m.recallHistory(-1)
+		return m, nil
+	case tea.KeyDown, tea.KeyCtrlN:
+		m.recallHistory(+1)
 		return m, nil
 	default:
 		var cmd tea.Cmd
