@@ -123,7 +123,7 @@ Each source file has a matching `_test.go`.
 | `loadedFileState` (`m.file`) | current file's loaded state | `lines`, `highlighted`, `intraRanges`, `blameData`, `mdTOC`, `singleFile` |
 | `modeState` (`m.modes`) | user-togglable view modes | `wrap`, `collapsed`, `compact`, `compactContext`, `lineNumbers`, `wordDiff`, `showBlame` |
 | `navigationState` (`m.nav`) | cursor position | `diffCursor`, `pendingHunkJump` |
-| `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet` |
+| `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet`, `history`, `historyIdx` |
 | `annotationState` (`m.annot`) | annotation input lifecycle | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input` |
 
 Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create mini-models.

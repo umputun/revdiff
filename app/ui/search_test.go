@@ -1439,15 +1439,19 @@ func TestModel_SearchHistory_StartSearchResetsIdxToDraft(t *testing.T) {
 func TestModel_SearchHistory_RecallEmptyHistoryNoop(t *testing.T) {
 	model := newSearchHistoryModel(t)
 	model.search.input = textinput.New()
+	// pre-set a non-zero sentinel so the no-op contract is verifiable
+	// (otherwise an unconditional reset to 0 would also pass the assertion).
+	const sentinel = 7
+	model.search.historyIdx = sentinel
 
 	// no submitted queries yet; recall in either direction must be a no-op.
 	model.recallHistory(-1)
 	assert.Empty(t, model.search.input.Value(), "input should remain empty")
-	assert.Equal(t, 0, model.search.historyIdx, "idx should not change with empty history")
+	assert.Equal(t, sentinel, model.search.historyIdx, "idx should not change with empty history")
 
 	model.recallHistory(+1)
 	assert.Empty(t, model.search.input.Value())
-	assert.Equal(t, 0, model.search.historyIdx)
+	assert.Equal(t, sentinel, model.search.historyIdx)
 }
 
 func TestModel_SearchHistory_UpRecallsThroughOlderEntries(t *testing.T) {

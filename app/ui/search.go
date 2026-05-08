@@ -180,7 +180,8 @@ func (m *Model) findFirstVisibleMatch(startIdx int) int {
 	return -1
 }
 
-// clearSearch resets all search state.
+// clearSearch resets per-query search state (term, matches, cursor, matchSet).
+// session-scoped history fields are intentionally preserved.
 func (m *Model) clearSearch() {
 	m.search.term = ""
 	m.search.matches = nil
