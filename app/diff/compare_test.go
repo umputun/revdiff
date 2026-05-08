@@ -207,11 +207,11 @@ func TestCompareReader_FileDiff_BinaryFiles(t *testing.T) {
 
 func TestCompareReader_FileDiff_NoTrailingNewline(t *testing.T) {
 	cases := []struct {
-		name           string
-		oldContent     string
-		newContent     string
-		wantAdd        int
-		wantRemove     int
+		name       string
+		oldContent string
+		newContent string
+		wantAdd    int
+		wantRemove int
 	}{
 		{"both with newline", "a\nb\n", "a\nc\n", 1, 1},
 		{"both without newline", "a\nb", "a\nc", 1, 1},
