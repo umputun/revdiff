@@ -63,6 +63,12 @@ func (m Model) buildHelpSpec() overlay.HelpSpec {
 				Description: e.Description,
 			})
 		}
+		if sec.Name == "Search" {
+			entries = append(entries,
+				overlay.HelpEntry{Keys: "↑ / Ctrl+P", Description: "recall previous search query (in search prompt)"},
+				overlay.HelpEntry{Keys: "↓ / Ctrl+N", Description: "recall next search query / clear (in search prompt)"},
+			)
+		}
 		result = append(result, overlay.HelpSection{Title: sec.Name, Entries: entries})
 
 		if sec.Name == keymap.SectionPane {

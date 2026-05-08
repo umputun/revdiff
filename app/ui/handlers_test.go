@@ -738,6 +738,34 @@ func TestModel_ToggleCompactMode_CursorResetsAfterReload(t *testing.T) {
 	assert.Equal(t, 1, model.nav.diffCursor, "cursor must reset to first non-divider line after compact re-fetch")
 }
 
+func TestBuildHelpSpec_SearchPromptHistoryEntries(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+
+	spec := m.buildHelpSpec()
+	var searchSection *overlay.HelpSection
+	for i := range spec.Sections {
+		if spec.Sections[i].Title == "Search" {
+			searchSection = &spec.Sections[i]
+			break
+		}
+	}
+	require.NotNil(t, searchSection, "help overlay must include a Search section")
+
+	var upEntry, downEntry *overlay.HelpEntry
+	for i := range searchSection.Entries {
+		switch searchSection.Entries[i].Keys {
+		case "↑ / Ctrl+P":
+			upEntry = &searchSection.Entries[i]
+		case "↓ / Ctrl+N":
+			downEntry = &searchSection.Entries[i]
+		}
+	}
+	require.NotNil(t, upEntry, "Search section must list the Up / Ctrl+P recall binding")
+	require.NotNil(t, downEntry, "Search section must list the Down / Ctrl+N recall binding")
+	assert.Contains(t, upEntry.Description, "previous", "Up entry description must mention previous query")
+	assert.Contains(t, downEntry.Description, "next", "Down entry description must mention next query")
+}
+
 func TestBuildHelpSpec_VimMotionSectionOff(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.modes.vimMotion = false
