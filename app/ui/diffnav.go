@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"slices"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/umputun/revdiff/app/diff"
@@ -196,8 +198,8 @@ func (m *Model) moveDiffCursorToStart() {
 func (m *Model) moveDiffCursorToEnd() {
 	m.annot.cursorOnAnnotation = false
 	hunks := m.findHunks()
-	for i := len(m.file.lines) - 1; i >= 0; i-- {
-		if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+	for i, dl := range slices.Backward(m.file.lines) {
+		if dl.ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
 			m.nav.diffCursor = i
 			break
 		}
@@ -417,8 +419,8 @@ func (m *Model) moveToNextHunk() {
 func (m *Model) moveToPrevHunk() {
 	m.annot.cursorOnAnnotation = false
 	hunks := m.findHunks()
-	for i := len(hunks) - 1; i >= 0; i-- {
-		target := m.firstVisibleInHunk(hunks[i], hunks)
+	for _, h := range slices.Backward(hunks) {
+		target := m.firstVisibleInHunk(h, hunks)
 		if target < 0 {
 			continue // skip delete-only hunks in collapsed mode
 		}

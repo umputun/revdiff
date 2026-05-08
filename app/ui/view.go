@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -160,8 +161,8 @@ func (m Model) truncateLeftToWidth(s string, budget int) string {
 	tailBudget := budget - 1 // 1 cell for the leading "…"
 	runes := []rune(s)
 	w, cutIdx := 0, len(runes)
-	for i := len(runes) - 1; i >= 0; i-- {
-		rw := runewidth.RuneWidth(runes[i])
+	for i, r := range slices.Backward(runes) {
+		rw := runewidth.RuneWidth(r)
 		if w+rw > tailBudget {
 			break
 		}

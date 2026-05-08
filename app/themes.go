@@ -264,8 +264,7 @@ func (tc *themeCatalog) patchConfigTheme(themeName string) error {
 	// config previously poisoned by the old persist path is fully healed (not
 	// just patched in one spot while go-flags keeps erroring on a remaining stray).
 	// deleting in reverse order keeps earlier indices stable.
-	for i := len(strayIdxs) - 1; i >= 0; i-- {
-		stray := strayIdxs[i]
+	for _, stray := range slices.Backward(strayIdxs) {
 		lines = slices.Delete(lines, stray, stray+1)
 		if defaultIdx > stray {
 			defaultIdx--

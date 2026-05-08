@@ -2,6 +2,7 @@ package sidepane
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -425,8 +426,8 @@ func (ft *FileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) s
 			runes := []rune(e.name)
 			w := 0
 			start := len(runes)
-			for i := len(runes) - 1; i >= 0; i-- {
-				rw := runewidth.RuneWidth(runes[i])
+			for i, r := range slices.Backward(runes) {
+				rw := runewidth.RuneWidth(r)
 				if w+rw > budget {
 					break
 				}
@@ -474,8 +475,8 @@ func (ft *FileTree) truncateDirName(name string, maxWidth int) string {
 	runes := []rune(name)
 	w := 0
 	start := len(runes)
-	for i := len(runes) - 1; i >= 0; i-- {
-		rw := runewidth.RuneWidth(runes[i])
+	for i, r := range slices.Backward(runes) {
+		rw := runewidth.RuneWidth(r)
 		if w+rw > maxWidth-1 { // reserve 1 cell for "…"
 			break
 		}
@@ -545,8 +546,8 @@ func (ft *FileTree) moveToFirst() {
 
 // moveToLast moves cursor to the last file entry.
 func (ft *FileTree) moveToLast() {
-	for i := len(ft.entries) - 1; i >= 0; i-- {
-		if !ft.entries[i].isDir {
+	for i, e := range slices.Backward(ft.entries) {
+		if !e.isDir {
 			ft.cursor = i
 			return
 		}
@@ -574,9 +575,9 @@ func (ft *FileTree) prevFile() {
 	if len(files) == 0 {
 		return
 	}
-	for i := len(files) - 1; i >= 0; i-- {
-		if files[i] < ft.cursor {
-			ft.cursor = files[i]
+	for _, f := range slices.Backward(files) {
+		if f < ft.cursor {
+			ft.cursor = f
 			return
 		}
 	}

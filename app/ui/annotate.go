@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -571,7 +572,7 @@ func (m Model) visualRowToDiffLine(row int) (idx int, onAnnotation bool) {
 		running += h
 	}
 	// row past the last visible line: return the last visible line index
-	for i := len(m.file.lines) - 1; i >= 0; i-- {
+	for i := range slices.Backward(m.file.lines) {
 		if m.hunkLineHeight(i, hunks, annSet) > 0 {
 			return i, false
 		}
