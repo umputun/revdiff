@@ -1394,7 +1394,8 @@ func TestModel_SearchHistory_CapEnforced(t *testing.T) {
 
 	require.Len(t, model.search.history, searchHistoryMax)
 	assert.Equal(t, "q1", model.search.history[0], "oldest entry q0 should have been dropped")
-	assert.Equal(t, fmt.Sprintf("q%d", searchHistoryMax), model.search.history[searchHistoryMax-1], "newest entry should be at the tail")
+	newest := fmt.Sprintf("q%d", searchHistoryMax)
+	assert.Equal(t, newest, model.search.history[searchHistoryMax-1], "newest entry should be at the tail")
 }
 
 func TestModel_SearchHistory_WhitespaceOnlyNotAppended(t *testing.T) {
@@ -1622,5 +1623,5 @@ func TestModel_SearchHistory_RecalledThenSubmittedAppendsAgain(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	model = result.(Model)
 
-	assert.Equal(t, []string{"alpha", "beta", "alpha"}, model.search.history, "resubmitted older entry should appear again as most recent")
+	assert.Equal(t, []string{"alpha", "beta", "alpha"}, model.search.history, "resubmitted older entry moves to most recent")
 }

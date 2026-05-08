@@ -657,7 +657,7 @@ type ModelConfig struct {
 func isNilValue(v any) bool {
 	rv := reflect.ValueOf(v)
 	k := rv.Kind()
-	if k == reflect.Ptr || k == reflect.Interface || k == reflect.Chan ||
+	if k == reflect.Pointer || k == reflect.Interface || k == reflect.Chan ||
 		k == reflect.Func || k == reflect.Map || k == reflect.Slice {
 		return rv.IsNil()
 	}

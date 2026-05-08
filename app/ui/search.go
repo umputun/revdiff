@@ -121,13 +121,11 @@ func (m *Model) cancelSearch() {
 // oldest entries are dropped. historyIdx is reset to the draft slot so the
 // next recall starts from "no recall active".
 func (m *Model) appendSearchHistory(query string) {
-	if n := len(m.search.history); n > 0 && m.search.history[n-1] == query {
-		m.search.historyIdx = len(m.search.history)
-		return
-	}
-	m.search.history = append(m.search.history, query)
-	if len(m.search.history) > searchHistoryMax {
-		m.search.history = m.search.history[len(m.search.history)-searchHistoryMax:]
+	if n := len(m.search.history); n == 0 || m.search.history[n-1] != query {
+		m.search.history = append(m.search.history, query)
+		if len(m.search.history) > searchHistoryMax {
+			m.search.history = m.search.history[len(m.search.history)-searchHistoryMax:]
+		}
 	}
 	m.search.historyIdx = len(m.search.history)
 }
