@@ -264,7 +264,10 @@ type modelConfigState struct {
 	crossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	treeWidthRatio   int      // 1-10 units for file tree panel
 	tabSpaces        string   // spaces to replace tabs with
-	wrapIndent       int      // extra indent (in columns) for wrap continuation rows; 0 disables
+	wrapIndent       int    // extra indent (in columns) for wrap continuation rows; 0 disables
+	annotationMarker string // prefix shown before annotation lines
+	annotPrefix      string // cached: marker + " "
+	annotFilePrefix  string // cached: marker + " file: "
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -650,6 +653,9 @@ type ModelConfig struct {
 	// the modal-key handler and keymap.Resolve. Copied into modes.vimMotion at
 	// construction; the feature is gated on that field everywhere.
 	VimMotion bool
+	// AnnotationMarker is the prefix shown before annotation lines.
+	// Empty is preserved so callers can intentionally render no marker.
+	AnnotationMarker string
 	// ReviewInfo populates the review-info overlay with invocation scope, filters, and
 	// aggregate file/line stats. Pass nil to preserve the legacy commit-only popup
 	// behavior used by focused tests — every derived path (footer, rows, stats
@@ -748,6 +754,9 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			treeWidthRatio:   cfg.TreeWidthRatio,
 			tabSpaces:        strings.Repeat(" ", cfg.TabWidth),
 			wrapIndent:       max(0, cfg.WrapIndent),
+			annotationMarker: cfg.AnnotationMarker,
+			annotPrefix:      cfg.AnnotationMarker + " ",
+			annotFilePrefix:  cfg.AnnotationMarker + " file: ",
 		},
 		layout: layoutState{
 			focus: paneTree,

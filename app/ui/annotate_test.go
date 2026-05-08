@@ -15,6 +15,7 @@ import (
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
+	"github.com/umputun/revdiff/app/ui/worddiff"
 )
 
 func TestModel_AnnotatedFilesMarker(t *testing.T) {
@@ -499,6 +500,84 @@ func TestModel_RenderDiffWithAnnotations(t *testing.T) {
 	rendered := m.renderDiff()
 	assert.Contains(t, rendered, "needs error handling")
 	assert.Contains(t, rendered, "\U0001f4ac")
+}
+
+func TestModel_CustomAnnotationMarker(t *testing.T) {
+	res := style.PlainResolver()
+	m, err := NewModel(ModelConfig{
+		Renderer:         plainRenderer(),
+		Store:            annotation.NewStore(),
+		Highlighter:      noopHighlighter(),
+		StyleResolver:    res,
+		StyleRenderer:    style.NewRenderer(res),
+		SGR:              style.SGR{},
+		WordDiffer:       worddiff.New(),
+		Overlay:          overlay.NewManager(),
+		Themes:           fakeThemeCatalog{},
+		TreeWidthRatio:   3,
+		AnnotationMarker: "▸",
+		NewFileTree:      testFileTreeFactory(),
+		ParseTOC:         testParseTOCFactory(),
+	})
+	require.NoError(t, err)
+	m.layout.width = 120
+	m.layout.height = 40
+	m.layout.treeWidth = m.layout.width * m.cfg.treeWidthRatio / 10
+	m.ready = true
+	m.filesLoaded = true
+
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "func foo() {}", ChangeType: diff.ChangeAdd},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 2, Type: "+", Comment: "note"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+
+	rendered := m.renderDiff()
+	assert.Contains(t, rendered, "▸ note", "line annotation should use custom marker")
+	assert.Contains(t, rendered, "▸ file: file note", "file annotation should use custom marker")
+	assert.NotContains(t, rendered, "\U0001f4ac", "default emoji should not appear with custom marker")
+}
+
+func TestModel_EmptyAnnotationMarkerExplicit(t *testing.T) {
+	res := style.PlainResolver()
+	m, err := NewModel(ModelConfig{
+		Renderer:         plainRenderer(),
+		Store:            annotation.NewStore(),
+		Highlighter:      noopHighlighter(),
+		StyleResolver:    res,
+		StyleRenderer:    style.NewRenderer(res),
+		SGR:              style.SGR{},
+		WordDiffer:       worddiff.New(),
+		Overlay:          overlay.NewManager(),
+		Themes:           fakeThemeCatalog{},
+		TreeWidthRatio:   3,
+		AnnotationMarker: "",
+		NewFileTree:      testFileTreeFactory(),
+		ParseTOC:         testParseTOCFactory(),
+	})
+	require.NoError(t, err)
+	m.layout.width = 120
+	m.layout.height = 40
+	m.layout.treeWidth = m.layout.width * m.cfg.treeWidthRatio / 10
+	m.ready = true
+	m.filesLoaded = true
+
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+	}
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "bare note"})
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+
+	rendered := m.renderDiff()
+	// verify empty marker produces bare space prefix, not emoji fallback
+	assert.NotContains(t, rendered, "\U0001f4ac", "empty marker should not produce emoji")
+	assert.NotContains(t, rendered, "\U0001f4ac bare note", "should not have emoji before line annotation")
+	assert.NotContains(t, rendered, "\U0001f4ac file:", "should not have emoji before file annotation")
+	assert.Contains(t, rendered, " bare note", "empty marker should render bare prefix for line annotation")
+	assert.Contains(t, rendered, " file: file note", "empty marker should render ' file: ' prefix for file annotation")
 }
 
 func TestModel_RenderDiffAnnotationInput(t *testing.T) {
@@ -1058,7 +1137,7 @@ func TestModel_FileAnnotationInputWidthNarrowerThanLineLevel(t *testing.T) {
 	fileWidth := m.annot.input.Width
 
 	assert.Greater(t, lineWidth, fileWidth, "file-level input should be narrower than line-level due to wider prefix")
-	assert.Equal(t, 6, lineWidth-fileWidth, "width difference should match prefix width difference (12-6=6)")
+	assert.Equal(t, 6, lineWidth-fileWidth, "width difference should match prefix width difference")
 }
 
 func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {

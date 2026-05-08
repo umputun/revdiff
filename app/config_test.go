@@ -23,6 +23,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.Equal(t, 2, opts.TreeWidth)
 	assert.Equal(t, 4, opts.TabWidth)
 	assert.Equal(t, "catppuccin-macchiato", opts.ChromaStyle)
+	assert.Equal(t, "💬", opts.AnnotationMarker)
 	assert.False(t, opts.Staged)
 	assert.False(t, opts.NoColors)
 	assert.False(t, opts.NoStatusBar)
@@ -410,6 +411,47 @@ func TestParseArgs_WordDiff(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.WordDiff)
+	})
+}
+
+func TestParseArgs_AnnotationMarker(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--annotation-marker=▸"))
+		require.NoError(t, err)
+		assert.Equal(t, "▸", opts.AnnotationMarker)
+	})
+
+	t.Run("empty flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--annotation-marker="))
+		require.NoError(t, err)
+		assert.Empty(t, opts.AnnotationMarker)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_ANNOTATION_MARKER", ">>>")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, ">>>", opts.AnnotationMarker)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nannotation-marker = #\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, "#", opts.AnnotationMarker)
+	})
+
+	t.Run("config file empty", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nannotation-marker =\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Empty(t, opts.AnnotationMarker)
 	})
 }
 

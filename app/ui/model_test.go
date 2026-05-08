@@ -146,18 +146,19 @@ func testModel(files []string, fileDiffs map[string][]diff.DiffLine) Model {
 	}
 	res := style.PlainResolver()
 	m, err := NewModel(ModelConfig{
-		Renderer:       renderer,
-		Store:          annotation.NewStore(),
-		Highlighter:    noopHighlighter(),
-		StyleResolver:  res,
-		StyleRenderer:  style.NewRenderer(res),
-		SGR:            style.SGR{},
-		WordDiffer:     worddiff.New(),
-		Overlay:        overlay.NewManager(),
-		Themes:         fakeThemeCatalog{},
-		TreeWidthRatio: 3,
-		NewFileTree:    testFileTreeFactory(),
-		ParseTOC:       testParseTOCFactory(),
+		Renderer:         renderer,
+		Store:            annotation.NewStore(),
+		Highlighter:      noopHighlighter(),
+		StyleResolver:    res,
+		StyleRenderer:    style.NewRenderer(res),
+		SGR:              style.SGR{},
+		WordDiffer:       worddiff.New(),
+		Overlay:          overlay.NewManager(),
+		Themes:           fakeThemeCatalog{},
+		TreeWidthRatio:   3,
+		AnnotationMarker: "\U0001f4ac",
+		NewFileTree:      testFileTreeFactory(),
+		ParseTOC:         testParseTOCFactory(),
 	})
 	if err != nil {
 		// testModel supplies all required deps — an error here is a bug in the helper, not the test.

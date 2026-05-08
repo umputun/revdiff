@@ -313,7 +313,7 @@ func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment 
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annot.annotating && m.annot.fileAnnotating {
-		line := " " + m.renderer.AnnotationInline("\U0001f4ac file: ") + m.annot.input.View()
+		line := " " + m.renderer.AnnotationInline(m.annotFilePrefix()) + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
@@ -330,7 +330,7 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 		if m.nav.diffCursor == -1 && m.layout.focus == paneDiff {
 			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
-		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: ", fileComment)
+		m.renderWrappedAnnotation(b, cursor, m.annotFilePrefix(), fileComment)
 	}
 }
 
@@ -655,7 +655,7 @@ func (m Model) extendLineBg(styled string, bg style.Color) string {
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
 	if m.annot.annotating && !m.annot.fileAnnotating && idx == m.nav.diffCursor {
-		line := " " + m.renderer.AnnotationInline("\U0001f4ac ") + m.annot.input.View()
+		line := " " + m.renderer.AnnotationInline(m.annotPrefix()) + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
@@ -669,7 +669,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 			if idx == m.nav.diffCursor && m.annot.cursorOnAnnotation && m.layout.focus == paneDiff {
 				cursor = m.renderer.DiffCursor(m.cfg.noColors)
 			}
-			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac ", comment)
+			m.renderWrappedAnnotation(b, cursor, m.annotPrefix(), comment)
 		}
 	}
 }
@@ -695,15 +695,15 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, prefix, body 
 	}
 }
 
-// annotationContinuationIndent returns leading whitespace sized to match the emoji
+// annotationContinuationIndent returns leading whitespace sized to match the marker
 // prefix on the first logical line of an annotation so continuation logical lines
-// align under the body. Uses lipgloss.Width because the emoji is double-width.
+// align under the body. Uses lipgloss.Width because markers may be wide glyphs.
 func (m Model) annotationContinuationIndent(firstLogicalLine string) string {
 	switch {
-	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac file: "):
-		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac file: "))
-	case strings.HasPrefix(firstLogicalLine, "\U0001f4ac "):
-		return strings.Repeat(" ", lipgloss.Width("\U0001f4ac "))
+	case strings.HasPrefix(firstLogicalLine, m.annotFilePrefix()):
+		return strings.Repeat(" ", lipgloss.Width(m.annotFilePrefix()))
+	case strings.HasPrefix(firstLogicalLine, m.annotPrefix()):
+		return strings.Repeat(" ", lipgloss.Width(m.annotPrefix()))
 	default:
 		return ""
 	}

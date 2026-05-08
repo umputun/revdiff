@@ -18,6 +18,16 @@ import (
 // annotKeyFile is the lookup key for file-level annotations in wrappedAnnotationLineCount.
 const annotKeyFile = "file"
 
+// annotPrefix returns the cached annotation line prefix (marker + space).
+func (m Model) annotPrefix() string {
+	return m.cfg.annotPrefix
+}
+
+// annotFilePrefix returns the cached file-level annotation prefix (marker + " file: ").
+func (m Model) annotFilePrefix() string {
+	return m.cfg.annotFilePrefix
+}
+
 // annotCharLimit caps annotation text length. sized for multi-item lists and
 // small pasted data slices, not for full-document content.
 const annotCharLimit = 8000
@@ -87,7 +97,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 		}
 	}
 
-	ti, cmd := m.newAnnotationInput(placeholder, 6) // cursor col + emoji prefix "💬 " + border margin
+	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotPrefix())) // cursor col + annotation prefix + border margin
 	if preFill != "" {
 		ti.SetValue(preFill)
 	}
@@ -147,7 +157,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		}
 	}
 
-	ti, cmd := m.newAnnotationInput(placeholder, 12) // cursor col + "💬 file: " prefix + border margin
+	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotFilePrefix())) // cursor col + file annotation prefix + border margin
 	if preFill != "" {
 		ti.SetValue(preFill)
 	}
@@ -391,15 +401,15 @@ type annotCacheKey struct {
 
 // annotationPrefixBody resolves the (prefix, body) pair for the annotation
 // identified by key. file-level annotations (key == annotKeyFile) get the
-// "💬 file: " prefix; line-level annotations get "💬 ". returns ("", "") when
-// no annotation matches the key.
+// file-level prefix; line-level annotations get the line prefix. returns ("", "")
+// when no annotation matches the key.
 func (m Model) annotationPrefixBody(key string) (prefix, body string) {
 	for _, a := range m.store.Get(m.file.name) {
 		if key == annotKeyFile && a.Line == 0 {
-			return "\U0001f4ac file: ", a.Comment
+			return m.annotFilePrefix(), a.Comment
 		}
 		if key != annotKeyFile && m.annotationKey(a.Line, a.Type) == key {
-			return "\U0001f4ac ", a.Comment
+			return m.annotPrefix(), a.Comment
 		}
 	}
 	return "", ""
