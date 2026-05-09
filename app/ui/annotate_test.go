@@ -2861,6 +2861,121 @@ func TestModel_AnnotationPlainEnterStillSaves(t *testing.T) {
 	assert.Equal(t, "note", anns[0].Comment)
 }
 
+// TestModel_AnnotationCtrlJDoesNotScrollFirstLineOut guards against a regression
+// where the textarea's internal viewport would scroll row 0 out of view when
+// Ctrl+J moved the cursor to row 1 with viewport.Height still at 1. Pre-growing
+// the textarea height before Update keeps the cursor inside the visible area
+// so repositionView leaves YOffset at 0.
+func TestModel_AnnotationCtrlJDoesNotScrollFirstLineOut(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	for _, r := range "alpha" {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+	m = result.(Model)
+	for _, r := range "beta" {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+
+	view := m.annot.input.View()
+	assert.Contains(t, view, "alpha", "Ctrl+J must not scroll the first row out of the textarea viewport")
+	assert.Contains(t, view, "beta", "second row must remain visible after typing into it")
+}
+
+// TestModel_AnnotationAltEnterDoesNotScrollFirstLineOut mirrors the Ctrl+J
+// regression test for the Alt+Enter newline binding. Both paths run through
+// the same pre-grow guard.
+func TestModel_AnnotationAltEnterDoesNotScrollFirstLineOut(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	for _, r := range "first" {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter, Alt: true})
+	m = result.(Model)
+	for _, r := range "second" {
+		result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+
+	view := m.annot.input.View()
+	assert.Contains(t, view, "first", "Alt+Enter must not scroll the first row out of the textarea viewport")
+	assert.Contains(t, view, "second", "second row must remain visible after typing into it")
+}
+
+// TestModel_AnnotationMultipleNewlinesAllVisible chains several Ctrl+J presses
+// to ensure each row stays visible — pre-grow must keep up as the cursor moves
+// down line by line.
+func TestModel_AnnotationMultipleNewlinesAllVisible(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	rowsToType := []string{"one", "two", "three", "four"}
+	for i, row := range rowsToType {
+		for _, r := range row {
+			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			m = result.(Model)
+		}
+		if i < len(rowsToType)-1 {
+			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlJ})
+			m = result.(Model)
+		}
+	}
+
+	view := m.annot.input.View()
+	for _, row := range rowsToType {
+		assert.Containsf(t, view, row, "row %q must be visible after multi-line input", row)
+	}
+}
+
+// TestModel_AnnotationPasteMultilineAllVisible verifies that paste messages
+// that carry embedded newlines also pre-grow the textarea so no rows scroll
+// out of the viewport.
+func TestModel_AnnotationPasteMultilineAllVisible(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+
+	// Simulate a multi-line paste through a single update message. The
+	// textarea consumes runes that include '\n' as a single insert.
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("alpha\nbeta\ngamma"), Paste: true})
+	m = result.(Model)
+
+	view := m.annot.input.View()
+	for _, row := range []string{"alpha", "beta", "gamma"} {
+		assert.Containsf(t, view, row, "pasted row %q must be visible", row)
+	}
+}
+
 func TestModel_ActiveInputRowCountTracksTextareaHeight(t *testing.T) {
 	// Cursor-math invariant: while annotating, wrappedAnnotationLineCount must
 	// return the textarea's current visible height (clamped) so diff content

@@ -363,15 +363,47 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := m.openEditor()
 		return m, cmd
 	default:
+		// pre-grow before Update: the textarea's internal viewport runs
+		// repositionView at the end of Update with the CURRENT Height, so a
+		// newline (Ctrl+J / Alt+Enter) or multi-line paste that moves the
+		// cursor past the visible area scrolls earlier rows out — and there
+		// is no public API to reset the viewport YOffset afterwards.
+		// Conservatively size to LineCount + lines-msg-could-add so the
+		// cursor never moves outside the viewport while Update is running.
+		preGrow := m.annot.input.LineCount() + linesMsgCanInsert(msg)
+		m.annot.input.SetHeight(clamp(preGrow, 1, annotMaxInputHeight))
+
 		var cmd tea.Cmd
 		m.annot.input, cmd = m.annot.input.Update(msg)
-		// grow the textarea's visible height to match its content so the
-		// in-progress annotation occupies the right number of diff-pane rows
-		// (capped at annotMaxInputHeight to bound layout impact).
+		// shrink back to actual content height (capped at annotMaxInputHeight
+		// to bound layout impact). Safe: cursor sits within the new bounds
+		// because Update did not need to scroll the over-sized viewport.
 		m.annot.input.SetHeight(clamp(m.annot.input.LineCount(), 1, annotMaxInputHeight))
 		m.layout.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately
 		return m, cmd
 	}
+}
+
+// linesMsgCanInsert returns the maximum number of additional logical lines a
+// single key/paste message could add to the textarea. Used by handleAnnotateKey
+// to pre-grow the textarea's internal viewport so its repositionView does not
+// scroll earlier rows out when the cursor crosses the previous height bound.
+//
+// InsertNewline (Ctrl+J / Alt+Enter) adds exactly one line. A paste can carry
+// arbitrary newlines, capped by annotMaxInputHeight. Everything else (rune
+// input, navigation, deletion) cannot grow line count, so 0 is enough.
+func linesMsgCanInsert(msg tea.Msg) int {
+	km, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return 0
+	}
+	if km.Type == tea.KeyCtrlJ || (km.Type == tea.KeyEnter && km.Alt) {
+		return 1
+	}
+	if km.Paste {
+		return annotMaxInputHeight
+	}
+	return 0
 }
 
 // cursorLineHasAnnotation checks if the cursor is on a deletable annotation line.
