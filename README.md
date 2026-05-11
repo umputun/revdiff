@@ -707,8 +707,8 @@ On narrow terminals, the left-hand segments are dropped before the icons: search
 
 revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals.
 
-- **Scroll wheel**: scrolls whichever pane the cursor is over (tree/TOC or diff). Three lines per notch. In the diff pane the wheel scrolls the viewport only — the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen. During fast scrolls (a trackpad flick) the cursor highlight catches up after a brief pause once the burst settles, matching less/vim behavior.
-- **Shift+scroll**: half-page scroll in whichever pane the cursor is over.
+- **Scroll wheel**: scrolls whichever pane the cursor is over. In the tree/TOC pane the wheel moves the cursor one entry per notch (matches `j`/`k`). In the diff pane the wheel scrolls the viewport by three lines per notch — the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen. During fast scrolls (a trackpad flick) the cursor highlight catches up after a brief pause once the burst settles, matching less/vim behavior.
+- **Shift+scroll**: half-page scroll in the diff pane. In the tree/TOC pane Shift+wheel behaves the same as plain wheel (one entry per notch — no page step).
 - **Left-click in the tree**: focuses the tree and selects/loads the clicked entry (same as pressing `j`/`k` to land there). Clicking a directory row moves the cursor but does not load a file.
 - **Left-click in the diff**: focuses the diff and moves the cursor to the clicked line. Enables a "click, then `a`" annotation flow.
 - **Left-click in the TOC pane** (single-file markdown): focuses the TOC and selects the clicked header.

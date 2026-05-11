@@ -409,6 +409,11 @@ func TestModel_HandleMouse_ShiftWheelHalfPage(t *testing.T) {
 }
 
 func TestModel_HandleMouse_WheelInTreeMovesTreeCursor(t *testing.T) {
+	// covers the contract introduced for the tree wheel: one entry per notch,
+	// direction follows wheel sign, magnitude ignored (so shift+wheel still
+	// moves only one entry), and boundaries clamp. exact-match assertions
+	// — not NotEqual — so a regression to multi-step (the old PageDown(3)
+	// behavior) would fail this test.
 	files := make([]string, 30)
 	diffs := make(map[string][]diff.DiffLine, 30)
 	for i := range files {
@@ -416,14 +421,74 @@ func TestModel_HandleMouse_WheelInTreeMovesTreeCursor(t *testing.T) {
 		files[i] = p
 		diffs[p] = []diff.DiffLine{{NewNum: 1, Content: p, ChangeType: diff.ChangeContext}}
 	}
-	m := mouseTestModel(t, files, diffs)
-	m.layout.focus = paneDiff // wheel routing is by hit zone, not focus
-	before := m.tree.SelectedFile()
 
-	// wheel-down inside tree columns (x=5, y=3 → hitTree)
-	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
-	model := result.(Model)
-	assert.NotEqual(t, before, model.tree.SelectedFile(), "wheel in tree should change tree selection even when focus is diff")
+	t.Run("plain wheel-down advances exactly one entry", func(t *testing.T) {
+		m := mouseTestModel(t, files, diffs)
+		m.layout.focus = paneDiff // wheel routing is by hit zone, not focus
+		require.Equal(t, "aa.go", m.tree.SelectedFile())
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model := result.(Model)
+		assert.Equal(t, "ab.go", model.tree.SelectedFile(), "single wheel-down notch must advance tree cursor by exactly one entry")
+	})
+
+	t.Run("plain wheel-up retreats exactly one entry", func(t *testing.T) {
+		m := mouseTestModel(t, files, diffs)
+		m.tree.SelectByPath("ac.go") // cursor at entry 2
+		require.Equal(t, "ac.go", m.tree.SelectedFile())
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelUp, 5, 3, false))
+		model := result.(Model)
+		assert.Equal(t, "ab.go", model.tree.SelectedFile(), "single wheel-up notch must retreat tree cursor by exactly one entry")
+	})
+
+	t.Run("shift+wheel in tree still single-step", func(t *testing.T) {
+		// shift+wheel in tree must NOT do half-page — the magnitude returned by
+		// wheelStepFor is discarded in the hitTree branch, so shift has no
+		// effect on the tree step size.
+		m := mouseTestModel(t, files, diffs)
+		require.Equal(t, "aa.go", m.tree.SelectedFile())
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, true))
+		model := result.(Model)
+		assert.Equal(t, "ab.go", model.tree.SelectedFile(), "shift+wheel in tree must still move exactly one entry")
+	})
+
+	t.Run("wheel-up at top is no-op", func(t *testing.T) {
+		m := mouseTestModel(t, files, diffs)
+		require.Equal(t, "aa.go", m.tree.SelectedFile())
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelUp, 5, 3, false))
+		model := result.(Model)
+		assert.Equal(t, "aa.go", model.tree.SelectedFile(), "wheel-up at first entry must clamp, not wrap")
+	})
+
+	t.Run("wheel-down at bottom is no-op", func(t *testing.T) {
+		m := mouseTestModel(t, files, diffs)
+		m.tree.SelectByPath(files[len(files)-1])
+		require.Equal(t, files[len(files)-1], m.tree.SelectedFile())
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model := result.(Model)
+		assert.Equal(t, files[len(files)-1], model.tree.SelectedFile(), "wheel-down at last entry must clamp, not wrap")
+	})
+
+	t.Run("tree wheel does not touch diff wheelState", func(t *testing.T) {
+		// negative invariant: the hitTree branch is independent of the
+		// diff-pane debounce state. a regression that accidentally bumped
+		// wheel.gen or set wheel.renderPending in the tree path would
+		// silently extend a later diff-pane debounce.
+		m := mouseTestModel(t, files, diffs)
+		require.Equal(t, 0, m.wheel.gen)
+		require.False(t, m.wheel.renderPending)
+		require.False(t, m.wheel.tickInFlight)
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model := result.(Model)
+		assert.Equal(t, 0, model.wheel.gen, "tree wheel must not bump diff wheel gen")
+		assert.False(t, model.wheel.renderPending, "tree wheel must not set diff renderPending")
+		assert.False(t, model.wheel.tickInFlight, "tree wheel must not schedule a diff debounce tick")
+	})
 }
 
 func TestModel_HandleMouse_WheelNonPressActionIgnored(t *testing.T) {
@@ -966,18 +1031,19 @@ func TestModel_HandleMouse_StdinModeTreeHiddenClickLandsOnDiff(t *testing.T) {
 
 func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 	// markdown single-file with TOC: tree pane slot shows TOC; wheel must
-	// route to TOC and advance its cursor one entry per notch.
-	// note ParseTOC prepends a synthetic filename entry at lineIdx=0, so the
-	// first heading (also at lineIdx=0 here) shares the same lineIdx with it;
-	// two wheel notches advance the cursor past both and land on # B which
-	// has a distinct lineIdx.
+	// route to TOC and advance its cursor exactly one entry per notch.
+	// the first content line is plain text (not a heading) so that the first
+	// heading lands at lineIdx >= 1, distinct from the synthetic filename
+	// entry that ParseTOC prepends at lineIdx=0. that lets a single notch
+	// produce an observably different CurrentLineIdx, no workaround needed.
 	files := []string{"README.md"}
 	lines := []diff.DiffLine{
-		{NewNum: 1, Content: "# A", ChangeType: diff.ChangeContext},
-		{NewNum: 2, Content: "body", ChangeType: diff.ChangeContext},
-		{NewNum: 3, Content: "# B", ChangeType: diff.ChangeContext},
-		{NewNum: 4, Content: "body", ChangeType: diff.ChangeContext},
-		{NewNum: 5, Content: "# C", ChangeType: diff.ChangeContext},
+		{NewNum: 1, Content: "intro paragraph", ChangeType: diff.ChangeContext}, // lineIdx=0, not a heading
+		{NewNum: 2, Content: "# A", ChangeType: diff.ChangeContext},             // lineIdx=1, first heading
+		{NewNum: 3, Content: "body", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "## B", ChangeType: diff.ChangeContext}, // lineIdx=3
+		{NewNum: 5, Content: "body", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "## C", ChangeType: diff.ChangeContext}, // lineIdx=5
 	}
 	m := mouseTestModel(t, files, map[string][]diff.DiffLine{"README.md": lines})
 	m.file.lines = lines
@@ -986,16 +1052,21 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 	require.NotNil(t, m.file.mdTOC)
 
 	before, _ := m.file.mdTOC.CurrentLineIdx()
+	require.Equal(t, 0, before, "initial TOC cursor sits on the synthetic filename entry at lineIdx=0")
 
-	// two wheel-down notches at (x=5, y=3) hit the tree slot; with mdTOC
-	// active, each is routed to TOC.Move(MotionDown) — single-step nav.
-	model := m
-	for range 2 {
-		result, _ := model.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
-		model = result.(Model)
-	}
-	after, _ := model.file.mdTOC.CurrentLineIdx()
-	assert.NotEqual(t, before, after, "TOC cursor must advance one entry per wheel notch")
+	// single wheel-down notch lands on heading # A (lineIdx=1) — distinct from
+	// the synthetic entry, so the change is observable in CurrentLineIdx alone.
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+	model := result.(Model)
+	after, ok := model.file.mdTOC.CurrentLineIdx()
+	require.True(t, ok)
+	assert.Equal(t, 1, after, "single wheel-down notch must advance TOC cursor by exactly one entry (to # A at lineIdx=1)")
+
+	// also verify the diff-side sync ran: syncDiffToTOCCursor sets
+	// m.nav.diffCursor to the TOC entry's lineIdx. without this assertion a
+	// regression that dropped syncDiffToTOCCursor from the hitTree branch
+	// would still pass the line-idx check above.
+	assert.Equal(t, 1, model.nav.diffCursor, "TOC wheel must sync diff cursor to the selected entry's lineIdx")
 }
 
 func TestModel_HandleMouse_LeftClickInTOCJumpsViewport(t *testing.T) {
