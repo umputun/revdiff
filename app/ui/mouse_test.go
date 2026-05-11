@@ -1030,12 +1030,12 @@ func TestModel_HandleMouse_StdinModeTreeHiddenClickLandsOnDiff(t *testing.T) {
 }
 
 func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
-	// markdown single-file with TOC: tree pane slot shows TOC; wheel must
-	// route to TOC and advance its cursor exactly one entry per notch.
-	// the first content line is plain text (not a heading) so that the first
-	// heading lands at lineIdx >= 1, distinct from the synthetic filename
-	// entry that ParseTOC prepends at lineIdx=0. that lets a single notch
-	// produce an observably different CurrentLineIdx, no workaround needed.
+	// mirrors the file-tree wheel test contract for the TOC branch: one entry
+	// per notch, direction follows wheel sign, magnitude ignored (shift still
+	// single-step), boundaries clamp. uses a non-heading first line so the
+	// first heading lands at lineIdx=1 — distinct from the synthetic filename
+	// entry ParseTOC prepends at lineIdx=0 — letting a single notch change
+	// CurrentLineIdx.
 	files := []string{"README.md"}
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "intro paragraph", ChangeType: diff.ChangeContext}, // lineIdx=0, not a heading
@@ -1045,28 +1045,98 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 		{NewNum: 5, Content: "body", ChangeType: diff.ChangeContext},
 		{NewNum: 6, Content: "## C", ChangeType: diff.ChangeContext}, // lineIdx=5
 	}
-	m := mouseTestModel(t, files, map[string][]diff.DiffLine{"README.md": lines})
-	m.file.lines = lines
-	m.file.singleFile = true
-	m.file.mdTOC = sidepane.ParseTOC(lines, "README.md")
-	require.NotNil(t, m.file.mdTOC)
 
-	before, _ := m.file.mdTOC.CurrentLineIdx()
-	require.Equal(t, 0, before, "initial TOC cursor sits on the synthetic filename entry at lineIdx=0")
+	// helper: build a fresh model with TOC ready.
+	build := func(t *testing.T) Model {
+		t.Helper()
+		m := mouseTestModel(t, files, map[string][]diff.DiffLine{"README.md": lines})
+		m.file.lines = lines
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(lines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		return m
+	}
 
-	// single wheel-down notch lands on heading # A (lineIdx=1) — distinct from
-	// the synthetic entry, so the change is observable in CurrentLineIdx alone.
-	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
-	model := result.(Model)
-	after, ok := model.file.mdTOC.CurrentLineIdx()
-	require.True(t, ok)
-	assert.Equal(t, 1, after, "single wheel-down notch must advance TOC cursor by exactly one entry (to # A at lineIdx=1)")
+	t.Run("plain wheel-down advances one entry and syncs diff cursor", func(t *testing.T) {
+		m := build(t)
+		before, _ := m.file.mdTOC.CurrentLineIdx()
+		require.Equal(t, 0, before)
 
-	// also verify the diff-side sync ran: syncDiffToTOCCursor sets
-	// m.nav.diffCursor to the TOC entry's lineIdx. without this assertion a
-	// regression that dropped syncDiffToTOCCursor from the hitTree branch
-	// would still pass the line-idx check above.
-	assert.Equal(t, 1, model.nav.diffCursor, "TOC wheel must sync diff cursor to the selected entry's lineIdx")
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model := result.(Model)
+		after, ok := model.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok)
+		assert.Equal(t, 1, after, "single wheel-down notch must advance TOC cursor by exactly one entry (to # A at lineIdx=1)")
+		assert.Equal(t, 1, model.nav.diffCursor, "TOC wheel must sync diff cursor to the selected entry's lineIdx")
+	})
+
+	t.Run("plain wheel-up retreats one entry", func(t *testing.T) {
+		m := build(t)
+		// position TOC cursor on entry 2 (## B at lineIdx=3) via two wheel-downs.
+		for range 2 {
+			r, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+			m = r.(Model)
+		}
+		mid, _ := m.file.mdTOC.CurrentLineIdx()
+		require.Equal(t, 3, mid)
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelUp, 5, 3, false))
+		model := result.(Model)
+		after, ok := model.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok)
+		assert.Equal(t, 1, after, "single wheel-up notch must retreat TOC cursor by exactly one entry")
+		assert.Equal(t, 1, model.nav.diffCursor, "TOC wheel-up must sync diff cursor to the previous entry's lineIdx")
+	})
+
+	t.Run("shift+wheel in TOC still single-step", func(t *testing.T) {
+		m := build(t)
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, true))
+		model := result.(Model)
+		after, ok := model.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok)
+		assert.Equal(t, 1, after, "shift+wheel in TOC must still move exactly one entry (magnitude discarded)")
+	})
+
+	t.Run("wheel-up at top entry is no-op", func(t *testing.T) {
+		m := build(t)
+		before, _ := m.file.mdTOC.CurrentLineIdx()
+		require.Equal(t, 0, before)
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelUp, 5, 3, false))
+		model := result.(Model)
+		after, _ := model.file.mdTOC.CurrentLineIdx()
+		assert.Equal(t, 0, after, "wheel-up at first TOC entry must clamp, not wrap")
+	})
+
+	t.Run("wheel-down at last entry is no-op", func(t *testing.T) {
+		m := build(t)
+		// advance to the last entry by wheel-down notches; entries are
+		// [README.md, # A, ## B, ## C] = 4 total, so 3 notches lands on # C.
+		for range 3 {
+			r, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+			m = r.(Model)
+		}
+		end, _ := m.file.mdTOC.CurrentLineIdx()
+		require.Equal(t, 5, end, "should now be on ## C at lineIdx=5")
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model := result.(Model)
+		after, _ := model.file.mdTOC.CurrentLineIdx()
+		assert.Equal(t, 5, after, "wheel-down at last TOC entry must clamp, not wrap")
+	})
+
+	t.Run("TOC wheel does not touch diff wheelState", func(t *testing.T) {
+		m := build(t)
+		require.Equal(t, 0, m.wheel.gen)
+		require.False(t, m.wheel.renderPending)
+		require.False(t, m.wheel.tickInFlight)
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model := result.(Model)
+		assert.Equal(t, 0, model.wheel.gen, "TOC wheel must not bump diff wheel gen")
+		assert.False(t, model.wheel.renderPending, "TOC wheel must not set diff renderPending")
+		assert.False(t, model.wheel.tickInFlight, "TOC wheel must not schedule a diff debounce tick")
+	})
 }
 
 func TestModel_HandleMouse_LeftClickInTOCJumpsViewport(t *testing.T) {
