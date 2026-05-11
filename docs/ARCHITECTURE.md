@@ -104,7 +104,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `diffnav.go` | Cursor movement, hunk navigation, viewport sync, horizontal scroll |
 | `scrollbar.go` | Vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
 | `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
-| `annotate.go` | Annotation input lifecycle: start, save, cancel, delete |
+| `annotate.go` | Annotation input lifecycle (start, save, cancel, delete) and the visual-row chokepoint: `annotationVisualRows` is the single source of truth for "how many rows + what content does this annotation paint as." Memoized on `annot.rowCache`, invalidated by `handleFileLoaded`, `applyTheme`, and `cancelThemeSelect` |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic (`jumpToAnnotationTarget` for the `@` popup, `tryJumpToAnnotationTarget` returning a jumped-bool for the `}`/`{` walker) |
 | `annotnav.go` | Cross-file annotation navigation (`}` / `{`): builds the flat annotation list, computes adjacent target via exact-match or insertion-point fallback, retries through non-jumpable targets so a hidden annotation cannot trap the walker |
 | `editor.go` | `$EDITOR` handoff for multi-line annotations: `openEditor()` wraps `app/editor.Editor` in `tea.ExecProcess`, `editorFinishedMsg` dispatch, `handleEditorFinished` routing (save / cancel / error-preserve) |
@@ -124,7 +124,7 @@ Each source file has a matching `_test.go`.
 | `modeState` (`m.modes`) | user-togglable view modes | `wrap`, `collapsed`, `compact`, `compactContext`, `lineNumbers`, `wordDiff`, `showBlame` |
 | `navigationState` (`m.nav`) | cursor position | `diffCursor`, `pendingHunkJump` |
 | `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet`, `history`, `historyIdx` |
-| `annotationState` (`m.annot`) | annotation input lifecycle | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input` |
+| `annotationState` (`m.annot`) | annotation input lifecycle and visual-row cache | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input`, `rowCache` |
 | `wheelState` (`m.wheel`) | diff-pane wheel coalescing (issue #179) | `gen`, `renderPending`, `tickInFlight` |
 
 Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create mini-models.
