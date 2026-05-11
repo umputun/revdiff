@@ -1059,7 +1059,8 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 
 	t.Run("plain wheel-down advances one entry and syncs diff cursor", func(t *testing.T) {
 		m := build(t)
-		before, _ := m.file.mdTOC.CurrentLineIdx()
+		before, ok := m.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok, "TOC must have a valid cursor as a precondition")
 		require.Equal(t, 0, before)
 
 		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
@@ -1077,7 +1078,8 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 			r, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
 			m = r.(Model)
 		}
-		mid, _ := m.file.mdTOC.CurrentLineIdx()
+		mid, ok := m.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok, "TOC cursor must remain valid after the two-step setup")
 		require.Equal(t, 3, mid)
 
 		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelUp, 5, 3, false))
@@ -1099,12 +1101,14 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 
 	t.Run("wheel-up at top entry is no-op", func(t *testing.T) {
 		m := build(t)
-		before, _ := m.file.mdTOC.CurrentLineIdx()
+		before, ok := m.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok)
 		require.Equal(t, 0, before)
 
 		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelUp, 5, 3, false))
 		model := result.(Model)
-		after, _ := model.file.mdTOC.CurrentLineIdx()
+		after, ok := model.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok, "wheel-up at top must leave cursor in a valid position (not invalidated)")
 		assert.Equal(t, 0, after, "wheel-up at first TOC entry must clamp, not wrap")
 	})
 
@@ -1116,12 +1120,14 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 			r, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
 			m = r.(Model)
 		}
-		end, _ := m.file.mdTOC.CurrentLineIdx()
+		end, ok := m.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok)
 		require.Equal(t, 5, end, "should now be on ## C at lineIdx=5")
 
 		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
 		model := result.(Model)
-		after, _ := model.file.mdTOC.CurrentLineIdx()
+		after, ok := model.file.mdTOC.CurrentLineIdx()
+		require.True(t, ok, "wheel-down at bottom must leave cursor in a valid position (not invalidated)")
 		assert.Equal(t, 5, after, "wheel-down at last TOC entry must clamp, not wrap")
 	})
 
