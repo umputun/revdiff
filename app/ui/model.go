@@ -606,9 +606,9 @@ type ModelConfig struct {
 	Collapsed        bool     // start in collapsed diff mode
 	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool     // show line numbers in diff gutter
-	ShowBlame        bool     // show blame gutter on startup when available
-	ShowUntracked    bool     // show untracked files in the tree; silent no-op when LoadUntracked is nil (e.g. --stdin, --compare-old/--compare-new)
-	WordDiff         bool     // enable intra-line word-diff highlighting on startup
+	ShowBlame        bool     // show blame gutter; requires Blamer
+	ShowUntracked    bool     // show untracked files in the tree; requires LoadUntracked
+	WordDiff         bool     // enable intra-line word-diff highlighting
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
 	ActiveThemeName  string   // name of theme currently applied (for theme selector cursor positioning)
