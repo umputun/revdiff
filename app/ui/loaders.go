@@ -361,6 +361,10 @@ func (m Model) handleBlameLoaded(msg blameLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.file.blameData = msg.data
 	m.file.blameAuthorLen = m.computeBlameAuthorLen()
+	// flush deferred wheel pin before syncViewportToCursor so the post-blame
+	// scroll is anchored to the user's wheeled-to position rather than the
+	// pre-burst cursor. mirrors the handleResize flush rationale.
+	m.flushWheelPending()
 	m.syncViewportToCursor()
 	return m, nil
 }
