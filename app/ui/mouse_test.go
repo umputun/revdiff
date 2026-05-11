@@ -1243,22 +1243,23 @@ func TestModel_HandleMouse_WheelDebounceMsg_StaleGenReschedules(t *testing.T) {
 }
 
 func TestModel_HandleMouse_WheelDebounceMsg_NoopWhenRenderNotPending(t *testing.T) {
-	// when renderPending is already false (an external path — handleKey,
-	// handleResize, handleBlameLoaded — flushed first), the in-flight tick
-	// still arrives. it must NOT re-render, but MUST clear tickInFlight so
-	// the next burst's first wheel can schedule a fresh tick (otherwise a
-	// stale tickInFlight would silently extend the next debounce by ~2x).
+	// defensive guard: handleWheelDebounce must degrade gracefully when it
+	// finds renderPending=false but tickInFlight=true. In production this
+	// combination is no longer reachable since flushWheelPending clears both
+	// flags atomically, but the handler must still no-op cleanly and clear
+	// tickInFlight if state ever lands in this combination (e.g. a future
+	// path that touches one flag without the other).
 	m := mouseTestModel(t, []string{"a.go"}, nil)
 	m.wheel.gen = 2
 	m.wheel.renderPending = false
-	m.wheel.tickInFlight = true // an external flush left this true
+	m.wheel.tickInFlight = true
 
 	result, cmd := m.Update(wheelDebounceMsg{gen: 2})
 	model := result.(Model)
 
 	assert.Nil(t, cmd)
 	assert.False(t, model.wheel.renderPending)
-	assert.False(t, model.wheel.tickInFlight, "stale tick after external flush must clear tickInFlight")
+	assert.False(t, model.wheel.tickInFlight, "no-pending tick must clear tickInFlight defensively")
 	assert.Equal(t, 2, model.wheel.gen)
 }
 
