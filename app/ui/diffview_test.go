@@ -1233,7 +1233,7 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		m := newModel()
 		var b strings.Builder
 		cursor := m.renderer.DiffCursor(m.cfg.noColors)
-		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac first\nsecond\nthird")
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac ", "first\nsecond\nthird")
 		out := b.String()
 		assert.Contains(t, out, "first", "first logical line present")
 		assert.Contains(t, out, "second", "second logical line present")
@@ -1254,7 +1254,7 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		m := newModel()
 		var b strings.Builder
 		cursor := m.renderer.DiffCursor(m.cfg.noColors)
-		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac file: alpha\nbeta")
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac file: ", "alpha\nbeta")
 		out := b.String()
 		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
 		require.Len(t, rows, 2)
@@ -1268,10 +1268,10 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		m.layout.treeWidth = 8
 		first := strings.Repeat("alpha ", 20)  // wraps multiple rows
 		second := strings.Repeat("bravo ", 20) // wraps multiple rows
-		text := "\U0001f4ac " + first + "\n" + second
+		body := first + "\n" + second
 		var b strings.Builder
 		cursor := m.renderer.DiffCursor(m.cfg.noColors)
-		m.renderWrappedAnnotation(&b, cursor, text)
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac ", body)
 		out := b.String()
 		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
 		assert.Greater(t, len(rows), 3, "both logical lines wrap beyond one row")

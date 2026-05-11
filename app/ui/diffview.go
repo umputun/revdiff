@@ -320,12 +320,17 @@ func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string
 		return
 	}
 
-	if fileComment != "" {
+	// gate on hasFileAnnotation, not fileComment != "": an empty-body file-level
+	// annotation loaded via --annotations still reserves a viewport row via
+	// hasFileAnnotation+wrappedAnnotationLineCount, and the chokepoint emits a
+	// single prefix-only row when body is empty. routing through fileComment != ""
+	// would skip paint while the height query still reserves the row.
+	if m.hasFileAnnotation() {
 		cursor := " "
 		if m.nav.diffCursor == -1 && m.layout.focus == paneDiff {
 			cursor = m.renderer.DiffCursor(m.cfg.noColors)
 		}
-		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: "+fileComment)
+		m.renderWrappedAnnotation(b, cursor, "\U0001f4ac file: ", fileComment)
 	}
 }
 
@@ -664,46 +669,29 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 			if idx == m.nav.diffCursor && m.annot.cursorOnAnnotation && m.layout.focus == paneDiff {
 				cursor = m.renderer.DiffCursor(m.cfg.noColors)
 			}
-			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac "+comment)
+			m.renderWrappedAnnotation(b, cursor, "\U0001f4ac ", comment)
 		}
 	}
 }
 
 // renderWrappedAnnotation writes an annotation line with word wrapping.
 // annotations always wrap regardless of wrapMode since they contain prose.
-// embedded "\n" in text splits into logical lines; the first logical line carries
-// the emoji prefix baked into text, continuation logical lines receive an indent
-// sized to the emoji prefix so body columns line up.
-// each visual row is padded with DiffPaneBg via extendLineBg so themed pane
-// backgrounds extend across the full width rather than falling back to terminal
-// default on the right portion.
-func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, text string) {
-	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+// delegates all wrap+style logic to annotationVisualRows (the chokepoint); this
+// painter only prepends the cursor cell on row 0 and pads each visual row with
+// DiffPaneBg via extendLineBg so themed pane backgrounds extend across the full
+// width rather than falling back to terminal default on the right portion.
+func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, prefix, body string) {
+	rows := m.annotationVisualRows(prefix, body)
+	if len(rows) == 0 {
+		return
+	}
 	paneBg := m.resolver.Color(style.ColorKeyDiffPaneBg)
-
-	logical := strings.Split(text, "\n")
-	indent := m.annotationContinuationIndent(logical[0])
-
-	first := true
-	for i, segment := range logical {
-		if i > 0 {
-			segment = indent + segment
+	for i, row := range rows {
+		c := " "
+		if i == 0 {
+			c = cursor
 		}
-		var lines []string
-		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
-			lines = m.wrapContent(segment, wrapWidth)
-		} else {
-			lines = []string{segment}
-		}
-		for _, line := range lines {
-			c := " "
-			if first {
-				c = cursor
-				first = false
-			}
-			styled := c + m.renderer.AnnotationInline(line)
-			b.WriteString(m.extendLineBg(styled, paneBg) + "\n")
-		}
+		b.WriteString(m.extendLineBg(c+row, paneBg) + "\n")
 	}
 }
 

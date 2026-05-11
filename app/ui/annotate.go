@@ -378,45 +378,108 @@ func (m Model) hunkEndLine(idx int) int {
 	return m.diffLineNum(m.file.lines[last])
 }
 
-// wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
-// annotations always wrap at the pane width regardless of wrapMode.
-// multi-line comments (embedded "\n") contribute the wrapped-row count for each
-// logical line, with continuation logical lines using the indent-padded width.
-func (m Model) wrappedAnnotationLineCount(key string) int {
-	var comment string
+// annotCacheKey is the lookup key for annotationState.rowCache. fields are
+// the comparable inputs to the wrap+style pipeline: cache hits require all
+// three to match. width self-invalidates: a different pane width produces a
+// different key and triggers a fresh compute. field order matches the
+// (prefix, body, width) API convention used by annotationVisualRows and
+// composeAnnotationRows.
+type annotCacheKey struct {
+	prefix, body string
+	width        int
+}
+
+// annotationPrefixBody resolves the (prefix, body) pair for the annotation
+// identified by key. file-level annotations (key == annotKeyFile) get the
+// "💬 file: " prefix; line-level annotations get "💬 ". returns ("", "") when
+// no annotation matches the key.
+func (m Model) annotationPrefixBody(key string) (prefix, body string) {
 	for _, a := range m.store.Get(m.file.name) {
 		if key == annotKeyFile && a.Line == 0 {
-			comment = "\U0001f4ac file: " + a.Comment
-			break
+			return "\U0001f4ac file: ", a.Comment
 		}
 		if key != annotKeyFile && m.annotationKey(a.Line, a.Type) == key {
-			comment = "\U0001f4ac " + a.Comment
-			break
+			return "\U0001f4ac ", a.Comment
 		}
 	}
-	if comment == "" {
-		return 1
-	}
-	wrapWidth := m.diffContentWidth() - 1 // 1 for cursor column
+	return "", ""
+}
 
-	logical := strings.Split(comment, "\n")
+// annotationVisualRows is the single source of truth for how an annotation is
+// painted: it returns the fully-styled visual rows for (prefix, body) at the
+// current pane width. wrappedAnnotationLineCount uses len() of this; the
+// painter iterates these rows directly. results are memoized on rowCache;
+// invalidation is the caller's responsibility (handleFileLoaded, applyTheme,
+// cancelThemeSelect). pointer receiver is mandatory: the method writes to
+// m.annot.rowCache and the consistency with invalidateAnnotationRows protects
+// against future LRU/slice replacements that would silently no-op on a value
+// receiver.
+func (m *Model) annotationVisualRows(prefix, body string) []string {
+	// 1 for cursor column; clamp to wrapMinContent so the cache key normalizes
+	// tiny-pane widths that all produce identical no-wrap output.
+	wrapW := max(m.diffContentWidth()-1, wrapMinContent)
+	key := annotCacheKey{prefix: prefix, body: body, width: wrapW}
+	if rows, ok := m.annot.rowCache[key]; ok {
+		return rows
+	}
+	rows := m.composeAnnotationRows(prefix, body, wrapW)
+	m.annot.rowCache[key] = rows
+	return rows
+}
+
+// composeAnnotationRows builds the styled visual rows for an annotation.
+// splits body on "\n" into logical lines, applies prefix on row 0 and a matching-width
+// plain-space indent on continuation rows so body columns line up, wraps each segment
+// at wrapW, and wraps each visual row in AnnotationInline.
+//
+// IMPORTANT: the returned rows bake in the resolver's AnnotationInline styling
+// envelope. applyTheme rebuilds the resolver — invalidation of rowCache on
+// applyTheme is load-bearing. anyone adding a runtime color toggle that affects
+// AnnotationInline MUST also invalidate the cache.
+func (m Model) composeAnnotationRows(prefix, body string, wrapW int) []string {
+	first := prefix + body
+	logical := strings.Split(first, "\n")
 	indent := m.annotationContinuationIndent(logical[0])
 
-	total := 0
+	var rows []string
 	for i, segment := range logical {
 		if i > 0 {
 			segment = indent + segment
 		}
-		if wrapWidth > 10 && lipgloss.Width(segment) > wrapWidth {
-			total += len(m.wrapContent(segment, wrapWidth))
-			continue
+		var lines []string
+		if wrapW > wrapMinContent && lipgloss.Width(segment) > wrapW {
+			lines = m.wrapContent(segment, wrapW)
+		} else {
+			lines = []string{segment}
 		}
-		total++
+		for _, line := range lines {
+			rows = append(rows, m.renderer.AnnotationInline(line))
+		}
 	}
-	if total < 1 {
+	return rows
+}
+
+// invalidateAnnotationRows clears the cached visual-row slices. callers:
+// handleFileLoaded (per-file annotation set changes), applyTheme (resolver
+// colors change), and cancelThemeSelect (preview theme rebuilt the resolver).
+// width changes self-invalidate via the cache key, so no call needed on resize.
+func (m *Model) invalidateAnnotationRows() {
+	clear(m.annot.rowCache)
+}
+
+// wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.
+// annotations always wrap at the pane width regardless of wrapMode.
+// resolves (prefix, body) via annotationPrefixBody and defers to the chokepoint
+// annotationVisualRows so the height query and the painter cannot drift apart.
+// returns 1 when no annotation matches the key (preserves prior behavior). when an
+// annotation exists with an empty body, the chokepoint produces a single prefix-only
+// row, matching master's behavior for blank annotations preloaded via --annotations.
+func (m *Model) wrappedAnnotationLineCount(key string) int {
+	prefix, body := m.annotationPrefixBody(key)
+	if prefix == "" && body == "" {
 		return 1
 	}
-	return total
+	return len(m.annotationVisualRows(prefix, body))
 }
 
 // hunkLineHeight returns the visual row count for a single diff line,

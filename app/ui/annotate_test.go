@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
@@ -2783,4 +2784,455 @@ func TestModel_VisualRowToDiffLine_RoundTrip(t *testing.T) {
 			assert.False(t, onAnn)
 		}
 	})
+}
+
+func TestModel_AnnotationPrefixBody(t *testing.T) {
+	newModel := func() Model {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.layout.width = 120
+		m.layout.treeWidth = 20
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+		return m
+	}
+
+	t.Run("file-level annotation returns file prefix", func(t *testing.T) {
+		m := newModel()
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "header note"})
+		defer m.store.Delete("a.go", 0, "")
+
+		prefix, body := m.annotationPrefixBody(annotKeyFile)
+		assert.Equal(t, "\U0001f4ac file: ", prefix)
+		assert.Equal(t, "header note", body)
+	})
+
+	t.Run("line-level annotation returns line prefix", func(t *testing.T) {
+		m := newModel()
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 7, Type: "+", Comment: "added"})
+		defer m.store.Delete("a.go", 7, "+")
+
+		prefix, body := m.annotationPrefixBody(m.annotationKey(7, "+"))
+		assert.Equal(t, "\U0001f4ac ", prefix)
+		assert.Equal(t, "added", body)
+	})
+
+	t.Run("no matching annotation returns empty pair", func(t *testing.T) {
+		m := newModel()
+		prefix, body := m.annotationPrefixBody(m.annotationKey(99, "+"))
+		assert.Empty(t, prefix)
+		assert.Empty(t, body)
+	})
+
+	t.Run("file key with no file annotation returns empty", func(t *testing.T) {
+		m := newModel()
+		// store has only a line-level annotation, no file-level
+		m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: " ", Comment: "ctx"})
+		defer m.store.Delete("a.go", 3, " ")
+
+		prefix, body := m.annotationPrefixBody(annotKeyFile)
+		assert.Empty(t, prefix)
+		assert.Empty(t, body)
+	})
+}
+
+func TestModel_AnnotationVisualRows(t *testing.T) {
+	newModel := func() Model {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.layout.width = 120
+		m.layout.treeWidth = 20
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+		return m
+	}
+
+	t.Run("empty body emits prefix-only row", func(t *testing.T) {
+		// preload via --annotations may produce empty-body records; the chokepoint
+		// must emit one styled row containing the prefix alone so paint and
+		// height (wrappedAnnotationLineCount) stay in sync. matches master's
+		// behavior where comment = prefix+body is non-empty for any real prefix.
+		m := newModel()
+		rows := m.annotationVisualRows("\U0001f4ac ", "")
+		require.Len(t, rows, 1)
+		assert.Contains(t, rows[0], "\U0001f4ac")
+	})
+
+	t.Run("single-line body returns one row", func(t *testing.T) {
+		m := newModel()
+		rows := m.annotationVisualRows("\U0001f4ac ", "hello")
+		require.Len(t, rows, 1)
+		assert.Contains(t, rows[0], "hello")
+		assert.Contains(t, rows[0], "\U0001f4ac")
+	})
+
+	t.Run("multi-line body splits on newline", func(t *testing.T) {
+		m := newModel()
+		rows := m.annotationVisualRows("\U0001f4ac ", "one\ntwo\nthree")
+		require.Len(t, rows, 3)
+		assert.Contains(t, rows[0], "one")
+		assert.Contains(t, rows[1], "two")
+		assert.Contains(t, rows[2], "three")
+	})
+
+	t.Run("wrap-needed body produces multiple rows", func(t *testing.T) {
+		m := newModel()
+		m.layout.width = 40
+		m.layout.treeWidth = 8
+		long := strings.Repeat("alpha ", 20)
+		rows := m.annotationVisualRows("\U0001f4ac ", long)
+		assert.Greater(t, len(rows), 1, "long body must wrap to more than one row")
+	})
+
+	t.Run("prefix affects row-0 content", func(t *testing.T) {
+		m := newModel()
+		fileRows := m.annotationVisualRows("\U0001f4ac file: ", "x")
+		lineRows := m.annotationVisualRows("\U0001f4ac ", "x")
+		require.Len(t, fileRows, 1)
+		require.Len(t, lineRows, 1)
+		assert.Contains(t, fileRows[0], "file:")
+		assert.NotContains(t, lineRows[0], "file:")
+	})
+
+	t.Run("cache hit returns identical slice on repeat call", func(t *testing.T) {
+		m := newModel()
+		first := m.annotationVisualRows("\U0001f4ac ", "cached body")
+		second := m.annotationVisualRows("\U0001f4ac ", "cached body")
+		// identical backing array means a real cache hit; value-equality would
+		// pass even if the cache short-circuit was removed (recompute returns
+		// equal bytes), so compare backing-array addresses via &slice[0].
+		require.Len(t, first, len(second))
+		require.NotEmpty(t, first)
+		assert.Same(t, &first[0], &second[0],
+			"second call must return the same backing array (true cache hit)")
+		assert.Len(t, m.annot.rowCache, 1, "exactly one cache entry")
+	})
+
+	t.Run("different width creates new cache entry", func(t *testing.T) {
+		m := newModel()
+		// first call at wider pane
+		m.annotationVisualRows("\U0001f4ac ", "body")
+		assert.Len(t, m.annot.rowCache, 1)
+		// shrink pane → new wrap width → new cache key
+		m.layout.width = 40
+		m.layout.treeWidth = 8
+		m.annotationVisualRows("\U0001f4ac ", "body")
+		assert.Len(t, m.annot.rowCache, 2)
+	})
+
+	t.Run("different prefix creates new cache entry", func(t *testing.T) {
+		m := newModel()
+		m.annotationVisualRows("\U0001f4ac ", "body")
+		m.annotationVisualRows("\U0001f4ac file: ", "body")
+		assert.Len(t, m.annot.rowCache, 2)
+	})
+
+	t.Run("different body creates new cache entry", func(t *testing.T) {
+		m := newModel()
+		m.annotationVisualRows("\U0001f4ac ", "first")
+		m.annotationVisualRows("\U0001f4ac ", "second")
+		assert.Len(t, m.annot.rowCache, 2)
+	})
+}
+
+func TestModel_InvalidateAnnotationRows(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+
+	m.invalidateAnnotationRows()
+	assert.Empty(t, m.annot.rowCache)
+
+	// cache must be usable after invalidation (not nil-mapped into a no-op)
+	m.annotationVisualRows("\U0001f4ac ", "after")
+	assert.Len(t, m.annot.rowCache, 1)
+}
+
+// TestModel_WrappedAnnotationLineCount_MatchesChokepoint pins the height-vs-paint
+// invariant after the chokepoint refactor: wrappedAnnotationLineCount(key) must
+// equal len(annotationVisualRows(prefix, body)) for every annotation shape. this
+// is the type-system replacement for the docs-and-test-suite invariant guard
+// the old forked implementation relied on.
+func TestModel_WrappedAnnotationLineCount_MatchesChokepoint(t *testing.T) {
+	newModel := func(width int) Model {
+		m := testModel(nil, nil)
+		m.file.name = "a.go"
+		m.layout.width = width
+		m.layout.treeWidth = 8
+		m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+		return m
+	}
+
+	long := strings.Repeat("alpha ", 20)
+
+	tests := []struct {
+		name      string
+		width     int
+		line      int
+		typ       string
+		body      string
+		fileLevel bool
+	}{
+		{"line-level single short", 120, 1, " ", "hi", false},
+		{"line-level multi-line plain", 120, 1, " ", "one\ntwo\nthree", false},
+		{"line-level wrap-needed", 40, 1, " ", long, false},
+		{"line-level multi-line with wrap", 40, 1, " ", long + "\nbrief", false},
+		{"line-level empty body", 120, 1, " ", "", false},
+		{"file-level single line", 120, 0, "", "header", true},
+		{"file-level multi-line", 120, 0, "", "line1\nline2", true},
+		{"file-level multi-line wrap continuation", 40, 0, "", "short\n" + long, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newModel(tc.width)
+			m.store.Add(annotation.Annotation{File: "a.go", Line: tc.line, Type: tc.typ, Comment: tc.body})
+			defer m.store.Delete("a.go", tc.line, tc.typ)
+
+			var key string
+			if tc.fileLevel {
+				key = annotKeyFile
+			} else {
+				key = m.annotationKey(tc.line, tc.typ)
+			}
+			prefix, body := m.annotationPrefixBody(key)
+			rows := m.annotationVisualRows(prefix, body)
+			count := m.wrappedAnnotationLineCount(key)
+			assert.Equal(t, len(rows), count, "wrappedAnnotationLineCount must equal len(annotationVisualRows)")
+		})
+	}
+}
+
+// TestModel_HandleFileLoaded_InvalidatesAnnotationRows pins the file-load
+// invalidation hook. handleFileLoaded must call invalidateAnnotationRows so
+// per-file annotation sets don't leak cached rows across files.
+func TestModel_HandleFileLoaded_InvalidatesAnnotationRows(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+
+	// populate the cache from the "current file" state
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+
+	lines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
+	result, _ := m.Update(fileLoadedMsg{file: "b.go", lines: lines})
+	model := result.(Model)
+
+	assert.Empty(t, model.annot.rowCache, "cache must be cleared after file load")
+}
+
+// TestModel_ApplyTheme_InvalidatesAnnotationRows pins the theme-apply
+// invalidation hook. cached rows bake in AnnotationInline resolver styling, so
+// applyTheme must clear the cache or stale colors persist.
+func TestModel_ApplyTheme_InvalidatesAnnotationRows(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	highlighter := &mocks.SyntaxHighlighterMock{
+		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
+		SetStyleFunc:       func(string) bool { return true },
+		StyleNameFunc:      func() string { return "orig-style" },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+	})
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+
+	m.applyTheme(ThemeSpec{
+		Colors: style.Colors{
+			Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
+			SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
+			CursorFg: "#282a36", CursorBg: "#f8f8f2",
+			AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
+			ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
+			TreeBg: "#21222c", DiffBg: "#282a36",
+			StatusFg: "#f8f8f2", StatusBg: "#44475a",
+			SearchFg: "#282a36", SearchBg: "#f1fa8c",
+		},
+		ChromaStyle: "dracula",
+	})
+
+	assert.Empty(t, m.annot.rowCache, "cache must be cleared after applyTheme")
+}
+
+// TestModel_AnnotationVisualRows_EmptyBodyEmitsPrefixRow pins the regression caught
+// by codex (PR review round 3): --annotations preload accepts empty bodies, and
+// master rendered a visible prefix-only row for them. an earlier version of the
+// chokepoint short-circuited on body == "" and returned nil, which desynced the
+// height query (wrappedAnnotationLineCount returned 1) from paint (zero rows).
+// the chokepoint must emit exactly one styled row containing the prefix alone.
+func TestModel_AnnotationVisualRows_EmptyBodyEmitsPrefixRow(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+
+	// line-level prefix with empty body emits exactly one row (the styled prefix).
+	rows := m.annotationVisualRows("\U0001f4ac ", "")
+	require.Len(t, rows, 1, "empty body must emit one prefix-only row, not zero")
+	assert.Contains(t, rows[0], "\U0001f4ac")
+
+	// wrappedAnnotationLineCount agrees with paint when annotation is in the store.
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: ""})
+	count := m.wrappedAnnotationLineCount(m.annotationKey(1, " "))
+	assert.Equal(t, 1, count, "height query must match paint (1 row) for empty body")
+}
+
+// TestModel_FileAnnotation_EmptyBody_Renders pins the regression caught by codex
+// (PR review round 3, file-level parallel of the line-level fix): a file-level
+// annotation with an empty body loaded via --annotations was reserving a viewport
+// row via hasFileAnnotation+wrappedAnnotationLineCount, but renderFileAnnotationHeader
+// short-circuited on fileComment != "" and emitted zero rows. paint must match
+// the height query: emit one prefix-only row for the file annotation header.
+func TestModel_FileAnnotation_EmptyBody_Renders(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m.layout.focus = paneDiff
+
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: ""})
+	defer m.store.Delete("a.go", 0, "")
+
+	assert.True(t, m.hasFileAnnotation(), "empty-body file annotation must register as present")
+	assert.Equal(t, 1, m.wrappedAnnotationLineCount(annotKeyFile), "height query must return 1 row for empty body")
+
+	rendered := m.renderDiff()
+	// the file annotation header must emit a row containing the file prefix even with empty body
+	assert.Contains(t, rendered, "\U0001f4ac file:", "empty-body file annotation must paint the prefix-only row")
+}
+
+// TestModel_AnnotationVisualRows_ByteEquivalentToMaster is the regression safety net
+// for the chokepoint refactor. expected bytes were captured from the pre-refactor
+// master code path (commit 28e6d8f) using a one-off capture program that
+// replicated the wrap+style inner loop of renderWrappedAnnotation BEFORE cursor
+// prepend and BEFORE extendLineBg padding — i.e. exactly what the chokepoint
+// annotationVisualRows must return. if this test ever fails after a code change,
+// DO NOT regenerate the expected bytes from the current code; investigate why
+// the refactored chokepoint diverges from master.
+//
+// model setup matches the capture program: testModel defaults + explicit
+// width/treeWidth overrides per case, so diffContentWidth() returns the same
+// value (wrapWidth = diffContentWidth() - 1 = 93 wide, 25 narrow).
+func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
+	type caseDef struct {
+		name      string
+		width     int
+		treeWidth int
+		prefix    string
+		body      string
+		expected  string
+	}
+
+	cases := []caseDef{
+		{
+			name:      "single-line line-level",
+			width:     120,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac ",
+			body:      "hello",
+			expected:  "\x1b[3m\U0001f4ac hello\x1b[23m",
+		},
+		{
+			name:      "multi-line line-level",
+			width:     120,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac ",
+			body:      "one\ntwo\nthree",
+			expected:  "\x1b[3m\U0001f4ac one\x1b[23m\n\x1b[3m   two\x1b[23m\n\x1b[3m   three\x1b[23m",
+		},
+		{
+			name:      "wrap-needed line-level narrow",
+			width:     40,
+			treeWidth: 8,
+			prefix:    "\U0001f4ac ",
+			body:      strings.Repeat("alpha ", 20),
+			expected: "\x1b[3m\U0001f4ac alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3malpha \x1b[23m",
+		},
+		{
+			name:      "multi-segment wrap on continuation narrow",
+			width:     40,
+			treeWidth: 8,
+			prefix:    "\U0001f4ac ",
+			body:      "short\n" + strings.Repeat("beta ", 20),
+			expected: "\x1b[3m\U0001f4ac short\x1b[23m\n" +
+				"\x1b[3m   beta beta beta beta\x1b[23m\n" +
+				"\x1b[3mbeta beta beta beta beta\x1b[23m\n" +
+				"\x1b[3mbeta beta beta beta beta\x1b[23m\n" +
+				"\x1b[3mbeta beta beta beta beta\x1b[23m\n" +
+				"\x1b[3mbeta \x1b[23m",
+		},
+		{
+			name:      "single-line file-level",
+			width:     120,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac file: ",
+			body:      "header",
+			expected:  "\x1b[3m\U0001f4ac file: header\x1b[23m",
+		},
+		{
+			name:      "multi-line file-level",
+			width:     120,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac file: ",
+			body:      "line1\nline2",
+			expected:  "\x1b[3m\U0001f4ac file: line1\x1b[23m\n\x1b[3m         line2\x1b[23m",
+		},
+		{
+			// empty-body annotations are produced by --annotations preload when
+			// the source file has a header followed by no body lines. master
+			// rendered a visible prefix-only row in this case; the chokepoint
+			// must too, so paint and wrappedAnnotationLineCount stay in sync.
+			name:      "empty-body line-level",
+			width:     120,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac ",
+			body:      "",
+			expected:  "\x1b[3m\U0001f4ac \x1b[23m",
+		},
+		{
+			// file-level parallel of empty-body line-level: same regression
+			// caught by codex round 3. paint must emit one prefix-only row.
+			name:      "empty-body file-level",
+			width:     120,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac file: ",
+			body:      "",
+			expected:  "\x1b[3m\U0001f4ac file: \x1b[23m",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.file.name = "a.go"
+			m.layout.width = tc.width
+			m.layout.treeWidth = tc.treeWidth
+			m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+
+			rows := m.annotationVisualRows(tc.prefix, tc.body)
+			got := strings.Join(rows, "\n")
+			assert.Equal(t, tc.expected, got, "annotationVisualRows must match pre-refactor master byte-for-byte")
+		})
+	}
 }

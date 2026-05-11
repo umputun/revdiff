@@ -75,6 +75,10 @@ func (m *Model) confirmThemeByName(name string) {
 }
 
 // cancelThemeSelect restores the original theme and clears the preview session.
+// invalidates the annotation row cache because preview applied a theme via
+// applyTheme (which re-populated the cache with preview-styled rows) — without
+// invalidation here, cached rows would carry the preview theme's AnnotationInline
+// bytes after the resolver is restored to the original.
 func (m *Model) cancelThemeSelect() {
 	if m.themePreview == nil {
 		return
@@ -86,6 +90,7 @@ func (m *Model) cancelThemeSelect() {
 		log.Printf("[WARN] failed to restore chroma style %q", m.themePreview.origChroma)
 	}
 	m.themePreview = nil
+	m.invalidateAnnotationRows()
 	m.refreshDiff()
 }
 
@@ -109,6 +114,7 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 			log.Printf("[WARN] failed to apply chroma style %q, keeping %q", spec.ChromaStyle, prevStyle)
 		}
 	}
+	m.invalidateAnnotationRows()
 	if m.file.name != "" && len(m.file.lines) > 0 {
 		if chromaChanged {
 			m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)

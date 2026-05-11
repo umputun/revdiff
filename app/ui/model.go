@@ -447,6 +447,13 @@ type annotationState struct {
 	// from this field, and Enter with empty input preserves the existing content
 	// unchanged. Cleared on every annotation-mode exit path.
 	existingMultiline string
+	// rowCache memoizes annotationVisualRows results keyed by (prefix, body, width).
+	// invalidated by handleFileLoaded (memory hygiene — the cache is content-keyed
+	// so cross-file collisions are correct, but a fresh file has a fresh working
+	// set), applyTheme, and cancelThemeSelect (resolver styling colors baked into
+	// rows change). width changes self-invalidate via the cache key.
+	// NewModel initializes this map; direct Model{} construction is unsupported.
+	rowCache map[annotCacheKey][]string
 }
 
 // Model is the top-level bubbletea model for revdiff.
@@ -766,6 +773,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		},
 		reload:          reloadState{applicable: cfg.ReloadApplicable},
 		compact:         compactState{applicable: cfg.CompactApplicable},
+		annot:           annotationState{rowCache: make(map[annotCacheKey][]string)},
 		loadUntracked:   cfg.LoadUntracked,
 		activeThemeName: cfg.ActiveThemeName,
 	}, nil

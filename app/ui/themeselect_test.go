@@ -151,6 +151,43 @@ func TestCancelThemeSelect_restoresOriginalTheme(t *testing.T) {
 	assert.Nil(t, m.themePreview, "preview session should be cleared")
 }
 
+// TestModel_CancelThemeSelect_InvalidatesAnnotationRows mirrors
+// TestModel_ApplyTheme_InvalidatesAnnotationRows. previewing a theme applies it
+// (which invalidates and then re-fills rowCache with preview-styled rows), but
+// cancel restores resolver/renderer to the original. without explicit
+// invalidation, cached rows would carry the preview theme's AnnotationInline
+// bytes after restore, producing stale themed annotation output on next render.
+func TestModel_CancelThemeSelect_InvalidatesAnnotationRows(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	highlighter := &mocks.SyntaxHighlighterMock{
+		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
+		SetStyleFunc:       func(string) bool { return true },
+		StyleNameFunc:      func() string { return "orig-style" },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(), Themes: newTestThemeCatalog(),
+	})
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+	m.ready = true
+
+	m.openThemeSelector()
+	m.previewThemeByName("dracula")
+	// populate cache AFTER the preview so cached rows carry dracula's
+	// AnnotationInline styling — exactly the stale-bytes scenario the fix targets.
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+
+	m.cancelThemeSelect()
+
+	assert.Empty(t, m.annot.rowCache, "cache must be cleared after cancelThemeSelect to drop preview-themed rows")
+}
+
 func TestPreviewThemeByName_appliesTheme(t *testing.T) {
 	currentStyle := "orig-style"
 	renderer := &mocks.RendererMock{
