@@ -322,10 +322,10 @@ func (m Model) handleWheelDebounce(msg wheelDebounceMsg) (tea.Model, tea.Cmd) {
 			return wheelDebounceMsg{gen: curGen}
 		})
 	}
-	// gen matches: burst has been idle for wheelRenderDelay. flush, clear
-	// tickInFlight so the next burst's first wheel reschedules.
+	// gen matches: burst has been idle for wheelRenderDelay. flushWheelPending
+	// clears both renderPending and tickInFlight, so the next burst's first
+	// wheel reschedules a fresh tick.
 	m.flushWheelPending()
-	m.wheel.tickInFlight = false
 	return m, nil
 }
 
@@ -391,19 +391,27 @@ func (m *Model) scrollDiffViewportBy(delta int) bool {
 //   - handleBlameLoaded (loaders.go) — same syncViewportToCursor rationale
 //   - handleWheelDebounce (mouse.go) — the matching-gen tick path
 //
-// no-op when no render is pending. clearing tickInFlight here means a new
-// wheel event arriving after an external flush can schedule a fresh tick
-// immediately (rather than waiting for the previously-scheduled tick to
-// drain through the !renderPending branch of handleWheelDebounce); any
-// already-scheduled tick that fires after the flush hits the !renderPending
-// or stale-gen branches and is harmless.
+// no-op when no render is pending. when pinDiffCursorTo returns false (the
+// cursor stayed in view through the burst, no pin needed), syncTOCActiveSection
+// and SetContent are skipped — the existing rendered string already has the
+// correct cursor highlight and the TOC active section is keyed off the
+// (unchanged) cursor index, so a re-render would be redundant. Only the
+// state flags are always cleared.
+//
+// clearing tickInFlight here means a new wheel event arriving after an
+// external flush can schedule a fresh tick immediately (rather than waiting
+// for the previously-scheduled tick to drain through the !renderPending
+// branch of handleWheelDebounce); any already-scheduled tick that fires
+// after the flush hits the !renderPending or stale-gen branches and is
+// harmless.
 func (m *Model) flushWheelPending() {
 	if !m.wheel.renderPending {
 		return
 	}
-	m.pinDiffCursorTo(m.layout.viewport.YOffset)
-	m.syncTOCActiveSection()
-	m.layout.viewport.SetContent(m.renderDiff())
+	if m.pinDiffCursorTo(m.layout.viewport.YOffset) {
+		m.syncTOCActiveSection()
+		m.layout.viewport.SetContent(m.renderDiff())
+	}
 	m.wheel.renderPending = false
 	m.wheel.tickInFlight = false
 }

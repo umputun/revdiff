@@ -1186,6 +1186,40 @@ func TestModel_HandleMouse_WheelDebounceMsg_RendersOnMatchingGen(t *testing.T) {
 	assert.Contains(t, postContent, fmt.Sprintf("line %d", wheelStep), "post-flush viewport must show the wheelStep-offset content")
 }
 
+func TestModel_HandleMouse_WheelDebounceMsg_SkipsRenderWhenCursorStaysInView(t *testing.T) {
+	// when the burst left the cursor inside the viewport (pinDiffCursorTo
+	// returns false), the deferred flush must skip the expensive
+	// SetContent(renderDiff()) — the existing viewport content already
+	// has the correct cursor highlight. only the state flags clear.
+	// without this gate, every wheel-burst-then-flush forces a redundant
+	// full-diff render even on short bursts where nothing visually changed.
+	lines := make([]diff.DiffLine, 60)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: fmt.Sprintf("line %d", i), ChangeType: diff.ChangeContext}
+	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.lines = lines
+	m.layout.viewport.SetContent(m.renderDiff())
+	// cursor at row 20 sits comfortably inside the 30-row viewport after a
+	// wheelStep-sized scroll (YOffset=3 → visible [3,32], cursor 20 still in view).
+	m.layout.viewport.SetYOffset(wheelStep)
+	m.nav.diffCursor = 20
+	preCursor := m.nav.diffCursor
+	preContent := m.layout.viewport.View()
+	m.wheel.gen = 5
+	m.wheel.renderPending = true
+	m.wheel.tickInFlight = true
+
+	result, cmd := m.Update(wheelDebounceMsg{gen: 5})
+	model := result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.False(t, model.wheel.renderPending, "matching debounce msg must clear renderPending even when no render runs")
+	assert.False(t, model.wheel.tickInFlight, "matching debounce msg must clear tickInFlight even when no render runs")
+	assert.Equal(t, preCursor, model.nav.diffCursor, "cursor must not move when already in view")
+	assert.Equal(t, preContent, model.layout.viewport.View(), "no-pin flush must not re-render the diff")
+}
+
 func TestModel_HandleMouse_WheelDebounceMsg_StaleGenReschedules(t *testing.T) {
 	// a debounce msg whose gen lags the current wheel gen represents an older
 	// burst tick that arrived while the burst is still going. it must NOT
