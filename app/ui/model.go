@@ -481,6 +481,7 @@ type Model struct {
 	compact     compactState      // applicability + transient hint for compact diff mode
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
 	vim         vimState          // count accumulator, pending letter leader, and transient hint for vim-motion preset
+	wheel       wheelState        // diff-pane mouse wheel coalescing (debounced render via wheelDebounceMsg)
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
@@ -812,6 +813,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleBlameLoaded(msg)
 	case editorFinishedMsg:
 		return m.handleEditorFinished(msg)
+	case wheelDebounceMsg:
+		return m.handleWheelDebounce(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)
@@ -839,6 +842,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.compact.hint = ""
 	m.keys.hint = ""
 	m.vim.hint = ""
+
+	// flush any deferred wheel work (cursor pin + diff render) before the key
+	// action runs — m.nav.diffCursor must be at its final pinned position
+	// before cursor-relative actions (j/k, save annotation, search) read it.
+	m.flushWheelPending()
 
 	// pending-reload intercept: y confirms, any other key cancels
 	if m.reload.pending {
@@ -1289,6 +1297,10 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.tree.EnsureVisible(m.treePageSize())
 
 	if m.file.name != "" {
+		// flush deferred wheel pin before syncViewportToCursor so the post-resize
+		// scroll is anchored to the user's wheeled-to position rather than the
+		// pre-burst cursor. extra render is rare (resize during wheel burst).
+		m.flushWheelPending()
 		m.syncViewportToCursor()
 	}
 
