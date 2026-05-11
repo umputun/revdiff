@@ -445,30 +445,20 @@ func TestModel_HandleMouse_WheelNonPressActionIgnored(t *testing.T) {
 	}
 }
 
-func TestModel_HandleMouse_ShiftWheelInTreeUsesTreePageSize(t *testing.T) {
-	// shift+wheel over the tree must move by treePageSize()/2 entries,
-	// matching the keyboard half-page shortcut for that pane — not by
-	// viewport.Height/2 which is the diff-pane half-page step.
-	// force viewport.Height != treePageSize so the test fails under the old
-	// formula.
+func TestModel_HandleMouse_ShiftWheelInDiffUsesHalfPage(t *testing.T) {
+	// shift+wheel in the diff pane must step by viewport.Height/2 to match
+	// the keyboard half-page shortcut. tree/TOC wheel paths ignore the
+	// magnitude entirely (single-step cursor nav) so they are not exercised
+	// here.
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
 		"a.go": {{NewNum: 1, Content: "x", ChangeType: diff.ChangeContext}},
 	})
-	m.layout.viewport.Height = 4 // small diff viewport
-	// treePageSize derives from layout.height - 2 (- 1 if status bar present);
-	// with the default mouseTestModel height it is larger than 4.
-	assert.NotEqual(t, m.layout.viewport.Height/2, m.treePageSize()/2,
-		"test precondition: viewport and tree half-pages must differ")
+	m.layout.viewport.Height = 20
 
-	// shift+wheel in tree zone (x < treeWidth+2, y >= treeTopRow)
-	got := m.wheelStepFor(hitTree, true)
-	assert.Equal(t, max(1, m.treePageSize()/2), got,
-		"shift+wheel in tree must step by treePageSize/2, not viewport.Height/2")
-
-	// sanity: shift+wheel in diff still uses viewport half-page
-	got = m.wheelStepFor(hitDiff, true)
-	assert.Equal(t, max(1, m.layout.viewport.Height/2), got,
-		"shift+wheel in diff must step by viewport.Height/2")
+	assert.Equal(t, max(1, m.layout.viewport.Height/2), m.wheelStepFor(true),
+		"shift+wheel must step by viewport.Height/2")
+	assert.Equal(t, wheelStep, m.wheelStepFor(false),
+		"plain wheel must step by the wheelStep constant")
 }
 
 func TestModel_HandleMouse_HorizontalWheelNoop(t *testing.T) {
@@ -975,7 +965,12 @@ func TestModel_HandleMouse_StdinModeTreeHiddenClickLandsOnDiff(t *testing.T) {
 }
 
 func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
-	// markdown single-file with TOC: tree pane slot shows TOC; wheel must route to TOC.
+	// markdown single-file with TOC: tree pane slot shows TOC; wheel must
+	// route to TOC and advance its cursor one entry per notch.
+	// note ParseTOC prepends a synthetic filename entry at lineIdx=0, so the
+	// first heading (also at lineIdx=0 here) shares the same lineIdx with it;
+	// two wheel notches advance the cursor past both and land on # B which
+	// has a distinct lineIdx.
 	files := []string{"README.md"}
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "# A", ChangeType: diff.ChangeContext},
@@ -992,11 +987,15 @@ func TestModel_HandleMouse_WheelInTOCJumpsViewport(t *testing.T) {
 
 	before, _ := m.file.mdTOC.CurrentLineIdx()
 
-	// wheel-down at (x=5, y=3) hits the tree slot; with mdTOC active, route to TOC
-	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
-	model := result.(Model)
+	// two wheel-down notches at (x=5, y=3) hit the tree slot; with mdTOC
+	// active, each is routed to TOC.Move(MotionDown) — single-step nav.
+	model := m
+	for range 2 {
+		result, _ := model.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
+		model = result.(Model)
+	}
 	after, _ := model.file.mdTOC.CurrentLineIdx()
-	assert.NotEqual(t, before, after, "TOC cursor must advance when wheel is used in TOC pane")
+	assert.NotEqual(t, before, after, "TOC cursor must advance one entry per wheel notch")
 }
 
 func TestModel_HandleMouse_LeftClickInTOCJumpsViewport(t *testing.T) {

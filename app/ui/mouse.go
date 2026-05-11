@@ -162,12 +162,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if msg.Action != tea.MouseActionPress {
 			return m, nil // guard against non-press wheel emissions for symmetry with left-click
 		}
-		return m.handleWheel(zone, -m.wheelStepFor(zone, msg.Shift))
+		return m.handleWheel(zone, -m.wheelStepFor(msg.Shift))
 	case tea.MouseButtonWheelDown:
 		if msg.Action != tea.MouseActionPress {
 			return m, nil
 		}
-		return m.handleWheel(zone, m.wheelStepFor(zone, msg.Shift))
+		return m.handleWheel(zone, m.wheelStepFor(msg.Shift))
 	case tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
 		// horizontal wheel is intentionally swallowed — horizontal scroll
 		// stays keyboard-driven so users keep a single mental model.
@@ -215,16 +215,14 @@ func (m Model) handleOverlayMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// wheelStepFor returns the wheel scroll step. Plain wheel scrolls by the
-// wheelStep constant in every zone. Shift+wheel scrolls by half the pane
-// under the pointer — viewport half for the diff, treePageSize half for
-// the tree/TOC — to match the keyboard half-page shortcuts for that pane.
-func (m Model) wheelStepFor(zone hitZone, shift bool) int {
+// wheelStepFor returns the wheel scroll step for the diff pane. Plain wheel
+// scrolls by the wheelStep constant; Shift+wheel scrolls by half the
+// viewport height to match the keyboard half-page shortcut. The tree/TOC
+// path in handleWheel ignores the magnitude and uses single-step cursor
+// navigation regardless, so this only governs the diff-pane delta.
+func (m Model) wheelStepFor(shift bool) int {
 	if !shift {
 		return wheelStep
-	}
-	if zone == hitTree {
-		return max(1, m.treePageSize()/2)
 	}
 	return max(1, m.layout.viewport.Height/2)
 }
@@ -273,19 +271,20 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 			return wheelDebounceMsg{gen: gen}
 		})
 	case hitTree:
-		motion := sidepane.MotionPageDown
-		step := delta
+		// tree/TOC wheel = direct cursor navigation, one entry per notch.
+		// no debounce, no shift-half-page tricks (those are diff-pane things);
+		// the tree is small and cheap so single-step matches j/k semantics.
+		motion := sidepane.MotionDown
 		if delta < 0 {
-			motion = sidepane.MotionPageUp
-			step = -delta
+			motion = sidepane.MotionUp
 		}
 		if m.file.mdTOC != nil {
-			m.file.mdTOC.Move(motion, step)
+			m.file.mdTOC.Move(motion)
 			m.file.mdTOC.EnsureVisible(m.treePageSize())
 			m.syncDiffToTOCCursor()
 			return m, nil
 		}
-		m.tree.Move(motion, step)
+		m.tree.Move(motion)
 		m.pendingAnnotJump = nil
 		m.nav.pendingHunkJump = nil
 		return m.loadSelectedIfChanged()
