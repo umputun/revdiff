@@ -5,12 +5,13 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type {
+	AgentToolUpdateCallback,
 	ExtensionAPI,
-	ExtensionCommandContext,
 	ExtensionContext,
 	Theme,
-} from "@mariozechner/pi-coding-agent";
-import { Box, matchesKey, Text, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
+} from "@earendil-works/pi-coding-agent";
+import { Box, matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { Type } from "typebox";
 
 const STATE_TYPE = "revdiff-state";
 const LAST_LAUNCH_TYPE = "revdiff-last-launch";
@@ -153,7 +154,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 		setReviewState(ctx, restoredReview, false);
 	}
 
-	async function startReview(ctx: ExtensionCommandContext, launch: LaunchSpec): Promise<void> {
+	async function startReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<void> {
 		pi.events.emit("revdiff:launch", { ...launch });
 		if (!ctx.hasUI) {
 			ctx.ui.notify("/revdiff requires the interactive TUI", "warning");
@@ -180,7 +181,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 
 		if (result.annotations.length === 0) {
 			setReviewState(ctx, undefined);
-			ctx.ui.notify(`Review complete — no annotations for ${launch.label}`, "success");
+			ctx.ui.notify(`Review complete — no annotations for ${launch.label}`, "info");
 			return;
 		}
 
@@ -195,11 +196,11 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			{ triggerTurn: false },
 		);
 
-		ctx.ui.notify(`Captured ${result.annotations.length} annotation${result.annotations.length === 1 ? "" : "s"}`, "success");
+		ctx.ui.notify(`Captured ${result.annotations.length} annotation${result.annotations.length === 1 ? "" : "s"}`, "info");
 		await handleAction(ctx, result, await openResultsPanel(ctx, result));
 	}
 
-	async function handleAction(ctx: ExtensionCommandContext, state: ReviewState, action: PanelAction): Promise<void> {
+	async function handleAction(ctx: ExtensionContext, state: ReviewState, action: PanelAction): Promise<void> {
 		if (action === "clear") {
 			setReviewState(ctx, undefined);
 			ctx.ui.notify("Cleared revdiff annotations", "info");
@@ -299,6 +300,75 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.registerTool({
+		name: "revdiff_review",
+		label: "revdiff review",
+		description: "Launch revdiff in pi, capture interactive review annotations, and return them to the agent.",
+		promptSnippet: "Launch an interactive revdiff review and return captured annotations.",
+		promptGuidelines: [
+			"Use revdiff_review when the user asks to review a diff, inspect changes interactively, or gather revdiff annotations inside pi.",
+			"After revdiff_review returns annotations, address them directly instead of asking the user to run /revdiff or /revdiff-apply.",
+		],
+		parameters: Type.Object({
+			args: Type.Optional(
+				Type.String({
+					description:
+						"Optional revdiff arguments as a shell-like string, for example 'main', '--staged', '--only README.md', or '--all-files --exclude vendor'. Omit for smart detection.",
+				}),
+			),
+			mode: Type.Optional(
+				Type.String({ description: "Optional launch mode: 'direct' (default) or 'overlay'." }),
+			),
+			openPanel: Type.Optional(
+				Type.Boolean({ description: "Open the pi results panel after capture. Defaults to false for agent-driven reviews." }),
+			),
+		}),
+		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
+			if (!ctx.hasUI) {
+				return toolTextResult("revdiff_review requires the interactive pi TUI.");
+			}
+
+			const mode = parseToolMode(params.mode);
+			if (params.mode && !mode) {
+				return toolTextResult("Invalid mode. Use 'direct' or 'overlay'.");
+			}
+
+			const rawArgs = [params.args?.trim() ?? "", mode ? `--pi-${mode}` : ""].filter(Boolean).join(" ");
+			const launch = await resolveLaunchSpec(rawArgs, ctx);
+			if (!launch) {
+				return toolTextResult("Could not resolve a revdiff launch target.");
+			}
+
+			pi.events.emit("revdiff:launch", { ...launch });
+			const result = await runAgentReview(ctx, launch, onUpdate);
+			if (!result) {
+				return toolTextResult("revdiff review did not complete.");
+			}
+
+			setLastLaunch({
+				args: [...result.args],
+				label: result.label,
+				mode: result.mode,
+				createdAt: result.createdAt,
+			});
+			setReviewState(ctx, result.annotations.length === 0 ? undefined : result);
+
+			if (params.openPanel === true && result.annotations.length > 0) {
+				await handleAction(ctx, result, await openResultsPanel(ctx, result));
+			}
+
+			if (result.annotations.length === 0) {
+				return toolTextResult(`Review complete — no annotations for ${result.label}.`, result);
+			}
+
+			const noun = result.annotations.length === 1 ? "annotation" : "annotations";
+			return toolTextResult(
+				[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, result.rawOutput.trim()].filter(Boolean).join("\n\n"),
+				result,
+			);
+		},
+	});
+
 	pi.on("session_start", async (_event, ctx) => {
 		restoreState(ctx);
 	});
@@ -308,9 +378,37 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 	});
 }
 
+async function runAgentReview(
+	ctx: ExtensionContext,
+	launch: LaunchSpec,
+	onUpdate: AgentToolUpdateCallback<ReviewState | null> | undefined,
+): Promise<ReviewState | undefined> {
+	onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label}...` }], details: null });
+	const result = await runReview(ctx, launch);
+	if (!result) {
+		return undefined;
+	}
+	return result;
+}
+
+function parseToolMode(mode: string | undefined): LaunchMode | undefined {
+	if (!mode) {
+		return undefined;
+	}
+	const normalized = mode.trim().toLowerCase();
+	if (normalized === "direct" || normalized === "overlay") {
+		return normalized;
+	}
+	return undefined;
+}
+
+function toolTextResult(content: string, details?: ReviewState) {
+	return { content: [{ type: "text" as const, text: content }], details: details ?? null };
+}
+
 async function applyReview(
 	pi: ExtensionAPI,
-	ctx: ExtensionCommandContext,
+	ctx: ExtensionContext,
 	state: ReviewState,
 	clearReviewState: () => void,
 ): Promise<void> {
@@ -327,7 +425,7 @@ async function applyReview(
 	clearReviewState();
 }
 
-async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionCommandContext): Promise<LaunchSpec | undefined> {
+async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
 	const trimmed = rawArgs.trim();
 	if (!trimmed) {
 		const detected = await detectSmartLaunch(ctx);
@@ -368,7 +466,7 @@ async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionCommandContext):
 	return { args: tokens, label: describeArgs(tokens), mode };
 }
 
-async function detectSmartLaunch(ctx: ExtensionCommandContext): Promise<Omit<LaunchSpec, "mode"> | undefined> {
+async function detectSmartLaunch(ctx: ExtensionContext): Promise<Omit<LaunchSpec, "mode"> | undefined> {
 	const detected = detectSmartRef();
 	if (!detected) {
 		ctx.ui.notify("Not inside a git repo. Use /revdiff --only <file> to review a standalone file.", "warning");
@@ -400,14 +498,14 @@ async function detectSmartLaunch(ctx: ExtensionCommandContext): Promise<Omit<Lau
 	return { args: [detected.suggestedRef], label: detected.suggestedRef };
 }
 
-async function runReview(ctx: ExtensionCommandContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
+async function runReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
 	if (launch.mode === "overlay") {
 		return runOverlayReview(ctx, launch);
 	}
 	return runDirectReview(ctx, launch);
 }
 
-async function runDirectReview(ctx: ExtensionCommandContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
+async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
 	const revdiffBin = resolveRevdiffBin();
 	if (!revdiffBin) {
 		ctx.ui.notify("revdiff binary not found. Install it or set REVDIFF_BIN.", "error");
@@ -455,7 +553,7 @@ async function runDirectReview(ctx: ExtensionCommandContext, launch: LaunchSpec)
 	return buildResult(launch, rawOutput);
 }
 
-async function runOverlayReview(ctx: ExtensionCommandContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
+async function runOverlayReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
 	const launcher = resolveLauncherScript();
 	if (!launcher) {
 		ctx.ui.notify("Overlay mode requested, but launch-revdiff.sh was not found", "error");
@@ -501,7 +599,7 @@ function buildResult(launch: LaunchSpec, rawOutput: string): ReviewState {
 	};
 }
 
-async function openResultsPanel(ctx: ExtensionCommandContext, state: ReviewState): Promise<PanelAction> {
+async function openResultsPanel(ctx: ExtensionContext, state: ReviewState): Promise<PanelAction> {
 	return ctx.ui.custom<PanelAction>(
 		(tui, theme, _kb, done) => new ReviewPanel(tui, theme, state, done),
 		{
@@ -878,7 +976,7 @@ function shellSplit(input: string): string[] {
 	return tokens;
 }
 
-function normalizeLaunchMode(mode: LaunchMode | undefined, ctx: ExtensionCommandContext): LaunchMode | undefined {
+function normalizeLaunchMode(mode: LaunchMode | undefined, ctx: ExtensionContext): LaunchMode | undefined {
 	const envMode = process.env.REVDIFF_PI_MODE;
 	const resolved = mode ?? (envMode === "overlay" ? "overlay" : "direct");
 	if (resolved === "overlay" && !resolveLauncherScript()) {

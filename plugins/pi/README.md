@@ -4,7 +4,7 @@ This directory contains the **pi-specific** integration for revdiff.
 
 ## Contents
 
-- `extensions/revdiff.ts` — pi extension that launches revdiff, captures annotations, and shows them in pi
+- `extensions/revdiff.ts` — pi extension that launches revdiff, captures annotations, exposes the `revdiff_review` agent tool, and shows results in pi
 - `extensions/revdiff-post-edit.ts` — optional post-edit reminder extension (disabled by default)
 - `skills/revdiff/SKILL.md` — pi skill describing the review workflow and commands
 

@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const CONFIG_TYPE = "revdiff-reminder-config";
 const STATUS_KEY = "revdiff-reminder";

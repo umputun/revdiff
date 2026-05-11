@@ -14,9 +14,14 @@
     "annotations",
     "tui"
   ],
+  "files": [
+    "plugins/pi/",
+    ".claude-plugin/skills/revdiff/scripts/"
+  ],
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.60",
-    "@mariozechner/pi-tui": "^0.60"
+    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-tui": "^0.74.0",
+    "typebox": "^1.1.24"
   },
   "pi": {
     "extensions": [
