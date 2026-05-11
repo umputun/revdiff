@@ -109,10 +109,12 @@ The script outputs structured fields:
 
 When you are launching revdiff for the user (e.g., right after a refactor or analysis), pass `--description="..."` so the info popup (`i` key) explains what the change is and what to look at — markdown is supported. For longer prose, write the markdown to a temp file and pass `--description-file=/tmp/revdiff-desc-XXXXXX.md`. The two flags are mutually exclusive; both are optional. Skip when there's no useful context to add.
 
+**When the recent change likely created new untracked files** (new packages, new test files, new docs, new scripts that haven't been `git add`-ed yet), pass `--untracked` so those files appear in the tree. Use this in working-tree mode (no ref, no `--staged`); skip it for ref-to-ref reviews where untracked files are not part of the historical diff.
+
 Run the launcher through the override-chain resolver:
 
 ```bash
-"$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" [base] [against] [--staged] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
+"$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" [base] [against] [--staged] [--untracked] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
 ```
 
 The resolver and launcher MUST run in the same bash invocation — the resolver runs as a sub-shell substitution so the resolved path is consumed immediately as the executable. The resolver checks `user → bundled` (see `references/install.md` for override paths) and prints the first-found absolute path. Fall-through to the bundled launcher is the default when no overrides exist.

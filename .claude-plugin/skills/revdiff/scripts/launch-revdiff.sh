@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # launch revdiff in a terminal overlay (tmux/zellij/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
-# usage: launch-revdiff.sh [ref] [--staged] [--only=file1 ...]
+# usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--only=file1 ...]
 # output: annotation text from revdiff stdout (empty if no annotations)
 
 set -euo pipefail
