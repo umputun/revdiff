@@ -607,7 +607,7 @@ type ModelConfig struct {
 	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool     // show line numbers in diff gutter
 	ShowBlame        bool     // show blame gutter on startup when available
-	ShowUntracked    bool     // show untracked files in the tree on startup (requires LoadUntracked)
+	ShowUntracked    bool     // show untracked files in the tree on startup; silent no-op when LoadUntracked is nil (e.g. --stdin, --compare-old/--compare-new)
 	WordDiff         bool     // enable intra-line word-diff highlighting on startup
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths

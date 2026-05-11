@@ -354,6 +354,34 @@ func TestParseArgs_Untracked(t *testing.T) {
 	})
 }
 
+func TestOptions_StartupUntracked(t *testing.T) {
+	mk := func(untracked, staged bool, base, against string) options {
+		var o options
+		o.Untracked = untracked
+		o.Staged = staged
+		o.Refs.Base = base
+		o.Refs.Against = against
+		return o
+	}
+	cases := []struct {
+		name string
+		opts options
+		want bool
+	}{
+		{"flag off", mk(false, false, "", ""), false},
+		{"flag on, no ref", mk(true, false, "", ""), true},
+		{"flag on with --staged (no positional ref)", mk(true, true, "", ""), true},
+		{"flag on, single ref", mk(true, false, "main", ""), true},
+		{"flag on, two refs (a b form)", mk(true, false, "main", "feature"), false},
+		{"flag on, dot-dot ref (a..b form)", mk(true, false, "main..feature", ""), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.opts.startupUntracked())
+		})
+	}
+}
+
 func TestParseArgs_WordDiff(t *testing.T) {
 	t.Run("default off", func(t *testing.T) {
 		opts, err := parseArgs(noConfigArgs(t))

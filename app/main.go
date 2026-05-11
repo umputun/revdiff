@@ -198,7 +198,7 @@ func run(opts options) error {
 		CrossFileHunks:    opts.CrossFileHunks,
 		LineNumbers:       opts.LineNumbers,
 		ShowBlame:         opts.Blame,
-		ShowUntracked:     opts.Untracked,
+		ShowUntracked:     opts.startupUntracked(),
 		WordDiff:          opts.WordDiff,
 		VimMotion:         opts.VimMotion,
 		ReviewInfo: reviewInfoFromOptions(opts, reviewInfoInputs{

@@ -100,6 +100,20 @@ func (o options) ref() string {
 	return o.Refs.Base
 }
 
+// startupUntracked reports whether --untracked should activate on startup.
+// disabled in two-ref mode (both `a b` and `a..b` forms) because untracked
+// files are working-tree state, not part of a historical diff between refs.
+// the 'u' runtime toggle still works in any mode.
+func (o options) startupUntracked() bool {
+	if !o.Untracked {
+		return false
+	}
+	if o.Refs.Against != "" || strings.Contains(o.Refs.Base, "..") {
+		return false
+	}
+	return true
+}
+
 // parseArgs parses CLI arguments with config file support.
 // config file is loaded first, then CLI args override.
 // precedence: CLI flags > env vars > config file > built-in defaults.
