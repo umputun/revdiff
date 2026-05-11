@@ -20,14 +20,15 @@ const wheelStep = overlay.WheelStep
 // pin and the diff render to a single tea.Tick so a burst of wheel events
 // produces one pin + render at burst-end instead of per-event work. Short
 // enough that the cursor highlight reappears quickly after the user stops
-// scrolling, long enough to coalesce a typical trackpad flick.
+// scrolling, long enough to coalesce a typical trackpad flick into one render.
 const wheelRenderDelay = 30 * time.Millisecond
 
 // wheelState tracks the coalescing state for diff-pane wheel events.
 //
-// gen is bumped each time a wheel event would trigger a render; the in-flight
-// tea.Tick captures the gen at scheduling time so the resulting debounce msg
-// can tell whether the burst has advanced past it.
+// gen is bumped on every wheel event that actually shifts YOffset (i.e.
+// scrollDiffViewportBy returned true — at-edge no-ops do NOT bump). The
+// in-flight tea.Tick captures the gen at scheduling time so the resulting
+// debounce msg can tell whether the burst has advanced past it.
 //
 // renderPending stays true while a render is owed (set by wheel events,
 // cleared by flushWheelPending).

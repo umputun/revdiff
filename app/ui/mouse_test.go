@@ -205,6 +205,11 @@ func wheelMsg(button tea.MouseButton, x, y int, shift bool) tea.MouseMsg {
 // debounce tick fires, the cursor pins and the diff re-renders. tests that
 // want to observe burst-time state (pre-flush) should call Update directly
 // instead.
+//
+// fails loudly when the wheel handler returns a cmd that is NOT a
+// wheelDebounceMsg producer — a future refactor (e.g. tea.Batch) would
+// otherwise silently degrade this helper into a plain Update and produce
+// misleading "post-flush" assertions on pre-flush state.
 func updateWheelAndFlush(t *testing.T, m Model, msg tea.MouseMsg) Model {
 	t.Helper()
 	result, cmd := m.Update(msg)
@@ -212,9 +217,10 @@ func updateWheelAndFlush(t *testing.T, m Model, msg tea.MouseMsg) Model {
 	if cmd == nil {
 		return model
 	}
-	debounceMsg, ok := cmd().(wheelDebounceMsg)
+	produced := cmd()
+	debounceMsg, ok := produced.(wheelDebounceMsg)
 	if !ok {
-		return model
+		t.Fatalf("updateWheelAndFlush: wheel handler returned non-wheelDebounceMsg cmd: %T", produced)
 	}
 	result, _ = model.Update(debounceMsg)
 	return result.(Model)
