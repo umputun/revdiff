@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -1133,16 +1134,28 @@ func TestModel_HandleMouse_WheelDeferredRender_NoDebounceWhenYOffsetCannotChange
 func TestModel_HandleMouse_WheelDebounceMsg_RendersOnMatchingGen(t *testing.T) {
 	// wheelDebounceMsg with matching gen and renderPending=true flushes the
 	// deferred cursor pin AND diff render, then clears renderPending +
-	// tickInFlight. all three side effects must be observable on the model.
+	// tickInFlight. all four side effects must be observable: state flags
+	// clear, cursor pins, AND the viewport content reflects the post-pin
+	// render (asserting against viewport.View() catches a regression where
+	// SetContent(renderDiff()) is removed from flushWheelPending).
+	// per-line unique content so a re-render is observable in the rendered
+	// string (the cursor highlight uses default colors in tests, so a plain
+	// "all lines look the same" fixture wouldn't catch a missing SetContent).
 	lines := make([]diff.DiffLine, 60)
 	for i := range lines {
-		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: fmt.Sprintf("line %d", i), ChangeType: diff.ChangeContext}
 	}
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.lines = lines
+	// initial render with cursor at 0, YOffset=0 — establishes the baseline
+	// content string the test asserts against later.
 	m.layout.viewport.SetContent(m.renderDiff())
+	preContent := m.layout.viewport.View()
+
 	// simulate a wheel burst that scrolled YOffset past the cursor: cursor at 0
 	// is now above the viewport top, pinDiffCursorTo will pin to row wheelStep.
+	// YOffset shifts but viewport.SetContent is NOT called — this matches the
+	// real wheel path that defers SetContent to the debounce flush.
 	m.layout.viewport.SetYOffset(wheelStep)
 	m.nav.diffCursor = 0
 	m.wheel.gen = 5
@@ -1156,6 +1169,15 @@ func TestModel_HandleMouse_WheelDebounceMsg_RendersOnMatchingGen(t *testing.T) {
 	assert.False(t, model.wheel.renderPending, "matching debounce msg must clear renderPending")
 	assert.False(t, model.wheel.tickInFlight, "matching debounce msg must clear tickInFlight")
 	assert.Equal(t, wheelStep, model.nav.diffCursor, "matching debounce msg must pin cursor to viewport top")
+
+	// the deferred SetContent(renderDiff()) ran during flushWheelPending, so
+	// viewport.View() must now reflect the post-pin state — at minimum,
+	// scrolled lines (YOffset+wheelStep) are visible where pre-burst lines
+	// used to be. without the assertion, removing SetContent from
+	// flushWheelPending would still pass the flag/cursor checks above.
+	postContent := model.layout.viewport.View()
+	assert.NotEqual(t, preContent, postContent, "matching debounce msg must re-render viewport content via SetContent(renderDiff())")
+	assert.Contains(t, postContent, fmt.Sprintf("line %d", wheelStep), "post-flush viewport must show the wheelStep-offset content")
 }
 
 func TestModel_HandleMouse_WheelDebounceMsg_StaleGenReschedules(t *testing.T) {
