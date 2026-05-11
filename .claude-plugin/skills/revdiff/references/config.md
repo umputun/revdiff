@@ -19,6 +19,7 @@ Then uncomment and edit the values you want to change.
 | Option | Env var | Description | Default |
 |--------|---------|-------------|---------|
 | `--staged` | `REVDIFF_STAGED` | Show staged changes | `false` |
+| `--untracked` | `REVDIFF_UNTRACKED` | Show untracked files in the tree | `false` |
 | `--tree-width` | `REVDIFF_TREE_WIDTH` | File tree panel width in units (1-10) | `2` |
 | `--tab-width` | `REVDIFF_TAB_WIDTH` | Spaces per tab character | `4` |
 | `--no-colors` | `REVDIFF_NO_COLORS` | Disable all colors including syntax highlighting | `false` |

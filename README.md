@@ -289,6 +289,7 @@ Positional arguments support several forms:
 | `base` | Git ref to diff against | uncommitted changes |
 | `against` | Second git ref for two-ref diff | |
 | `--staged` | Show staged changes, env: `REVDIFF_STAGED` | `false` |
+| `--untracked` | Show untracked files in the tree, env: `REVDIFF_UNTRACKED` | `false` |
 | `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `2` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |

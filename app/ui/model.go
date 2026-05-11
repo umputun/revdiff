@@ -607,6 +607,7 @@ type ModelConfig struct {
 	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool     // show line numbers in diff gutter
 	ShowBlame        bool     // show blame gutter on startup when available
+	ShowUntracked    bool     // show untracked files in the tree on startup (requires LoadUntracked)
 	WordDiff         bool     // enable intra-line word-diff highlighting on startup
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
@@ -749,7 +750,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			collapsed:      collapsedState{enabled: cfg.Collapsed},
 			wordDiff:       cfg.WordDiff,
 			showBlame:      cfg.ShowBlame && cfg.Blamer != nil,
-			showUntracked:  false,
+			showUntracked:  cfg.ShowUntracked && cfg.LoadUntracked != nil,
 			compact:        cfg.Compact && cfg.CompactApplicable,
 			compactContext: cfg.CompactContext,
 			vimMotion:      cfg.VimMotion,

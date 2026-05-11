@@ -332,6 +332,41 @@ func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
 	assert.Contains(t, model.layout.viewport.View(), "no files match --only filter")
 }
 
+func TestModel_UntrackedStartup(t *testing.T) {
+	t.Run("ShowUntracked=true with LoadUntracked initializes showUntracked on", func(t *testing.T) {
+		renderer := &mocks.RendererMock{}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return nil, nil },
+		})
+		assert.True(t, m.modes.showUntracked)
+	})
+
+	t.Run("ShowUntracked=true without LoadUntracked stays off", func(t *testing.T) {
+		renderer := &mocks.RendererMock{}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  nil,
+		})
+		assert.False(t, m.modes.showUntracked, "no-op when LoadUntracked is not wired (e.g. stdin, compare modes)")
+	})
+
+	t.Run("ShowUntracked=false stays off even with LoadUntracked wired", func(t *testing.T) {
+		renderer := &mocks.RendererMock{}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  false,
+			LoadUntracked:  func() ([]string, error) { return nil, nil },
+		})
+		assert.False(t, m.modes.showUntracked)
+	})
+}
+
 func TestModel_UntrackedToggle(t *testing.T) {
 	t.Run("toggle cycles showUntracked and reloads files", func(t *testing.T) {
 		entries := []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}

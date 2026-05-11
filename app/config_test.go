@@ -323,6 +323,37 @@ func TestParseArgs_Blame(t *testing.T) {
 	})
 }
 
+func TestParseArgs_Untracked(t *testing.T) {
+	t.Run("default off", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.False(t, opts.Untracked)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--untracked"))
+		require.NoError(t, err)
+		assert.True(t, opts.Untracked)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_UNTRACKED", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.Untracked)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nuntracked = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.Untracked)
+	})
+}
+
 func TestParseArgs_WordDiff(t *testing.T) {
 	t.Run("default off", func(t *testing.T) {
 		opts, err := parseArgs(noConfigArgs(t))
