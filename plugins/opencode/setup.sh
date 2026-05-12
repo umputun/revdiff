@@ -6,7 +6,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 OPENCODE_CONFIG="$HOME/.config/opencode"
 
-copy_file() {
+USE_SYMLINK=false
+for arg in "$@"; do
+  case "$arg" in
+    --symlink) USE_SYMLINK=true ;;
+  esac
+done
+
+install_file() {
   local src="$1"
   local dst="$2"
   local make_exec="${3:-}"
@@ -16,9 +23,15 @@ copy_file() {
     return 1
   fi
 
-  cp "$src" "$dst"
+  if [[ "$USE_SYMLINK" == true ]]; then
+    ln -sf "$src" "$dst"
+    echo "Linked ${src#"$REPO_ROOT"/} as $dst"
+  else
+    cp "$src" "$dst"
+    echo "Copied ${src#"$REPO_ROOT"/} -> $dst"
+  fi
+
   [[ "$make_exec" == "exec" ]] && chmod +x "$dst"
-  echo "Copied ${src#"$REPO_ROOT"/} -> $dst"
 }
 
 mkdir -p "$OPENCODE_CONFIG/commands"
@@ -27,11 +40,11 @@ mkdir -p "$OPENCODE_CONFIG/plugins"
 
 errors=0
 
-copy_file "$REPO_ROOT/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"  "$OPENCODE_CONFIG/tools/launch-revdiff.sh" exec || ((errors++))
-copy_file "$REPO_ROOT/plugins/revdiff-planning/scripts/launch-plan-review.sh"   "$OPENCODE_CONFIG/plugins/launch-plan-review.sh" exec || ((errors++))
-copy_file "$SCRIPT_DIR/commands/revdiff.md"  "$OPENCODE_CONFIG/commands/revdiff.md" || ((errors++))
-copy_file "$SCRIPT_DIR/tools/revdiff.ts"     "$OPENCODE_CONFIG/tools/revdiff.ts" || ((errors++))
-copy_file "$SCRIPT_DIR/plugins/revdiff-plan-review.ts"   "$OPENCODE_CONFIG/plugins/revdiff-plan-review.ts" || ((errors++))
+install_file "$REPO_ROOT/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"  "$OPENCODE_CONFIG/tools/launch-revdiff.sh" exec || ((errors++))
+install_file "$REPO_ROOT/plugins/revdiff-planning/scripts/launch-plan-review.sh"   "$OPENCODE_CONFIG/plugins/launch-plan-review.sh" exec || ((errors++))
+install_file "$SCRIPT_DIR/commands/revdiff.md"  "$OPENCODE_CONFIG/commands/revdiff.md" || ((errors++))
+install_file "$SCRIPT_DIR/tools/revdiff.ts"     "$OPENCODE_CONFIG/tools/revdiff.ts" || ((errors++))
+install_file "$SCRIPT_DIR/plugins/revdiff-plan-review.ts"   "$OPENCODE_CONFIG/plugins/revdiff-plan-review.ts" || ((errors++))
 
 OPENCODE_JSON="$HOME/.config/opencode/opencode.json"
 PLUGIN_ENTRY="./plugins/revdiff-plan-review.ts"

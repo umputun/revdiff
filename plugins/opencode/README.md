@@ -25,7 +25,15 @@
 bash setup.sh
 ```
 
-The script creates the target directories if needed, copies all files, marks the shell scripts as executable, and registers the plan-review plugin in `~/.config/opencode/opencode.json`. Or manually:
+The script creates the target directories if needed, copies all files, marks the shell scripts as executable, and registers the plan-review plugin in `~/.config/opencode/opencode.json`.
+
+Use the `--symlink` flag to create symlinks instead of copies. This makes updating as simple as a `git pull` inside this repo — no need to re-run the script after every change:
+
+```sh
+bash setup.sh --symlink
+```
+
+Or manually:
 
 ```sh
 mkdir -p ~/.config/opencode/commands ~/.config/opencode/tools ~/.config/opencode/plugins
