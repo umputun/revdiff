@@ -453,6 +453,24 @@ func TestParseArgs_AnnotationMarker(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, opts.AnnotationMarker)
 	})
+
+	t.Run("rejects newline", func(t *testing.T) {
+		_, err := parseArgs(append(noConfigArgs(t), "--annotation-marker=a\nb"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot contain newlines or tabs")
+	})
+
+	t.Run("rejects tab", func(t *testing.T) {
+		_, err := parseArgs(append(noConfigArgs(t), "--annotation-marker=a\tb"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot contain newlines or tabs")
+	})
+
+	t.Run("rejects carriage return", func(t *testing.T) {
+		_, err := parseArgs(append(noConfigArgs(t), "--annotation-marker=a\rb"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot contain newlines or tabs")
+	})
 }
 
 func TestParseArgs_VimMotion(t *testing.T) {

@@ -157,6 +157,10 @@ func parseArgs(args []string) (options, error) {
 		return options{}, errors.New("--compact-context must be >= 1")
 	}
 
+	if strings.ContainsAny(opts.AnnotationMarker, "\n\r\t") {
+		return options{}, errors.New("--annotation-marker cannot contain newlines or tabs")
+	}
+
 	if opts.Description != "" && opts.DescriptionFile != "" {
 		return options{}, errors.New("--description and --description-file are mutually exclusive")
 	}

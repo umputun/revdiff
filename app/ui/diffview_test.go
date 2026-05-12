@@ -1262,6 +1262,18 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		assert.Contains(t, rows[1], strings.Repeat(" ", 9)+"beta", "continuation indented to align past 💬 file: prefix")
 	})
 
+	t.Run("line-level body starting file colon uses line prefix indent", func(t *testing.T) {
+		m := newModel()
+		var b strings.Builder
+		cursor := m.renderer.DiffCursor(m.cfg.noColors)
+		m.renderWrappedAnnotation(&b, cursor, "\U0001f4ac ", "file: alpha\nbeta")
+		out := b.String()
+		rows := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		require.Len(t, rows, 2)
+		assert.Contains(t, rows[1], strings.Repeat(" ", 3)+"beta", "line-level continuation should align past 💬 prefix")
+		assert.NotContains(t, rows[1], strings.Repeat(" ", 9)+"beta", "line-level body must not be treated as file-level prefix")
+	})
+
 	t.Run("two logical lines each wrap, counts grow", func(t *testing.T) {
 		m := newModel()
 		m.layout.width = 40 // narrow pane to force wrap
@@ -1279,29 +1291,4 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		assert.Contains(t, out, "alpha", "first logical line content present")
 		assert.Contains(t, out, "bravo", "second logical line content present")
 	})
-}
-
-func TestModel_AnnotationContinuationIndent(t *testing.T) {
-	m := testModel(nil, nil)
-
-	tests := []struct {
-		name  string
-		first string
-		want  int // number of indent spaces
-	}{
-		{"line-level emoji prefix gets 3-space indent", "\U0001f4ac line note", 3},
-		{"file-level emoji prefix gets 9-space indent", "\U0001f4ac file: note", 9},
-		{"no emoji prefix yields no indent (default branch)", "plain text", 0},
-		{"empty string yields no indent (default branch)", "", 0},
-		{"lookalike prefix without emoji yields no indent", "file: note", 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			indent := m.annotationContinuationIndent(tt.first)
-			assert.Len(t, indent, tt.want)
-			for _, r := range indent {
-				assert.Equal(t, ' ', r, "indent must be spaces only")
-			}
-		})
-	}
 }

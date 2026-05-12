@@ -695,20 +695,6 @@ func (m Model) renderWrappedAnnotation(b *strings.Builder, cursor, prefix, body 
 	}
 }
 
-// annotationContinuationIndent returns leading whitespace sized to match the marker
-// prefix on the first logical line of an annotation so continuation logical lines
-// align under the body. Uses lipgloss.Width because markers may be wide glyphs.
-func (m Model) annotationContinuationIndent(firstLogicalLine string) string {
-	switch {
-	case strings.HasPrefix(firstLogicalLine, m.annotFilePrefix()):
-		return strings.Repeat(" ", lipgloss.Width(m.annotFilePrefix()))
-	case strings.HasPrefix(firstLogicalLine, m.annotPrefix()):
-		return strings.Repeat(" ", lipgloss.Width(m.annotPrefix()))
-	default:
-		return ""
-	}
-}
-
 const (
 	wrapGutterWidth = 3  // wrap gutter prefix width: " + ", " - ", "   ", " ↪ "
 	wrapMinContent  = 10 // minimum content width per visual row when wrap-indent is active

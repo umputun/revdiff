@@ -449,7 +449,7 @@ func (m *Model) annotationVisualRows(prefix, body string) []string {
 func (m Model) composeAnnotationRows(prefix, body string, wrapW int) []string {
 	first := prefix + body
 	logical := strings.Split(first, "\n")
-	indent := m.annotationContinuationIndent(logical[0])
+	indent := strings.Repeat(" ", lipgloss.Width(prefix))
 
 	var rows []string
 	for i, segment := range logical {

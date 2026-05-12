@@ -264,10 +264,10 @@ type modelConfigState struct {
 	crossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	treeWidthRatio   int      // 1-10 units for file tree panel
 	tabSpaces        string   // spaces to replace tabs with
-	wrapIndent       int    // extra indent (in columns) for wrap continuation rows; 0 disables
-	annotationMarker string // prefix shown before annotation lines
-	annotPrefix      string // cached: marker + " "
-	annotFilePrefix  string // cached: marker + " file: "
+	wrapIndent       int      // extra indent (in columns) for wrap continuation rows; 0 disables
+	annotationMarker string   // prefix shown before annotation lines
+	annotPrefix      string   // cached: marker + " "
+	annotFilePrefix  string   // cached: marker + " file: "
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.

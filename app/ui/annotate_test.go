@@ -1140,6 +1140,46 @@ func TestModel_FileAnnotationInputWidthNarrowerThanLineLevel(t *testing.T) {
 	assert.Equal(t, 6, lineWidth-fileWidth, "width difference should match prefix width difference")
 }
 
+func TestModel_AnnotationInputWidthUsesMarkerWidth(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeAdd}}
+	tests := []struct {
+		name          string
+		marker        string
+		wantLineWidth int
+		wantFileWidth int
+	}{
+		{name: "default emoji marker", marker: "\U0001f4ac", wantLineWidth: 78, wantFileWidth: 72},
+		{name: "wide emoji marker", marker: "\U0001f4ac\U0001f4ac", wantLineWidth: 76, wantFileWidth: 70},
+		{name: "empty marker", marker: "", wantLineWidth: 80, wantFileWidth: 74},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			m.tree = testNewFileTree([]string{"a.go"})
+			m.file.name = "a.go"
+			m.file.lines = lines
+			m.nav.diffCursor = 0
+			m.layout.focus = paneDiff
+			m.layout.width = 120
+			m.layout.treeWidth = 30
+			m.layout.treeHidden = false
+			m.cfg.annotationMarker = tt.marker
+			m.cfg.annotPrefix = tt.marker + " "
+			m.cfg.annotFilePrefix = tt.marker + " file: "
+
+			require.Equal(t, 84, m.diffContentWidth(), "test fixture pins absolute width")
+
+			m.startAnnotation()
+			assert.Equal(t, tt.wantLineWidth, m.annot.input.Width, "line annotation input width")
+
+			m.annot.annotating = false
+			m.startFileAnnotation()
+			assert.Equal(t, tt.wantFileWidth, m.annot.input.Width, "file annotation input width")
+		})
+	}
+}
+
 func TestModel_FileAnnotationSavesWithLineZero(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
