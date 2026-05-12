@@ -100,7 +100,7 @@ Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iT
 >
 > ```json
 > {
->   "permissions": {
+>   "sandbox": {
 >     "excludedCommands": ["*/launch-revdiff.sh*"]
 >   }
 > }
