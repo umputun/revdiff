@@ -5,7 +5,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type {
-	AgentToolUpdateCallback,
 	ExtensionAPI,
 	ExtensionContext,
 	Theme,
@@ -155,7 +154,6 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 	}
 
 	async function startReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<void> {
-		pi.events.emit("revdiff:launch", { ...launch });
 		if (!ctx.hasUI) {
 			ctx.ui.notify("/revdiff requires the interactive TUI", "warning");
 			return;
@@ -165,7 +163,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		const result = await runReview(ctx, launch);
+		const result = await runReview(pi, ctx, launch);
 		if (!result) {
 			return;
 		}
@@ -317,7 +315,9 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 				}),
 			),
 			mode: Type.Optional(
-				Type.String({ description: "Optional launch mode: 'direct' (default) or 'overlay'." }),
+				Type.Union([Type.Literal("direct"), Type.Literal("overlay")], {
+					description: "Optional launch mode: 'direct' (default) or 'overlay'.",
+				}),
 			),
 			openPanel: Type.Optional(
 				Type.Boolean({ description: "Open the pi results panel after capture. Defaults to false for agent-driven reviews." }),
@@ -328,10 +328,9 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 				return toolTextResult("revdiff_review requires the interactive pi TUI.");
 			}
 
-			const mode = parseToolMode(params.mode);
-			if (params.mode && !mode) {
-				return toolTextResult("Invalid mode. Use 'direct' or 'overlay'.");
-			}
+			// Tool execution runs during the agent turn, so ctx.isIdle() is expected
+			// to be false here; the tool runner serializes this interactive call.
+			const mode = params.mode;
 
 			const rawArgs = [params.args?.trim() ?? "", mode ? `--pi-${mode}` : ""].filter(Boolean).join(" ");
 			const launch = await resolveLaunchSpec(rawArgs, ctx);
@@ -339,8 +338,8 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 				return toolTextResult("Could not resolve a revdiff launch target.");
 			}
 
-			pi.events.emit("revdiff:launch", { ...launch });
-			const result = await runAgentReview(ctx, launch, onUpdate);
+			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label}...` }], details: null });
+			const result = await runReview(pi, ctx, launch);
 			if (!result) {
 				return toolTextResult("revdiff review did not complete.");
 			}
@@ -354,7 +353,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			setReviewState(ctx, result.annotations.length === 0 ? undefined : result);
 
 			if (params.openPanel === true && result.annotations.length > 0) {
-				await handleAction(ctx, result, await openResultsPanel(ctx, result));
+				await openResultsPanel(ctx, result, { readOnly: true });
 			}
 
 			if (result.annotations.length === 0) {
@@ -362,10 +361,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			}
 
 			const noun = result.annotations.length === 1 ? "annotation" : "annotations";
-			return toolTextResult(
-				[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, result.rawOutput.trim()].filter(Boolean).join("\n\n"),
-				result,
-			);
+			return toolTextResult(`Captured ${result.annotations.length} ${noun} for ${result.label}.`, result);
 		},
 	});
 
@@ -376,30 +372,6 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 	pi.on("session_tree", async (_event, ctx) => {
 		restoreState(ctx);
 	});
-}
-
-async function runAgentReview(
-	ctx: ExtensionContext,
-	launch: LaunchSpec,
-	onUpdate: AgentToolUpdateCallback<ReviewState | null> | undefined,
-): Promise<ReviewState | undefined> {
-	onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label}...` }], details: null });
-	const result = await runReview(ctx, launch);
-	if (!result) {
-		return undefined;
-	}
-	return result;
-}
-
-function parseToolMode(mode: string | undefined): LaunchMode | undefined {
-	if (!mode) {
-		return undefined;
-	}
-	const normalized = mode.trim().toLowerCase();
-	if (normalized === "direct" || normalized === "overlay") {
-		return normalized;
-	}
-	return undefined;
 }
 
 function toolTextResult(content: string, details?: ReviewState) {
@@ -498,7 +470,8 @@ async function detectSmartLaunch(ctx: ExtensionContext): Promise<Omit<LaunchSpec
 	return { args: [detected.suggestedRef], label: detected.suggestedRef };
 }
 
-async function runReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
+async function runReview(pi: ExtensionAPI, ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
+	pi.events.emit("revdiff:launch", { ...launch });
 	if (launch.mode === "overlay") {
 		return runOverlayReview(ctx, launch);
 	}
@@ -534,7 +507,8 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 		return { render: () => [], invalidate() {} };
 	});
 
-	const rawOutput = existsSync(outputFile) ? readFileSync(outputFile, "utf8").trim() : "";
+	const outputExists = existsSync(outputFile);
+	const rawOutput = outputExists ? readFileSync(outputFile, "utf8").trim() : "";
 	try {
 		rmSync(tempDir, { recursive: true, force: true });
 	} catch {
@@ -545,8 +519,16 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 		ctx.ui.notify(`Failed to launch revdiff: ${launchError}`, "error");
 		return undefined;
 	}
-	if ((exitCode ?? 0) !== 0 && !rawOutput) {
-		ctx.ui.notify(`revdiff exited with code ${exitCode ?? 1}`, "warning");
+	if (typeof exitCode !== "number") {
+		ctx.ui.notify("revdiff review did not complete", "warning");
+		return undefined;
+	}
+	if (exitCode !== 0) {
+		ctx.ui.notify(`revdiff exited with code ${exitCode}`, "warning");
+		return undefined;
+	}
+	if (!outputExists) {
+		ctx.ui.notify("revdiff completed without writing annotations output", "warning");
 		return undefined;
 	}
 
@@ -599,9 +581,13 @@ function buildResult(launch: LaunchSpec, rawOutput: string): ReviewState {
 	};
 }
 
-async function openResultsPanel(ctx: ExtensionContext, state: ReviewState): Promise<PanelAction> {
+async function openResultsPanel(
+	ctx: ExtensionContext,
+	state: ReviewState,
+	options: { readOnly?: boolean } = {},
+): Promise<PanelAction> {
 	return ctx.ui.custom<PanelAction>(
-		(tui, theme, _kb, done) => new ReviewPanel(tui, theme, state, done),
+		(tui, theme, _kb, done) => new ReviewPanel(tui, theme, state, done, options.readOnly === true),
 		{
 			overlay: true,
 			overlayOptions: {
@@ -620,17 +606,20 @@ class ReviewPanel {
 	private theme: Theme;
 	private state: ReviewState;
 	private done: (value: PanelAction) => void;
+	private readOnly: boolean;
 
 	constructor(
 		tui: { requestRender: (full?: boolean) => void },
 		theme: Theme,
 		state: ReviewState,
 		done: (value: PanelAction) => void,
+		readOnly: boolean,
 	) {
 		this.tui = tui;
 		this.theme = theme;
 		this.state = state;
 		this.done = done;
+		this.readOnly = readOnly;
 	}
 
 	handleInput(data: string): void {
@@ -648,15 +637,15 @@ class ReviewPanel {
 			this.tui.requestRender();
 			return;
 		}
-		if (matchesKey(data, "return") || data === "a" || data === "A") {
+		if (!this.readOnly && (matchesKey(data, "return") || data === "a" || data === "A")) {
 			this.done("apply");
 			return;
 		}
-		if (data === "r" || data === "R") {
+		if (!this.readOnly && (data === "r" || data === "R")) {
 			this.done("rerun");
 			return;
 		}
-		if (data === "c" || data === "C") {
+		if (!this.readOnly && (data === "c" || data === "C")) {
 			this.done("clear");
 		}
 	}
@@ -682,8 +671,13 @@ class ReviewPanel {
 		}
 
 		lines.push(border(`├${"─".repeat(innerW)}┤`));
-		lines.push(row(th.fg("dim", "↑↓/j k move • Enter/a apply • r rerun")));
-		lines.push(row(th.fg("dim", "c clear • Esc close")));
+		if (this.readOnly) {
+			lines.push(row(th.fg("dim", "↑↓/j k move • Esc close")));
+			lines.push(row(""));
+		} else {
+			lines.push(row(th.fg("dim", "↑↓/j k move • Enter/a apply • r rerun")));
+			lines.push(row(th.fg("dim", "c clear • Esc close")));
+		}
 		lines.push(border(`╰${"─".repeat(innerW)}╯`));
 		return lines;
 	}
