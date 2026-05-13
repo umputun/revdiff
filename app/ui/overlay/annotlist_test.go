@@ -84,17 +84,18 @@ func TestAnnotListOverlay_RenderPopupWidthScaling(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenAnnotList(annotListSpec(items...))
 
-	// rendered width = popupWidth + 2 (1-col border on each side, padding is inside Width)
+	// rendered width = popupWidth + 2 (1-col border on each side; padding lives inside lipgloss Width)
+	const borderCols = 2
 	tests := []struct {
-		name    string
-		ctxW    int
-		wantW   int
-		comment string
+		name      string
+		ctxW      int
+		wantPopup int
+		comment   string
 	}{
-		{"narrow terminal floors at 20", 25, 22, "min cap protects readability"},
-		{"medium terminal scales by ctx width", 60, 52, "ctx.Width-10 below the upper cap"},
-		{"upper cap kicks in at 150", 150, 142, "popup capped at 140 to avoid dominating wide screens"},
-		{"wide terminal stays at 140", 220, 142, "extra columns past 140 ignored"},
+		{"narrow terminal floors at min cap", 25, annotPopupMinWidth, "min cap protects readability"},
+		{"medium terminal scales by ctx width", 60, 50, "ctx.Width-margin below the upper cap"},
+		{"upper cap kicks in just past max", 150, annotPopupMaxWidth, "popup capped to avoid dominating wide screens"},
+		{"wide terminal stays at max cap", 220, annotPopupMaxWidth, "extra columns past max cap ignored"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -106,9 +107,37 @@ func TestAnnotListOverlay_RenderPopupWidthScaling(t *testing.T) {
 					maxLine = w
 				}
 			}
-			assert.Equal(t, tt.wantW, maxLine, tt.comment)
+			assert.Equal(t, tt.wantPopup+borderCols, maxLine, tt.comment)
 		})
 	}
+}
+
+func TestAnnotListOverlay_RenderWidePopupFitsMoreCommentText(t *testing.T) {
+	// the user-visible payoff of the wider cap: long comments must fit more chars
+	// before truncation on a wide terminal than on a narrow one. locks the
+	// behavior the cap bump was meant to deliver, not just the popup geometry.
+	longComment := strings.Repeat("ABCDEFGHIJ ", 20) // 220 chars
+	items := []AnnotationItem{annotItem("a.go", 1, "+", longComment)}
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec(items...))
+
+	render := func(ctxW int) string {
+		ctx := RenderCtx{Width: ctxW, Height: 30, Resolver: style.PlainResolver()}
+		return mgr.annotLst.render(ctx, mgr)
+	}
+	visibleAlpha := func(s string) int {
+		var n int
+		for _, r := range s {
+			if r >= 'A' && r <= 'J' {
+				n++
+			}
+		}
+		return n
+	}
+
+	narrow := visibleAlpha(render(80)) // popup capped to 70
+	wide := visibleAlpha(render(200))  // popup uses up to annotPopupMaxWidth
+	assert.Greater(t, wide, narrow, "wide terminal must show more comment chars before truncation")
 }
 
 func TestAnnotListOverlay_RenderScrollOffset(t *testing.T) {

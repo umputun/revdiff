@@ -13,6 +13,13 @@ import (
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
+const (
+	annotPopupMaxWidth  = 140 // maximum popup width
+	annotPopupMinWidth  = 20  // minimum popup width
+	annotPopupMargin    = 10  // horizontal margin from terminal edges
+	annotPopupBorderPad = 4   // border (2) + padding (2) for content width
+)
+
 type annotListOverlay struct {
 	items      []AnnotationItem
 	cursor     int
@@ -29,7 +36,7 @@ func (a *annotListOverlay) open(spec AnnotListSpec) {
 
 func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	a.height = ctx.Height
-	popupWidth := max(min(ctx.Width-10, 140), 20)
+	popupWidth := max(min(ctx.Width-annotPopupMargin, annotPopupMaxWidth), annotPopupMinWidth)
 	a.popupWidth = popupWidth
 
 	if len(a.items) == 0 {
@@ -37,7 +44,7 @@ func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	}
 
 	maxVisibleItems := a.maxVisible(ctx.Height)
-	contentWidth := popupWidth - 4 // 2 for border + 2 for padding
+	contentWidth := popupWidth - annotPopupBorderPad
 
 	var lines []string
 	for i := a.offset; i < len(a.items) && i < a.offset+maxVisibleItems; i++ {
@@ -59,7 +66,7 @@ func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 
 func (a *annotListOverlay) emptyOverlay(popupWidth int, resolver Resolver, mgr *Manager) string {
 	text := "no annotations"
-	innerWidth := popupWidth - 4
+	innerWidth := popupWidth - annotPopupBorderPad
 	pad := max((innerWidth-lipgloss.Width(text))/2, 0)
 	centered := strings.Repeat(" ", pad) + text
 
