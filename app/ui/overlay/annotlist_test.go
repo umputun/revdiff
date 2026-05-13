@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,6 +77,38 @@ func TestAnnotListOverlay_RenderTruncation(t *testing.T) {
 	result := mgr.annotLst.render(ctx, mgr)
 	assert.Contains(t, result, "...")
 	assert.NotContains(t, result, longComment)
+}
+
+func TestAnnotListOverlay_RenderPopupWidthScaling(t *testing.T) {
+	items := []AnnotationItem{annotItem("a.go", 1, "+", "note")}
+	mgr := NewManager()
+	mgr.OpenAnnotList(annotListSpec(items...))
+
+	// rendered width = popupWidth + 2 (1-col border on each side, padding is inside Width)
+	tests := []struct {
+		name    string
+		ctxW    int
+		wantW   int
+		comment string
+	}{
+		{"narrow terminal floors at 20", 25, 22, "min cap protects readability"},
+		{"medium terminal scales by ctx width", 60, 52, "ctx.Width-10 below the upper cap"},
+		{"upper cap kicks in at 150", 150, 142, "popup capped at 140 to avoid dominating wide screens"},
+		{"wide terminal stays at 140", 220, 142, "extra columns past 140 ignored"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := RenderCtx{Width: tt.ctxW, Height: 30, Resolver: style.PlainResolver()}
+			result := mgr.annotLst.render(ctx, mgr)
+			var maxLine int
+			for ln := range strings.SplitSeq(result, "\n") {
+				if w := lipgloss.Width(ln); w > maxLine {
+					maxLine = w
+				}
+			}
+			assert.Equal(t, tt.wantW, maxLine, tt.comment)
+		})
+	}
 }
 
 func TestAnnotListOverlay_RenderScrollOffset(t *testing.T) {

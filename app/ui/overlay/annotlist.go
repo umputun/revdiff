@@ -29,7 +29,7 @@ func (a *annotListOverlay) open(spec AnnotListSpec) {
 
 func (a *annotListOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	a.height = ctx.Height
-	popupWidth := max(min(ctx.Width-10, 70), 20)
+	popupWidth := max(min(ctx.Width-10, 140), 20)
 	a.popupWidth = popupWidth
 
 	if len(a.items) == 0 {
