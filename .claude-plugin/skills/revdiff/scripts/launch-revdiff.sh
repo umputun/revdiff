@@ -198,8 +198,13 @@ LAUNCHER
     exit 0
 fi
 
-# ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
+# ghostty: AppleScript-driven overlay (macOS only, requires Ghostty 1.3.0+)
+# REVDIFF_GHOSTTY_MODE controls placement:
+#   split  (default) — split current window pane, zoom the new surface
+#   window           — open in a new Ghostty window so the original pane stays usable
 if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
+
+    GHOSTTY_MODE="${REVDIFF_GHOSTTY_MODE:-split}"
 
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
@@ -212,7 +217,30 @@ $REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    if ! GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" "$CWD" <<'APPLESCRIPT'
+    if [ "$GHOSTTY_MODE" = "window" ]; then
+        # new window mode — wait-after-command=true keeps surface alive even
+        # if revdiff exits on a fresh window (PTY-size race during realize);
+        # we close the window explicitly by id once the sentinel fires.
+        if ! GHOSTTY_TARGET=$(osascript - "$LAUNCH_SCRIPT" "$CWD" <<'APPLESCRIPT'
+on run argv
+    set launchScript to item 1 of argv
+    set cwd to item 2 of argv
+    tell application "Ghostty"
+        set cfg to new surface configuration
+        set command of cfg to launchScript
+        set initial working directory of cfg to cwd
+        set wait after command of cfg to true
+        set newWin to new window with configuration cfg
+        return "window:" & (id of newWin)
+    end tell
+end run
+APPLESCRIPT
+        ); then
+            rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+            exit 1
+        fi
+    else
+        if ! GHOSTTY_TARGET=$(osascript - "$LAUNCH_SCRIPT" "$CWD" <<'APPLESCRIPT'
 on run argv
     set launchScript to item 1 of argv
     set cwd to item 2 of argv
@@ -224,22 +252,34 @@ on run argv
         set ft to focused terminal of selected tab of front window
         set newTerm to split ft direction down with configuration cfg
         perform action "toggle_split_zoom" on newTerm
-        return id of newTerm
+        return "terminal:" & (id of newTerm)
     end tell
 end run
 APPLESCRIPT
-    ); then
-        rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
-        exit 1
+        ); then
+            rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+            exit 1
+        fi
     fi
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
-    # close the split pane (dismisses "press any key" prompt)
-    osascript - "$GHOSTTY_TERM_ID" <<'APPLESCRIPT' 2>/dev/null
+    # close the surface/window we created — by exact id so we never touch
+    # any window the user already had open
+    GHOSTTY_KIND="${GHOSTTY_TARGET%%:*}"
+    GHOSTTY_TID="${GHOSTTY_TARGET#*:}"
+    osascript - "$GHOSTTY_KIND" "$GHOSTTY_TID" <<'APPLESCRIPT' 2>/dev/null
 on run argv
-    tell application "Ghostty" to close terminal id (item 1 of argv)
+    set kind to item 1 of argv
+    set tid to item 2 of argv
+    tell application "Ghostty"
+        if kind is "window" then
+            close window id tid
+        else
+            close terminal id tid
+        end if
+    end tell
 end run
 APPLESCRIPT
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
