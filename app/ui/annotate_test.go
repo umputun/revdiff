@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -2508,6 +2509,85 @@ func TestModel_AnnotationPlaceholderMentionsEditor(t *testing.T) {
 	m2.file.name = "a.go"
 	m2.startFileAnnotation()
 	assert.Contains(t, m2.annot.input.Placeholder, "Ctrl+E", "file-level placeholder must mention Ctrl+E")
+}
+
+func TestModel_AnnotationPlaceholderRemappedEditor(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.keymap.Unbind("ctrl+e")
+	m.keymap.Bind("ctrl+g", keymap.ActionOpenEditor)
+
+	m.startAnnotation()
+	assert.Contains(t, m.annot.input.Placeholder, "Ctrl+G", "placeholder must reflect remapped key")
+	assert.NotContains(t, m.annot.input.Placeholder, "Ctrl+E", "placeholder must not mention old key")
+}
+
+func TestModel_AnnotationPlaceholderUnboundEditor(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.keymap.Unbind("ctrl+e")
+
+	m.startAnnotation()
+	assert.NotContains(t, m.annot.input.Placeholder, "Ctrl+E", "placeholder must not mention editor when unbound")
+	assert.NotContains(t, m.annot.input.Placeholder, "for editor", "placeholder must not mention editor when unbound")
+}
+
+func TestModel_RemappedEditorKeyOpensEditor(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.keymap.Unbind("ctrl+e")
+	m.keymap.Bind("ctrl+g", keymap.ActionOpenEditor)
+
+	fake := mockEditor("edited", nil)
+	m.editor = fake
+
+	m.startAnnotation()
+	m.annot.input.SetValue("seed")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
+	model := result.(Model)
+	require.NotNil(t, cmd, "remapped ctrl+g should trigger editor")
+	require.Len(t, fake.CommandCalls(), 1, "editor.Command called once")
+	assert.Equal(t, "seed", fake.CommandCalls()[0].Content)
+	assert.True(t, model.annot.annotating)
+}
+
+func TestModel_UnboundEditorKeyFallsThrough(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	m.keymap.Unbind("ctrl+e")
+
+	fake := mockEditor("edited", nil)
+	m.editor = fake
+
+	m.startAnnotation()
+
+	_, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	assert.Empty(t, fake.CommandCalls(), "unbound ctrl+e must not open editor")
 }
 
 func TestModel_VisualRowToDiffLine_EmptyFile(t *testing.T) {

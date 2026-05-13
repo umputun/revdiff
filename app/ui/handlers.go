@@ -32,7 +32,11 @@ func (m Model) displayKeyName(key string) string {
 		return d
 	}
 	if strings.HasPrefix(key, "ctrl+") {
-		return "Ctrl+" + key[5:]
+		suffix := key[5:]
+		if suffix != "" {
+			return "Ctrl+" + strings.ToUpper(suffix[:1]) + suffix[1:]
+		}
+		return "Ctrl+"
 	}
 	return key
 }

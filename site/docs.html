@@ -508,11 +508,11 @@ color-border = #6272a4
                 <tr><td><code>@</code></td><td>Toggle annotation list popup</td></tr>
                 <tr><td><code>}</code> / <code>{</code></td><td>Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation)</td></tr>
                 <tr><td><code>d</code></td><td>Delete annotation under cursor</td></tr>
-                <tr><td><code>Ctrl+E</code></td><td>Open <code>$EDITOR</code> for multi-line annotation (during annotation input)</td></tr>
+                <tr><td><code>Ctrl+E</code></td><td>Open <code>$EDITOR</code> for multi-line annotation (<code>open_editor</code> &mdash; rebindable, during annotation input)</td></tr>
                 <tr><td><code>Esc</code></td><td>Cancel annotation input</td></tr>
             </tbody>
         </table>
-        <p>While the annotation input is active, press <code>Ctrl+E</code> to hand off the current text to an external editor for multi-line comments. Editor resolution: <code>$EDITOR</code> &rarr; <code>$VISUAL</code> &rarr; <code>vi</code>. Values with arguments work (e.g. <code>EDITOR="code --wait"</code>). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (<code>@</code>), and emitted with embedded newlines in the structured output.</p>
+        <p>While the annotation input is active, press <code>Ctrl+E</code> (or whatever key is bound to <code>open_editor</code>) to hand off the current text to an external editor for multi-line comments. Editor resolution: <code>$EDITOR</code> &rarr; <code>$VISUAL</code> &rarr; <code>vi</code>. Values with arguments work (e.g. <code>EDITOR="code --wait"</code>). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (<code>@</code>), and emitted with embedded newlines in the structured output.</p>
 
         <h2 id="view">View toggles</h2>
         <table>
@@ -586,19 +586,19 @@ map ctrl+u half_page_up
 map x quit
 unmap q</code></div>
         <p>Generate a template: <code>revdiff --dump-keys > ~/.config/revdiff/keybindings</code></p>
-        <p>Modal keys (annotation input, search input, confirm discard) are not remappable.</p>
+        <p>Fixed modal keys (Enter, Esc in annotation/search input, confirm discard) are not remappable. Keymap-resolved actions like <code>open_editor</code> work during annotation input and can be rebound.</p>
         <h3>Chord bindings (ctrl/alt leader)</h3>
         <p>Bind a two-stage chord by joining the leader and second key with <code>&gt;</code>. The leader must be a <code>ctrl+*</code> or <code>alt+*</code> combo; the second stage is any single key. Only two stages are supported.</p>
         <div class="code-block"><code>map ctrl+w&gt;x mark_reviewed
 map alt+t&gt;n theme_select</code></div>
-        <p>When the leader is pressed, the status bar shows <code>Pending: ctrl+w, esc to cancel</code>; press the second key to dispatch, or <code>esc</code> to cancel silently. Binding a key as both a standalone action and a chord prefix drops the standalone binding (the chord wins, with a warning). Chord bindings work under non-Latin keyboard layouts &mdash; the second-stage key is translated via the same layout-resolve fallback as single-key bindings.</p>
+        <p>When the leader is pressed, the status bar shows <code>Pending: ctrl+w, esc to cancel</code>; press the second key to dispatch, or <code>esc</code> to cancel silently. Binding a key as both a standalone action and a chord prefix drops the standalone binding (the chord wins, with a warning). Chord bindings work under non-Latin keyboard layouts &mdash; the second-stage key is translated via the same layout-resolve fallback as single-key bindings. Note: chord bindings do not fire during text input (annotation and search prompts) &mdash; use single-key <code>ctrl+*</code> bindings for actions like <code>open_editor</code> that need to work during annotation input.</p>
         <p><strong>macOS note:</strong> <code>alt+*</code> leaders require your terminal to send Option as Meta/Alt. Most terminals default to &quot;Option composes special characters&quot; (e.g. <code>Option+T</code> &rarr; <code>&dagger;</code>), in which case Alt chords silently won&apos;t fire. To enable: iTerm2 &rarr; <em>Profiles &rarr; Keys &rarr; Left/Right Option key &rarr; <code>Esc+</code></em>; Terminal.app &rarr; <em>Profiles &rarr; Keyboard &rarr; Use Option as Meta key</em>; Kitty &rarr; <code>macos_option_as_alt yes</code>; Ghostty &rarr; <code>macos-option-as-alt = true</code>. If you&apos;d rather not touch terminal settings, use <code>ctrl+*</code> leaders &mdash; those work everywhere with no configuration.</p>
         <h3>Available actions</h3>
         <p><strong>Navigation:</strong> <code>down</code>, <code>up</code>, <code>page_down</code>, <code>page_up</code>, <code>half_page_down</code>, <code>half_page_up</code>, <code>home</code>, <code>end</code>, <code>scroll_left</code>, <code>scroll_right</code>, <code>scroll_center</code>, <code>scroll_top</code>, <code>scroll_bottom</code></p>
         <p><strong>File/Hunk:</strong> <code>next_item</code>, <code>prev_item</code>, <code>next_hunk</code>, <code>prev_hunk</code></p>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
-        <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code>, <code>next_annotation</code>, <code>prev_annotation</code></p>
+        <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code>, <code>open_editor</code>, <code>next_annotation</code>, <code>prev_annotation</code></p>
         <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 

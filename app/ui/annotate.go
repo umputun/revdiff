@@ -12,6 +12,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
@@ -76,25 +77,30 @@ func (m *Model) startAnnotation() tea.Cmd {
 		return nil
 	}
 
-	placeholder := "annotation... (Ctrl+E for editor)"
+	editorKey := m.editorKeyDisplay()
+	placeholder := "annotation..."
+	if editorKey != "" {
+		placeholder = fmt.Sprintf("annotation... (%s for editor)", editorKey)
+	}
 
 	// pre-fill with existing annotation if one exists. multi-line comments are
 	// NOT set via ti.SetValue because textinput's sanitizer collapses \n to
 	// space; instead, stash the original in existingMultiline and hint at it
-	// via the placeholder so Ctrl+E can seed the editor from it and Enter with
-	// empty input preserves it unchanged.
+	// via the placeholder so the editor key can seed the editor from it and
+	// Enter with empty input preserves it unchanged.
 	lineNum := m.diffLineNum(dl)
 	var preFill, existingMultiline string
 	for _, a := range m.store.Get(m.file.name) {
-		if a.Line == lineNum && a.Type == string(dl.ChangeType) {
-			if strings.Contains(a.Comment, "\n") {
-				existingMultiline = a.Comment
-				placeholder = "[existing multi-line — Ctrl+E to edit]"
-			} else {
-				preFill = a.Comment
-			}
-			break
+		if a.Line != lineNum || a.Type != string(dl.ChangeType) {
+			continue
 		}
+		if strings.Contains(a.Comment, "\n") {
+			existingMultiline = a.Comment
+			placeholder = m.multiLinePlaceholder()
+		} else {
+			preFill = a.Comment
+		}
+		break
 	}
 
 	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotPrefix())) // cursor col + annotation prefix + border margin
@@ -138,23 +144,28 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		return nil
 	}
 
-	placeholder := "file-level annotation... (Ctrl+E for editor)"
+	editorKey := m.editorKeyDisplay()
+	placeholder := "file-level annotation..."
+	if editorKey != "" {
+		placeholder = fmt.Sprintf("file-level annotation... (%s for editor)", editorKey)
+	}
 
 	// pre-fill with existing file-level annotation if one exists. multi-line
 	// comments bypass ti.SetValue (textinput sanitizer flattens \n to space);
-	// instead stash in existingMultiline so Ctrl+E can seed and Enter with empty
-	// input preserves it unchanged.
+	// instead stash in existingMultiline so the editor key can seed and Enter
+	// with empty input preserves it unchanged.
 	var preFill, existingMultiline string
 	for _, a := range m.store.Get(m.file.name) {
-		if a.Line == 0 {
-			if strings.Contains(a.Comment, "\n") {
-				existingMultiline = a.Comment
-				placeholder = "[existing multi-line — Ctrl+E to edit]"
-			} else {
-				preFill = a.Comment
-			}
-			break
+		if a.Line != 0 {
+			continue
 		}
+		if strings.Contains(a.Comment, "\n") {
+			existingMultiline = a.Comment
+			placeholder = m.multiLinePlaceholder()
+		} else {
+			preFill = a.Comment
+		}
+		break
 	}
 
 	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotFilePrefix())) // cursor col + file annotation prefix + border margin
@@ -312,6 +323,27 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 	return nil
 }
 
+// editorKeyDisplay returns the display name for the open_editor binding
+// (e.g. "Ctrl+E") for use in placeholder text. Returns empty when unbound.
+// Filters out chord bindings since they don't fire during annotation input.
+func (m Model) editorKeyDisplay() string {
+	keys := m.keymap.KeysFor(keymap.ActionOpenEditor)
+	var single []string
+	for _, k := range keys {
+		if strings.Index(k, ">") <= 0 {
+			single = append(single, m.displayKeyName(k))
+		}
+	}
+	return strings.Join(single, " / ")
+}
+
+func (m Model) multiLinePlaceholder() string {
+	if key := m.editorKeyDisplay(); key != "" {
+		return fmt.Sprintf("[existing multi-line — %s to edit]", key)
+	}
+	return "[existing multi-line]"
+}
+
 // handleAnnotateKey handles key messages during annotation input mode.
 func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type {
@@ -321,12 +353,11 @@ func (m Model) handleAnnotateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.cancelAnnotation()
 		return m, nil
-	case tea.KeyCtrlE:
-		// hand off to $EDITOR for multi-line annotation input.
-		// keep annotating=true so editorFinishedMsg routes back through the annotation flow.
-		cmd := m.openEditor()
-		return m, cmd
 	default:
+		if m.keymap.Resolve(msg.String()) == keymap.ActionOpenEditor {
+			cmd := m.openEditor()
+			return m, cmd
+		}
 		var cmd tea.Cmd
 		m.annot.input, cmd = m.annot.input.Update(msg)
 		m.layout.viewport.SetContent(m.renderDiff()) // re-render so typed characters are visible immediately

@@ -34,7 +34,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
 		{"/", ActionSearch},
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
-		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList},
+		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList}, {"ctrl+e", ActionOpenEditor},
 		{"}", ActionNextAnnotation}, {"{", ActionPrevAnnotation},
 		{"v", ActionToggleCollapsed}, {"C", ActionToggleCompact}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
 		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
@@ -243,6 +243,29 @@ func TestActionToggleCompact_HelpEntry(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "ActionToggleCompact should have a help entry")
+}
+
+func TestActionOpenEditor_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionOpenEditor))
+}
+
+func TestActionOpenEditor_DefaultBinding(t *testing.T) {
+	km := Default()
+	assert.Equal(t, ActionOpenEditor, km.Resolve("ctrl+e"))
+}
+
+func TestActionOpenEditor_HelpEntry(t *testing.T) {
+	entries := defaultDescriptions()
+	var found bool
+	for _, e := range entries {
+		if e.Action == ActionOpenEditor {
+			assert.Equal(t, "open annotation in $EDITOR", e.Description)
+			assert.Equal(t, "Annotations", e.Section)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "ActionOpenEditor should have a help entry")
 }
 
 func TestActionScrollConstants_InNavigationActions(t *testing.T) {

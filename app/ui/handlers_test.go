@@ -738,6 +738,24 @@ func TestModel_ToggleCompactMode_CursorResetsAfterReload(t *testing.T) {
 	assert.Equal(t, 1, model.nav.diffCursor, "cursor must reset to first non-divider line after compact re-fetch")
 }
 
+func TestDisplayKeyName(t *testing.T) {
+	m := testModel(nil, nil)
+	tests := []struct{ input, want string }{
+		{"ctrl+e", "Ctrl+E"},
+		{"ctrl+d", "Ctrl+D"},
+		{"ctrl+u", "Ctrl+U"},
+		{"ctrl+w>x", "Ctrl+W>x"},
+		{"ctrl+", "Ctrl+"},
+		{"j", "j"},
+		{"pgdown", "PgDn"},
+		{"enter", "Enter"},
+		{" ", "Space"},
+	}
+	for _, tt := range tests {
+		assert.Equal(t, tt.want, m.displayKeyName(tt.input), "displayKeyName(%q)", tt.input)
+	}
+}
+
 func TestBuildHelpSpec_SearchPromptHistoryEntries(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 

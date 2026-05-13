@@ -64,6 +64,7 @@ const (
 	ActionThemeSelect      Action = "theme_select"
 	ActionInfo             Action = "info"
 	ActionReload           Action = "reload"
+	ActionOpenEditor       Action = "open_editor"
 )
 
 // SectionPane is the help section name for pane-related keybindings.
@@ -84,8 +85,9 @@ var validActions = map[Action]bool{
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
 	ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
-	ActionInfo:   true,
-	ActionReload: true,
+	ActionInfo:       true,
+	ActionReload:     true,
+	ActionOpenEditor: true,
 }
 
 // deprecatedActionAliases maps obsolete action names parsed from user
@@ -207,6 +209,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionAnnotateFile, "annotate file", "Annotations"},
 		{ActionDeleteAnnotation, "delete annotation", "Annotations"},
 		{ActionAnnotList, "annotation list", "Annotations"},
+		{ActionOpenEditor, "open annotation in $EDITOR", "Annotations"},
 		{ActionNextAnnotation, "next annotation (across files)", "Annotations"},
 		{ActionPrevAnnotation, "previous annotation (across files)", "Annotations"},
 
@@ -263,6 +266,7 @@ func defaultBindings() map[string]Action {
 		"A":      ActionAnnotateFile,
 		"d":      ActionDeleteAnnotation,
 		"@":      ActionAnnotList,
+		"ctrl+e": ActionOpenEditor,
 		"}":      ActionNextAnnotation,
 		"{":      ActionPrevAnnotation,
 		"v":      ActionToggleCollapsed,
