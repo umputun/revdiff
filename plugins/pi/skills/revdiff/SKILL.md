@@ -1,6 +1,6 @@
 ---
 name: revdiff
-description: Pi-only interactive diff and file review with revdiff. Use when the user wants to review a diff, browse files for annotation, or revisit the last captured revdiff comments inside pi.
+description: Pi-only interactive diff and file review with revdiff. Use when the user explicitly asks for revdiff, interactive annotations, or captured revdiff comments inside pi.
 ---
 
 # revdiff for pi
@@ -10,7 +10,7 @@ Use the revdiff pi extension for interactive review sessions.
 
 ## Agent usage
 
-When the user asks you to review a diff, inspect changes with revdiff, or gather revdiff annotations, call the `revdiff_review` tool. Do **not** tell the user to run `/revdiff`; slash commands are user-invoked only.
+Call the `revdiff_review` tool only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations. Do **not** call it for ordinary autonomous requests like "review the code", "review my changes", or "review the diff"; handle those by inspecting the code directly. Do **not** tell the user to run `/revdiff`; slash commands are user-invoked only.
 
 Tool examples:
 

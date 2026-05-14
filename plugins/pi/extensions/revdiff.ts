@@ -304,7 +304,8 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 		description: "Launch revdiff in pi, capture interactive review annotations, and return them to the agent.",
 		promptSnippet: "Launch an interactive revdiff review and return captured annotations.",
 		promptGuidelines: [
-			"Use revdiff_review when the user asks to review a diff, inspect changes interactively, or gather revdiff annotations inside pi.",
+			"Use revdiff_review only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations inside pi.",
+			"Do not use revdiff_review for ordinary autonomous code-review requests like 'review the code', 'review my changes', or 'review the diff'; inspect the code directly instead.",
 			"After revdiff_review returns annotations, address them directly instead of asking the user to run /revdiff or /revdiff-apply.",
 		],
 		parameters: Type.Object({
