@@ -11,6 +11,22 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
+// completionShell is a string alias that implements flags.Completer so the
+// --completions choice values are suggested during shell completion.
+type completionShell string
+
+// Complete returns the available shell names matching the given prefix.
+func (c *completionShell) Complete(match string) []flags.Completion {
+	choices := []string{"bash", "zsh", "fish"}
+	var res []flags.Completion
+	for _, ch := range choices {
+		if strings.HasPrefix(ch, match) {
+			res = append(res, flags.Completion{Item: ch})
+		}
+	}
+	return res
+}
+
 type options struct {
 	Refs struct {
 		Base    string `positional-arg-name:"base" description:"git ref to diff against (default: uncommitted changes)"`
@@ -60,6 +76,7 @@ type options struct {
 	InstallTheme     []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
 	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
+	Completions      completionShell `long:"completions" choice:"bash" choice:"zsh" choice:"fish" no-ini:"true" description:"print shell completion script"`
 	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {

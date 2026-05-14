@@ -49,6 +49,14 @@ func main() {
 		os.Exit(0)
 	}
 
+	if opts.Completions != "" {
+		if err := printCompletionScript(os.Stdout, string(opts.Completions), os.Args[0]); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	if opts.DumpKeys {
 		km := keymap.LoadOrDefault(resolveFlagPath(os.Args[1:], "keys", "REVDIFF_KEYS", defaultKeysPath))
 		if err := km.Dump(os.Stdout); err != nil {
