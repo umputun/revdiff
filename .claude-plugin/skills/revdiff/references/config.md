@@ -62,8 +62,8 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 
 | Env var | Description | Default |
 |---------|-------------|---------|
-| `REVDIFF_POPUP_WIDTH` | Tmux popup width (e.g., `100%`, `80%`) | `90%` |
-| `REVDIFF_POPUP_HEIGHT` | Tmux popup height / wezterm split percent | `90%` |
+| `REVDIFF_POPUP_WIDTH` | Tmux/Zellij popup width (e.g., `100%`, `80%`) | `90%` |
+| `REVDIFF_POPUP_HEIGHT` | Tmux/Zellij popup height / wezterm split percent | `90%` |
 
 ## Themes
 

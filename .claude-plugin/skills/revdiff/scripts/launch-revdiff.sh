@@ -63,7 +63,7 @@ for arg in "$@"; do
 done
 OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 
-# popup size: override via REVDIFF_POPUP_WIDTH / REVDIFF_POPUP_HEIGHT env vars (tmux and wezterm)
+# popup size: override via REVDIFF_POPUP_WIDTH / REVDIFF_POPUP_HEIGHT env vars (tmux, zellij, and wezterm)
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
@@ -95,10 +95,8 @@ $REVDIFF_CMD; touch $(sq "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    ZELLIJ_W="${POPUP_W%%%}"
-    ZELLIJ_H="${POPUP_H%%%}"
     zellij run --floating --close-on-exit \
-        --width "$ZELLIJ_W" --height "$ZELLIJ_H" \
+        --width "$POPUP_W" --height "$POPUP_H" \
         --name "$OVERLAY_TITLE" --cwd "$CWD" \
         -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
 
