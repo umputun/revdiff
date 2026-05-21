@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -25,15 +26,17 @@ import (
 
 var revision = "unknown"
 
+const exitCodeAnnotations = 10
+
 func main() {
-	opts, err := parseArgs(os.Args[1:])
-	if err != nil {
+	opts, parseErr := parseArgs(os.Args[1:])
+	if parseErr != nil {
 		var flagsErr *flags.Error
-		if errors.As(err, &flagsErr) && flagsErr.Type == flags.ErrHelp {
+		if errors.As(parseErr, &flagsErr) && flagsErr.Type == flags.ErrHelp {
 			os.Exit(0)
 		}
-		if !errors.As(err, &flagsErr) {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		if !errors.As(parseErr, &flagsErr) {
+			fmt.Fprintf(os.Stderr, "error: %v\n", parseErr)
 		}
 		os.Exit(1)
 	}
@@ -79,13 +82,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	if err := run(opts); err != nil {
+	code, err := run(opts)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+	if code != 0 {
+		os.Exit(code)
+	}
 }
 
-func run(opts options) error {
+func run(opts options) (int, error) {
 	// force lipgloss to truecolor when colors are enabled. revdiff's raw-ANSI
 	// helpers (style.ansiColor) always emit truecolor, but lipgloss respects
 	// the termenv-detected profile, which can downgrade to ANSI256 / ANSI in
@@ -118,7 +125,7 @@ func run(opts options) error {
 	}
 	description, err := resolveDescription(opts)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	switch {
@@ -129,7 +136,7 @@ func run(opts options) error {
 		var tty *os.File
 		renderer, tty, err = prepareStdinMode(opts, os.Stdin)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		defer tty.Close()
 		programOptions = append(programOptions, tea.WithInput(tty))
@@ -137,7 +144,7 @@ func run(opts options) error {
 		var setup vcsSetup
 		setup, err = setupVCSRenderer(opts)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		renderer = setup.renderer
 		gitRoot = setup.gitRoot
@@ -150,7 +157,7 @@ func run(opts options) error {
 
 	if opts.Annotations != "" {
 		if perr := preloadAnnotations(opts.Annotations, store, renderer, opts.ref(), opts.Staged, untrackedFn, workDir, os.Stderr); perr != nil {
-			return perr
+			return 0, perr
 		}
 	}
 
@@ -226,38 +233,58 @@ func run(opts options) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("create model: %w", err)
+		return 0, fmt.Errorf("create model: %w", err)
 	}
 
 	p := tea.NewProgram(model, programOptions...)
 	finalModel, err := p.Run()
 	if err != nil {
-		return fmt.Errorf("TUI error: %w", err)
+		return 0, fmt.Errorf("TUI error: %w", err)
 	}
 
 	// output annotations to stdout or file
 	m, ok := finalModel.(ui.Model)
 	if !ok {
-		return nil
+		return 0, nil
 	}
 	if m.Discarded() {
-		return nil
+		return 0, nil
 	}
 	output := m.Store().FormatOutput()
 	if output == "" {
-		return nil
+		return 0, nil
 	}
 
 	saveHistory(histReq{opts: opts, annotations: output, gitRoot: gitRoot, workDir: workDir, files: m.Store().Files()})
 
-	if opts.Output != "" {
-		if err := os.WriteFile(opts.Output, []byte(output), 0o600); err != nil {
-			return fmt.Errorf("write output: %w", err)
+	return writeAnnotationOutput(annotationOutputReq{opts: opts, output: output, stdout: os.Stdout})
+}
+
+type annotationOutputReq struct {
+	opts   options
+	output string
+	stdout io.Writer
+}
+
+func writeAnnotationOutput(r annotationOutputReq) (int, error) {
+	code := annotationExitCode(r.opts.ExitCodeOnAnnotations, r.output)
+	if r.opts.Output != "" {
+		if err := os.WriteFile(r.opts.Output, []byte(r.output), 0o600); err != nil {
+			return 0, fmt.Errorf("write output: %w", err)
 		}
-		return nil
+		return code, nil
 	}
-	fmt.Print(output)
-	return nil
+	if _, err := fmt.Fprint(r.stdout, r.output); err != nil {
+		return 0, fmt.Errorf("write output: %w", err)
+	}
+	return code, nil
+}
+
+func annotationExitCode(enabled bool, output string) int {
+	if enabled && output != "" {
+		return exitCodeAnnotations
+	}
+	return 0
 }
 
 // reloadApplicable returns false when --stdin is active: the stream has already

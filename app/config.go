@@ -17,50 +17,51 @@ type options struct {
 		Against string `positional-arg-name:"against" description:"second git ref for two-ref diff (e.g. revdiff main feature)"`
 	} `positional-args:"yes"`
 
-	Staged           bool     `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
-	Untracked        bool     `long:"untracked" ini-name:"untracked" env:"REVDIFF_UNTRACKED" description:"show untracked files in the tree"`
-	TreeWidth        int      `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
-	TabWidth         int      `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
-	NoColors         bool     `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
-	NoStatusBar      bool     `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
-	NoConfirmDiscard bool     `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
-	NoMouse          bool     `long:"no-mouse" ini-name:"no-mouse" env:"REVDIFF_NO_MOUSE" description:"disable mouse support (scroll wheel, click)"`
-	Wrap             bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
-	WrapIndent       int      `long:"wrap-indent" ini-name:"wrap-indent" env:"REVDIFF_WRAP_INDENT" default:"0" description:"indent wrap continuation rows by N columns so they hang under the first row's content (helps when reviewing markdown lists where unindented continuation can be misread as a new bullet)"`
-	Collapsed        bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
-	Compact          bool     `long:"compact" ini-name:"compact" env:"REVDIFF_COMPACT" description:"start in compact diff mode (small context around changes)"`
-	CompactContext   int      `long:"compact-context" ini-name:"compact-context" env:"REVDIFF_COMPACT_CONTEXT" default:"5" description:"number of context lines around changes when in compact mode"`
-	CrossFileHunks   bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
-	LineNumbers      bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
-	Blame            bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter"`
-	WordDiff         bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
-	AnnotationMarker string   `long:"annotation-marker" ini-name:"annotation-marker" env:"REVDIFF_ANNOTATION_MARKER" default:"💬" description:"prefix shown before annotation lines"`
-	VimMotion        bool     `long:"vim-motion" ini-name:"vim-motion" env:"REVDIFF_VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)"`
-	ChromaStyle      string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
-	AllFiles         bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git and jj only)"`
-	CompareOld       string   `long:"compare-old" no-ini:"true" description:"compare mode: old file path (use with --compare-new)"`
-	CompareNew       string   `long:"compare-new" no-ini:"true" description:"compare mode: new file path (use with --compare-old)"`
-	Stdin            bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
-	StdinName        string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
-	Annotations      string   `long:"annotations" no-ini:"true" description:"preload annotations from a markdown file written by -o (round-trip)"`
-	Description      string   `long:"description" no-ini:"true" description:"prose context shown in the info popup (markdown; use shell multiline quoting or --description-file for multiple lines)"`
-	DescriptionFile  string   `long:"description-file" no-ini:"true" description:"read the info-popup description from this file (markdown)"`
-	Exclude          []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
-	Include          []string `long:"include" short:"I" ini-name:"include" env:"REVDIFF_INCLUDE" env-delim:"," description:"include only files matching prefix (may be repeated)"`
-	Only             []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
-	HistoryDir       string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
-	Output           string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
-	Keys             string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
-	DumpKeys         bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
-	Theme            string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
-	DumpTheme        bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
-	ListThemes       bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
-	InitThemes       bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
-	InitAllThemes    bool     `long:"init-all-themes" no-ini:"true" description:"write all gallery themes (bundled + community) to themes dir and exit"`
-	InstallTheme     []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
-	Config           string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
-	DumpConfig       bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
-	Version          bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
+	Staged                bool     `long:"staged" ini-name:"staged" env:"REVDIFF_STAGED" description:"show staged changes"`
+	Untracked             bool     `long:"untracked" ini-name:"untracked" env:"REVDIFF_UNTRACKED" description:"show untracked files in the tree"`
+	TreeWidth             int      `long:"tree-width" ini-name:"tree-width" env:"REVDIFF_TREE_WIDTH" default:"2" description:"file tree panel width in units (1-10, default 2 of 10)"`
+	TabWidth              int      `long:"tab-width" ini-name:"tab-width" env:"REVDIFF_TAB_WIDTH" default:"4" description:"number of spaces per tab character"`
+	NoColors              bool     `long:"no-colors" ini-name:"no-colors" env:"REVDIFF_NO_COLORS" description:"disable all colors including syntax highlighting"`
+	NoStatusBar           bool     `long:"no-status-bar" ini-name:"no-status-bar" env:"REVDIFF_NO_STATUS_BAR" description:"hide the status bar"`
+	NoConfirmDiscard      bool     `long:"no-confirm-discard" ini-name:"no-confirm-discard" env:"REVDIFF_NO_CONFIRM_DISCARD" description:"skip confirmation prompt when discarding annotations with Q"`
+	NoMouse               bool     `long:"no-mouse" ini-name:"no-mouse" env:"REVDIFF_NO_MOUSE" description:"disable mouse support (scroll wheel, click)"`
+	Wrap                  bool     `long:"wrap" ini-name:"wrap" env:"REVDIFF_WRAP" description:"enable line wrapping in diff view"`
+	WrapIndent            int      `long:"wrap-indent" ini-name:"wrap-indent" env:"REVDIFF_WRAP_INDENT" default:"0" description:"indent wrap continuation rows by N columns so they hang under the first row's content (helps when reviewing markdown lists where unindented continuation can be misread as a new bullet)"`
+	Collapsed             bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
+	Compact               bool     `long:"compact" ini-name:"compact" env:"REVDIFF_COMPACT" description:"start in compact diff mode (small context around changes)"`
+	CompactContext        int      `long:"compact-context" ini-name:"compact-context" env:"REVDIFF_COMPACT_CONTEXT" default:"5" description:"number of context lines around changes when in compact mode"`
+	CrossFileHunks        bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
+	LineNumbers           bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
+	Blame                 bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter"`
+	WordDiff              bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
+	AnnotationMarker      string   `long:"annotation-marker" ini-name:"annotation-marker" env:"REVDIFF_ANNOTATION_MARKER" default:"💬" description:"prefix shown before annotation lines"`
+	ExitCodeOnAnnotations bool     `long:"exit-code-on-annotations" ini-name:"exit-code-on-annotations" env:"REVDIFF_EXIT_CODE_ON_ANNOTATIONS" description:"exit 10 when annotations are produced"`
+	VimMotion             bool     `long:"vim-motion" ini-name:"vim-motion" env:"REVDIFF_VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)"`
+	ChromaStyle           string   `long:"chroma-style" ini-name:"chroma-style" env:"REVDIFF_CHROMA_STYLE" default:"catppuccin-macchiato" description:"chroma style for syntax highlighting"`
+	AllFiles              bool     `long:"all-files" short:"A" no-ini:"true" description:"browse all tracked files, not just diffs (git and jj only)"`
+	CompareOld            string   `long:"compare-old" no-ini:"true" description:"compare mode: old file path (use with --compare-new)"`
+	CompareNew            string   `long:"compare-new" no-ini:"true" description:"compare mode: new file path (use with --compare-old)"`
+	Stdin                 bool     `long:"stdin" no-ini:"true" description:"review stdin as a scratch buffer"`
+	StdinName             string   `long:"stdin-name" no-ini:"true" description:"synthetic file name for stdin content"`
+	Annotations           string   `long:"annotations" no-ini:"true" description:"preload annotations from a markdown file written by -o (round-trip)"`
+	Description           string   `long:"description" no-ini:"true" description:"prose context shown in the info popup (markdown; use shell multiline quoting or --description-file for multiple lines)"`
+	DescriptionFile       string   `long:"description-file" no-ini:"true" description:"read the info-popup description from this file (markdown)"`
+	Exclude               []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
+	Include               []string `long:"include" short:"I" ini-name:"include" env:"REVDIFF_INCLUDE" env-delim:"," description:"include only files matching prefix (may be repeated)"`
+	Only                  []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
+	HistoryDir            string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
+	Output                string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
+	Keys                  string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
+	DumpKeys              bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
+	Theme                 string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
+	DumpTheme             bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
+	ListThemes            bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
+	InitThemes            bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`
+	InitAllThemes         bool     `long:"init-all-themes" no-ini:"true" description:"write all gallery themes (bundled + community) to themes dir and exit"`
+	InstallTheme          []string `long:"install-theme" no-ini:"true" description:"install theme(s) from gallery or local file path and exit"`
+	Config                string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
+	DumpConfig            bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
+	Version               bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
 
 	Colors struct {
 		Accent       string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`

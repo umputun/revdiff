@@ -36,6 +36,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.CrossFileHunks)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
+	assert.False(t, opts.ExitCodeOnAnnotations)
 	assert.False(t, opts.Stdin)
 	assert.Empty(t, opts.Output)
 	assert.Empty(t, opts.StdinName)
@@ -473,6 +474,37 @@ func TestParseArgs_AnnotationMarker(t *testing.T) {
 	})
 }
 
+func TestParseArgs_ExitCodeOnAnnotations(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.False(t, opts.ExitCodeOnAnnotations)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--exit-code-on-annotations"))
+		require.NoError(t, err)
+		assert.True(t, opts.ExitCodeOnAnnotations)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_EXIT_CODE_ON_ANNOTATIONS", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.ExitCodeOnAnnotations)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nexit-code-on-annotations = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.ExitCodeOnAnnotations)
+	})
+}
+
 func TestParseArgs_VimMotion(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		opts, err := parseArgs(noConfigArgs(t))
@@ -762,6 +794,7 @@ func TestDumpConfig(t *testing.T) {
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
 	assert.Contains(t, output, "cross-file-hunks = false")
+	assert.Contains(t, output, "exit-code-on-annotations = false")
 	assert.Contains(t, output, "no-mouse = false")
 	assert.Contains(t, output, "wrap-indent = 0")
 	assert.Contains(t, output, "[color options]")
