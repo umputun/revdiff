@@ -150,7 +150,11 @@ func TestPlanReviewHookAnnotationExitCodes(t *testing.T) {
 				},
 			})
 			assert.Equal(t, tc.wantExit, res.code)
-			assert.Contains(t, res.stdout, tc.wantStdout)
+			if tc.wantStdout == "" {
+				assert.Empty(t, res.stdout)
+			} else {
+				assert.Contains(t, res.stdout, tc.wantStdout)
+			}
 			if tc.wantStderr == "" {
 				assert.Empty(t, res.stderr)
 			} else {
