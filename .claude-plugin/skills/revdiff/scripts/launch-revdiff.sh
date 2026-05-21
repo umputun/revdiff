@@ -33,12 +33,16 @@ done
 
 write_rc_cmd() {
     local sentinel="$1"
+    # single-quoted format keeps $?/$rc literal for the generated inner script
+    # shellcheck disable=SC2016
     printf '%s; rc=$?; printf "%%s" "$rc" > %s.tmp && mv -f %s.tmp %s' \
         "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")"
 }
 
 write_fifo_rc_cmd() {
     local sentinel="$1"
+    # single-quoted format keeps $?/$rc literal for the generated inner script
+    # shellcheck disable=SC2016
     printf '%s; rc=$?; echo "$rc" > %s; exit' "$REVDIFF_CMD" "$(sq "$sentinel")"
 }
 

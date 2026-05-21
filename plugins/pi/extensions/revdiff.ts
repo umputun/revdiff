@@ -561,11 +561,19 @@ async function runOverlayReview(ctx: ExtensionContext, launch: LaunchSpec): Prom
 
 	const stdout = (result.stdout ?? "").trim();
 	const stderr = (result.stderr ?? "").trim();
-	const status = result.status ?? 0;
 	if (result.error) {
 		ctx.ui.notify(`Failed to launch overlay: ${result.error.message}`, "error");
 		return undefined;
 	}
+	if (result.signal) {
+		ctx.ui.notify(`Overlay launcher terminated by signal ${result.signal}`, "error");
+		return undefined;
+	}
+	if (result.status === null) {
+		ctx.ui.notify("Overlay launcher exited abnormally without a status code", "error");
+		return undefined;
+	}
+	const status = result.status;
 	if (!isRevdiffSuccess(status)) {
 		ctx.ui.notify(stderr || `Overlay launcher exited with code ${status}`, "error");
 		return undefined;
