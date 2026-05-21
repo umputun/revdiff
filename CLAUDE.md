@@ -62,6 +62,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Skills path in `plugin.json` is relative to repo root, not to `.claude-plugin/`
 - **CRITICAL: After any plugin file change, ask user if they want to bump the plugin version**
 - When bumping, update version in both `plugin.json` and `marketplace.json`
+- **CRITICAL: Defer plugin version bumps when the change depends on a new binary feature.** If a plugin/launcher change relies on a `revdiff` binary feature, flag, env var, or exit code that is not yet in a tagged release, do NOT bump `plugin.json` / `marketplace.json` / `package.json` on the feature branch. The plugin (marketplace) and the binary (brew / `go install`) version independently — bumping the plugin early ships an updated launcher to users still running an old binary, causing a hard mismatch (e.g. the launcher passes an unknown flag, the old binary exits 1, every plugin-triggered review fails). Bump plugin/package versions as part of the binary version release, after the binary is tagged.
 - Reference docs at `.claude-plugin/skills/revdiff/references/` — keep in sync with README.md:
   - `install.md` — installation methods and plugin setup
   - `config.md` — options, colors, chroma styles
