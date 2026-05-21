@@ -328,8 +328,9 @@ User presses 'a' on diff line
           content == ""  → cancelAnnotation (preserve existing annotation)
           otherwise      → saveComment(content, fileLevel, line, type)
   → re-render shows annotation (multi-line aware) below diff line
-  → on quit: store.Format() → structured output to stdout/file
-  → (optional) history.Save() → markdown to ~/.config/revdiff/history/
+  → on quit: store.FormatOutput() → structured output to stdout/file
+  → (optional) history.Save() → markdown to ~/.config/revdiff/history/ (best-effort warnings only)
+  → if --exit-code-on-annotations is enabled and output is non-empty: exit 10
 ```
 
 ### Overlay Flow

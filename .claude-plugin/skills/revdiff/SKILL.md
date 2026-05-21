@@ -129,9 +129,11 @@ The script:
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
+The bundled launcher appends `--exit-code-on-annotations`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+
 ### Step 3: Process Annotations
 
-**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool instead reports a timeout (on Claude Code the task keeps running in the background after the 10-minute cap; on other harnesses it may be killed outright), revdiff is almost certainly still open in the overlay. Do NOT retry the launcher. Use the fallback:
+**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout (on Claude Code the task keeps running in the background after the 10-minute cap; on other harnesses it may be killed outright), revdiff is almost certainly still open in the overlay. Do NOT retry the launcher. Use the fallback:
 
 1. Tell the user: "The bash tool timed out, but revdiff may still be open. Let me know when you're done reviewing."
 2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply confirms revdiff has exited.

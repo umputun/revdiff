@@ -285,6 +285,8 @@ Comment body lines starting with `## ` (the record-header form) are prefixed wit
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
 
+Exit status: `0` = no annotations, discarded annotations, or default mode; `10` = annotations were produced with `--exit-code-on-annotations`, `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, or `exit-code-on-annotations`; `1` = real errors. Agent launchers enable `--exit-code-on-annotations` and treat `10` as success-with-annotations.
+
 ## Preloading Annotations
 
 Use `--annotations=PATH` to preload the annotation store from a markdown file in the same `-o` format. The format is bidirectional: any file written by `-o` can be read back via `--annotations` for round-trip workflows — review, quit, edit the file externally, relaunch, and continue from the preloaded state.

@@ -152,13 +152,13 @@ The plugin includes built-in reference documentation and can answer questions ab
 "set tree width to 3 in revdiff config"
 ```
 
-The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain.
+The plugin supports the full review loop: annotate → plan → fix → re-review until no more annotations remain. The bundled launcher treats exit code `10` as success-with-annotations and processes stdout normally.
 
 **Custom launchers:** both Claude plugins resolve their launcher script through a two-layer chain (user → bundled), so you can drop a custom launcher at `${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh` without forking the plugin. There is no project-level (`.claude/...`) override layer by design — the planning hook fires automatically on every `ExitPlanMode`, and a repo-controlled executable layer would let an untrusted repo run arbitrary code on routine Claude actions. See `.claude-plugin/skills/revdiff/references/install.md` for the diff-review skill and [plugins/revdiff-planning/README.md](plugins/revdiff-planning/README.md) for the planning hook.
 
 ### Plan Review Plugin
 
-A separate `revdiff-planning` plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again — looping until you're satisfied.
+A separate `revdiff-planning` plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again — looping until you're satisfied. Exit code `10` means annotations were captured, not launcher failure.
 
 ```bash
 /plugin install revdiff-planning@revdiff
@@ -197,6 +197,7 @@ pi install https://github.com/umputun/revdiff
 - Requires the `revdiff` binary on `PATH`
 - Set `REVDIFF_BIN=/absolute/path/to/revdiff` if pi can't find the binary
 - Same-terminal mode is the default: pi temporarily suspends, revdiff takes over the terminal, and pi resumes on exit
+- Direct and overlay modes treat exit code `10` as success-with-annotations and keep captured output
 - Optional overlay mode (`--pi-overlay` or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration; pi invokes the bundled script directly and does not honor Claude-plugin overrides (`CLAUDE_PLUGIN_DATA` is not set in the pi runtime)
 - Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
@@ -230,6 +231,7 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
 
 **Notes:**
 
+- Codex treats exit code `10` as success-with-annotations and keeps captured output
 - Codex has no hook system — plan review requires manually invoking `/revdiff-plan` after Codex generates a plan
 - Scripts are portable copies from the Claude Code plugin, not symlinks
 - Plugin source lives under `plugins/codex/` in the repository
@@ -246,7 +248,7 @@ revdiff integrates with [OpenCode](https://github.com/opencode-ai/opencode) via 
 cd plugins/opencode && bash setup.sh
 ```
 
-The setup script copies files to `~/.config/opencode/` and registers the plan-review plugin. See [plugins/opencode/README.md](plugins/opencode/README.md) for manual installation and details.
+The setup script copies files to `~/.config/opencode/` and registers the plan-review plugin. The tool and plan-review plugin treat exit code `10` as success-with-annotations and keep captured output. See [plugins/opencode/README.md](plugins/opencode/README.md) for manual installation and details.
 
 **Commands inside OpenCode:**
 
@@ -259,15 +261,20 @@ The plan-review plugin automatically launches revdiff when the assistant exits p
 
 #### General
 
-The structured stdout output works with any tool that can read text:
+The structured stdout output works with any tool that can read text. By default revdiff exits `0` even when annotations are produced; pass `--exit-code-on-annotations` to return `10` for successful annotation output:
 
 ```bash
 # capture annotations for processing
-annotations=$(revdiff main)
-if [ -n "$annotations" ]; then
-  echo "$annotations" | your-tool
-fi
+rc=0
+annotations=$(revdiff --exit-code-on-annotations main) || rc=$?
+case "$rc" in
+  0) [ -n "$annotations" ] && echo "$annotations" | your-tool ;;
+  10) echo "$annotations" | your-tool ;;
+  *) exit "$rc" ;;
+esac
 ```
+
+Exit status: `0` = no annotations, discarded annotations, or default mode; `10` = annotations were produced with `--exit-code-on-annotations`; `1` = real errors.
 
 ## Usage
 
@@ -304,6 +311,7 @@ Positional arguments support several forms:
 | `--blame` | Show blame gutter, env: `REVDIFF_BLAME` | `false` |
 | `--word-diff` | Highlight intra-line word-level changes in paired add/remove lines, env: `REVDIFF_WORD_DIFF` | `false` |
 | `--annotation-marker` | Prefix shown before annotation lines, env: `REVDIFF_ANNOTATION_MARKER` | `💬` |
+| `--exit-code-on-annotations` | Exit 10 when annotations are produced, env: `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, config: `exit-code-on-annotations` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--no-mouse` | Disable mouse support (scroll wheel, click), env: `REVDIFF_NO_MOUSE` | `false` |
 | `--vim-motion` | Enable vim-style motion preset (counts, `gg`, `G`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`), env: `REVDIFF_VIM_MOTION` | `false` |
@@ -335,7 +343,7 @@ Positional arguments support several forms:
 
 ### Config File
 
-All options can be set in a config file at `~/.config/revdiff/config` (INI format). CLI flags and environment variables override config file values.
+All options can be set in a config file at `~/.config/revdiff/config` (INI format). CLI flags and environment variables override config file values. For annotation exit status, use `exit-code-on-annotations = true`.
 
 Generate a default config file:
 

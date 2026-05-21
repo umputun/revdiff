@@ -104,6 +104,8 @@ Run the launcher script with `--only=<tempfile>`:
 $LAUNCHER_DIR/launch-revdiff.sh --only="$PLAN_FILE"
 ```
 
+The launcher appends `--exit-code-on-annotations`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+
 **IMPORTANT -- long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay. Set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher). Do NOT use `run_in_background`.
 
 If the bash tool reports a timeout, use the same fallback as the revdiff skill:
@@ -120,7 +122,7 @@ If the bash tool reports a timeout, use the same fallback as the revdiff skill:
 
 ### Step 3: Process Annotations
 
-If the launcher produces output, the user made annotations. The output format is:
+If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the launcher produces output, the user made annotations. The output format is:
 
 ```
 ## plan-XXXXXX.md:12 ( )

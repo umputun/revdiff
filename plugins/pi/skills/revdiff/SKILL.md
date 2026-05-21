@@ -21,7 +21,7 @@ Tool examples:
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
 - `mode: "overlay"`: use optional overlay mode instead of the default direct pi-native launcher
 
-After `revdiff_review` returns annotations, address them directly. If it returns no annotations, report that the review was clean.
+After `revdiff_review` returns annotations, address them directly. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean.
 
 ## User commands
 
@@ -64,4 +64,5 @@ Behavior:
 - The default mode launches the external `revdiff` binary in the current terminal session, temporarily suspending pi while revdiff is running
 - Optional overlay mode (`--pi-overlay`, `mode: "overlay"`, or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration
 - If `revdiff` is not on `PATH`, set `REVDIFF_BIN` to its absolute path
+- Direct and overlay modes pass `--exit-code-on-annotations`; `10` means annotations were captured, not failure
 - You can still use revdiff standalone outside pi; the extension is only a convenience layer around the existing binary

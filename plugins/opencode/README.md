@@ -47,3 +47,5 @@ Then register the plan-review plugin in `~/.config/opencode/opencode.json`:
 ```
 
 Restart OpenCode after installing — tools and commands are loaded at startup.
+
+The tool and plan-review plugin pass `--exit-code-on-annotations`; exit `10` is success-with-annotations and captured stdout is still processed. Other nonzero statuses remain failures.

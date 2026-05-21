@@ -33,6 +33,7 @@ Then uncomment and edit the values you want to change.
 | `--blame` | `REVDIFF_BLAME` | Show blame gutter | `false` |
 | `--word-diff` | `REVDIFF_WORD_DIFF` | Highlight intra-line word-level changes in paired add/remove lines | `false` |
 | `--annotation-marker` | `REVDIFF_ANNOTATION_MARKER` | Prefix shown before annotation lines | `💬` |
+| `--exit-code-on-annotations` | `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` | Exit 10 when annotations are produced | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
 | `--no-mouse` | `REVDIFF_NO_MOUSE` | Disable mouse support (scroll wheel, click) | `false` |
 | `--vim-motion` | `REVDIFF_VIM_MOTION` | Enable vim-style motion preset (counts, `gg`, `G`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`) | `false` |
@@ -55,6 +56,8 @@ Then uncomment and edit the values you want to change.
 | `--dump-keys` | | Print effective keybindings to stdout and exit | |
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
+
+Config-backed options use long flag names without leading `--`; for annotation exit status use `exit-code-on-annotations = true`.
 
 ## Popup Size (Claude Code plugin)
 

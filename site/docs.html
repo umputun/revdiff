@@ -128,7 +128,7 @@
         <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
 
         <h2 id="pi-package">Pi package</h2>
-        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The extension launches the existing <code>revdiff</code> binary, captures annotations on exit, and keeps them visible inside pi as a persistent widget plus a right-side results panel.</p>
+        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The extension launches the existing <code>revdiff</code> binary, captures annotations on exit, and keeps them visible inside pi as a persistent widget plus a right-side results panel. Direct and overlay modes treat exit code <code>10</code> as success-with-annotations.</p>
         <div class="code-block"><code>pi install https://github.com/umputun/revdiff</code></div>
         <h3>Commands inside pi</h3>
         <div class="code-block"><code>/revdiff                         <span class="code-comment">-- detect uncommitted, staged, or branch changes, then open revdiff</span>
@@ -351,7 +351,7 @@ revdiff --only=/tmp/draft-comment.md</code></div>
         <!-- configuration -->
         <h2 id="config-file">Config file</h2>
         <p>Location: <code>~/.config/revdiff/config</code> (INI format). Override with <code>--config</code> flag or <code>REVDIFF_CONFIG</code> env var.</p>
-        <p>Precedence: CLI flags &gt; env vars &gt; config file &gt; built-in defaults.</p>
+        <p>Precedence: CLI flags &gt; env vars &gt; config file &gt; built-in defaults. For annotation exit status, use <code>REVDIFF_EXIT_CODE_ON_ANNOTATIONS</code> or <code>exit-code-on-annotations = true</code>.</p>
         <div class="code-block"><code>mkdir -p ~/.config/revdiff
 revdiff --dump-config > ~/.config/revdiff/config</code></div>
 
@@ -374,6 +374,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
                 <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
                 <tr><td><code>--annotation-marker</code></td><td>Prefix shown before annotation lines</td><td><code>💬</code></td></tr>
+                <tr><td><code>--exit-code-on-annotations</code></td><td>Exit 10 when annotations are produced</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-confirm-discard</code></td><td>Skip discard confirmation</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-mouse</code></td><td>Disable mouse support (scroll wheel, click)</td><td><code>false</code></td></tr>
                 <tr><td><code>--vim-motion</code></td><td>Enable vim-style motion preset (counts, <code>gg</code>, <code>G</code>, <code>zz</code>/<code>zt</code>/<code>zb</code>, <code>ZZ</code>/<code>ZQ</code>)</td><td><code>false</code></td></tr>
@@ -667,7 +668,7 @@ map alt+t&gt;n theme_select</code></div>
 "what themes does revdiff support?" <span class="code-comment">-- ask about config without launching</span>
 "switch revdiff to dracula theme"   <span class="code-comment">-- modify config via conversation</span></code></div>
         <p>The plugin includes built-in reference documentation and can answer questions about revdiff usage, themes, keybindings, and configuration. It can also create or modify the local config file on request.</p>
-        <p>The plugin supports the full review loop: annotate &rarr; plan &rarr; fix &rarr; re-review until no more annotations remain.</p>
+        <p>The plugin supports the full review loop: annotate &rarr; plan &rarr; fix &rarr; re-review until no more annotations remain. The bundled launcher treats exit code <code>10</code> as success-with-annotations and processes stdout normally.</p>
 
         <h2 id="plugin-autodetect">Auto-detection</h2>
         <p>When no ref is provided, the plugin detects what to review automatically:</p>
@@ -679,7 +680,7 @@ map alt+t&gt;n theme_select</code></div>
         </ul>
 
         <h2 id="plugin-planning">Plan review plugin</h2>
-        <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again, looping until you're satisfied.</p>
+        <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again, looping until you're satisfied. Exit code <code>10</code> means annotations were captured, not launcher failure.</p>
         <div class="code-block"><code>/plugin install revdiff-planning@revdiff</code></div>
         <p>This plugin is independent from the main <code>revdiff</code> plugin and does not conflict with other planning plugins.</p>
 
@@ -712,6 +713,7 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div
             <li><code>/revdiff</code> &mdash; same diff review workflow as the Claude Code plugin (detect ref, launch overlay, capture annotations, feedback loop)</li>
             <li><code>/revdiff-plan</code> &mdash; extracts the last Codex assistant message from session rollout files, opens it in revdiff for annotation, and feeds feedback back</li>
         </ul>
+        <p>Codex treats exit code <code>10</code> as success-with-annotations and keeps captured output.</p>
         <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
 /revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
 /revdiff-plan         <span class="code-comment"># review last Codex response</span></code></div>
@@ -728,7 +730,7 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div
         <p>revdiff integrates with <a href="https://github.com/opencode-ai/opencode">OpenCode</a> via a tool, slash command, and plan-review plugin. The tool wraps the existing <code>launch-revdiff.sh</code> launcher, so terminal detection stays in sync automatically.</p>
         <div class="code-block"><code><span class="code-comment"># from the revdiff repo</span>
 cd plugins/opencode && bash setup.sh</code></div>
-        <p>The setup script copies files to <code>~/.config/opencode/</code> (commands, tools, plugins) and registers the plan-review plugin in <code>opencode.json</code>. Restart OpenCode after installing. See <a href="https://github.com/umputun/revdiff/tree/master/plugins/opencode">plugins/opencode/README.md</a> for manual installation.</p>
+        <p>The setup script copies files to <code>~/.config/opencode/</code> (commands, tools, plugins) and registers the plan-review plugin in <code>opencode.json</code>. The tool and plan-review plugin treat exit code <code>10</code> as success-with-annotations and keep captured output. Restart OpenCode after installing. See <a href="https://github.com/umputun/revdiff/tree/master/plugins/opencode">plugins/opencode/README.md</a> for manual installation.</p>
 
         <h2 id="opencode-usage">Usage</h2>
         <p>The integration provides two components:</p>
@@ -759,12 +761,16 @@ don't remove this validation</code></div>
         <p>Comment body lines starting with <code>## </code> (the record-header form) are prefixed with a single space on output so parsers that split on <code>## </code> record headers cannot confuse a multi-line comment for a new record.</p>
 
         <h2 id="integration">Integration with other tools</h2>
-        <p>The structured stdout output works with any tool that can read text:</p>
+        <p>The structured stdout output works with any tool that can read text. By default revdiff exits <code>0</code> even when annotations are produced; pass <code>--exit-code-on-annotations</code> to return <code>10</code> for successful annotation output.</p>
         <div class="code-block"><code><span class="code-comment"># capture annotations for processing</span>
-annotations=$(revdiff main)
-if [ -n "$annotations" ]; then
-  echo "$annotations" | your-tool
-fi</code></div>
+rc=0
+annotations=$(revdiff --exit-code-on-annotations main) || rc=$?
+case "$rc" in
+  0) [ -n "$annotations" ] &amp;&amp; echo "$annotations" | your-tool ;;
+  10) echo "$annotations" | your-tool ;;
+  *) exit "$rc" ;;
+esac</code></div>
+        <p>Exit status: <code>0</code> = no annotations, discarded annotations, or default mode; <code>10</code> = annotations were produced with <code>--exit-code-on-annotations</code>; <code>1</code> = real errors.</p>
     </main>
 </div>
 

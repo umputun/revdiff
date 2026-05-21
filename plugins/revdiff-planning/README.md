@@ -32,7 +32,7 @@ After the first round, every iteration shows only what changed since the previou
 
 The marker is stripped from the saved snapshot, and the path it points at drives `--compare`. Each chain references its own snapshot, so parallel sessions can't collide.
 
-**Snapshot lifecycle.** New snapshots are created on every invocation. The previous snapshot (`old_snap`) is deleted only when the launcher exits 0 — i.e., the user actually saw the diff. On launcher failure (no overlay terminal available, AppleScript split error, etc.) `old_snap` is preserved so the next attempt can resolve the same marker, and the user sees an `ask` response noting the launcher exit code instead of a misleading "no annotations" success. The new snapshot is kept on `deny` (so the agent's next revision can compare against it) and deleted on the clean `ask` path.
+**Snapshot lifecycle.** New snapshots are created on every invocation. The previous snapshot (`old_snap`) is deleted only when the launcher exits 0 or 10 — i.e., the user actually saw the diff. Exit 10 means annotations were captured. On launcher failure (no overlay terminal available, AppleScript split error, etc.) `old_snap` is preserved so the next attempt can resolve the same marker, and the user sees an `ask` response noting the launcher exit code instead of a misleading "no annotations" success. The new snapshot is kept on `deny` (so the agent's next revision can compare against it) and deleted on the clean `ask` path.
 
 **Agent-discipline failure mode.** The chain assumes the agent prepends the marker on every revised plan. If it forgets — context truncation, model swap, tool drift — the hook treats the revision as a fresh v1 and falls back to `--only`. The user sees the full file again for that round but the loop self-heals: the deny reason re-issues the marker contract every time, so the next round resumes the rolling compare. Failure is recoverable, never fatal.
 
@@ -71,4 +71,4 @@ In compare mode the **new revision comes first**, prior revision second. This or
 
 If you want compare-mode highlighting in your own custom launcher, add a 2-arg branch that builds `--compare-old="$2" --compare-new="$1"` and passes it through to revdiff. The bundled `launch-plan-review.sh` is a worked example.
 
-Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The hook treats a non-zero exit as launcher failure and preserves the previous snapshot so the next attempt can resume the rolling chain.
+Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The bundled launcher passes `--exit-code-on-annotations`; exit 10 is success-with-annotations, while nonzero statuses other than 10 are launcher failures and preserve the previous snapshot so the next attempt can resume the rolling chain.

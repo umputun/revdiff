@@ -11,7 +11,7 @@ brew install umputun/apps/revdiff
 
 Install the revdiff Codex plugin from the marketplace or manually copy the `plugins/codex/` directory to your Codex plugins location.
 
-Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, Zellij, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm).
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, Zellij, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm). The bundled launcher appends `--exit-code-on-annotations`; exit `10` is success-with-annotations, not launcher failure.
 
 ### Plan Review
 
