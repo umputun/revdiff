@@ -10,6 +10,7 @@
 # the stale launcher degrades to --only of the NEW revision (legacy UX, no
 # regression) instead of opening the OLD revision the user already reviewed.
 # output: annotations from revdiff stdout (empty if no annotations)
+# exit: 0 clean, 10 annotations captured, other nonzero failure
 
 set -euo pipefail
 
@@ -60,7 +61,7 @@ CWD="$(pwd)"
 OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-REVDIFF_CMD="$(sq "$REVDIFF_BIN") $REVDIFF_ARGS $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
+REVDIFF_CMD="$(sq "$REVDIFF_BIN") $REVDIFF_ARGS $(sq "--output=$OUTPUT_FILE") $(sq --exit-code-on-annotations) $(sq --wrap)"
 # in compare mode, default to --collapsed so the user reads the new state with
 # new-line highlights instead of full +/- diff visual clutter — better UX for
 # rolling plan-revision review where each round is a focused list of edits
@@ -79,9 +80,10 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
         fi
     fi
     TMUX_ARGS+=(-- sh -c "$REVDIFF_CMD")
-    "${TMUX_ARGS[@]}"
+    rc=0
+    "${TMUX_ARGS[@]}" || rc=$?
     cat "$OUTPUT_FILE"
-    exit 0
+    exit "$rc"
 fi
 
 # zellij: floating pane with sentinel file carrying revdiff's exit code
