@@ -17,6 +17,8 @@ const LAST_LAUNCH_TYPE = "revdiff-last-launch";
 const MESSAGE_TYPE = "revdiff-review";
 const PANEL_PREVIEW_LINES = 18;
 const WIDGET_PREVIEW_ITEMS = 3;
+const EXIT_CODE_ANNOTATIONS = 10;
+const EXIT_CODE_ON_ANNOTATIONS_FLAG = "--exit-code-on-annotations";
 const ANNOTATION_HEADER_RE = /^## (.+?)(?::(\d+))? \(([^)]+)\)$/;
 const EXT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PI_PLUGIN_ROOT = path.resolve(EXT_DIR, "..");
@@ -488,7 +490,7 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 
 	const tempDir = mkdtempSync(path.join(tmpdir(), "revdiff-pi-"));
 	const outputFile = path.join(tempDir, "annotations.txt");
-	const commandArgs = [...launch.args, `--output=${outputFile}`];
+	const commandArgs = [...withAnnotationExitCode(launch.args), `--output=${outputFile}`];
 	let launchError = "";
 
 	const exitCode = await ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
@@ -524,12 +526,12 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 		ctx.ui.notify("revdiff review did not complete", "warning");
 		return undefined;
 	}
-	if (exitCode !== 0) {
+	if (!isRevdiffSuccess(exitCode)) {
 		ctx.ui.notify(`revdiff exited with code ${exitCode}`, "warning");
 		return undefined;
 	}
-	if (!outputExists) {
-		ctx.ui.notify("revdiff completed without writing annotations output", "warning");
+	if (!outputExists && exitCode === EXIT_CODE_ANNOTATIONS) {
+		ctx.ui.notify("revdiff reported annotations without writing output", "warning");
 		return undefined;
 	}
 
@@ -551,7 +553,7 @@ async function runOverlayReview(ctx: ExtensionContext, launch: LaunchSpec): Prom
 
 	ctx.ui.notify("Launching revdiff overlay…", "info");
 	const env = withRevdiffOnPath(process.env, revdiffBin);
-	const result = spawnSync(launcher, launch.args, {
+	const result = spawnSync(launcher, withAnnotationExitCode(launch.args), {
 		cwd: process.cwd(),
 		env,
 		encoding: "utf8",
@@ -559,12 +561,13 @@ async function runOverlayReview(ctx: ExtensionContext, launch: LaunchSpec): Prom
 
 	const stdout = (result.stdout ?? "").trim();
 	const stderr = (result.stderr ?? "").trim();
+	const status = result.status ?? 0;
 	if (result.error) {
 		ctx.ui.notify(`Failed to launch overlay: ${result.error.message}`, "error");
 		return undefined;
 	}
-	if ((result.status ?? 0) !== 0) {
-		ctx.ui.notify(stderr || `Overlay launcher exited with code ${result.status ?? 1}`, "error");
+	if (!isRevdiffSuccess(status)) {
+		ctx.ui.notify(stderr || `Overlay launcher exited with code ${status}`, "error");
 		return undefined;
 	}
 
@@ -580,6 +583,17 @@ function buildResult(launch: LaunchSpec, rawOutput: string): ReviewState {
 		annotations: parseAnnotations(rawOutput),
 		createdAt: Date.now(),
 	};
+}
+
+function withAnnotationExitCode(args: string[]): string[] {
+	if (args.includes(EXIT_CODE_ON_ANNOTATIONS_FLAG)) {
+		return [...args];
+	}
+	return [...args, EXIT_CODE_ON_ANNOTATIONS_FLAG];
+}
+
+function isRevdiffSuccess(exitCode: number): boolean {
+	return exitCode === 0 || exitCode === EXIT_CODE_ANNOTATIONS;
 }
 
 async function openResultsPanel(

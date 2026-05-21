@@ -42,6 +42,7 @@ MARKER_RE = re.compile(r"^\s*<!--\s*previous revision:\s*(.+?)\s*-->\s*$")
 # subsequent annotations. confining to our own snapshots keeps the hook a
 # closed system.
 SNAPSHOT_PREFIX = "plan-rev-"
+SUCCESS_CODES = {0, 10}
 
 
 def trusted_snapshot(p: Path) -> Path | None:
@@ -211,7 +212,7 @@ def main() -> None:
     # launcher failure (terminal not available, AppleScript split failed, etc.)
     # means the user never saw the diff. preserve old_snap so the next attempt
     # can still resolve the marker; clean up our own orphan new_snap.
-    if result.returncode != 0:
+    if result.returncode not in SUCCESS_CODES:
         new_snap.unlink(missing_ok=True)
         make_response(
             "ask",

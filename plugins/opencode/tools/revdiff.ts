@@ -5,6 +5,7 @@ const scriptPath = path.join(
   path.dirname(new URL(import.meta.url).pathname),
   "launch-revdiff.sh",
 );
+const EXIT_CODE_ANNOTATIONS = 10;
 
 const buildArgs = ({
   ref,
@@ -44,8 +45,18 @@ export default tool({
   async execute(args, context) {
     const result = await Bun.$`bash ${scriptPath} ${buildArgs(args)}`
       .cwd(context.directory)
-      .text();
+      .quiet()
+      .nothrow();
+    const stdout = new TextDecoder().decode(result.stdout).trim();
+    if (!isRevdiffSuccess(result.exitCode)) {
+      const stderr = new TextDecoder().decode(result.stderr).trim();
+      throw new Error(stderr || `revdiff exited with code ${result.exitCode}`);
+    }
 
-    return result.trim() || "(no annotations)";
+    return stdout || "(no annotations)";
   },
 });
+
+function isRevdiffSuccess(exitCode: number): boolean {
+  return exitCode === 0 || exitCode === EXIT_CODE_ANNOTATIONS;
+}
