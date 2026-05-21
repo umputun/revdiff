@@ -308,6 +308,82 @@ func (m *Model) bottomAlignViewportOnCursor() {
 	m.layout.viewport.SetYOffset(max(0, cursorY-m.layout.viewport.Height+1))
 }
 
+// moveDiffCursorToScreenTop moves the cursor to the Nth visible line from the
+// top of the viewport. n=0 or n=1 targets the first visible line. Matches vim H.
+func (m *Model) moveDiffCursorToScreenTop(n int) {
+	if len(m.file.lines) == 0 {
+		return
+	}
+	offset := max(0, n-1)
+	row := m.layout.viewport.YOffset + offset
+	idx, _ := m.visualRowToDiffLine(row)
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = idx
+	m.nudgeCursorOffDivider()
+	m.adjustCursorIfHidden()
+	m.syncViewportToCursor()
+	m.syncTOCActiveSection()
+}
+
+// moveDiffCursorToScreenMiddle moves the cursor to the middle visible line
+// of the viewport. Matches vim M.
+func (m *Model) moveDiffCursorToScreenMiddle() {
+	if len(m.file.lines) == 0 {
+		return
+	}
+	row := m.layout.viewport.YOffset + m.layout.viewport.Height/2
+	idx, _ := m.visualRowToDiffLine(row)
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = idx
+	m.nudgeCursorOffDivider()
+	m.adjustCursorIfHidden()
+	m.syncViewportToCursor()
+	m.syncTOCActiveSection()
+}
+
+// moveDiffCursorToScreenBottom moves the cursor to the Nth visible line from the
+// bottom of the viewport. n=0 or n=1 targets the last visible line. Matches vim L.
+func (m *Model) moveDiffCursorToScreenBottom(n int) {
+	if len(m.file.lines) == 0 {
+		return
+	}
+	offset := max(0, n-1)
+	row := m.layout.viewport.YOffset + m.layout.viewport.Height - 1 - offset
+	if row < m.layout.viewport.YOffset {
+		row = m.layout.viewport.YOffset
+	}
+	idx, _ := m.visualRowToDiffLine(row)
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = idx
+	m.nudgeCursorOffDivider()
+	m.adjustCursorIfHidden()
+	m.syncViewportToCursor()
+	m.syncTOCActiveSection()
+}
+
+// nudgeCursorOffDivider pushes the cursor to the nearest non-divider line when
+// it currently sits on a ChangeDivider row. Searches backward first, then forward.
+func (m *Model) nudgeCursorOffDivider() {
+	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
+		return
+	}
+	if m.file.lines[m.nav.diffCursor].ChangeType != diff.ChangeDivider {
+		return
+	}
+	for i := m.nav.diffCursor - 1; i >= 0; i-- {
+		if m.file.lines[i].ChangeType != diff.ChangeDivider {
+			m.nav.diffCursor = i
+			return
+		}
+	}
+	for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
+		if m.file.lines[i].ChangeType != diff.ChangeDivider {
+			m.nav.diffCursor = i
+			return
+		}
+	}
+}
+
 // jumpToLineN moves the diff cursor to line n (1-indexed), clamped to [1, total],
 // then centers the viewport on the new cursor position. no-op when the diff is empty.
 // in collapsed mode, the cursor is nudged to the nearest visible line so it

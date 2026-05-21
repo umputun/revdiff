@@ -66,16 +66,36 @@ func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	// priority 3: G motion (diff pane only) — bare G goes to last line
-	if keyStr == "G" && m.layout.focus == paneDiff {
-		n := m.vim.count
-		m.vim.count = 0
-		m.vim.hint = ""
-		if n == 0 {
-			n = len(m.file.lines) // jumpToLineN clamps
+	// priority 3: screen-position motions (diff pane only)
+	if m.layout.focus == paneDiff {
+		switch keyStr {
+		case "G": // bare G goes to last line, <N>G goes to line N
+			n := m.vim.count
+			m.vim.count = 0
+			m.vim.hint = ""
+			if n == 0 {
+				n = len(m.file.lines) // jumpToLineN clamps
+			}
+			m.jumpToLineN(n)
+			return m, nil, true
+		case "H": // move cursor to top of visible screen; <N>H = Nth line from top
+			n := m.vim.count
+			m.vim.count = 0
+			m.vim.hint = ""
+			m.moveDiffCursorToScreenTop(n)
+			return m, nil, true
+		case "M": // move cursor to middle of visible screen
+			m.vim.count = 0
+			m.vim.hint = ""
+			m.moveDiffCursorToScreenMiddle()
+			return m, nil, true
+		case "L": // move cursor to bottom of visible screen; <N>L = Nth line from bottom
+			n := m.vim.count
+			m.vim.count = 0
+			m.vim.hint = ""
+			m.moveDiffCursorToScreenBottom(n)
+			return m, nil, true
 		}
-		m.jumpToLineN(n)
-		return m, nil, true
 	}
 
 	// priority 4: other count consumer keys
