@@ -64,5 +64,5 @@ Behavior:
 - The default mode launches the external `revdiff` binary in the current terminal session, temporarily suspending pi while revdiff is running
 - Optional overlay mode (`--pi-overlay`, `mode: "overlay"`, or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration
 - If `revdiff` is not on `PATH`, set `REVDIFF_BIN` to its absolute path
-- Direct and overlay modes pass `--exit-code-on-annotations`; `10` means annotations were captured, not failure
+- Direct and overlay modes set `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; `10` means annotations were captured, not failure
 - You can still use revdiff standalone outside pi; the extension is only a convenience layer around the existing binary

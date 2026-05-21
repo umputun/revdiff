@@ -27,7 +27,9 @@ REVDIFF_CMD="$(sq "$REVDIFF_BIN")"
 if [ -n "${REVDIFF_CONFIG:-}" ] && [ -f "$REVDIFF_CONFIG" ]; then
     REVDIFF_CMD="$REVDIFF_CMD $(sq "--config=$REVDIFF_CONFIG")"
 fi
-REVDIFF_CMD="$REVDIFF_CMD $(sq "--output=$OUTPUT_FILE") $(sq --exit-code-on-annotations)"
+# pass exit-code-on-annotations via env, not a CLI flag: an old revdiff binary
+# silently ignores an unknown env var but hard-fails on an unknown flag
+REVDIFF_CMD="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $REVDIFF_CMD $(sq "--output=$OUTPUT_FILE")"
 for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
 done

@@ -61,7 +61,9 @@ CWD="$(pwd)"
 OUTPUT_FILE=$(mktemp "$TMPBASE/plan-review-output-XXXXXX")
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-REVDIFF_CMD="$(sq "$REVDIFF_BIN") $REVDIFF_ARGS $(sq "--output=$OUTPUT_FILE") $(sq --exit-code-on-annotations) $(sq --wrap)"
+# pass exit-code-on-annotations via env, not a CLI flag: an old revdiff binary
+# silently ignores an unknown env var but hard-fails on an unknown flag
+REVDIFF_CMD="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $(sq "$REVDIFF_BIN") $REVDIFF_ARGS $(sq "--output=$OUTPUT_FILE") $(sq --wrap)"
 # in compare mode, default to --collapsed so the user reads the new state with
 # new-line highlights instead of full +/- diff visual clutter — better UX for
 # rolling plan-revision review where each round is a focused list of edits

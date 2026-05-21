@@ -129,7 +129,7 @@ The script:
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
-The bundled launcher appends `--exit-code-on-annotations`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
 
 ### Step 3: Process Annotations
 

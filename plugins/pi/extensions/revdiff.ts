@@ -18,7 +18,7 @@ const MESSAGE_TYPE = "revdiff-review";
 const PANEL_PREVIEW_LINES = 18;
 const WIDGET_PREVIEW_ITEMS = 3;
 const EXIT_CODE_ANNOTATIONS = 10;
-const EXIT_CODE_ON_ANNOTATIONS_FLAG = "--exit-code-on-annotations";
+const EXIT_CODE_ON_ANNOTATIONS_ENV = "REVDIFF_EXIT_CODE_ON_ANNOTATIONS";
 const ANNOTATION_HEADER_RE = /^## (.+?)(?::(\d+))? \(([^)]+)\)$/;
 const EXT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PI_PLUGIN_ROOT = path.resolve(EXT_DIR, "..");
@@ -490,7 +490,7 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 
 	const tempDir = mkdtempSync(path.join(tmpdir(), "revdiff-pi-"));
 	const outputFile = path.join(tempDir, "annotations.txt");
-	const commandArgs = [...withAnnotationExitCode(launch.args), `--output=${outputFile}`];
+	const commandArgs = [...launch.args, `--output=${outputFile}`];
 	let launchError = "";
 
 	const exitCode = await ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
@@ -498,7 +498,7 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 		process.stdout.write("\x1b[2J\x1b[H");
 		const result = spawnSync(revdiffBin, commandArgs, {
 			cwd: process.cwd(),
-			env: process.env,
+			env: withAnnotationExitCode(process.env),
 			stdio: "inherit",
 		});
 		if (result.error) {
@@ -552,8 +552,8 @@ async function runOverlayReview(ctx: ExtensionContext, launch: LaunchSpec): Prom
 	}
 
 	ctx.ui.notify("Launching revdiff overlay…", "info");
-	const env = withRevdiffOnPath(process.env, revdiffBin);
-	const result = spawnSync(launcher, withAnnotationExitCode(launch.args), {
+	const env = withAnnotationExitCode(withRevdiffOnPath(process.env, revdiffBin));
+	const result = spawnSync(launcher, launch.args, {
 		cwd: process.cwd(),
 		env,
 		encoding: "utf8",
@@ -593,11 +593,10 @@ function buildResult(launch: LaunchSpec, rawOutput: string): ReviewState {
 	};
 }
 
-function withAnnotationExitCode(args: string[]): string[] {
-	if (args.includes(EXIT_CODE_ON_ANNOTATIONS_FLAG)) {
-		return [...args];
-	}
-	return [...args, EXIT_CODE_ON_ANNOTATIONS_FLAG];
+// request exit code 10 via env, not a CLI flag: an old revdiff binary silently
+// ignores an unknown env var but hard-fails on an unknown flag
+function withAnnotationExitCode(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+	return { ...env, [EXIT_CODE_ON_ANNOTATIONS_ENV]: "true" };
 }
 
 function isRevdiffSuccess(exitCode: number): boolean {

@@ -285,7 +285,7 @@ Comment body lines starting with `## ` (the record-header form) are prefixed wit
 
 Use `--output` / `-o` flag to write annotations to a file instead of stdout.
 
-Exit status: `0` = no annotations, discarded annotations, or default mode; `10` = annotations were produced with `--exit-code-on-annotations`, `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, or `exit-code-on-annotations`; `1` = real errors. Agent launchers enable `--exit-code-on-annotations` and treat `10` as success-with-annotations.
+Exit status: `0` = no annotations, discarded annotations, or default mode; `10` = annotations were produced with `--exit-code-on-annotations`, `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, or `exit-code-on-annotations`; `1` = real errors. Agent launchers set `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` and treat `10` as success-with-annotations.
 
 ## Preloading Annotations
 

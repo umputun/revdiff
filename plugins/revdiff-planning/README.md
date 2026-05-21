@@ -71,4 +71,4 @@ In compare mode the **new revision comes first**, prior revision second. This or
 
 If you want compare-mode highlighting in your own custom launcher, add a 2-arg branch that builds `--compare-old="$2" --compare-new="$1"` and passes it through to revdiff. The bundled `launch-plan-review.sh` is a worked example.
 
-Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The bundled launcher passes `--exit-code-on-annotations`; exit 10 is success-with-annotations, while nonzero statuses other than 10 are launcher failures and preserve the previous snapshot so the next attempt can resume the rolling chain.
+Print captured annotations to stdout on exit so the hook can include them in the deny reason; print nothing to allow the plan as-is. The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit 10 is success-with-annotations, while nonzero statuses other than 10 are launcher failures and preserve the previous snapshot so the next attempt can resume the rolling chain.
