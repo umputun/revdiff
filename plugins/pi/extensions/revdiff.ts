@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +32,7 @@ const LAUNCH_REVDIFF_SCRIPT = path.join(
 	"scripts",
 	"launch-revdiff.sh",
 );
+const DEFAULT_APPLY_PROMPT_FILE = path.join(homedir(), ".config", "revdiff", "pi-apply-prompt.md");
 
 type LaunchMode = "direct" | "overlay";
 type PanelAction = "apply" | "clear" | "rerun" | undefined;
@@ -82,6 +83,16 @@ interface GroupedAnnotations {
 interface ParsedPiArgs {
 	args: string[];
 	mode?: LaunchMode;
+}
+
+interface ApplyPromptResult {
+	prompt: string;
+	warning?: string;
+}
+
+interface ApplyPromptTemplateResult {
+	content?: string;
+	warning?: string;
 }
 
 export default function revdiffExtension(pi: ExtensionAPI): void {
@@ -387,7 +398,10 @@ async function applyReview(
 	state: ReviewState,
 	clearReviewState: () => void,
 ): Promise<void> {
-	const prompt = buildApplyPrompt(state);
+	const { prompt, warning } = buildApplyPrompt(state);
+	if (warning) {
+		ctx.ui.notify(warning, "warning");
+	}
 	if (ctx.isIdle()) {
 		ctx.ui.notify("Sending revdiff annotations to the agent", "info");
 		pi.sendUserMessage(prompt);
@@ -764,17 +778,60 @@ function buildWidgetLines(theme: Theme, state: ReviewState): string[] {
 	return lines;
 }
 
-function buildApplyPrompt(state: ReviewState): string {
-	return [
-		"Please address the following revdiff annotations.",
-		`Review target: ${state.label}`,
-		`Launch mode: ${state.mode}`,
-		`Original command: revdiff${state.args.length > 0 ? ` ${state.args.join(" ")}` : ""}`,
-		"Start with a short plan, then make the necessary changes in the repository.",
-		state.rawOutput.trim(),
-	]
-		.filter(Boolean)
-		.join("\n\n");
+function buildApplyPrompt(state: ReviewState): ApplyPromptResult {
+	const annotations = state.rawOutput.trim();
+	const command = `revdiff${state.args.length > 0 ? ` ${state.args.join(" ")}` : ""}`;
+	const { content: template, warning } = readApplyPromptTemplate();
+
+	if (template) {
+		const prompt = template
+			.replaceAll("{{target}}", state.label)
+			.replaceAll("{{mode}}", state.mode)
+			.replaceAll("{{command}}", command)
+			.replaceAll("{{annotations}}", annotations)
+			.trim();
+		return {
+			prompt: template.includes("{{annotations}}") ? prompt : [prompt, annotations].filter(Boolean).join("\n\n"),
+			warning,
+		};
+	}
+
+	return {
+		prompt: [
+			"Please address the following revdiff annotations.",
+			`Review target: ${state.label}`,
+			`Launch mode: ${state.mode}`,
+			`Original command: ${command}`,
+			"Start with a short plan, then make the necessary changes in the repository.",
+			annotations,
+		]
+			.filter(Boolean)
+			.join("\n\n"),
+		warning,
+	};
+}
+
+function readApplyPromptTemplate(): ApplyPromptTemplateResult {
+	const envFile = process.env.REVDIFF_PI_APPLY_PROMPT_FILE;
+	if (envFile) {
+		return readTemplateFile(envFile, "REVDIFF_PI_APPLY_PROMPT_FILE");
+	}
+	if (!existsSync(DEFAULT_APPLY_PROMPT_FILE)) {
+		return {};
+	}
+	return readTemplateFile(DEFAULT_APPLY_PROMPT_FILE, "default apply prompt template");
+}
+
+function readTemplateFile(file: string, source: string): ApplyPromptTemplateResult {
+	try {
+		return { content: readFileSync(file, "utf8") };
+	} catch (error) {
+		return { warning: `Failed to read ${source} (${file}): ${formatError(error)}` };
+	}
+}
+
+function formatError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 function parseAnnotations(output: string): AnnotationItem[] {

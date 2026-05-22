@@ -200,6 +200,7 @@ pi install https://github.com/umputun/revdiff
 - Direct and overlay modes treat exit code `10` as success-with-annotations and keep captured output
 - Optional overlay mode (`--pi-overlay` or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration; pi invokes the bundled script directly and does not honor Claude-plugin overrides (`CLAUDE_PLUGIN_DATA` is not set in the pi runtime)
 - Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
+- `/revdiff-apply` uses `~/.config/revdiff/pi-apply-prompt.md` when present, or the path in `REVDIFF_PI_APPLY_PROMPT_FILE` when set. Templates support `{{target}}`, `{{mode}}`, `{{command}}`, and `{{annotations}}`; annotations are appended automatically when `{{annotations}}` is omitted
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
 ## Codex Plugin

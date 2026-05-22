@@ -29,6 +29,14 @@ To enable post-edit reminders after agent edits, run:
 /revdiff-reminders on
 ```
 
+To customize the prompt used by `/revdiff-apply`, create:
+
+```text
+~/.config/revdiff/pi-apply-prompt.md
+```
+
+Or set `REVDIFF_PI_APPLY_PROMPT_FILE` to another template path. Supported placeholders: `{{target}}`, `{{mode}}`, `{{command}}`, and `{{annotations}}`. If the template omits `{{annotations}}`, captured annotations are appended after the template.
+
 This integration is intentionally kept separate from other harnesses:
 
 - Claude Code integration lives in `.claude-plugin/`

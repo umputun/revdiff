@@ -59,6 +59,10 @@ Behavior:
 - Optional post-edit reminders can suggest `/revdiff` or `/revdiff-rerun` after the agent uses `edit`/`write`
 - `/revdiff-apply` packages the structured annotations and sends them back to the agent for implementation
 
+## Apply prompt customization
+
+`/revdiff-apply` uses `~/.config/revdiff/pi-apply-prompt.md` when present, or the path in `REVDIFF_PI_APPLY_PROMPT_FILE` when set. Supported placeholders: `{{target}}`, `{{mode}}`, `{{command}}`, and `{{annotations}}`. If the template omits `{{annotations}}`, captured annotations are appended after the template.
+
 ## Notes
 
 - The default mode launches the external `revdiff` binary in the current terminal session, temporarily suspending pi while revdiff is running

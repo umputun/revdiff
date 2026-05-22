@@ -143,6 +143,7 @@
 /revdiff-clear                   <span class="code-comment">-- clear stored review state</span>
 /revdiff-reminders on            <span class="code-comment">-- enable post-edit review reminders</span></code></div>
         <p>Requires the <code>revdiff</code> binary on <code>PATH</code>. Set <code>REVDIFF_BIN=/absolute/path/to/revdiff</code> if pi can’t find the binary. Same-terminal mode is the default. Optional overlay mode (<code>--pi-overlay</code> or <code>REVDIFF_PI_MODE=overlay</code>) reuses the existing <code>launch-revdiff.sh</code> script from the Claude plugin integration; pi invokes the bundled script directly and does not honor Claude-plugin overrides (<code>CLAUDE_PLUGIN_DATA</code> is not set in the pi runtime). Optional post-edit reminders (<code>/revdiff-reminders on</code>) suggest running <code>/revdiff</code> or <code>/revdiff-rerun</code> after agent edits.</p>
+        <p><code>/revdiff-apply</code> uses <code>~/.config/revdiff/pi-apply-prompt.md</code> when present, or the path in <code>REVDIFF_PI_APPLY_PROMPT_FILE</code> when set. Templates support <code>{{target}}</code>, <code>{{mode}}</code>, <code>{{command}}</code>, and <code>{{annotations}}</code>; annotations are appended automatically when <code>{{annotations}}</code> is omitted.</p>
 
         <!-- usage -->
         <h2 id="usage">Usage</h2>
