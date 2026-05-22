@@ -11,6 +11,8 @@ Claude Code plugin that intercepts `ExitPlanMode` and opens the proposed plan in
 
 Requires the `revdiff` binary in `PATH` and one of: tmux, Zellij, kitty, wezterm, cmux, ghostty (macOS), iTerm2 (macOS), or Emacs vterm.
 
+cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
+
 ## How It Works
 
 The plugin registers a `PreToolUse` hook on `ExitPlanMode` that:

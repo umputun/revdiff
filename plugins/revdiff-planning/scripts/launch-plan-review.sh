@@ -72,6 +72,19 @@ if [ "$COMPARE_MODE" = "1" ]; then
 fi
 OVERLAY_TITLE="plan: $(basename "$PLAN_FILE")"
 
+is_cmux_session() {
+    if [ -n "${CMUX_SURFACE_ID:-}" ]; then
+        return 0
+    fi
+    if [ "${__CFBundleIdentifier:-}" = "com.cmuxterm.app" ]; then
+        return 0
+    fi
+    case "${GHOSTTY_RESOURCES_DIR:-}:${GHOSTTY_BIN_DIR:-}" in
+        *cmux.app*) return 0 ;;
+    esac
+    return 1
+}
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # -T (title) requires tmux 3.3+; skip on older versions
@@ -166,8 +179,12 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
     fi
 fi
 
-# cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)
-if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
+# cmux: split pane via cmux CLI (must precede ghostty because cmux may expose Ghostty env vars)
+if is_cmux_session; then
+    if ! command -v cmux >/dev/null 2>&1; then
+        echo "error: cmux session detected but cmux CLI not found" >&2
+        exit 1
+    fi
     SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
     rm -f "$SENTINEL"
 

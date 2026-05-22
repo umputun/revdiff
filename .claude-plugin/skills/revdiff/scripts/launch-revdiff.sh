@@ -58,6 +58,19 @@ print_output_and_exit() {
     exit "$rc"
 }
 
+is_cmux_session() {
+    if [ -n "${CMUX_SURFACE_ID:-}" ]; then
+        return 0
+    fi
+    if [ "${__CFBundleIdentifier:-}" = "com.cmuxterm.app" ]; then
+        return 0
+    fi
+    case "${GHOSTTY_RESOURCES_DIR:-}:${GHOSTTY_BIN_DIR:-}" in
+        *cmux.app*) return 0 ;;
+    esac
+    return 1
+}
+
 # overlay backends (kitty @ launch, tmux display-popup, zellij run, etc.) spawn
 # children from a server/app process whose env predates user shell rc files,
 # so EDITOR/VISUAL exports from .zshrc/.bashrc are otherwise lost. prepend
@@ -187,8 +200,12 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
     fi
 fi
 
-# cmux: split pane via cmux CLI (must precede ghostty — cmux also sets TERM_PROGRAM=ghostty)
-if [ -n "${CMUX_SURFACE_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
+# cmux: split pane via cmux CLI (must precede ghostty because cmux may expose Ghostty env vars)
+if is_cmux_session; then
+    if ! command -v cmux >/dev/null 2>&1; then
+        echo "error: cmux session detected but cmux CLI not found" >&2
+        exit 1
+    fi
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
 

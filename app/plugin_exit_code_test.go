@@ -286,6 +286,12 @@ func launcherBackends() []launcherBackend {
 		{name: "kitty", command: "kitty", env: map[string]string{"KITTY_LISTEN_ON": "unix:/tmp/kitty"}},
 		{name: "wezterm", command: "wezterm", env: map[string]string{"WEZTERM_PANE": "1"}},
 		{name: "cmux", command: "cmux", env: map[string]string{"CMUX_SURFACE_ID": "1"}},
+		{name: "cmux ghostty env", command: "cmux", env: map[string]string{
+			"TERM_PROGRAM":          "ghostty",
+			"__CFBundleIdentifier":  "com.cmuxterm.app",
+			"GHOSTTY_RESOURCES_DIR": "/Applications/cmux.app/Contents/Resources/ghostty",
+			"GHOSTTY_BIN_DIR":       "/Applications/cmux.app/Contents/MacOS",
+		}},
 		{name: "ghostty", command: "osascript", env: map[string]string{"TERM_PROGRAM": "ghostty"}},
 		{name: "iterm2", command: "osascript", env: map[string]string{"ITERM_SESSION_ID": "w0t0p0:ABC"}},
 		{name: "emacs", command: "emacsclient", env: map[string]string{"INSIDE_EMACS": "vterm"}},
@@ -310,16 +316,20 @@ func fakeLauncherEnv(t *testing.T, r launcherRun) map[string]string {
 
 func cleanOverlayEnv() map[string]string {
 	return map[string]string{
-		"TMUX":             "",
-		"ZELLIJ":           "",
-		"KITTY_LISTEN_ON":  "",
-		"KITTY_WINDOW_ID":  "",
-		"WEZTERM_PANE":     "",
-		"CMUX_SURFACE_ID":  "",
-		"TERM_PROGRAM":     "",
-		"ITERM_SESSION_ID": "",
-		"INSIDE_EMACS":     "",
-		"REVDIFF_CONFIG":   "",
+		"TMUX":                  "",
+		"ZELLIJ":                "",
+		"KITTY_LISTEN_ON":       "",
+		"KITTY_WINDOW_ID":       "",
+		"WEZTERM_PANE":          "",
+		"CMUX_SURFACE_ID":       "",
+		"TERM_PROGRAM":          "",
+		"GHOSTTY_SURFACE_ID":    "",
+		"GHOSTTY_RESOURCES_DIR": "",
+		"GHOSTTY_BIN_DIR":       "",
+		"__CFBundleIdentifier":  "",
+		"ITERM_SESSION_ID":      "",
+		"INSIDE_EMACS":          "",
+		"REVDIFF_CONFIG":        "",
 	}
 }
 
