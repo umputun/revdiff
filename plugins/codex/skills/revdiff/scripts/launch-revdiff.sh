@@ -137,10 +137,33 @@ $(write_rc_cmd "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    zellij run --floating --close-on-exit \
-        --width "$POPUP_W" --height "$POPUP_H" \
-        --name "$OVERLAY_TITLE" --cwd "$CWD" \
-        -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
+    # zellij run targets the focused tab; route into our originating tab via
+    # `action new-pane --tab-id` so the popup follows the caller's pane even
+    # when the user has switched tabs. needs ZELLIJ_PANE_ID (zellij 0.40+) + jq;
+    # falls back to the plain `zellij run` path otherwise.
+    #
+    # `list-panes --json` reports `.id` as a bare integer and plugin panes
+    # share id numbers with terminal panes, so filter on is_plugin=false.
+    ZELLIJ_TAB_ID=""
+    if [ -n "${ZELLIJ_PANE_ID:-}" ] && command -v jq >/dev/null 2>&1; then
+        ZELLIJ_TAB_ID=$(zellij action list-panes --json 2>/dev/null \
+            | jq -r --arg p "$ZELLIJ_PANE_ID" \
+                '.[] | select((.is_plugin // false) == false and .id == ($p | tonumber)) | .tab_id' \
+            | head -1)
+    fi
+
+    if [ -n "$ZELLIJ_TAB_ID" ]; then
+        zellij action new-pane --floating --close-on-exit \
+            --tab-id "$ZELLIJ_TAB_ID" \
+            --width "$POPUP_W" --height "$POPUP_H" \
+            --name "$OVERLAY_TITLE" --cwd "$CWD" \
+            -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
+    else
+        zellij run --floating --close-on-exit \
+            --width "$POPUP_W" --height "$POPUP_H" \
+            --name "$OVERLAY_TITLE" --cwd "$CWD" \
+            -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
+    fi
 
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
