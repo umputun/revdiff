@@ -16,7 +16,7 @@
   ],
   "files": [
     "plugins/pi/",
-    ".claude-plugin/skills/revdiff/scripts/"
+    ".claude-plugin/skills/revdiff/scripts/detect-ref.sh"
   ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^0.74.0",

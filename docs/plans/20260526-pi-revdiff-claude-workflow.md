@@ -163,15 +163,15 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - Delete: `plugins/pi/extensions/revdiff-post-edit.ts`
 - Modify: `package.json`
 
-- [ ] delete `plugins/pi/extensions/revdiff-post-edit.ts`
-- [ ] update `package.json` `files` to include `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` instead of the whole scripts directory
-- [ ] verify package discovery no longer exposes `/revdiff-reminders`
-- [ ] run package dry-run: `npm pack --dry-run`
-- [ ] verify dry-run output includes `detect-ref.sh`
-- [ ] verify `detect-ref.sh` remains executable for direct `spawnSync` use
-- [ ] verify dry-run output excludes `launch-revdiff.sh`
-- [ ] verify dry-run output excludes `plugins/pi/extensions/revdiff-post-edit.ts`
-- [ ] run tests: `go test ./...`
+- [x] delete `plugins/pi/extensions/revdiff-post-edit.ts`
+- [x] update `package.json` `files` to include `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` instead of the whole scripts directory
+- [x] verify package discovery no longer exposes `/revdiff-reminders`
+- [x] run package dry-run: `npm pack --dry-run`
+- [x] verify dry-run output includes `detect-ref.sh`
+- [x] verify `detect-ref.sh` remains executable for direct `spawnSync` use
+- [x] verify dry-run output excludes `launch-revdiff.sh`
+- [x] verify dry-run output excludes `plugins/pi/extensions/revdiff-post-edit.ts`
+- [x] run tests: `go test ./...`
 
 ### Task 4: Update Pi workflow documentation
 
