@@ -12,6 +12,19 @@ Use the revdiff pi extension for interactive review sessions.
 
 Call the `revdiff_review` tool only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations. Do **not** call it for ordinary autonomous requests like "review the code", "review my changes", or "review the diff"; handle those by inspecting the code directly. Do **not** tell the user to run `/revdiff`; slash commands are user-invoked only.
 
+When the user invokes `/skill:revdiff <input>`, treat `<input>` as a request to launch revdiff unless it is clearly a usage/configuration question or an existing-history request. First figure out the concrete reference point(s) or file target the user asked for, then call `revdiff_review`. Do not stop after printing the resolved ref.
+
+Reference resolution rules:
+
+- Accept natural language. Resolve the user's requested target to concrete revdiff args before launching.
+- For commit-count requests, use the matching git rev: `prev commit`, `previous commit`, `last commit` → `HEAD~1`; `head-3`, `head 3`, `HEAD~3`, `previous 3 commits`, `last 3 commits` → `HEAD~3`.
+- For tag requests, resolve the actual tag first. `last tag` or `latest tag` → run `git describe --tags --abbrev=0`, then pass that tag as `args`.
+- For date requests, resolve the commit first. Examples: `2 weeks ago`, `yesterday`, `last Friday` → run `git rev-list -1 --before=<phrase> HEAD`, then pass the resulting commit hash as `args`.
+- For file targets, use `args: "--only <path>"`.
+- For all-files requests, map excludes explicitly. Example: `all files exclude vendor and dist` → `args: "--all-files --exclude=vendor --exclude=dist"`.
+- For explicit refs, ranges, flags, or two-ref requests, pass them through as revdiff args.
+- If the requested natural language target cannot be resolved, say what failed and ask for a concrete ref/path. Do not guess silently.
+
 Tool examples:
 
 - No args: smart detection, same default target as `/revdiff`
@@ -42,7 +55,8 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 
 ## User commands
 
-- `/revdiff [args]` — launch revdiff through direct terminal handoff, capture annotations, and send them to the agent immediately
+- `/revdiff [args]` — launch revdiff through direct terminal handoff, capture annotations, and send them to the agent immediately. Arguments are revdiff CLI args or simple built-in shortcuts; natural-language requests belong in `/skill:revdiff`.
+- `/skill:revdiff <request>` — agent resolves natural language into concrete revdiff args and calls `revdiff_review`.
 
 ## Recommended user command examples
 
@@ -58,6 +72,16 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 /revdiff HEAD~3 --description="why this refactor matters"
 /revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
 /revdiff main --annotations=/tmp/revdiff-review.md
+```
+
+## Recommended skill command examples
+
+```text
+/skill:revdiff prev commit
+/skill:revdiff last tag
+/skill:revdiff 2 weeks ago
+/skill:revdiff all files exclude vendor and dist
+/skill:revdiff README.md
 ```
 
 Behavior:

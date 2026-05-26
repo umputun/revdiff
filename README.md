@@ -198,6 +198,14 @@ Useful args:
 /revdiff main --annotations=/tmp/revdiff-review.md
 ```
 
+For natural-language targets, use the skill command so the agent can resolve the requested ref before launching:
+
+```text
+/skill:revdiff prev commit
+/skill:revdiff last tag
+/skill:revdiff 2 weeks ago
+```
+
 **Agent workflow:**
 
 - `/revdiff` is the only Pi user command. It suspends pi, hands the terminal to revdiff, then resumes pi when revdiff exits.

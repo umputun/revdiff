@@ -48,6 +48,14 @@ Useful args:
 /revdiff main --annotations=/tmp/revdiff-review.md
 ```
 
+For natural-language targets, use the skill command so the agent can resolve the requested ref before launching:
+
+```text
+/skill:revdiff prev commit
+/skill:revdiff last tag
+/skill:revdiff 2 weeks ago
+```
+
 ## Notes
 
 - Requires the `revdiff` binary on `PATH`

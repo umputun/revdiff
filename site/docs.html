@@ -144,6 +144,10 @@
 /revdiff HEAD~3 --description="why this refactor matters"
 /revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
 /revdiff main --annotations=/tmp/revdiff-review.md</code></div>
+        <p>For natural-language targets, use the skill command so the agent can resolve the requested ref before launching:</p>
+        <div class="code-block"><code>/skill:revdiff prev commit
+/skill:revdiff last tag
+/skill:revdiff 2 weeks ago</code></div>
         <h3>Agent workflow</h3>
         <ul>
             <li><code>/revdiff</code> is the only Pi user command. It suspends pi, hands the terminal to revdiff, then resumes pi when revdiff exits.</li>
