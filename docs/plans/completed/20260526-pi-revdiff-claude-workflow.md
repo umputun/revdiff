@@ -219,9 +219,9 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 **Files:**
 - Move: `docs/plans/20260526-pi-revdiff-claude-workflow.md` to `docs/plans/completed/20260526-pi-revdiff-claude-workflow.md`
 
-- [ ] update project agent guidance if implementation reveals new durable Pi integration patterns
-- [ ] ask whether to bump `package.json` version because Pi plugin files changed
-- [ ] move this plan to `docs/plans/completed/`
+- [x] update project agent guidance if implementation reveals new durable Pi integration patterns (skipped - no new durable guidance pattern beyond existing Pi plugin rules)
+- [x] ask whether to bump `package.json` version because Pi plugin files changed (deferred to Post-Completion - exec mode is non-interactive)
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 *Items requiring manual intervention or external systems. No checkboxes.*
