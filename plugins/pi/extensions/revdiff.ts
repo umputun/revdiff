@@ -90,7 +90,8 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			"Use revdiff_review only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations inside pi.",
 			"Do not use revdiff_review for ordinary autonomous code-review requests like 'review the code', 'review my changes', or 'review the diff'; inspect the code directly instead.",
-			"After revdiff_review returns annotations, address them directly and rerun revdiff_review with the same args until no annotations are captured.",
+			"If revdiff_review returns no annotations, stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.",
+			"Rerun the original revdiff_review target only after code changes or when the user asks to continue reviewing; do not rerun it after explanation-only annotations are answered.",
 		],
 		parameters: Type.Object({
 			args: Type.Optional(
@@ -139,12 +140,13 @@ function buildAgentPrompt(result: ReviewResult): string {
 		`Rerun command: ${rerun}`,
 		[
 			"Workflow:",
+			"- If any revdiff_review call returns no annotations, stop. Do not relaunch revdiff after a clean/no-annotation result unless the user explicitly asks for another review.",
 			"- Classify annotations into explanation requests and code-change directives.",
-			"- Answer explanation requests first.",
-			"- If an explanation answer needs review, write it to a temporary markdown file and run revdiff_review with args: --only <tempfile> until clean.",
+			"- Answer explanation requests in normal chat, not by opening another revdiff session.",
+			"- After explanation-only annotations are answered, ask the user to choose between continuing the original review and finishing the review.",
 			"- Before editing repository files, list the planned file/code changes.",
 			"- Apply code-change directives.",
-			"- Rerun revdiff_review with the same args until no annotations are captured.",
+			"- Rerun the original revdiff_review target only after repository files changed or when the user chooses to continue reviewing.",
 			"- Add --untracked on reruns when agent-created files should be included.",
 		].join("\n"),
 		"Annotations:",
@@ -187,7 +189,7 @@ async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promis
 async function detectSmartLaunch(ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
 	const detected = detectSmartRef();
 	if (!detected) {
-		ctx.ui.notify("Not inside a git repo. Use /revdiff --only <file> to review a standalone file.", "warning");
+		ctx.ui.notify("Not inside a supported VCS repo or smart detection is unavailable. Use /revdiff --only <file> to review a standalone file.", "warning");
 		return undefined;
 	}
 
@@ -448,14 +450,7 @@ function isFileReviewArg(arg: string): boolean {
 	if (existsSync(path.resolve(arg))) {
 		return true;
 	}
-	if (arg.startsWith("/") || arg.startsWith("./")) {
-		return true;
-	}
-	return arg.includes("/") && path.extname(arg) !== "" && !isGitRef(arg);
-}
-
-function isGitRef(arg: string): boolean {
-	return gitOk(["rev-parse", "--verify", "--quiet", `${arg}^{commit}`]);
+	return arg.startsWith("/") || arg.startsWith("./") || arg.startsWith("../");
 }
 
 function shellSplit(input: string): string[] {

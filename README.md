@@ -211,7 +211,9 @@ For natural-language targets, use the skill command so the agent can resolve the
 - `/revdiff` is the only Pi user command. It suspends pi, hands the terminal to revdiff, then resumes pi when revdiff exits.
 - Captured annotations are sent to the agent as a user message, and the agent continues the loop with `revdiff_review`.
 - The agent classifies annotations into explanation requests and code-change directives.
-- Explanation requests are answered first. If the explanation needs review, the agent writes it to a temporary markdown file and reviews it with `revdiff_review --only <tempfile>` until clean.
+- Explanation requests are answered first in normal chat, without opening another revdiff session for the explanation.
+- Any clean/no-annotation `revdiff_review` result stops the loop. The agent must not relaunch revdiff unless you explicitly ask for another review.
+- For explanation-only annotations, the agent asks whether to continue the original review or finish.
 - Before editing repository files, the agent lists planned code/file changes, applies the changes, then reruns `revdiff_review` with the same args until no annotations are captured.
 
 **Notes:**

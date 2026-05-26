@@ -37,21 +37,24 @@ Tool examples:
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
 
-After `revdiff_review` returns annotations, address them directly. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean.
+After `revdiff_review` returns annotations, address them directly. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean and stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.
 
 ## Annotation handling loop
 
 When annotations arrive from `/revdiff` or `revdiff_review`:
 
-1. Classify each annotation into:
+1. If any `revdiff_review` call returns no annotations, stop. Do not relaunch revdiff after a clean/no-annotation result unless the user explicitly asks for another review.
+2. Classify each annotation into:
    - **explanation requests**: questions or requests to explain/clarify behavior
    - **code-change directives**: requested repository changes
-2. Answer explanation requests first.
-3. If an explanation answer needs user review, write it to a temporary markdown file and run `revdiff_review` with `args: "--only <tempfile>"`. Refine the explanation and rerun until that explanation review returns clean.
-4. Before editing repository files, list the planned file/code changes.
-5. Apply code-change directives.
-6. Rerun `revdiff_review` with the same args until no annotations are captured.
-7. Add `--untracked` on reruns when agent-created files should be included.
+3. Answer explanation requests first in normal chat. Do not open another revdiff session just to show the explanation.
+4. If all annotations are explanation requests and no repository files change, ask the user to choose between:
+   - `Continue review` — rerun the original `revdiff_review` target
+   - `Done with review` — stop
+5. Before editing repository files, list the planned file/code changes.
+6. Apply code-change directives.
+7. Rerun the original `revdiff_review` target only after repository files changed or when the user chooses to continue reviewing.
+8. Add `--untracked` on reruns when agent-created files should be included.
 
 ## User commands
 

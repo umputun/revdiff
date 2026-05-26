@@ -348,6 +348,10 @@ async function testCommandSendsAnnotations(): Promise<void> {
 		testAssert(prompt.includes("Review target: docs/my plan.md"), "prompt should include review target");
 		testAssert(prompt.includes("Original command: revdiff --only 'docs/my plan.md'"), "prompt should shell-quote original args");
 		testAssert(prompt.includes("Rerun command: Call revdiff_review with args: --only 'docs/my plan.md'"), "prompt should include round-trippable rerun args");
+		testAssert(prompt.includes("If any revdiff_review call returns no annotations, stop"), "prompt should stop after any clean review");
+		testAssert(prompt.includes("Answer explanation requests in normal chat"), "prompt should keep explanation answers in chat");
+		testAssert(prompt.includes("choose between continuing the original review and finishing"), "prompt should ask after explanation-only annotations");
+		testAssert(prompt.includes("Rerun the original revdiff_review target only after repository files changed"), "prompt should gate reruns on repo changes");
 		testAssert(prompt.includes("## src/app.go:12-14 (+)"), "prompt should include captured hunk annotation header");
 		testAssert(prompt.includes("fix it"), "prompt should include captured annotation body");
 
@@ -407,9 +411,13 @@ async function testArgumentResolution(): Promise<void> {
 	testAssert(Boolean(launch), "expected all-files shortcut launch");
 	assertArray(launch!.args, ["--all-files", "--exclude=vendor", "--exclude=dist"], "all-files shortcut should expand excludes");
 
-	launch = await resolveLaunchSpec("docs/new-file.md", fakeCtx());
-	testAssert(Boolean(launch), "expected path-like file launch");
-	assertArray(launch!.args, ["--only", "docs/new-file.md"], "path-like file arg should map to --only");
+	launch = await resolveLaunchSpec("./docs/new-file.md", fakeCtx());
+	testAssert(Boolean(launch), "expected explicit path file launch");
+	assertArray(launch!.args, ["--only", "./docs/new-file.md"], "explicit path arg should map to --only");
+
+	launch = await resolveLaunchSpec("release/v1.2.3", fakeCtx());
+	testAssert(Boolean(launch), "expected slash-dot token launch");
+	assertArray(launch!.args, ["release/v1.2.3"], "slash-dot token should stay a ref-like arg when path does not exist");
 
 	const roundTrip = ["--description=why this matters", "--only", "docs/it's mine.md"];
 	assertArray(shellSplit(shellJoin(roundTrip)), roundTrip, "shellJoin output should shellSplit back to original args");
