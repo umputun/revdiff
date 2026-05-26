@@ -128,21 +128,42 @@
         <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
 
         <h2 id="pi-package">Pi package</h2>
-        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The extension launches the existing <code>revdiff</code> binary, captures annotations on exit, and keeps them visible inside pi as a persistent widget plus a right-side results panel. Direct and overlay modes treat exit code <code>10</code> as success-with-annotations.</p>
+        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The extension launches the existing <code>revdiff</code> binary through direct terminal handoff, captures annotations on exit, and sends them to the agent immediately. If no annotations were captured, the review is clean.</p>
         <div class="code-block"><code>pi install https://github.com/umputun/revdiff</code></div>
-        <h3>Commands inside pi</h3>
+        <h3>Command inside pi</h3>
+        <div class="code-block"><code>/revdiff [args]</code></div>
+        <h3>Useful args</h3>
         <div class="code-block"><code>/revdiff                         <span class="code-comment">-- detect uncommitted, staged, or branch changes, then open revdiff</span>
 /revdiff HEAD~1                  <span class="code-comment">-- review last commit</span>
+/revdiff main                    <span class="code-comment">-- review against main</span>
+/revdiff --staged                <span class="code-comment">-- review staged changes</span>
+/revdiff --untracked             <span class="code-comment">-- include untracked files in working-tree review</span>
 /revdiff --all-files             <span class="code-comment">-- browse all tracked files</span>
+/revdiff --all-files --exclude vendor
 /revdiff --only README.md        <span class="code-comment">-- review a single file in context-only mode</span>
-/revdiff --pi-overlay            <span class="code-comment">-- use the existing overlay launcher script</span>
-/revdiff-rerun                   <span class="code-comment">-- rerun the last review with remembered args</span>
-/revdiff-rerun --pi-overlay      <span class="code-comment">-- rerun the last review in overlay mode</span>
-/revdiff-results                 <span class="code-comment">-- reopen the last results panel</span>
-/revdiff-apply                   <span class="code-comment">-- insert the last annotations into the pi chat context</span>
-/revdiff-clear                   <span class="code-comment">-- clear stored review state</span>
-/revdiff-reminders on            <span class="code-comment">-- enable post-edit review reminders</span></code></div>
-        <p>Requires the <code>revdiff</code> binary on <code>PATH</code>. Set <code>REVDIFF_BIN=/absolute/path/to/revdiff</code> if pi can’t find the binary. Same-terminal mode is the default. Optional overlay mode (<code>--pi-overlay</code> or <code>REVDIFF_PI_MODE=overlay</code>) reuses the existing <code>launch-revdiff.sh</code> script from the Claude plugin integration; pi invokes the bundled script directly and does not honor Claude-plugin overrides (<code>CLAUDE_PLUGIN_DATA</code> is not set in the pi runtime). Optional post-edit reminders (<code>/revdiff-reminders on</code>) suggest running <code>/revdiff</code> or <code>/revdiff-rerun</code> after agent edits.</p>
+/revdiff HEAD~3 --description="why this refactor matters"
+/revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
+/revdiff main --annotations=/tmp/revdiff-review.md</code></div>
+        <h3>Agent workflow</h3>
+        <ul>
+            <li><code>/revdiff</code> is the only Pi user command. It suspends pi, hands the terminal to revdiff, then resumes pi when revdiff exits.</li>
+            <li>Captured annotations are sent to the agent as a user message, and the agent continues the loop with <code>revdiff_review</code>.</li>
+            <li>The agent classifies annotations into explanation requests and code-change directives.</li>
+            <li>Explanation requests are answered first. If the explanation needs review, the agent writes it to a temporary markdown file and reviews it with <code>revdiff_review --only &lt;tempfile&gt;</code> until clean.</li>
+            <li>Before editing repository files, the agent lists planned code/file changes, applies the changes, then reruns <code>revdiff_review</code> with the same args until no annotations are captured.</li>
+        </ul>
+        <h3>Notes</h3>
+        <ul>
+            <li>Requires the <code>revdiff</code> binary on <code>PATH</code></li>
+            <li>Set <code>REVDIFF_BIN=/absolute/path/to/revdiff</code> if pi can’t find the binary</li>
+            <li>Direct terminal handoff is the only Pi launch mode</li>
+            <li>Exit code <code>10</code> means annotations were captured, not failure</li>
+            <li>Use <code>--untracked</code> when agent-created files should be reviewed before they are staged</li>
+            <li>Use <code>--description</code> or <code>--description-file</code> after analysis/refactor work so the info popup carries review context</li>
+            <li>Use <code>--annotations=&lt;tempfile&gt;</code> to preload in-session review notes</li>
+            <li>For "use my latest revdiff annotations", the agent should read the newest file under <code>$REVDIFF_HISTORY_DIR</code> or <code>~/.config/revdiff/history/</code> instead of relaunching revdiff</li>
+            <li>In the repo, the pi-specific resources live under <code>plugins/pi/</code> to keep harness integrations clearly separated</li>
+        </ul>
 
         <!-- usage -->
         <h2 id="usage">Usage</h2>

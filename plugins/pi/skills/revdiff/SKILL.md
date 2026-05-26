@@ -17,20 +17,32 @@ Tool examples:
 - No args: smart detection, same default target as `/revdiff`
 - `args: "main"`: review the current branch against `main`
 - `args: "--staged"`: review staged changes
+- `args: "--untracked"`: review untracked files with working-tree changes
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
-- `mode: "overlay"`: use optional overlay mode instead of the default direct pi-native launcher
+- `args: "--description='why this refactor matters' main"`: include review context in the info popup
+- `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
+- `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
 
 After `revdiff_review` returns annotations, address them directly. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean.
 
+## Annotation handling loop
+
+When annotations arrive from `/revdiff` or `revdiff_review`:
+
+1. Classify each annotation into:
+   - **explanation requests**: questions or requests to explain/clarify behavior
+   - **code-change directives**: requested repository changes
+2. Answer explanation requests first.
+3. If an explanation answer needs user review, write it to a temporary markdown file and run `revdiff_review` with `args: "--only <tempfile>"`. Refine the explanation and rerun until that explanation review returns clean.
+4. Before editing repository files, list the planned file/code changes.
+5. Apply code-change directives.
+6. Rerun `revdiff_review` with the same args until no annotations are captured.
+7. Add `--untracked` on reruns when agent-created files should be included.
+
 ## User commands
 
-- `/revdiff [args]` — launch revdiff, capture annotations, and open the results side panel
-- `/revdiff-rerun [--pi-overlay|--pi-direct]` — rerun the last review with remembered args
-- `/revdiff-results` — reopen the last captured results panel
-- `/revdiff-apply` — send the last captured annotations to the agent as a user request
-- `/revdiff-clear` — clear the stored review state widget/panel
-- `/revdiff-reminders on|off` — enable or disable post-edit review reminders
+- `/revdiff [args]` — launch revdiff through direct terminal handoff, capture annotations, and send them to the agent immediately
 
 ## Recommended user command examples
 
@@ -44,25 +56,38 @@ After `revdiff_review` returns annotations, address them directly. Exit code `10
 /revdiff --all-files --exclude vendor
 /revdiff --only README.md
 /revdiff HEAD~3 --description="why this refactor matters"
+/revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
+/revdiff main --annotations=/tmp/revdiff-review.md
 ```
 
 Behavior:
 
 - With no arguments, the extension uses smart detection:
+  - on main/master with staged-only changes → review staged changes with `--staged`
   - on main/master with uncommitted changes → review uncommitted changes
   - on main/master with a clean tree → review `HEAD~1`
   - on a clean feature branch → review against the detected main branch
-  - on a dirty feature branch → asks whether to review uncommitted changes or the branch diff
-- After revdiff exits, annotations are parsed and shown in a grouped right-side overlay panel for user-launched reviews
-- A persistent widget is shown below the editor until cleared or until a clean re-review produces no annotations
-- `/revdiff-rerun` remembers the last args, so the review loop stays tight
-- Optional post-edit reminders can suggest `/revdiff` or `/revdiff-rerun` after the agent uses `edit`/`write`
-- `/revdiff-apply` packages the structured annotations and sends them back to the agent for implementation
+  - on a dirty feature branch → asks whether to review uncommitted changes or the branch diff; staged-only uncommitted review uses `--staged`
+- After revdiff exits with annotations, the extension sends a user message to the agent immediately; the agent continues the loop with `revdiff_review`.
+- If revdiff exits without annotations, the review is clean.
+- When recent agent work created new untracked files, include `--untracked` so those files appear in the review tree.
+- When launching after analysis or refactor work, include `--description` or `--description-file` so the info popup explains the review context.
+
+## Existing review history
+
+If the user says "use my latest revdiff annotations", "pull up my last revdiff review", or similar, do not launch revdiff again. Read the newest markdown file from the revdiff history directory and process its annotations through the same annotation handling loop.
+
+- Use `$REVDIFF_HISTORY_DIR` when set; otherwise use `~/.config/revdiff/history/`.
+- Prefer the history subdirectory matching the current repository root name when present.
+- History files contain annotation blocks in `## file:line (type)` format, usually followed by captured diff context.
+
+## In-session review preload
+
+When the user wants to review comments already present in the current conversation, write those comments to a temporary markdown file using revdiff's annotation output format, then run `revdiff_review` with `--annotations=<tempfile>` plus the normal review target args. This preloads the notes into the review session so the user can accept, edit, or add annotations in context.
 
 ## Notes
 
-- The default mode launches the external `revdiff` binary in the current terminal session, temporarily suspending pi while revdiff is running
-- Optional overlay mode (`--pi-overlay`, `mode: "overlay"`, or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration
-- If `revdiff` is not on `PATH`, set `REVDIFF_BIN` to its absolute path
-- Direct and overlay modes set `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; `10` means annotations were captured, not failure
-- You can still use revdiff standalone outside pi; the extension is only a convenience layer around the existing binary
+- The extension launches the external `revdiff` binary in the current terminal session, temporarily suspending pi while revdiff is running.
+- If `revdiff` is not on `PATH`, set `REVDIFF_BIN` to its absolute path.
+- The extension sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; `10` means annotations were captured, not failure.
+- You can still use revdiff standalone outside pi; the extension is only a convenience layer around the existing binary.

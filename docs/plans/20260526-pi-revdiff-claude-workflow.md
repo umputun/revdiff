@@ -181,15 +181,15 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - Modify: `README.md`
 - Modify: `site/docs.html`
 
-- [ ] document `/revdiff [args]` as the only Pi user command
-- [ ] document direct terminal handoff only; remove overlay, pending UI, apply/results/rerun/clear, and reminder references
-- [ ] document agent handling of captured annotations: classify explanation requests and code-change directives, answer questions first, review explanation drafts through temp markdown files when needed, list planned changes before editing, rerun `revdiff_review` until clean
-- [ ] document `--untracked` guidance for agent-created files
-- [ ] document `--description` and `--description-file` guidance after analysis/refactor work
-- [ ] document existing-history workflow for "use my latest revdiff annotations"
-- [ ] document in-session review preload with `--annotations=<tempfile>`
-- [ ] keep `site/docs.html` in sync with the README Pi section
-- [ ] run tests: `go test ./...`
+- [x] document `/revdiff [args]` as the only Pi user command
+- [x] document direct terminal handoff only; remove overlay, pending UI, apply/results/rerun/clear, and reminder references
+- [x] document agent handling of captured annotations: classify explanation requests and code-change directives, answer questions first, review explanation drafts through temp markdown files when needed, list planned changes before editing, rerun `revdiff_review` until clean
+- [x] document `--untracked` guidance for agent-created files
+- [x] document `--description` and `--description-file` guidance after analysis/refactor work
+- [x] document existing-history workflow for "use my latest revdiff annotations"
+- [x] document in-session review preload with `--annotations=<tempfile>`
+- [x] keep `site/docs.html` in sync with the README Pi section
+- [x] run tests: `go test ./...`
 
 ### Task 5: Verify acceptance criteria
 

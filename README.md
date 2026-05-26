@@ -31,7 +31,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - All-files mode: browse and annotate all tracked files with `--all-files` (git `ls-files` or jj `file list`), filter with `--include` and `--exclude`
 - No-VCS file review: `--only` files outside a VCS repo (or not in any diff) are shown as context-only with full annotation support
 - Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
-- Pi package: launch revdiff from pi, capture annotations, and keep them visible in a widget and right-side panel until you apply or clear them
+- Pi package: launch revdiff from pi, capture annotations, and send them to the agent immediately for the normal review loop
 - Review history: auto-saves annotations and diffs to `~/.config/revdiff/history/` on quit as a safety net
 - Fully customizable colors via environment variables, CLI flags, or config file
 - Custom keybindings: remap any key via config file, export defaults with `--dump-keys`
@@ -168,7 +168,7 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 
 ## Pi Package
 
-revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The extension launches the existing `revdiff` binary, captures annotations on exit, and renders them inside pi as a persistent widget plus a right-side results panel.
+revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The extension launches the existing `revdiff` binary through direct terminal handoff, captures annotations on exit, and sends them to the agent immediately. If no annotations were captured, the review is clean.
 
 **Install:**
 
@@ -176,30 +176,46 @@ revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The e
 pi install https://github.com/umputun/revdiff
 ```
 
-**Commands inside pi:**
+**Command inside pi:**
+
+```text
+/revdiff [args]
+```
+
+Useful args:
 
 ```text
 /revdiff                         -- detect uncommitted, staged, or branch changes, then open revdiff
 /revdiff HEAD~1                  -- review last commit
+/revdiff main                    -- review against main
+/revdiff --staged                -- review staged changes
+/revdiff --untracked             -- include untracked files in working-tree review
 /revdiff --all-files             -- browse all tracked files
+/revdiff --all-files --exclude vendor
 /revdiff --only README.md        -- review a single file in context-only mode
-/revdiff --pi-overlay            -- use the existing overlay launcher script instead of same-terminal mode
-/revdiff-rerun                   -- rerun the last review with remembered args
-/revdiff-rerun --pi-overlay      -- rerun the last review in overlay mode
-/revdiff-results                 -- reopen the last results panel
-/revdiff-apply                   -- insert the last annotations into the pi chat context
-/revdiff-clear                   -- clear stored review state
-/revdiff-reminders on            -- enable post-edit review reminders
+/revdiff HEAD~3 --description="why this refactor matters"
+/revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
+/revdiff main --annotations=/tmp/revdiff-review.md
 ```
+
+**Agent workflow:**
+
+- `/revdiff` is the only Pi user command. It suspends pi, hands the terminal to revdiff, then resumes pi when revdiff exits.
+- Captured annotations are sent to the agent as a user message, and the agent continues the loop with `revdiff_review`.
+- The agent classifies annotations into explanation requests and code-change directives.
+- Explanation requests are answered first. If the explanation needs review, the agent writes it to a temporary markdown file and reviews it with `revdiff_review --only <tempfile>` until clean.
+- Before editing repository files, the agent lists planned code/file changes, applies the changes, then reruns `revdiff_review` with the same args until no annotations are captured.
 
 **Notes:**
 
 - Requires the `revdiff` binary on `PATH`
 - Set `REVDIFF_BIN=/absolute/path/to/revdiff` if pi can't find the binary
-- Same-terminal mode is the default: pi temporarily suspends, revdiff takes over the terminal, and pi resumes on exit
-- Direct and overlay modes treat exit code `10` as success-with-annotations and keep captured output
-- Optional overlay mode (`--pi-overlay` or `REVDIFF_PI_MODE=overlay`) reuses the existing `launch-revdiff.sh` script from the Claude plugin integration; pi invokes the bundled script directly and does not honor Claude-plugin overrides (`CLAUDE_PLUGIN_DATA` is not set in the pi runtime)
-- Optional post-edit reminders are available via `/revdiff-reminders on` and suggest running `/revdiff` or `/revdiff-rerun` after agent edits
+- Direct terminal handoff is the only Pi launch mode
+- Exit code `10` means annotations were captured, not failure
+- Use `--untracked` when agent-created files should be reviewed before they are staged
+- Use `--description` or `--description-file` after analysis/refactor work so the info popup carries review context
+- Use `--annotations=<tempfile>` to preload in-session review notes
+- For "use my latest revdiff annotations", the agent should read the newest file under `$REVDIFF_HISTORY_DIR` or `~/.config/revdiff/history/` instead of relaunching revdiff
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
 ## Codex Plugin
