@@ -190,12 +190,12 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.Contains(t, src, `const EXIT_CODE_ON_ANNOTATIONS_ENV = "REVDIFF_EXIT_CODE_ON_ANNOTATIONS";`)
 	assert.Contains(t, src, "const commandArgs = [...launch.args, `--output=${outputFile}`];")
 	assert.Contains(t, src, "env: withAnnotationExitCode(process.env),")
-	assert.Contains(t, src, "const env = withAnnotationExitCode(withRevdiffOnPath(process.env, revdiffBin));")
-	assert.Contains(t, src, "spawnSync(launcher, launch.args, {")
+	assert.NotContains(t, src, "runOverlayReview")
+	assert.NotContains(t, src, "withRevdiffOnPath")
+	assert.NotContains(t, src, "spawnSync(launcher")
 	assert.Contains(t, src, "return exitCode === 0 || exitCode === EXIT_CODE_ANNOTATIONS;")
 	assert.Contains(t, src, "if (!outputExists && exitCode === EXIT_CODE_ANNOTATIONS)")
 	assert.Contains(t, src, "return buildResult(launch, rawOutput);")
-	assert.Contains(t, src, "return buildResult(launch, stdout);")
 }
 
 func testRepoRoot(t *testing.T) string {

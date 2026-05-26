@@ -4,19 +4,9 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	Theme,
-} from "@earendil-works/pi-coding-agent";
-import { Box, matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-const STATE_TYPE = "revdiff-state";
-const LAST_LAUNCH_TYPE = "revdiff-last-launch";
-const MESSAGE_TYPE = "revdiff-review";
-const PANEL_PREVIEW_LINES = 18;
-const WIDGET_PREVIEW_ITEMS = 3;
 const EXIT_CODE_ANNOTATIONS = 10;
 const EXIT_CODE_ON_ANNOTATIONS_ENV = "REVDIFF_EXIT_CODE_ON_ANNOTATIONS";
 const ANNOTATION_HEADER_RE = /^## (.+?)(?::(\d+))? \(([^)]+)\)$/;
@@ -24,17 +14,6 @@ const EXT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PI_PLUGIN_ROOT = path.resolve(EXT_DIR, "..");
 const REPO_ROOT = path.resolve(PI_PLUGIN_ROOT, "..", "..");
 const DETECT_REF_SCRIPT = path.join(REPO_ROOT, ".claude-plugin", "skills", "revdiff", "scripts", "detect-ref.sh");
-const LAUNCH_REVDIFF_SCRIPT = path.join(
-	REPO_ROOT,
-	".claude-plugin",
-	"skills",
-	"revdiff",
-	"scripts",
-	"launch-revdiff.sh",
-);
-
-type LaunchMode = "direct" | "overlay";
-type PanelAction = "apply" | "clear" | "rerun" | undefined;
 
 interface AnnotationItem {
 	file: string;
@@ -43,26 +22,17 @@ interface AnnotationItem {
 	text: string;
 }
 
-interface LaunchMemory {
+interface ReviewResult {
 	args: string[];
+	argsText: string;
 	label: string;
-	mode: LaunchMode;
-	createdAt: number;
-}
-
-interface ReviewState extends LaunchMemory {
 	rawOutput: string;
 	annotations: AnnotationItem[];
-}
-
-interface ClearedState {
-	cleared: true;
 }
 
 interface LaunchSpec {
 	args: string[];
 	label: string;
-	mode: LaunchMode;
 }
 
 interface SmartDetectResult {
@@ -74,87 +44,7 @@ interface SmartDetectResult {
 	needsAsk: boolean;
 }
 
-interface GroupedAnnotations {
-	file: string;
-	items: Array<{ index: number; annotation: AnnotationItem }>;
-}
-
-interface ParsedPiArgs {
-	args: string[];
-	mode?: LaunchMode;
-}
-
 export default function revdiffExtension(pi: ExtensionAPI): void {
-	let currentState: ReviewState | undefined;
-	let lastLaunch: LaunchMemory | undefined;
-
-	function setReviewState(ctx: ExtensionContext, state: ReviewState | undefined, persist = true): void {
-		currentState = state;
-
-		if (persist) {
-			pi.appendEntry(STATE_TYPE, state ?? { cleared: true });
-		}
-
-		if (!ctx.hasUI) {
-			return;
-		}
-
-		if (!state || state.annotations.length === 0) {
-			ctx.ui.setStatus("revdiff", undefined);
-			ctx.ui.setWidget("revdiff-results", undefined);
-			return;
-		}
-
-		const theme = ctx.ui.theme;
-		const count = state.annotations.length;
-		const noun = count === 1 ? "annotation" : "annotations";
-		const mode = state.mode === "overlay" ? "overlay" : "direct";
-		ctx.ui.setStatus(
-			"revdiff",
-			`${theme.fg("warning", "rd")} ${theme.fg("dim", `${count} ${noun}`)} ${theme.fg("muted", `[${mode}]`)}`,
-		);
-		ctx.ui.setWidget("revdiff-results", buildWidgetLines(theme, state), { placement: "belowEditor" });
-	}
-
-	function setLastLaunch(launch: LaunchMemory | undefined, persist = true): void {
-		lastLaunch = launch;
-		if (persist) {
-			pi.appendEntry(LAST_LAUNCH_TYPE, launch ?? { cleared: true });
-		}
-	}
-
-	function restoreState(ctx: ExtensionContext): void {
-		let restoredReview: ReviewState | undefined;
-		let restoredLaunch: LaunchMemory | undefined;
-
-		for (const entry of ctx.sessionManager.getBranch()) {
-			if (entry.type !== "custom") {
-				continue;
-			}
-			if (entry.customType === STATE_TYPE) {
-				const data = entry.data as ReviewState | ClearedState | undefined;
-				if (isReviewState(data)) {
-					restoredReview = data;
-				}
-				if (isClearedState(data)) {
-					restoredReview = undefined;
-				}
-			}
-			if (entry.customType === LAST_LAUNCH_TYPE) {
-				const data = entry.data as LaunchMemory | ClearedState | undefined;
-				if (isLaunchMemory(data)) {
-					restoredLaunch = data;
-				}
-				if (isClearedState(data)) {
-					restoredLaunch = undefined;
-				}
-			}
-		}
-
-		lastLaunch = restoredLaunch;
-		setReviewState(ctx, restoredReview, false);
-	}
-
 	async function startReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<void> {
 		if (!ctx.hasUI) {
 			ctx.ui.notify("/revdiff requires the interactive TUI", "warning");
@@ -165,138 +55,29 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		const result = await runReview(pi, ctx, launch);
+		const result = await runReview(ctx, launch);
 		if (!result) {
 			return;
 		}
 
-		setLastLaunch(
-			{
-				args: [...result.args],
-				label: result.label,
-				mode: result.mode,
-				createdAt: result.createdAt,
-			},
-		);
-
 		if (result.annotations.length === 0) {
-			setReviewState(ctx, undefined);
 			ctx.ui.notify(`Review complete — no annotations for ${launch.label}`, "info");
 			return;
 		}
 
-		setReviewState(ctx, result);
-		pi.sendMessage(
-			{
-				customType: MESSAGE_TYPE,
-				content: `${result.annotations.length} annotation${result.annotations.length === 1 ? "" : "s"} captured for ${result.label}`,
-				display: true,
-				details: result,
-			},
-			{ triggerTurn: false },
-		);
-
-		ctx.ui.notify(`Captured ${result.annotations.length} annotation${result.annotations.length === 1 ? "" : "s"}`, "info");
-		await handleAction(ctx, result, await openResultsPanel(ctx, result));
+		const noun = result.annotations.length === 1 ? "annotation" : "annotations";
+		ctx.ui.notify(`Captured ${result.annotations.length} ${noun}; sending to agent`, "info");
+		pi.sendUserMessage(buildAgentPrompt(result));
 	}
-
-	async function handleAction(ctx: ExtensionContext, state: ReviewState, action: PanelAction): Promise<void> {
-		if (action === "clear") {
-			setReviewState(ctx, undefined);
-			ctx.ui.notify("Cleared revdiff annotations", "info");
-			return;
-		}
-		if (action === "apply") {
-			await applyReview(pi, ctx, state, () => setReviewState(ctx, undefined));
-			return;
-		}
-		if (action === "rerun") {
-			await startReview(ctx, { args: [...state.args], label: state.label, mode: state.mode });
-		}
-	}
-
-	pi.registerMessageRenderer(MESSAGE_TYPE, (message, { expanded }, theme) => {
-		const details = message.details as ReviewState | undefined;
-		const lines = [theme.bold(theme.fg("accent", "revdiff")) + ` ${message.content}`];
-
-		if (expanded && details) {
-			for (const group of groupAnnotations(details.annotations)) {
-				lines.push("");
-				lines.push(theme.fg("muted", group.file));
-				for (const { annotation } of group.items) {
-					lines.push(`• ${formatWithinFile(annotation)}`);
-					for (const line of wrapPlain(annotation.text, 72).slice(0, 2)) {
-						lines.push(`  ${line}`);
-					}
-				}
-			}
-		}
-
-		const box = new Box(1, 0, (text: string) => theme.bg("customMessageBg", text));
-		box.addChild(new Text(lines.join("\n"), 0, 0));
-		return box;
-	});
 
 	pi.registerCommand("revdiff", {
-		description: "Launch revdiff, capture annotations, and show them in a side panel",
+		description: "Launch revdiff, capture annotations, and send them to the agent",
 		handler: async (args, ctx) => {
 			const launch = await resolveLaunchSpec(args, ctx);
 			if (!launch) {
 				return;
 			}
 			await startReview(ctx, launch);
-		},
-	});
-
-	pi.registerCommand("revdiff-rerun", {
-		description: "Rerun the last revdiff review with the remembered args",
-		handler: async (args, ctx) => {
-			if (!lastLaunch) {
-				ctx.ui.notify("No previous revdiff run in this session branch", "info");
-				return;
-			}
-
-			const parsed = parsePiArgs(args);
-			const mode = normalizeLaunchMode(parsed.mode ?? lastLaunch.mode, ctx);
-			if (!mode) {
-				return;
-			}
-
-			await startReview(ctx, {
-				args: [...lastLaunch.args],
-				label: lastLaunch.label,
-				mode,
-			});
-		},
-	});
-
-	pi.registerCommand("revdiff-results", {
-		description: "Open the last revdiff results panel",
-		handler: async (_args, ctx) => {
-			if (!currentState) {
-				ctx.ui.notify("No revdiff annotations captured in this session branch", "info");
-				return;
-			}
-			await handleAction(ctx, currentState, await openResultsPanel(ctx, currentState));
-		},
-	});
-
-	pi.registerCommand("revdiff-apply", {
-		description: "Send the last revdiff annotations to the agent",
-		handler: async (_args, ctx) => {
-			if (!currentState) {
-				ctx.ui.notify("No revdiff annotations captured in this session branch", "info");
-				return;
-			}
-			await applyReview(pi, ctx, currentState, () => setReviewState(ctx, undefined));
-		},
-	});
-
-	pi.registerCommand("revdiff-clear", {
-		description: "Clear the stored revdiff annotations widget and panel state",
-		handler: async (_args, ctx) => {
-			setReviewState(ctx, undefined);
-			ctx.ui.notify("Cleared revdiff annotations", "info");
 		},
 	});
 
@@ -308,7 +89,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			"Use revdiff_review only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations inside pi.",
 			"Do not use revdiff_review for ordinary autonomous code-review requests like 'review the code', 'review my changes', or 'review the diff'; inspect the code directly instead.",
-			"After revdiff_review returns annotations, address them directly instead of asking the user to run /revdiff or /revdiff-apply.",
+			"After revdiff_review returns annotations, address them directly and rerun revdiff_review with the same args until no annotations are captured.",
 		],
 		parameters: Type.Object({
 			args: Type.Optional(
@@ -317,46 +98,21 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 						"Optional revdiff arguments as a shell-like string, for example 'main', '--staged', '--only README.md', or '--all-files --exclude vendor'. Omit for smart detection.",
 				}),
 			),
-			mode: Type.Optional(
-				Type.Union([Type.Literal("direct"), Type.Literal("overlay")], {
-					description: "Optional launch mode: 'direct' (default) or 'overlay'.",
-				}),
-			),
-			openPanel: Type.Optional(
-				Type.Boolean({ description: "Open the pi results panel after capture. Defaults to false for agent-driven reviews." }),
-			),
 		}),
 		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			if (!ctx.hasUI) {
 				return toolTextResult("revdiff_review requires the interactive pi TUI.");
 			}
 
-			// Tool execution runs during the agent turn, so ctx.isIdle() is expected
-			// to be false here; the tool runner serializes this interactive call.
-			const mode = params.mode;
-
-			const rawArgs = [params.args?.trim() ?? "", mode ? `--pi-${mode}` : ""].filter(Boolean).join(" ");
-			const launch = await resolveLaunchSpec(rawArgs, ctx);
+			const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx);
 			if (!launch) {
 				return toolTextResult("Could not resolve a revdiff launch target.");
 			}
 
 			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label}...` }], details: null });
-			const result = await runReview(pi, ctx, launch);
+			const result = await runReview(ctx, launch);
 			if (!result) {
 				return toolTextResult("revdiff review did not complete.");
-			}
-
-			setLastLaunch({
-				args: [...result.args],
-				label: result.label,
-				mode: result.mode,
-				createdAt: result.createdAt,
-			});
-			setReviewState(ctx, result.annotations.length === 0 ? undefined : result);
-
-			if (params.openPanel === true && result.annotations.length > 0) {
-				await openResultsPanel(ctx, result, { readOnly: true });
 			}
 
 			if (result.annotations.length === 0) {
@@ -367,67 +123,53 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			return toolTextResult(`Captured ${result.annotations.length} ${noun} for ${result.label}.`, result);
 		},
 	});
-
-	pi.on("session_start", async (_event, ctx) => {
-		restoreState(ctx);
-	});
-
-	pi.on("session_tree", async (_event, ctx) => {
-		restoreState(ctx);
-	});
 }
 
-function toolTextResult(content: string, details?: ReviewState) {
+function toolTextResult(content: string, details?: ReviewResult) {
 	return { content: [{ type: "text" as const, text: content }], details: details ?? null };
 }
 
-async function applyReview(
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	state: ReviewState,
-	clearReviewState: () => void,
-): Promise<void> {
-	const prompt = buildApplyPrompt(state);
-	if (ctx.isIdle()) {
-		ctx.ui.notify("Sending revdiff annotations to the agent", "info");
-		pi.sendUserMessage(prompt);
-		clearReviewState();
-		return;
-	}
-
-	ctx.ui.notify("Agent is busy — queued revdiff annotations as a follow-up", "info");
-	pi.sendUserMessage(prompt, { deliverAs: "followUp" });
-	clearReviewState();
+function buildAgentPrompt(result: ReviewResult): string {
+	const rerun = result.argsText ? `Call revdiff_review with args: ${result.argsText}` : "Call revdiff_review without args";
+	return [
+		"revdiff captured annotations. Treat this as user feedback from an interactive review.",
+		`Review target: ${result.label}`,
+		`Original command: ${commandText(result.args)}`,
+		`Rerun command: ${rerun}`,
+		[
+			"Workflow:",
+			"- Classify annotations into explanation requests and code-change directives.",
+			"- Answer explanation requests first.",
+			"- If an explanation answer needs review, write it to a temporary markdown file and run revdiff_review with args: --only <tempfile> until clean.",
+			"- Before editing repository files, list the planned file/code changes.",
+			"- Apply code-change directives.",
+			"- Rerun revdiff_review with the same args until no annotations are captured.",
+			"- Add --untracked on reruns when agent-created files should be included.",
+		].join("\n"),
+		"Annotations:",
+		result.rawOutput.trim(),
+	]
+		.filter(Boolean)
+		.join("\n\n");
 }
 
 async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
 	const trimmed = rawArgs.trim();
 	if (!trimmed) {
-		const detected = await detectSmartLaunch(ctx);
-		if (!detected) {
-			return undefined;
-		}
-		const mode = normalizeLaunchMode(undefined, ctx);
-		return mode ? { ...detected, mode } : undefined;
+		return detectSmartLaunch(ctx);
 	}
 
-	const parsed = parsePiArgs(trimmed);
-	const mode = normalizeLaunchMode(parsed.mode, ctx);
-	if (!mode) {
-		return undefined;
+	const split = shellSplit(trimmed);
+	if (split.length === 0) {
+		return detectSmartLaunch(ctx);
 	}
 
-	if (parsed.args.length === 0) {
-		const detected = await detectSmartLaunch(ctx);
-		return detected ? { ...detected, mode } : undefined;
-	}
-
-	const allFiles = parseAllFilesShortcut(parsed.args.join(" "));
+	const allFiles = parseAllFilesShortcut(split.join(" "));
 	if (allFiles) {
-		return { ...allFiles, mode };
+		return allFiles;
 	}
 
-	const tokens = sanitizeArgs(parsed.args);
+	const tokens = sanitizeArgs(split);
 	if (tokens.length === 0) {
 		ctx.ui.notify("No revdiff arguments left after stripping --output", "warning");
 		return undefined;
@@ -435,13 +177,13 @@ async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promis
 
 	if (tokens.length === 1 && !tokens[0]!.startsWith("-") && existsSync(path.resolve(tokens[0]!))) {
 		const target = tokens[0]!;
-		return { args: ["--only", target], label: target, mode };
+		return { args: ["--only", target], label: target };
 	}
 
-	return { args: tokens, label: describeArgs(tokens), mode };
+	return { args: tokens, label: describeArgs(tokens) };
 }
 
-async function detectSmartLaunch(ctx: ExtensionContext): Promise<Omit<LaunchSpec, "mode"> | undefined> {
+async function detectSmartLaunch(ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
 	const detected = detectSmartRef();
 	if (!detected) {
 		ctx.ui.notify("Not inside a git repo. Use /revdiff --only <file> to review a standalone file.", "warning");
@@ -473,15 +215,11 @@ async function detectSmartLaunch(ctx: ExtensionContext): Promise<Omit<LaunchSpec
 	return { args: [detected.suggestedRef], label: detected.suggestedRef };
 }
 
-async function runReview(pi: ExtensionAPI, ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
-	pi.events.emit("revdiff:launch", { ...launch });
-	if (launch.mode === "overlay") {
-		return runOverlayReview(ctx, launch);
-	}
+async function runReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewResult | undefined> {
 	return runDirectReview(ctx, launch);
 }
 
-async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
+async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewResult | undefined> {
 	const revdiffBin = resolveRevdiffBin();
 	if (!revdiffBin) {
 		ctx.ui.notify("revdiff binary not found. Install it or set REVDIFF_BIN.", "error");
@@ -538,58 +276,13 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 	return buildResult(launch, rawOutput);
 }
 
-async function runOverlayReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewState | undefined> {
-	const launcher = resolveLauncherScript();
-	if (!launcher) {
-		ctx.ui.notify("Overlay mode requested, but launch-revdiff.sh was not found", "error");
-		return undefined;
-	}
-
-	const revdiffBin = resolveRevdiffBin();
-	if (!revdiffBin) {
-		ctx.ui.notify("revdiff binary not found. Install it or set REVDIFF_BIN.", "error");
-		return undefined;
-	}
-
-	ctx.ui.notify("Launching revdiff overlay…", "info");
-	const env = withAnnotationExitCode(withRevdiffOnPath(process.env, revdiffBin));
-	const result = spawnSync(launcher, launch.args, {
-		cwd: process.cwd(),
-		env,
-		encoding: "utf8",
-	});
-
-	const stdout = (result.stdout ?? "").trim();
-	const stderr = (result.stderr ?? "").trim();
-	if (result.error) {
-		ctx.ui.notify(`Failed to launch overlay: ${result.error.message}`, "error");
-		return undefined;
-	}
-	if (result.signal) {
-		ctx.ui.notify(`Overlay launcher terminated by signal ${result.signal}`, "error");
-		return undefined;
-	}
-	if (result.status === null) {
-		ctx.ui.notify("Overlay launcher exited abnormally without a status code", "error");
-		return undefined;
-	}
-	const status = result.status;
-	if (!isRevdiffSuccess(status)) {
-		ctx.ui.notify(stderr || `Overlay launcher exited with code ${status}`, "error");
-		return undefined;
-	}
-
-	return buildResult(launch, stdout);
-}
-
-function buildResult(launch: LaunchSpec, rawOutput: string): ReviewState {
+function buildResult(launch: LaunchSpec, rawOutput: string): ReviewResult {
 	return {
 		args: [...launch.args],
+		argsText: shellJoin(launch.args),
 		label: launch.label,
-		mode: launch.mode,
 		rawOutput,
 		annotations: parseAnnotations(rawOutput),
-		createdAt: Date.now(),
 	};
 }
 
@@ -601,180 +294,6 @@ function withAnnotationExitCode(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 
 function isRevdiffSuccess(exitCode: number): boolean {
 	return exitCode === 0 || exitCode === EXIT_CODE_ANNOTATIONS;
-}
-
-async function openResultsPanel(
-	ctx: ExtensionContext,
-	state: ReviewState,
-	options: { readOnly?: boolean } = {},
-): Promise<PanelAction> {
-	return ctx.ui.custom<PanelAction>(
-		(tui, theme, _kb, done) => new ReviewPanel(tui, theme, state, done, options.readOnly === true),
-		{
-			overlay: true,
-			overlayOptions: {
-				anchor: "right-center",
-				width: "40%",
-				minWidth: 48,
-				margin: { right: 1 },
-			},
-		},
-	);
-}
-
-class ReviewPanel {
-	private selected = 0;
-	private tui: { requestRender: (full?: boolean) => void };
-	private theme: Theme;
-	private state: ReviewState;
-	private done: (value: PanelAction) => void;
-	private readOnly: boolean;
-
-	constructor(
-		tui: { requestRender: (full?: boolean) => void },
-		theme: Theme,
-		state: ReviewState,
-		done: (value: PanelAction) => void,
-		readOnly: boolean,
-	) {
-		this.tui = tui;
-		this.theme = theme;
-		this.state = state;
-		this.done = done;
-		this.readOnly = readOnly;
-	}
-
-	handleInput(data: string): void {
-		if (matchesKey(data, "escape") || data === "q" || data === "Q") {
-			this.done(undefined);
-			return;
-		}
-		if (matchesKey(data, "up") || data === "k") {
-			this.selected = Math.max(0, this.selected - 1);
-			this.tui.requestRender();
-			return;
-		}
-		if (matchesKey(data, "down") || data === "j") {
-			this.selected = Math.min(this.state.annotations.length - 1, this.selected + 1);
-			this.tui.requestRender();
-			return;
-		}
-		if (!this.readOnly && (matchesKey(data, "return") || data === "a" || data === "A")) {
-			this.done("apply");
-			return;
-		}
-		if (!this.readOnly && (data === "r" || data === "R")) {
-			this.done("rerun");
-			return;
-		}
-		if (!this.readOnly && (data === "c" || data === "C")) {
-			this.done("clear");
-		}
-	}
-
-	render(width: number): string[] {
-		const th = this.theme;
-		const innerW = Math.max(1, width - 2);
-		const lines: string[] = [];
-		const border = (s: string) => th.fg("border", s);
-		const row = (s = "") => border("│") + padRight(truncateToWidth(s, innerW, "...", true), innerW) + border("│");
-
-		lines.push(border(`╭${"─".repeat(innerW)}╮`));
-		lines.push(
-			row(
-				`${th.fg("accent", "revdiff results")} ${th.fg("dim", `(${this.state.annotations.length})`)} ${th.fg("muted", `[${this.state.mode}]`)}`,
-			),
-		);
-		lines.push(row(th.fg("dim", this.state.label)));
-		lines.push(border(`├${"─".repeat(innerW)}┤`));
-
-		for (const line of this.renderAnnotations(innerW)) {
-			lines.push(row(line));
-		}
-
-		lines.push(border(`├${"─".repeat(innerW)}┤`));
-		if (this.readOnly) {
-			lines.push(row(th.fg("dim", "↑↓/j k move • Esc close")));
-			lines.push(row(""));
-		} else {
-			lines.push(row(th.fg("dim", "↑↓/j k move • Enter/a apply • r rerun")));
-			lines.push(row(th.fg("dim", "c clear • Esc close")));
-		}
-		lines.push(border(`╰${"─".repeat(innerW)}╯`));
-		return lines;
-	}
-
-	private renderAnnotations(innerW: number): string[] {
-		const rendered: string[] = [];
-		let selectedAnchor = 0;
-		const bodyWidth = Math.max(10, innerW - 4);
-
-		for (const group of groupAnnotations(this.state.annotations)) {
-			rendered.push(this.theme.bold(this.theme.fg("muted", group.file)));
-			for (const { index, annotation } of group.items) {
-				const selected = index === this.selected;
-				if (selected) {
-					selectedAnchor = rendered.length;
-				}
-				const prefix = selected ? this.theme.fg("accent", "▶") : this.theme.fg("dim", "•");
-				const header = `${prefix} ${formatWithinFile(annotation)} ${this.theme.fg("dim", `[${annotation.kind}]`)}`;
-				rendered.push(selected ? this.theme.fg("accent", header) : header);
-
-				const bodyLines = wrapPlain(annotation.text, bodyWidth);
-				const limit = selected ? 3 : 1;
-				for (const line of bodyLines.slice(0, limit)) {
-					rendered.push(selected ? `  ${line}` : this.theme.fg("dim", `  ${line}`));
-				}
-				if (bodyLines.length > limit) {
-					rendered.push(this.theme.fg("dim", "  …"));
-				}
-				rendered.push("");
-			}
-		}
-
-		const start = Math.max(0, Math.min(selectedAnchor - Math.floor(PANEL_PREVIEW_LINES / 3), Math.max(0, rendered.length - PANEL_PREVIEW_LINES)));
-		const slice = rendered.slice(start, start + PANEL_PREVIEW_LINES);
-		while (slice.length < PANEL_PREVIEW_LINES) {
-			slice.push("");
-		}
-		return slice;
-	}
-
-	invalidate(): void {}
-	dispose(): void {}
-}
-
-function buildWidgetLines(theme: Theme, state: ReviewState): string[] {
-	const count = state.annotations.length;
-	const noun = count === 1 ? "annotation" : "annotations";
-	const groups = groupAnnotations(state.annotations);
-	const lines = [
-		`${theme.fg("accent", "revdiff")}: ${count} pending ${noun} ${theme.fg("dim", `(${state.label})`)} ${theme.fg("muted", `[${state.mode}]`)}`,
-	];
-
-	for (const group of groups.slice(0, WIDGET_PREVIEW_ITEMS)) {
-		lines.push(`${theme.fg("muted", "•")} ${group.file} ${theme.fg("dim", `×${group.items.length}`)}`);
-	}
-
-	if (groups.length > WIDGET_PREVIEW_ITEMS) {
-		lines.push(theme.fg("dim", `…and ${groups.length - WIDGET_PREVIEW_ITEMS} more files`));
-	}
-
-	lines.push(theme.fg("dim", "/revdiff-results • /revdiff-rerun • /revdiff-apply • /revdiff-clear"));
-	return lines;
-}
-
-function buildApplyPrompt(state: ReviewState): string {
-	return [
-		"Please address the following revdiff annotations.",
-		`Review target: ${state.label}`,
-		`Launch mode: ${state.mode}`,
-		`Original command: revdiff${state.args.length > 0 ? ` ${state.args.join(" ")}` : ""}`,
-		"Start with a short plan, then make the necessary changes in the repository.",
-		state.rawOutput.trim(),
-	]
-		.filter(Boolean)
-		.join("\n\n");
 }
 
 function parseAnnotations(output: string): AnnotationItem[] {
@@ -830,28 +349,6 @@ function parseAnnotations(output: string): AnnotationItem[] {
 	return annotations;
 }
 
-function groupAnnotations(annotations: AnnotationItem[]): GroupedAnnotations[] {
-	const groups: GroupedAnnotations[] = [];
-	const byFile = new Map<string, GroupedAnnotations>();
-	annotations.forEach((annotation, index) => {
-		let group = byFile.get(annotation.file);
-		if (!group) {
-			group = { file: annotation.file, items: [] };
-			byFile.set(annotation.file, group);
-			groups.push(group);
-		}
-		group.items.push({ index, annotation });
-	});
-	return groups;
-}
-
-function formatWithinFile(annotation: AnnotationItem): string {
-	if (annotation.kind === "file-level") {
-		return "file note";
-	}
-	return annotation.line ? `line ${annotation.line}` : annotation.kind;
-}
-
 function describeArgs(args: string[]): string {
 	if (args.length === 0) {
 		return "uncommitted changes";
@@ -870,10 +367,10 @@ function describeArgs(args: string[]): string {
 	if (onlyFiles.length > 0) {
 		return onlyFiles.length === 1 ? onlyFiles[0]! : `files: ${onlyFiles.join(", ")}`;
 	}
-	return args.join(" ");
+	return shellJoin(args);
 }
 
-function parseAllFilesShortcut(raw: string): Omit<LaunchSpec, "mode"> | undefined {
+function parseAllFilesShortcut(raw: string): LaunchSpec | undefined {
 	const match = /^all(?:-| )files(?:\s+exclude\s+(.+))?$/i.exec(raw);
 	if (!match) {
 		return undefined;
@@ -888,23 +385,6 @@ function parseAllFilesShortcut(raw: string): Omit<LaunchSpec, "mode"> | undefine
 		}
 	}
 	return { args, label: describeArgs(args) };
-}
-
-function parsePiArgs(raw: string): ParsedPiArgs {
-	const modeLess: string[] = [];
-	let mode: LaunchMode | undefined;
-	for (const token of shellSplit(raw)) {
-		if (token === "--pi-overlay") {
-			mode = "overlay";
-			continue;
-		}
-		if (token === "--pi-direct") {
-			mode = "direct";
-			continue;
-		}
-		modeLess.push(token);
-	}
-	return { args: modeLess, mode };
 }
 
 function collectFlagValues(args: string[], longFlag: string, shortFlag: string): string[] {
@@ -992,14 +472,23 @@ function shellSplit(input: string): string[] {
 	return tokens;
 }
 
-function normalizeLaunchMode(mode: LaunchMode | undefined, ctx: ExtensionContext): LaunchMode | undefined {
-	const envMode = process.env.REVDIFF_PI_MODE;
-	const resolved = mode ?? (envMode === "overlay" ? "overlay" : "direct");
-	if (resolved === "overlay" && !resolveLauncherScript()) {
-		ctx.ui.notify("Overlay mode requested, but launch-revdiff.sh was not found", "error");
-		return undefined;
+function shellJoin(args: string[]): string {
+	return args.map(shellQuote).join(" ");
+}
+
+function commandText(args: string[]): string {
+	const argsText = shellJoin(args);
+	return argsText ? `revdiff ${argsText}` : "revdiff";
+}
+
+function shellQuote(arg: string): string {
+	if (arg === "") {
+		return "''";
 	}
-	return resolved;
+	if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) {
+		return arg;
+	}
+	return `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
 function resolveRevdiffBin(): string | undefined {
@@ -1018,13 +507,6 @@ function resolveRevdiffBin(): string | undefined {
 	return undefined;
 }
 
-function resolveLauncherScript(): string | undefined {
-	if (existsSync(LAUNCH_REVDIFF_SCRIPT)) {
-		return LAUNCH_REVDIFF_SCRIPT;
-	}
-	return findInPath("launch-revdiff.sh");
-}
-
 function findInPath(binary: string): string | undefined {
 	for (const dir of (process.env.PATH ?? "").split(path.delimiter)) {
 		if (!dir) {
@@ -1036,15 +518,6 @@ function findInPath(binary: string): string | undefined {
 		}
 	}
 	return undefined;
-}
-
-function withRevdiffOnPath(env: NodeJS.ProcessEnv, revdiffBin: string): NodeJS.ProcessEnv {
-	const binDir = path.dirname(revdiffBin);
-	const currentPath = env.PATH ?? "";
-	return {
-		...env,
-		PATH: currentPath ? `${binDir}${path.delimiter}${currentPath}` : binDir,
-	};
 }
 
 function detectSmartRef(): SmartDetectResult | undefined {
@@ -1143,69 +616,4 @@ function gitStdout(args: string[]): string {
 
 function gitOk(args: string[]): boolean {
 	return (spawnSync("git", args, { cwd: process.cwd(), stdio: "ignore" }).status ?? 1) === 0;
-}
-
-function wrapPlain(text: string, width: number): string[] {
-	const clean = text.replace(/\s+/g, " ").trim();
-	if (!clean) {
-		return [""];
-	}
-	const words = clean.split(" ");
-	const lines: string[] = [];
-	let current = "";
-
-	for (const word of words) {
-		const next = current ? `${current} ${word}` : word;
-		if (visibleWidth(next) <= width) {
-			current = next;
-			continue;
-		}
-		if (current) {
-			lines.push(current);
-		}
-		if (visibleWidth(word) <= width) {
-			current = word;
-			continue;
-		}
-		let remaining = word;
-		while (visibleWidth(remaining) > width) {
-			lines.push(remaining.slice(0, Math.max(1, width - 1)) + "…");
-			remaining = remaining.slice(Math.max(1, width - 1));
-		}
-		current = remaining;
-	}
-
-	if (current) {
-		lines.push(current);
-	}
-	return lines.length > 0 ? lines : [""];
-}
-
-function padRight(text: string, width: number): string {
-	return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
-}
-
-function isReviewState(data: unknown): data is ReviewState {
-	return Boolean(
-		data &&
-			typeof data === "object" &&
-			Array.isArray((data as ReviewState).annotations) &&
-			typeof (data as ReviewState).rawOutput === "string" &&
-			typeof (data as ReviewState).label === "string" &&
-			((data as ReviewState).mode === "direct" || (data as ReviewState).mode === "overlay"),
-	);
-}
-
-function isLaunchMemory(data: unknown): data is LaunchMemory {
-	return Boolean(
-		data &&
-			typeof data === "object" &&
-			Array.isArray((data as LaunchMemory).args) &&
-			typeof (data as LaunchMemory).label === "string" &&
-			((data as LaunchMemory).mode === "direct" || (data as LaunchMemory).mode === "overlay"),
-	);
-}
-
-function isClearedState(data: unknown): data is ClearedState {
-	return Boolean(data && typeof data === "object" && (data as ClearedState).cleared === true);
 }
