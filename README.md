@@ -168,7 +168,7 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 
 ## Pi Package
 
-revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The extension launches the existing `revdiff` binary through direct terminal handoff, captures annotations on exit, and sends them to the agent immediately. If no annotations were captured, the review is clean.
+revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The `/revdiff` command routes requests through the revdiff skill, which resolves refs, files, and natural-language targets before launching the existing `revdiff` binary through the `revdiff_review` tool. If no annotations were captured, the review is clean.
 
 **Install:**
 
@@ -198,18 +198,20 @@ Useful args:
 /revdiff main --annotations=/tmp/revdiff-review.md
 ```
 
-For natural-language targets, use the skill command so the agent can resolve the requested ref before launching:
+Natural-language targets are supported because `/revdiff` routes through the skill:
 
 ```text
-/skill:revdiff prev commit
-/skill:revdiff last tag
-/skill:revdiff 2 weeks ago
+/revdiff prev commit
+/revdiff last tag
+/revdiff 2 weeks ago
 ```
+
+You can also call the skill explicitly with `/skill:revdiff <request>`.
 
 **Agent workflow:**
 
-- `/revdiff` is the only Pi user command. It suspends pi, hands the terminal to revdiff, then resumes pi when revdiff exits.
-- Captured annotations are sent to the agent as a user message, and the agent continues the loop with `revdiff_review`.
+- `/revdiff` is a Pi command alias for `/skill:revdiff`; the skill resolves the request and calls `revdiff_review`.
+- `revdiff_review` suspends pi, hands the terminal to revdiff, then returns captured annotations to the agent.
 - The agent classifies annotations into explanation requests and code-change directives.
 - Explanation requests are answered first in normal chat, without opening another revdiff session for the explanation.
 - Any clean/no-annotation `revdiff_review` result stops the loop. The agent must not relaunch revdiff unless you explicitly ask for another review.
@@ -225,6 +227,7 @@ For natural-language targets, use the skill command so the agent can resolve the
 - Use `--untracked` when agent-created files should be reviewed before they are staged
 - Use `--description` or `--description-file` after analysis/refactor work so the info popup carries review context
 - Use `--annotations=<tempfile>` to preload in-session review notes
+- Successful `revdiff_review` results include captured annotation text; history is only for explicit latest-history requests or missing-output fallback
 - For "use my latest revdiff annotations", the agent should read the newest file under `$REVDIFF_HISTORY_DIR` or `~/.config/revdiff/history/` instead of relaunching revdiff
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 

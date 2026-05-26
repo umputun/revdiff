@@ -28,9 +28,9 @@ The pi package exposes one user command:
 /revdiff [args]
 ```
 
-`/revdiff` launches the external `revdiff` binary through direct terminal handoff. pi temporarily suspends, revdiff takes over the terminal, and pi resumes when revdiff exits. If annotations were captured, the extension sends them to the agent immediately as a user message. If no annotations were captured, the review is clean.
+`/revdiff` routes requests through `/skill:revdiff`. The skill resolves refs, files, and natural-language targets before calling the `revdiff_review` tool. The tool launches the external `revdiff` binary through direct terminal handoff. pi temporarily suspends, revdiff takes over the terminal, and pi resumes when revdiff exits. If no annotations were captured, the review is clean.
 
-The agent uses the `revdiff_review` tool for follow-up review loops after handling annotations. The loop is: classify annotations, answer explanation requests first in normal chat, ask whether to continue or finish after explanation-only annotations, stop after any clean/no-annotation result, list planned code changes for code-change directives, edit files, and rerun `revdiff_review` with the same args only after repository files changed or when the user asks to continue reviewing.
+The agent uses the `revdiff_review` tool for the review loop after handling annotations. The loop is: classify annotations, answer explanation requests first in normal chat, ask whether to continue or finish after explanation-only annotations, stop after any clean/no-annotation result, list planned code changes for code-change directives, edit files, and rerun `revdiff_review` with the same args only after repository files changed or when the user asks to continue reviewing.
 
 Useful args:
 
@@ -48,13 +48,15 @@ Useful args:
 /revdiff main --annotations=/tmp/revdiff-review.md
 ```
 
-For natural-language targets, use the skill command so the agent can resolve the requested ref before launching:
+Natural-language targets are supported because `/revdiff` routes through the skill:
 
 ```text
-/skill:revdiff prev commit
-/skill:revdiff last tag
-/skill:revdiff 2 weeks ago
+/revdiff prev commit
+/revdiff last tag
+/revdiff 2 weeks ago
 ```
+
+You can also call the skill explicitly with `/skill:revdiff <request>`.
 
 ## Notes
 
@@ -65,6 +67,7 @@ For natural-language targets, use the skill command so the agent can resolve the
 - Use `--untracked` when agent-created files should be reviewed before they are staged
 - Use `--description` or `--description-file` after analysis/refactor work so the info popup carries review context
 - Use `--annotations=<tempfile>` to preload in-session review notes
+- Successful `revdiff_review` results include captured annotation text; history is only for explicit latest-history requests or missing-output fallback
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
 This integration is intentionally kept separate from other harnesses:

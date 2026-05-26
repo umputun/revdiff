@@ -37,7 +37,7 @@ Tool examples:
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
 
-After `revdiff_review` returns annotations, address them directly. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean and stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.
+After `revdiff_review` returns annotations, address them directly from the tool result content. Do not read revdiff history after a successful captured-annotation result. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean and stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.
 
 ## Annotation handling loop
 
@@ -58,8 +58,8 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 
 ## User commands
 
-- `/revdiff [args]` — launch revdiff through direct terminal handoff, capture annotations, and send them to the agent immediately. Arguments are revdiff CLI args or simple built-in shortcuts; natural-language requests belong in `/skill:revdiff`.
-- `/skill:revdiff <request>` — agent resolves natural language into concrete revdiff args and calls `revdiff_review`.
+- `/revdiff [args]` — alias for `/skill:revdiff [args]`; the skill resolves the request and calls `revdiff_review`.
+- `/skill:revdiff <request>` — explicit skill command; same behavior as `/revdiff <request>`.
 
 ## Recommended user command examples
 
@@ -77,14 +77,14 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 /revdiff main --annotations=/tmp/revdiff-review.md
 ```
 
-## Recommended skill command examples
+## Recommended natural-language examples
 
 ```text
-/skill:revdiff prev commit
-/skill:revdiff last tag
-/skill:revdiff 2 weeks ago
-/skill:revdiff all files exclude vendor and dist
-/skill:revdiff README.md
+/revdiff prev commit
+/revdiff last tag
+/revdiff 2 weeks ago
+/revdiff all files exclude vendor and dist
+/revdiff README.md
 ```
 
 Behavior:
@@ -102,7 +102,7 @@ Behavior:
 
 ## Existing review history
 
-If the user says "use my latest revdiff annotations", "pull up my last revdiff review", or similar, do not launch revdiff again. Read the newest markdown file from the revdiff history directory and process its annotations through the same annotation handling loop.
+If the user says "use my latest revdiff annotations", "pull up my last revdiff review", or similar, do not launch revdiff again. Read the newest markdown file from the revdiff history directory and process its annotations through the same annotation handling loop. Also use history as a fallback only when a revdiff launch reports annotations but the tool did not return annotation text, or when the review did not complete and recent history may contain the saved annotations.
 
 - Use `$REVDIFF_HISTORY_DIR` when set; otherwise use `~/.config/revdiff/history/`.
 - Prefer the history subdirectory matching the current repository root name when present.

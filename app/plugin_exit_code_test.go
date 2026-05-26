@@ -328,8 +328,21 @@ function fakeSignalRevdiffScript(): string {
 	return ["#!/bin/sh", "kill -TERM $$", ""].join("\n");
 }
 
-async function testCommandSendsAnnotations(): Promise<void> {
-	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-command-"));
+async function testCommandRoutesToSkill(): Promise<void> {
+	const pi = fakePi();
+	revdiffExtension(pi);
+
+	await pi.commands.get("revdiff").handler("last tag", fakeCtx());
+	testAssert(pi.sentMessages.length === 1, "expected /revdiff to route through the skill");
+	testAssert(pi.sentMessages[0] === "/skill:revdiff last tag", "expected /revdiff args to be passed to /skill:revdiff");
+
+	await pi.commands.get("revdiff").handler("", fakeCtx());
+	testAssert(pi.sentMessages.length === 2, "expected no-arg /revdiff to route through the skill");
+	testAssert(pi.sentMessages[1] === "/skill:revdiff", "expected no-arg /revdiff to call the skill without args");
+}
+
+async function testToolReturnsAnnotations(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-tool-"));
 	const fakeBin = path.join(tempDir, "revdiff");
 	const argFile = path.join(tempDir, "args.txt");
 	writeExecutable(fakeBin, fakeRevdiffScript());
@@ -341,23 +354,11 @@ async function testCommandSendsAnnotations(): Promise<void> {
 	try {
 		const pi = fakePi();
 		revdiffExtension(pi);
-		await pi.commands.get("revdiff").handler("--only 'docs/my plan.md'", fakeCtx());
-
-		testAssert(pi.sentMessages.length === 1, "expected captured annotations to be sent to the agent");
-		const prompt = pi.sentMessages[0];
-		testAssert(prompt.includes("Review target: docs/my plan.md"), "prompt should include review target");
-		testAssert(prompt.includes("Original command: revdiff --only 'docs/my plan.md'"), "prompt should shell-quote original args");
-		testAssert(prompt.includes("Rerun command: Call revdiff_review with args: --only 'docs/my plan.md'"), "prompt should include round-trippable rerun args");
-		testAssert(prompt.includes("If any revdiff_review call returns no annotations, stop"), "prompt should stop after any clean review");
-		testAssert(prompt.includes("Answer explanation requests in normal chat"), "prompt should keep explanation answers in chat");
-		testAssert(prompt.includes("choose between continuing the original review and finishing"), "prompt should ask after explanation-only annotations");
-		testAssert(prompt.includes("Rerun the original revdiff_review target only after repository files changed"), "prompt should gate reruns on repo changes");
-		testAssert(prompt.includes("## src/app.go:12-14 (+)"), "prompt should include captured hunk annotation header");
-		testAssert(prompt.includes("fix it"), "prompt should include captured annotation body");
-
-		const args = readFileSync(argFile, "utf8").trim().split("\n");
-		assertArray(args.slice(0, 2), ["--only", "docs/my plan.md"], "fake revdiff should receive split review args");
-		testAssert(args[2]?.startsWith("--output="), "fake revdiff should receive output file arg");
+		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, fakeCtx());
+		const text = result.content[0].text;
+		testAssert(text.includes("Captured 1 annotation for README.md."), "tool result should summarize captured annotations");
+		testAssert(text.includes("Annotations:\n## src/app.go:12-14 (+)\nfix it"), "tool result should include raw annotation text");
+		testAssert(result.details.rawOutput.includes("## src/app.go:12-14 (+)"), "tool details should preserve raw output");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -384,9 +385,9 @@ async function testSignalTerminatedReviewFails(): Promise<void> {
 		const pi = fakePi();
 		const ctx = fakeCtx();
 		revdiffExtension(pi);
-		await pi.commands.get("revdiff").handler("--only README.md", ctx);
+		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
 
-		testAssert(pi.sentMessages.length === 0, "signal-terminated revdiff must not send annotations");
+		testAssert(result.content[0].text === "revdiff review did not complete.", "signal-terminated revdiff should return incomplete result");
 		testAssert(
 			ctx.ui.notifications.some((message: string) => message.includes("terminated by signal")),
 			"signal-terminated revdiff should notify failure",
@@ -519,7 +520,8 @@ async function testStagedSmartDetection(): Promise<void> {
 	}
 }
 
-await testCommandSendsAnnotations();
+await testCommandRoutesToSkill();
+await testToolReturnsAnnotations();
 await testSignalTerminatedReviewFails();
 await testArgumentResolution();
 await testRefLikePathArgKeepsRef();

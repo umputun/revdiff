@@ -46,39 +46,10 @@ interface SmartDetectResult {
 }
 
 export default function revdiffExtension(pi: ExtensionAPI): void {
-	async function startReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<void> {
-		if (!ctx.hasUI) {
-			ctx.ui.notify("/revdiff requires the interactive TUI", "warning");
-			return;
-		}
-		if (!ctx.isIdle()) {
-			ctx.ui.notify("Wait for the current turn to finish before launching revdiff", "warning");
-			return;
-		}
-
-		const result = await runDirectReview(ctx, launch);
-		if (!result) {
-			return;
-		}
-
-		if (result.annotations.length === 0) {
-			ctx.ui.notify(`Review complete — no annotations for ${launch.label}`, "info");
-			return;
-		}
-
-		const noun = result.annotations.length === 1 ? "annotation" : "annotations";
-		ctx.ui.notify(`Captured ${result.annotations.length} ${noun}; sending to agent`, "info");
-		pi.sendUserMessage(buildAgentPrompt(result));
-	}
-
 	pi.registerCommand("revdiff", {
-		description: "Launch revdiff, capture annotations, and send them to the agent",
-		handler: async (args, ctx) => {
-			const launch = await resolveLaunchSpec(args, ctx);
-			if (!launch) {
-				return;
-			}
-			await startReview(ctx, launch);
+		description: "Resolve a revdiff request through the revdiff skill",
+		handler: async (args) => {
+			pi.sendUserMessage(skillCommand(args));
 		},
 	});
 
@@ -90,6 +61,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			"Use revdiff_review only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations inside pi.",
 			"Do not use revdiff_review for ordinary autonomous code-review requests like 'review the code', 'review my changes', or 'review the diff'; inspect the code directly instead.",
+			"When revdiff_review captures annotations, read them from the tool result content; do not read revdiff history unless the tool reports an incomplete/missing-output result or the user explicitly asks for history.",
 			"If revdiff_review returns no annotations, stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.",
 			"Rerun the original revdiff_review target only after code changes or when the user asks to continue reviewing; do not rerun it after explanation-only annotations are answered.",
 		],
@@ -122,7 +94,10 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			}
 
 			const noun = result.annotations.length === 1 ? "annotation" : "annotations";
-			return toolTextResult(`Captured ${result.annotations.length} ${noun} for ${result.label}.`, result);
+			return toolTextResult(
+				[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, "", "Annotations:", result.rawOutput.trim()].join("\n"),
+				result,
+			);
 		},
 	});
 }
@@ -131,29 +106,9 @@ function toolTextResult(content: string, details?: ReviewResult) {
 	return { content: [{ type: "text" as const, text: content }], details: details ?? null };
 }
 
-function buildAgentPrompt(result: ReviewResult): string {
-	const rerun = result.argsText ? `Call revdiff_review with args: ${result.argsText}` : "Call revdiff_review without args";
-	return [
-		"revdiff captured annotations. Treat this as user feedback from an interactive review.",
-		`Review target: ${result.label}`,
-		`Original command: ${commandText(result.args)}`,
-		`Rerun command: ${rerun}`,
-		[
-			"Workflow:",
-			"- If any revdiff_review call returns no annotations, stop. Do not relaunch revdiff after a clean/no-annotation result unless the user explicitly asks for another review.",
-			"- Classify annotations into explanation requests and code-change directives.",
-			"- Answer explanation requests in normal chat, not by opening another revdiff session.",
-			"- After explanation-only annotations are answered, ask the user to choose between continuing the original review and finishing the review.",
-			"- Before editing repository files, list the planned file/code changes.",
-			"- Apply code-change directives.",
-			"- Rerun the original revdiff_review target only after repository files changed or when the user chooses to continue reviewing.",
-			"- Add --untracked on reruns when agent-created files should be included.",
-		].join("\n"),
-		"Annotations:",
-		result.rawOutput.trim(),
-	]
-		.filter(Boolean)
-		.join("\n\n");
+function skillCommand(rawArgs: string): string {
+	const trimmed = rawArgs.trim();
+	return trimmed ? `/skill:revdiff ${trimmed}` : "/skill:revdiff";
 }
 
 async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
