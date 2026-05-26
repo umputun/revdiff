@@ -195,6 +195,9 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.NotContains(t, src, "spawnSync(launcher")
 	assert.Contains(t, src, "return exitCode === 0 || exitCode === EXIT_CODE_ANNOTATIONS;")
 	assert.Contains(t, src, "if (!outputExists && exitCode === EXIT_CODE_ANNOTATIONS)")
+	assert.Contains(t, src, "if (result.signal)")
+	assert.Contains(t, src, "done(result.status ?? 1)")
+	assert.Contains(t, src, "revdiff terminated by signal")
 	assert.Contains(t, src, "return buildResult(launch, rawOutput);")
 }
 
@@ -291,6 +294,7 @@ function fakePi() {
 }
 
 function writeExecutable(pathname: string, content: string): void {
+	testMkdirSync(path.dirname(pathname), { recursive: true });
 	testWriteFileSync(pathname, content);
 	testChmodSync(pathname, 0o700);
 }
@@ -309,6 +313,10 @@ function fakeRevdiffScript(): string {
 		"exit 10",
 		"",
 	].join("\n");
+}
+
+function fakeSignalRevdiffScript(): string {
+	return ["#!/bin/sh", "kill -TERM $$", ""].join("\n");
 }
 
 async function testCommandSendsAnnotations(): Promise<void> {
@@ -352,6 +360,34 @@ async function testCommandSendsAnnotations(): Promise<void> {
 	}
 }
 
+async function testSignalTerminatedReviewFails(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-signal-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	writeExecutable(fakeBin, fakeSignalRevdiffScript());
+
+	const oldBin = process.env.REVDIFF_BIN;
+	process.env.REVDIFF_BIN = fakeBin;
+	try {
+		const pi = fakePi();
+		const ctx = fakeCtx();
+		revdiffExtension(pi);
+		await pi.commands.get("revdiff").handler("--only README.md", ctx);
+
+		testAssert(pi.sentMessages.length === 0, "signal-terminated revdiff must not send annotations");
+		testAssert(
+			ctx.ui.notifications.some((message: string) => message.includes("terminated by signal")),
+			"signal-terminated revdiff should notify failure",
+		);
+	} finally {
+		if (oldBin === undefined) {
+			delete process.env.REVDIFF_BIN;
+		} else {
+			process.env.REVDIFF_BIN = oldBin;
+		}
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
 async function testArgumentResolution(): Promise<void> {
 	let launch = await resolveLaunchSpec("--output ignored --only 'docs/my plan.md'", fakeCtx());
 	testAssert(Boolean(launch), "expected launch after stripping --output");
@@ -387,6 +423,34 @@ function initGitRepo(): string {
 	return repo;
 }
 
+async function testNeedsAskWithoutMainStops(): Promise<void> {
+	const detectScript = path.resolve(".claude-plugin", "skills", "revdiff", "scripts", "detect-ref.sh");
+	writeExecutable(
+		detectScript,
+		[
+			"#!/bin/sh",
+			"echo 'branch: @'",
+			"echo 'main_branch: '",
+			"echo 'is_main: false'",
+			"echo 'has_uncommitted: false'",
+			"echo 'has_staged_only: false'",
+			"echo 'suggested_ref: '",
+			"echo 'use_staged: false'",
+			"echo 'needs_ask: true'",
+			"",
+		].join("\n"),
+	);
+
+	const ctx = fakeCtx();
+	const launch = await detectSmartLaunch(ctx);
+	testAssert(launch === undefined, "needsAsk without a main branch should not launch uncommitted review");
+	testAssert(
+		ctx.ui.notifications.some((message: string) => message.includes("Could not determine a revdiff target")),
+		"needsAsk without a main branch should notify a clear target error",
+	);
+	rmSync(path.resolve(".claude-plugin"), { recursive: true, force: true });
+}
+
 async function testStagedSmartDetection(): Promise<void> {
 	const oldCwd = process.cwd();
 	const mainRepo = initGitRepo();
@@ -420,7 +484,9 @@ async function testStagedSmartDetection(): Promise<void> {
 }
 
 await testCommandSendsAnnotations();
+await testSignalTerminatedReviewFails();
 await testArgumentResolution();
+await testNeedsAskWithoutMainStops();
 await testStagedSmartDetection();
 console.log("pi extension executable behavior ok");
 `

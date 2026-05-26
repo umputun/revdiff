@@ -191,7 +191,11 @@ async function detectSmartLaunch(ctx: ExtensionContext): Promise<LaunchSpec | un
 		return undefined;
 	}
 
-	if (detected.needsAsk && detected.mainBranch) {
+	if (detected.needsAsk) {
+		if (!detected.mainBranch) {
+			ctx.ui.notify("Could not determine a revdiff target. Pass a ref or use /revdiff --only <file>.", "warning");
+			return undefined;
+		}
 		const choice = await ctx.ui.select("revdiff", [
 			"Review uncommitted changes only",
 			`Review current branch against ${detected.mainBranch}`,
@@ -234,6 +238,7 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 	const outputFile = path.join(tempDir, "annotations.txt");
 	const commandArgs = [...launch.args, `--output=${outputFile}`];
 	let launchError = "";
+	let launchSignal = "";
 
 	const exitCode = await ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
 		tui.stop();
@@ -246,9 +251,12 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 		if (result.error) {
 			launchError = result.error.message;
 		}
+		if (result.signal) {
+			launchSignal = result.signal;
+		}
 		tui.start();
 		tui.requestRender(true);
-		done(result.status ?? (result.error ? 1 : 0));
+		done(result.status ?? 1);
 		return { render: () => [], invalidate() {} };
 	});
 
@@ -262,6 +270,10 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 
 	if (launchError) {
 		ctx.ui.notify(`Failed to launch revdiff: ${launchError}`, "error");
+		return undefined;
+	}
+	if (launchSignal) {
+		ctx.ui.notify(`revdiff terminated by signal ${launchSignal}`, "warning");
 		return undefined;
 	}
 	if (typeof exitCode !== "number") {
