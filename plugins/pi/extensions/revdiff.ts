@@ -40,6 +40,7 @@ interface SmartDetectResult {
 	mainBranch: string;
 	isMain: boolean;
 	hasUncommitted: boolean;
+	useStaged: boolean;
 	suggestedRef: string;
 	needsAsk: boolean;
 }
@@ -175,7 +176,7 @@ async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promis
 		return undefined;
 	}
 
-	if (tokens.length === 1 && !tokens[0]!.startsWith("-") && existsSync(path.resolve(tokens[0]!))) {
+	if (tokens.length === 1 && isFileReviewArg(tokens[0]!)) {
 		const target = tokens[0]!;
 		return { args: ["--only", target], label: target };
 	}
@@ -199,13 +200,13 @@ async function detectSmartLaunch(ctx: ExtensionContext): Promise<LaunchSpec | un
 			return undefined;
 		}
 		if (choice.startsWith("Review uncommitted")) {
-			return { args: [], label: "uncommitted changes" };
+			return uncommittedLaunchSpec(detected);
 		}
 		return { args: [detected.mainBranch], label: `${detected.branch} vs ${detected.mainBranch}` };
 	}
 
 	if (!detected.suggestedRef) {
-		return { args: [], label: "uncommitted changes" };
+		return uncommittedLaunchSpec(detected);
 	}
 
 	if (detected.mainBranch && detected.suggestedRef === detected.mainBranch && !detected.isMain) {
@@ -213,6 +214,13 @@ async function detectSmartLaunch(ctx: ExtensionContext): Promise<LaunchSpec | un
 	}
 
 	return { args: [detected.suggestedRef], label: detected.suggestedRef };
+}
+
+function uncommittedLaunchSpec(detected: SmartDetectResult): LaunchSpec {
+	if (detected.useStaged) {
+		return { args: ["--staged"], label: "staged changes" };
+	}
+	return { args: [], label: "uncommitted changes" };
 }
 
 async function runReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewResult | undefined> {
@@ -425,6 +433,19 @@ function sanitizeArgs(args: string[]): string[] {
 	return sanitized;
 }
 
+function isFileReviewArg(arg: string): boolean {
+	if (arg.startsWith("-")) {
+		return false;
+	}
+	if (existsSync(path.resolve(arg))) {
+		return true;
+	}
+	if (arg.startsWith("/") || arg.startsWith("./")) {
+		return true;
+	}
+	return arg.includes("/") && path.extname(arg) !== "";
+}
+
 function shellSplit(input: string): string[] {
 	const tokens: string[] = [];
 	let current = "";
@@ -550,6 +571,7 @@ function runDetectRefScript(): SmartDetectResult | undefined {
 		mainBranch: fields.get("main_branch") ?? "",
 		isMain: fields.get("is_main") === "true",
 		hasUncommitted: fields.get("has_uncommitted") === "true",
+		useStaged: fields.get("use_staged") === "true",
 		suggestedRef: fields.get("suggested_ref") ?? "",
 		needsAsk: fields.get("needs_ask") === "true",
 	};
@@ -563,6 +585,9 @@ function detectSmartRefFallback(): SmartDetectResult | undefined {
 	// detect no-commits state (fresh repo after git init)
 	const hasCommits = gitOk(["rev-parse", "HEAD"]);
 	const hasUncommitted = gitStdout(["status", "--porcelain"]).trim().length > 0;
+	const hasUnstaged = !gitOk(["diff", "--quiet"]);
+	const hasStaged = !gitOk(["diff", "--cached", "--quiet"]);
+	const useStaged = hasUncommitted && hasStaged && !hasUnstaged;
 
 	if (!hasCommits) {
 		return {
@@ -570,6 +595,7 @@ function detectSmartRefFallback(): SmartDetectResult | undefined {
 			mainBranch: "",
 			isMain: false,
 			hasUncommitted,
+			useStaged: false,
 			suggestedRef: "--all-files",
 			needsAsk: false,
 		};
@@ -589,7 +615,7 @@ function detectSmartRefFallback(): SmartDetectResult | undefined {
 		suggestedRef = mainBranch;
 	}
 
-	return { branch, mainBranch, isMain, hasUncommitted, suggestedRef, needsAsk };
+	return { branch, mainBranch, isMain, hasUncommitted, useStaged, suggestedRef, needsAsk };
 }
 
 function detectMainBranch(): string {

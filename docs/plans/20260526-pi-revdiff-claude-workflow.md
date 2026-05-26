@@ -148,14 +148,14 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - Modify: `plugins/pi/extensions/revdiff.ts`
 - Reference: `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`
 
-- [ ] add `useStaged` to the Pi smart-detection result type
-- [ ] parse `use_staged` from `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` output
-- [ ] update fallback git detection to set `useStaged` for staged-only changes
-- [ ] make no-arg smart detection return `args: ["--staged"]` and label `staged changes` when `useStaged` is true on the uncommitted-review path
-- [ ] preserve the dirty-feature-branch branch-vs-uncommitted prompt and apply `--staged` only when the user chooses uncommitted changes
-- [ ] preserve file review detection for existing files and path-like args while simplifying argument handling
-- [ ] manually validate staged-only no-arg detection and dirty-feature-branch staged-only choice when practical
-- [ ] run tests: `go test ./...`
+- [x] add `useStaged` to the Pi smart-detection result type
+- [x] parse `use_staged` from `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` output
+- [x] update fallback git detection to set `useStaged` for staged-only changes
+- [x] make no-arg smart detection return `args: ["--staged"]` and label `staged changes` when `useStaged` is true on the uncommitted-review path
+- [x] preserve the dirty-feature-branch branch-vs-uncommitted prompt and apply `--staged` only when the user chooses uncommitted changes
+- [x] preserve file review detection for existing files and path-like args while simplifying argument handling
+- [x] manually validate staged-only no-arg detection and dirty-feature-branch staged-only choice when practical (validated detect-ref staged-only outputs; interactive Pi choice skipped - not automatable in this subagent)
+- [x] run tests: `go test ./...`
 
 ### Task 3: Remove post-edit reminder from default Pi package surface
 
