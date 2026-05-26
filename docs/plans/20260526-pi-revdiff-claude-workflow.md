@@ -201,18 +201,18 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - Inspect: `site/docs.html`
 - Inspect: `package.json`
 
-- [ ] verify `/revdiff [args]` starts direct revdiff and sends captured annotations to the agent without an apply step
-- [ ] verify no pending annotation widget, status, results panel, or apply/clear/results/rerun command remains in the Pi workflow
-- [ ] verify staged-only no-arg review opens staged changes with `--staged`
-- [ ] verify dirty feature branch staged-only state still asks branch-vs-uncommitted
-- [ ] verify path-like single-file review detection still maps to `--only` as intended
-- [ ] verify `revdiff_review` is direct-only and suitable for rerun loops after fixes
-- [ ] verify docs match the new workflow and do not mention removed Pi overlay/pending commands
-- [ ] verify package dry-run includes only the intended Pi files and executable detect-ref script
-- [ ] run full test suite: `go test ./...`
-- [ ] run race tests: `go test -race ./...`
-- [ ] run formatter: `~/.claude/format.sh`
-- [ ] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] verify `/revdiff [args]` starts direct revdiff and sends captured annotations to the agent without an apply step
+- [x] verify no pending annotation widget, status, results panel, or apply/clear/results/rerun command remains in the Pi workflow
+- [x] verify staged-only no-arg review opens staged changes with `--staged`
+- [x] verify dirty feature branch staged-only state still asks branch-vs-uncommitted
+- [x] verify path-like single-file review detection still maps to `--only` as intended
+- [x] verify `revdiff_review` is direct-only and suitable for rerun loops after fixes
+- [x] verify docs match the new workflow and do not mention removed Pi overlay/pending commands
+- [x] verify package dry-run includes only the intended Pi files and executable detect-ref script
+- [x] run full test suite: `go test ./...`
+- [x] run race tests: `go test -race ./...`
+- [x] run formatter: `~/.claude/format.sh`
+- [x] run linter: `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
 
 ### Task 6: [Final] Update plan lifecycle
 
