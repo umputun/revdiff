@@ -449,7 +449,7 @@ function initGitRepo(): string {
 }
 
 async function testNeedsAskWithoutMainStops(): Promise<void> {
-	const detectScript = path.resolve(".claude-plugin", "skills", "revdiff", "scripts", "detect-ref.sh");
+	const detectScript = path.resolve("plugins", "pi", "scripts", "detect-ref.sh");
 	writeExecutable(
 		detectScript,
 		[
@@ -466,14 +466,17 @@ async function testNeedsAskWithoutMainStops(): Promise<void> {
 		].join("\n"),
 	);
 
-	const ctx = fakeCtx();
-	const launch = await detectSmartLaunch(ctx);
-	testAssert(launch === undefined, "needsAsk without a main branch should not launch uncommitted review");
-	testAssert(
-		ctx.ui.notifications.some((message: string) => message.includes("Could not determine a revdiff target")),
-		"needsAsk without a main branch should notify a clear target error",
-	);
-	rmSync(path.resolve(".claude-plugin"), { recursive: true, force: true });
+	try {
+		const ctx = fakeCtx();
+		const launch = await detectSmartLaunch(ctx);
+		testAssert(launch === undefined, "needsAsk without a main branch should not launch uncommitted review");
+		testAssert(
+			ctx.ui.notifications.some((message: string) => message.includes("Could not determine a revdiff target")),
+			"needsAsk without a main branch should notify a clear target error",
+		);
+	} finally {
+		rmSync(path.resolve("plugins", "pi", "scripts"), { recursive: true, force: true });
+	}
 }
 
 async function testStagedSmartDetection(): Promise<void> {

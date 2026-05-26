@@ -13,7 +13,7 @@ const ANNOTATION_HEADER_RE = /^## (.+?)(?::(\d+)(?:-\d+)?)? \(([^)]+)\)$/;
 const EXT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PI_PLUGIN_ROOT = path.resolve(EXT_DIR, "..");
 const REPO_ROOT = path.resolve(PI_PLUGIN_ROOT, "..", "..");
-const DETECT_REF_SCRIPT = path.join(REPO_ROOT, ".claude-plugin", "skills", "revdiff", "scripts", "detect-ref.sh");
+const DETECT_REF_SCRIPT = path.join(PI_PLUGIN_ROOT, "scripts", "detect-ref.sh");
 
 interface AnnotationItem {
 	file: string;

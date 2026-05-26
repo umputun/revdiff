@@ -1,6 +1,6 @@
 {
   "name": "revdiff-pi",
-  "version": "0.2.4",
+  "version": "0.3.0",
   "description": "Pi package for revdiff interactive diff review",
   "license": "MIT",
   "repository": {
@@ -15,12 +15,10 @@
     "tui"
   ],
   "files": [
-    "plugins/pi/",
-    ".claude-plugin/skills/revdiff/scripts/detect-ref.sh"
+    "plugins/pi/"
   ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^0.74.0",
-    "@earendil-works/pi-tui": "^0.74.0",
     "typebox": "^1.1.24"
   },
   "pi": {
