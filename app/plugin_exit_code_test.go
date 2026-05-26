@@ -198,6 +198,236 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.Contains(t, src, "return buildResult(launch, rawOutput);")
 }
 
+func TestPiExtensionExecutableBehavior(t *testing.T) {
+	bun, err := exec.LookPath("bun")
+	if err != nil {
+		t.Skip("bun not found")
+	}
+
+	root := testRepoRoot(t)
+	tmp := t.TempDir()
+	testPath := filepath.Join(tmp, "plugins", "pi", "extensions", "revdiff-test.ts")
+	writeTestFile(t, filepath.Join(tmp, "node_modules", "typebox", "index.ts"), piTypeboxStub())
+	writeTestFile(t, testPath, readRepoFile(t, root, "plugins", "pi", "extensions", "revdiff.ts")+piExtensionHarness())
+
+	res := runTestCmd(t, cmdReq{
+		dir:  tmp,
+		name: bun,
+		args: []string{"run", testPath},
+		env:  map[string]string{"PATH": os.Getenv("PATH")},
+	})
+	require.Equal(t, 0, res.code, "stdout:\n%s\nstderr:\n%s", res.stdout, res.stderr)
+}
+
+func piTypeboxStub() string {
+	return `export const Type = {
+  Object: (schema: unknown) => schema,
+  Optional: (schema: unknown) => schema,
+  String: (options?: unknown) => ({ type: "string", options }),
+};
+`
+}
+
+func piExtensionHarness() string {
+	return `
+import { chmodSync as testChmodSync, mkdirSync as testMkdirSync, writeFileSync as testWriteFileSync } from "node:fs";
+
+function testAssert(condition: unknown, message: string): asserts condition {
+	if (!condition) {
+		throw new Error(message);
+	}
+}
+
+function assertArray(actual: string[], expected: string[], message: string): void {
+	const actualText = JSON.stringify(actual);
+	const expectedText = JSON.stringify(expected);
+	testAssert(actualText === expectedText, message + ": got " + actualText + ", want " + expectedText);
+}
+
+function fakeCtx(choice?: "uncommitted" | "branch") {
+	return {
+		hasUI: true,
+		isIdle: () => true,
+		ui: {
+			notifications: [] as string[],
+			notify(message: string) {
+				this.notifications.push(message);
+			},
+			select(_title: string, choices: string[]) {
+				return choice === "branch" ? choices[1] : choices[0];
+			},
+			custom(factory: any) {
+				let value: unknown;
+				factory(
+					{ stop() {}, start() {}, requestRender(_full?: boolean) {} },
+					{},
+					{},
+					(next: unknown) => {
+						value = next;
+					},
+				);
+				return value;
+			},
+		},
+	} as any;
+}
+
+function fakePi() {
+	const commands = new Map<string, any>();
+	const tools = new Map<string, any>();
+	const sentMessages: string[] = [];
+	return {
+		commands,
+		tools,
+		sentMessages,
+		registerCommand(name: string, command: any) {
+			commands.set(name, command);
+		},
+		registerTool(tool: any) {
+			tools.set(tool.name, tool);
+		},
+		sendUserMessage(message: string) {
+			sentMessages.push(message);
+		},
+	} as any;
+}
+
+function writeExecutable(pathname: string, content: string): void {
+	testWriteFileSync(pathname, content);
+	testChmodSync(pathname, 0o700);
+}
+
+function fakeRevdiffScript(): string {
+	return [
+		"#!/bin/sh",
+		"test \"$REVDIFF_EXIT_CODE_ON_ANNOTATIONS\" = \"true\" || exit 21",
+		"out=",
+		"for arg in \"$@\"; do",
+		"  case \"$arg\" in --output=*) out=${arg#--output=};; esac",
+		"done",
+		"test -n \"$out\" || exit 22",
+		"printf '## src/app.go:12 (+)\\nfix it\\n' > \"$out\"",
+		"printf '%s\\n' \"$@\" > \"$FAKE_ARG_FILE\"",
+		"exit 10",
+		"",
+	].join("\n");
+}
+
+async function testCommandSendsAnnotations(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-command-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	const argFile = path.join(tempDir, "args.txt");
+	writeExecutable(fakeBin, fakeRevdiffScript());
+
+	const oldBin = process.env.REVDIFF_BIN;
+	const oldArgFile = process.env.FAKE_ARG_FILE;
+	process.env.REVDIFF_BIN = fakeBin;
+	process.env.FAKE_ARG_FILE = argFile;
+	try {
+		const pi = fakePi();
+		revdiffExtension(pi);
+		await pi.commands.get("revdiff").handler("--only 'docs/my plan.md'", fakeCtx());
+
+		testAssert(pi.sentMessages.length === 1, "expected captured annotations to be sent to the agent");
+		const prompt = pi.sentMessages[0];
+		testAssert(prompt.includes("Review target: docs/my plan.md"), "prompt should include review target");
+		testAssert(prompt.includes("Original command: revdiff --only 'docs/my plan.md'"), "prompt should shell-quote original args");
+		testAssert(prompt.includes("Rerun command: Call revdiff_review with args: --only 'docs/my plan.md'"), "prompt should include round-trippable rerun args");
+		testAssert(prompt.includes("## src/app.go:12 (+)"), "prompt should include captured annotation header");
+		testAssert(prompt.includes("fix it"), "prompt should include captured annotation body");
+
+		const args = readFileSync(argFile, "utf8").trim().split("\n");
+		assertArray(args.slice(0, 2), ["--only", "docs/my plan.md"], "fake revdiff should receive split review args");
+		testAssert(args[2]?.startsWith("--output="), "fake revdiff should receive output file arg");
+	} finally {
+		if (oldBin === undefined) {
+			delete process.env.REVDIFF_BIN;
+		} else {
+			process.env.REVDIFF_BIN = oldBin;
+		}
+		if (oldArgFile === undefined) {
+			delete process.env.FAKE_ARG_FILE;
+		} else {
+			process.env.FAKE_ARG_FILE = oldArgFile;
+		}
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testArgumentResolution(): Promise<void> {
+	let launch = await resolveLaunchSpec("--output ignored --only 'docs/my plan.md'", fakeCtx());
+	testAssert(Boolean(launch), "expected launch after stripping --output");
+	assertArray(launch!.args, ["--only", "docs/my plan.md"], "--output stripping should preserve remaining args");
+	testAssert(launch!.label === "docs/my plan.md", "--only label should use target path");
+
+	launch = await resolveLaunchSpec("all-files exclude vendor and dist", fakeCtx());
+	testAssert(Boolean(launch), "expected all-files shortcut launch");
+	assertArray(launch!.args, ["--all-files", "--exclude=vendor", "--exclude=dist"], "all-files shortcut should expand excludes");
+
+	launch = await resolveLaunchSpec("docs/new-file.md", fakeCtx());
+	testAssert(Boolean(launch), "expected path-like file launch");
+	assertArray(launch!.args, ["--only", "docs/new-file.md"], "path-like file arg should map to --only");
+
+	const roundTrip = ["--description=why this matters", "--only", "docs/it's mine.md"];
+	assertArray(shellSplit(shellJoin(roundTrip)), roundTrip, "shellJoin output should shellSplit back to original args");
+}
+
+function runGit(repo: string, args: string[]): void {
+	const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+	testAssert(result.status === 0, "git " + args.join(" ") + " failed: " + (result.stderr || result.stdout));
+}
+
+function initGitRepo(): string {
+	const repo = mkdtempSync(path.join(tmpdir(), "pi-revdiff-git-"));
+	runGit(repo, ["init"]);
+	runGit(repo, ["checkout", "-b", "main"]);
+	runGit(repo, ["config", "user.email", "test@example.com"]);
+	runGit(repo, ["config", "user.name", "Test User"]);
+	testWriteFileSync(path.join(repo, "file.txt"), "base\n");
+	runGit(repo, ["add", "file.txt"]);
+	runGit(repo, ["commit", "-m", "initial"]);
+	return repo;
+}
+
+async function testStagedSmartDetection(): Promise<void> {
+	const oldCwd = process.cwd();
+	const mainRepo = initGitRepo();
+	const featureRepo = initGitRepo();
+	try {
+		testWriteFileSync(path.join(mainRepo, "file.txt"), "main staged\n");
+		runGit(mainRepo, ["add", "file.txt"]);
+		process.chdir(mainRepo);
+		let launch = await detectSmartLaunch(fakeCtx());
+		testAssert(Boolean(launch), "expected staged launch on main");
+		assertArray(launch!.args, ["--staged"], "main staged-only should launch --staged");
+		testAssert(launch!.label === "staged changes", "main staged-only label should be staged changes");
+
+		runGit(featureRepo, ["checkout", "-b", "feature"]);
+		testWriteFileSync(path.join(featureRepo, "file.txt"), "feature staged\n");
+		runGit(featureRepo, ["add", "file.txt"]);
+		process.chdir(featureRepo);
+		launch = await detectSmartLaunch(fakeCtx("uncommitted"));
+		testAssert(Boolean(launch), "expected dirty feature uncommitted launch");
+		assertArray(launch!.args, ["--staged"], "dirty feature uncommitted choice should launch --staged");
+
+		launch = await detectSmartLaunch(fakeCtx("branch"));
+		testAssert(Boolean(launch), "expected dirty feature branch launch");
+		assertArray(launch!.args, ["main"], "dirty feature branch choice should preserve branch diff");
+		testAssert(launch!.label === "feature vs main", "dirty feature branch label should identify main branch");
+	} finally {
+		process.chdir(oldCwd);
+		rmSync(mainRepo, { recursive: true, force: true });
+		rmSync(featureRepo, { recursive: true, force: true });
+	}
+}
+
+await testCommandSendsAnnotations();
+await testArgumentResolution();
+await testStagedSmartDetection();
+console.log("pi extension executable behavior ok");
+`
+}
+
 func testRepoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

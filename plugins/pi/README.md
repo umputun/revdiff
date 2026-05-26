@@ -30,7 +30,7 @@ The pi package exposes one user command:
 
 `/revdiff` launches the external `revdiff` binary through direct terminal handoff. pi temporarily suspends, revdiff takes over the terminal, and pi resumes when revdiff exits. If annotations were captured, the extension sends them to the agent immediately as a user message. If no annotations were captured, the review is clean.
 
-The agent uses the `revdiff_review` tool for follow-up review loops after handling annotations. The loop is: classify annotations, answer explanation requests first, list planned code changes, edit files, rerun `revdiff_review` with the same args, and stop only when no annotations are captured.
+The agent uses the `revdiff_review` tool for follow-up review loops after handling annotations. The loop is: classify annotations, answer explanation requests first, write explanation answers to a temporary markdown file and review it with `revdiff_review --only <tempfile>` when user review/refinement is needed, list planned code changes, edit files, rerun `revdiff_review` with the same args, and stop only when no annotations are captured.
 
 Useful args:
 

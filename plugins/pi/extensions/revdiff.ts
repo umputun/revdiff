@@ -56,7 +56,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		const result = await runReview(ctx, launch);
+		const result = await runDirectReview(ctx, launch);
 		if (!result) {
 			return;
 		}
@@ -111,7 +111,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			}
 
 			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label}...` }], details: null });
-			const result = await runReview(ctx, launch);
+			const result = await runDirectReview(ctx, launch);
 			if (!result) {
 				return toolTextResult("revdiff review did not complete.");
 			}
@@ -221,10 +221,6 @@ function uncommittedLaunchSpec(detected: SmartDetectResult): LaunchSpec {
 		return { args: ["--staged"], label: "staged changes" };
 	}
 	return { args: [], label: "uncommitted changes" };
-}
-
-async function runReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewResult | undefined> {
-	return runDirectReview(ctx, launch);
 }
 
 async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewResult | undefined> {

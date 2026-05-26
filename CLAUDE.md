@@ -82,6 +82,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Pi Plugin
 - Pi package defined in root `package.json`, extensions and skills in `plugins/pi/`
+- Pi review path is direct-terminal only: `/revdiff [args]` suspends pi, runs the `revdiff` binary directly, and sends captured annotations to the agent immediately. There is no Pi overlay mode, pending annotation widget/panel, `/revdiff-rerun`, `/revdiff-results`, `/revdiff-apply`, `/revdiff-clear`, or default post-edit reminder command.
+- Pi packages only `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` from Claude scripts; do not re-add `launch-revdiff.sh` to the Pi package surface unless the workflow is explicitly changed.
 - **CRITICAL: After any pi plugin file change, ask user if they want to bump the version in `package.json`**
 - Version in `package.json` is independently versioned (does not track the project's git tags)
 
