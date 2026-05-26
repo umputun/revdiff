@@ -451,7 +451,11 @@ function isFileReviewArg(arg: string): boolean {
 	if (arg.startsWith("/") || arg.startsWith("./")) {
 		return true;
 	}
-	return arg.includes("/") && path.extname(arg) !== "";
+	return arg.includes("/") && path.extname(arg) !== "" && !isGitRef(arg);
+}
+
+function isGitRef(arg: string): boolean {
+	return gitOk(["rev-parse", "--verify", "--quiet", `${arg}^{commit}`]);
 }
 
 function shellSplit(input: string): string[] {

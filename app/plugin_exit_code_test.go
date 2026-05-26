@@ -201,9 +201,18 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.Contains(t, src, "return buildResult(launch, rawOutput);")
 }
 
+func TestPiExecutableRegressionHasCIBunSetup(t *testing.T) {
+	root := testRepoRoot(t)
+	ci := readRepoFile(t, root, ".github", "workflows", "ci.yml")
+	assert.Contains(t, ci, "oven-sh/setup-bun")
+	assert.Contains(t, ci, "go test -race")
+}
+
 func TestPiExtensionExecutableBehavior(t *testing.T) {
 	bun, err := exec.LookPath("bun")
-	require.NoError(t, err, "bun is required for the Pi extension executable regression")
+	if err != nil {
+		t.Skip("bun is not installed locally; CI installs Bun via oven-sh/setup-bun and runs this regression")
+	}
 
 	root := testRepoRoot(t)
 	tmp := t.TempDir()
@@ -406,6 +415,22 @@ async function testArgumentResolution(): Promise<void> {
 	assertArray(shellSplit(shellJoin(roundTrip)), roundTrip, "shellJoin output should shellSplit back to original args");
 }
 
+async function testRefLikePathArgKeepsRef(): Promise<void> {
+	const oldCwd = process.cwd();
+	const repo = initGitRepo();
+	try {
+		runGit(repo, ["checkout", "-b", "release/v1.2.3"]);
+		process.chdir(repo);
+		const launch = await resolveLaunchSpec("release/v1.2.3", fakeCtx());
+		testAssert(Boolean(launch), "expected ref-like launch");
+		assertArray(launch!.args, ["release/v1.2.3"], "ref-like path arg should stay a ref when the git ref exists");
+		testAssert(launch!.label === "release/v1.2.3", "ref-like path label should stay the ref");
+	} finally {
+		process.chdir(oldCwd);
+		rmSync(repo, { recursive: true, force: true });
+	}
+}
+
 function runGit(repo: string, args: string[]): void {
 	const result = spawnSync("git", args, { cwd: repo, encoding: "utf8" });
 	testAssert(result.status === 0, "git " + args.join(" ") + " failed: " + (result.stderr || result.stdout));
@@ -486,6 +511,7 @@ async function testStagedSmartDetection(): Promise<void> {
 await testCommandSendsAnnotations();
 await testSignalTerminatedReviewFails();
 await testArgumentResolution();
+await testRefLikePathArgKeepsRef();
 await testNeedsAskWithoutMainStops();
 await testStagedSmartDetection();
 console.log("pi extension executable behavior ok");
