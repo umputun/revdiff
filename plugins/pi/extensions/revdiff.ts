@@ -9,7 +9,7 @@ import { Type } from "typebox";
 
 const EXIT_CODE_ANNOTATIONS = 10;
 const EXIT_CODE_ON_ANNOTATIONS_ENV = "REVDIFF_EXIT_CODE_ON_ANNOTATIONS";
-const ANNOTATION_HEADER_RE = /^## (.+?)(?::(\d+))? \(([^)]+)\)$/;
+const ANNOTATION_HEADER_RE = /^## (.+?)(?::(\d+)(?:-\d+)?)? \(([^)]+)\)$/;
 const EXT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PI_PLUGIN_ROOT = path.resolve(EXT_DIR, "..");
 const REPO_ROOT = path.resolve(PI_PLUGIN_ROOT, "..", "..");

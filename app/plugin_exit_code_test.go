@@ -200,9 +200,7 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 
 func TestPiExtensionExecutableBehavior(t *testing.T) {
 	bun, err := exec.LookPath("bun")
-	if err != nil {
-		t.Skip("bun not found")
-	}
+	require.NoError(t, err, "bun is required for the Pi extension executable regression")
 
 	root := testRepoRoot(t)
 	tmp := t.TempDir()
@@ -306,7 +304,7 @@ function fakeRevdiffScript(): string {
 		"  case \"$arg\" in --output=*) out=${arg#--output=};; esac",
 		"done",
 		"test -n \"$out\" || exit 22",
-		"printf '## src/app.go:12 (+)\\nfix it\\n' > \"$out\"",
+		"printf '## src/app.go:12-14 (+)\\nfix it\\n' > \"$out\"",
 		"printf '%s\\n' \"$@\" > \"$FAKE_ARG_FILE\"",
 		"exit 10",
 		"",
@@ -333,7 +331,7 @@ async function testCommandSendsAnnotations(): Promise<void> {
 		testAssert(prompt.includes("Review target: docs/my plan.md"), "prompt should include review target");
 		testAssert(prompt.includes("Original command: revdiff --only 'docs/my plan.md'"), "prompt should shell-quote original args");
 		testAssert(prompt.includes("Rerun command: Call revdiff_review with args: --only 'docs/my plan.md'"), "prompt should include round-trippable rerun args");
-		testAssert(prompt.includes("## src/app.go:12 (+)"), "prompt should include captured annotation header");
+		testAssert(prompt.includes("## src/app.go:12-14 (+)"), "prompt should include captured hunk annotation header");
 		testAssert(prompt.includes("fix it"), "prompt should include captured annotation body");
 
 		const args = readFileSync(argFile, "utf8").trim().split("\n");
