@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/umputun/revdiff/app/diff"
@@ -80,9 +81,25 @@ func prepareStdinMode(opts options, stdin *os.File) (ui.Renderer, *os.File, erro
 		return nil, nil, err
 	}
 
-	renderer, err := diff.NewStdinReaderFromReader(stdinName(opts.StdinName), stdin)
+	// read all stdin into memory for detection
+	content, err := io.ReadAll(stdin)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read stdin: %w", err)
+	}
+
+	var renderer ui.Renderer
+	if diff.IsUnifiedDiff(string(content)) {
+		// try multi-file diff parsing; nil renderer falls through to context mode below
+		if multi, mErr := diff.NewMultiFileStdinReader(string(content)); mErr == nil {
+			renderer = multi
+		}
+	}
+	if renderer == nil {
+		// raw text, or fallback after a multi-file parse failure
+		renderer, err = diff.NewStdinReaderFromString(stdinName(opts.StdinName), string(content))
+		if err != nil {
+			return nil, nil, fmt.Errorf("create stdin reader: %w", err)
+		}
 	}
 
 	tty, err := openTTY()
