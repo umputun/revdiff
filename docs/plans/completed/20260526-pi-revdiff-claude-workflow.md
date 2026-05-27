@@ -2,16 +2,16 @@
 
 ## Overview
 - Implement issue #207 by replacing the Pi-specific pending annotation workflow with the Claude-style revdiff review loop.
-- The current Pi integration stores annotations in side-panel/widget state and requires `/revdiff-apply` to send them back to the agent. The new flow sends captured annotations to the agent immediately.
+- The current Pi integration stores annotations in side-panel/widget state and requires `/revdiff-apply` to send them back to the agent. The new flow routes `/revdiff` through the skill so `revdiff_review` returns captured annotations to the agent.
 - The public Pi command surface becomes one command: `/revdiff [args]`. The agent rerun loop remains available through the `revdiff_review` tool.
 - The Pi integration uses direct terminal handoff only. Overlay mode and the Claude `launch-revdiff.sh` dependency are removed from the Pi review path.
 
 ## Context (from discovery)
-- Files/components involved: `plugins/pi/extensions/revdiff.ts`, `plugins/pi/extensions/revdiff-post-edit.ts`, `plugins/pi/skills/revdiff/SKILL.md`, `plugins/pi/README.md`, README Pi section, `site/docs.html`, `package.json`, `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`.
+- Files/components involved: `plugins/pi/extensions/revdiff.ts`, `plugins/pi/extensions/revdiff-post-edit.ts`, `plugins/pi/skills/revdiff/SKILL.md`, `plugins/pi/README.md`, README Pi section, `site/docs.html`, `package.json`, `plugins/pi/scripts/detect-ref.sh`, and the source copy at `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`.
 - Current `plugins/pi/extensions/revdiff.ts` registers direct and overlay launch modes, pending review state, a message renderer, side-panel UI, status/widget UI, `/revdiff-rerun`, `/revdiff-results`, `/revdiff-apply`, `/revdiff-clear`, and `revdiff_review` with `mode`/`openPanel` parameters.
 - `/revdiff` currently captures annotations as custom message data and opens a panel; it does not trigger the agent until `/revdiff-apply` builds a hardcoded apply prompt.
 - `revdiff_review` already returns annotations to the agent as a tool result and is the right path for agent-driven reruns.
-- `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` already emits `use_staged`, but the Pi extension does not parse it yet.
+- `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` is the source for the Pi copy and already emits `use_staged`, but the Pi extension does not parse it yet.
 - There is no existing TypeScript test harness or `package.json` test script for the Pi extension. Manual validation is the selected testing approach for this ticket.
 
 ## Development Approach
@@ -68,8 +68,8 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 
 ## Testing Strategy
 - Manual validation is required for the Pi TUI flow:
-  - `/revdiff` with no annotations reports clean and does not trigger an agent turn.
-  - `/revdiff` with annotations sends a real user message to the agent immediately.
+  - `/revdiff` with no annotations reports no captured annotations and stops the loop.
+  - `/revdiff` with annotations returns them through `revdiff_review` after the skill launch.
   - `revdiff_review` returns annotations as a tool result and remains direct-only.
   - staged-only no-arg detection opens staged changes with `--staged`.
   - a dirty feature branch with staged-only changes still asks branch-vs-uncommitted; `--staged` is applied only when the uncommitted path is selected.
@@ -87,7 +87,7 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 ## Solution Overview
 - Use a hard cut rather than a compatibility transition.
 - `/revdiff [args]` remains the only user command and uses the existing direct terminal handoff mechanism.
-- Captured annotations are sent to the main agent with `pi.sendUserMessage()` using a prompt that preserves the Claude-style workflow: classify annotations, answer explanation requests first, review explanation drafts when needed, list planned changes before editing, apply code-change directives, and rerun `revdiff_review` with the same args until clean.
+- Captured annotations are returned to the agent by `revdiff_review`; the skill preserves the Claude-style workflow: classify annotations, answer explanation requests first, review explanation drafts when needed, list planned changes before editing, apply code-change directives, and rerun `revdiff_review` with the same args until no annotations are captured.
 - `revdiff_review` stays as the agent-only interactive review tool for rerun loops, but becomes direct-only and loses Pi panel options.
 - Removed workflows are deleted rather than kept as deprecated aliases: no pending inbox, no results panel, no apply/clear/rerun commands, no overlay path, and no post-edit reminder command in the default package surface.
 - `use_staged` from the existing detect-ref script is honored so staged-only no-arg reviews open staged changes correctly without bypassing the dirty-feature-branch choice.
@@ -96,11 +96,11 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - `LaunchSpec` should only carry `args` and `label`; remove launch mode from the Pi extension's data model.
 - Replace persisted `ReviewState`/`LaunchMemory` with a transient run result that carries `args`, a shell-quoted rerun args string, `label`, `rawOutput`, and `annotations` only while handling one launch. Do not keep `createdAt` unless a concrete remaining consumer needs it.
 - Remove `STATE_TYPE`, `LAST_LAUNCH_TYPE`, `LaunchMemory`, `setLastLaunch`, `restoreState`, `session_start`/`session_tree` restore handlers, and `pi.events.emit("revdiff:launch")` after their consumers are deleted.
-- `startReview()` handles user-launched `/revdiff`: run direct review, notify clean result, or send annotations to the agent.
+- The `/revdiff` command handler routes to `/skill:revdiff`; the skill resolves args and calls `revdiff_review`, which returns no-annotation status or captured annotations as a tool result.
 - `revdiff_review` handles agent-launched reviews: resolve args, run direct review, and return tool text/details. It must not persist pending state or open panels.
 - Preserve round-trippable arguments. Add or keep a shell-quoting helper for prompt/tool details so rerun guidance uses exactly the original args, including paths or descriptions with spaces.
 - Preserve file review detection for existing files and path-like args while simplifying `resolveLaunchSpec`. Path-like args include existing paths, `./...`, `/...`, or file-looking args that should map to `--only` consistently with current skill guidance.
-- `sendAnnotationsToAgent()` should include:
+- The skill/tool handling should preserve:
   - review target
   - original command as a shell-quoted `revdiff ...`
   - rerun args string suitable for `revdiff_review args: "..."`
@@ -109,11 +109,11 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
   - instruction to answer questions before editing
   - instruction to write explanation answers to a temp markdown file and review that file with `revdiff_review --only <tempfile>` when explanation notes require user review/refinement
   - instruction to list planned file/code changes before editing
-  - instruction to rerun `revdiff_review` with the same args until clean
+  - instruction to rerun `revdiff_review` with the same args until no annotations are captured
   - guidance to include `--untracked` on reruns when agent-created files should be reviewed
 - `detectSmartLaunch()` should apply `--staged` only to the uncommitted-review path when `useStaged=true`. On dirty feature branches, keep the existing branch-diff vs uncommitted prompt and use `--staged` only if the user chooses uncommitted changes.
 - `runDetectRefScript()` should parse `use_staged`. `detectSmartRefFallback()` should compute staged-only for git and set the same field.
-- `package.json` should include `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` rather than the whole scripts directory.
+- `package.json` should include the Pi package surface with `plugins/pi/scripts/detect-ref.sh` rather than depending on the Claude plugin tree.
 - Deleting `plugins/pi/extensions/revdiff-post-edit.ts` removes `/revdiff-reminders` from extension auto-discovery.
 - After any Pi plugin file change, ask whether to bump `package.json` version. Do not bump it automatically.
 
@@ -135,21 +135,21 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - [x] remove `pi.events.emit("revdiff:launch")` and drop the now-unneeded `pi` parameter from `runReview`
 - [x] remove Pi overlay mode handling, `--pi-overlay`, `--pi-direct`, `REVDIFF_PI_MODE`, and `launch-revdiff.sh` resolution from the Pi review path
 - [x] keep `/revdiff [args]` as the only user command and make it direct-terminal only
-- [x] add immediate annotation delivery from `/revdiff` through `pi.sendUserMessage()` using the Claude-style loop instructions
+- [x] route `/revdiff` through the revdiff skill so annotations return through the `revdiff_review` tool result
 - [x] simplify `revdiff_review` to direct-only parameters and remove `mode`/`openPanel`
 - [x] preserve round-trippable shell-quoted rerun args in the generated agent prompt and tool details
 - [x] confirm no automated TypeScript tests are added for this task per manual-validation decision
-- [x] manually validate clean and annotation-captured `/revdiff` behavior in Pi if the local interactive environment allows it (skipped - not automatable in this subagent)
+- [x] manually validate no-annotation and annotation-captured `/revdiff` behavior in Pi if the local interactive environment allows it (skipped - not automatable in this subagent)
 - [x] run tests: `go test ./...`
 
 ### Task 2: Honor staged-only smart detection and path-like file args
 
 **Files:**
 - Modify: `plugins/pi/extensions/revdiff.ts`
-- Reference: `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`
+- Reference/source: `.claude-plugin/skills/revdiff/scripts/detect-ref.sh`; packaged copy: `plugins/pi/scripts/detect-ref.sh`
 
 - [x] add `useStaged` to the Pi smart-detection result type
-- [x] parse `use_staged` from `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` output
+- [x] parse `use_staged` from the Pi-local `plugins/pi/scripts/detect-ref.sh` output
 - [x] update fallback git detection to set `useStaged` for staged-only changes
 - [x] make no-arg smart detection return `args: ["--staged"]` and label `staged changes` when `useStaged` is true on the uncommitted-review path
 - [x] preserve the dirty-feature-branch branch-vs-uncommitted prompt and apply `--staged` only when the user chooses uncommitted changes
@@ -164,7 +164,7 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - Modify: `package.json`
 
 - [x] delete `plugins/pi/extensions/revdiff-post-edit.ts`
-- [x] update `package.json` `files` to include `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` instead of the whole scripts directory
+- [x] update `package.json` `files` to include the Pi-local `plugins/pi/scripts/detect-ref.sh` via the packaged `plugins/pi/` tree
 - [x] verify package discovery no longer exposes `/revdiff-reminders`
 - [x] run package dry-run: `npm pack --dry-run`
 - [x] verify dry-run output includes `detect-ref.sh`
@@ -183,7 +183,7 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 
 - [x] document `/revdiff [args]` as the only Pi user command
 - [x] document direct terminal handoff only; remove overlay, pending UI, apply/results/rerun/clear, and reminder references
-- [x] document agent handling of captured annotations: classify explanation requests and code-change directives, answer questions first, review explanation drafts through temp markdown files when needed, list planned changes before editing, rerun `revdiff_review` until clean
+- [x] document agent handling of captured annotations: classify explanation requests and code-change directives, answer questions first, review explanation drafts through temp markdown files when needed, list planned changes before editing, rerun `revdiff_review` until no annotations are captured
 - [x] document `--untracked` guidance for agent-created files
 - [x] document `--description` and `--description-file` guidance after analysis/refactor work
 - [x] document existing-history workflow for "use my latest revdiff annotations"
@@ -201,7 +201,7 @@ If a previous task shipped a violation (spotted later by user, reviewer, or your
 - Inspect: `site/docs.html`
 - Inspect: `package.json`
 
-- [x] verify `/revdiff [args]` starts direct revdiff and sends captured annotations to the agent without an apply step
+- [x] verify `/revdiff [args]` routes through the skill and returns captured annotations through `revdiff_review` without an apply step
 - [x] verify no pending annotation widget, status, results panel, or apply/clear/results/rerun command remains in the Pi workflow
 - [x] verify staged-only no-arg review opens staged changes with `--staged`
 - [x] verify dirty feature branch staged-only state still asks branch-vs-uncommitted

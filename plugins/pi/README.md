@@ -4,8 +4,9 @@ This directory contains the **pi-specific** integration for revdiff.
 
 ## Contents
 
-- `extensions/revdiff.ts` — pi extension that launches revdiff with `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` set, captures annotations, treats exit `10` as success-with-annotations, exposes the `revdiff_review` agent tool, and sends user-launched annotations to the agent immediately
+- `extensions/revdiff.ts` — pi extension that routes `/revdiff` through the skill, launches revdiff with `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` set, captures annotations, treats exit `10` as success-with-annotations, and exposes the `revdiff_review` agent tool
 - `skills/revdiff/SKILL.md` — pi skill describing the review workflow and command
+- `scripts/detect-ref.sh` — packaged smart-target detection script used by the extension
 
 ## Install
 
@@ -15,10 +16,11 @@ From the repo root:
 pi install https://github.com/umputun/revdiff
 ```
 
-The root `package.json` exposes these resources via:
+The root `package.json` includes these resources in the package:
 
 - `plugins/pi/extensions`
 - `plugins/pi/skills`
+- `plugins/pi/scripts`
 
 ## Usage
 
@@ -28,9 +30,9 @@ The pi package exposes one user command:
 /revdiff [args]
 ```
 
-`/revdiff` routes requests through `/skill:revdiff`. The skill resolves refs, files, and natural-language targets before calling the `revdiff_review` tool. The tool launches the external `revdiff` binary through direct terminal handoff. pi temporarily suspends, revdiff takes over the terminal, and pi resumes when revdiff exits. If no annotations were captured, the review is clean.
+`/revdiff` routes requests through `/skill:revdiff`. The skill resolves refs, files, and natural-language targets before calling the `revdiff_review` tool. The tool launches the external `revdiff` binary through direct terminal handoff. pi temporarily suspends, revdiff takes over the terminal, and pi resumes when revdiff exits. If no annotations were captured, the agent stops the review loop unless you explicitly ask for another review.
 
-The agent uses the `revdiff_review` tool for the review loop after handling annotations. The loop is: classify annotations, answer explanation requests first in normal chat, ask whether to continue or finish after explanation-only annotations, stop after any clean/no-annotation result, list planned code changes for code-change directives, edit files, and rerun `revdiff_review` with the same args only after repository files changed or when the user asks to continue reviewing.
+The agent uses the `revdiff_review` tool for the review loop after handling annotations. The loop is: classify annotations, answer explanation requests first in normal chat, ask whether to continue or finish after explanation-only annotations, stop after any no-annotation result, list planned code changes for code-change directives, edit files, and rerun `revdiff_review` with the same args only after repository files changed or when the user asks to continue reviewing.
 
 Useful args:
 

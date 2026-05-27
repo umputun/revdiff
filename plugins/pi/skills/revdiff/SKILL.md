@@ -37,13 +37,13 @@ Tool examples:
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
 
-After `revdiff_review` returns annotations, address them directly from the tool result content. Do not read revdiff history after a successful captured-annotation result. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that the review was clean and stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.
+After `revdiff_review` returns annotations, address them directly from the tool result content. Do not read revdiff history after a successful captured-annotation result. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that no annotations were captured and stop. Do not relaunch revdiff after any no-annotation result unless the user explicitly asks for another review.
 
 ## Annotation handling loop
 
 When annotations arrive from `/revdiff` or `revdiff_review`:
 
-1. If any `revdiff_review` call returns no annotations, stop. Do not relaunch revdiff after a clean/no-annotation result unless the user explicitly asks for another review.
+1. If any `revdiff_review` call returns no annotations, stop. Do not relaunch revdiff after a no-annotation result unless the user explicitly asks for another review.
 2. Classify each annotation into:
    - **explanation requests**: questions or requests to explain/clarify behavior
    - **code-change directives**: requested repository changes
@@ -95,8 +95,8 @@ Behavior:
   - on main/master with a clean tree → review `HEAD~1`
   - on a clean feature branch → review against the detected main branch
   - on a dirty feature branch → asks whether to review uncommitted changes or the branch diff; staged-only uncommitted review uses `--staged`
-- After revdiff exits with annotations, the extension sends a user message to the agent immediately; the agent continues the loop with `revdiff_review`.
-- If revdiff exits without annotations, the review is clean.
+- After revdiff exits with annotations, `revdiff_review` returns them in the tool result; the agent processes that result directly.
+- If revdiff exits without captured annotations, report that no annotations were captured and stop.
 - When recent agent work created new untracked files, include `--untracked` so those files appear in the review tree.
 - When launching after analysis or refactor work, include `--description` or `--description-file` so the info popup explains the review context.
 

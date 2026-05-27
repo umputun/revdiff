@@ -168,7 +168,7 @@ This plugin is independent from the main `revdiff` plugin and does not conflict 
 
 ## Pi Package
 
-revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The `/revdiff` command routes requests through the revdiff skill, which resolves refs, files, and natural-language targets before launching the existing `revdiff` binary through the `revdiff_review` tool. If no annotations were captured, the review is clean.
+revdiff also ships as a [pi](https://github.com/badlogic/pi-mono) package. The `/revdiff` command routes requests through the revdiff skill, which resolves refs, files, and natural-language targets before launching the existing `revdiff` binary through the `revdiff_review` tool. If no annotations were captured, the agent stops the review loop unless you explicitly ask for another review.
 
 **Install:**
 
@@ -214,7 +214,7 @@ You can also call the skill explicitly with `/skill:revdiff <request>`.
 - `revdiff_review` suspends pi, hands the terminal to revdiff, then returns captured annotations to the agent.
 - The agent classifies annotations into explanation requests and code-change directives.
 - Explanation requests are answered first in normal chat, without opening another revdiff session for the explanation.
-- Any clean/no-annotation `revdiff_review` result stops the loop. The agent must not relaunch revdiff unless you explicitly ask for another review.
+- Any no-annotation `revdiff_review` result stops the loop. The agent must not relaunch revdiff unless you explicitly ask for another review.
 - For explanation-only annotations, the agent asks whether to continue the original review or finish.
 - Before editing repository files, the agent lists planned code/file changes, applies the changes, then reruns `revdiff_review` with the same args until no annotations are captured.
 

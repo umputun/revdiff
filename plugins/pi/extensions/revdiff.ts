@@ -62,7 +62,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			"Use revdiff_review only when the user explicitly asks for revdiff, an interactive annotation pass, or captured revdiff annotations inside pi.",
 			"Do not use revdiff_review for ordinary autonomous code-review requests like 'review the code', 'review my changes', or 'review the diff'; inspect the code directly instead.",
 			"When revdiff_review captures annotations, read them from the tool result content; do not read revdiff history unless the tool reports an incomplete/missing-output result or the user explicitly asks for history.",
-			"If revdiff_review returns no annotations, stop. Do not relaunch revdiff after any clean/no-annotation result unless the user explicitly asks for another review.",
+			"If revdiff_review returns no annotations, stop. Do not relaunch revdiff after any no-annotation result unless the user explicitly asks for another review.",
 			"Rerun the original revdiff_review target only after code changes or when the user asks to continue reviewing; do not rerun it after explanation-only annotations are answered.",
 		],
 		parameters: Type.Object({

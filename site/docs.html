@@ -128,7 +128,7 @@
         <p>Download from <a href="https://github.com/umputun/revdiff/releases">GitHub Releases</a> &mdash; deb, rpm, archives for linux/darwin amd64/arm64.</p>
 
         <h2 id="pi-package">Pi package</h2>
-        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The <code>/revdiff</code> command routes requests through the revdiff skill, which resolves refs, files, and natural-language targets before launching the existing <code>revdiff</code> binary through the <code>revdiff_review</code> tool. If no annotations were captured, the review is clean.</p>
+        <p>revdiff also ships as a <a href="https://github.com/badlogic/pi-mono">pi</a> package. The <code>/revdiff</code> command routes requests through the revdiff skill, which resolves refs, files, and natural-language targets before launching the existing <code>revdiff</code> binary through the <code>revdiff_review</code> tool. If no annotations were captured, the agent stops the review loop unless you explicitly ask for another review.</p>
         <div class="code-block"><code>pi install https://github.com/umputun/revdiff</code></div>
         <h3>Command inside pi</h3>
         <div class="code-block"><code>/revdiff [args]</code></div>
@@ -154,7 +154,7 @@
             <li><code>revdiff_review</code> suspends pi, hands the terminal to revdiff, then returns captured annotations to the agent.</li>
             <li>The agent classifies annotations into explanation requests and code-change directives.</li>
             <li>Explanation requests are answered first in normal chat, without opening another revdiff session for the explanation.</li>
-            <li>Any clean/no-annotation <code>revdiff_review</code> result stops the loop. The agent must not relaunch revdiff unless you explicitly ask for another review.</li>
+            <li>Any no-annotation <code>revdiff_review</code> result stops the loop. The agent must not relaunch revdiff unless you explicitly ask for another review.</li>
             <li>For explanation-only annotations, the agent asks whether to continue the original review or finish.</li>
             <li>Before editing repository files, the agent lists planned code/file changes, applies the changes, then reruns <code>revdiff_review</code> with the same args until no annotations are captured.</li>
         </ul>
