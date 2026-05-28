@@ -26,21 +26,36 @@ func TestIsUnifiedDiff(t *testing.T) {
 			want:    true,
 		},
 		{
-			name:    "hunk header",
-			content: "--- a/file.go\n+++ b/file.go\n@@ -1,3 +1,4 @@\n",
+			name:    "format-patch with leading mail headers",
+			content: "From abc Mon Sep 17\nFrom: A\nSubject: foo\n\ndiff --git a/file.go b/file.go\n@@ -1,1 +1,1 @@\n",
 			want:    true,
 		},
 		{
-			name:    "diff-like text in code",
-			content: "func TestDiff() {\n  // check @@ format\n  s := \"diff --git\"\n}\n",
-			want:    false, // Should not detect as diff (no "diff --git a/" marker)
+			name:    "hunk header only (no diff --git)",
+			content: "--- a/file.go\n+++ b/file.go\n@@ -1,3 +1,4 @@\n",
+			want:    false, // no diff --git boundary, splitter can't section it
+		},
+		{
+			name:    "diff-like text in code, no line-start marker",
+			content: "func TestDiff() {\n  // check @@ format\n  s := \"diff --git a/foo b/foo\"\n}\n",
+			want:    false, // marker is mid-line inside a quoted string
+		},
+		{
+			name:    "marker mentioned in prose, not line-anchored",
+			content: "The header is `diff --git a/x b/x` and separates files.\n",
+			want:    false,
+		},
+		{
+			name:    "marker only at line start but after blank line",
+			content: "\n\ndiff --git a/foo b/foo\n@@ -1,1 +1,1 @@\n",
+			want:    true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsUnifiedDiff(tt.content); got != tt.want {
-				t.Errorf("IsUnifiedDiff() = %v, want %v", got, tt.want)
+			if got := isUnifiedDiff(tt.content); got != tt.want {
+				t.Errorf("isUnifiedDiff() = %v, want %v", got, tt.want)
 			}
 		})
 	}

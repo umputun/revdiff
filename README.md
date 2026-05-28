@@ -30,7 +30,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Markdown TOC navigation: single-file markdown files in context-only mode show a table-of-contents pane with header navigation and active section tracking
 - All-files mode: browse and annotate all tracked files with `--all-files` (git `ls-files` or jj `file list`), filter with `--include` and `--exclude`
 - No-VCS file review: `--only` files outside a VCS repo (or not in any diff) are shown as context-only with full annotation support
-- Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`
+- Scratch-buffer review: annotate arbitrary piped or redirected text with `--stdin`, optionally naming it with `--stdin-name`. When the piped content sniffs as a git unified diff, revdiff parses it as a real multi-file diff (review `gh pr diff` or `git format-patch -1 --stdout` output directly); otherwise the input is shown as a single context-only buffer.
 - Pi package: launch revdiff from pi, capture annotations, and send them to the agent immediately for the normal review loop
 - Review history: auto-saves annotations and diffs to `~/.config/revdiff/history/` on quit as a safety net
 - Fully customizable colors via environment variables, CLI flags, or config file
@@ -589,16 +589,20 @@ revdiff --compare-old=a.txt --compare-new=b.txt
 
 ### Scratch-Buffer Review
 
-Use `--stdin` to review arbitrary piped or redirected text as a single synthetic file. All lines are shown as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.
+Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, compact mode, and per-file annotations); otherwise the input is shown as a single context-only buffer with all lines as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.
 
 `--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
 
-Use `--stdin-name` to control the synthetic filename. This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
+Use `--stdin-name` to control the synthetic filename for the context-only case (it is ignored in multi-file diff mode, where the tree shows the real paths). This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
 
 ```bash
 echo "plain text" | revdiff --stdin
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
 git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md
+
+# multi-file diff parsing — tree shows real paths, per-file annotations
+gh pr diff 123 | revdiff --stdin
+git format-patch -1 --stdout | revdiff --stdin
 ```
 
 ### Review Description

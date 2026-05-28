@@ -383,7 +383,8 @@ Several mutually exclusive input sources, validated at parse time:
 | Staged changes | `--staged` | `Git` or `Hg` | Cannot combine with refs |
 | All tracked files | `--all-files` / `-A` | `DirectoryReader` | Git only, not with refs/staged/only |
 | Single file(s) | `--only` / `-F` | `FileReader` | Not with include |
-| Stdin | `--stdin` | `StdinReader` | Reads before TUI, reopens `/dev/tty` |
+| Stdin (raw text) | `--stdin` | `StdinReader` | Sniff fails or returns `ErrNotUnifiedDiff` |
+| Stdin (multi-file diff) | `--stdin` | `MultiFileStdinReader` | Sniffs unified-diff signature, parses each section via `parseUnifiedDiff`; any per-section parse error fails the whole call so the caller falls back to `StdinReader` for the entire input |
 
 Filters stack: `--include` narrows first, then `--exclude` removes. Both wrap any renderer as decorators.
 

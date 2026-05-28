@@ -13,14 +13,17 @@ type rawFileSection struct {
 	diffText string     // full section text to pass to parseUnifiedDiff
 }
 
-// unifiedDiffSniffLimit caps how many leading bytes IsUnifiedDiff inspects.
+// unifiedDiffSniffLimit caps how many leading bytes isUnifiedDiff inspects.
 const unifiedDiffSniffLimit = 4096
 
-// IsUnifiedDiff reports whether the content looks like a git unified diff.
-// Detection criteria:
-//   - starts with "diff --git a/"
-//   - has "@@ -" hunk header pattern within the sniff limit
-func IsUnifiedDiff(content string) bool {
+// isUnifiedDiff reports whether the content looks like a git unified diff.
+// A line in the leading sniff window must START with "diff --git a/" (or the
+// quoted form "diff --git \"a/" used by git for paths containing spaces). The
+// previous substring check falsely classified prose that merely mentioned the
+// marker (e.g. a markdown file documenting diff output). No "@@ -" fallback:
+// revdiff only knows how to split sections by "diff --git" boundaries, so
+// hunk-only input would mis-render anyway.
+func isUnifiedDiff(content string) bool {
 	if content == "" {
 		return false
 	}
@@ -28,13 +31,12 @@ func IsUnifiedDiff(content string) bool {
 	// inspect only the leading bytes for efficiency
 	sample := content[:min(unifiedDiffSniffLimit, len(content))]
 
-	// primary: git diff header
-	if strings.Contains(sample, "diff --git a/") {
-		return true
+	for line := range strings.SplitSeq(sample, "\n") {
+		if strings.HasPrefix(line, "diff --git a/") || strings.HasPrefix(line, `diff --git "a/`) {
+			return true
+		}
 	}
-
-	// secondary: hunk header pattern
-	return strings.Contains(sample, "@@ -")
+	return false
 }
 
 // diffGitHeaderRe matches "diff --git a/path b/path", including quoted paths with spaces.

@@ -42,6 +42,25 @@ The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.con
 
 When the user asks to open an in-session review in revdiff (the conversation already contains review comments produced earlier in the session), write those comments to a temp file (e.g. `/tmp/revdiff-review-XXXXXX.md`) using the format documented in `references/usage.md` ("Output Format" section), then run the normal launcher flow (Step 1 ref detection, Step 2 invocation) with `--annotations=<temp-path>` appended. Step 3 onward handles the curated annotations as usual.
 
+## Reviewing a Diff That Lives Outside the Working Tree
+
+Some review targets are not the current repo state: a GitHub PR diff, a patch file on disk, or `git format-patch -1 --stdout` output. Pipe the unified diff into `revdiff --stdin` and the input is parsed as a real multi-file diff (one tree entry per file, hunk navigation, per-file annotations) instead of a context-only buffer. revdiff auto-detects the unified-diff signature; on a malformed patch the input falls back silently to raw-text mode.
+
+Use this instead of the normal launcher flow when:
+- the user asks to "review PR #N", "review this patch", "review `gh pr diff` output", or supplies a patch URL/path
+- the diff describes commits that are not checked out locally (e.g. someone else's branch on a remote-only PR)
+- the user pastes a unified diff and asks for a review of *that diff*, not the working tree
+
+Example invocations (route through the same launcher resolver as the normal flow):
+
+```bash
+gh pr diff 123 | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" --stdin
+git format-patch -1 --stdout | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" --stdin
+cat /tmp/feature.patch | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" --stdin
+```
+
+`--stdin` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`, so do not combine with the Step 1 ref detection — go directly to Step 3 once the launcher returns. Annotations come back keyed by the real file paths from the diff (not by `--stdin-name`).
+
 ## How It Works
 
 1. Launch revdiff in a terminal overlay (tmux popup, Zellij floating pane, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)

@@ -36,6 +36,7 @@ Tool examples:
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
+- `args: "--stdin"` with a unified diff piped to stdin (e.g. `gh pr diff 123`, `git format-patch -1 --stdout`, a `.patch` file): review a multi-file diff that lives outside the working tree — revdiff parses it as a real diff (one tree entry per file, hunk navigation, per-file annotations) instead of a context-only buffer
 
 After `revdiff_review` returns annotations, address them directly from the tool result content. Do not read revdiff history after a successful captured-annotation result. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that no annotations were captured and stop. Do not relaunch revdiff after any no-annotation result unless the user explicitly asks for another review.
 
@@ -75,6 +76,8 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 /revdiff HEAD~3 --description="why this refactor matters"
 /revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
 /revdiff main --annotations=/tmp/revdiff-review.md
+gh pr diff 123 | revdiff --stdin
+git format-patch -1 --stdout | revdiff --stdin
 ```
 
 ## Recommended natural-language examples

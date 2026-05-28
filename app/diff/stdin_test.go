@@ -1,6 +1,8 @@
 package diff
 
 import (
+	"errors"
+	"strings"
 	"testing"
 )
 
@@ -182,8 +184,111 @@ rename to new.go
 
 func TestMultiFileStdinReader_EmptyInput(t *testing.T) {
 	_, err := NewMultiFileStdinReader("")
+	if !errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("NewMultiFileStdinReader(\"\") error = %v, want ErrNotUnifiedDiff", err)
+	}
+}
+
+func TestMultiFileStdinReader_NotUnifiedDiffSentinel(t *testing.T) {
+	// plain text returns the sentinel so the caller can silently fall back
+	_, err := NewMultiFileStdinReader("just some plain text\nnothing diff-like here\n")
+	if !errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("plain text NewMultiFileStdinReader error = %v, want ErrNotUnifiedDiff", err)
+	}
+}
+
+func TestMultiFileStdinReader_ProseMentioningMarker(t *testing.T) {
+	// the marker is referenced inside a sentence (not at line start) — must NOT sniff true
+	content := "Documentation: the header `diff --git a/foo b/foo` separates file sections.\n" +
+		"It is followed by `@@ -1,1 +1,1 @@` and the hunk body.\n"
+	_, err := NewMultiFileStdinReader(content)
+	if !errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("prose mention NewMultiFileStdinReader error = %v, want ErrNotUnifiedDiff", err)
+	}
+}
+
+func TestMultiFileStdinReader_HunkOnlyNoDiffGit(t *testing.T) {
+	// hunk header without a "diff --git" boundary cannot be sectioned; reject sniff
+	content := "--- a/file.go\n+++ b/file.go\n@@ -1,1 +1,1 @@\n-old\n+new\n"
+	_, err := NewMultiFileStdinReader(content)
+	if !errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("hunk-only NewMultiFileStdinReader error = %v, want ErrNotUnifiedDiff", err)
+	}
+}
+
+func TestMultiFileStdinReader_MalformedHunkHeaderFails(t *testing.T) {
+	// hunk header start exceeds int64 range — matches the regex but Atoi fails,
+	// triggering parseUnifiedDiff's only practical error path. The whole call
+	// must fail so the caller falls back to raw-text mode rather than silently
+	// dropping the bad section.
+	content := `diff --git a/bad.go b/bad.go
+index abc..def
+--- a/bad.go
++++ b/bad.go
+@@ -99999999999999999999999,1 +1,1 @@
+-old
++new
+`
+	_, err := NewMultiFileStdinReader(content)
 	if err == nil {
-		t.Error("NewMultiFileStdinReader(\"\") should return error")
+		t.Fatal("malformed hunk header NewMultiFileStdinReader should return error")
+	}
+	if errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("malformed hunk header should NOT return ErrNotUnifiedDiff, got %v", err)
+	}
+}
+
+func TestMultiFileStdinReader_PartialFailureFailsWhole(t *testing.T) {
+	// first section parses cleanly, second section has a malformed hunk;
+	// reader must fail so the caller falls back rather than rendering a
+	// tree with one file silently dropped.
+	content := `diff --git a/good.go b/good.go
+index abc..def
+--- a/good.go
++++ b/good.go
+@@ -1,1 +1,1 @@
+-old
++new
+
+diff --git a/bad.go b/bad.go
+index def..ghi
+--- a/bad.go
++++ b/bad.go
+@@ -99999999999999999999999,1 +1,1 @@
+-old
++new
+`
+	_, err := NewMultiFileStdinReader(content)
+	if err == nil {
+		t.Fatal("partial failure NewMultiFileStdinReader should return error")
+	}
+	if !strings.Contains(err.Error(), "bad.go") {
+		t.Errorf("error %q should reference the failing section path", err)
+	}
+}
+
+func TestMultiFileStdinReader_RenameTargetWithSpaces(t *testing.T) {
+	content := `diff --git "a/old name.go" "b/new name.go"
+similarity index 100%
+rename from old name.go
+rename to new name.go
+`
+	r, err := NewMultiFileStdinReader(content)
+	if err != nil {
+		t.Fatalf("NewMultiFileStdinReader() error = %v", err)
+	}
+	files, err := r.ChangedFiles("", false)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("ChangedFiles() returned %d files, want 1", len(files))
+	}
+	if files[0].Path != "new name.go" {
+		t.Errorf("files[0].Path = %q, want %q", files[0].Path, "new name.go")
+	}
+	if files[0].Status != FileRenamed {
+		t.Errorf("files[0].Status = %v, want FileRenamed", files[0].Status)
 	}
 }
 
@@ -238,31 +343,3 @@ index abc..def
 	}
 }
 
-func TestNewStdinReaderFromString(t *testing.T) {
-	content := "line1\nline2\nline3\n"
-	name := "test.txt"
-
-	r, err := NewStdinReaderFromString(name, content)
-	if err != nil {
-		t.Fatalf("NewStdinReaderFromString() error = %v", err)
-	}
-
-	files, err := r.ChangedFiles("", false)
-	if err != nil {
-		t.Fatalf("ChangedFiles() error = %v", err)
-	}
-	if len(files) != 1 {
-		t.Errorf("ChangedFiles() returned %d files, want 1", len(files))
-	}
-	if files[0].Path != name {
-		t.Errorf("files[0].Path = %q, want %q", files[0].Path, name)
-	}
-
-	lines, err := r.FileDiff("", name, false, 0)
-	if err != nil {
-		t.Fatalf("FileDiff() error = %v", err)
-	}
-	if len(lines) == 0 {
-		t.Error("FileDiff() returned no lines")
-	}
-}

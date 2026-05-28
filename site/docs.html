@@ -265,12 +265,16 @@ revdiff --compare-old=a.txt --compare-new=b.txt</code></div>
         <p><code>--compare-old</code> and <code>--compare-new</code> must be used together and are mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, <code>--stdin</code>, <code>--include</code>, <code>--exclude</code>, and <code>--annotations</code>. All standard features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.</p>
 
         <h2 id="scratch-buffer">Scratch-buffer review</h2>
-        <p>Use <code>--stdin</code> to review arbitrary piped or redirected text as a single synthetic file. All lines are treated as context, so the normal single-file review flow still works: annotations, file-level notes, search, wrap, collapsed mode, and structured output.</p>
+        <p>Use <code>--stdin</code> to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with <code>diff --git a/</code> is found near the start, the input is parsed as a real multi-file diff with one tree entry per file, <code>+</code>/<code>-</code> markers, hunk navigation, word-diff, compact mode, and per-file annotations. Otherwise the input is shown as a single context-only buffer: all lines are treated as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.</p>
         <p><code>--stdin</code> is explicit, requires piped or redirected input, and is mutually exclusive with refs, <code>--staged</code>, <code>--only</code>, <code>--all-files</code>, <code>--include</code>, <code>--exclude</code>, and <code>--annotations</code>.</p>
-        <p>Use <code>--stdin-name</code> to control the synthetic filename for annotation output and extension-based highlighting or markdown TOC activation.</p>
+        <p>Use <code>--stdin-name</code> to control the synthetic filename for the context-only case (it is ignored in multi-file diff mode, where the tree shows the real paths). The name gives annotation output a stable key and enables extension-based highlighting or markdown TOC activation.</p>
         <div class="code-block"><code>echo "plain text" | revdiff --stdin
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md
-git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md</code></div>
+git show HEAD~1:README.md | revdiff --stdin --stdin-name README.md
+
+# multi-file diff parsing — tree shows real paths, per-file annotations
+gh pr diff 123 | revdiff --stdin
+git format-patch -1 --stdout | revdiff --stdin</code></div>
 
         <h2 id="description">Review description</h2>
         <p>Use <code>--description</code> (or <code>--description-file=path.md</code>) to attach prose context to a review. The text is rendered at the top of the info popup (<code>i</code> key) using the same markdown-highlighting path as <code>.md</code> files in the diff view. Useful when an agent or a script launches revdiff on your behalf and you come back to it later — the popup tells you what the change is and why.</p>
