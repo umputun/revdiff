@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -49,6 +50,11 @@ func TestIsUnifiedDiff(t *testing.T) {
 			name:    "marker only at line start but after blank line",
 			content: "\n\ndiff --git a/foo b/foo\n@@ -1,1 +1,1 @@\n",
 			want:    true,
+		},
+		{
+			name:    "marker pushed past sniff window by long preamble",
+			content: strings.Repeat("preamble line that pads past the 4 KiB sniff cap\n", 100) + "diff --git a/file.go b/file.go\n",
+			want:    false, // documented tradeoff: format-patch output with very long bodies misses the sniff
 		},
 	}
 
@@ -249,9 +255,24 @@ func TestCleanPath(t *testing.T) {
 			want:  "path with spaces/file.go",
 		},
 		{
+			name:  "quoted b/path with spaces",
+			input: `"b/path with spaces/file.go"`,
+			want:  "path with spaces/file.go",
+		},
+		{
 			name:  "no prefix",
 			input: "path/file.go",
 			want:  "path/file.go",
+		},
+		{
+			name:  "top-level b dir preserved",
+			input: "b/b/weird.go",
+			want:  "b/weird.go",
+		},
+		{
+			name:  "top-level a dir preserved",
+			input: "a/a/weird.go",
+			want:  "a/weird.go",
 		},
 	}
 

@@ -142,4 +142,37 @@ index abc..def
 		_, ok := r.(*diff.StdinReader)
 		assert.True(t, ok, "expected *StdinReader, got %T", r)
 	})
+
+	t.Run("valid + malformed section falls back to raw text", func(t *testing.T) {
+		// first section is a valid hunk, second is a bare `diff --git` boundary
+		// with no body. The whole reader must fail so the caller gets a raw-text
+		// StdinReader showing the full input, not a one-file tree silently
+		// dropping the second section.
+		content := "diff --git a/good.go b/good.go\n" +
+			"index abc..def\n" +
+			"--- a/good.go\n" +
+			"+++ b/good.go\n" +
+			"@@ -1,1 +1,1 @@\n" +
+			"-old\n" +
+			"+new\n" +
+			"\n" +
+			"diff --git a/orphan b/orphan\n"
+		r, err := selectStdinRenderer(options{Stdin: true, StdinName: "mixed.diff"}, content)
+		require.NoError(t, err)
+		_, ok := r.(*diff.StdinReader)
+		assert.True(t, ok, "expected *StdinReader fallback, got %T", r)
+	})
+
+	t.Run("line-start diff --git with no hunk falls back to raw text", func(t *testing.T) {
+		// document starts with what looks like a diff header but has no hunks
+		// or structural markers. Without the hunkless-section guard the tree
+		// would silently render an empty file entry, hiding the real text.
+		content := "diff --git a/note b/note\n" +
+			"this is actually free-form notes that just happen to start with\n" +
+			"a line that looks like a diff boundary; there are no hunks here.\n"
+		r, err := selectStdinRenderer(options{Stdin: true, StdinName: "note.txt"}, content)
+		require.NoError(t, err)
+		_, ok := r.(*diff.StdinReader)
+		assert.True(t, ok, "expected *StdinReader fallback, got %T", r)
+	})
 }

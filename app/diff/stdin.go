@@ -1,8 +1,6 @@
 package diff
 
-import (
-	"io"
-)
+import "io"
 
 // StdinReader is an in-memory renderer for scratch-buffer review mode.
 type StdinReader struct {

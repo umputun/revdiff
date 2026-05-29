@@ -3,6 +3,7 @@ package diff
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrNotUnifiedDiff is returned by NewMultiFileStdinReader when the input does
@@ -51,11 +52,22 @@ func NewMultiFileStdinReader(content string) (*MultiFileStdinReader, error) {
 			// for the entire input rather than silently dropping one file's hunks.
 			return nil, fmt.Errorf("parse section %q: %w", sec.path, parseErr)
 		}
+		// A zero-line section is acceptable only when the header records a
+		// structural change (rename, mode flip, new/deleted empty file) — those
+		// surface in the file tree via status alone. A zero-line section with
+		// no structural marker means we matched a stray "diff --git" line in
+		// prose; failing here lets the caller fall back to raw text instead of
+		// hiding the real stdin behind an empty tree entry.
+		if len(lines) == 0 && !hasStructuralChange(sec.diffText) {
+			return nil, fmt.Errorf("section %q has no renderable content", sec.path)
+		}
+		if _, exists := r.sections[sec.path]; !exists {
+			r.order = append(r.order, sec.path)
+		}
 		r.sections[sec.path] = parsedSection{
 			lines:  lines,
 			status: sec.status,
 		}
-		r.order = append(r.order, sec.path)
 	}
 
 	if len(r.sections) == 0 {
@@ -63,6 +75,33 @@ func NewMultiFileStdinReader(content string) (*MultiFileStdinReader, error) {
 	}
 
 	return r, nil
+}
+
+// hasStructuralChange reports whether section text carries a marker that
+// renders meaningfully in the tree even without diff lines: a hunk header, a
+// binary marker, a mode flip, or a rename/copy header. Used to keep
+// rename-only / mode-only / new-empty / deleted-empty sections valid while
+// rejecting bare "diff --git" lines surrounded by prose.
+func hasStructuralChange(section string) bool {
+	for line := range strings.SplitSeq(section, "\n") {
+		switch {
+		case strings.HasPrefix(line, "@@ "):
+			return true
+		case strings.HasPrefix(line, "Binary files "):
+			return true
+		case strings.HasPrefix(line, "new file mode"),
+			strings.HasPrefix(line, "deleted file mode"),
+			strings.HasPrefix(line, "old mode "),
+			strings.HasPrefix(line, "new mode "):
+			return true
+		case strings.HasPrefix(line, "rename from"),
+			strings.HasPrefix(line, "rename to"),
+			strings.HasPrefix(line, "copy from"),
+			strings.HasPrefix(line, "copy to"):
+			return true
+		}
+	}
+	return false
 }
 
 // ChangedFiles returns file entries in original diff order.

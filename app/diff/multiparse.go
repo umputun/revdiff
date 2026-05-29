@@ -2,6 +2,7 @@ package diff
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -14,6 +15,12 @@ type rawFileSection struct {
 }
 
 // unifiedDiffSniffLimit caps how many leading bytes isUnifiedDiff inspects.
+// 4 KiB comfortably covers `git diff` output (the boundary marker is the very
+// first line) but can miss `git format-patch` output when a long commit body
+// or large mail header pushes the first `diff --git` past this window — those
+// inputs fall back to raw-text rendering. Raising the cap trades worst-case
+// sniff cost for broader format-patch coverage; pick a larger value if that
+// tradeoff changes.
 const unifiedDiffSniffLimit = 4096
 
 // isUnifiedDiff reports whether the content looks like a git unified diff.
@@ -23,6 +30,9 @@ const unifiedDiffSniffLimit = 4096
 // marker (e.g. a markdown file documenting diff output). No "@@ -" fallback:
 // revdiff only knows how to split sections by "diff --git" boundaries, so
 // hunk-only input would mis-render anyway.
+//
+// Only the first unifiedDiffSniffLimit bytes are inspected — see the const
+// comment for the format-patch caveat.
 func isUnifiedDiff(content string) bool {
 	if content == "" {
 		return false
@@ -51,6 +61,11 @@ var diffGitHeaderRe = regexp.MustCompile(`^diff --git ("?a/[^"]*"?|"?a/.*?") ("?
 // each section includes the full diff header through to the next file boundary
 // (next "diff --git" or end of input). path and status are resolved once per
 // section by parseFileHeader — there is no separate inline header parse.
+//
+// A section whose header yields no parseable new-side path fails the whole
+// call so the caller can fall back to raw-text mode. Silently skipping the
+// section would let a single crafted "diff --git" line followed by prose
+// drop real content from the rendering with no in-TUI signal.
 func splitMultiFileDiff(raw string) ([]rawFileSection, error) {
 	if raw == "" {
 		return nil, errors.New("empty input")
@@ -60,24 +75,27 @@ func splitMultiFileDiff(raw string) ([]rawFileSection, error) {
 	var current strings.Builder
 	inSection := false
 
-	// flush appends the accumulated section text, resolving path/status from its header.
-	// sections without a parseable new-side path are skipped.
-	flush := func() {
+	// flush resolves path/status from the accumulated section text and appends
+	// it. An empty path is a hard failure: the caller falls back to raw-text mode.
+	flush := func() error {
 		if !inSection {
-			return
+			return nil
 		}
 		text := current.String()
 		path, status := parseFileHeader(text)
 		if path == "" {
-			return
+			return fmt.Errorf("section %q has no parseable new-side path", firstLine(text))
 		}
 		sections = append(sections, rawFileSection{path: path, status: status, diffText: text})
+		return nil
 	}
 
 	for line := range strings.SplitSeq(raw, "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
 			// new file boundary: flush the previous section and start a fresh one
-			flush()
+			if err := flush(); err != nil {
+				return nil, err
+			}
 			current.Reset()
 			inSection = true
 		}
@@ -86,7 +104,9 @@ func splitMultiFileDiff(raw string) ([]rawFileSection, error) {
 			current.WriteString("\n")
 		}
 	}
-	flush()
+	if err := flush(); err != nil {
+		return nil, err
+	}
 
 	if len(sections) == 0 {
 		return nil, errors.New("no file sections found")
@@ -95,13 +115,34 @@ func splitMultiFileDiff(raw string) ([]rawFileSection, error) {
 	return sections, nil
 }
 
+// firstLine returns the first line of s, used to identify a malformed section
+// in error messages without dumping the whole diff text into the log.
+func firstLine(s string) string {
+	first, _, _ := strings.Cut(s, "\n")
+	return first
+}
+
 // cleanPath strips a leading "a/" or "b/" prefix and surrounding quotes from a path.
-// Handles both "b/path with spaces" (quotes outside prefix) and b/"path with spaces"
-// (quotes inside prefix) by stripping the prefix, then the quotes, then the prefix again.
+// Handles both git path forms:
+//   - "b/path with spaces" — quotes wrap the prefix; strip quotes first, then prefix
+//   - b/"path with spaces" — prefix wraps the quotes; strip prefix first, then quotes
+//
+// Strips the prefix exactly once so a legitimate top-level directory literally
+// named "a" or "b" (e.g. "b/b/weird.go" representing repo path b/weird.go)
+// resolves to "b/weird.go", not "weird.go".
 func cleanPath(path string) string {
-	path = strings.TrimPrefix(strings.TrimPrefix(path, "b/"), "a/")
-	path = strings.Trim(path, `"`)
-	return strings.TrimPrefix(strings.TrimPrefix(path, "b/"), "a/")
+	// outer-quotes form: "a/foo" or "b/foo"
+	if len(path) >= 2 && path[0] == '"' && path[len(path)-1] == '"' {
+		path = path[1 : len(path)-1]
+	}
+	switch {
+	case strings.HasPrefix(path, "a/"):
+		path = path[2:]
+	case strings.HasPrefix(path, "b/"):
+		path = path[2:]
+	}
+	// inner-quotes form: prefix already stripped, surviving quotes wrap the body
+	return strings.Trim(path, `"`)
 }
 
 // parseFileHeader extracts the new-side path and change status from a diff
@@ -139,9 +180,10 @@ func parseFileHeader(section string) (path string, status FileStatus) {
 				}
 			}
 		case strings.HasPrefix(line, "rename to "):
-			// rename target overrides the diff --git path
-			if parts := strings.Fields(line); len(parts) >= 3 {
-				path = strings.Join(parts[2:], " ")
+			// rename target overrides the diff --git path; route through cleanPath
+			// so quoted paths shed their quotes like every other branch does.
+			if rest := strings.TrimSpace(strings.TrimPrefix(line, "rename to ")); rest != "" {
+				path = cleanPath(rest)
 			}
 		case strings.HasPrefix(line, "+++ "):
 			// fallback: derive the path from the +++ line when the header lacked one

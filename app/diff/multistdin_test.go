@@ -292,6 +292,162 @@ rename to new name.go
 	}
 }
 
+func TestMultiFileStdinReader_RenameTargetQuoted(t *testing.T) {
+	// git's actual quoted format for paths with special chars; the rename-to
+	// line carries the quotes. The branch must route through cleanPath so the
+	// resolved tree entry has no surviving quote chars.
+	content := "diff --git \"a/old name.go\" \"b/new name.go\"\n" +
+		"similarity index 100%\n" +
+		"rename from \"old name.go\"\n" +
+		"rename to \"new name.go\"\n"
+	r, err := NewMultiFileStdinReader(content)
+	if err != nil {
+		t.Fatalf("NewMultiFileStdinReader() error = %v", err)
+	}
+	files, err := r.ChangedFiles("", false)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("ChangedFiles() returned %d files, want 1", len(files))
+	}
+	if files[0].Path != "new name.go" {
+		t.Errorf("files[0].Path = %q, want %q", files[0].Path, "new name.go")
+	}
+}
+
+func TestMultiFileStdinReader_HunklessSectionFails(t *testing.T) {
+	// section is just "diff --git a/foo b/foo" with no body — no hunks, no
+	// structural change marker. Currently produced an empty tree entry,
+	// hiding real prose behind it; must now fail so the caller falls back.
+	content := "diff --git a/foo b/foo\nsome prose follows that the reader has no way to render\n"
+	_, err := NewMultiFileStdinReader(content)
+	if err == nil {
+		t.Fatal("hunkless section NewMultiFileStdinReader should return error")
+	}
+	if errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("hunkless section should NOT return ErrNotUnifiedDiff, got %v", err)
+	}
+}
+
+func TestMultiFileStdinReader_ValidPlusHunklessFailsWhole(t *testing.T) {
+	// first section parses cleanly; second is a bare "diff --git" boundary
+	// with no body. Whole reader must fail rather than render a one-file tree
+	// with the second file silently dropped.
+	content := `diff --git a/good.go b/good.go
+index abc..def
+--- a/good.go
++++ b/good.go
+@@ -1,1 +1,1 @@
+-old
++new
+
+diff --git a/empty b/empty
+`
+	_, err := NewMultiFileStdinReader(content)
+	if err == nil {
+		t.Fatal("valid + hunkless NewMultiFileStdinReader should return error")
+	}
+}
+
+func TestMultiFileStdinReader_EmptyPathSectionFailsWhole(t *testing.T) {
+	// first section parses cleanly; second `diff --git` line is malformed so
+	// parseFileHeader yields no path. The split layer must fail the whole
+	// call so the caller falls back to raw text instead of silently dropping
+	// the second section.
+	content := `diff --git a/good.go b/good.go
+index abc..def
+--- a/good.go
++++ b/good.go
+@@ -1,1 +1,1 @@
+-old
++new
+
+diff --git malformed-no-prefix
+`
+	_, err := NewMultiFileStdinReader(content)
+	if err == nil {
+		t.Fatal("empty-path section NewMultiFileStdinReader should return error")
+	}
+	if errors.Is(err, ErrNotUnifiedDiff) {
+		t.Errorf("empty-path section should NOT return ErrNotUnifiedDiff, got %v", err)
+	}
+}
+
+func TestMultiFileStdinReader_NewEmptyFileSucceeds(t *testing.T) {
+	// new empty file: zero hunks but the `new file mode` marker means the
+	// section still renders meaningfully in the tree. Must NOT trip the
+	// hunkless-section guard.
+	content := `diff --git a/empty.txt b/empty.txt
+new file mode 100644
+index 0000000..e69de29
+`
+	r, err := NewMultiFileStdinReader(content)
+	if err != nil {
+		t.Fatalf("new empty file NewMultiFileStdinReader error = %v", err)
+	}
+	files, err := r.ChangedFiles("", false)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "empty.txt" || files[0].Status != FileAdded {
+		t.Errorf("ChangedFiles() = %+v, want one FileAdded entry for empty.txt", files)
+	}
+}
+
+func TestMultiFileStdinReader_ModeOnlyChangeSucceeds(t *testing.T) {
+	// mode-only change: zero hunks but `old mode` / `new mode` markers mean
+	// the section still renders meaningfully in the tree.
+	content := `diff --git a/script.sh b/script.sh
+old mode 100644
+new mode 100755
+`
+	r, err := NewMultiFileStdinReader(content)
+	if err != nil {
+		t.Fatalf("mode-only NewMultiFileStdinReader error = %v", err)
+	}
+	files, err := r.ChangedFiles("", false)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "script.sh" {
+		t.Errorf("ChangedFiles() = %+v, want one entry for script.sh", files)
+	}
+}
+
+func TestMultiFileStdinReader_DuplicatePathDeduped(t *testing.T) {
+	// crafted diff with two sections resolving to the same path. The tree
+	// must list the path once; without dedupe the user would see a duplicate
+	// row in the navigation pane.
+	content := `diff --git a/same.go b/same.go
+index abc..def
+--- a/same.go
++++ b/same.go
+@@ -1,1 +1,1 @@
+-first
++first-changed
+
+diff --git a/same.go b/same.go
+index def..ghi
+--- a/same.go
++++ b/same.go
+@@ -1,1 +1,1 @@
+-second
++second-changed
+`
+	r, err := NewMultiFileStdinReader(content)
+	if err != nil {
+		t.Fatalf("duplicate path NewMultiFileStdinReader error = %v", err)
+	}
+	files, err := r.ChangedFiles("", false)
+	if err != nil {
+		t.Fatalf("ChangedFiles() error = %v", err)
+	}
+	if len(files) != 1 {
+		t.Errorf("ChangedFiles() returned %d entries, want 1 (deduped)", len(files))
+	}
+}
+
 func TestMultiFileStdinReader_PreservesOrder(t *testing.T) {
 	content := `diff --git a/z.go b/z.go
 index abc..def

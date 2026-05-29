@@ -105,7 +105,7 @@ func readStdinCapped(r io.Reader) (string, error) {
 // multi-file unified-diff reader when the content sniffs as a diff and parses
 // cleanly, otherwise the raw-text StdinReader. Non-sentinel errors from the
 // multi-file path are logged before fall-through so partial parse failures
-// are visible to operators despite the alt-screen swallowing stderr.
+// are surfaced rather than silently routed to raw text.
 func selectStdinRenderer(opts options, content string) (ui.Renderer, error) {
 	multi, mErr := diff.NewMultiFileStdinReader(content)
 	switch {
