@@ -12,6 +12,8 @@ import (
 
 const scrollStep = 4 // horizontal scroll step in characters
 
+const diffScrollStep = 2 // vertical diff viewport scroll step in lines
+
 // cursorDiffLine returns the DiffLine at the current cursor position, if valid.
 func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
 	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
@@ -487,6 +489,18 @@ func (m *Model) handleHorizontalScroll(direction int) {
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
+// scrollDiffViewportLine scrolls the diff viewport by delta lines, pinning the
+// hidden cursor back into view. No-op if the offset can't change.
+func (m *Model) scrollDiffViewportLine(delta int) {
+	if !m.scrollDiffViewportBy(delta) {
+		return
+	}
+	if m.pinDiffCursorTo(m.layout.viewport.YOffset) {
+		m.syncTOCActiveSection()
+		m.layout.viewport.SetContent(m.renderDiff())
+	}
+}
+
 // handleDiffAction dispatches a resolved action when the diff pane is focused.
 func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action {
@@ -512,6 +526,10 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		m.moveDiffCursorPageUp()
 	case keymap.ActionHalfPageUp:
 		m.moveDiffCursorHalfPageUp()
+	case keymap.ActionScrollDiffDown:
+		m.scrollDiffViewportLine(diffScrollStep)
+	case keymap.ActionScrollDiffUp:
+		m.scrollDiffViewportLine(-diffScrollStep)
 	case keymap.ActionHome:
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
@@ -544,6 +562,20 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 // When markdown TOC is active, routes to TOC navigation so chord-resolved and
 // keymap-resolved actions reach the TOC without re-resolving from the raw key.
 func (m Model) handleTreeAction(action keymap.Action) (tea.Model, tea.Cmd) {
+	// Shift+J / Shift+K scroll the diff pane while the tree (or TOC) keeps
+	// focus. Handled before the mdTOC dispatch and returned early so the
+	// tree-navigation tail (EnsureVisible, loadSelectedIfChanged) does not run —
+	// the tree selection is unchanged.
+	switch action {
+	case keymap.ActionScrollDiffDown:
+		m.scrollDiffViewportLine(diffScrollStep)
+		return m, nil
+	case keymap.ActionScrollDiffUp:
+		m.scrollDiffViewportLine(-diffScrollStep)
+		return m, nil
+	default: // all other actions fall through to tree/TOC navigation below
+	}
+
 	// when mdTOC is active, route navigation to TOC instead of file tree
 	if m.file.mdTOC != nil {
 		return m.handleTOCNav(action)

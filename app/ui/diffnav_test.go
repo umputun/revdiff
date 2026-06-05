@@ -2861,3 +2861,82 @@ func TestHandleDiffAction_ScrollBottom(t *testing.T) {
 	assert.Equal(t, expected, got.layout.viewport.YOffset, "scroll_bottom should place cursor on last visible row")
 	assert.Equal(t, 50, got.nav.diffCursor, "scroll action must not move cursor")
 }
+
+// J/K scroll the diff viewport by 2 lines regardless of which pane holds focus,
+// without moving focus or changing the tree selection.
+func TestModel_JKScrollsDiffViewport(t *testing.T) {
+	lines := make([]diff.DiffLine, 200)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	focusCases := []struct {
+		name  string
+		focus pane
+	}{
+		{"tree focused", paneTree},
+		{"diff focused", paneDiff},
+	}
+	for _, tc := range focusCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines})
+			result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+			model := result.(Model)
+			result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+			model = result.(Model)
+			model.tree = testNewFileTree([]string{"a.go", "b.go"})
+			model.layout.focus = tc.focus
+
+			require.Equal(t, 0, model.layout.viewport.YOffset)
+			require.Equal(t, "a.go", model.tree.SelectedFile())
+
+			// Shift+J scrolls the diff viewport down by 2 lines.
+			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+			model = result.(Model)
+			assert.Equal(t, 2, model.layout.viewport.YOffset, "J should scroll diff viewport down 2 lines")
+			assert.Equal(t, tc.focus, model.layout.focus, "focus must not change")
+			assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree selection must not change")
+
+			// Shift+K scrolls back up by 2 lines.
+			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
+			model = result.(Model)
+			assert.Equal(t, 0, model.layout.viewport.YOffset, "K should scroll diff viewport back up 2 lines")
+			assert.Equal(t, tc.focus, model.layout.focus, "focus must not change")
+			assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree selection must not change")
+		})
+	}
+}
+
+// When the diff fits the viewport the offset can't change, so J is a no-op in
+// either focus mode.
+func TestModel_JKScrollDiffNoOpWhenContentFits(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "line", ChangeType: diff.ChangeContext},
+	}
+
+	focusCases := []struct {
+		name  string
+		focus pane
+	}{
+		{"tree focused", paneTree},
+		{"diff focused", paneDiff},
+	}
+	for _, tc := range focusCases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines})
+			result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+			model := result.(Model)
+			result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+			model = result.(Model)
+			model.tree = testNewFileTree([]string{"a.go", "b.go"})
+			model.layout.focus = tc.focus
+
+			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
+			model = result.(Model)
+			assert.Equal(t, 0, model.layout.viewport.YOffset, "J must be a no-op when the diff fits the viewport")
+			assert.Equal(t, tc.focus, model.layout.focus)
+			assert.Equal(t, "a.go", model.tree.SelectedFile())
+		})
+	}
+}
