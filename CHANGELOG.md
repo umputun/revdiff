@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5.1 - 2026-06-06
+
+### Bug Fixes
+
+- show rename origin and render rename-aware diffs #223 @umputun
+
+### Improvements
+
+- bump github.com/mattn/go-runewidth from 0.0.23 to 0.0.24 #219 @dependabot
+- bump github.com/alecthomas/chroma/v2 from 2.25.0 to 2.26.1 #218 @dependabot
+
+### Other
+
+- bump claude plugin to 0.8.13 and pi package to 0.3.1 4843785 @umputun
+
 ## v1.5.0 - 2026-05-31
 
 ### New Features
