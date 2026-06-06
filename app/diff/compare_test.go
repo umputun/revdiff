@@ -28,7 +28,7 @@ func TestCompareReader_FileDiff_Normal(t *testing.T) {
 	require.NoError(t, os.WriteFile(newPath, []byte("line1\nchanged\nline3\n"), 0o600))
 
 	r := NewCompareReader(oldPath, newPath)
-	lines, err := r.FileDiff("", "", false, 0)
+	lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -55,7 +55,7 @@ func TestCompareReader_FileDiff_Identical(t *testing.T) {
 	require.NoError(t, os.WriteFile(newPath, []byte(content), 0o600))
 
 	r := NewCompareReader(oldPath, newPath)
-	lines, err := r.FileDiff("", "", false, 0)
+	lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 	require.NoError(t, err)
 	// identical files produce empty diff output
 	assert.Empty(t, lines)
@@ -73,7 +73,7 @@ func TestCompareReader_FileDiff_CompactMode(t *testing.T) {
 	require.NoError(t, os.WriteFile(newPath, []byte(newContent), 0o600))
 
 	r := NewCompareReader(oldPath, newPath)
-	lines, err := r.FileDiff("", "", false, 3)
+	lines, err := r.FileDiff(FileDiffRequest{Path: "", ContextLines: 3})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -105,7 +105,7 @@ func TestCompareReader_FileDiff_FullFileMode(t *testing.T) {
 
 	r := NewCompareReader(oldPath, newPath)
 	// contextLines=0 means full-file mode (no compact dividers)
-	lines, err := r.FileDiff("", "", false, 0)
+	lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -116,7 +116,7 @@ func TestCompareReader_FileDiff_FullFileMode(t *testing.T) {
 
 func TestCompareReader_FileDiff_ErrorMissingFile(t *testing.T) {
 	r := NewCompareReader("/nonexistent/old.txt", "/nonexistent/new.txt")
-	_, err := r.FileDiff("", "", false, 0)
+	_, err := r.FileDiff(FileDiffRequest{Path: ""})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "git diff --no-index")
 }
@@ -163,7 +163,7 @@ func TestCompareReader_FileDiff_PathsWithColons(t *testing.T) {
 	require.NoError(t, os.WriteFile(newPath, []byte("alpha\ngamma\n"), 0o600))
 
 	r := NewCompareReader(oldPath, newPath)
-	lines, err := r.FileDiff("", "", false, 0)
+	lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -190,7 +190,7 @@ func TestCompareReader_FileDiff_BinaryFiles(t *testing.T) {
 	require.NoError(t, os.WriteFile(newPath, []byte{0x00, 0x01, 0xFF, 0x03, 0x04}, 0o600))
 
 	r := NewCompareReader(oldPath, newPath)
-	lines, err := r.FileDiff("", "", false, 0)
+	lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 	// git emits "Binary files X and Y differ" on stdout with exit 1; diffError
 	// treats this as success and parseUnifiedDiff produces a single
 	// "(binary file)" placeholder row (Partial=true) — no add/remove rows,
@@ -227,7 +227,7 @@ func TestCompareReader_FileDiff_NoTrailingNewline(t *testing.T) {
 			require.NoError(t, os.WriteFile(newPath, []byte(tc.newContent), 0o600))
 
 			r := NewCompareReader(oldPath, newPath)
-			lines, err := r.FileDiff("", "", false, 0)
+			lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 			require.NoError(t, err)
 
 			var adds, removes int
@@ -251,7 +251,7 @@ func TestCompareReader_FileDiff_GitErrorSurfacesStderr(t *testing.T) {
 	// stderr; diffError must surface that text rather than fall back to the
 	// bare "exit N" branch.
 	r := NewCompareReader("/nonexistent/old-only-here.txt", "/nonexistent/new-only-here.txt")
-	_, err := r.FileDiff("", "", false, 0)
+	_, err := r.FileDiff(FileDiffRequest{Path: ""})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "git diff --no-index")
 	// the error must carry stderr content. accept either git's path-echo or a
@@ -297,7 +297,7 @@ func TestCompareReader_FileDiff_Symlinks(t *testing.T) {
 	// at least one add and one remove; assert that, not exact counts.
 	t.Run("both symlinks", func(t *testing.T) {
 		r := NewCompareReader(linkOld, linkNew)
-		lines, err := r.FileDiff("", "", false, 0)
+		lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 		require.NoError(t, err)
 		adds, removes := countAddRemove(t, lines)
 		assert.GreaterOrEqual(t, adds, 1, "should produce at least one add")
@@ -306,7 +306,7 @@ func TestCompareReader_FileDiff_Symlinks(t *testing.T) {
 
 	t.Run("mixed symlink and regular", func(t *testing.T) {
 		r := NewCompareReader(linkOld, realNew)
-		lines, err := r.FileDiff("", "", false, 0)
+		lines, err := r.FileDiff(FileDiffRequest{Path: ""})
 		require.NoError(t, err)
 		adds, removes := countAddRemove(t, lines)
 		assert.GreaterOrEqual(t, adds, 1)

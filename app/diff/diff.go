@@ -64,8 +64,9 @@ const (
 
 // FileEntry represents a file with its change status from a VCS diff.
 type FileEntry struct {
-	Path   string     // file path relative to repo root
-	Status FileStatus // file change status, empty for non-git renderers
+	Path    string     // file path relative to repo root
+	OldPath string     // rename origin, empty for non-renames
+	Status  FileStatus // file change status, empty for non-git renderers
 }
 
 // FileEntryPaths extracts just the paths from a slice of FileEntry.
@@ -75,6 +76,16 @@ func FileEntryPaths(entries []FileEntry) []string {
 		paths[i] = e.Path
 	}
 	return paths
+}
+
+// FileDiffRequest carries the inputs FileDiff needs to render one file's diff.
+// OldPath is the rename origin (empty for non-renames); only the Git renderer consumes it.
+type FileDiffRequest struct {
+	Ref          string
+	Path         string // new/current path
+	OldPath      string // rename origin; empty when not a rename
+	Staged       bool
+	ContextLines int
 }
 
 // CountChanges tallies ChangeAdd and ChangeRemove lines in a DiffLine slice.
@@ -357,7 +368,9 @@ func (g *Git) UntrackedFiles() ([]string, error) {
 // Uses -z for NUL-terminated output to handle filenames with special characters.
 func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 	args := g.diffArgs(ref, staged)
-	args = append(args, "--name-status", "-z")
+	// force rename detection (-M) so OldPath is populated regardless of the user's
+	// diff.renames config; FileDiff relies on OldPath to pair the rename
+	args = append(args, "--name-status", "-M", "-z")
 
 	out, err := g.runGit(args...)
 	if err != nil {
@@ -378,9 +391,12 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 		}
 		path := fields[i]
 		i++
-		// for renames/copies (R100, C100), consume two paths, use the new name
+		// for renames/copies (R100, C100), consume two paths: the first is the
+		// rename origin (old path), the second is the new/current name
+		var oldPath string
 		if rawStatus[0] == 'R' || rawStatus[0] == 'C' {
 			if i < len(fields) {
+				oldPath = path
 				path = fields[i]
 				i++
 			}
@@ -389,7 +405,7 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 		if len(rawStatus) > 1 {
 			rawStatus = rawStatus[:1]
 		}
-		entries = append(entries, FileEntry{Path: path, Status: FileStatus(rawStatus)})
+		entries = append(entries, FileEntry{Path: path, OldPath: oldPath, Status: FileStatus(rawStatus)})
 	}
 	return entries, nil
 }
@@ -400,20 +416,21 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 // For binary files, it returns a single placeholder line with size delta information.
 // contextLines controls surrounding context: 0 or >= fullContextSentinel requests full-file
 // context; positive values below the sentinel request that many lines on each side of a hunk.
-func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
-	args := g.diffArgs(ref, staged)
-	args = append(args, unifiedContextArg(contextLines), "--", file)
+func (g *Git) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	args := g.diffArgs(req.Ref, req.Staged)
+	args = append(args, unifiedContextArg(req.ContextLines))
+	args = append(args, g.pathArgs(req)...)
 
 	out, err := g.runGit(args...)
 	if err != nil {
-		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
+		return nil, fmt.Errorf("get file diff for %s: %w", req.Path, err)
 	}
 
 	// trailing divider is only meaningful in compact mode — full-file mode always
 	// reaches EOF, so probing the old-file size would be a wasted subprocess.
 	total := 0
-	if contextLines > 0 && contextLines < fullContextSentinel {
-		total = g.totalOldLines(ref, file, staged)
+	if req.ContextLines > 0 && req.ContextLines < fullContextSentinel {
+		total = g.totalOldLines(req)
 	}
 	lines, err := parseUnifiedDiff(out, total)
 	if err != nil {
@@ -422,12 +439,23 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 
 	// enrich binary placeholder with size delta from git diff --stat
 	if len(lines) == 1 && lines[0].IsBinary {
-		if desc := g.binarySizeDesc(ref, file, staged); desc != "" {
+		if desc := g.binarySizeDesc(req); desc != "" {
 			lines[0].Content = desc
 		}
 	}
 
 	return lines, nil
+}
+
+// pathArgs builds the pathspec suffix for a file diff. For a rename (OldPath set
+// and distinct from Path) it returns "-M -- <old> <new>" so git pairs the rename
+// into a minimal diff instead of rendering the file as brand-new; otherwise it
+// returns "-- <path>".
+func (g *Git) pathArgs(req FileDiffRequest) []string {
+	if req.OldPath != "" && req.OldPath != req.Path {
+		return []string{"-M", "--", req.OldPath, req.Path}
+	}
+	return []string{"--", req.Path}
 }
 
 // totalOldLines returns the line count of the pre-change version of file, used by
@@ -444,16 +472,23 @@ func (g *Git) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffL
 //
 // For triple-dot ranges the left operand is an approximation of the true old side
 // (merge-base(A,B)); accurate enough for the informational trailing-divider count.
-func (g *Git) totalOldLines(ref, file string, staged bool) int {
-	oldRef := ref
-	if left, _, ok := strings.Cut(ref, "..."); ok {
+//
+// For renames the old side lives at req.OldPath, so the line count is read from
+// there rather than from the new path.
+func (g *Git) totalOldLines(req FileDiffRequest) int {
+	oldRef := req.Ref
+	if left, _, ok := strings.Cut(req.Ref, "..."); ok {
 		oldRef = left
 	}
 	if left, _, ok := strings.Cut(oldRef, ".."); ok {
 		oldRef = left
 	}
-	if oldRef == "" && staged {
+	if oldRef == "" && req.Staged {
 		oldRef = "HEAD"
+	}
+	file := req.Path
+	if req.OldPath != "" {
+		file = req.OldPath
 	}
 	// `git show :path` (empty oldRef) shows the index version of the file
 	out, err := g.runGit("show", oldRef+":"+file)
@@ -509,9 +544,10 @@ func runVCS(workDir, binary string, args ...string) (string, error) {
 // binarySizeDesc runs git diff --stat for a binary file and returns a human-readable
 // description like "(new binary file, 2.0 KB)" or "(binary file: 1.0 KB → 2.0 KB)".
 // Returns empty string if stat info is unavailable.
-func (g *Git) binarySizeDesc(ref, file string, staged bool) string {
-	args := g.diffArgs(ref, staged)
-	args = append(args, "--stat", "--summary", "--", file)
+func (g *Git) binarySizeDesc(req FileDiffRequest) string {
+	args := g.diffArgs(req.Ref, req.Staged)
+	args = append(args, "--stat", "--summary")
+	args = append(args, g.pathArgs(req)...)
 
 	out, err := g.runGit(args...)
 	if err != nil {

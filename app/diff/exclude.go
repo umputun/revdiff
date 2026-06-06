@@ -12,7 +12,7 @@ import "fmt"
 // they have no hunks.
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]FileEntry, error)
-	FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error)
+	FileDiff(req FileDiffRequest) ([]DiffLine, error)
 }
 
 // ExcludeFilter wraps a renderer and filters out files matching any of the given prefixes.
@@ -44,11 +44,11 @@ func (ef *ExcludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, err
 }
 
 // FileDiff delegates directly to the inner renderer without filtering.
-// contextLines is passed through unchanged.
-func (ef *ExcludeFilter) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
-	lines, err := ef.inner.FileDiff(ref, file, staged, contextLines)
+// req is passed through unchanged.
+func (ef *ExcludeFilter) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	lines, err := ef.inner.FileDiff(req)
 	if err != nil {
-		return nil, fmt.Errorf("exclude filter, file diff %s: %w", file, err)
+		return nil, fmt.Errorf("exclude filter, file diff %s: %w", req.Path, err)
 	}
 	return lines, nil
 }

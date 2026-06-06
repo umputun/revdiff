@@ -45,7 +45,7 @@ index ghi..jkl
 	}
 
 	// test FileDiff for file1
-	lines1, err := r.FileDiff("", "file1.go", false, 0)
+	lines1, err := r.FileDiff(FileDiffRequest{Path: "file1.go"})
 	if err != nil {
 		t.Fatalf("FileDiff(file1.go) error = %v", err)
 	}
@@ -54,7 +54,7 @@ index ghi..jkl
 	}
 
 	// test FileDiff for file2
-	lines2, err := r.FileDiff("", "file2.go", false, 0)
+	lines2, err := r.FileDiff(FileDiffRequest{Path: "file2.go"})
 	if err != nil {
 		t.Fatalf("FileDiff(file2.go) error = %v", err)
 	}
@@ -63,7 +63,7 @@ index ghi..jkl
 	}
 
 	// test FileDiff for non-existent file
-	linesNone, err := r.FileDiff("", "nonexistent.go", false, 0)
+	linesNone, err := r.FileDiff(FileDiffRequest{Path: "nonexistent.go"})
 	if err != nil {
 		t.Fatalf("FileDiff(nonexistent.go) error = %v", err)
 	}
@@ -101,7 +101,7 @@ Binary files /dev/null and b/image.png differ
 	}
 
 	// check that binary file was parsed
-	lines, err := r.FileDiff("", "image.png", false, 0)
+	lines, err := r.FileDiff(FileDiffRequest{Path: "image.png"})
 	if err != nil {
 		t.Fatalf("FileDiff(image.png) error = %v", err)
 	}
@@ -498,4 +498,3 @@ index abc..def
 		t.Errorf("files[2].Path = %q, want %q", files[2].Path, "m.go")
 	}
 }
-

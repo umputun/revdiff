@@ -36,11 +36,11 @@ func (f *IncludeFilter) ChangedFiles(ref string, staged bool) ([]FileEntry, erro
 }
 
 // FileDiff delegates directly to the inner renderer without filtering.
-// contextLines is passed through unchanged.
-func (f *IncludeFilter) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
-	lines, err := f.inner.FileDiff(ref, file, staged, contextLines)
+// req is passed through unchanged.
+func (f *IncludeFilter) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	lines, err := f.inner.FileDiff(req)
 	if err != nil {
-		return nil, fmt.Errorf("include filter, file diff %s: %w", file, err)
+		return nil, fmt.Errorf("include filter, file diff %s: %w", req.Path, err)
 	}
 	return lines, nil
 }

@@ -118,9 +118,9 @@ func (r *MultiFileStdinReader) ChangedFiles(_ string, _ bool) ([]FileEntry, erro
 }
 
 // FileDiff returns pre-parsed diff lines for the requested file.
-// contextLines is ignored — sections are pre-parsed from the original diff.
-func (r *MultiFileStdinReader) FileDiff(_, file string, _ bool, _ int) ([]DiffLine, error) {
-	sec, ok := r.sections[file]
+// req fields other than Path are ignored — sections are pre-parsed from the original diff.
+func (r *MultiFileStdinReader) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	sec, ok := r.sections[req.Path]
 	if !ok {
 		return nil, nil
 	}

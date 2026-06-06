@@ -88,9 +88,9 @@ func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 }
 
 // FileDiff reads the file from disk and returns all lines as context DiffLines.
-// ref, staged, and contextLines parameters are ignored — DirectoryReader is a
-// context-only source with no hunks.
-func (dr *DirectoryReader) FileDiff(_, file string, _ bool, _ int) ([]DiffLine, error) {
-	resolved := resolvePath(dr.workDir, file)
+// req fields other than Path are ignored — DirectoryReader is a context-only
+// source with no hunks.
+func (dr *DirectoryReader) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	resolved := resolvePath(dr.workDir, req.Path)
 	return readFileAsContext(resolved)
 }

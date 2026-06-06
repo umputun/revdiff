@@ -162,7 +162,7 @@ func TestHg_FileDiff_Uncommitted(t *testing.T) {
 
 	writeFile(t, dir, "hello.txt", "line one\nline modified\nline three\n")
 
-	lines, err := h.FileDiff("", "hello.txt", false, 0)
+	lines, err := h.FileDiff(FileDiffRequest{Path: "hello.txt"})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -194,7 +194,7 @@ func TestHg_FileDiff_NewFile(t *testing.T) {
 	writeFile(t, dir, "new.txt", "new content\n")
 	hgCmd(t, dir, "add", "new.txt")
 
-	lines, err := h.FileDiff("", "new.txt", false, 0)
+	lines, err := h.FileDiff(FileDiffRequest{Path: "new.txt"})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -219,7 +219,7 @@ func TestHg_FileDiff_WithRef(t *testing.T) {
 	hgCmd(t, dir, "commit", "-m", "second")
 
 	// diff between revisions
-	lines, err := h.FileDiff("0..1", "hello.txt", false, 0)
+	lines, err := h.FileDiff(FileDiffRequest{Ref: "0..1", Path: "hello.txt"})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -459,7 +459,7 @@ func TestHg_FileDiff_SmallContext(t *testing.T) {
 	}
 	writeFile(t, dir, "big.txt", sb.String())
 
-	lines, err := h.FileDiff("", "big.txt", false, 2)
+	lines, err := h.FileDiff(FileDiffRequest{Path: "big.txt", ContextLines: 2})
 	require.NoError(t, err)
 
 	var adds, removes, ctx int
@@ -479,7 +479,7 @@ func TestHg_FileDiff_SmallContext(t *testing.T) {
 
 	// with contextLines=0 (full file) the diff should contain all 19 unchanged
 	// lines as context, proving the parameter is actually in effect.
-	fullLines, err := h.FileDiff("", "big.txt", false, 0)
+	fullLines, err := h.FileDiff(FileDiffRequest{Path: "big.txt"})
 	require.NoError(t, err)
 	var fullCtx int
 	for _, l := range fullLines {

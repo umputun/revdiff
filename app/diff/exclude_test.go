@@ -70,23 +70,23 @@ func TestExcludeFilter_FileDiff_passthrough(t *testing.T) {
 		{OldNum: 2, NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
 	inner := &mocks.RendererMock{
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) { return lines, nil },
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return lines, nil },
 	}
 	ef := diff.NewExcludeFilter(inner, []string{"vendor"})
 
 	// even a file matching exclude prefix is passed through — filtering is only at file list level
-	result, err := ef.FileDiff("", "vendor/foo.go", false, 0)
+	result, err := ef.FileDiff(diff.FileDiffRequest{Path: "vendor/foo.go"})
 	require.NoError(t, err)
 	assert.Equal(t, lines, result)
 }
 
 func TestExcludeFilter_FileDiff_innerError(t *testing.T) {
 	inner := &mocks.RendererMock{
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
 	}
 	ef := diff.NewExcludeFilter(inner, []string{"vendor"})
 
-	_, err := ef.FileDiff("", "foo.go", false, 0)
+	_, err := ef.FileDiff(diff.FileDiffRequest{Path: "foo.go"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read failed")
 }
@@ -104,13 +104,13 @@ func TestExcludeFilter_FileDiff_passesContextLinesThrough(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotContext int
 			inner := &mocks.RendererMock{
-				FileDiffFunc: func(_, _ string, _ bool, c int) ([]diff.DiffLine, error) {
-					gotContext = c
+				FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+					gotContext = req.ContextLines
 					return nil, nil
 				},
 			}
 			ef := diff.NewExcludeFilter(inner, []string{"vendor"})
-			_, err := ef.FileDiff("", "foo.go", false, tt.context)
+			_, err := ef.FileDiff(diff.FileDiffRequest{Path: "foo.go", ContextLines: tt.context})
 			require.NoError(t, err)
 			assert.Equal(t, tt.context, gotContext)
 		})

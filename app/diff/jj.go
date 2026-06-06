@@ -141,16 +141,16 @@ func (j *Jj) expandRename(target string) (oldPath, newPath string, ok bool) {
 // The staged flag is ignored — Jujutsu has no staging area. contextLines controls
 // surrounding context: 0 or >= fullContextSentinel requests full-file context;
 // positive values below the sentinel request that many lines on each side of a hunk.
-func (j *Jj) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, error) {
-	rangeArgs := j.diffRangeFlags(ref)
+func (j *Jj) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	rangeArgs := j.diffRangeFlags(req.Ref)
 	args := make([]string, 0, 5+len(rangeArgs))
-	args = append(args, "diff", "--git", jjContextArg(contextLines))
+	args = append(args, "diff", "--git", jjContextArg(req.ContextLines))
 	args = append(args, rangeArgs...)
-	args = append(args, "--", file)
+	args = append(args, "--", req.Path)
 
 	out, err := j.runJj(args...)
 	if err != nil {
-		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
+		return nil, fmt.Errorf("get file diff for %s: %w", req.Path, err)
 	}
 
 	// jj emits raw bytes for binary files instead of git's "Binary files … differ"
@@ -159,8 +159,8 @@ func (j *Jj) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, e
 
 	// trailing divider only matters in compact mode; skip the probe in full-file mode.
 	total := 0
-	if contextLines > 0 && contextLines < fullContextSentinel {
-		total = j.totalOldLines(ref, file)
+	if req.ContextLines > 0 && req.ContextLines < fullContextSentinel {
+		total = j.totalOldLines(req.Ref, req.Path)
 	}
 	return parseUnifiedDiff(normalized, total)
 }

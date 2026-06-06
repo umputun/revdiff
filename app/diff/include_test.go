@@ -112,23 +112,23 @@ func TestIncludeFilter_FileDiff_passthrough(t *testing.T) {
 		{OldNum: 2, NewNum: 2, Content: "line2", ChangeType: diff.ChangeContext},
 	}
 	inner := &mocks.RendererMock{
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) { return lines, nil },
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return lines, nil },
 	}
 	f := diff.NewIncludeFilter(inner, []string{"src"})
 
 	// even a file NOT matching include prefix is passed through — filtering is only at file list level
-	result, err := f.FileDiff("", "vendor/foo.go", false, 0)
+	result, err := f.FileDiff(diff.FileDiffRequest{Path: "vendor/foo.go"})
 	require.NoError(t, err)
 	assert.Equal(t, lines, result)
 }
 
 func TestIncludeFilter_FileDiff_innerError(t *testing.T) {
 	inner := &mocks.RendererMock{
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, errors.New("read failed") },
 	}
 	f := diff.NewIncludeFilter(inner, []string{"src"})
 
-	_, err := f.FileDiff("", "foo.go", false, 0)
+	_, err := f.FileDiff(diff.FileDiffRequest{Path: "foo.go"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "include filter, file diff foo.go")
 	assert.Contains(t, err.Error(), "read failed")
@@ -147,13 +147,13 @@ func TestIncludeFilter_FileDiff_passesContextLinesThrough(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var gotContext int
 			inner := &mocks.RendererMock{
-				FileDiffFunc: func(_, _ string, _ bool, c int) ([]diff.DiffLine, error) {
-					gotContext = c
+				FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+					gotContext = req.ContextLines
 					return nil, nil
 				},
 			}
 			f := diff.NewIncludeFilter(inner, []string{"src"})
-			_, err := f.FileDiff("", "foo.go", false, tt.context)
+			_, err := f.FileDiff(diff.FileDiffRequest{Path: "foo.go", ContextLines: tt.context})
 			require.NoError(t, err)
 			assert.Equal(t, tt.context, gotContext)
 		})

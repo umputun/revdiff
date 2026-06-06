@@ -147,22 +147,22 @@ func (h *Hg) revFlag(flag, ref string) []string {
 // staged flag is ignored (hg has no staging area). contextLines controls surrounding
 // context: 0 or >= fullContextSentinel requests full-file context; positive values
 // below the sentinel request that many lines on each side of a hunk.
-func (h *Hg) FileDiff(ref, file string, _ bool, contextLines int) ([]DiffLine, error) {
-	rArgs := h.revFlag("-r", ref)
+func (h *Hg) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	rArgs := h.revFlag("-r", req.Ref)
 	args := make([]string, 0, 5+len(rArgs))
 	args = append(args, "diff", "--git", "--color=never")
 	args = append(args, rArgs...)
-	args = append(args, unifiedContextArg(contextLines), "--", file)
+	args = append(args, unifiedContextArg(req.ContextLines), "--", req.Path)
 
 	out, err := h.runHg(args...)
 	if err != nil {
-		return nil, fmt.Errorf("get file diff for %s: %w", file, err)
+		return nil, fmt.Errorf("get file diff for %s: %w", req.Path, err)
 	}
 
 	// trailing divider only matters in compact mode; skip the probe in full-file mode.
 	total := 0
-	if contextLines > 0 && contextLines < fullContextSentinel {
-		total = h.totalOldLines(ref, file)
+	if req.ContextLines > 0 && req.ContextLines < fullContextSentinel {
+		total = h.totalOldLines(req.Ref, req.Path)
 	}
 	return parseUnifiedDiff(out, total)
 }

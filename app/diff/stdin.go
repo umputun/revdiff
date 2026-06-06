@@ -28,9 +28,9 @@ func (r *StdinReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 }
 
 // FileDiff returns the stored context lines for the synthetic file.
-// contextLines is ignored — StdinReader is a context-only source with no hunks.
-func (r *StdinReader) FileDiff(_, file string, _ bool, _ int) ([]DiffLine, error) {
-	if file != r.name {
+// req fields other than Path are ignored — StdinReader is a context-only source with no hunks.
+func (r *StdinReader) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	if req.Path != r.name {
 		return nil, nil
 	}
 	return r.lines, nil

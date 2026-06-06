@@ -481,6 +481,72 @@ func TestGit_ChangedFiles_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "get changed files")
 }
 
+func TestGit_ChangedFiles_StagedRename(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "old.txt", "one\ntwo\nthree\nfour\nfive\n")
+	gitCmd(t, dir, "add", "old.txt")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	gitCmd(t, dir, "mv", "old.txt", "new.txt")
+	writeFile(t, dir, "new.txt", "one\nTWO\nthree\nfour\nfive\n")
+	gitCmd(t, dir, "add", "new.txt")
+
+	entries, err := g.ChangedFiles("", true)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, FileRenamed, entries[0].Status)
+	assert.Equal(t, "new.txt", entries[0].Path)
+	assert.Equal(t, "old.txt", entries[0].OldPath)
+}
+
+func TestGit_ChangedFiles_StagedRename_DiffRenamesOff(t *testing.T) {
+	dir := setupTestRepo(t)
+	gitCmd(t, dir, "config", "diff.renames", "false")
+	g := NewGit(dir)
+
+	writeFile(t, dir, "old.txt", "one\ntwo\nthree\nfour\nfive\n")
+	gitCmd(t, dir, "add", "old.txt")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	gitCmd(t, dir, "mv", "old.txt", "new.txt")
+	writeFile(t, dir, "new.txt", "one\nTWO\nthree\nfour\nfive\n")
+	gitCmd(t, dir, "add", "new.txt")
+
+	// with diff.renames=false the discovery step must still detect the rename
+	// because ChangedFiles forces -M; otherwise git would report A new.txt + D old.txt
+	entries, err := g.ChangedFiles("", true)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, FileRenamed, entries[0].Status)
+	assert.Equal(t, "new.txt", entries[0].Path)
+	assert.Equal(t, "old.txt", entries[0].OldPath)
+}
+
+func TestGit_ChangedFiles_NonRenameEmptyOldPath(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "keep.txt", "stable\n")
+	writeFile(t, dir, "gone.txt", "remove me\n")
+	gitCmd(t, dir, "add", "keep.txt", "gone.txt")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	writeFile(t, dir, "keep.txt", "stable\nplus\n") // modify
+	writeFile(t, dir, "fresh.txt", "added\n")       // add
+	gitCmd(t, dir, "rm", "gone.txt")                // delete
+	gitCmd(t, dir, "add", "keep.txt", "fresh.txt")
+
+	entries, err := g.ChangedFiles("", true)
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	for _, e := range entries {
+		assert.Empty(t, e.OldPath, "non-rename entry %q must have empty OldPath", e.Path)
+		assert.NotEqual(t, FileRenamed, e.Status)
+	}
+}
+
 func TestGit_FileDiff(t *testing.T) {
 	dir := setupTestRepo(t)
 	g := NewGit(dir)
@@ -491,7 +557,7 @@ func TestGit_FileDiff(t *testing.T) {
 
 	writeFile(t, dir, "main.go", "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hello\")\n}\n")
 
-	lines, err := g.FileDiff("", "main.go", false, 0)
+	lines, err := g.FileDiff(FileDiffRequest{Path: "main.go"})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines, "expected non-empty diff lines")
 
@@ -512,7 +578,7 @@ func TestGit_FileDiff(t *testing.T) {
 
 func TestGit_FileDiff_Error(t *testing.T) {
 	g := NewGit("/nonexistent/repo")
-	_, err := g.FileDiff("", "main.go", false, 0)
+	_, err := g.FileDiff(FileDiffRequest{Path: "main.go"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "get file diff")
 }
@@ -543,9 +609,193 @@ func TestGit_FileDiff_NoChanges(t *testing.T) {
 	gitCmd(t, dir, "commit", "-m", "initial")
 
 	// no modifications, diff should be empty
-	lines, err := g.FileDiff("", "x.go", false, 0)
+	lines, err := g.FileDiff(FileDiffRequest{Path: "x.go"})
 	require.NoError(t, err)
 	assert.Empty(t, lines)
+}
+
+func TestGit_FileDiff_StagedRename(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "old.txt", "one\ntwo\nthree\n")
+	gitCmd(t, dir, "add", "old.txt")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	gitCmd(t, dir, "mv", "old.txt", "new.txt")
+	writeFile(t, dir, "new.txt", "one\nTWO\nthree\n")
+	gitCmd(t, dir, "add", "new.txt")
+
+	entries, err := g.ChangedFiles("", true)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, FileRenamed, entries[0].Status)
+
+	lines, err := g.FileDiff(FileDiffRequest{Path: entries[0].Path, OldPath: entries[0].OldPath, Staged: true})
+	require.NoError(t, err)
+
+	added, removed := changeContents(lines)
+	assert.Equal(t, []string{"TWO"}, added, "only the edited line is added, not the whole file")
+	assert.Equal(t, []string{"two"}, removed, "only the edited line is removed")
+}
+
+func TestGit_FileDiff_TwoRefRename(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "old.txt", "one\ntwo\nthree\n")
+	gitCmd(t, dir, "add", "old.txt")
+	gitCmd(t, dir, "commit", "-m", "A")
+
+	gitCmd(t, dir, "mv", "old.txt", "new.txt")
+	writeFile(t, dir, "new.txt", "one\nTWO\nthree\n")
+	gitCmd(t, dir, "add", "new.txt")
+	gitCmd(t, dir, "commit", "-m", "B")
+
+	entries, err := g.ChangedFiles("HEAD~1..HEAD", false)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, FileRenamed, entries[0].Status)
+	require.Equal(t, "new.txt", entries[0].Path)
+	require.Equal(t, "old.txt", entries[0].OldPath)
+
+	lines, err := g.FileDiff(FileDiffRequest{Ref: "HEAD~1..HEAD", Path: entries[0].Path, OldPath: entries[0].OldPath})
+	require.NoError(t, err)
+
+	added, removed := changeContents(lines)
+	assert.Equal(t, []string{"TWO"}, added)
+	assert.Equal(t, []string{"two"}, removed)
+}
+
+func TestGit_FileDiff_PureRename(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "old.txt", "alpha\nbeta\ngamma\n")
+	writeFile(t, dir, "keep.txt", "stable\n")
+	gitCmd(t, dir, "add", "old.txt", "keep.txt")
+	gitCmd(t, dir, "commit", "-m", "initial")
+
+	gitCmd(t, dir, "mv", "old.txt", "new.txt")
+	writeFile(t, dir, "keep.txt", "stable\nadded\n")
+	gitCmd(t, dir, "add", "new.txt", "keep.txt")
+
+	entries, err := g.ChangedFiles("", true)
+	require.NoError(t, err)
+	byPath := make(map[string]FileEntry, len(entries))
+	for _, e := range entries {
+		byPath[e.Path] = e
+	}
+
+	t.Run("pure rename yields empty diff, not all-added", func(t *testing.T) {
+		e := byPath["new.txt"]
+		require.Equal(t, FileRenamed, e.Status)
+		require.Equal(t, "old.txt", e.OldPath)
+
+		lines, err := g.FileDiff(FileDiffRequest{Path: e.Path, OldPath: e.OldPath, Staged: true})
+		require.NoError(t, err)
+		adds, removes := CountChanges(lines)
+		assert.Zero(t, adds, "pure rename adds no content")
+		assert.Zero(t, removes, "pure rename removes no content")
+	})
+
+	t.Run("non-rename modify unaffected by rename path", func(t *testing.T) {
+		e := byPath["keep.txt"]
+		require.Empty(t, e.OldPath)
+
+		lines, err := g.FileDiff(FileDiffRequest{Path: e.Path, OldPath: e.OldPath, Staged: true})
+		require.NoError(t, err)
+		added, removed := changeContents(lines)
+		assert.Equal(t, []string{"added"}, added)
+		assert.Empty(t, removed)
+	})
+}
+
+// TestGit_RenameAware_AcceptanceIssue222 reproduces issue #222 end-to-end across
+// the three git modes (--staged, single-ref, two-ref): ChangedFiles must yield the
+// rename origin in OldPath, and FileDiff must produce the minimal rename-aware diff
+// (only the edited line), not render the file as fully added.
+func TestGit_RenameAware_AcceptanceIssue222(t *testing.T) {
+	assertMinimalRenameDiff := func(t *testing.T, g *Git, req FileDiffRequest) {
+		t.Helper()
+		lines, err := g.FileDiff(req)
+		require.NoError(t, err)
+		added, removed := changeContents(lines)
+		assert.Equal(t, []string{"TWO"}, added, "only the edited line is added, not the whole file")
+		assert.Equal(t, []string{"two"}, removed, "only the edited line is removed")
+		adds, removes := CountChanges(lines)
+		assert.Equal(t, 1, adds, "rename-aware diff has exactly one addition, not all-added")
+		assert.Equal(t, 1, removes, "rename-aware diff has exactly one removal")
+	}
+
+	t.Run("staged", func(t *testing.T) {
+		dir := setupTestRepo(t)
+		g := NewGit(dir)
+
+		writeFile(t, dir, "old.txt", "one\ntwo\nthree\n")
+		gitCmd(t, dir, "add", "old.txt")
+		gitCmd(t, dir, "commit", "-m", "initial")
+
+		gitCmd(t, dir, "mv", "old.txt", "new.txt")
+		writeFile(t, dir, "new.txt", "one\nTWO\nthree\n")
+		gitCmd(t, dir, "add", "new.txt")
+
+		entries, err := g.ChangedFiles("", true)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, FileRenamed, entries[0].Status)
+		assert.Equal(t, "new.txt", entries[0].Path)
+		assert.Equal(t, "old.txt", entries[0].OldPath)
+
+		assertMinimalRenameDiff(t, g, FileDiffRequest{Path: entries[0].Path, OldPath: entries[0].OldPath, Staged: true})
+	})
+
+	t.Run("single-ref", func(t *testing.T) {
+		dir := setupTestRepo(t)
+		g := NewGit(dir)
+
+		writeFile(t, dir, "old.txt", "one\ntwo\nthree\n")
+		gitCmd(t, dir, "add", "old.txt")
+		gitCmd(t, dir, "commit", "-m", "A")
+
+		gitCmd(t, dir, "mv", "old.txt", "new.txt")
+		writeFile(t, dir, "new.txt", "one\nTWO\nthree\n")
+		gitCmd(t, dir, "add", "new.txt")
+		gitCmd(t, dir, "commit", "-m", "B")
+
+		// single ref compares HEAD~1 against the (clean) working tree
+		entries, err := g.ChangedFiles("HEAD~1", false)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, FileRenamed, entries[0].Status)
+		assert.Equal(t, "new.txt", entries[0].Path)
+		assert.Equal(t, "old.txt", entries[0].OldPath)
+
+		assertMinimalRenameDiff(t, g, FileDiffRequest{Ref: "HEAD~1", Path: entries[0].Path, OldPath: entries[0].OldPath})
+	})
+
+	t.Run("two-ref", func(t *testing.T) {
+		dir := setupTestRepo(t)
+		g := NewGit(dir)
+
+		writeFile(t, dir, "old.txt", "one\ntwo\nthree\n")
+		gitCmd(t, dir, "add", "old.txt")
+		gitCmd(t, dir, "commit", "-m", "A")
+
+		gitCmd(t, dir, "mv", "old.txt", "new.txt")
+		writeFile(t, dir, "new.txt", "one\nTWO\nthree\n")
+		gitCmd(t, dir, "add", "new.txt")
+		gitCmd(t, dir, "commit", "-m", "B")
+
+		entries, err := g.ChangedFiles("HEAD~1..HEAD", false)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, FileRenamed, entries[0].Status)
+		assert.Equal(t, "new.txt", entries[0].Path)
+		assert.Equal(t, "old.txt", entries[0].OldPath)
+
+		assertMinimalRenameDiff(t, g, FileDiffRequest{Ref: "HEAD~1..HEAD", Path: entries[0].Path, OldPath: entries[0].OldPath})
+	})
 }
 
 func TestGit_FileDiff_BinaryFile(t *testing.T) {
@@ -570,7 +820,7 @@ func TestGit_FileDiff_BinaryFile(t *testing.T) {
 	err = os.WriteFile(filepath.Join(dir, "image.png"), binData2, 0o600)
 	require.NoError(t, err)
 
-	lines, err := g.FileDiff("", "image.png", false, 0)
+	lines, err := g.FileDiff(FileDiffRequest{Path: "image.png"})
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, ChangeContext, lines[0].ChangeType)
@@ -599,7 +849,7 @@ func TestGit_FileDiff_NewBinaryFile(t *testing.T) {
 	require.NoError(t, err)
 	gitCmd(t, dir, "add", "new.bin")
 
-	lines, err := g.FileDiff("", "new.bin", true, 0)
+	lines, err := g.FileDiff(FileDiffRequest{Path: "new.bin", Staged: true})
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Contains(t, lines[0].Content, "new binary file")
@@ -622,7 +872,7 @@ func TestGit_FileDiff_ModifiedEmptyBinaryFile(t *testing.T) {
 	err = os.WriteFile(filepath.Join(dir, "empty.bin"), []byte{0x00, 0x01, 0x02}, 0o600)
 	require.NoError(t, err)
 
-	lines, err := g.FileDiff("", "empty.bin", false, 0)
+	lines, err := g.FileDiff(FileDiffRequest{Path: "empty.bin"})
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.Equal(t, "(binary file: 0 B → 3 B)", lines[0].Content)
@@ -1113,6 +1363,21 @@ func gitCmd(t *testing.T, dir string, args ...string) {
 	require.NoError(t, err, "git %v failed: %s", args, string(out))
 }
 
+// changeContents collects the content of added and removed lines from a diff,
+// in order. Context and divider lines are ignored.
+func changeContents(lines []DiffLine) (added, removed []string) {
+	for _, l := range lines {
+		switch l.ChangeType {
+		case ChangeAdd:
+			added = append(added, l.Content)
+		case ChangeRemove:
+			removed = append(removed, l.Content)
+		case ChangeContext, ChangeDivider:
+		}
+	}
+	return added, removed
+}
+
 func TestGit_TotalOldLines(t *testing.T) {
 	dir := setupTestRepo(t)
 	// commit A: 5 lines
@@ -1160,7 +1425,7 @@ func TestGit_TotalOldLines(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, g.totalOldLines(tc.ref, tc.file, tc.staged))
+			assert.Equal(t, tc.want, g.totalOldLines(FileDiffRequest{Ref: tc.ref, Path: tc.file, Staged: tc.staged}))
 		})
 	}
 }
@@ -1284,7 +1549,7 @@ func TestGit_FileDiff_SmallContext(t *testing.T) {
 	}
 	writeFile(t, dir, "big.txt", sb.String())
 
-	lines, err := g.FileDiff("", "big.txt", false, 2)
+	lines, err := g.FileDiff(FileDiffRequest{Path: "big.txt", ContextLines: 2})
 	require.NoError(t, err)
 
 	var adds, removes, ctx int
@@ -1304,7 +1569,7 @@ func TestGit_FileDiff_SmallContext(t *testing.T) {
 
 	// with contextLines=0 (full file) the diff should contain all 19 unchanged
 	// lines as context, proving the parameter is actually in effect.
-	fullLines, err := g.FileDiff("", "big.txt", false, 0)
+	fullLines, err := g.FileDiff(FileDiffRequest{Path: "big.txt"})
 	require.NoError(t, err)
 	var fullCtx int
 	for _, l := range fullLines {

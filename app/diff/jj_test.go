@@ -431,7 +431,7 @@ func TestJj_FileDiff_Uncommitted(t *testing.T) {
 	jjCmd(t, dir, "new", "-m", "modify", "--quiet")
 	writeFile(t, dir, "hello.txt", "line one\nline modified\nline three\n")
 
-	lines, err := j.FileDiff("", "hello.txt", false, 0)
+	lines, err := j.FileDiff(FileDiffRequest{Path: "hello.txt"})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -460,7 +460,7 @@ func TestJj_FileDiff_NewFile(t *testing.T) {
 	jjCmd(t, dir, "new", "-m", "add", "--quiet")
 	writeFile(t, dir, "new.txt", "new content\n")
 
-	lines, err := j.FileDiff("", "new.txt", false, 0)
+	lines, err := j.FileDiff(FileDiffRequest{Path: "new.txt"})
 	require.NoError(t, err)
 	require.NotEmpty(t, lines)
 
@@ -481,7 +481,7 @@ func TestJj_FileDiff_Binary(t *testing.T) {
 	jjCmd(t, dir, "new", "-m", "add binary", "--quiet")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin.dat"), []byte{0x00, 0x01, 0x02, 0xff}, 0o600))
 
-	lines, err := j.FileDiff("", "bin.dat", false, 0)
+	lines, err := j.FileDiff(FileDiffRequest{Path: "bin.dat"})
 	require.NoError(t, err)
 	require.Len(t, lines, 1)
 	assert.True(t, lines[0].IsBinary)
@@ -508,7 +508,7 @@ func TestJj_DirectoryReader_FileDiff(t *testing.T) {
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
 
 	dr := NewJjDirectoryReader(dir)
-	lines, err := dr.FileDiff("", "main.go", false, 0)
+	lines, err := dr.FileDiff(FileDiffRequest{Path: "main.go"})
 	require.NoError(t, err)
 	require.Len(t, lines, 3)
 	for _, l := range lines {
@@ -573,7 +573,7 @@ func TestJj_FileDiff_SmallContext(t *testing.T) {
 	}
 	writeFile(t, dir, "big.txt", sb.String())
 
-	lines, err := j.FileDiff("", "big.txt", false, 2)
+	lines, err := j.FileDiff(FileDiffRequest{Path: "big.txt", ContextLines: 2})
 	require.NoError(t, err)
 
 	var adds, removes, ctx int
@@ -593,7 +593,7 @@ func TestJj_FileDiff_SmallContext(t *testing.T) {
 
 	// with contextLines=0 (full file) the diff should contain all 19 unchanged
 	// lines as context, proving the parameter is actually in effect.
-	fullLines, err := j.FileDiff("", "big.txt", false, 0)
+	fullLines, err := j.FileDiff(FileDiffRequest{Path: "big.txt"})
 	require.NoError(t, err)
 	var fullCtx int
 	for _, l := range fullLines {

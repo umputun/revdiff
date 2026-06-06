@@ -53,10 +53,10 @@ func (fr *FallbackRenderer) ChangedFiles(ref string, staged bool) ([]FileEntry, 
 // that escape workDir), it skips the inner renderer entirely and reads from disk.
 // for in-repo files, it calls the inner renderer first; if the result is empty
 // (no error, no lines) and the file matches an --only pattern, it falls back to
-// reading the file from disk as all-context lines. contextLines is passed through
-// to the inner renderer unchanged; disk-read fallback paths ignore it.
-func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool, contextLines int) ([]DiffLine, error) {
-	resolved := resolvePath(fr.workDir, file)
+// reading the file from disk as all-context lines. req is passed through to the
+// inner renderer unchanged; disk-read fallback paths ignore everything but Path.
+func (fr *FallbackRenderer) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	resolved := resolvePath(fr.workDir, req.Path)
 
 	// skip inner renderer for files outside the repo — VCS would reject them
 	// with "is outside repository" error
@@ -64,19 +64,19 @@ func (fr *FallbackRenderer) FileDiff(ref, file string, staged bool, contextLines
 		if _, statErr := os.Stat(resolved); statErr == nil {
 			return readFileAsContext(resolved)
 		}
-		return nil, fmt.Errorf("file not found: %s", file)
+		return nil, fmt.Errorf("file not found: %s", req.Path)
 	}
 
-	lines, err := fr.inner.FileDiff(ref, file, staged, contextLines)
+	lines, err := fr.inner.FileDiff(req)
 	if err != nil {
-		return lines, fmt.Errorf("fallback file diff %s: %w", file, err)
+		return lines, fmt.Errorf("fallback file diff %s: %w", req.Path, err)
 	}
 	if len(lines) > 0 {
 		return lines, nil
 	}
 
 	// empty result (no error) — check if this file matches any --only pattern
-	if !fr.isOnlyFile(file) {
+	if !fr.isOnlyFile(req.Path) {
 		return lines, nil
 	}
 
@@ -176,9 +176,9 @@ func (r *FileReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 }
 
 // FileDiff reads the file from disk and returns all lines as context DiffLines.
-// contextLines is ignored — FileReader is a context-only source with no hunks.
-func (r *FileReader) FileDiff(_, file string, _ bool, _ int) ([]DiffLine, error) {
-	resolved := resolvePath(r.workDir, file)
+// req fields other than Path are ignored — FileReader is a context-only source with no hunks.
+func (r *FileReader) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	resolved := resolvePath(r.workDir, req.Path)
 	return readFileAsContext(resolved)
 }
 
