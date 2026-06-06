@@ -12,8 +12,6 @@ import (
 
 const scrollStep = 4 // horizontal scroll step in characters
 
-const diffScrollStep = 2 // vertical diff viewport scroll step in lines
-
 // cursorDiffLine returns the DiffLine at the current cursor position, if valid.
 func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
 	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
@@ -527,9 +525,9 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionHalfPageUp:
 		m.moveDiffCursorHalfPageUp()
 	case keymap.ActionScrollDiffDown:
-		m.scrollDiffViewportLine(diffScrollStep)
+		m.scrollDiffViewportLine(wheelStep)
 	case keymap.ActionScrollDiffUp:
-		m.scrollDiffViewportLine(-diffScrollStep)
+		m.scrollDiffViewportLine(-wheelStep)
 	case keymap.ActionHome:
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
@@ -568,10 +566,10 @@ func (m Model) handleTreeAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	// the tree selection is unchanged.
 	switch action {
 	case keymap.ActionScrollDiffDown:
-		m.scrollDiffViewportLine(diffScrollStep)
+		m.scrollDiffViewportLine(wheelStep)
 		return m, nil
 	case keymap.ActionScrollDiffUp:
-		m.scrollDiffViewportLine(-diffScrollStep)
+		m.scrollDiffViewportLine(-wheelStep)
 		return m, nil
 	default: // all other actions fall through to tree/TOC navigation below
 	}

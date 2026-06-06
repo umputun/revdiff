@@ -2890,17 +2890,17 @@ func TestModel_JKScrollsDiffViewport(t *testing.T) {
 			require.Equal(t, 0, model.layout.viewport.YOffset)
 			require.Equal(t, "a.go", model.tree.SelectedFile())
 
-			// Shift+J scrolls the diff viewport down by 2 lines.
+			// Shift+J scrolls the diff viewport down by one wheel step.
 			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
 			model = result.(Model)
-			assert.Equal(t, 2, model.layout.viewport.YOffset, "J should scroll diff viewport down 2 lines")
+			assert.Equal(t, wheelStep, model.layout.viewport.YOffset, "J should scroll diff viewport down one wheel step")
 			assert.Equal(t, tc.focus, model.layout.focus, "focus must not change")
 			assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree selection must not change")
 
-			// Shift+K scrolls back up by 2 lines.
+			// Shift+K scrolls back up by one wheel step.
 			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'K'}})
 			model = result.(Model)
-			assert.Equal(t, 0, model.layout.viewport.YOffset, "K should scroll diff viewport back up 2 lines")
+			assert.Equal(t, 0, model.layout.viewport.YOffset, "K should scroll diff viewport back up one wheel step")
 			assert.Equal(t, tc.focus, model.layout.focus, "focus must not change")
 			assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree selection must not change")
 		})
