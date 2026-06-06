@@ -24,7 +24,7 @@ const maxUntrackedBytes = 16 * 1024 * 1024
 // needs. Defined consumer-side so tests can supply mocks without importing
 // the full ui.Renderer surface.
 type FileDiffer interface {
-	FileDiff(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)
+	FileDiff(req diff.FileDiffRequest) ([]diff.DiffLine, error)
 }
 
 // Stats holds the aggregate add/remove counts for a review and whether one
@@ -108,13 +108,13 @@ func ComputeStats(req StatsRequest) Stats {
 			stats.Removes += removes
 			continue
 		}
-		lines, err := req.Differ.FileDiff(req.Ref, e.Path, req.Staged, 0)
+		lines, err := req.Differ.FileDiff(diff.FileDiffRequest{Ref: req.Ref, Path: e.Path, OldPath: e.OldPath, Staged: req.Staged})
 		if err != nil {
 			stats.Err = err
 			return stats
 		}
 		if len(lines) == 0 && !req.Staged && e.Status == diff.FileAdded {
-			cached, cachedErr := req.Differ.FileDiff(req.Ref, e.Path, true, 0)
+			cached, cachedErr := req.Differ.FileDiff(diff.FileDiffRequest{Ref: req.Ref, Path: e.Path, OldPath: e.OldPath, Staged: true})
 			switch {
 			case cachedErr != nil:
 				stats.Partial = true

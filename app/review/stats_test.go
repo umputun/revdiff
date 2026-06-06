@@ -78,11 +78,11 @@ func TestSafeWorkDirPath_SymlinkInsideWorkDirAccepted(t *testing.T) {
 
 // fakeDiffer is a stub FileDiffer for ComputeStats tests.
 type fakeDiffer struct {
-	fn func(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)
+	fn func(req diff.FileDiffRequest) ([]diff.DiffLine, error)
 }
 
-func (f fakeDiffer) FileDiff(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error) {
-	return f.fn(ref, file, staged, contextLines)
+func (f fakeDiffer) FileDiff(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+	return f.fn(req)
 }
 
 func TestComputeStats_AggregatesAddsAndRemoves(t *testing.T) {
@@ -90,7 +90,7 @@ func TestComputeStats_AggregatesAddsAndRemoves(t *testing.T) {
 		{Path: "a.go", Status: diff.FileModified},
 		{Path: "b.go", Status: diff.FileModified},
 	}
-	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		return []diff.DiffLine{
 			{ChangeType: diff.ChangeAdd},
 			{ChangeType: diff.ChangeAdd},
@@ -106,6 +106,59 @@ func TestComputeStats_AggregatesAddsAndRemoves(t *testing.T) {
 	assert.NoError(t, got.Err)
 }
 
+func TestComputeStats_RenamePassesOldPath(t *testing.T) {
+	// a renamed+edited entry must thread OldPath into the FileDiff request so
+	// the renderer produces the minimal rename-aware diff (real +/- only),
+	// not an all-lines-added diff.
+	entries := []diff.FileEntry{{Path: "new.go", OldPath: "old.go", Status: diff.FileRenamed}}
+	var gotReq diff.FileDiffRequest
+	differ := fakeDiffer{fn: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+		gotReq = req
+		return []diff.DiffLine{
+			{ChangeType: diff.ChangeRemove},
+			{ChangeType: diff.ChangeAdd},
+			{ChangeType: diff.ChangeContext},
+		}, nil
+	}}
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
+	assert.Equal(t, "old.go", gotReq.OldPath, "rename origin must be passed to FileDiff")
+	assert.Equal(t, "new.go", gotReq.Path)
+	assert.Equal(t, 1, got.Adds, "minimal rename-aware diff: one add")
+	assert.Equal(t, 1, got.Removes, "minimal rename-aware diff: one remove")
+	assert.NoError(t, got.Err)
+}
+
+func TestComputeStats_NonRenameHasEmptyOldPath(t *testing.T) {
+	entries := []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}
+	var gotReq diff.FileDiffRequest
+	differ := fakeDiffer{fn: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+		gotReq = req
+		return []diff.DiffLine{{ChangeType: diff.ChangeAdd}}, nil
+	}}
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
+	assert.Empty(t, gotReq.OldPath, "non-rename entry must carry empty OldPath")
+	assert.Equal(t, 1, got.Adds)
+	assert.NoError(t, got.Err)
+}
+
+func TestComputeStats_RenameStagedFallbackPassesOldPath(t *testing.T) {
+	// the staged fallback path (empty primary diff on an added file) must also
+	// carry OldPath so a staged rename is counted against the rename-aware diff.
+	entries := []diff.FileEntry{{Path: "new.go", OldPath: "old.go", Status: diff.FileAdded}}
+	var stagedReq diff.FileDiffRequest
+	differ := fakeDiffer{fn: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+		if !req.Staged {
+			return nil, nil
+		}
+		stagedReq = req
+		return []diff.DiffLine{{ChangeType: diff.ChangeAdd}}, nil
+	}}
+	got := ComputeStats(StatsRequest{Differ: differ, Entries: entries})
+	assert.Equal(t, "old.go", stagedReq.OldPath, "staged fallback must pass rename origin")
+	assert.Equal(t, 1, got.Adds)
+	assert.NoError(t, got.Err)
+}
+
 func TestComputeStats_FirstErrorStopsAndReturns(t *testing.T) {
 	entries := []diff.FileEntry{
 		{Path: "good.go", Status: diff.FileModified},
@@ -113,9 +166,9 @@ func TestComputeStats_FirstErrorStopsAndReturns(t *testing.T) {
 	}
 	wantErr := errors.New("vcs blew up")
 	calls := 0
-	differ := fakeDiffer{fn: func(_, file string, _ bool, _ int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		calls++
-		if file == "bad.go" {
+		if req.Path == "bad.go" {
 			return nil, wantErr
 		}
 		return []diff.DiffLine{{ChangeType: diff.ChangeAdd}}, nil
@@ -127,8 +180,8 @@ func TestComputeStats_FirstErrorStopsAndReturns(t *testing.T) {
 
 func TestComputeStats_StagedFallbackForAddedFile(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "new.go", Status: diff.FileAdded}}
-	differ := fakeDiffer{fn: func(_, _ string, staged bool, _ int) ([]diff.DiffLine, error) {
-		if !staged {
+	differ := fakeDiffer{fn: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+		if !req.Staged {
 			return nil, nil
 		}
 		return []diff.DiffLine{{ChangeType: diff.ChangeAdd}, {ChangeType: diff.ChangeAdd}}, nil
@@ -141,8 +194,8 @@ func TestComputeStats_StagedFallbackForAddedFile(t *testing.T) {
 
 func TestComputeStats_StagedFallbackErrorMarksPartial(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "new.go", Status: diff.FileAdded}}
-	differ := fakeDiffer{fn: func(_, _ string, staged bool, _ int) ([]diff.DiffLine, error) {
-		if staged {
+	differ := fakeDiffer{fn: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+		if req.Staged {
 			return nil, errors.New("staged blew up")
 		}
 		return nil, nil
@@ -158,7 +211,7 @@ func TestComputeStats_UntrackedReadBypassesPrimaryDiffError(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte("one\ntwo\n"), 0o600))
 	entries := []diff.FileEntry{{Path: rel, Status: diff.FileUntracked}}
 	called := false
-	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		called = true
 		return nil, errors.New("vcs does not know untracked file")
 	}}
@@ -177,7 +230,7 @@ func TestComputeStats_UntrackedReadOutsideWorkDirMarksPartial(t *testing.T) {
 	// the safeWorkDirPath guard rejects, partial flag is set, and the file
 	// contributes zero lines instead of being read off-tree.
 	entries := []diff.FileEntry{{Path: "../../etc/passwd", Status: diff.FileUntracked}}
-	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		return nil, nil
 	}}
 	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: t.TempDir(), Entries: entries})
@@ -197,7 +250,7 @@ func TestComputeStats_OversizedUntrackedFileSkipped(t *testing.T) {
 	require.NoError(t, os.WriteFile(huge, []byte{}, 0o600))
 	require.NoError(t, os.Truncate(huge, maxUntrackedBytes+1))
 	entries := []diff.FileEntry{{Path: "huge.bin", Status: diff.FileUntracked}}
-	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		return nil, nil
 	}}
 	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
@@ -219,7 +272,7 @@ func TestComputeStats_NonRegularUntrackedFileSkipped(t *testing.T) {
 		t.Skipf("mkfifo unsupported: %v", err)
 	}
 	entries := []diff.FileEntry{{Path: "pipe", Status: diff.FileUntracked}}
-	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		return nil, nil
 	}}
 	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
@@ -237,7 +290,7 @@ func TestComputeStats_BinaryUntrackedFileSkipped(t *testing.T) {
 	// classifies the file as binary.
 	require.NoError(t, os.WriteFile(bin, []byte{0x00, 0x01, 0x02, 0x03}, 0o600))
 	entries := []diff.FileEntry{{Path: "blob.bin", Status: diff.FileUntracked}}
-	differ := fakeDiffer{fn: func(string, string, bool, int) ([]diff.DiffLine, error) {
+	differ := fakeDiffer{fn: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 		return nil, nil
 	}}
 	got := ComputeStats(StatsRequest{Differ: differ, WorkDir: root, Entries: entries})
