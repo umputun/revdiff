@@ -2894,6 +2894,7 @@ func TestModel_JKScrollsDiffViewport(t *testing.T) {
 			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J'}})
 			model = result.(Model)
 			assert.Equal(t, wheelStep, model.layout.viewport.YOffset, "J should scroll diff viewport down one wheel step")
+			assert.Equal(t, wheelStep, model.nav.diffCursor, "cursor must be pinned into view at the new viewport top")
 			assert.Equal(t, tc.focus, model.layout.focus, "focus must not change")
 			assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree selection must not change")
 
