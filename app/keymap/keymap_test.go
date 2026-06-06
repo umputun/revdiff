@@ -29,6 +29,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"ctrl+d", ActionHalfPageDown}, {"ctrl+u", ActionHalfPageUp},
 		{"home", ActionHome}, {"end", ActionEnd},
 		{"left", ActionScrollLeft}, {"right", ActionScrollRight},
+		{"J", ActionScrollDiffDown}, {"K", ActionScrollDiffUp},
 		{"n", ActionNextItem}, {"N", ActionPrevItem}, {"p", ActionPrevItem},
 		{"]", ActionNextHunk}, {"[", ActionPrevHunk},
 		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
@@ -220,6 +221,11 @@ func TestHelpSections_customBindingReflected(t *testing.T) {
 
 func TestActionReload_IsValid(t *testing.T) {
 	assert.True(t, IsValidAction(ActionReload))
+}
+
+func TestActionScrollDiff_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionScrollDiffDown))
+	assert.True(t, IsValidAction(ActionScrollDiffUp))
 }
 
 func TestActionToggleCompact_IsValid(t *testing.T) {

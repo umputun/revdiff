@@ -32,6 +32,8 @@ const (
 	ActionScrollCenter     Action = "scroll_center"
 	ActionScrollTop        Action = "scroll_top"
 	ActionScrollBottom     Action = "scroll_bottom"
+	ActionScrollDiffDown   Action = "scroll_diff_down"
+	ActionScrollDiffUp     Action = "scroll_diff_up"
 	ActionNextItem         Action = "next_item"
 	ActionPrevItem         Action = "prev_item"
 	ActionNextHunk         Action = "next_hunk"
@@ -76,6 +78,7 @@ var validActions = map[Action]bool{
 	ActionHalfPageDown: true, ActionHalfPageUp: true, ActionHome: true, ActionEnd: true,
 	ActionScrollLeft: true, ActionScrollRight: true,
 	ActionScrollCenter: true, ActionScrollTop: true, ActionScrollBottom: true,
+	ActionScrollDiffDown: true, ActionScrollDiffUp: true,
 	ActionNextItem: true, ActionPrevItem: true, ActionNextHunk: true, ActionPrevHunk: true,
 	ActionTogglePane: true, ActionFocusTree: true, ActionFocusDiff: true,
 	ActionSearch:  true,
@@ -189,6 +192,8 @@ func defaultDescriptions() []HelpEntry {
 		{ActionScrollCenter, "center viewport on cursor", "Navigation"},
 		{ActionScrollTop, "align viewport top", "Navigation"},
 		{ActionScrollBottom, "align viewport bottom", "Navigation"},
+		{ActionScrollDiffDown, "scroll diff down", "Navigation"},
+		{ActionScrollDiffUp, "scroll diff up", "Navigation"},
 
 		// file/hunk
 		{ActionNextItem, "next file / search match", "File/Hunk"},
@@ -252,6 +257,8 @@ func defaultBindings() map[string]Action {
 		"end":    ActionEnd,
 		"left":   ActionScrollLeft,
 		"right":  ActionScrollRight,
+		"J":      ActionScrollDiffDown,
+		"K":      ActionScrollDiffUp,
 		"n":      ActionNextItem,
 		"N":      ActionPrevItem,
 		"p":      ActionPrevItem,

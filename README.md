@@ -676,6 +676,7 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `Tab` | Switch between file tree and diff pane |
 | `PgDown/PgUp` | Page scroll in file tree and diff pane |
 | `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |
+| `J/K` | Scroll diff viewport (works from either pane) |
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
@@ -811,7 +812,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 <details>
 <summary>Available actions (click to expand)</summary>
 
-**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`
+**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `scroll_diff_down`, `scroll_diff_up`
 
 **File/Hunk:** `next_item`, `prev_item`, `next_hunk`, `prev_hunk`
 
