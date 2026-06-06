@@ -3231,7 +3231,7 @@ func TestModel_HandleFileLoaded_InvalidatesAnnotationRows(t *testing.T) {
 func TestModel_ApplyTheme_InvalidatesAnnotationRows(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	highlighter := &mocks.SyntaxHighlighterMock{
 		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },

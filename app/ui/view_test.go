@@ -607,6 +607,38 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 	})
 }
 
+func TestModel_ViewRenameHeader(t *testing.T) {
+	t.Run("renamed file header shows old to new", func(t *testing.T) {
+		m := testModel([]string{"new.go"}, nil)
+		m.tree = sidepane.NewFileTree([]diff.FileEntry{{Path: "new.go", OldPath: "old.go", Status: diff.FileRenamed}})
+		m.file.singleFile = true
+		m.layout.treeWidth = 0
+		m.layout.focus = paneDiff
+		m.file.name = "new.go"
+		m.file.oldName = "old.go"
+		m.cfg.noStatusBar = true
+		m.ready = true
+
+		view := ansi.Strip(m.View())
+		assert.Contains(t, view, "old.go → new.go")
+	})
+
+	t.Run("non-rename file header shows only name", func(t *testing.T) {
+		m := testModel([]string{"main.go"}, nil)
+		m.tree = testNewFileTree([]string{"main.go"})
+		m.file.singleFile = true
+		m.layout.treeWidth = 0
+		m.layout.focus = paneDiff
+		m.file.name = "main.go"
+		m.cfg.noStatusBar = true
+		m.ready = true
+
+		view := ansi.Strip(m.View())
+		assert.Contains(t, view, "main.go")
+		assert.NotContains(t, view, "→")
+	})
+}
+
 func TestModel_DiffContentWidthSingleFile(t *testing.T) {
 	t.Run("single-file mode", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)

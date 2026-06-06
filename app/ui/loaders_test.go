@@ -102,6 +102,38 @@ func TestModel_FileLoaded(t *testing.T) {
 	assert.Len(t, model.file.lines, 2)
 }
 
+func TestModel_LoadFileDiffThreadsRenameOrigin(t *testing.T) {
+	var gotReq diff.FileDiffRequest
+	m := testModel([]string{"new.go"}, nil)
+	m.tree = sidepane.NewFileTree([]diff.FileEntry{{Path: "new.go", OldPath: "old.go", Status: diff.FileRenamed}})
+	m.diffRenderer = &mocks.RendererMock{
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			gotReq = req
+			return []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}, nil
+		},
+	}
+
+	t.Run("request and message carry rename origin", func(t *testing.T) {
+		msg := m.loadFileDiff("new.go")().(fileLoadedMsg)
+		assert.Equal(t, "old.go", gotReq.OldPath, "request OldPath comes from the tree")
+		assert.Equal(t, "new.go", gotReq.Path)
+		assert.Equal(t, "old.go", msg.oldName, "message carries rename origin")
+	})
+
+	t.Run("handleFileLoaded sets oldName on the model", func(t *testing.T) {
+		result, _ := m.Update(fileLoadedMsg{file: "new.go", oldName: "old.go", seq: m.file.loadSeq,
+			lines: []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}})
+		assert.Equal(t, "old.go", result.(Model).file.oldName)
+	})
+
+	t.Run("non-rename file has empty oldName", func(t *testing.T) {
+		m2 := testModel([]string{"plain.go"}, nil)
+		m2.tree = testNewFileTree([]string{"plain.go"})
+		msg := m2.loadFileDiff("plain.go")().(fileLoadedMsg)
+		assert.Empty(t, msg.oldName)
+	})
+}
+
 func TestModel_ComputeFileStats(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -425,7 +457,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return []diff.DiffLine{{Content: "line1", ChangeType: diff.ChangeContext, OldNum: 1, NewNum: 1}}, nil
 			},
 		}
@@ -479,7 +511,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil
 			},
 		}
@@ -503,7 +535,7 @@ func TestModel_UntrackedToggle(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil
 			},
 		}
@@ -536,7 +568,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 				}
 				return nil, nil // no unstaged changes
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return []diff.DiffLine{{Content: "content", ChangeType: diff.ChangeAdd, NewNum: 1}}, nil
 			},
 		}
@@ -562,7 +594,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 				}
 				return []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil
 			},
 		}
@@ -586,7 +618,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 				}
 				return []diff.FileEntry{{Path: "main.go", Status: diff.FileModified}}, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil
 			},
 		}
@@ -610,7 +642,7 @@ func TestModel_StagedOnlyFiles(t *testing.T) {
 				}
 				return nil, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil
 			},
 		}
@@ -636,7 +668,7 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil // empty diff for untracked
 			},
 		}
@@ -669,7 +701,7 @@ func TestModel_HandleFileLoadedUntrackedFallback(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil // empty diff for some reason
 			},
 		}
@@ -698,8 +730,8 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
-				if staged {
+			FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+				if req.Staged {
 					return cachedLines, nil
 				}
 				return nil, nil // empty unstaged diff for staged-only file
@@ -729,7 +761,7 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+			FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 				return nil, nil // empty diff even with --cached
 			},
 		}
@@ -757,8 +789,8 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
-				if staged {
+			FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+				if req.Staged {
 					return []diff.DiffLine{{NewNum: 1, Content: "staged", ChangeType: diff.ChangeContext}}, nil
 				}
 				return nil, nil
@@ -789,9 +821,9 @@ func TestModel_HandleFileLoadedStagedOnlyFallback(t *testing.T) {
 			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
 				return entries, nil
 			},
-			FileDiffFunc: func(ref, file string, staged bool, ctx int) ([]diff.DiffLine, error) {
-				if staged {
-					stagedCtx = ctx
+			FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+				if req.Staged {
+					stagedCtx = req.ContextLines
 					return cachedLines, nil
 				}
 				return nil, nil
@@ -1232,7 +1264,7 @@ func TestModel_TriggerReload_BumpsSeqAndCallsLoadFiles(t *testing.T) {
 			callCount++
 			return []diff.FileEntry{{Path: "main.go"}}, nil
 		},
-		FileDiffFunc: func(ref, file string, staged bool, _ int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return nil, nil
 		},
 	}
@@ -1432,8 +1464,8 @@ func TestModel_LoadFileDiffPassesContextLines(t *testing.T) {
 	var captured int
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc: func(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error) {
-			captured = contextLines
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			captured = req.ContextLines
 			return nil, nil
 		},
 	}
@@ -1453,8 +1485,8 @@ func TestModel_LoadFileDiffPassesZeroWhenNotApplicable(t *testing.T) {
 	var captured = -1
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc: func(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error) {
-			captured = contextLines
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			captured = req.ContextLines
 			return nil, nil
 		},
 	}
@@ -1474,7 +1506,7 @@ func TestModel_ReloadCurrentFileBumpsLoadSeqAndFetches(t *testing.T) {
 	var calls int
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc: func(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			calls++
 			return nil, nil
 		},

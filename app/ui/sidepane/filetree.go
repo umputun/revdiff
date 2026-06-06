@@ -22,6 +22,7 @@ type FileTree struct {
 	filter       bool                       // when true, show only annotated files
 	reviewed     map[string]bool            // files marked as reviewed by the user
 	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
+	oldPaths     map[string]string          // rename origin keyed by new path, empty for non-renames
 }
 
 // treeEntry represents a single line in the file tree display.
@@ -44,13 +45,21 @@ type renderCtx struct {
 // handles entries == nil gracefully, returning a valid empty *FileTree.
 func NewFileTree(entries []diff.FileEntry) *FileTree {
 	paths := diff.FileEntryPaths(entries)
-	ft := &FileTree{allFiles: paths, reviewed: make(map[string]bool), fileStatuses: make(map[string]diff.FileStatus)}
+	ft := &FileTree{
+		allFiles:     paths,
+		reviewed:     make(map[string]bool),
+		fileStatuses: make(map[string]diff.FileStatus),
+		oldPaths:     make(map[string]string),
+	}
 	ft.entries = ft.buildEntries(paths)
 
-	// store file statuses from entries
+	// store file statuses and rename origins from entries
 	for _, e := range entries {
 		if e.Status != "" {
 			ft.fileStatuses[e.Path] = e.Status
+		}
+		if e.OldPath != "" {
+			ft.oldPaths[e.Path] = e.OldPath
 		}
 	}
 
@@ -81,6 +90,12 @@ func (ft *FileTree) TotalFiles() int {
 // FileStatus returns the git change status for the given file path.
 func (ft *FileTree) FileStatus(path string) diff.FileStatus {
 	return ft.fileStatuses[path]
+}
+
+// OldPath returns the rename origin for the given file path, or empty when the
+// file is not a rename or the path is unknown.
+func (ft *FileTree) OldPath(path string) string {
+	return ft.oldPaths[path]
 }
 
 // FilterActive returns true when the file tree is showing only annotated files.
@@ -194,14 +209,19 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	paths := diff.FileEntryPaths(entries)
 	ft.allFiles = paths
 
-	// build new file status map from entries
+	// build new file status and rename-origin maps from entries
 	newStatuses := make(map[string]diff.FileStatus, len(entries))
+	newOldPaths := make(map[string]string)
 	for _, e := range entries {
 		if e.Status != "" {
 			newStatuses[e.Path] = e.Status
 		}
+		if e.OldPath != "" {
+			newOldPaths[e.Path] = e.OldPath
+		}
 	}
 	ft.fileStatuses = newStatuses
+	ft.oldPaths = newOldPaths
 
 	// prune reviewed map: drop keys no longer in entries
 	fileSet := make(map[string]struct{}, len(paths))

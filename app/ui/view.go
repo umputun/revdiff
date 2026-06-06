@@ -46,6 +46,9 @@ func (m Model) View() string {
 	diffTitle := "no file selected"
 	if m.file.name != "" {
 		diffTitle = m.file.name
+		if m.file.oldName != "" && m.file.oldName != m.file.name {
+			diffTitle = m.file.oldName + " → " + m.file.name
+		}
 	}
 	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(m.truncateHeaderTitle(diffTitle, diffPaneW))
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.layout.viewport.View())

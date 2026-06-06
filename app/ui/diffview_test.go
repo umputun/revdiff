@@ -728,7 +728,7 @@ func TestModel_WrapWidthClampsLargeIndent(t *testing.T) {
 func TestModel_NewModelClampsNegativeWrapIndent(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{WrapIndent: -7})
 	assert.Equal(t, 0, m.cfg.wrapIndent, "negative WrapIndent must clamp to 0 at construction")
@@ -760,7 +760,7 @@ func TestModel_WrappedLineCountReactsToIndent(t *testing.T) {
 func TestModel_PlainStyles(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return []diff.FileEntry{{Path: "a.go"}}, nil },
-		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{NoColors: true, TreeWidthRatio: 3})
 	m.layout.width = 120
@@ -776,7 +776,7 @@ func TestModel_PlainStyles(t *testing.T) {
 func TestModel_TabWidthDefault(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TabWidth: 0})
 	assert.Equal(t, "    ", m.cfg.tabSpaces, "tab width 0 should default to 4 spaces")

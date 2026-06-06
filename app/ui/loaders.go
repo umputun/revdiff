@@ -94,9 +94,16 @@ func (m Model) loadCommits() tea.Cmd {
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
 	contextLines := m.currentContextLines()
+	oldPath := m.tree.OldPath(file)
 	return func() tea.Msg {
-		lines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, m.cfg.staged, contextLines)
-		return fileLoadedMsg{file: file, seq: seq, lines: lines, err: err}
+		lines, err := m.diffRenderer.FileDiff(diff.FileDiffRequest{
+			Ref:          m.cfg.ref,
+			Path:         file,
+			OldPath:      oldPath,
+			Staged:       m.cfg.staged,
+			ContextLines: contextLines,
+		})
+		return fileLoadedMsg{file: file, oldName: oldPath, seq: seq, lines: lines, err: err}
 	}
 }
 
@@ -211,6 +218,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	m.file.singleFile = m.tree.TotalFiles() == 1
 	if len(entries) == 0 {
 		m.file.name = ""
+		m.file.oldName = ""
 		m.file.lines = nil
 		m.file.highlighted = nil
 		m.layout.viewport.SetContent("")
@@ -263,6 +271,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.file.name = msg.file
+	m.file.oldName = msg.oldName
 	m.file.lines = msg.lines
 	m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
 	m.invalidateAnnotationRows()
@@ -334,7 +343,8 @@ func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
 	}
 	// staged-only files: retry with git diff --cached
 	if !m.cfg.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
-		if cachedLines, err := m.diffRenderer.FileDiff(m.cfg.ref, file, true, m.currentContextLines()); err == nil && len(cachedLines) > 0 {
+		req := diff.FileDiffRequest{Ref: m.cfg.ref, Path: file, OldPath: m.tree.OldPath(file), Staged: true, ContextLines: m.currentContextLines()}
+		if cachedLines, err := m.diffRenderer.FileDiff(req); err == nil && len(cachedLines) > 0 {
 			m.file.lines = cachedLines
 			return
 		}

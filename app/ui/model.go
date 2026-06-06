@@ -42,7 +42,7 @@ import (
 // many lines on each side of a hunk. Context-only sources ignore this parameter.
 type Renderer interface {
 	ChangedFiles(ref string, staged bool) ([]diff.FileEntry, error)
-	FileDiff(ref, file string, staged bool, contextLines int) ([]diff.DiffLine, error)
+	FileDiff(req diff.FileDiffRequest) ([]diff.DiffLine, error)
 }
 
 // SyntaxHighlighter provides syntax highlighting for diff lines.
@@ -164,6 +164,8 @@ type FileTreeComponent interface {
 	TotalFiles() int
 	// FileStatus returns the git change status for the given file path.
 	FileStatus(path string) diff.FileStatus
+	// OldPath returns the rename origin for the given file path, empty for non-renames.
+	OldPath(path string) string
 	// FilterActive returns true when the file tree is showing only annotated files.
 	FilterActive() bool
 	// ReviewedCount returns the number of files marked as reviewed.
@@ -237,6 +239,7 @@ const (
 // object, making the synchronization invariant explicit.
 type loadedFileState struct {
 	name             string                 // currently displayed file path
+	oldName          string                 // rename origin of the displayed file, empty for non-renames
 	lines            []diff.DiffLine        // parsed diff lines
 	highlighted      []string               // pre-computed highlighted content, parallel to lines
 	intraRanges      [][]worddiff.Range     // per-line intra-line word-diff ranges, parallel to lines
@@ -511,10 +514,11 @@ type Model struct {
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
 type fileLoadedMsg struct {
-	file  string
-	seq   uint64
-	lines []diff.DiffLine
-	err   error
+	file    string
+	oldName string // rename origin of the file, empty for non-renames
+	seq     uint64
+	lines   []diff.DiffLine
+	err     error
 }
 
 // blameLoadedMsg is sent when blame data for a file has been loaded.

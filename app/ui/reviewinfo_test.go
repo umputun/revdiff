@@ -21,8 +21,8 @@ func TestModel_ReviewInfoStats(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "a.go", Status: diff.FileAdded}, {Path: "b.go", Status: diff.FileModified}}
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc: func(_, file string, _ bool, _ int) ([]diff.DiffLine, error) {
-			switch file {
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			switch req.Path {
 			case "a.go":
 				return []diff.DiffLine{{ChangeType: diff.ChangeAdd}, {ChangeType: diff.ChangeAdd}}, nil
 			case "b.go":
@@ -77,7 +77,7 @@ func TestModel_ReviewStatsLazyOnFirstOpen(t *testing.T) {
 	calls := 0
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc: func(_, _ string, _ bool, _ int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			calls++
 			return []diff.DiffLine{{ChangeType: diff.ChangeAdd}}, nil
 		},
@@ -111,7 +111,7 @@ func TestModel_ReviewStatsEarlyInfoOpenFetchesAfterFilesLoad(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc: func(_, _ string, _ bool, _ int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return []diff.DiffLine{{ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
@@ -183,8 +183,8 @@ func TestModel_ReviewStatsAddedFallback(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "newfile.go", Status: diff.FileAdded}}
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc: func(_, _ string, staged bool, _ int) ([]diff.DiffLine, error) {
-			if staged {
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			if req.Staged {
 				return []diff.DiffLine{{ChangeType: diff.ChangeAdd}, {ChangeType: diff.ChangeAdd}}, nil
 			}
 			return nil, nil
@@ -206,8 +206,8 @@ func TestModel_ReviewStatsAddedFallbackErrorMarksPartial(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "newfile.go", Status: diff.FileAdded}}
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc: func(_, _ string, staged bool, _ int) ([]diff.DiffLine, error) {
-			if staged {
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			if req.Staged {
 				return nil, errors.New("staged unavailable")
 			}
 			return nil, nil
@@ -232,7 +232,7 @@ func TestModel_ReviewStatsUntrackedFallbackOutsideWorkDir(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "../../etc/passwd", Status: diff.FileUntracked}}
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc:     func(string, string, bool, int) ([]diff.DiffLine, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
 	}
 	m := testNewModel(t, r, annotation.NewStore(), noopHighlighter(), ModelConfig{
 		WorkDir:    t.TempDir(),
@@ -346,7 +346,7 @@ func TestModel_InfoOverlay_RefreshesOnStatsLoad(t *testing.T) {
 	entries := []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return []diff.DiffLine{{ChangeType: diff.ChangeAdd}, {ChangeType: diff.ChangeAdd}, {ChangeType: diff.ChangeRemove}}, nil
 		},
 	}

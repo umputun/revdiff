@@ -711,6 +711,34 @@ func TestFileTreeRebuild(t *testing.T) {
 	})
 }
 
+func TestFileTree_OldPath(t *testing.T) {
+	entries := []diff.FileEntry{
+		{Path: "new.go", OldPath: "old.go", Status: diff.FileRenamed},
+		{Path: "mod.go", Status: diff.FileModified},
+	}
+	ft := NewFileTree(entries)
+
+	t.Run("returns origin for renamed entry", func(t *testing.T) {
+		assert.Equal(t, "old.go", ft.OldPath("new.go"))
+	})
+
+	t.Run("empty for non-rename entry", func(t *testing.T) {
+		assert.Empty(t, ft.OldPath("mod.go"))
+	})
+
+	t.Run("empty for unknown path", func(t *testing.T) {
+		assert.Empty(t, ft.OldPath("nope.go"))
+	})
+
+	t.Run("survives rebuild with refreshed origins", func(t *testing.T) {
+		ft.Rebuild([]diff.FileEntry{
+			{Path: "dst.go", OldPath: "src.go", Status: diff.FileRenamed},
+		})
+		assert.Equal(t, "src.go", ft.OldPath("dst.go"))
+		assert.Empty(t, ft.OldPath("new.go"), "old rename origins should be cleared")
+	})
+}
+
 func TestFileTree_ScrollState(t *testing.T) {
 	t.Run("empty tree reports zero total and zero offset", func(t *testing.T) {
 		ft := NewFileTree(nil)
