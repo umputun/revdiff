@@ -32,6 +32,10 @@ type preloader struct {
 	// lineCache memoises the (line, change-type) set per file so
 	// repeated annotations on the same file do not re-fetch its diff.
 	lineCache map[string]map[lineKey]struct{}
+
+	// renames maps a file's current path to its rename origin so the
+	// per-file diff is rename-aware (matches the displayed minimal diff).
+	renames map[string]string
 }
 
 type lineKey struct {
@@ -65,6 +69,7 @@ func preloadAnnotations(path string, store *annotation.Store, renderer ui.Render
 		workDir:     workDir,
 		warnOut:     warnOut,
 		lineCache:   make(map[string]map[lineKey]struct{}),
+		renames:     make(map[string]string),
 	}
 	return p.load(records)
 }
@@ -151,6 +156,9 @@ func (p *preloader) resolveKnownFiles() (map[string]diff.FileStatus, error) {
 	known := make(map[string]diff.FileStatus, len(files))
 	for _, fe := range files {
 		known[fe.Path] = fe.Status
+		if fe.OldPath != "" {
+			p.renames[fe.Path] = fe.OldPath
+		}
 	}
 	if p.untrackedFn != nil {
 		if ut, utErr := p.untrackedFn(); utErr != nil {
@@ -185,7 +193,8 @@ func (p *preloader) resolveKnownFiles() (map[string]diff.FileStatus, error) {
 // lookupLineSet returns the cached line-set for file, fetching FileDiff on
 // miss. Mirrors ui.resolveEmptyDiff: staged-only FileAdded entries retry with
 // --cached when the request was unstaged, and FileUntracked entries are read
-// from disk as all-added lines.
+// from disk as all-added lines. Renamed files carry OldPath so the diff is
+// rename-aware and its line keys match the displayed minimal diff.
 func (p *preloader) lookupLineSet(file string, status diff.FileStatus) map[lineKey]struct{} {
 	if lines, ok := p.lineCache[file]; ok {
 		return lines
@@ -205,7 +214,7 @@ func (p *preloader) lookupLineSet(file string, status diff.FileStatus) map[lineK
 		if !p.staged && p.ref == "" && status == diff.FileAdded {
 			fileStaged = true
 		}
-		dl, err = p.renderer.FileDiff(p.ref, file, fileStaged, 0)
+		dl, err = p.renderer.FileDiff(diff.FileDiffRequest{Ref: p.ref, Path: file, OldPath: p.renames[file], Staged: fileStaged})
 	}
 	var lines map[lineKey]struct{}
 	if err != nil {

@@ -81,8 +81,8 @@ func TestPreloadAnnotations_DropsOrphans(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
 			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
 		},
-		FileDiffFunc: func(_, file string, _ bool, _ int) ([]diff.DiffLine, error) {
-			assert.Equal(t, "a.go", file)
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			assert.Equal(t, "a.go", req.Path)
 			return []diff.DiffLine{
 				{OldNum: 0, NewNum: 5, Content: "added", ChangeType: diff.ChangeAdd},
 				{OldNum: 4, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
@@ -111,7 +111,7 @@ func TestPreloadAnnotations_RemovedLineMatchesOldNum(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
 			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
 		},
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return []diff.DiffLine{
 				{OldNum: 4, NewNum: 0, Content: "gone", ChangeType: diff.ChangeRemove},
 			}, nil
@@ -129,7 +129,7 @@ func TestPreloadAnnotations_ContextMatchesNewNum(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
 			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
 		},
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return []diff.DiffLine{
 				{OldNum: 7, NewNum: 7, Content: "ctx", ChangeType: diff.ChangeContext},
 			}, nil
@@ -146,7 +146,7 @@ func TestPreloadAnnotations_DuplicateLastWriteWins(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
 			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
 		},
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
@@ -171,9 +171,9 @@ func TestPreloadAnnotations_StagedOnlyAddedFile(t *testing.T) {
 			}
 			return nil, nil
 		},
-		FileDiffFunc: func(_, file string, staged bool, _ int) ([]diff.DiffLine, error) {
-			assert.Equal(t, "new.go", file)
-			assert.True(t, staged, "FileAdded with empty unstaged set must retry with --cached")
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			assert.Equal(t, "new.go", req.Path)
+			assert.True(t, req.Staged, "FileAdded with empty unstaged set must retry with --cached")
 			return []diff.DiffLine{
 				{NewNum: 1, Content: "first", ChangeType: diff.ChangeAdd},
 				{NewNum: 2, Content: "second", ChangeType: diff.ChangeAdd},
@@ -213,6 +213,56 @@ func TestPreloadAnnotations_UntrackedFile(t *testing.T) {
 	assert.True(t, store.Has("new.go", 0, ""), "file-level annotation must round-trip")
 	assert.True(t, store.Has("new.go", 2, "+"), "line-2 annotation must match disk content")
 	assert.Contains(t, warn.String(), "new.go:99")
+}
+
+func TestPreloadAnnotations_RenamedFileUsesRenameAwareDiff(t *testing.T) {
+	// A renamed+edited file must have its rename origin threaded into FileDiff
+	// so the line-set is the minimal rename-aware diff, not all-added. The
+	// annotation on the genuinely edited line round-trips; a (+) annotation on
+	// a line that is only context under the rename-aware diff is dropped.
+	body := "## new.go:2 (+)\nedited line\n\n## new.go:1 (+)\ncontext under rename-aware diff\n"
+	path := writeTempAnnotations(t, body)
+	store := annotation.NewStore()
+	var gotReq diff.FileDiffRequest
+	r := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "new.go", OldPath: "old.go", Status: diff.FileRenamed}}, nil
+		},
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			gotReq = req
+			return []diff.DiffLine{
+				{OldNum: 1, NewNum: 1, Content: "first", ChangeType: diff.ChangeContext},
+				{OldNum: 0, NewNum: 2, Content: "TWO", ChangeType: diff.ChangeAdd},
+			}, nil
+		},
+	}
+	warn := &bytes.Buffer{}
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", warn))
+
+	assert.Equal(t, "old.go", gotReq.OldPath, "FileDiff must receive the rename origin")
+	assert.Equal(t, "new.go", gotReq.Path)
+	assert.Equal(t, 1, store.Count(), "warnings: %s", warn.String())
+	assert.True(t, store.Has("new.go", 2, "+"), "edited line annotation round-trips")
+	assert.False(t, store.Has("new.go", 1, "+"), "context line is not an add in the rename-aware diff")
+	assert.Contains(t, warn.String(), "new.go:1")
+}
+
+func TestPreloadAnnotations_NonRenameHasEmptyOldPath(t *testing.T) {
+	path := writeTempAnnotations(t, "## a.go:5 (+)\nadd note\n")
+	store := annotation.NewStore()
+	var gotReq diff.FileDiffRequest
+	r := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
+		},
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			gotReq = req
+			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
+		},
+	}
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	assert.Empty(t, gotReq.OldPath, "non-rename entries carry no rename origin")
+	assert.True(t, store.Has("a.go", 5, "+"))
 }
 
 func TestPreloadAnnotations_UntrackedListError(t *testing.T) {
@@ -270,7 +320,7 @@ func TestPreloadAnnotations_SanitizesCommentText(t *testing.T) {
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
 			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
 		},
-		FileDiffFunc: func(string, string, bool, int) ([]diff.DiffLine, error) {
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
 			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
