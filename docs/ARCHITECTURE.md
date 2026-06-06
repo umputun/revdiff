@@ -71,8 +71,8 @@ Handles all interaction with version control systems and diff parsing.
 
 **VCS detection** (`vcs.go`): `DetectVCS()` walks up directory tree looking for `.jj`/`.git`/`.hg` markers, returns `VCSJJ`, `VCSGit`, `VCSHg`, or `VCSNone`. `.jj` is checked before `.git` so colocated jj+git repositories resolve as jj (reads go through the jj working-copy model instead of bypassing it via git).
 
-**Renderer implementations** — all implement the `ui.Renderer` interface (`ChangedFiles()` + `FileDiff()`):
-- `Git` — runs `git diff`, parses unified diff output
+**Renderer implementations** — all implement the `ui.Renderer` interface (`ChangedFiles()` + `FileDiff()`). `FileDiff` takes a single `FileDiffRequest` value (`Ref`, `Path`, `OldPath`, `Staged`, `ContextLines`) rather than positional args — bundled to stay under the 4-param limit and to carry the rename origin:
+- `Git` — runs `git diff`, parses unified diff output. Rename-aware: `ChangedFiles` keeps the rename origin on `FileEntry.OldPath`, and `FileDiff` passes `-M` plus both old/new paths (`pathArgs`) so git pairs the rename into a minimal diff instead of rendering the file as fully added. Git-only — `Hg`/`Jj` never set `OldPath`, so they ignore it
 - `Hg` — runs `hg diff --git`, parses unified diff output
 - `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
 
