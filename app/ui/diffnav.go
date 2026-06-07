@@ -308,18 +308,41 @@ func (m *Model) bottomAlignViewportOnCursor() {
 	m.layout.viewport.SetYOffset(max(0, cursorY-m.layout.viewport.Height+1))
 }
 
+// clampViewportRow clamps an absolute content row to the currently visible
+// window [YOffset, YOffset+Height-1] so screen-position motions never target a
+// row outside the screen (which would force a scroll). Height 0 collapses the
+// window to the single YOffset row.
+func (m *Model) clampViewportRow(row int) int {
+	top := m.layout.viewport.YOffset
+	bottom := top + max(m.layout.viewport.Height-1, 0)
+	return min(max(row, top), bottom)
+}
+
+// nudgeOffDividerTowardViewportInterior nudges the cursor off a divider toward
+// the interior of the visible window relative to targetRow. screen-position
+// motions clamp their target into the window, but a divider sitting on the
+// clamped row would otherwise nudge in a fixed direction that can leave the
+// window (e.g. a large-count H clamped to the bottom row nudging further down);
+// preferring the side with more room keeps the cursor on-screen.
+func (m *Model) nudgeOffDividerTowardViewportInterior(targetRow int) {
+	top := m.layout.viewport.YOffset
+	bottom := top + max(m.layout.viewport.Height-1, 0)
+	m.nudgeCursorOffDivider(targetRow-top <= bottom-targetRow)
+}
+
 // moveDiffCursorToScreenTop moves the cursor to the Nth visible line from the
-// top of the viewport. n=0 or n=1 targets the first visible line. Matches vim H.
+// top of the viewport. n=0 or n=1 targets the first visible line; counts past
+// the bottom of the screen clamp to the last visible line. Matches vim H.
 func (m *Model) moveDiffCursorToScreenTop(n int) {
 	if len(m.file.lines) == 0 {
 		return
 	}
 	offset := max(0, n-1)
-	row := m.layout.viewport.YOffset + offset
-	idx, _ := m.visualRowToDiffLine(row)
-	m.annot.cursorOnAnnotation = false
+	row := m.clampViewportRow(m.layout.viewport.YOffset + offset)
+	idx, onAnn := m.visualRowToDiffLine(row)
+	m.annot.cursorOnAnnotation = onAnn
 	m.nav.diffCursor = idx
-	m.nudgeCursorOffDivider()
+	m.nudgeOffDividerTowardViewportInterior(row)
 	m.adjustCursorIfHidden()
 	m.syncViewportToCursor()
 	m.syncTOCActiveSection()
@@ -331,11 +354,11 @@ func (m *Model) moveDiffCursorToScreenMiddle() {
 	if len(m.file.lines) == 0 {
 		return
 	}
-	row := m.layout.viewport.YOffset + m.layout.viewport.Height/2
-	idx, _ := m.visualRowToDiffLine(row)
-	m.annot.cursorOnAnnotation = false
+	row := m.clampViewportRow(m.layout.viewport.YOffset + m.layout.viewport.Height/2)
+	idx, onAnn := m.visualRowToDiffLine(row)
+	m.annot.cursorOnAnnotation = onAnn
 	m.nav.diffCursor = idx
-	m.nudgeCursorOffDivider()
+	m.nudgeOffDividerTowardViewportInterior(row)
 	m.adjustCursorIfHidden()
 	m.syncViewportToCursor()
 	m.syncTOCActiveSection()
@@ -348,40 +371,50 @@ func (m *Model) moveDiffCursorToScreenBottom(n int) {
 		return
 	}
 	offset := max(0, n-1)
-	row := m.layout.viewport.YOffset + m.layout.viewport.Height - 1 - offset
-	if row < m.layout.viewport.YOffset {
-		row = m.layout.viewport.YOffset
-	}
-	idx, _ := m.visualRowToDiffLine(row)
-	m.annot.cursorOnAnnotation = false
+	row := m.clampViewportRow(m.layout.viewport.YOffset + m.layout.viewport.Height - 1 - offset)
+	idx, onAnn := m.visualRowToDiffLine(row)
+	m.annot.cursorOnAnnotation = onAnn
 	m.nav.diffCursor = idx
-	m.nudgeCursorOffDivider()
+	m.nudgeOffDividerTowardViewportInterior(row)
 	m.adjustCursorIfHidden()
 	m.syncViewportToCursor()
 	m.syncTOCActiveSection()
 }
 
-// nudgeCursorOffDivider pushes the cursor to the nearest non-divider line when
-// it currently sits on a ChangeDivider row. Searches backward first, then forward.
-func (m *Model) nudgeCursorOffDivider() {
+// nudgeCursorOffDivider pushes the cursor off a ChangeDivider row to the nearest
+// non-divider line, since dividers cannot host cursor actions. preferForward
+// searches forward (down) first so screen-position motions keep the cursor inside
+// the viewport (forward from the top, backward from the bottom); otherwise it
+// searches backward first. The opposite direction is the fallback, so the cursor
+// still moves off a divider when the preferred side has no plain line.
+func (m *Model) nudgeCursorOffDivider(preferForward bool) {
 	if m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
 		return
 	}
 	if m.file.lines[m.nav.diffCursor].ChangeType != diff.ChangeDivider {
 		return
 	}
-	for i := m.nav.diffCursor - 1; i >= 0; i-- {
+	first, second := -1, 1 // backward first, forward fallback
+	if preferForward {
+		first, second = 1, -1
+	}
+	if m.scanForNonDivider(first) {
+		return
+	}
+	m.scanForNonDivider(second)
+}
+
+// scanForNonDivider walks the diff lines from the current cursor in the given
+// step direction (+1 forward, -1 backward) and moves the cursor to the first
+// non-divider line found, returning true when one is found.
+func (m *Model) scanForNonDivider(step int) bool {
+	for i := m.nav.diffCursor + step; i >= 0 && i < len(m.file.lines); i += step {
 		if m.file.lines[i].ChangeType != diff.ChangeDivider {
 			m.nav.diffCursor = i
-			return
+			return true
 		}
 	}
-	for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
-		if m.file.lines[i].ChangeType != diff.ChangeDivider {
-			m.nav.diffCursor = i
-			return
-		}
-	}
+	return false
 }
 
 // jumpToLineN moves the diff cursor to line n (1-indexed), clamped to [1, total],
@@ -405,24 +438,11 @@ func (m *Model) jumpToLineN(n int) {
 	}
 	m.annot.cursorOnAnnotation = false
 	m.nav.diffCursor = n - 1
+	// nudge off ChangeDivider rows before resolving hidden lines so the final
+	// landing is both actionable and visible (collapsed mode may hide the
+	// nudged-to line). backward first matches the centered feel of G / <N>G.
+	m.nudgeCursorOffDivider(false)
 	m.adjustCursorIfHidden()
-	// nudge off ChangeDivider rows — they cannot host cursor actions.
-	if m.nav.diffCursor >= 0 && m.nav.diffCursor < len(m.file.lines) && m.file.lines[m.nav.diffCursor].ChangeType == diff.ChangeDivider {
-		for i := m.nav.diffCursor - 1; i >= 0; i-- {
-			if m.file.lines[i].ChangeType != diff.ChangeDivider {
-				m.nav.diffCursor = i
-				break
-			}
-		}
-	}
-	if m.nav.diffCursor >= 0 && m.nav.diffCursor < len(m.file.lines) && m.file.lines[m.nav.diffCursor].ChangeType == diff.ChangeDivider {
-		for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
-			if m.file.lines[i].ChangeType != diff.ChangeDivider {
-				m.nav.diffCursor = i
-				break
-			}
-		}
-	}
 	m.syncTOCActiveSection()
 	m.centerViewportOnCursor()
 }

@@ -54,7 +54,7 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 // buildHelpSpec builds an overlay.HelpSpec from the keymap's help sections,
 // converting raw key names to display names and inserting the TOC section.
 // When the vim-motion preset is active, appends a synthetic "Vim motion"
-// section listing the 8 preset bindings (which have no entries in the base
+// section listing the 11 preset bindings (which have no entries in the base
 // keymap since they're only reachable through the interceptor).
 func (m Model) buildHelpSpec() overlay.HelpSpec {
 	sections := m.keymap.HelpSections()

@@ -36,7 +36,7 @@ Then uncomment and edit the values you want to change.
 | `--exit-code-on-annotations` | `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` | Exit 10 when annotations are produced | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
 | `--no-mouse` | `REVDIFF_NO_MOUSE` | Disable mouse support (scroll wheel, click) | `false` |
-| `--vim-motion` | `REVDIFF_VIM_MOTION` | Enable vim-style motion preset (counts, `gg`, `G`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`) | `false` |
+| `--vim-motion` | `REVDIFF_VIM_MOTION` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`) | `false` |
 | `--chroma-style` | `REVDIFF_CHROMA_STYLE` | Chroma color theme for syntax highlighting | `catppuccin-macchiato` |
 | `--theme` | `REVDIFF_THEME` | Load color theme from `~/.config/revdiff/themes/` | |
 | `--dump-theme` | | Print currently resolved colors as theme file and exit | |
