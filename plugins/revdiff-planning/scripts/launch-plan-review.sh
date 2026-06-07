@@ -230,7 +230,9 @@ LAUNCHER
         sleep 0.3
     done
     rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
-    cmux close-surface --surface "$CMUX_SURF" 2>/dev/null || true
+    # no explicit close: the exec'd launch script exits when the review tool does,
+    # so cmux auto-closes the surface. closing by the short ref (surface:N) here
+    # would risk hitting a recycled ref — another tab or the caller (see #217).
     rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit "${rc:-1}"
