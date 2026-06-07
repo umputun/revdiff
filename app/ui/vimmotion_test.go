@@ -245,6 +245,64 @@ func TestInterceptVimMotion_GTreePaneFallsThrough(t *testing.T) {
 	assert.Equal(t, 0, model.vim.count)
 }
 
+func TestInterceptVimMotion_HWithCount(t *testing.T) {
+	m := vimTestModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+	m.vim.count = 5
+
+	result, _, handled := m.interceptVimMotion(keyMsg('H'))
+	require.True(t, handled, "H in diff pane must be consumed")
+	model := result.(Model)
+	assert.Equal(t, yoff+4, model.nav.diffCursor, "5H lands on the 5th line from the top")
+	assert.Equal(t, 0, model.vim.count, "count must be cleared after use")
+	assert.Empty(t, model.vim.hint, "hint must be cleared after use")
+}
+
+func TestInterceptVimMotion_LWithCount(t *testing.T) {
+	m := vimTestModel(t, 200)
+	m.layout.viewport.SetYOffset(20)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+	m.vim.count = 3
+
+	result, _, handled := m.interceptVimMotion(keyMsg('L'))
+	require.True(t, handled, "L in diff pane must be consumed")
+	model := result.(Model)
+	assert.Equal(t, yoff+h-3, model.nav.diffCursor, "3L lands on the 3rd line from the bottom")
+	assert.Equal(t, 0, model.vim.count, "count must be cleared after use")
+}
+
+func TestInterceptVimMotion_MIgnoresCount(t *testing.T) {
+	m := vimTestModel(t, 200)
+	m.layout.viewport.SetYOffset(20)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+	m.vim.count = 5
+
+	result, _, handled := m.interceptVimMotion(keyMsg('M'))
+	require.True(t, handled, "M in diff pane must be consumed")
+	model := result.(Model)
+	assert.Equal(t, yoff+h/2, model.nav.diffCursor, "M lands on the middle line, ignoring the count")
+	assert.Equal(t, 0, model.vim.count, "count must be cleared even though M ignores it")
+}
+
+func TestInterceptVimMotion_HMLTreePaneFallsThrough(t *testing.T) {
+	for _, key := range []rune{'H', 'M', 'L'} {
+		t.Run(string(key), func(t *testing.T) {
+			m := vimTestModel(t, 50)
+			m.layout.focus = paneTree
+			m.nav.diffCursor = 7
+
+			result, cmd, handled := m.interceptVimMotion(keyMsg(key))
+			require.False(t, handled, "screen motions are diff-only and must fall through in the tree pane")
+			assert.Nil(t, cmd, "fall-through must return nil cmd per documented invariant")
+			model := result.(Model)
+			assert.Equal(t, 7, model.nav.diffCursor, "tree-pane fall-through must not move the diff cursor")
+		})
+	}
+}
+
 func TestInterceptVimMotion_CountUnrelatedKeyFallsThrough(t *testing.T) {
 	m := vimTestModel(t, 50)
 	m.vim.count = 5

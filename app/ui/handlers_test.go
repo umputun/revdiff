@@ -808,10 +808,10 @@ func TestBuildHelpSpec_VimMotionSectionOn(t *testing.T) {
 		}
 	}
 	require.NotNil(t, vimSection, "help overlay must include a Vim motion section when --vim-motion is on")
-	require.Len(t, vimSection.Entries, 8, "Vim motion section must list all 8 preset bindings")
+	require.Len(t, vimSection.Entries, 11, "Vim motion section must list all 11 preset bindings")
 
 	// verify each expected binding is present by key string
-	wantKeys := []string{"N j / N k", "gg", "G / N G", "zz", "zt", "zb", "ZZ", "ZQ"}
+	wantKeys := []string{"N j / N k", "gg", "G / N G", "H / N H", "M", "L / N L", "zz", "zt", "zb", "ZZ", "ZQ"}
 	for i, want := range wantKeys {
 		assert.Equal(t, want, vimSection.Entries[i].Keys,
 			"entry %d key string mismatch", i)

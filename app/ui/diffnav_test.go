@@ -2788,6 +2788,251 @@ func TestJumpToLineN_CollapsedModeVisibleLineStays(t *testing.T) {
 	assert.Equal(t, 2, model.nav.diffCursor, "visible target line must not be adjusted")
 }
 
+// screenMotionModel builds a diff-focused model with n single-row context lines
+// and a sized viewport, for exercising the H/M/L screen-position motions.
+func screenMotionModel(t *testing.T, n int) Model {
+	t.Helper()
+	lines := make([]diff.DiffLine, n)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	return model
+}
+
+func TestMoveDiffCursorToScreenTop_Placement(t *testing.T) {
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+
+	m.moveDiffCursorToScreenTop(0)
+	assert.Equal(t, yoff, m.nav.diffCursor, "H with no count lands on the top visible line")
+
+	m.moveDiffCursorToScreenTop(5)
+	assert.Equal(t, yoff+4, m.nav.diffCursor, "5H lands on the 5th line from the top")
+	assert.Equal(t, yoff, m.layout.viewport.YOffset, "screen motion must not scroll the viewport")
+}
+
+func TestMoveDiffCursorToScreenMiddle_OddEvenHeight(t *testing.T) {
+	tests := []struct {
+		name         string
+		height, want int
+	}{
+		{"even height", 10, 5},
+		{"odd height", 9, 4},
+		{"full window", 40, 20},
+		{"height one", 1, 0},
+		{"height zero", 0, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := screenMotionModel(t, 200)
+			m.layout.viewport.SetYOffset(0)
+			m.layout.viewport.Height = tc.height
+			m.moveDiffCursorToScreenMiddle()
+			assert.Equal(t, tc.want, m.nav.diffCursor, "M lands on the middle visible line (YOffset 0 + Height/2)")
+		})
+	}
+}
+
+func TestMoveDiffCursorToScreenBottom_Placement(t *testing.T) {
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+
+	m.moveDiffCursorToScreenBottom(0)
+	assert.Equal(t, yoff+h-1, m.nav.diffCursor, "L with no count lands on the bottom visible line")
+
+	m.moveDiffCursorToScreenBottom(3)
+	assert.Equal(t, yoff+h-3, m.nav.diffCursor, "3L lands on the 3rd line from the bottom")
+	assert.Equal(t, yoff, m.layout.viewport.YOffset, "screen motion must not scroll the viewport")
+}
+
+func TestMoveDiffCursorToScreenBottom_CountBeyondTopClamps(t *testing.T) {
+	// a count taller than the viewport must clamp the target row to the top of the
+	// screen, not underflow above it (regression guard for the row clamp).
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+
+	m.moveDiffCursorToScreenBottom(100000)
+	assert.Equal(t, yoff, m.nav.diffCursor, "huge count clamps L to the top visible line")
+}
+
+func TestMoveDiffCursorToScreen_EmptyDiff(t *testing.T) {
+	m := screenMotionModel(t, 0)
+	m.nav.diffCursor = 3
+	before := m.nav.diffCursor
+
+	assert.NotPanics(t, func() {
+		m.moveDiffCursorToScreenTop(2)
+		m.moveDiffCursorToScreenMiddle()
+		m.moveDiffCursorToScreenBottom(2)
+	})
+	assert.Equal(t, before, m.nav.diffCursor, "empty diff leaves the cursor unchanged")
+}
+
+func TestMoveDiffCursorToScreenTop_CountBeyondBottomClamps(t *testing.T) {
+	// a count taller than the viewport must clamp H to the last visible row, not
+	// select an off-screen row below the window (symmetry with L's clamp).
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+
+	m.moveDiffCursorToScreenTop(100000)
+	assert.Equal(t, yoff+h-1, m.nav.diffCursor, "huge count clamps H to the last visible line")
+	assert.Equal(t, yoff, m.layout.viewport.YOffset, "clamped H must not scroll the viewport")
+}
+
+func TestMoveDiffCursorToScreen_ZeroHeight(t *testing.T) {
+	// degenerate viewport height must not panic in the height-derived row math.
+	m := screenMotionModel(t, 50)
+	m.layout.viewport.SetYOffset(0)
+	m.layout.viewport.Height = 0
+
+	assert.NotPanics(t, func() {
+		m.moveDiffCursorToScreenTop(3)
+		m.moveDiffCursorToScreenMiddle()
+		m.moveDiffCursorToScreenBottom(3)
+	})
+}
+
+func TestMoveDiffCursorToScreenTop_CountClampOntoBottomDividerStaysInViewport(t *testing.T) {
+	// a large H count clamps to the bottom visible row; if that row is a divider
+	// the nudge must move toward the window interior (backward), not push below
+	// the window and scroll.
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+	m.file.lines[yoff+h-1].ChangeType = diff.ChangeDivider // bottom visible row
+
+	m.moveDiffCursorToScreenTop(100000)
+	assert.GreaterOrEqual(t, m.nav.diffCursor, yoff, "cursor must stay at or below the window top")
+	assert.Less(t, m.nav.diffCursor, yoff+h, "cursor must stay within the visible window")
+	assert.NotEqual(t, diff.ChangeDivider, m.file.lines[m.nav.diffCursor].ChangeType, "cursor must not rest on a divider")
+	assert.Equal(t, yoff, m.layout.viewport.YOffset, "clamped H onto a bottom-edge divider must not scroll")
+}
+
+func TestMoveDiffCursorToScreenBottom_CountClampOntoTopDividerStaysInViewport(t *testing.T) {
+	// a large L count clamps to the top visible row; if that row is a divider the
+	// nudge must move toward the window interior (forward), not push above the
+	// window and scroll.
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(50)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+	m.file.lines[yoff].ChangeType = diff.ChangeDivider // top visible row
+
+	m.moveDiffCursorToScreenBottom(100000)
+	assert.GreaterOrEqual(t, m.nav.diffCursor, yoff, "cursor must not nudge above the window top")
+	assert.Less(t, m.nav.diffCursor, yoff+h, "cursor must stay within the visible window")
+	assert.NotEqual(t, diff.ChangeDivider, m.file.lines[m.nav.diffCursor].ChangeType, "cursor must not rest on a divider")
+	assert.Equal(t, yoff, m.layout.viewport.YOffset, "clamped L onto a top-edge divider must not scroll")
+}
+
+func TestJumpToLineN_NudgesOffDivider(t *testing.T) {
+	// G / <N>G landing on a divider must nudge off it (the refactor routes this
+	// through the shared nudgeCursorOffDivider before adjustCursorIfHidden).
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}, // idx 0
+		{Content: "⋯", ChangeType: diff.ChangeDivider},            // idx 1
+		{NewNum: 2, Content: "b", ChangeType: diff.ChangeContext}, // idx 2
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+
+	model.jumpToLineN(2) // idx 1 = divider; nudge (backward-first) off it
+	assert.NotEqual(t, diff.ChangeDivider, model.file.lines[model.nav.diffCursor].ChangeType,
+		"jumpToLineN must not leave the cursor on a divider")
+	assert.Equal(t, 0, model.nav.diffCursor, "backward-first nudge lands on the preceding line")
+}
+
+func TestMoveDiffCursorToScreenTop_StaysInViewportOnDivider(t *testing.T) {
+	// H targets the top visible row; when that row is a ⋯ divider the cursor must
+	// nudge forward into the viewport, not backward above YOffset (which would
+	// scroll the page). Regression guard for the viewport-aware nudge.
+	m := screenMotionModel(t, 200)
+	m.layout.viewport.SetYOffset(55)
+	yoff := m.layout.viewport.YOffset
+	h := m.layout.viewport.Height
+	m.file.lines[yoff].ChangeType = diff.ChangeDivider
+
+	m.moveDiffCursorToScreenTop(0)
+	assert.Equal(t, yoff+1, m.nav.diffCursor, "H on a top-row divider nudges forward to the next line")
+	assert.NotEqual(t, diff.ChangeDivider, m.file.lines[m.nav.diffCursor].ChangeType, "cursor must not rest on a divider")
+	assert.GreaterOrEqual(t, m.nav.diffCursor, yoff, "cursor must not nudge above the viewport top")
+	assert.Less(t, m.nav.diffCursor, yoff+h, "cursor must stay within the visible window")
+	assert.Equal(t, yoff, m.layout.viewport.YOffset, "screen motion must not scroll the viewport")
+}
+
+func TestMoveDiffCursorToScreenTop_OnAnnotationRow(t *testing.T) {
+	// when the targeted top row is an injected annotation sub-line, the cursor
+	// must report cursorOnAnnotation so edits and the highlight target the
+	// annotation rather than its parent diff line.
+	m := screenMotionModel(t, 200)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: string(diff.ChangeContext), Comment: "note"})
+	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: m.file.lines})
+	m = result.(Model)
+	// content row 0 is diff line 0; row 1 is its annotation sub-line.
+	m.layout.viewport.SetYOffset(1)
+
+	m.moveDiffCursorToScreenTop(0)
+	assert.Equal(t, 0, m.nav.diffCursor, "H targets the annotation's parent diff line")
+	assert.True(t, m.annot.cursorOnAnnotation, "H on an annotation sub-row must set cursorOnAnnotation")
+}
+
+func TestNudgeCursorOffDivider_Direction(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}, // idx 0
+		{Content: "⋯", ChangeType: diff.ChangeDivider},            // idx 1
+		{NewNum: 2, Content: "b", ChangeType: diff.ChangeContext}, // idx 2
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+
+	model.nav.diffCursor = 1
+	model.nudgeCursorOffDivider(true)
+	assert.Equal(t, 2, model.nav.diffCursor, "preferForward nudges down off the divider")
+
+	model.nav.diffCursor = 1
+	model.nudgeCursorOffDivider(false)
+	assert.Equal(t, 0, model.nav.diffCursor, "backward-first nudges up off the divider")
+}
+
+func TestNudgeCursorOffDivider_FallbackOppositeDirection(t *testing.T) {
+	// preferForward, but the only non-divider line is behind the cursor: the
+	// search must fall back to the opposite direction.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}, // idx 0
+		{Content: "⋯", ChangeType: diff.ChangeDivider},            // idx 1
+		{Content: "⋯", ChangeType: diff.ChangeDivider},            // idx 2
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+
+	model.nav.diffCursor = 2
+	model.nudgeCursorOffDivider(true) // no non-divider forward; fall back to idx 0
+	assert.Equal(t, 0, model.nav.diffCursor, "forward search falls back to the backward non-divider line")
+}
+
 func TestHandleDiffAction_ScrollCenter(t *testing.T) {
 	lines := make([]diff.DiffLine, 100)
 	for i := range lines {

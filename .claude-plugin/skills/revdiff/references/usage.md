@@ -256,15 +256,18 @@ Opt-in vim-style motion layer activated via `--vim-motion`, `REVDIFF_VIM_MOTION=
 | `gg` | Jump to first line (diff pane) |
 | `G` | Jump to last line (diff pane) |
 | `<N>G` | Goto line N (diff pane) |
+| `H` / `<N>H` | Cursor to top of screen / Nth line from top (diff pane) |
+| `M` | Cursor to middle of screen (diff pane) |
+| `L` / `<N>L` | Cursor to bottom of screen / Nth line from bottom (diff pane) |
 | `zz` | Center viewport on cursor (diff pane) |
 | `zt` | Align viewport top on cursor (diff pane) |
 | `zb` | Align viewport bottom on cursor (diff pane) |
 | `ZZ` | Quit (any pane) |
 | `ZQ` | Discard annotations and quit (any pane) |
 
-When the preset is on, the digits `0`-`9` and the leader keys `g`, `z`, `Z` are intercepted before the regular keymap, so any standalone binding on those keys is overridden while the flag is active. `<N>j`/`<N>k`/`<N>G` and `gg`/`zz`/`zt`/`zb` apply to the diff pane only — in the file tree they fall through to the normal bindings. `ZZ` and `ZQ` work from any pane. Press `Esc` to silently cancel a pending leader; an unknown second key surfaces a transient `Unknown: <chord>` hint in the status bar. A bare digit `0` is not consumed; counts over 9999 are clamped. Modal keys (search input, annotation input, overlay navigation) always take precedence over the interceptor, and `ctrl+*`/`alt+*` chord bindings keep working orthogonally.
+When the preset is on, the digits `0`-`9` and the leader keys `g`, `z`, `Z` are intercepted before the regular keymap, so any standalone binding on those keys is overridden while the flag is active. `<N>j`/`<N>k`/`<N>G`, `gg`/`zz`/`zt`/`zb`, and the screen-position motions `H`/`M`/`L` apply to the diff pane only — in the file tree they fall through to the normal bindings. `ZZ` and `ZQ` work from any pane. While the preset is active `L` is a screen-position motion rather than the line-numbers toggle (`toggle_line_numbers`); remap it in the keybindings file if you need both. Press `Esc` to silently cancel a pending leader; an unknown second key surfaces a transient `Unknown: <chord>` hint in the status bar. A bare digit `0` is not consumed; counts over 9999 are clamped. Modal keys (search input, annotation input, overlay navigation) always take precedence over the interceptor, and `ctrl+*`/`alt+*` chord bindings keep working orthogonally.
 
-The help overlay (`?`) shows a dedicated **Vim motion** section listing all eight preset bindings when `--vim-motion` is on; when off, the section is hidden.
+The help overlay (`?`) shows a dedicated **Vim motion** section listing all eleven preset bindings when `--vim-motion` is on; when off, the section is hidden.
 
 ## Output Format
 

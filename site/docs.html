@@ -410,7 +410,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--exit-code-on-annotations</code></td><td>Exit 10 when annotations are produced</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-confirm-discard</code></td><td>Skip discard confirmation</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-mouse</code></td><td>Disable mouse support (scroll wheel, click)</td><td><code>false</code></td></tr>
-                <tr><td><code>--vim-motion</code></td><td>Enable vim-style motion preset (counts, <code>gg</code>, <code>G</code>, <code>zz</code>/<code>zt</code>/<code>zb</code>, <code>ZZ</code>/<code>ZQ</code>)</td><td><code>false</code></td></tr>
+                <tr><td><code>--vim-motion</code></td><td>Enable vim-style motion preset (counts, <code>gg</code>, <code>G</code>, <code>H</code>/<code>M</code>/<code>L</code>, <code>zz</code>/<code>zt</code>/<code>zb</code>, <code>ZZ</code>/<code>ZQ</code>)</td><td><code>false</code></td></tr>
                 <tr><td><code>--chroma-style</code></td><td>Syntax highlighting theme</td><td><code>catppuccin-macchiato</code></td></tr>
                 <tr><td><code>--theme</code></td><td>Load color theme from <code>~/.config/revdiff/themes/</code></td><td></td></tr>
                 <tr><td><code>--dump-theme</code></td><td>Print resolved colors as theme file and exit</td><td></td></tr>
@@ -646,6 +646,9 @@ map alt+t&gt;n theme_select</code></div>
                 <tr><td><code>gg</code></td><td>Jump to first line (diff pane)</td></tr>
                 <tr><td><code>G</code></td><td>Jump to last line (diff pane)</td></tr>
                 <tr><td><code>&lt;N&gt;G</code></td><td>Goto line N (diff pane)</td></tr>
+                <tr><td><code>H</code> / <code>&lt;N&gt;H</code></td><td>Cursor to top of screen / Nth line from top (diff pane)</td></tr>
+                <tr><td><code>M</code></td><td>Cursor to middle of screen (diff pane)</td></tr>
+                <tr><td><code>L</code> / <code>&lt;N&gt;L</code></td><td>Cursor to bottom of screen / Nth line from bottom (diff pane)</td></tr>
                 <tr><td><code>zz</code></td><td>Center viewport on cursor (diff pane)</td></tr>
                 <tr><td><code>zt</code></td><td>Align viewport top on cursor (diff pane)</td></tr>
                 <tr><td><code>zb</code></td><td>Align viewport bottom on cursor (diff pane)</td></tr>
@@ -653,8 +656,8 @@ map alt+t&gt;n theme_select</code></div>
                 <tr><td><code>ZQ</code></td><td>Discard annotations and quit (any pane)</td></tr>
             </tbody>
         </table>
-        <p>When the preset is on, the digits <code>0</code>-<code>9</code> and the leader keys <code>g</code>, <code>z</code>, <code>Z</code> are intercepted before the regular keymap, so any standalone binding on those keys is overridden while the flag is active. <code>&lt;N&gt;j</code>/<code>&lt;N&gt;k</code>/<code>&lt;N&gt;G</code> and <code>gg</code>/<code>zz</code>/<code>zt</code>/<code>zb</code> apply to the diff pane only &mdash; in the file tree they fall through to the normal bindings. <code>ZZ</code> and <code>ZQ</code> work from any pane. Press <code>Esc</code> to silently cancel a pending leader; an unknown second key surfaces a transient <code>Unknown: &lt;chord&gt;</code> hint in the status bar. A bare digit <code>0</code> is not consumed (falls through to whatever binding is mapped); counts over 9999 are clamped. Modal keys (search input, annotation input, overlay navigation) always take precedence over the interceptor, and <code>ctrl+*</code>/<code>alt+*</code> chord bindings keep working orthogonally.</p>
-        <p>The help overlay (<code>?</code>) shows a dedicated <strong>Vim motion</strong> section listing all eight preset bindings when <code>--vim-motion</code> is on; when off, the section is hidden.</p>
+        <p>When the preset is on, the digits <code>0</code>-<code>9</code> and the leader keys <code>g</code>, <code>z</code>, <code>Z</code> are intercepted before the regular keymap, so any standalone binding on those keys is overridden while the flag is active. <code>&lt;N&gt;j</code>/<code>&lt;N&gt;k</code>/<code>&lt;N&gt;G</code>, <code>gg</code>/<code>zz</code>/<code>zt</code>/<code>zb</code>, and the screen-position motions <code>H</code>/<code>M</code>/<code>L</code> apply to the diff pane only &mdash; in the file tree they fall through to the normal bindings. <code>ZZ</code> and <code>ZQ</code> work from any pane. While the preset is active <code>L</code> is a screen-position motion rather than the line-numbers toggle (<code>toggle_line_numbers</code>); remap it in the keybindings file if you need both. Press <code>Esc</code> to silently cancel a pending leader; an unknown second key surfaces a transient <code>Unknown: &lt;chord&gt;</code> hint in the status bar. A bare digit <code>0</code> is not consumed (falls through to whatever binding is mapped); counts over 9999 are clamped. Modal keys (search input, annotation input, overlay navigation) always take precedence over the interceptor, and <code>ctrl+*</code>/<code>alt+*</code> chord bindings keep working orthogonally.</p>
+        <p>The help overlay (<code>?</code>) shows a dedicated <strong>Vim motion</strong> section listing all eleven preset bindings when <code>--vim-motion</code> is on; when off, the section is hidden.</p>
 
         <!-- claude code plugin -->
         <h2 id="plugin-install">Claude Code plugin</h2>

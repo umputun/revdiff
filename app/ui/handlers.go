@@ -54,7 +54,7 @@ func (m Model) formatKeysForHelp(action keymap.Action) string {
 // buildHelpSpec builds an overlay.HelpSpec from the keymap's help sections,
 // converting raw key names to display names and inserting the TOC section.
 // When the vim-motion preset is active, appends a synthetic "Vim motion"
-// section listing the 8 preset bindings (which have no entries in the base
+// section listing the 11 preset bindings (which have no entries in the base
 // keymap since they're only reachable through the interceptor).
 func (m Model) buildHelpSpec() overlay.HelpSpec {
 	sections := m.keymap.HelpSections()
@@ -96,6 +96,9 @@ func (m Model) buildVimMotionHelpSection() overlay.HelpSection {
 			{Keys: "N j / N k", Description: "move cursor N lines down/up"},
 			{Keys: "gg", Description: "jump to first line"},
 			{Keys: "G / N G", Description: "jump to last line / goto line N"},
+			{Keys: "H / N H", Description: "cursor to top of screen / Nth line from top"},
+			{Keys: "M", Description: "cursor to middle of screen"},
+			{Keys: "L / N L", Description: "cursor to bottom of screen / Nth line from bottom"},
 			{Keys: "zz", Description: "center viewport on cursor"},
 			{Keys: "zt", Description: "align viewport top"},
 			{Keys: "zb", Description: "align viewport bottom"},

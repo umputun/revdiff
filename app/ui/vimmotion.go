@@ -32,7 +32,9 @@ var vimChordTable = map[string]keymap.Action{
 // Priority order (first match wins):
 //  1. pending letter leader — resolved via vimChordTable or hint on miss
 //  2. digit accumulation — builds the count prefix
-//  3. G motion — bare G jumps to end, <N>G jumps to line N (diff pane only)
+//  3. screen-position motions (diff pane only) — G/<N>G goto line, H/M/L move
+//     the cursor to the top/middle/bottom of the visible screen (<N>H/<N>L pick
+//     the Nth line from the top/bottom; M ignores any count)
 //  4. count consumer keys — j/k repeat cursor motion (diff pane only)
 //  5. leader entry — g/z require diff pane, Z is pane-agnostic
 //
@@ -66,16 +68,27 @@ func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	// priority 3: G motion (diff pane only) — bare G goes to last line
-	if keyStr == "G" && m.layout.focus == paneDiff {
-		n := m.vim.count
-		m.vim.count = 0
-		m.vim.hint = ""
-		if n == 0 {
-			n = len(m.file.lines) // jumpToLineN clamps
+	// priority 3: screen-position motions (diff pane only)
+	if m.layout.focus == paneDiff {
+		switch keyStr {
+		case "G": // bare G goes to last line, <N>G goes to line N
+			n := m.consumeVimCount()
+			if n == 0 {
+				n = len(m.file.lines) // jumpToLineN clamps
+			}
+			m.jumpToLineN(n)
+			return m, nil, true
+		case "H": // move cursor to top of visible screen; <N>H = Nth line from top
+			m.moveDiffCursorToScreenTop(m.consumeVimCount())
+			return m, nil, true
+		case "M": // move cursor to middle of visible screen (count ignored, as in vim)
+			m.consumeVimCount()
+			m.moveDiffCursorToScreenMiddle()
+			return m, nil, true
+		case "L": // move cursor to bottom of visible screen; <N>L = Nth line from bottom
+			m.moveDiffCursorToScreenBottom(m.consumeVimCount())
+			return m, nil, true
 		}
-		m.jumpToLineN(n)
-		return m, nil, true
 	}
 
 	// priority 4: other count consumer keys
@@ -107,6 +120,15 @@ func (m Model) interceptVimMotion(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 
 	return m, nil, false
+}
+
+// consumeVimCount returns the pending count prefix and clears the count and hint
+// so the next keypress starts fresh. Returns 0 when no count is pending.
+func (m *Model) consumeVimCount() int {
+	n := m.vim.count
+	m.vim.count = 0
+	m.vim.hint = ""
+	return n
 }
 
 // resolveVimLeader handles the second-stage key after a leader (g/z/Z) is
