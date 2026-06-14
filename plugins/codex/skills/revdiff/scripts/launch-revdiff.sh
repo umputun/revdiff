@@ -186,12 +186,13 @@ LAUNCHER
         echo "error: herdr tab create failed: $HERDR_NEW" >&2
         exit 1
     }
+    # || true on both branches keeps a parse miss (jq exits nonzero on malformed
+    # JSON, grep exits 1 on no match) from tripping set -e, so the explicit id
+    # check below stays reachable to emit a real error and close any created tab
     if command -v jq >/dev/null 2>&1; then
-        HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
-        HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
+        HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.tab.tab_id // empty' 2>/dev/null || true)
+        HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null || true)
     else
-        # || true keeps the no-match case (grep exits 1) from tripping set -e,
-        # so the explicit id check below stays reachable to emit a real error
         HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"tab_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
         HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
     fi
