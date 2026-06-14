@@ -83,6 +83,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 |----------|---------------|-----------|
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
 | **Zellij** | `zellij run --floating` | `$ZELLIJ` env var |
+| **herdr** | `herdr tab create` + `herdr pane run` (new tab) | `$HERDR_ENV` env var |
 | **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
 | **Kaku** | `kaku cli split-pane` (same API as wezterm) | `$WEZTERM_PANE` env var |
@@ -91,7 +92,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
 
 > **Note:** cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 
@@ -107,7 +108,7 @@ Priority: tmux → Zellij → kitty → wezterm/Kaku → cmux → ghostty → iT
 > }
 > ```
 >
-> Terminals that use CLI tools instead of AppleScript (tmux, Zellij, kitty, wezterm, cmux) are not affected.
+> Terminals that use CLI tools instead of AppleScript (tmux, Zellij, herdr, kitty, wezterm, cmux) are not affected.
 
 **Install:**
 
@@ -239,7 +240,7 @@ revdiff ships with a [Codex CLI](https://github.com/openai/codex) plugin for int
 - `/revdiff` — same diff review workflow as the Claude Code plugin (detect ref, launch overlay, capture annotations, feedback loop)
 - `/revdiff-plan` — extracts the last Codex assistant message from session rollout files, opens it in revdiff for annotation, and feeds feedback back
 
-The plugin uses the same terminal overlay mechanism (tmux, Zellij, kitty, wezterm, etc.) as the Claude Code plugin.
+The plugin uses the same terminal overlay mechanism (tmux, Zellij, herdr, kitty, wezterm, etc.) as the Claude Code plugin.
 
 **Install:**
 

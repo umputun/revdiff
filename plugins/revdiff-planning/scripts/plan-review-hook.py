@@ -11,7 +11,7 @@ returns PreToolUse hook JSON response with permissionDecision:
 
 requirements:
   - revdiff binary in PATH
-  - tmux, kitty, wezterm, cmux, or ghostty (macOS) terminal
+  - tmux, herdr, kitty, wezterm, cmux, or ghostty (macOS) terminal
 """
 
 from __future__ import annotations

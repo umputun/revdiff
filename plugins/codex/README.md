@@ -14,7 +14,7 @@ This directory contains the **Codex CLI** skills for revdiff.
 
 - `revdiff` binary — `brew install umputun/apps/revdiff` or download from [releases](https://github.com/umputun/revdiff/releases)
 - `jq` — required by the `revdiff-plan` skill for extracting messages from Codex rollout files
-- A supported terminal: tmux, Zellij, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm
+- A supported terminal: tmux, Zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm
 
 ## Install
 

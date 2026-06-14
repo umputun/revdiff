@@ -6,7 +6,7 @@
  * annotations are injected back as a user message so the AI can revise.
  *
  * Requires launch-plan-review.sh in ~/.config/opencode/plugins/ and revdiff
- * on $PATH. Supports tmux, kitty, wezterm, cmux, ghostty, iTerm2, emacs.
+ * on $PATH. Supports tmux, herdr, kitty, wezterm, cmux, ghostty, iTerm2, emacs.
  */
 import type { Plugin } from "@opencode-ai/plugin";
 import path from "path";
