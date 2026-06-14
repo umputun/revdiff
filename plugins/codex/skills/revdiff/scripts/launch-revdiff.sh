@@ -190,14 +190,20 @@ LAUNCHER
         HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.tab.tab_id // empty' 2>/dev/null)
         HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null)
     else
-        HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"tab_id":"[^"]*"' | head -1 | cut -d'"' -f4)
-        HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4)
+        # || true keeps the no-match case (grep exits 1) from tripping set -e,
+        # so the explicit id check below stays reachable to emit a real error
+        HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"tab_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
     fi
 
     # bail explicitly when ids are missing — sending the launch command into the
     # wrong pane would type it into the caller's interactive shell
     if [ -z "$HERDR_PANE_ID" ] || [ -z "$HERDR_TAB_ID" ]; then
         echo "error: herdr tab create did not return pane/tab ids: $HERDR_NEW" >&2
+        if [ -n "$HERDR_TAB_ID" ]; then
+            herdr tab close "$HERDR_TAB_ID" >/dev/null 2>&1 || true
+        fi
+        rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
         exit 1
     fi
 

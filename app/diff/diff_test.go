@@ -1503,6 +1503,10 @@ func TestFilterPaths(t *testing.T) {
 			assert.Equal(t, tt.want, FilterPaths(paths, tt.include, tt.exclude))
 		})
 	}
+
+	t.Run("empty input with prefixes", func(t *testing.T) {
+		assert.Empty(t, FilterPaths(nil, []string{"src"}, nil))
+	})
 }
 
 func TestGit_UntrackedFiles(t *testing.T) {

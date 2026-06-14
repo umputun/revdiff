@@ -347,6 +347,12 @@ func TestFilterUntracked(t *testing.T) {
 		assert.Equal(t, []string{"src/app.go", "docs/readme.md"}, got)
 	})
 
+	t.Run("include and exclude combined", func(t *testing.T) {
+		got, err := filterUntracked(base, []string{"src"}, []string{"src/vendor"})()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"src/app.go"}, got)
+	})
+
 	t.Run("inner error propagates", func(t *testing.T) {
 		boom := func() ([]string, error) { return nil, errors.New("boom") }
 		_, err := filterUntracked(boom, []string{"src"}, nil)()
