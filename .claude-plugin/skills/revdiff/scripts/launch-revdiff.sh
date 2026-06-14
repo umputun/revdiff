@@ -108,6 +108,14 @@ OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
+# agent-deck: its control-mode tmux UI cannot render display-popup, so when detected this sourced
+# backend runs revdiff in a tmux window instead and exits. It returns here (no-op) for every
+# non-agent-deck tmux, leaving the popup path below unchanged.
+if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    _RD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+    [ -f "$_RD_SCRIPT_DIR/agentdeck-window.sh" ] && . "$_RD_SCRIPT_DIR/agentdeck-window.sh"
+fi
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # -T (title) requires tmux 3.3+; skip on older versions
