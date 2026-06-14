@@ -150,7 +150,7 @@ func run(opts options) (int, error) {
 		gitRoot = setup.gitRoot
 		workDir = setup.workDir
 		blamer = setup.blamer
-		untrackedFn = setup.untrackedFn
+		untrackedFn = filterUntracked(setup.untrackedFn, opts.Include, opts.Exclude)
 		commitLogger = setup.commitLogger
 		vcsType = setup.vcsType
 	}

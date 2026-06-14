@@ -1479,6 +1479,32 @@ func TestNormalizePrefixes(t *testing.T) {
 	}
 }
 
+func TestFilterPaths(t *testing.T) {
+	paths := []string{"src/app.go", "src/vendor/lib.go", "pkg/util.go", "docs/readme.md"}
+
+	tests := []struct {
+		name    string
+		include []string
+		exclude []string
+		want    []string
+	}{
+		{"no prefixes is a no-op", nil, nil, paths},
+		{"include keeps only matching", []string{"src"}, nil, []string{"src/app.go", "src/vendor/lib.go"}},
+		{"exclude drops matching", nil, []string{"src/vendor"}, []string{"src/app.go", "pkg/util.go", "docs/readme.md"}},
+		{"include then exclude", []string{"src"}, []string{"src/vendor"}, []string{"src/app.go"}},
+		{"include none match", []string{"nope"}, nil, []string{}},
+		{"exclude none match", nil, []string{"nope"}, paths},
+		{"trailing slash normalized", []string{"src/"}, []string{"src/vendor/"}, []string{"src/app.go"}},
+		{"exact path match", []string{"pkg/util.go"}, nil, []string{"pkg/util.go"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, FilterPaths(paths, tt.include, tt.exclude))
+		})
+	}
+}
+
 func TestGit_UntrackedFiles(t *testing.T) {
 	dir := t.TempDir()
 	gitCmd(t, dir, "init")

@@ -842,3 +842,29 @@ func matchesPrefix(file string, prefixes []string) bool {
 	}
 	return false
 }
+
+// FilterPaths keeps the paths permitted by the given include/exclude prefixes,
+// mirroring IncludeFilter+ExcludeFilter semantics for path lists that bypass the
+// Renderer chain — notably untracked files, which come straight from the VCS
+// UntrackedFiles call and never pass through the filter wrappers. When include
+// is non-empty, only paths matching an include prefix are kept; any path
+// matching an exclude prefix is then dropped. Prefixes are normalized as in the
+// filter wrappers; empty include/exclude leaves that stage a no-op.
+func FilterPaths(paths, include, exclude []string) []string {
+	inc := normalizePrefixes(include)
+	exc := normalizePrefixes(exclude)
+	if len(inc) == 0 && len(exc) == 0 {
+		return paths
+	}
+	filtered := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if len(inc) > 0 && !matchesPrefix(p, inc) {
+			continue
+		}
+		if len(exc) > 0 && matchesPrefix(p, exc) {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+	return filtered
+}

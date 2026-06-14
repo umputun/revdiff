@@ -120,6 +120,24 @@ func wrapFilters(r ui.Renderer, opts options) ui.Renderer {
 	return r
 }
 
+// filterUntracked wraps an untracked-files function so its results honor the
+// --include / --exclude prefixes. The raw VCS UntrackedFiles call bypasses the
+// renderer's IncludeFilter/ExcludeFilter (those only filter ChangedFiles), so
+// without this wrap untracked files leak into a scoped review. Returns fn
+// unchanged when fn is nil or no prefixes are set.
+func filterUntracked(fn func() ([]string, error), include, exclude []string) func() ([]string, error) {
+	if fn == nil || (len(include) == 0 && len(exclude) == 0) {
+		return fn
+	}
+	return func() ([]string, error) {
+		paths, err := fn()
+		if err != nil {
+			return nil, err
+		}
+		return diff.FilterPaths(paths, include, exclude), nil
+	}
+}
+
 // makeNoVCSRenderer creates a renderer when no VCS is detected.
 // No-VCS mode requires --only, which is mutually exclusive with --include.
 // --exclude is a no-op here (FileReader only returns the --only files).

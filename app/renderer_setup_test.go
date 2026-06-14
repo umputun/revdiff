@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -317,4 +318,38 @@ func TestReloadApplicable(t *testing.T) {
 			assert.Equal(t, tc.want, reloadApplicable(tc.opts))
 		})
 	}
+}
+
+func TestFilterUntracked(t *testing.T) {
+	base := func() ([]string, error) {
+		return []string{"src/app.go", "src/vendor/lib.go", "docs/readme.md"}, nil
+	}
+
+	t.Run("nil fn returns nil", func(t *testing.T) {
+		assert.Nil(t, filterUntracked(nil, []string{"src"}, nil))
+	})
+
+	t.Run("no prefixes returns fn unchanged", func(t *testing.T) {
+		got, err := filterUntracked(base, nil, nil)()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"src/app.go", "src/vendor/lib.go", "docs/readme.md"}, got)
+	})
+
+	t.Run("include narrows untracked", func(t *testing.T) {
+		got, err := filterUntracked(base, []string{"src"}, nil)()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"src/app.go", "src/vendor/lib.go"}, got)
+	})
+
+	t.Run("exclude drops untracked", func(t *testing.T) {
+		got, err := filterUntracked(base, nil, []string{"src/vendor"})()
+		require.NoError(t, err)
+		assert.Equal(t, []string{"src/app.go", "docs/readme.md"}, got)
+	})
+
+	t.Run("inner error propagates", func(t *testing.T) {
+		boom := func() ([]string, error) { return nil, errors.New("boom") }
+		_, err := filterUntracked(boom, []string{"src"}, nil)()
+		require.Error(t, err)
+	})
 }
