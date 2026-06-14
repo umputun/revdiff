@@ -14,9 +14,11 @@
 #   REVDIFF_TMUX_WINDOW=0   force the popup path (skip this backend)
 #   unset                   auto: window mode only when agent-deck is detected
 #
-# Reuses from the caller (launch-revdiff.sh): TMPBASE, OUTPUT_FILE, REVDIFF_CMD, CWD, DIR_NAME,
-# TITLE_REF, and the helpers sq() / write_rc_cmd() / read_rc() / print_output_and_exit().
-# The caller guarantees $TMUX is set and tmux is on PATH before sourcing this.
+# Reuses from the caller (launch-revdiff.sh): TMPBASE, CWD, DIR_NAME, TITLE_REF and the helpers
+# sq() / write_rc_cmd() / read_rc() / print_output_and_exit(). The caller guarantees $TMUX is
+# set and tmux is on PATH before sourcing this. This file is SOURCED, so it must not install an
+# EXIT trap (that would clobber the caller's cleanup trap); it cleans up explicitly instead and
+# either returns (non-agent-deck → caller falls through to the popup) or exits the process.
 
 _rd_winmode="${REVDIFF_TMUX_WINDOW:-}"
 if [ -z "$_rd_winmode" ]; then
@@ -30,7 +32,8 @@ if [ -z "$_rd_winmode" ]; then
         _rd_winmode=0
     fi
 fi
-# not agent-deck (and not forced) → return to the launcher, which uses the normal popup path
+# not agent-deck (and not forced) → return to the launcher, which uses the normal popup path.
+# returning here (before any trap/sentinel work) leaves the caller's environment untouched.
 [ "$_rd_winmode" = 1 ] || return 0
 
 # window name from the content under review: the --only file, else the ref, else the directory
@@ -42,17 +45,31 @@ for _rd_arg in "$@"; do
 done
 [ -z "$_rd_winname" ] && _rd_winname="review: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 
-SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
-rm -f "$SENTINEL"
-trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+_rd_sentinel=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
+rm -f "$_rd_sentinel"
 
-# -d: create the window in the BACKGROUND so it does not steal the active window — it waits in
-# the agent-deck tree until the user switches to it. -c: start directory.
-tmux new-window -d -c "$CWD" -n "$_rd_winname" -- sh -c "$(write_rc_cmd "$SENTINEL")"
+# Open the review in a background window (-d: don't steal the active window; -c: start dir).
+# -P -F prints the new window id so we can watch it; mirror the popup path's `sh -c "$REVDIFF_CMD"`
+# invocation (every backend runs the command through sh, and REVDIFF_CMD is built sh-compatible).
+# If tmux can't create the window, fail loudly instead of busy-waiting on a sentinel that will
+# never appear.
+if ! _rd_winid=$(tmux new-window -d -P -F '#{window_id}' -c "$CWD" -n "$_rd_winname" \
+        -- sh -c "$(write_rc_cmd "$_rd_sentinel")"); then
+    rm -f "$_rd_sentinel" "$_rd_sentinel".tmp
+    echo "revdiff: failed to open tmux review window" >&2
+    exit 1
+fi
 
-while [ ! -f "$SENTINEL" ]; do
+# Wait for the review to finish. The sentinel carries revdiff's exit code (written before the
+# inner shell exits, so it exists by the time the window closes on a normal finish). Bound the
+# wait on the window still existing rather than a timer: a real review may take a long time, but
+# if the window disappears without a sentinel (killed / tmux died) we stop instead of hanging.
+while [ ! -f "$_rd_sentinel" ]; do
+    tmux list-windows -F '#{window_id}' 2>/dev/null | grep -qxF "$_rd_winid" || break
     sleep 0.3
 done
-rc=$(read_rc "$SENTINEL")
-rm -f "$SENTINEL"
-print_output_and_exit "${rc:-1}"
+
+_rd_rc=1
+[ -f "$_rd_sentinel" ] && _rd_rc=$(read_rc "$_rd_sentinel")
+rm -f "$_rd_sentinel" "$_rd_sentinel".tmp
+print_output_and_exit "${_rd_rc:-1}"

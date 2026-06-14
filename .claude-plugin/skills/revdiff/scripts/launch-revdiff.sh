@@ -113,6 +113,8 @@ POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 # non-agent-deck tmux, leaving the popup path below unchanged.
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     _RD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+    # shellcheck source=/dev/null  # sibling backend resolved at runtime; not followed at lint time
+    # shellcheck disable=SC1091
     [ -f "$_RD_SCRIPT_DIR/agentdeck-window.sh" ] && . "$_RD_SCRIPT_DIR/agentdeck-window.sh"
 fi
 
