@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.7.0 - 2026-06-14
+
+### New Features
+
+- render revdiff in a tmux window under agent-deck #229 @paskal
+- add herdr terminal-multiplexer launcher backend #228 @umputun
+
+### Bug Fixes
+
+- apply --include/--exclude prefixes to untracked files #228 @umputun
+
 ## v1.6.1 - 2026-06-07
 
 ### Improvements
