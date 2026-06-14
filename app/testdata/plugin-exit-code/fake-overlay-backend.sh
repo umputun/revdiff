@@ -97,6 +97,30 @@ case "$cmd_name" in
         done
         exit 0
         ;;
+    herdr)
+        case "${1:-} ${2:-}" in
+            "tab create")
+                # ids satisfy both the jq path (.result.tab.tab_id /
+                # .result.root_pane.pane_id) and the grep fallback ("tab_id":"..." /
+                # "pane_id":"...")
+                echo '{"result":{"tab":{"tab_id":"w1:1"},"root_pane":{"pane_id":"w1-1"}}}'
+                ;;
+            "tab close")
+                exit 0
+                ;;
+            "pane run")
+                # herdr pane run <pane_id> <command>; run the launch command and
+                # report success, mimicking herdr's fire-and-forget (the real rc
+                # still arrives via the sentinel the launch script writes)
+                eval "${4:-}" || true
+                exit 0
+                ;;
+            *)
+                echo "unexpected herdr command: ${1:-} ${2:-}" >&2
+                exit 1
+                ;;
+        esac
+        ;;
     *)
         echo "unexpected fake backend: $cmd_name" >&2
         exit 1

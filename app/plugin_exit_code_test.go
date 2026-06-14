@@ -616,6 +616,7 @@ func launcherBackends() []launcherBackend {
 	return []launcherBackend{
 		{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}},
 		{name: "zellij", command: "zellij", env: map[string]string{"ZELLIJ": "1"}},
+		{name: "herdr", command: "herdr", env: map[string]string{"HERDR_ENV": "1"}},
 		{name: "kitty", command: "kitty", env: map[string]string{"KITTY_LISTEN_ON": "unix:/tmp/kitty"}},
 		{name: "wezterm", command: "wezterm", env: map[string]string{"WEZTERM_PANE": "1"}},
 		{name: "cmux", command: "cmux", env: map[string]string{"CMUX_SURFACE_ID": "1"}},
@@ -651,6 +652,9 @@ func cleanOverlayEnv() map[string]string {
 	return map[string]string{
 		"TMUX":                  "",
 		"ZELLIJ":                "",
+		"HERDR_ENV":             "",
+		"HERDR_SOCKET_PATH":     "",
+		"HERDR_PANE_ID":         "",
 		"KITTY_LISTEN_ON":       "",
 		"KITTY_WINDOW_ID":       "",
 		"WEZTERM_PANE":          "",

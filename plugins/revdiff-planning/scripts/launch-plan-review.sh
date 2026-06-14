@@ -143,6 +143,62 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
+# herdr: open a new fullscreen tab via the herdr CLI (must precede kitty —
+# inside herdr-in-kitty KITTY_LISTEN_ON is set, so the kitty branch would
+# otherwise win and open an overlay window herdr cannot composite into its panes)
+if [ "${HERDR_ENV:-}" = "1" ] && command -v herdr >/dev/null 2>&1; then
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
+    rm -f "$SENTINEL"
+
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+$REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    HERDR_NEW=$(herdr tab create --cwd "$CWD" --label "$OVERLAY_TITLE" --focus 2>&1) || {
+        echo "error: herdr tab create failed: $HERDR_NEW" >&2
+        exit 1
+    }
+    # || true on both branches keeps a parse miss (jq exits nonzero on malformed
+    # JSON, grep exits 1 on no match) from tripping set -e, so the explicit id
+    # check below stays reachable to emit a real error and close any created tab
+    if command -v jq >/dev/null 2>&1; then
+        HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.tab.tab_id // empty' 2>/dev/null || true)
+        HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | jq -r '.result.root_pane.pane_id // empty' 2>/dev/null || true)
+    else
+        HERDR_TAB_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"tab_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        HERDR_PANE_ID=$(printf '%s' "$HERDR_NEW" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+    fi
+
+    if [ -z "$HERDR_PANE_ID" ] || [ -z "$HERDR_TAB_ID" ]; then
+        echo "error: herdr tab create did not return pane/tab ids: $HERDR_NEW" >&2
+        if [ -n "$HERDR_TAB_ID" ]; then
+            herdr tab close "$HERDR_TAB_ID" >/dev/null 2>&1 || true
+        fi
+        rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+        exit 1
+    fi
+
+    if ! herdr pane run "$HERDR_PANE_ID" "sh $(sq "$LAUNCH_SCRIPT")" >/dev/null 2>&1; then
+        echo "error: herdr pane run failed for pane $HERDR_PANE_ID" >&2
+        herdr tab close "$HERDR_TAB_ID" >/dev/null 2>&1 || true
+        rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+        exit 1
+    fi
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
+    herdr tab close "$HERDR_TAB_ID" >/dev/null 2>&1 || true
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+    cat "$OUTPUT_FILE"
+    exit "${rc:-1}"
+fi
+
 # kitty: overlay with sentinel file carrying revdiff's exit code
 KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
@@ -420,5 +476,5 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
-echo "error: no overlay terminal available (requires tmux, zellij, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires tmux, zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
