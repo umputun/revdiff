@@ -189,9 +189,13 @@ $(write_rc_cmd "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    # create a focused tab (cwd set so revdiff runs in the caller's directory);
-    # parse the new tab + root pane ids from the JSON reply
-    HERDR_NEW=$(herdr tab create --cwd "$CWD" --label "$OVERLAY_TITLE" --focus 2>&1) || {
+    # pin the tab to the caller's workspace: without --workspace, herdr tab create
+    # targets the server's focused workspace (what the user is currently viewing),
+    # not the caller's workspace
+    HERDR_TAB_ARGS=(tab create --cwd "$CWD" --label "$OVERLAY_TITLE")
+    [ -n "${HERDR_WORKSPACE_ID:-}" ] && HERDR_TAB_ARGS+=(--workspace "$HERDR_WORKSPACE_ID")
+    HERDR_TAB_ARGS+=(--focus)
+    HERDR_NEW=$(herdr "${HERDR_TAB_ARGS[@]}" 2>&1) || {
         echo "error: herdr tab create failed: $HERDR_NEW" >&2
         exit 1
     }
