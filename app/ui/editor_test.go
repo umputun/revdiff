@@ -551,6 +551,83 @@ func TestOpenSourceEditor_SourceNotRegularErrorKeepsHint(t *testing.T) {
 	assert.Equal(t, "Editor unavailable: file is not regular", m.editorState.hint)
 }
 
+func TestOpenSourceEditor_WorktreeReviewLineAnnotationBlocks(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("one\n"), 0o600))
+	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.cfg.workDir = workDir
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "line note"})
+	fake := mockSourceEditor(nil)
+	m.editor = fake
+
+	cmd := m.openSourceEditor()
+
+	assert.Nil(t, cmd)
+	assert.Empty(t, fake.SourceCommandCalls())
+	assert.Equal(t, "Editor unavailable: file has line annotations", m.editorState.hint)
+}
+
+func TestOpenSourceEditor_WorktreeReviewFileAnnotationAllows(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("one\n"), 0o600))
+	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.cfg.workDir = workDir
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 0, Type: "", Comment: "file note"})
+	fake := mockSourceEditor(nil)
+	m.editor = fake
+
+	cmd := m.openSourceEditor()
+
+	require.NotNil(t, cmd)
+	require.Len(t, fake.SourceCommandCalls(), 1)
+	assert.Equal(t, editor.SourceTarget{Path: filepath.Join(workDir, "a.go"), Line: 1}, fake.SourceCommandCalls()[0].Target)
+}
+
+func TestSourceEditorTarget_NonWorktreeReviewLineAnnotationAllows(t *testing.T) {
+	tests := []struct {
+		name   string
+		staged bool
+		ref    string
+	}{
+		{name: "staged review", staged: true},
+		{name: "ref review", ref: "HEAD~1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("one\n"), 0o600))
+			lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
+			m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+			m.cfg.workDir = workDir
+			m.cfg.staged = tt.staged
+			m.cfg.ref = tt.ref
+			m.tree = testNewFileTree([]string{"a.go"})
+			m.file.name = "a.go"
+			m.file.lines = lines
+			m.nav.diffCursor = 0
+			m.store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "line note"})
+
+			got, err := m.sourceEditorTarget()
+
+			require.NoError(t, err)
+			assert.Equal(t, editor.SourceTarget{Path: filepath.Join(workDir, "a.go"), Line: 1}, got.Target)
+			assert.Equal(t, sourceEditorRefreshNever, got.RefreshPolicy)
+		})
+	}
+}
+
 func TestHandleSourceEditorFinished_RefreshPolicy(t *testing.T) {
 	tests := []struct {
 		name       string

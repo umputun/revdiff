@@ -180,6 +180,13 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 	if m.cfg.staged || m.cfg.ref != "" {
 		refreshPolicy = sourceEditorRefreshNever
 	}
+	// Worktree source-editor exits reload the diff.
+	// Line annotations only have (file,line,type) coordinates,
+	// so edits can orphan them.
+	// Disallow editing for files with line annotations.
+	if refreshPolicy == sourceEditorRefreshWorktree && m.hasCurrentFileLineAnnotations() {
+		return sourceEditorTargetResult{}, errors.New("file has line annotations")
+	}
 	targetPath := m.file.name
 	if !filepath.IsAbs(targetPath) {
 		if !filepath.IsLocal(targetPath) {
@@ -199,6 +206,15 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 		Target:        editor.SourceTarget{Path: targetPath, Line: targetLine},
 		RefreshPolicy: refreshPolicy,
 	}, nil
+}
+
+func (m Model) hasCurrentFileLineAnnotations() bool {
+	for _, a := range m.store.Get(m.file.name) {
+		if a.Line > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // sourceEditorLine maps the focused diff row to the current worktree line for
