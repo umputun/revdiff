@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log"
@@ -97,24 +98,12 @@ func (m *Model) openEditor() tea.Cmd {
 	})
 }
 
-// sourceEditorRefreshPolicy controls whether a clean source-editor exit
-// reloads the displayed diff.
-type sourceEditorRefreshPolicy int
-
-const (
-	// sourceEditorRefreshNever returns to the existing diff without reloading.
-	sourceEditorRefreshNever sourceEditorRefreshPolicy = iota
-
-	// sourceEditorRefreshWorktree reloads the displayed worktree file.
-	sourceEditorRefreshWorktree
-)
-
 // sourceEditorFinishedMsg is dispatched after opening a worktree source file
 // in the external editor.
 type sourceEditorFinishedMsg struct {
-	err           error
-	fileName      string
-	refreshPolicy sourceEditorRefreshPolicy
+	err                  error
+	fileName             string
+	reloadAfterCleanExit bool
 }
 
 // sourceEditorTargetResult is the UI-side decision for one source-editor
@@ -126,8 +115,9 @@ type sourceEditorTargetResult struct {
 	// Target is the source file and optional line passed to ExternalEditor.
 	Target editor.SourceTarget
 
-	// RefreshPolicy controls the reload behavior after a clean editor exit.
-	RefreshPolicy sourceEditorRefreshPolicy
+	// ReloadAfterCleanExit controls whether a clean editor exit reloads the
+	// displayed diff file.
+	ReloadAfterCleanExit bool
 }
 
 func (m *Model) openSourceEditor() tea.Cmd {
@@ -147,11 +137,11 @@ func (m *Model) openSourceEditor() tea.Cmd {
 			return nil
 		}
 		return func() tea.Msg {
-			return sourceEditorFinishedMsg{err: err, fileName: result.FileName, refreshPolicy: result.RefreshPolicy}
+			return sourceEditorFinishedMsg{err: err, fileName: result.FileName, reloadAfterCleanExit: result.ReloadAfterCleanExit}
 		}
 	}
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
-		return sourceEditorFinishedMsg{err: runErr, fileName: result.FileName, refreshPolicy: result.RefreshPolicy}
+		return sourceEditorFinishedMsg{err: runErr, fileName: result.FileName, reloadAfterCleanExit: result.ReloadAfterCleanExit}
 	})
 }
 
@@ -164,8 +154,9 @@ func (m *Model) openSourceEditor() tea.Cmd {
 // non-regular files keep the same command-boundary handling as other source
 // editor launches.
 func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
-	if m.cfg.workDir == "" {
-		return sourceEditorTargetResult{}, errors.New("no worktree")
+	policy := m.cfg.sourceEditorPolicy
+	if !policy.Available {
+		return sourceEditorTargetResult{}, errors.New("source editor disabled")
 	}
 	if m.file.name == "" {
 		return sourceEditorTargetResult{}, errors.New("no file loaded")
@@ -180,23 +171,18 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 	if !ok {
 		targetLine = 0
 	}
-	refreshPolicy := sourceEditorRefreshWorktree
-	if m.cfg.staged || m.cfg.ref != "" {
-		refreshPolicy = sourceEditorRefreshNever
-	}
-	// Worktree source-editor exits reload the diff.
-	// Line annotations only have (file,line,type) coordinates,
-	// so edits can orphan them.
-	// Disallow editing for files with line annotations.
-	if refreshPolicy == sourceEditorRefreshWorktree && m.hasCurrentFileLineAnnotations() {
+	if policy.DisallowAnnotatedFileEditing && m.hasCurrentFileLineAnnotations() {
 		return sourceEditorTargetResult{}, errors.New("file has line annotations")
 	}
-	targetPath := m.file.name
+	targetPath := cmp.Or(policy.ExactPath, m.file.name)
 	if !filepath.IsAbs(targetPath) {
+		if policy.Root == "" {
+			return sourceEditorTargetResult{}, errors.New("no source root")
+		}
 		if !filepath.IsLocal(targetPath) {
 			return sourceEditorTargetResult{}, errors.New("file path escapes worktree")
 		}
-		root, err := os.OpenRoot(m.cfg.workDir)
+		root, err := os.OpenRoot(policy.Root)
 		if err != nil {
 			return sourceEditorTargetResult{}, fmt.Errorf("open worktree root: %w", err)
 		}
@@ -204,12 +190,12 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 		if _, err := root.Stat(targetPath); err != nil && !os.IsNotExist(err) {
 			return sourceEditorTargetResult{}, errors.New("file path escapes worktree")
 		}
-		targetPath = filepath.Join(m.cfg.workDir, targetPath)
+		targetPath = filepath.Join(policy.Root, targetPath)
 	}
 	return sourceEditorTargetResult{
-		FileName:      m.file.name,
-		Target:        editor.SourceTarget{Path: targetPath, Line: targetLine},
-		RefreshPolicy: refreshPolicy,
+		FileName:             m.file.name,
+		Target:               editor.SourceTarget{Path: targetPath, Line: targetLine},
+		ReloadAfterCleanExit: policy.ReloadAfterCleanExit,
 	}, nil
 }
 
@@ -332,7 +318,7 @@ func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Mode
 		return m, nil
 	}
 	m.editorState.hint = "Returned from editor"
-	if msg.refreshPolicy != sourceEditorRefreshWorktree {
+	if !msg.reloadAfterCleanExit {
 		return m, nil
 	}
 	if msg.fileName != m.file.name {

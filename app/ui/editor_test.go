@@ -57,6 +57,15 @@ func mockSourceEditor(err error) *mocks.ExternalEditorMock {
 	}
 }
 
+func enableSourceEditor(m *Model, root string, reload bool) {
+	m.cfg.sourceEditorPolicy = SourceEditorPolicy{
+		Available:                    true,
+		Root:                         root,
+		ReloadAfterCleanExit:         reload,
+		DisallowAnnotatedFileEditing: reload,
+	}
+}
+
 func TestOpenEditor_LineLevelCapturesTargetAndSeedsContent(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
@@ -216,6 +225,7 @@ func TestSourceEditorTarget_LineResolution(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 			m.cfg.workDir = workDir
+			enableSourceEditor(&m, workDir, true)
 			m.tree = testNewFileTree([]string{"a.go"})
 			m.file.name = "a.go"
 			m.file.lines = lines
@@ -239,6 +249,7 @@ func TestSourceEditorTarget_RemoveOnlyFileOpensWithoutLine(t *testing.T) {
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -262,6 +273,7 @@ func TestSourceEditorTarget_CollapsedDeleteOnlyPlaceholderHasNoSourceLine(t *tes
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -286,6 +298,7 @@ func TestSourceEditorTarget_CollapsedHiddenRemovedLineHasNoSourceLine(t *testing
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -310,6 +323,7 @@ func TestSourceEditorTarget_ExpandedDeleteOnlyLineUsesNearestCurrentLine(t *test
 	}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -332,6 +346,7 @@ func TestSourceEditorTarget_AbsoluteFilePathUsesOriginalPath(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{standaloneFile}, map[string][]diff.DiffLine{standaloneFile: lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{standaloneFile})
 	m.file.name = standaloneFile
 	m.file.lines = lines
@@ -344,6 +359,31 @@ func TestSourceEditorTarget_AbsoluteFilePathUsesOriginalPath(t *testing.T) {
 	assert.Equal(t, 1, got.Target.Line)
 }
 
+func TestSourceEditorTarget_CompareFileUsesExactNewPath(t *testing.T) {
+	compareDir := t.TempDir()
+	compareNew := filepath.Join(compareDir, "nested", "same-name.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(compareNew), 0o700))
+	require.NoError(t, os.WriteFile(compareNew, []byte("one\n"), 0o600))
+	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"same-name.go"}, map[string][]diff.DiffLine{"same-name.go": lines})
+	m.cfg.sourceEditorPolicy = SourceEditorPolicy{
+		Available: true,
+		Root:      compareDir,
+		ExactPath: compareNew,
+	}
+	m.tree = testNewFileTree([]string{"same-name.go"})
+	m.file.name = "same-name.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	got, err := m.sourceEditorTarget()
+
+	require.NoError(t, err)
+	assert.Equal(t, compareNew, got.Target.Path)
+	assert.Equal(t, 1, got.Target.Line)
+	assert.False(t, got.ReloadAfterCleanExit)
+}
+
 func TestSourceEditorTarget_RelativeSymlinkEscapeRejected(t *testing.T) {
 	workDir := t.TempDir()
 	outsideDir := t.TempDir()
@@ -353,6 +393,7 @@ func TestSourceEditorTarget_RelativeSymlinkEscapeRejected(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"escape.go"}, map[string][]diff.DiffLine{"escape.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"escape.go"})
 	m.file.name = "escape.go"
 	m.file.lines = lines
@@ -371,6 +412,7 @@ func TestSourceEditorTarget_StagedReviewOpensWithFocusedLine(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
 	m.cfg.staged = true
+	enableSourceEditor(&m, workDir, false)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -381,7 +423,7 @@ func TestSourceEditorTarget_StagedReviewOpensWithFocusedLine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(workDir, "a.go"), got.Target.Path)
 	assert.Equal(t, 2, got.Target.Line)
-	assert.Equal(t, sourceEditorRefreshNever, got.RefreshPolicy)
+	assert.False(t, got.ReloadAfterCleanExit)
 }
 
 func TestSourceEditorTarget_RefReviewOpensWithFocusedLine(t *testing.T) {
@@ -391,6 +433,7 @@ func TestSourceEditorTarget_RefReviewOpensWithFocusedLine(t *testing.T) {
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
 	m.cfg.ref = "HEAD~1"
+	enableSourceEditor(&m, workDir, false)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -401,7 +444,7 @@ func TestSourceEditorTarget_RefReviewOpensWithFocusedLine(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(workDir, "a.go"), got.Target.Path)
 	assert.Equal(t, 2, got.Target.Line)
-	assert.Equal(t, sourceEditorRefreshNever, got.RefreshPolicy)
+	assert.False(t, got.ReloadAfterCleanExit)
 }
 
 func TestSourceEditorTarget_StagedReviewStillRejectsRowsWithoutSource(t *testing.T) {
@@ -411,6 +454,7 @@ func TestSourceEditorTarget_StagedReviewStillRejectsRowsWithoutSource(t *testing
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
 	m.cfg.staged = true
+	enableSourceEditor(&m, workDir, false)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	m.file.lines = lines
@@ -435,13 +479,13 @@ func TestSourceEditorTarget_SelectionErrorCases(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "no worktree",
+			name:    "unavailable policy",
 			workDir: "",
 			file:    "a.go",
 			tree:    testNewFileTree([]string{"a.go"}),
 			lines:   []diff.DiffLine{{NewNum: 1, ChangeType: diff.ChangeContext}},
 			cursor:  0,
-			wantErr: "no worktree",
+			wantErr: "source editor disabled",
 		},
 		{
 			name:    "deleted file",
@@ -502,6 +546,9 @@ func TestSourceEditorTarget_SelectionErrorCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel([]string{"a.go"}, nil)
 			m.cfg.workDir = tt.workDir
+			if tt.workDir != "" {
+				enableSourceEditor(&m, tt.workDir, true)
+			}
 			m.tree = tt.tree
 			m.file.name = tt.file
 			m.file.lines = tt.lines
@@ -520,6 +567,7 @@ func TestOpenSourceEditor_SourceValidationErrorKeepsHint(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"missing.go"}, map[string][]diff.DiffLine{"missing.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"missing.go"})
 	m.layout.focus = paneDiff
 	m.file.name = "missing.go"
@@ -538,6 +586,7 @@ func TestOpenSourceEditor_SourceNotRegularErrorKeepsHint(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"dir"}, map[string][]diff.DiffLine{"dir": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"dir"})
 	m.layout.focus = paneDiff
 	m.file.name = "dir"
@@ -557,6 +606,7 @@ func TestOpenSourceEditor_WorktreeReviewLineAnnotationBlocks(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.layout.focus = paneDiff
 	m.file.name = "a.go"
@@ -579,6 +629,7 @@ func TestOpenSourceEditor_WorktreeReviewFileAnnotationAllows(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.layout.focus = paneDiff
 	m.file.name = "a.go"
@@ -613,6 +664,7 @@ func TestSourceEditorTarget_NonWorktreeReviewLineAnnotationAllows(t *testing.T) 
 			m.cfg.workDir = workDir
 			m.cfg.staged = tt.staged
 			m.cfg.ref = tt.ref
+			enableSourceEditor(&m, workDir, false)
 			m.tree = testNewFileTree([]string{"a.go"})
 			m.file.name = "a.go"
 			m.file.lines = lines
@@ -623,19 +675,19 @@ func TestSourceEditorTarget_NonWorktreeReviewLineAnnotationAllows(t *testing.T) 
 
 			require.NoError(t, err)
 			assert.Equal(t, editor.SourceTarget{Path: filepath.Join(workDir, "a.go"), Line: 1}, got.Target)
-			assert.Equal(t, sourceEditorRefreshNever, got.RefreshPolicy)
+			assert.False(t, got.ReloadAfterCleanExit)
 		})
 	}
 }
 
-func TestHandleSourceEditorFinished_RefreshPolicy(t *testing.T) {
+func TestHandleSourceEditorFinished_ReloadAfterCleanExit(t *testing.T) {
 	tests := []struct {
-		name       string
-		policy     sourceEditorRefreshPolicy
-		wantReload bool
+		name                 string
+		reloadAfterCleanExit bool
+		wantReload           bool
 	}{
-		{name: "worktree clean exit reloads displayed file", policy: sourceEditorRefreshWorktree, wantReload: true},
-		{name: "staged or ref clean exit skips reload", policy: sourceEditorRefreshNever, wantReload: false},
+		{name: "worktree clean exit reloads displayed file", reloadAfterCleanExit: true, wantReload: true},
+		{name: "staged or ref clean exit skips reload", reloadAfterCleanExit: false, wantReload: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -643,7 +695,10 @@ func TestHandleSourceEditorFinished_RefreshPolicy(t *testing.T) {
 			m.file.name = "a.go"
 			beforeSeq := m.file.loadSeq
 
-			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{fileName: "a.go", refreshPolicy: tt.policy})
+			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
+				fileName:             "a.go",
+				reloadAfterCleanExit: tt.reloadAfterCleanExit,
+			})
 			model := result.(Model)
 
 			assert.Equal(t, "Returned from editor", model.editorState.hint)
@@ -664,8 +719,8 @@ func TestHandleSourceEditorFinished_SkipsReloadWhenFileChanged(t *testing.T) {
 	beforeSeq := m.file.loadSeq
 
 	result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
-		fileName:      "a.go",
-		refreshPolicy: sourceEditorRefreshWorktree,
+		fileName:             "a.go",
+		reloadAfterCleanExit: true,
 	})
 	model := result.(Model)
 
@@ -680,6 +735,7 @@ func TestHandleDiffAction_OpenFileInEditor(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 2, Content: "two", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.cfg.workDir = workDir
+	enableSourceEditor(&m, workDir, true)
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.layout.focus = paneDiff
 	m.file.name = "a.go"
@@ -713,5 +769,5 @@ func TestHandleDiffAction_OpenFileInEditorNoopKeepsHint(t *testing.T) {
 
 	assert.Nil(t, cmd)
 	assert.Empty(t, fake.SourceCommandCalls())
-	assert.Equal(t, "Editor unavailable: no worktree", model.editorState.hint)
+	assert.Equal(t, "Editor unavailable: source editor disabled", model.editorState.hint)
 }

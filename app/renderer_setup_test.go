@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -316,6 +317,68 @@ func TestReloadApplicable(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, reloadApplicable(tc.opts))
+		})
+	}
+}
+
+func TestSourceEditorPolicy_ModeBehavior(t *testing.T) {
+	workDir := t.TempDir()
+	compareNew := filepath.Join(t.TempDir(), "new.md")
+	refOpts := options{}
+	refOpts.Refs.Base = "HEAD~1"
+	compareOpts := options{compareAbsNew: compareNew}
+
+	tests := []struct {
+		name string
+		opts options
+		root string
+		want ui.SourceEditorPolicy
+	}{
+		{
+			name: "stdin disables source editor",
+			opts: options{Stdin: true},
+			root: workDir,
+			want: ui.SourceEditorPolicy{},
+		},
+		{
+			name: "worktree reloads after clean exit",
+			opts: options{},
+			root: workDir,
+			want: ui.SourceEditorPolicy{
+				Available:                    true,
+				Root:                         workDir,
+				ReloadAfterCleanExit:         true,
+				DisallowAnnotatedFileEditing: true,
+			},
+		},
+		{
+			name: "staged opens without reload",
+			opts: options{Staged: true},
+			root: workDir,
+			want: ui.SourceEditorPolicy{Available: true, Root: workDir},
+		},
+		{
+			name: "ref opens without reload",
+			opts: refOpts,
+			root: workDir,
+			want: ui.SourceEditorPolicy{Available: true, Root: workDir},
+		},
+		{
+			name: "compare opens exact new path without reload",
+			opts: compareOpts,
+			root: filepath.Dir(compareNew),
+			want: ui.SourceEditorPolicy{Available: true, Root: filepath.Dir(compareNew), ExactPath: compareNew},
+		},
+		{
+			name: "empty root disables source editor",
+			opts: options{},
+			root: "",
+			want: ui.SourceEditorPolicy{},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, sourceEditorPolicy(tc.opts, tc.root))
 		})
 	}
 }
