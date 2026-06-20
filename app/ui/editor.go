@@ -195,8 +195,9 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 // A false ok result means the file can still be opened without a line target,
 // either because no diff row is focused or because a removed row has no nearby
 // current-file anchor. An error means the focused row represents content that
-// cannot be opened as a source location, such as binary, placeholder, or
-// collapsed context rows.
+// cannot be opened as a source location, such as binary, placeholder,
+// collapsed context, collapsed-mode delete-only placeholders, or hidden
+// removed rows.
 func (m Model) sourceEditorLine() (line int, ok bool, err error) {
 	dl, ok := m.cursorDiffLine()
 	if !ok {
@@ -204,6 +205,12 @@ func (m Model) sourceEditorLine() (line int, ok bool, err error) {
 	}
 	if dl.IsBinary || dl.IsPlaceholder {
 		return 0, false, errors.New("no source line")
+	}
+	if dl.ChangeType == diff.ChangeRemove && m.modes.collapsed.enabled {
+		hunks := m.findHunks()
+		if m.isDeleteOnlyPlaceholder(m.nav.diffCursor, hunks) || m.isCollapsedHidden(m.nav.diffCursor, hunks) {
+			return 0, false, errors.New("no source line")
+		}
 	}
 	if dl.ChangeType == diff.ChangeDivider {
 		return 0, false, errors.New("skipped context")

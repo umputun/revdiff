@@ -251,6 +251,79 @@ func TestSourceEditorTarget_RemoveOnlyFileOpensWithoutLine(t *testing.T) {
 	assert.Equal(t, 0, got.Target.Line)
 }
 
+func TestSourceEditorTarget_CollapsedDeleteOnlyPlaceholderHasNoSourceLine(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("ctx1\nctx2\n"), 0o600))
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+		{OldNum: 3, NewNum: 0, Content: "removed too", ChangeType: diff.ChangeRemove},
+		{OldNum: 4, NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.cfg.workDir = workDir
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.nav.diffCursor = 1
+
+	got, err := m.sourceEditorTarget()
+
+	assert.Equal(t, editor.SourceTarget{}, got.Target)
+	assert.EqualError(t, err, "no source line")
+}
+
+func TestSourceEditorTarget_CollapsedHiddenRemovedLineHasNoSourceLine(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("ctx1\nctx2\n"), 0o600))
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+		{OldNum: 3, NewNum: 0, Content: "hidden removed", ChangeType: diff.ChangeRemove},
+		{OldNum: 4, NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.cfg.workDir = workDir
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.nav.diffCursor = 2
+
+	got, err := m.sourceEditorTarget()
+
+	assert.Equal(t, editor.SourceTarget{}, got.Target)
+	assert.EqualError(t, err, "no source line")
+}
+
+func TestSourceEditorTarget_ExpandedDeleteOnlyLineUsesNearestCurrentLine(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("ctx1\nctx2\n"), 0o600))
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx1", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 0, Content: "removed", ChangeType: diff.ChangeRemove},
+		{OldNum: 3, NewNum: 0, Content: "removed too", ChangeType: diff.ChangeRemove},
+		{OldNum: 4, NewNum: 2, Content: "ctx2", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.cfg.workDir = workDir
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = map[int]bool{1: true}
+	m.nav.diffCursor = 1
+
+	got, err := m.sourceEditorTarget()
+
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(workDir, "a.go"), got.Target.Path)
+	assert.Equal(t, 1, got.Target.Line)
+}
+
 func TestSourceEditorTarget_AbsoluteFilePathUsesOriginalPath(t *testing.T) {
 	workDir := t.TempDir()
 	standaloneDir := t.TempDir()
