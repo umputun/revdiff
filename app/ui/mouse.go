@@ -150,8 +150,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m.handleOverlayMouse(msg)
 	}
 
-	// transient hints persist for exactly one render cycle; any mouse event
-	// that reaches this point dismisses the last hint, mirroring handleKey.
+	// reload, compact-mode, and editor hints persist for exactly one render
+	// cycle; any mouse event that reaches this point dismisses them, mirroring
+	// handleKey.
 	m.reload.hint = ""
 	m.compact.hint = ""
 	m.editorState.hint = ""

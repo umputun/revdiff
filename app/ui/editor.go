@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -181,6 +182,17 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 	}
 	targetPath := m.file.name
 	if !filepath.IsAbs(targetPath) {
+		if !filepath.IsLocal(targetPath) {
+			return sourceEditorTargetResult{}, errors.New("file path escapes worktree")
+		}
+		root, err := os.OpenRoot(m.cfg.workDir)
+		if err != nil {
+			return sourceEditorTargetResult{}, fmt.Errorf("open worktree root: %w", err)
+		}
+		defer root.Close()
+		if _, err := root.Stat(targetPath); err != nil && !os.IsNotExist(err) {
+			return sourceEditorTargetResult{}, errors.New("file path escapes worktree")
+		}
 		targetPath = filepath.Join(m.cfg.workDir, targetPath)
 	}
 	return sourceEditorTargetResult{

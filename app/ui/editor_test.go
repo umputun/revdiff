@@ -344,6 +344,26 @@ func TestSourceEditorTarget_AbsoluteFilePathUsesOriginalPath(t *testing.T) {
 	assert.Equal(t, 1, got.Target.Line)
 }
 
+func TestSourceEditorTarget_RelativeSymlinkEscapeRejected(t *testing.T) {
+	workDir := t.TempDir()
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "outside.go")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("one\n"), 0o600))
+	require.NoError(t, os.Symlink(outsideFile, filepath.Join(workDir, "escape.go")))
+	lines := []diff.DiffLine{{NewNum: 1, Content: "one", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"escape.go"}, map[string][]diff.DiffLine{"escape.go": lines})
+	m.cfg.workDir = workDir
+	m.tree = testNewFileTree([]string{"escape.go"})
+	m.file.name = "escape.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 0
+
+	got, err := m.sourceEditorTarget()
+
+	assert.Equal(t, editor.SourceTarget{}, got.Target)
+	assert.EqualError(t, err, "file path escapes worktree")
+}
+
 func TestSourceEditorTarget_StagedReviewOpensWithFocusedLine(t *testing.T) {
 	workDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("worktree\ncontents\n"), 0o600))
@@ -458,6 +478,15 @@ func TestSourceEditorTarget_SelectionErrorCases(t *testing.T) {
 			lines:   []diff.DiffLine{{ChangeType: diff.ChangeContext, IsPlaceholder: true}},
 			cursor:  0,
 			wantErr: "no source line",
+		},
+		{
+			name:    "relative path escapes worktree",
+			workDir: workDir,
+			file:    "a/../../../outside.go",
+			tree:    testNewFileTree([]string{"a/../../../outside.go"}),
+			lines:   []diff.DiffLine{{NewNum: 1, ChangeType: diff.ChangeContext}},
+			cursor:  0,
+			wantErr: "file path escapes worktree",
 		},
 		{
 			name:    "no loaded file",
