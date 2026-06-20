@@ -212,9 +212,6 @@ func (m Model) sourceEditorLine() (line int, ok bool, err error) {
 			return 0, false, errors.New("no source line")
 		}
 	}
-	if dl.ChangeType == diff.ChangeDivider {
-		return 0, false, errors.New("skipped context")
-	}
 	switch dl.ChangeType {
 	case diff.ChangeAdd, diff.ChangeContext:
 		if dl.NewNum > 0 {
@@ -225,6 +222,8 @@ func (m Model) sourceEditorLine() (line int, ok bool, err error) {
 			return line, true, nil
 		}
 		return 0, false, nil
+	case diff.ChangeDivider:
+		return 0, false, errors.New("skipped context")
 	}
 	return 0, false, nil
 }
@@ -303,5 +302,6 @@ func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Mode
 	if msg.refreshPolicy != sourceEditorRefreshWorktree {
 		return m, nil
 	}
-	return m, m.reloadCurrentFile()
+	cmd := m.reloadCurrentFile()
+	return m, cmd
 }

@@ -597,6 +597,11 @@ func (m *Model) scrollDiffViewportLine(delta int) {
 
 // handleDiffAction dispatches a resolved action when the diff pane is focused.
 func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
+	if m.handleDiffMovement(action) {
+		m.syncTOCActiveSection()
+		return m, nil
+	}
+
 	switch action {
 	case keymap.ActionFocusTree:
 		return m.handleSwitchToTree()
@@ -606,28 +611,6 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionScrollRight:
 		m.handleHorizontalScroll(1)
 		return m, nil
-	case keymap.ActionDown:
-		m.moveDiffCursorDown()
-		m.syncViewportToCursor()
-	case keymap.ActionUp:
-		m.moveDiffCursorUp()
-		m.syncViewportToCursor()
-	case keymap.ActionPageDown:
-		m.moveDiffCursorPageDown()
-	case keymap.ActionHalfPageDown:
-		m.moveDiffCursorHalfPageDown()
-	case keymap.ActionPageUp:
-		m.moveDiffCursorPageUp()
-	case keymap.ActionHalfPageUp:
-		m.moveDiffCursorHalfPageUp()
-	case keymap.ActionScrollDiffDown:
-		m.scrollDiffViewportLine(wheelStep)
-	case keymap.ActionScrollDiffUp:
-		m.scrollDiffViewportLine(-wheelStep)
-	case keymap.ActionHome:
-		m.moveDiffCursorToStart()
-	case keymap.ActionEnd:
-		m.moveDiffCursorToEnd()
 	case keymap.ActionScrollCenter:
 		m.centerViewportOnCursor()
 		return m, nil
@@ -653,6 +636,36 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	}
 	m.syncTOCActiveSection()
 	return m, nil
+}
+
+func (m *Model) handleDiffMovement(action keymap.Action) bool {
+	switch action {
+	case keymap.ActionDown:
+		m.moveDiffCursorDown()
+		m.syncViewportToCursor()
+	case keymap.ActionUp:
+		m.moveDiffCursorUp()
+		m.syncViewportToCursor()
+	case keymap.ActionPageDown:
+		m.moveDiffCursorPageDown()
+	case keymap.ActionHalfPageDown:
+		m.moveDiffCursorHalfPageDown()
+	case keymap.ActionPageUp:
+		m.moveDiffCursorPageUp()
+	case keymap.ActionHalfPageUp:
+		m.moveDiffCursorHalfPageUp()
+	case keymap.ActionScrollDiffDown:
+		m.scrollDiffViewportLine(wheelStep)
+	case keymap.ActionScrollDiffUp:
+		m.scrollDiffViewportLine(-wheelStep)
+	case keymap.ActionHome:
+		m.moveDiffCursorToStart()
+	case keymap.ActionEnd:
+		m.moveDiffCursorToEnd()
+	default:
+		return false
+	}
+	return true
 }
 
 // handleTreeAction dispatches a resolved action when the tree pane is focused.
