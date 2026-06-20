@@ -113,12 +113,16 @@ const (
 // in the external editor.
 type sourceEditorFinishedMsg struct {
 	err           error
+	fileName      string
 	refreshPolicy sourceEditorRefreshPolicy
 }
 
 // sourceEditorTargetResult is the UI-side decision for one source-editor
 // request.
 type sourceEditorTargetResult struct {
+	// FileName is the displayed diff file captured when the editor launches.
+	FileName string
+
 	// Target is the source file and optional line passed to ExternalEditor.
 	Target editor.SourceTarget
 
@@ -143,11 +147,11 @@ func (m *Model) openSourceEditor() tea.Cmd {
 			return nil
 		}
 		return func() tea.Msg {
-			return sourceEditorFinishedMsg{err: err, refreshPolicy: result.RefreshPolicy}
+			return sourceEditorFinishedMsg{err: err, fileName: result.FileName, refreshPolicy: result.RefreshPolicy}
 		}
 	}
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
-		return sourceEditorFinishedMsg{err: runErr, refreshPolicy: result.RefreshPolicy}
+		return sourceEditorFinishedMsg{err: runErr, fileName: result.FileName, refreshPolicy: result.RefreshPolicy}
 	})
 }
 
@@ -203,6 +207,7 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 		targetPath = filepath.Join(m.cfg.workDir, targetPath)
 	}
 	return sourceEditorTargetResult{
+		FileName:      m.file.name,
 		Target:        editor.SourceTarget{Path: targetPath, Line: targetLine},
 		RefreshPolicy: refreshPolicy,
 	}, nil
@@ -328,6 +333,9 @@ func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Mode
 	}
 	m.editorState.hint = "Returned from editor"
 	if msg.refreshPolicy != sourceEditorRefreshWorktree {
+		return m, nil
+	}
+	if msg.fileName != m.file.name {
 		return m, nil
 	}
 	cmd := m.reloadCurrentFile()

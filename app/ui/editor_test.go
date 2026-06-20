@@ -643,7 +643,7 @@ func TestHandleSourceEditorFinished_RefreshPolicy(t *testing.T) {
 			m.file.name = "a.go"
 			beforeSeq := m.file.loadSeq
 
-			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{refreshPolicy: tt.policy})
+			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{fileName: "a.go", refreshPolicy: tt.policy})
 			model := result.(Model)
 
 			assert.Equal(t, "Returned from editor", model.editorState.hint)
@@ -656,6 +656,22 @@ func TestHandleSourceEditorFinished_RefreshPolicy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHandleSourceEditorFinished_SkipsReloadWhenFileChanged(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.file.name = "b.go"
+	beforeSeq := m.file.loadSeq
+
+	result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
+		fileName:      "a.go",
+		refreshPolicy: sourceEditorRefreshWorktree,
+	})
+	model := result.(Model)
+
+	assert.Equal(t, "Returned from editor", model.editorState.hint)
+	assert.Nil(t, cmd)
+	assert.Equal(t, beforeSeq, model.file.loadSeq)
 }
 
 func TestHandleDiffAction_OpenFileInEditor(t *testing.T) {
