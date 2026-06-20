@@ -49,25 +49,14 @@ func (e Editor) Command(content string) (*exec.Cmd, func(error) (string, error),
 	return cmd, complete, nil
 }
 
-// SourceTarget identifies an existing file the editor should open. Line is a
-// one-based source line; values less than 1 mean "open the file without line
-// navigation."
-type SourceTarget struct {
-	// Path is the file path passed to the external editor.
-	Path string
-
-	// Line is the one-based source line to request from editors that support it.
-	Line int
-}
-
 // SourceCommand prepares an editor invocation for an existing source file.
 // Known editors receive best-effort line-navigation arguments; unknown editors
 // receive only the path so the command remains shell-free and predictable.
-func (e Editor) SourceCommand(target SourceTarget) (*exec.Cmd, error) {
-	if target.Path == "" {
+func (e Editor) SourceCommand(path string, line int) (*exec.Cmd, error) {
+	if path == "" {
 		return nil, ErrSourceMissing
 	}
-	stat, err := os.Stat(target.Path)
+	stat, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrSourceMissing
@@ -80,18 +69,18 @@ func (e Editor) SourceCommand(target SourceTarget) (*exec.Cmd, error) {
 	argv := e.resolve()
 	switch editorLineSyntax(argv[0]) {
 	case editorPlusLine:
-		if target.Line > 0 {
-			argv = append(argv, "+"+strconv.Itoa(target.Line))
+		if line > 0 {
+			argv = append(argv, "+"+strconv.Itoa(line))
 		}
-		argv = append(argv, target.Path)
+		argv = append(argv, path)
 	case editorGotoLine:
-		if target.Line > 0 {
-			argv = append(argv, "--goto", target.Path+":"+strconv.Itoa(target.Line))
+		if line > 0 {
+			argv = append(argv, "--goto", path+":"+strconv.Itoa(line))
 		} else {
-			argv = append(argv, target.Path)
+			argv = append(argv, path)
 		}
 	case editorPlainLine:
-		argv = append(argv, target.Path)
+		argv = append(argv, path)
 	}
 	//nolint:gosec // user-controlled editor binary by design (resolved from $EDITOR/$VISUAL)
 	return exec.CommandContext(context.Background(), argv[0], argv[1:]...), nil

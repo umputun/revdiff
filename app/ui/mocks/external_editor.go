@@ -6,8 +6,6 @@ package mocks
 import (
 	"os/exec"
 	"sync"
-
-	"github.com/umputun/revdiff/app/editor"
 )
 
 // ExternalEditorMock is a mock implementation of ui.ExternalEditor.
@@ -29,7 +27,7 @@ type ExternalEditorMock struct {
 	// CommandFunc mocks the Command method.
 	CommandFunc func(content string) (*exec.Cmd, func(error) (string, error), error)
 	// SourceCommandFunc mocks the SourceCommand method.
-	SourceCommandFunc func(target editor.SourceTarget) (*exec.Cmd, error)
+	SourceCommandFunc func(path string, line int) (*exec.Cmd, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -40,8 +38,10 @@ type ExternalEditorMock struct {
 		}
 		// SourceCommand holds details about calls to the SourceCommand method.
 		SourceCommand []struct {
-			// Target is the target argument value.
-			Target editor.SourceTarget
+			// Path is the path argument value.
+			Path string
+			// Line is the line argument value.
+			Line int
 		}
 	}
 	lockCommand       sync.RWMutex
@@ -65,19 +65,21 @@ func (mock *ExternalEditorMock) Command(content string) (*exec.Cmd, func(error) 
 }
 
 // SourceCommand calls SourceCommandFunc.
-func (mock *ExternalEditorMock) SourceCommand(target editor.SourceTarget) (*exec.Cmd, error) {
+func (mock *ExternalEditorMock) SourceCommand(path string, line int) (*exec.Cmd, error) {
 	if mock.SourceCommandFunc == nil {
 		panic("ExternalEditorMock.SourceCommandFunc: method is nil but ExternalEditor.SourceCommand was just called")
 	}
 	callInfo := struct {
-		Target editor.SourceTarget
+		Path string
+		Line int
 	}{
-		Target: target,
+		Path: path,
+		Line: line,
 	}
 	mock.lockSourceCommand.Lock()
 	mock.calls.SourceCommand = append(mock.calls.SourceCommand, callInfo)
 	mock.lockSourceCommand.Unlock()
-	return mock.SourceCommandFunc(target)
+	return mock.SourceCommandFunc(path, line)
 }
 
 // CommandCalls gets all the calls that were made to Command.
@@ -101,10 +103,12 @@ func (mock *ExternalEditorMock) CommandCalls() []struct {
 //
 //	len(mockedExternalEditor.SourceCommandCalls())
 func (mock *ExternalEditorMock) SourceCommandCalls() []struct {
-	Target editor.SourceTarget
+	Path string
+	Line int
 } {
 	var calls []struct {
-		Target editor.SourceTarget
+		Path string
+		Line int
 	}
 	mock.lockSourceCommand.RLock()
 	calls = mock.calls.SourceCommand

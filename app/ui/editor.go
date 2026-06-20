@@ -28,7 +28,7 @@ type ExternalEditor interface {
 	// complete function also handles any temp-file cleanup.
 	Command(content string) (*exec.Cmd, func(error) (string, error), error)
 	// SourceCommand prepares the editor invocation for an existing source file.
-	SourceCommand(target editor.SourceTarget) (*exec.Cmd, error)
+	SourceCommand(path string, line int) (*exec.Cmd, error)
 }
 
 // editorFinishedMsg is dispatched after the external editor spawned via Ctrl+E
@@ -112,8 +112,11 @@ type sourceEditorTargetResult struct {
 	// FileName is the displayed diff file captured when the editor launches.
 	FileName string
 
-	// Target is the source file and optional line passed to ExternalEditor.
-	Target editor.SourceTarget
+	// SourcePath is the source file passed to ExternalEditor.
+	SourcePath string
+
+	// SourceLine is the optional one-based line passed to ExternalEditor.
+	SourceLine int
 
 	// ReloadAfterCleanExit controls whether a clean editor exit reloads the
 	// displayed diff file.
@@ -126,7 +129,7 @@ func (m *Model) openSourceEditor() tea.Cmd {
 		m.editorState.hint = fmt.Sprintf("Editor unavailable: %v", err)
 		return nil
 	}
-	cmd, err := m.editor.SourceCommand(result.Target)
+	cmd, err := m.editor.SourceCommand(result.SourcePath, result.SourceLine)
 	if err != nil {
 		switch {
 		case errors.Is(err, editor.ErrSourceMissing):
@@ -194,7 +197,8 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 	}
 	return sourceEditorTargetResult{
 		FileName:             m.file.name,
-		Target:               editor.SourceTarget{Path: targetPath, Line: targetLine},
+		SourcePath:           targetPath,
+		SourceLine:           targetLine,
 		ReloadAfterCleanExit: policy.ReloadAfterCleanExit,
 	}, nil
 }

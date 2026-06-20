@@ -197,7 +197,7 @@ func TestEditor_SourceCommand_LineSyntax(t *testing.T) {
 			t.Setenv("EDITOR", tt.editor)
 			t.Setenv("VISUAL", "")
 
-			cmd, err := Editor{}.SourceCommand(SourceTarget{Path: file, Line: tt.line})
+			cmd, err := Editor{}.SourceCommand(file, tt.line)
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, cmd.Args)
@@ -211,20 +211,20 @@ func TestEditor_SourceCommand_RecognizesEditorBasename(t *testing.T) {
 	t.Setenv("EDITOR", "/usr/local/bin/nvim --clean")
 	t.Setenv("VISUAL", "")
 
-	cmd, err := Editor{}.SourceCommand(SourceTarget{Path: file, Line: 7})
+	cmd, err := Editor{}.SourceCommand(file, 7)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/usr/local/bin/nvim", "--clean", "+7", file}, cmd.Args)
 }
 
-func TestEditor_SourceCommand_ValidatesSourceTarget(t *testing.T) {
+func TestEditor_SourceCommand_ValidatesSourcePath(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "a.go")
 	require.NoError(t, os.WriteFile(file, []byte("package main\n"), 0o600))
 	t.Setenv("EDITOR", "/bin/true")
 	t.Setenv("VISUAL", "")
 
-	cmd, err := Editor{}.SourceCommand(SourceTarget{Path: file, Line: 3})
+	cmd, err := Editor{}.SourceCommand(file, 3)
 
 	require.NoError(t, err)
 	require.NotNil(t, cmd)
@@ -233,13 +233,13 @@ func TestEditor_SourceCommand_ValidatesSourceTarget(t *testing.T) {
 }
 
 func TestEditor_SourceCommand_MissingSource(t *testing.T) {
-	_, err := Editor{}.SourceCommand(SourceTarget{Path: filepath.Join(t.TempDir(), "missing.go")})
+	_, err := Editor{}.SourceCommand(filepath.Join(t.TempDir(), "missing.go"), 0)
 
 	assert.ErrorIs(t, err, ErrSourceMissing)
 }
 
 func TestEditor_SourceCommand_NonRegularSource(t *testing.T) {
-	_, err := Editor{}.SourceCommand(SourceTarget{Path: t.TempDir()})
+	_, err := Editor{}.SourceCommand(t.TempDir(), 0)
 
 	assert.ErrorIs(t, err, ErrSourceNotRegular)
 }
