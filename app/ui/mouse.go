@@ -154,6 +154,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// that reaches this point dismisses the last hint, mirroring handleKey.
 	m.reload.hint = ""
 	m.compact.hint = ""
+	m.editorState.hint = ""
 
 	zone := m.hitTest(msg.X, msg.Y)
 

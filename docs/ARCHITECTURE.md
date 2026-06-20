@@ -107,7 +107,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `annotate.go` | Annotation input lifecycle (start, save, cancel, delete) and the visual-row chokepoint: `annotationVisualRows` is the single source of truth for "how many rows + what content does this annotation paint as." Memoized on `annot.rowCache`, invalidated by `handleFileLoaded`, `applyTheme`, and `cancelThemeSelect` |
 | `annotlist.go` | Annotation list spec building, cross-file jump logic (`jumpToAnnotationTarget` for the `@` popup, `tryJumpToAnnotationTarget` returning a jumped-bool for the `}`/`{` walker) |
 | `annotnav.go` | Cross-file annotation navigation (`}` / `{`): builds the flat annotation list, computes adjacent target via exact-match or insertion-point fallback, retries through non-jumpable targets so a hidden annotation cannot trap the walker |
-| `editor.go` | `$EDITOR` handoff for multi-line annotations: `openEditor()` wraps `app/editor.Editor` in `tea.ExecProcess`, `editorFinishedMsg` dispatch, `handleEditorFinished` routing (save / cancel / error-preserve) |
+| `editor.go` | `$EDITOR` handoffs for annotation temp-file editing and source-file opening: `openEditor()` / `openSourceEditor()` wrap `app/editor.Editor` in `tea.ExecProcess`, capture target state, route completion, and refresh the current file after a clean source-editor exit |
 | `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `search.go` | Search input handling, match computation, navigation |
 | `mouse.go` | Mouse event routing: `handleMouse` dispatch, `hitTest` pane classification (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers (`statusBarHeight`, `diffTopRow`, `treeTopRow`). Diff-pane wheel events defer both the cursor pin and the `SetContent(renderDiff())` call via a single in-flight `tea.Tick(wheelRenderDelay)` debounce (issue #179) — `wheelState.tickInFlight` ensures one tick at a time across an entire burst (subsequent wheels just bump `gen`); stale ticks reschedule, matching ticks flush. `flushWheelPending()` is called from `handleWheelDebounce`, `handleKey`, `handleResize`, and `handleBlameLoaded` (any path that runs `syncViewportToCursor` or reads `m.nav.diffCursor` must flush first). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set |
@@ -205,10 +205,11 @@ In-memory store for annotations. Each `Annotation` has file, line, text, and opt
 
 ### app/editor/ — external editor invocation
 
-Spawns the user's `$EDITOR` on a seeded temp file and reads the result back. TUI-agnostic — the caller wraps the returned `*exec.Cmd` with bubbletea's `tea.ExecProcess` (or runs it directly).
+Prepares external editor processes for annotation temp-file editing and source-file opening. TUI-agnostic — the caller wraps the returned `*exec.Cmd` with bubbletea's `tea.ExecProcess` (or runs it directly).
 
 Single stateless type `Editor` bundling all behavior as methods (no standalone functions):
 - `Command(content)` — writes content to a `revdiff-annot-*.md` temp file, resolves the editor (`$EDITOR` → `$VISUAL` → `vi`, whitespace-split so `code --wait` works), returns `*exec.Cmd` + a `complete(runErr) (string, error)` function. `complete` reads the file, removes it regardless of outcome, and preserves `runErr` — content is still returned alongside a non-nil `runErr` so callers can keep user work on soft editor failures.
+- `SourceCommand(target)` — checks that the source path exists and is a regular file as part of preparing an editor command, resolves the same editor chain, and returns an editor command for the existing source file. Known editors receive line-navigation arguments: `vi`, `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use `--goto path:N`. Unknown editors receive only the file path.
 
 Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.
 
@@ -234,7 +235,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
-| `ExternalEditor` | `Command(content)` returning `*exec.Cmd`, `complete(error) (string, error)`, `error` | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
+| `ExternalEditor` | `Command(content)` for annotation temp-file editing, `SourceCommand(target editor.SourceTarget)` for opening source files | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
 
 ## Data Flow
 
@@ -332,6 +333,32 @@ User presses 'a' on diff line
   → (optional) history.Save() → markdown to ~/.config/revdiff/history/ (best-effort warnings only)
   → if --exit-code-on-annotations is enabled and output is non-empty: exit 10
 ```
+
+### Source Editor Flow
+
+```
+User presses 'e' in diff pane
+  → openSourceEditor()
+      → sourceEditorTarget() chooses file path and optional worktree line
+      → editor.Editor.SourceCommand(target) prepares the source-file command
+      → tea.ExecProcess(cmd, complete)  (suspends bubbletea, hands over tty)
+      → sourceEditorFinishedMsg{err, refreshPolicy}
+      → handleSourceEditorFinished:
+          err != nil  → log, show hint, do not reload
+          err == nil and worktree refresh policy
+              → reloadCurrentFile() reloads current file only
+          err == nil and no-refresh policy
+              → return to revdiff without reloading
+```
+
+Source line navigation is best effort for all worktree-backed reviews.
+Staged and ref reviews still request the focused line when revdiff can derive
+one from the loaded diff,
+but clean editor exits from staged and ref reviews do not reload the displayed
+diff.
+Removed rows target the nearest line that still exists in the current file;
+when previous and next current-file rows are equally near,
+the previous row wins.
 
 ### Overlay Flow
 

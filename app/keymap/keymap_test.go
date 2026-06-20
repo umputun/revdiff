@@ -31,7 +31,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"left", ActionScrollLeft}, {"right", ActionScrollRight},
 		{"J", ActionScrollDiffDown}, {"K", ActionScrollDiffUp},
 		{"n", ActionNextItem}, {"N", ActionPrevItem}, {"p", ActionPrevItem},
-		{"]", ActionNextHunk}, {"[", ActionPrevHunk},
+		{"]", ActionNextHunk}, {"[", ActionPrevHunk}, {"e", ActionOpenFileInEditor},
 		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
 		{"/", ActionSearch},
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
@@ -272,6 +272,29 @@ func TestActionOpenEditor_HelpEntry(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "ActionOpenEditor should have a help entry")
+}
+
+func TestActionOpenFileInEditor_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionOpenFileInEditor))
+}
+
+func TestActionOpenFileInEditor_DefaultBinding(t *testing.T) {
+	km := Default()
+	assert.Equal(t, ActionOpenFileInEditor, km.Resolve("e"))
+}
+
+func TestActionOpenFileInEditor_HelpEntry(t *testing.T) {
+	entries := defaultDescriptions()
+	var found bool
+	for _, e := range entries {
+		if e.Action == ActionOpenFileInEditor {
+			assert.Equal(t, "open focused file in $EDITOR", e.Description)
+			assert.Equal(t, "File/Hunk", e.Section)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "ActionOpenFileInEditor should have a help entry")
 }
 
 func TestActionScrollConstants_InNavigationActions(t *testing.T) {

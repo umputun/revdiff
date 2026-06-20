@@ -67,6 +67,7 @@ const (
 	ActionInfo             Action = "info"
 	ActionReload           Action = "reload"
 	ActionOpenEditor       Action = "open_editor"
+	ActionOpenFileInEditor Action = "open_file_in_editor"
 )
 
 // SectionPane is the help section name for pane-related keybindings.
@@ -88,9 +89,10 @@ var validActions = map[Action]bool{
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
 	ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
-	ActionInfo:       true,
-	ActionReload:     true,
-	ActionOpenEditor: true,
+	ActionInfo:             true,
+	ActionReload:           true,
+	ActionOpenEditor:       true,
+	ActionOpenFileInEditor: true,
 }
 
 // deprecatedActionAliases maps obsolete action names parsed from user
@@ -200,6 +202,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionPrevItem, "prev file / search match", "File/Hunk"},
 		{ActionNextHunk, "next hunk", "File/Hunk"},
 		{ActionPrevHunk, "prev hunk", "File/Hunk"},
+		{ActionOpenFileInEditor, "open focused file in $EDITOR", "File/Hunk"},
 
 		// pane
 		{ActionTogglePane, "toggle pane focus", SectionPane},
@@ -264,6 +267,7 @@ func defaultBindings() map[string]Action {
 		"p":      ActionPrevItem,
 		"]":      ActionNextHunk,
 		"[":      ActionPrevHunk,
+		"e":      ActionOpenFileInEditor,
 		"tab":    ActionTogglePane,
 		"h":      ActionFocusTree,
 		"l":      ActionFocusDiff,

@@ -682,6 +682,7 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
 | `[` / `]` | Jump to previous/next change hunk in diff; add `--cross-file-hunks` to continue into the previous/next file at the boundary |
+| `e` | Open focused worktree file/line in `$EDITOR` |
 
 **Search:**
 
@@ -707,6 +708,8 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `Esc` | Cancel annotation input |
 
 While the annotation input is active, press `Ctrl+E` (or whatever key is bound to `open_editor`) to hand off the current text to an external editor for multi-line comments. Editor resolution: `$EDITOR` → `$VISUAL` → `vi`. Values with arguments work (e.g. `EDITOR="code --wait"`). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (`@`), and emitted with embedded newlines in the structured output.
+
+Press `e` in the diff pane to open the focused worktree file in `$EDITOR` (`open_file_in_editor` — rebindable). Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive line-navigation arguments: `vi`, `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use `--goto path:N`. Unknown editors receive only the file path. In working-tree review, added and context rows open at their new-file line number. Removed rows use the nearest line that still exists in the current file; if the previous and next current-file lines are equally near, the previous line is used. In staged or ref review, revdiff still makes a best-effort line-navigation request for the focused row in the current worktree file. After a clean editor exit from working-tree review, revdiff reloads the currently displayed file. Clean editor exits from staged or ref review return to revdiff without reloading the displayed diff. Editor errors leave the diff unchanged and show a status hint. Deleted, missing, non-regular, binary, placeholder, and skipped-context rows show a status hint instead of launching an editor.
 
 **View:**
 
@@ -815,7 +818,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `scroll_diff_down`, `scroll_diff_up`
 
-**File/Hunk:** `next_item`, `prev_item`, `next_hunk`, `prev_hunk`
+**File/Hunk:** `next_item`, `prev_item`, `next_hunk`, `prev_hunk`, `open_file_in_editor`
 
 **Pane:** `toggle_pane`, `focus_tree`, `focus_diff`
 

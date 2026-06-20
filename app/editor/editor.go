@@ -1,19 +1,30 @@
-// Package editor spawns the user's external $EDITOR on seeded content and
-// reads the result back. It is independent of the TUI — the caller wraps the
+// Package editor prepares external editor processes for annotation text and
+// existing source files. It is independent of the TUI — the caller wraps the
 // returned *exec.Cmd with bubbletea's tea.ExecProcess (or equivalent).
 package editor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 // Editor bundles external-editor operations. It is stateless; the type exists
 // to group related behavior as methods per project convention.
 type Editor struct{}
+
+var (
+	// ErrSourceMissing is returned when SourceCommand cannot find the source file.
+	ErrSourceMissing = errors.New("source file is missing")
+
+	// ErrSourceNotRegular is returned when SourceCommand is given a non-file path.
+	ErrSourceNotRegular = errors.New("source path is not a regular file")
+)
 
 // Command prepares the editor invocation for content. It writes content to a
 // freshly-created temp file and resolves the editor command, returning a ready
@@ -36,6 +47,79 @@ func (e Editor) Command(content string) (*exec.Cmd, func(error) (string, error),
 		return e.readResult(tempPath, runErr)
 	}
 	return cmd, complete, nil
+}
+
+// SourceTarget identifies an existing file the editor should open. Line is a
+// one-based source line; values less than 1 mean "open the file without line
+// navigation."
+type SourceTarget struct {
+	// Path is the file path passed to the external editor.
+	Path string
+
+	// Line is the one-based source line to request from editors that support it.
+	Line int
+}
+
+// SourceCommand prepares an editor invocation for an existing source file.
+// Known editors receive best-effort line-navigation arguments; unknown editors
+// receive only the path so the command remains shell-free and predictable.
+func (e Editor) SourceCommand(target SourceTarget) (*exec.Cmd, error) {
+	if target.Path == "" {
+		return nil, ErrSourceMissing
+	}
+	stat, err := os.Stat(target.Path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrSourceMissing
+		}
+		return nil, fmt.Errorf("stat source file: %w", err)
+	}
+	if !stat.Mode().IsRegular() {
+		return nil, ErrSourceNotRegular
+	}
+	argv := e.resolve()
+	switch editorLineSyntax(argv[0]) {
+	case editorPlusLine:
+		if target.Line > 0 {
+			argv = append(argv, "+"+strconv.Itoa(target.Line))
+		}
+		argv = append(argv, target.Path)
+	case editorGotoLine:
+		if target.Line > 0 {
+			argv = append(argv, "--goto", target.Path+":"+strconv.Itoa(target.Line))
+		} else {
+			argv = append(argv, target.Path)
+		}
+	case editorPlainLine:
+		argv = append(argv, target.Path)
+	}
+	//nolint:gosec // user-controlled editor binary by design (resolved from $EDITOR/$VISUAL)
+	return exec.CommandContext(context.Background(), argv[0], argv[1:]...), nil
+}
+
+// editorLineMode describes how an editor accepts an initial source line.
+type editorLineMode int
+
+const (
+	// editorPlainLine opens the path without a line-navigation argument.
+	editorPlainLine editorLineMode = iota
+
+	// editorPlusLine uses "+N" before the path, as vi-family editors do.
+	editorPlusLine
+
+	// editorGotoLine uses "--goto path:N", as VS Code-family editors do.
+	editorGotoLine
+)
+
+func editorLineSyntax(program string) editorLineMode {
+	switch filepath.Base(program) {
+	case "vi", "vim", "nvim", "nano":
+		return editorPlusLine
+	case "code", "code-insiders", "codium", "cursor":
+		return editorGotoLine
+	default:
+		return editorPlainLine
+	}
 }
 
 // resolve returns the editor command and its arguments. Lookup order is

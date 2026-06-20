@@ -19,10 +19,9 @@
 //   - annotate.go — annotation input lifecycle: start, save, cancel, delete (line and file level),
 //     cursor-viewport coordination, annotation key map
 //   - annotlist.go — annotation list spec building, cross-file jump logic
-//   - editor.go — external $EDITOR handoff for multi-line annotations: [ExternalEditor]
-//     interface, [editorFinishedMsg], openEditor (wraps the injected editor in
-//     tea.ExecProcess and captures target state at spawn time), handleEditorFinished
-//     (save / cancel / error-preserve routing)
+//   - editor.go — external $EDITOR handoffs: [ExternalEditor] interface,
+//     [editorFinishedMsg], openEditor (annotation temp-file editing with read-back),
+//     source-file opening, source-editor completion, and clean-exit refresh policy
 //   - themeselect.go — theme selector operations: open, preview/confirm/cancel, apply theme
 //     (delegates to injected [ThemeCatalog] for discovery and persistence)
 //   - search.go — incremental search: input handling, match computation, navigation
@@ -79,6 +78,6 @@
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
 // [SyntaxHighlighter] (provides ANSI-highlighted lines), [Blamer] (provides blame data),
 // [ThemeCatalog] (provides theme discovery, resolution, and persistence), and
-// [ExternalEditor] (provides $EDITOR invocation for multi-line annotation input).
-// All are defined in this package and implemented externally.
+// [ExternalEditor] (provides $EDITOR invocation for annotation temp-file editing
+// and source-file opening). All are defined in this package and implemented externally.
 package ui

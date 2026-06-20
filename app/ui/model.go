@@ -415,6 +415,12 @@ type compactState struct {
 	hint       string // transient status-bar message; cleared on next key press
 }
 
+// editorState holds transient feedback for opening worktree files in the
+// external editor. Annotation editor state stays on annotationState.
+type editorState struct {
+	hint string // transient status-bar message for source-editor launch outcomes
+}
+
 // keyState holds transient key-dispatch state for the leader-chord feature.
 // It lives separate from navigationState because chord state is a key-dispatch
 // concern, not a cursor/scroll concern — keeping the two split prevents
@@ -475,7 +481,7 @@ type Model struct {
 	diffRenderer Renderer
 	keymap       *keymap.Keymap
 	themes       ThemeCatalog   // theme catalog for discovery, resolve, and persistence
-	editor       ExternalEditor // launches $EDITOR for multi-line annotation editing
+	editor       ExternalEditor // launches $EDITOR for annotation editing and source-file opening
 
 	// grouped state
 	cfg    modelConfigState // immutable session config
@@ -491,6 +497,7 @@ type Model struct {
 	review      reviewInfoState   // invocation summary + whole-review aggregate stats for the review-info overlay
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 	compact     compactState      // applicability + transient hint for compact diff mode
+	editorState editorState       // transient hint state for source-file editor launches
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
 	vim         vimState          // count accumulator, pending letter leader, and transient hint for vim-motion preset
 	wheel       wheelState        // diff-pane mouse wheel coalescing (debounced render via wheelDebounceMsg)
@@ -832,6 +839,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleBlameLoaded(msg)
 	case editorFinishedMsg:
 		return m.handleEditorFinished(msg)
+	case sourceEditorFinishedMsg:
+		return m.handleSourceEditorFinished(msg)
 	case wheelDebounceMsg:
 		return m.handleWheelDebounce(msg)
 	}
@@ -859,6 +868,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// this point dismisses the last hint before the new action runs.
 	m.reload.hint = ""
 	m.compact.hint = ""
+	m.editorState.hint = ""
 	m.keys.hint = ""
 	m.vim.hint = ""
 

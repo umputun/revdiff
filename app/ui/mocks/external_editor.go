@@ -6,6 +6,8 @@ package mocks
 import (
 	"os/exec"
 	"sync"
+
+	"github.com/umputun/revdiff/app/editor"
 )
 
 // ExternalEditorMock is a mock implementation of ui.ExternalEditor.
@@ -26,6 +28,8 @@ import (
 type ExternalEditorMock struct {
 	// CommandFunc mocks the Command method.
 	CommandFunc func(content string) (*exec.Cmd, func(error) (string, error), error)
+	// SourceCommandFunc mocks the SourceCommand method.
+	SourceCommandFunc func(target editor.SourceTarget) (*exec.Cmd, error)
 
 	// calls tracks calls to the methods.
 	calls struct {
@@ -34,8 +38,14 @@ type ExternalEditorMock struct {
 			// Content is the content argument value.
 			Content string
 		}
+		// SourceCommand holds details about calls to the SourceCommand method.
+		SourceCommand []struct {
+			// Target is the target argument value.
+			Target editor.SourceTarget
+		}
 	}
-	lockCommand sync.RWMutex
+	lockCommand       sync.RWMutex
+	lockSourceCommand sync.RWMutex
 }
 
 // Command calls CommandFunc.
@@ -54,6 +64,22 @@ func (mock *ExternalEditorMock) Command(content string) (*exec.Cmd, func(error) 
 	return mock.CommandFunc(content)
 }
 
+// SourceCommand calls SourceCommandFunc.
+func (mock *ExternalEditorMock) SourceCommand(target editor.SourceTarget) (*exec.Cmd, error) {
+	if mock.SourceCommandFunc == nil {
+		panic("ExternalEditorMock.SourceCommandFunc: method is nil but ExternalEditor.SourceCommand was just called")
+	}
+	callInfo := struct {
+		Target editor.SourceTarget
+	}{
+		Target: target,
+	}
+	mock.lockSourceCommand.Lock()
+	mock.calls.SourceCommand = append(mock.calls.SourceCommand, callInfo)
+	mock.lockSourceCommand.Unlock()
+	return mock.SourceCommandFunc(target)
+}
+
 // CommandCalls gets all the calls that were made to Command.
 // Check the length with:
 //
@@ -67,5 +93,21 @@ func (mock *ExternalEditorMock) CommandCalls() []struct {
 	mock.lockCommand.RLock()
 	calls = mock.calls.Command
 	mock.lockCommand.RUnlock()
+	return calls
+}
+
+// SourceCommandCalls gets all the calls that were made to SourceCommand.
+// Check the length with:
+//
+//	len(mockedExternalEditor.SourceCommandCalls())
+func (mock *ExternalEditorMock) SourceCommandCalls() []struct {
+	Target editor.SourceTarget
+} {
+	var calls []struct {
+		Target editor.SourceTarget
+	}
+	mock.lockSourceCommand.RLock()
+	calls = mock.calls.SourceCommand
+	mock.lockSourceCommand.RUnlock()
 	return calls
 }
