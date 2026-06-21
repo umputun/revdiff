@@ -209,7 +209,7 @@ Prepares external editor processes for annotation temp-file editing and source-f
 
 Single stateless type `Editor` bundling all behavior as methods (no standalone functions):
 - `Command(content)` — writes content to a `revdiff-annot-*.md` temp file, resolves the editor (`$EDITOR` → `$VISUAL` → `vi`, whitespace-split so `code --wait` works), returns `*exec.Cmd` + a `complete(runErr) (string, error)` function. `complete` reads the file, removes it regardless of outcome, and preserves `runErr` — content is still returned alongside a non-nil `runErr` so callers can keep user work on soft editor failures.
-- `SourceCommand(target)` — checks that the source path exists and is a regular file as part of preparing an editor command, resolves the same editor chain, and returns an editor command for the existing source file. Known editors receive line-navigation arguments: `vi`, `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use `--goto path:N`. Unknown editors receive only the file path.
+- `SourceCommand(path string, line int)` — checks that the source path exists and is a regular file as part of preparing an editor command, resolves the same editor chain, and returns an editor command for the existing source file. Known editors receive line-navigation arguments: `vi`, `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use `--goto path:N`. Unknown editors receive only the file path.
 
 Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.
 
@@ -235,7 +235,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
-| `ExternalEditor` | `Command(content)` for annotation temp-file editing, `SourceCommand(target editor.SourceTarget)` for opening source files | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
+| `ExternalEditor` | `Command(content)` for annotation temp-file editing, `SourceCommand(path string, line int)` for opening source files | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
 
 ## Data Flow
 
@@ -340,7 +340,7 @@ User presses 'a' on diff line
 User presses 'e' in diff pane
   → openSourceEditor()
       → sourceEditorTarget() chooses file path and optional worktree line
-      → editor.Editor.SourceCommand(target) prepares the source-file command
+      → editor.Editor.SourceCommand(path, line) prepares the source-file command
       → tea.ExecProcess(cmd, complete)  (suspends bubbletea, hands over tty)
       → sourceEditorFinishedMsg{err, refreshPolicy}
       → handleSourceEditorFinished:
