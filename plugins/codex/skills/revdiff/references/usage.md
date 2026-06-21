@@ -122,7 +122,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
 | `[` / `]` | Jump to previous/next change hunk in diff |
-| `e` | Open focused worktree file/line in `$EDITOR` |
+| `e` | Open focused file in `$EDITOR` |
 
 **Search:**
 
@@ -149,7 +149,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 
 While the annotation input is active, press `Ctrl+E` (or whatever key is bound to `open_editor`) to hand off the current text to an external editor for multi-line comments. Editor resolution: `$EDITOR` → `$VISUAL` → `vi`. Values with arguments work (e.g. `EDITOR="code --wait"`). On editor save and quit, the full file contents (including newlines) become the annotation. Quitting the editor with an empty file cancels the annotation and preserves any previously stored note on that line. Multi-line annotations are rendered line-by-line in the diff view, shown flattened in the annotation list popup (`@`), and emitted with embedded newlines in the structured output.
 
-Press `e` in the diff pane to open the focused worktree file in `$EDITOR` (`open_file_in_editor` — rebindable). Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive line-navigation arguments: `vi`, `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use `--goto path:N`. Unknown editors receive only the file path. In working-tree review, added and context rows open at their new-file line number. Removed rows use the nearest line that still exists in the current file; if the previous and next current-file lines are equally near, the previous line is used. In staged or ref review, revdiff still makes a best-effort line-navigation request for the focused row in the current worktree file. After a clean editor exit from working-tree review, revdiff reloads the currently displayed file. Clean editor exits from staged or ref review return to revdiff without reloading the displayed diff. Editor errors leave the diff unchanged and show a status hint. Deleted, missing, non-regular, binary, placeholder, and skipped-context rows show a status hint instead of launching an editor.
+Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_editor` — rebindable) when revdiff has a stable source path. Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive either `$EDITOR +N path` or `$EDITOR --goto path:N` as appropriate; unknown editors receive only the file path. File lines are resolved on a best-effort basis. For working tree changes, a clean editor exit reloads the displayed file. For `--staged` or refs, a clean editor exit returns to revdiff without reloading the displayed diff. In compare mode, `e` opens the `--compare-new` side. Working tree files with line annotations cannot be opened for editing because edits can orphan those annotations. Diffs read with `--stdin` do not support opening files. Unsupported rows or files and editor errors show a status hint instead of launching an editor or changing the diff.
 
 **View:**
 
