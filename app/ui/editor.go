@@ -179,6 +179,11 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 	}
 	targetPath := cmp.Or(policy.ExactPath, m.file.name)
 	if !filepath.IsAbs(targetPath) {
+		// Relative displayed paths come from VCS diff data,
+		// so confine them to the source root.
+		// Absolute paths are explicit user input
+		// (e.g. --only=/path/to/file)
+		// and are therefore trusted for now.
 		if policy.Root == "" {
 			return sourceEditorTargetResult{}, errors.New("no source root")
 		}
