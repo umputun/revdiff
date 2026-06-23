@@ -67,7 +67,8 @@ func (e Editor) SourceCommand(path string, line int) (*exec.Cmd, error) {
 		return nil, ErrSourceNotRegular
 	}
 	argv := e.resolve()
-	switch editorLineSyntax(argv[0]) {
+	mode := editorLineSyntax(argv[0])
+	switch mode {
 	case editorPlusLine:
 		if line > 0 {
 			argv = append(argv, "+"+strconv.Itoa(line))
@@ -81,6 +82,11 @@ func (e Editor) SourceCommand(path string, line int) (*exec.Cmd, error) {
 		}
 	case editorPlainLine:
 		argv = append(argv, path)
+	default:
+		// editorLineMode values come from private code in this file. An
+		// unrecognized mode means SourceCommand and editorLineSyntax disagree;
+		// callers cannot fix it by changing their input.
+		panic(fmt.Sprintf("unrecognized editor line mode %d", mode))
 	}
 	//nolint:gosec // user-controlled editor binary by design (resolved from $EDITOR/$VISUAL)
 	return exec.CommandContext(context.Background(), argv[0], argv[1:]...), nil
