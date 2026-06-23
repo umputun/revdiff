@@ -699,6 +699,9 @@ func TestHandleSourceEditorFinished_ReloadAfterCleanExit(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel([]string{"a.go"}, nil)
+			// Source-editor reloads require the displayed file and tree
+			// selection to describe the same loaded file.
+			m.tree = testNewFileTree([]string{"a.go"})
 			m.file.name = "a.go"
 			beforeSeq := m.file.loadSeq
 
@@ -734,6 +737,32 @@ func TestHandleSourceEditorFinished_SkipsReloadWhenFileChanged(t *testing.T) {
 	assert.Equal(t, "Returned from editor", model.editorState.hint)
 	assert.Nil(t, cmd)
 	assert.Equal(t, beforeSeq, model.file.loadSeq)
+}
+
+func TestHandleSourceEditorFinished_SkipsReloadWhenTreeSelectionChanged(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.tree.StepFile(sidepane.DirectionNext)
+	require.Equal(t, "b.go", m.tree.SelectedFile())
+
+	// Cross-file hunk navigation advances the tree selection before the
+	// selected file load completes, so the displayed file can lag behind it.
+	m.nav.pendingHunkJump = new(true)
+	beforeSeq := m.file.loadSeq
+
+	result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
+		fileName:             "a.go",
+		reloadAfterCleanExit: true,
+	})
+	model := result.(Model)
+
+	assert.Equal(t, "Returned from editor", model.editorState.hint)
+	// Returning from an editor for the stale displayed file must not reload it
+	// over the queued tree selection or preserve the pending cross-file jump.
+	assert.Nil(t, cmd)
+	assert.Equal(t, beforeSeq, model.file.loadSeq)
+	assert.Nil(t, model.nav.pendingHunkJump)
 }
 
 func TestHandleDiffAction_OpenFileInEditor(t *testing.T) {

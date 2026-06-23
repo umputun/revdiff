@@ -343,6 +343,13 @@ func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Mode
 	if !msg.reloadAfterCleanExit {
 		return m, nil
 	}
+	// Cross-file hunk navigation can advance the tree selection before the
+	// selected file load finishes. In that window, the editor returned for a
+	// stale displayed file, so leave the queued load in control.
+	if msg.fileName != m.tree.SelectedFile() {
+		m.nav.pendingHunkJump = nil
+		return m, nil
+	}
 	if msg.fileName != m.file.name {
 		return m, nil
 	}
