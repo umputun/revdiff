@@ -81,6 +81,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 
 | Terminal | Overlay method | Detection |
 |----------|---------------|-----------|
+| **agterm** | `agtermctl session overlay open … --block` (full-pane overlay, blocks until quit) | `$AGTERM_SESSION_ID` env var |
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
 | **Zellij** | `zellij run --floating` | `$ZELLIJ` env var |
 | **herdr** | `herdr tab create` + `herdr pane run` (new tab) | `$HERDR_ENV` env var |
@@ -92,7 +93,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
 
 > **Note:** cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 

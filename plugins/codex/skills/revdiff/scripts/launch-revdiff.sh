@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launch revdiff in a terminal overlay (tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
+# launch revdiff in a terminal overlay (agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
 # source: .claude-plugin/skills/revdiff/scripts/launch-revdiff.sh (keep in sync)
 # usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--only=file1 ...]
 # output: annotation text from revdiff stdout (empty if no annotations)
@@ -108,6 +108,20 @@ OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 # popup size: override via REVDIFF_POPUP_WIDTH / REVDIFF_POPUP_HEIGHT env vars (tmux, zellij, and wezterm)
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
+
+# agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a FULL-pane overlay (no
+# --size-percent) over the agent's own session and blocks until it exits, returning revdiff's exit
+# code directly — so, unlike the sentinel-polling backends below, no sentinel is needed. Checked
+# first so an agterm session always uses its native overlay even when a multiplexer is also present.
+# Needs $AGTERM_SESSION_ID (set in every agterm session) and agtermctl on PATH; passes the bound
+# $AGTERM_SOCKET so it reaches the agterm instance hosting this session.
+if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
+    AGTERM_ARGS=(agtermctl session overlay open "$REVDIFF_CMD" --target "$AGTERM_SESSION_ID" --block)
+    [ -n "${AGTERM_SOCKET:-}" ] && AGTERM_ARGS+=(--socket "$AGTERM_SOCKET")
+    rc=0
+    "${AGTERM_ARGS[@]}" || rc=$?
+    print_output_and_exit "$rc"
+fi
 
 # agent-deck: its control-mode tmux UI cannot render display-popup, so when detected this sourced
 # backend runs revdiff in a tmux window instead and exits. It returns here (no-op) for every
