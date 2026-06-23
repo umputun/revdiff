@@ -47,6 +47,11 @@ type editorFinishedMsg struct {
 	fileLevel  bool
 	line       int
 	changeType string
+
+	// restoreMouse requests mouse tracking after the editor returns.
+	// Bubble Tea disables mouse modes while the child process owns the terminal;
+	// editor setup failures never release the terminal, so they do not need this.
+	restoreMouse bool
 }
 
 // openEditor returns a tea.Cmd that suspends the program, launches the user's
@@ -86,14 +91,18 @@ func (m *Model) openEditor() tea.Cmd {
 	seed := content
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
 		text, finalErr := complete(runErr)
+		// Earlier setup failures return before tea.ExecProcess releases the
+		// terminal, so restoreMouse is set only on this completion path and only
+		// when the session originally enabled mouse tracking.
 		return editorFinishedMsg{
-			content:    text,
-			seed:       seed,
-			err:        finalErr,
-			fileName:   fileName,
-			fileLevel:  fileLevel,
-			line:       line,
-			changeType: changeType,
+			content:      text,
+			seed:         seed,
+			err:          finalErr,
+			restoreMouse: m.cfg.mouseTracking,
+			fileName:     fileName,
+			fileLevel:    fileLevel,
+			line:         line,
+			changeType:   changeType,
 		}
 	})
 }
@@ -295,6 +304,10 @@ func (m Model) nearestCurrentLine() int {
 // failure (tty restore error post-save, non-zero exit after save), so the
 // content is saved and the error logged — preserving user work.
 func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	if msg.restoreMouse {
+		cmd = tea.EnableMouseCellMotion
+	}
 	if msg.err != nil {
 		// covers editor spawn failure, non-zero exit, tty release/restore errors,
 		// temp-file creation/write failures, and post-exit file read errors.
@@ -308,16 +321,16 @@ func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) 
 			// and drop. trade-off: preserving input state on ambiguous errors lets
 			// users retry. the alternative (save on any non-empty content) caused
 			// the iter-2 regression where launch-time failures silently saved seed.
-			return m, nil
+			return m, cmd
 		}
 		// fall through to save: user wrote content before the error, preserve it
 	}
 	if msg.content == "" {
 		m.cancelAnnotation()
-		return m, nil
+		return m, cmd
 	}
 	m.saveComment(msg.content, msg.fileName, msg.fileLevel, msg.line, msg.changeType)
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Model, tea.Cmd) {

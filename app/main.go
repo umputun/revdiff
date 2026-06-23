@@ -195,6 +195,7 @@ func run(opts options) (int, error) {
 		ReloadApplicable:  reloadApplicable(opts),
 		CompactApplicable: compactApplicable(opts, renderer),
 		NoColors:          opts.NoColors,
+		MouseTracking:     !opts.NoMouse,
 		NoStatusBar:       opts.NoStatusBar,
 		NoConfirmDiscard:  opts.NoConfirmDiscard,
 		Wrap:              opts.Wrap,

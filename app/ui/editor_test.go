@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -199,7 +200,6 @@ func TestOpenEditor_CommandErrorProducesEditorFinishedMsg(t *testing.T) {
 	assert.Equal(t, "in-progress note", model.annot.input.Value(), "input value must be preserved after error")
 	assert.Empty(t, model.store.Get("a.go"), "no annotation should be saved when editor errored")
 }
-
 func TestSourceEditorTarget_LineResolution(t *testing.T) {
 	workDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, "a.go"), []byte("one\ntwo\nthree\nfour\n"), 0o600))
@@ -778,4 +778,52 @@ func TestHandleDiffAction_OpenFileInEditorNoopKeepsHint(t *testing.T) {
 	assert.Nil(t, cmd)
 	assert.Empty(t, fake.SourceCommandCalls())
 	assert.Equal(t, "Editor unavailable: source editor disabled", model.editorState.hint)
+}
+
+func TestModel_EditorFinishedReenablesMouseTracking(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 1
+	m.startAnnotation()
+
+	result, cmd := m.Update(editorFinishedMsg{content: "review note", restoreMouse: true, fileName: "a.go", line: 2, changeType: "+"})
+	model := result.(Model)
+
+	require.NotNil(t, cmd, "editor completion must re-enable mouse tracking after Bubble Tea restores the terminal")
+	// This intentionally checks the current command shape. The external behavior
+	// is a terminal escape sequence emitted by Bubble Tea after Update returns;
+	// asserting it without a PTY harness requires inspecting the command message.
+	assert.IsType(t, tea.EnableMouseCellMotion(), cmd(), "editor completion must emit Bubble Tea's mouse re-enable message")
+	assert.False(t, model.annot.annotating, "annotation mode should close after successful editor save")
+	require.Len(t, model.store.Get("a.go"), 1)
+	assert.Equal(t, "review note", model.store.Get("a.go")[0].Comment)
+}
+
+func TestModel_EditorFinishedDoesNotEnableMouseWhenTrackingDisabled(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.layout.focus = paneDiff
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.nav.diffCursor = 1
+	m.startAnnotation()
+
+	result, cmd := m.Update(editorFinishedMsg{content: "review note", restoreMouse: false, fileName: "a.go", line: 2, changeType: "+"})
+	model := result.(Model)
+
+	assert.Nil(t, cmd, "editor completion must not enable mouse tracking when the session did not enable it")
+	assert.False(t, model.annot.annotating, "annotation mode should close after successful editor save")
+	require.Len(t, model.store.Get("a.go"), 1)
+	assert.Equal(t, "review note", model.store.Get("a.go")[0].Comment)
 }

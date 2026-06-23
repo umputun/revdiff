@@ -293,6 +293,7 @@ type modelConfigState struct {
 	workDir            string             // working directory for resolving absolute --only paths
 	sourceEditorPolicy SourceEditorPolicy // source-file editor availability and target behavior
 	noColors           bool               // keep monochrome output when previewing or applying themes
+	mouseTracking      bool               // true when the session enabled mouse tracking
 	noStatusBar        bool               // hide the status bar
 	noConfirmDiscard   bool               // skip confirmation prompt on discard quit
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
@@ -651,6 +652,7 @@ type ModelConfig struct {
 	TreeWidthRatio   int
 	TabWidth         int      // number of spaces per tab character
 	NoColors         bool     // disable all colors including syntax highlighting
+	MouseTracking    bool     // enable mouse tracking for clicks and wheel events
 	NoStatusBar      bool     // hide the status bar
 	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
 	Wrap             bool     // enable line wrapping
@@ -791,6 +793,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			workDir:            cfg.WorkDir,
 			sourceEditorPolicy: cfg.SourceEditor,
 			noColors:           cfg.NoColors,
+			mouseTracking:      cfg.MouseTracking,
 			noStatusBar:        cfg.NoStatusBar,
 			noConfirmDiscard:   cfg.NoConfirmDiscard,
 			crossFileHunks:     cfg.CrossFileHunks,
