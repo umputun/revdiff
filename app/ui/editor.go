@@ -118,18 +118,18 @@ type sourceEditorFinishedMsg struct {
 // sourceEditorTargetResult is the UI-side decision for one source-editor
 // request.
 type sourceEditorTargetResult struct {
-	// FileName is the displayed diff file captured when the editor launches.
-	FileName string
+	// fileName is the displayed diff file captured when the editor launches.
+	fileName string
 
-	// SourcePath is the source file passed to ExternalEditor.
-	SourcePath string
+	// sourcePath is the source file passed to ExternalEditor.
+	sourcePath string
 
-	// SourceLine is the optional one-based line passed to ExternalEditor.
-	SourceLine int
+	// sourceLine is the optional one-based line passed to ExternalEditor.
+	sourceLine int
 
-	// ReloadAfterCleanExit controls whether a clean editor exit reloads the
+	// reloadAfterCleanExit controls whether a clean editor exit reloads the
 	// displayed diff file.
-	ReloadAfterCleanExit bool
+	reloadAfterCleanExit bool
 }
 
 func (m *Model) openSourceEditor() tea.Cmd {
@@ -138,7 +138,7 @@ func (m *Model) openSourceEditor() tea.Cmd {
 		m.editorState.hint = fmt.Sprintf("Editor unavailable: %v", err)
 		return nil
 	}
-	cmd, err := m.editor.SourceCommand(result.SourcePath, result.SourceLine)
+	cmd, err := m.editor.SourceCommand(result.sourcePath, result.sourceLine)
 	if err != nil {
 		switch {
 		case errors.Is(err, editor.ErrSourceMissing):
@@ -149,11 +149,11 @@ func (m *Model) openSourceEditor() tea.Cmd {
 			return nil
 		}
 		return func() tea.Msg {
-			return sourceEditorFinishedMsg{err: err, fileName: result.FileName, reloadAfterCleanExit: result.ReloadAfterCleanExit}
+			return sourceEditorFinishedMsg{err: err, fileName: result.fileName, reloadAfterCleanExit: result.reloadAfterCleanExit}
 		}
 	}
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
-		return sourceEditorFinishedMsg{err: runErr, fileName: result.FileName, reloadAfterCleanExit: result.ReloadAfterCleanExit}
+		return sourceEditorFinishedMsg{err: runErr, fileName: result.fileName, reloadAfterCleanExit: result.reloadAfterCleanExit}
 	})
 }
 
@@ -210,10 +210,10 @@ func (m Model) sourceEditorTarget() (sourceEditorTargetResult, error) {
 		targetPath = filepath.Join(policy.Root, targetPath)
 	}
 	return sourceEditorTargetResult{
-		FileName:             m.file.name,
-		SourcePath:           targetPath,
-		SourceLine:           targetLine,
-		ReloadAfterCleanExit: policy.ReloadAfterCleanExit,
+		fileName:             m.file.name,
+		sourcePath:           targetPath,
+		sourceLine:           targetLine,
+		reloadAfterCleanExit: policy.ReloadAfterCleanExit,
 	}, nil
 }
 

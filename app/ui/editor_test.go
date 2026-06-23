@@ -234,8 +234,8 @@ func TestSourceEditorTarget_LineResolution(t *testing.T) {
 			got, err := m.sourceEditorTarget()
 
 			require.NoError(t, err)
-			assert.Equal(t, filepath.Join(workDir, "a.go"), got.SourcePath)
-			assert.Equal(t, tt.wantLine, got.SourceLine)
+			assert.Equal(t, filepath.Join(workDir, "a.go"), got.sourcePath)
+			assert.Equal(t, tt.wantLine, got.sourceLine)
 		})
 	}
 }
@@ -258,8 +258,8 @@ func TestSourceEditorTarget_RemoveOnlyFileOpensWithoutLine(t *testing.T) {
 	got, err := m.sourceEditorTarget()
 
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(workDir, "a.go"), got.SourcePath)
-	assert.Equal(t, 0, got.SourceLine)
+	assert.Equal(t, filepath.Join(workDir, "a.go"), got.sourcePath)
+	assert.Equal(t, 0, got.sourceLine)
 }
 
 func TestSourceEditorTarget_CollapsedDeleteOnlyPlaceholderHasNoSourceLine(t *testing.T) {
@@ -283,8 +283,8 @@ func TestSourceEditorTarget_CollapsedDeleteOnlyPlaceholderHasNoSourceLine(t *tes
 
 	got, err := m.sourceEditorTarget()
 
-	assert.Empty(t, got.SourcePath)
-	assert.Zero(t, got.SourceLine)
+	assert.Empty(t, got.sourcePath)
+	assert.Zero(t, got.sourceLine)
 	assert.EqualError(t, err, "no source line")
 }
 
@@ -309,8 +309,8 @@ func TestSourceEditorTarget_CollapsedHiddenRemovedLineHasNoSourceLine(t *testing
 
 	got, err := m.sourceEditorTarget()
 
-	assert.Empty(t, got.SourcePath)
-	assert.Zero(t, got.SourceLine)
+	assert.Empty(t, got.sourcePath)
+	assert.Zero(t, got.sourceLine)
 	assert.EqualError(t, err, "no source line")
 }
 
@@ -336,8 +336,8 @@ func TestSourceEditorTarget_ExpandedDeleteOnlyLineUsesNearestCurrentLine(t *test
 	got, err := m.sourceEditorTarget()
 
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(workDir, "a.go"), got.SourcePath)
-	assert.Equal(t, 1, got.SourceLine)
+	assert.Equal(t, filepath.Join(workDir, "a.go"), got.sourcePath)
+	assert.Equal(t, 1, got.sourceLine)
 }
 
 func TestSourceEditorTarget_AbsoluteFilePathUsesOriginalPath(t *testing.T) {
@@ -357,8 +357,8 @@ func TestSourceEditorTarget_AbsoluteFilePathUsesOriginalPath(t *testing.T) {
 	got, err := m.sourceEditorTarget()
 
 	require.NoError(t, err)
-	assert.Equal(t, standaloneFile, got.SourcePath)
-	assert.Equal(t, 1, got.SourceLine)
+	assert.Equal(t, standaloneFile, got.sourcePath)
+	assert.Equal(t, 1, got.sourceLine)
 }
 
 func TestSourceEditorTarget_CompareFileUsesExactNewPath(t *testing.T) {
@@ -381,9 +381,9 @@ func TestSourceEditorTarget_CompareFileUsesExactNewPath(t *testing.T) {
 	got, err := m.sourceEditorTarget()
 
 	require.NoError(t, err)
-	assert.Equal(t, compareNew, got.SourcePath)
-	assert.Equal(t, 1, got.SourceLine)
-	assert.False(t, got.ReloadAfterCleanExit)
+	assert.Equal(t, compareNew, got.sourcePath)
+	assert.Equal(t, 1, got.sourceLine)
+	assert.False(t, got.reloadAfterCleanExit)
 }
 
 func TestSourceEditorTarget_RelativeSymlinkEscapeRejected(t *testing.T) {
@@ -403,8 +403,8 @@ func TestSourceEditorTarget_RelativeSymlinkEscapeRejected(t *testing.T) {
 
 	got, err := m.sourceEditorTarget()
 
-	assert.Empty(t, got.SourcePath)
-	assert.Zero(t, got.SourceLine)
+	assert.Empty(t, got.sourcePath)
+	assert.Zero(t, got.sourceLine)
 	assert.EqualError(t, err, "file path escapes worktree")
 }
 
@@ -424,9 +424,9 @@ func TestSourceEditorTarget_StagedReviewOpensWithFocusedLine(t *testing.T) {
 	got, err := m.sourceEditorTarget()
 
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(workDir, "a.go"), got.SourcePath)
-	assert.Equal(t, 2, got.SourceLine)
-	assert.False(t, got.ReloadAfterCleanExit)
+	assert.Equal(t, filepath.Join(workDir, "a.go"), got.sourcePath)
+	assert.Equal(t, 2, got.sourceLine)
+	assert.False(t, got.reloadAfterCleanExit)
 }
 
 func TestSourceEditorTarget_RefReviewOpensWithFocusedLine(t *testing.T) {
@@ -445,9 +445,9 @@ func TestSourceEditorTarget_RefReviewOpensWithFocusedLine(t *testing.T) {
 	got, err := m.sourceEditorTarget()
 
 	require.NoError(t, err)
-	assert.Equal(t, filepath.Join(workDir, "a.go"), got.SourcePath)
-	assert.Equal(t, 2, got.SourceLine)
-	assert.False(t, got.ReloadAfterCleanExit)
+	assert.Equal(t, filepath.Join(workDir, "a.go"), got.sourcePath)
+	assert.Equal(t, 2, got.sourceLine)
+	assert.False(t, got.reloadAfterCleanExit)
 }
 
 func TestSourceEditorTarget_StagedReviewStillRejectsRowsWithoutSource(t *testing.T) {
@@ -465,8 +465,8 @@ func TestSourceEditorTarget_StagedReviewStillRejectsRowsWithoutSource(t *testing
 
 	got, err := m.sourceEditorTarget()
 
-	assert.Empty(t, got.SourcePath)
-	assert.Zero(t, got.SourceLine)
+	assert.Empty(t, got.sourcePath)
+	assert.Zero(t, got.sourceLine)
 	assert.EqualError(t, err, "no source line")
 }
 
@@ -560,8 +560,8 @@ func TestSourceEditorTarget_SelectionErrorCases(t *testing.T) {
 
 			got, err := m.sourceEditorTarget()
 
-			assert.Empty(t, got.SourcePath)
-			assert.Zero(t, got.SourceLine)
+			assert.Empty(t, got.sourcePath)
+			assert.Zero(t, got.sourceLine)
 			assert.EqualError(t, err, tt.wantErr)
 		})
 	}
@@ -680,9 +680,9 @@ func TestSourceEditorTarget_NonWorktreeReviewLineAnnotationAllows(t *testing.T) 
 			got, err := m.sourceEditorTarget()
 
 			require.NoError(t, err)
-			assert.Equal(t, filepath.Join(workDir, "a.go"), got.SourcePath)
-			assert.Equal(t, 1, got.SourceLine)
-			assert.False(t, got.ReloadAfterCleanExit)
+			assert.Equal(t, filepath.Join(workDir, "a.go"), got.sourcePath)
+			assert.Equal(t, 1, got.sourceLine)
+			assert.False(t, got.reloadAfterCleanExit)
 		})
 	}
 }
