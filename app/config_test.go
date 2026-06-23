@@ -42,6 +42,8 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.Empty(t, opts.StdinName)
 	assert.Empty(t, opts.Refs.Base)
 	assert.Empty(t, opts.Refs.Against)
+	assert.Equal(t, "revdiff", opts.AutoThemeDark)
+	assert.Equal(t, "catppuccin-latte", opts.AutoThemeLight)
 }
 
 func TestParseArgs_NoConfirmDiscard(t *testing.T) {
@@ -987,6 +989,34 @@ func TestParseArgs_ThemeEnv(t *testing.T) {
 	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)
 	assert.Equal(t, "nord", opts.Theme)
+}
+
+func TestParseArgs_AutoThemeOptions(t *testing.T) {
+	t.Run("flags", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--auto-theme-dark=dracula", "--auto-theme-light=catppuccin-latte"))
+		require.NoError(t, err)
+		assert.Equal(t, "dracula", opts.AutoThemeDark)
+		assert.Equal(t, "catppuccin-latte", opts.AutoThemeLight)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_AUTO_THEME_DARK", "nord")
+		t.Setenv("REVDIFF_AUTO_THEME_LIGHT", "basic")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, "nord", opts.AutoThemeDark)
+		assert.Equal(t, "basic", opts.AutoThemeLight)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgPath := filepath.Join(t.TempDir(), "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nauto-theme-dark = dracula\nauto-theme-light = basic\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, "dracula", opts.AutoThemeDark)
+		assert.Equal(t, "basic", opts.AutoThemeLight)
+	})
 }
 
 func TestParseArgs_DumpThemeFlag(t *testing.T) {

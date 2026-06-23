@@ -331,6 +331,47 @@ func TestHandleThemes_LoadTheme(t *testing.T) {
 	assert.Equal(t, "dracula", opts.ChromaStyle)
 }
 
+func TestResolveAutoThemeName(t *testing.T) {
+	tests := []struct {
+		name           string
+		opts           options
+		darkBackground bool
+		want           string
+	}{
+		{name: "dark terminal uses default dark theme", darkBackground: true, want: "revdiff"},
+		{name: "light terminal uses default light theme", darkBackground: false, want: "catppuccin-latte"},
+		{
+			name:           "custom dark choice is honored",
+			opts:           options{AutoThemeDark: "dracula", AutoThemeLight: "basic"},
+			darkBackground: true,
+			want:           "dracula",
+		},
+		{
+			name:           "custom light choice is honored",
+			opts:           options{AutoThemeDark: "dracula", AutoThemeLight: "basic"},
+			darkBackground: false,
+			want:           "basic",
+		},
+		{
+			name:           "empty custom dark choice falls back to default",
+			opts:           options{AutoThemeDark: "", AutoThemeLight: "basic"},
+			darkBackground: true,
+			want:           "revdiff",
+		},
+		{
+			name:           "empty custom light choice falls back to default",
+			opts:           options{AutoThemeDark: "dracula", AutoThemeLight: ""},
+			darkBackground: false,
+			want:           "catppuccin-latte",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, resolveAutoThemeName(tt.opts, tt.darkBackground))
+		})
+	}
+}
+
 func TestHandleThemes_LoadThemeNotFound(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
 	cat := theme.NewCatalog(themesDir)

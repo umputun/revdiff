@@ -347,7 +347,9 @@ Positional arguments support several forms:
 | `--no-mouse` | Disable mouse support (scroll wheel, click), env: `REVDIFF_NO_MOUSE` | `false` |
 | `--vim-motion` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`), env: `REVDIFF_VIM_MOTION` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
-| `--theme` | Load color theme from `~/.config/revdiff/themes/`, env: `REVDIFF_THEME` | |
+| `--theme` | Load color theme from `~/.config/revdiff/themes/`; use `auto` to choose by terminal background, env: `REVDIFF_THEME` | |
+| `--auto-theme-dark` | Theme used by `--theme auto` on dark terminal backgrounds, env: `REVDIFF_AUTO_THEME_DARK` | `revdiff` |
+| `--auto-theme-light` | Theme used by `--theme auto` on light terminal backgrounds, env: `REVDIFF_AUTO_THEME_LIGHT` | `catppuccin-latte` |
 | `--dump-theme` | Print currently resolved colors as theme file to stdout and exit | |
 | `--list-themes` | Print available theme names to stdout and exit | |
 | `--init-themes` | Write bundled theme files to themes dir and exit | |
@@ -395,6 +397,9 @@ Press `T` inside revdiff to open the interactive theme selector with live previe
 # apply a theme
 revdiff --theme dracula
 
+# choose a theme from the terminal background color
+revdiff --theme auto
+
 # list available themes
 revdiff --list-themes
 
@@ -432,6 +437,14 @@ theme = dracula
 ```
 
 Or via environment variable: `REVDIFF_THEME=dracula`.
+
+Set `theme = auto` to query the terminal background and choose a matching theme. By default, auto mode uses `revdiff` for dark backgrounds and `catppuccin-latte` for light backgrounds:
+
+```ini
+theme = auto
+auto-theme-dark = revdiff
+auto-theme-light = catppuccin-latte
+```
 
 **Contributing themes** — community themes live in the `themes/gallery/` directory. See [themes/README.md](themes/README.md) for the contribution guide, format requirements, and validation instructions.
 

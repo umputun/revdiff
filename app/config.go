@@ -54,6 +54,8 @@ type options struct {
 	Keys                  string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
 	DumpKeys              bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
 	Theme                 string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
+	AutoThemeDark         string   `long:"auto-theme-dark" ini-name:"auto-theme-dark" env:"REVDIFF_AUTO_THEME_DARK" default:"revdiff" description:"theme to use for dark terminal backgrounds when --theme=auto"`
+	AutoThemeLight        string   `long:"auto-theme-light" ini-name:"auto-theme-light" env:"REVDIFF_AUTO_THEME_LIGHT" default:"catppuccin-latte" description:"theme to use for light terminal backgrounds when --theme=auto"`
 	DumpTheme             bool     `long:"dump-theme" no-ini:"true" description:"print currently resolved colors as theme file and exit"`
 	ListThemes            bool     `long:"list-themes" no-ini:"true" description:"print available theme names and exit"`
 	InitThemes            bool     `long:"init-themes" no-ini:"true" description:"write bundled theme files to themes dir and exit"`

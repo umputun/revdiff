@@ -9,11 +9,19 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/muesli/termenv"
+
 	"github.com/umputun/revdiff/app/fsutil"
 	"github.com/umputun/revdiff/app/highlight"
 	"github.com/umputun/revdiff/app/theme"
 	"github.com/umputun/revdiff/app/ui"
 	"github.com/umputun/revdiff/app/ui/style"
+)
+
+const (
+	autoThemeName         = "auto"
+	defaultAutoThemeDark  = "revdiff"
+	defaultAutoThemeLight = "catppuccin-latte"
 )
 
 // defaultThemesDir returns ~/.config/revdiff/themes.
@@ -79,12 +87,28 @@ func handleThemes(opts *options, cat *theme.Catalog, stdout, stderr io.Writer) (
 		_, _ = fmt.Fprintln(stderr, "warning: --no-colors ignored when --theme is set")
 		opts.NoColors = false
 	}
+	if opts.Theme == autoThemeName {
+		opts.Theme = resolveAutoThemeName(*opts, termenv.HasDarkBackground())
+	}
 	th, err := cat.Load(opts.Theme)
 	if err != nil {
 		return false, fmt.Errorf("load theme: %w", err)
 	}
 	applyTheme(opts, th, cat.OptionalColorKeys())
 	return false, nil
+}
+
+func resolveAutoThemeName(opts options, darkBackground bool) string {
+	if darkBackground {
+		if opts.AutoThemeDark != "" {
+			return opts.AutoThemeDark
+		}
+		return defaultAutoThemeDark
+	}
+	if opts.AutoThemeLight != "" {
+		return opts.AutoThemeLight
+	}
+	return defaultAutoThemeLight
 }
 
 // colorFieldPtrs maps color key names (matching ini-name tags) to pointers into opts.Colors fields.
