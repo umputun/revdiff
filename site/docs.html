@@ -687,7 +687,7 @@ map alt+t&gt;n theme_select</code></div>
         <p>Priority: agterm &rarr; tmux &rarr; zellij &rarr; herdr &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm (first detected wins). cmux is checked before ghostty when <code>$CMUX_SURFACE_ID</code> is set, <code>__CFBundleIdentifier=com.cmuxterm.app</code>, or <code>GHOSTTY_RESOURCES_DIR</code> / <code>GHOSTTY_BIN_DIR</code> contains <code>cmux.app</code>. iTerm2 uses a split pane rather than a full-screen overlay.</p>
         <p><strong>Sandbox note:</strong> Ghostty and iTerm2 launchers use <code>osascript</code> (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add the launcher to <code>excludedCommands</code> in your Claude Code <code>settings.json</code>:</p>
         <div class="code-block"><code>{ "permissions": { "excludedCommands": ["*/launch-revdiff.sh*"] } }</code></div>
-        <p>Terminals that use CLI tools instead of AppleScript (tmux, Zellij, herdr, kitty, wezterm, cmux) are not affected.</p>
+        <p>Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.</p>
 
         <h2 id="plugin-usage">Plugin usage</h2>
         <h3>Slash commands</h3>

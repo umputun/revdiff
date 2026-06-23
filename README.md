@@ -109,7 +109,7 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 > }
 > ```
 >
-> Terminals that use CLI tools instead of AppleScript (tmux, Zellij, herdr, kitty, wezterm, cmux) are not affected.
+> Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.
 
 **Install:**
 
