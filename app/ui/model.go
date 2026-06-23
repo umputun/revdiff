@@ -538,6 +538,11 @@ type filesLoadedMsg struct {
 	warnings []string // non-fatal issues (staged/untracked fetch failures)
 }
 
+// WatchReloadMsg is sent by the external file-watcher goroutine (started when
+// --watch is set) when the changed-files list hash differs from the previous
+// poll. Exported so main.go can construct and send it via p.Send().
+type WatchReloadMsg struct{}
+
 // commitsLoadedMsg is sent when the commit log for the current ref range is loaded.
 type commitsLoadedMsg struct {
 	seq       uint64 // matches m.commits.loadSeq at the time the load was issued; mismatched messages are dropped
@@ -833,6 +838,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleFileLoaded(msg)
 	case blameLoadedMsg:
 		return m.handleBlameLoaded(msg)
+	case WatchReloadMsg:
+		return m.handleWatchReload()
 	case editorFinishedMsg:
 		return m.handleEditorFinished(msg)
 	case wheelDebounceMsg:
@@ -1063,6 +1070,21 @@ func (m Model) handleChordSecond(keyStr string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.dispatchAction(action)
+}
+
+// handleWatchReload is called when the external watcher detects a file-list
+// change. Unlike handleReload (R key), there is no confirmation prompt and no
+// hint — watch mode is unattended. If annotations exist, the reload is skipped
+// silently to avoid dropping user work.
+func (m Model) handleWatchReload() (tea.Model, tea.Cmd) {
+	if !m.reload.applicable || m.reload.pending || m.annot.annotating || m.search.active {
+		return m, nil
+	}
+	if m.store.Count() > 0 {
+		return m, nil
+	}
+	cmd := m.triggerReload()
+	return m, cmd
 }
 
 // handleReload handles the ActionReload key. In stdin mode the feature is

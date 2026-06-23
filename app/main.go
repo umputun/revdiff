@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -238,6 +241,13 @@ func run(opts options) (int, error) {
 	}
 
 	p := tea.NewProgram(model, programOptions...)
+
+	if opts.Watch && watchApplicable(opts) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		startWatcher(ctx, renderer, opts.ref(), opts.Staged, p)
+	}
+
 	finalModel, err := p.Run()
 	if err != nil {
 		return 0, fmt.Errorf("TUI error: %w", err)
@@ -337,4 +347,51 @@ func compactApplicable(opts options, r ui.Renderer) bool {
 		return false
 	}
 	return true
+}
+
+// watchApplicable returns true when --watch is meaningful: stdin has been
+// consumed and cannot change; compare mode operates on static files.
+func watchApplicable(opts options) bool {
+	return !opts.Stdin && opts.compareAbsOld == ""
+}
+
+// startWatcher polls the renderer's ChangedFiles list every 2 seconds and
+// sends a WatchReloadMsg to the bubbletea program when the list changes.
+// The goroutine exits when ctx is cancelled (triggered when run() returns).
+func startWatcher(ctx context.Context, renderer ui.Renderer, ref string, staged bool, p *tea.Program) {
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		last := fileListHash(renderer, ref, staged)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h := fileListHash(renderer, ref, staged)
+				if h != last {
+					last = h
+					p.Send(ui.WatchReloadMsg{})
+				}
+			}
+		}
+	}()
+}
+
+// fileListHash returns a string that changes whenever the set of changed files
+// (paths and statuses) changes. Returns empty string on error so the watcher
+// stays quiet rather than spamming reloads on transient VCS failures.
+func fileListHash(r ui.Renderer, ref string, staged bool) string {
+	entries, err := r.ChangedFiles(ref, staged)
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		b.WriteString(e.Path)
+		b.WriteByte('|')
+		b.WriteString(string(e.Status))
+		b.WriteByte('\n')
+	}
+	return b.String()
 }
