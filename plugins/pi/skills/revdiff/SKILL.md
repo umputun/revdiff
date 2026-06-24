@@ -17,6 +17,7 @@ When the user invokes `/skill:revdiff <input>`, treat `<input>` as a request to 
 Reference resolution rules:
 
 - Accept natural language. Resolve the user's requested target to concrete revdiff args before launching.
+- If the request identifies another working directory (for example `in ~/source/repo`), use that directory for any git/ref/path resolution, omit that directory phrase from the revdiff args, and pass the directory as the `revdiff_review` tool's `cwd` parameter.
 - For commit-count requests, use the matching git rev: `prev commit`, `previous commit`, `last commit` → `HEAD~1`; `head-3`, `head 3`, `HEAD~3`, `previous 3 commits`, `last 3 commits` → `HEAD~3`.
 - For tag requests, resolve the actual tag first. `last tag` or `latest tag` → run `git describe --tags --abbrev=0`, then pass that tag as `args`.
 - For date requests, resolve the commit first. Examples: `2 weeks ago`, `yesterday`, `last Friday` → run `git rev-list -1 --before=<phrase> HEAD`, then pass the resulting commit hash as `args`.
@@ -36,6 +37,7 @@ Tool examples:
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
+- `args: "main", cwd: "~/source/repo"`: run revdiff from a specific working directory when the session was started elsewhere.
 - `args: "--stdin"` with a unified diff piped to stdin (e.g. `gh pr diff 123`, `git format-patch -1 --stdout`, a `.patch` file): review a multi-file diff that lives outside the working tree — revdiff parses it as a real diff (one tree entry per file, hunk navigation, per-file annotations) instead of a context-only buffer
 
 After `revdiff_review` returns annotations, address them directly from the tool result content. Do not read revdiff history after a successful captured-annotation result. Exit code `10` is success-with-annotations and is handled by the extension; do not report it as a failure. If it returns no annotations, report that no annotations were captured and stop. Do not relaunch revdiff after any no-annotation result unless the user explicitly asks for another review.

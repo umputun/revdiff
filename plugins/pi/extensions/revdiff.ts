@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -72,19 +72,29 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 						"Optional revdiff arguments as a shell-like string, for example 'main', '--staged', '--only README.md', or '--all-files --exclude vendor'. Omit for smart detection.",
 				}),
 			),
+			cwd: Type.Optional(
+				Type.String({
+					description: "Optional working directory for revdiff and git target resolution. Defaults to the current working directory.",
+				}),
+			),
 		}),
 		async execute(_toolCallId, params, _signal, onUpdate, ctx) {
 			if (!ctx.hasUI) {
 				return toolTextResult("revdiff_review requires the interactive pi TUI.");
 			}
 
-			const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx);
+			const cwd = resolveReviewCwd(params.cwd, ctx.cwd);
+			if (!cwd) {
+				return toolTextResult("Could not resolve revdiff working directory.");
+			}
+
+			const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx, cwd);
 			if (!launch) {
 				return toolTextResult("Could not resolve a revdiff launch target.");
 			}
 
-			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label}...` }], details: null });
-			const result = await runDirectReview(ctx, launch);
+			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
+			const result = await runDirectReview(ctx, launch, cwd);
 			if (!result) {
 				return toolTextResult("revdiff review did not complete.");
 			}
@@ -111,15 +121,38 @@ function skillCommand(rawArgs: string): string {
 	return trimmed ? `/skill:revdiff ${trimmed}` : "/skill:revdiff";
 }
 
-async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
+function resolveReviewCwd(rawCwd: string | undefined, baseCwd: string): string | undefined {
+	const expanded = expandHome(rawCwd?.trim() || baseCwd);
+	const resolved = path.resolve(baseCwd, expanded);
+	try {
+		if (!statSync(resolved).isDirectory()) {
+			return undefined;
+		}
+	} catch {
+		return undefined;
+	}
+	return resolved;
+}
+
+function expandHome(value: string): string {
+	if (value === "~") {
+		return homedir();
+	}
+	if (value.startsWith(`~${path.sep}`)) {
+		return path.join(homedir(), value.slice(2));
+	}
+	return value;
+}
+
+async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext, cwd: string): Promise<LaunchSpec | undefined> {
 	const trimmed = rawArgs.trim();
 	if (!trimmed) {
-		return detectSmartLaunch(ctx);
+		return detectSmartLaunch(ctx, cwd);
 	}
 
 	const split = shellSplit(trimmed);
 	if (split.length === 0) {
-		return detectSmartLaunch(ctx);
+		return detectSmartLaunch(ctx, cwd);
 	}
 
 	const allFiles = parseAllFilesShortcut(split.join(" "));
@@ -133,7 +166,7 @@ async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promis
 		return undefined;
 	}
 
-	if (tokens.length === 1 && isFileReviewArg(tokens[0]!)) {
+	if (tokens.length === 1 && isFileReviewArg(tokens[0]!, cwd)) {
 		const target = tokens[0]!;
 		return { args: ["--only", target], label: target };
 	}
@@ -141,8 +174,8 @@ async function resolveLaunchSpec(rawArgs: string, ctx: ExtensionContext): Promis
 	return { args: tokens, label: describeArgs(tokens) };
 }
 
-async function detectSmartLaunch(ctx: ExtensionContext): Promise<LaunchSpec | undefined> {
-	const detected = detectSmartRef();
+async function detectSmartLaunch(ctx: ExtensionContext, cwd: string): Promise<LaunchSpec | undefined> {
+	const detected = detectSmartRef(cwd);
 	if (!detected) {
 		ctx.ui.notify("Not inside a supported VCS repo or smart detection is unavailable. Use /revdiff --only <file> to review a standalone file.", "warning");
 		return undefined;
@@ -184,7 +217,7 @@ function uncommittedLaunchSpec(detected: SmartDetectResult): LaunchSpec {
 	return { args: [], label: "uncommitted changes" };
 }
 
-async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promise<ReviewResult | undefined> {
+async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: string): Promise<ReviewResult | undefined> {
 	const revdiffBin = resolveRevdiffBin();
 	if (!revdiffBin) {
 		ctx.ui.notify("revdiff binary not found. Install it or set REVDIFF_BIN.", "error");
@@ -201,7 +234,7 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec): Promi
 		tui.stop();
 		process.stdout.write("\x1b[2J\x1b[H");
 		const result = spawnSync(revdiffBin, commandArgs, {
-			cwd: process.cwd(),
+			cwd,
 			env: withAnnotationExitCode(process.env),
 			stdio: "inherit",
 		});
@@ -398,11 +431,11 @@ function sanitizeArgs(args: string[]): string[] {
 	return sanitized;
 }
 
-function isFileReviewArg(arg: string): boolean {
+function isFileReviewArg(arg: string, cwd: string): boolean {
 	if (arg.startsWith("-")) {
 		return false;
 	}
-	if (existsSync(path.resolve(arg))) {
+	if (existsSync(path.resolve(cwd, arg))) {
 		return true;
 	}
 	return arg.startsWith("/") || arg.startsWith("./") || arg.startsWith("../");
@@ -503,15 +536,15 @@ function findInPath(binary: string): string | undefined {
 	return undefined;
 }
 
-function detectSmartRef(): SmartDetectResult | undefined {
-	return runDetectRefScript() ?? detectSmartRefFallback();
+function detectSmartRef(cwd: string): SmartDetectResult | undefined {
+	return runDetectRefScript(cwd) ?? detectSmartRefFallback(cwd);
 }
 
-function runDetectRefScript(): SmartDetectResult | undefined {
+function runDetectRefScript(cwd: string): SmartDetectResult | undefined {
 	if (!existsSync(DETECT_REF_SCRIPT)) {
 		return undefined;
 	}
-	const result = spawnSync(DETECT_REF_SCRIPT, [], { cwd: process.cwd(), encoding: "utf8" });
+	const result = spawnSync(DETECT_REF_SCRIPT, [], { cwd, encoding: "utf8" });
 	if ((result.status ?? 1) !== 0) {
 		return undefined;
 	}
@@ -539,16 +572,16 @@ function runDetectRefScript(): SmartDetectResult | undefined {
 	};
 }
 
-function detectSmartRefFallback(): SmartDetectResult | undefined {
-	if (gitStdout(["rev-parse", "--is-inside-work-tree"]) !== "true") {
+function detectSmartRefFallback(cwd: string): SmartDetectResult | undefined {
+	if (gitStdout(["rev-parse", "--is-inside-work-tree"], cwd) !== "true") {
 		return undefined;
 	}
 
 	// detect no-commits state (fresh repo after git init)
-	const hasCommits = gitOk(["rev-parse", "HEAD"]);
-	const hasUncommitted = gitStdout(["status", "--porcelain"]).trim().length > 0;
-	const hasUnstaged = !gitOk(["diff", "--quiet"]);
-	const hasStaged = !gitOk(["diff", "--cached", "--quiet"]);
+	const hasCommits = gitOk(["rev-parse", "HEAD"], cwd);
+	const hasUncommitted = gitStdout(["status", "--porcelain"], cwd).trim().length > 0;
+	const hasUnstaged = !gitOk(["diff", "--quiet"], cwd);
+	const hasStaged = !gitOk(["diff", "--cached", "--quiet"], cwd);
 	const useStaged = hasUncommitted && hasStaged && !hasUnstaged;
 
 	if (!hasCommits) {
@@ -563,8 +596,8 @@ function detectSmartRefFallback(): SmartDetectResult | undefined {
 		};
 	}
 
-	const branch = gitStdout(["rev-parse", "--abbrev-ref", "HEAD"]) || "HEAD";
-	const mainBranch = detectMainBranch();
+	const branch = gitStdout(["rev-parse", "--abbrev-ref", "HEAD"], cwd) || "HEAD";
+	const mainBranch = detectMainBranch(cwd);
 	const isMain = Boolean(mainBranch) && branch === mainBranch;
 	let suggestedRef = "";
 	let needsAsk = false;
@@ -580,28 +613,28 @@ function detectSmartRefFallback(): SmartDetectResult | undefined {
 	return { branch, mainBranch, isMain, hasUncommitted, useStaged, suggestedRef, needsAsk };
 }
 
-function detectMainBranch(): string {
-	const remoteHead = gitStdout(["symbolic-ref", "refs/remotes/origin/HEAD"]);
+function detectMainBranch(cwd: string): string {
+	const remoteHead = gitStdout(["symbolic-ref", "refs/remotes/origin/HEAD"], cwd);
 	if (remoteHead.startsWith("refs/remotes/origin/")) {
 		return remoteHead.slice("refs/remotes/origin/".length);
 	}
-	if (gitOk(["show-ref", "--verify", "--quiet", "refs/heads/master"])) {
+	if (gitOk(["show-ref", "--verify", "--quiet", "refs/heads/master"], cwd)) {
 		return "master";
 	}
-	if (gitOk(["show-ref", "--verify", "--quiet", "refs/heads/main"])) {
+	if (gitOk(["show-ref", "--verify", "--quiet", "refs/heads/main"], cwd)) {
 		return "main";
 	}
 	return "";
 }
 
-function gitStdout(args: string[]): string {
-	const result = spawnSync("git", args, { cwd: process.cwd(), encoding: "utf8" });
+function gitStdout(args: string[], cwd: string): string {
+	const result = spawnSync("git", args, { cwd, encoding: "utf8" });
 	if ((result.status ?? 1) !== 0) {
 		return "";
 	}
 	return (result.stdout ?? "").trim();
 }
 
-function gitOk(args: string[]): boolean {
-	return (spawnSync("git", args, { cwd: process.cwd(), stdio: "ignore" }).status ?? 1) === 0;
+function gitOk(args: string[], cwd: string): boolean {
+	return (spawnSync("git", args, { cwd, stdio: "ignore" }).status ?? 1) === 0;
 }
