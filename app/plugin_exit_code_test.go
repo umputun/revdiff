@@ -198,7 +198,7 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.Contains(t, src, "if (result.signal)")
 	assert.Contains(t, src, "done(result.status ?? 1)")
 	assert.Contains(t, src, "revdiff terminated by signal")
-	assert.Contains(t, src, "return buildResult(launch, rawOutput);")
+	assert.Contains(t, src, "return buildResult(launch, rawOutput, cwd);")
 }
 
 func TestPiExecutableRegressionHasCIBunSetup(t *testing.T) {
@@ -240,7 +240,7 @@ func piTypeboxStub() string {
 
 func piExtensionHarness() string {
 	return `
-import { chmodSync as testChmodSync, mkdirSync as testMkdirSync, writeFileSync as testWriteFileSync } from "node:fs";
+import { chmodSync as testChmodSync, mkdirSync as testMkdirSync, realpathSync as testRealpathSync, writeFileSync as testWriteFileSync } from "node:fs";
 
 function testAssert(condition: unknown, message: string): asserts condition {
 	if (!condition) {
@@ -376,10 +376,35 @@ async function testToolReturnsAnnotations(): Promise<void> {
 	}
 }
 
-function testReviewCwdExpansion(): void {
-	const base = process.cwd();
-	const resolvedHome = resolveReviewCwd("~/", base);
-	testAssert(resolvedHome === homedir(), "~/ should expand to the home directory");
+function testReviewCwdResolution(): void {
+	const base = mkdtempSync(path.join(tmpdir(), "pi-revdiff-cwd-base-"));
+	const child = path.join(base, "child");
+	testMkdirSync(child, { recursive: true });
+	try {
+		const resolvedHome = resolveReviewCwd("~/", base);
+		testAssert(resolvedHome === homedir(), "~/ should expand to the home directory");
+		testAssert(resolveReviewCwd("child", base) === child, "relative cwd should resolve against ctx cwd");
+	} finally {
+		rmSync(base, { recursive: true, force: true });
+	}
+}
+
+async function testToolRejectsInvalidCwd(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-invalid-cwd-"));
+	const file = path.join(tempDir, "not-a-dir.txt");
+	testWriteFileSync(file, "not a directory\n");
+	try {
+		const pi = fakePi();
+		revdiffExtension(pi);
+		const fileResult = await pi.tools.get("revdiff_review").execute("call-1", { cwd: file }, undefined, undefined, fakeCtx());
+		testAssert(fileResult.content[0].text === "Could not resolve revdiff working directory.", "file cwd should return a clear error");
+		const missingResult = await pi.tools
+			.get("revdiff_review")
+			.execute("call-2", { cwd: path.join(tempDir, "missing") }, undefined, undefined, fakeCtx());
+		testAssert(missingResult.content[0].text === "Could not resolve revdiff working directory.", "missing cwd should return a clear error");
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
 }
 
 async function testToolCwdParameter(): Promise<void> {
@@ -404,10 +429,27 @@ async function testToolCwdParameter(): Promise<void> {
 		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "README.md", cwd: targetRepo }, undefined, undefined, fakeCtx());
 		const text = result.content[0].text;
 		testAssert(text.includes("Captured 1 annotation for README.md."), "cwd parameter should still review target file");
-		testAssert(readFileSync(cwdFile, "utf8").trim() === targetRepo, "revdiff should launch in requested directory");
-		const argText = readFileSync(argFile, "utf8");
+		testAssert(result.details.cwd === targetRepo, "tool details should preserve cwd for reruns");
+		testAssert(
+			testRealpathSync(readFileSync(cwdFile, "utf8").trim()) === testRealpathSync(targetRepo),
+			"revdiff should launch in requested directory",
+		);
+		let argText = readFileSync(argFile, "utf8");
 		testAssert(argText.includes("--only\nREADME.md\n"), "file target in requested directory should resolve to --only README.md");
 		testAssert(!argText.includes(targetRepo), "cwd parameter should not be passed as a revdiff argument");
+
+		rmSync(cwdFile, { force: true });
+		const rerun = await pi.tools
+			.get("revdiff_review")
+			.execute("call-2", { args: result.details.argsText, cwd: result.details.cwd }, undefined, undefined, fakeCtx());
+		testAssert(rerun.details.cwd === targetRepo, "rerun details should preserve cwd");
+		testAssert(
+			testRealpathSync(readFileSync(cwdFile, "utf8").trim()) === testRealpathSync(targetRepo),
+			"rerun should launch in requested directory",
+		);
+		argText = readFileSync(argFile, "utf8");
+		testAssert(argText.includes("--only\nREADME.md\n"), "rerun should use returned args with preserved cwd");
+		testAssert(!argText.includes(targetRepo), "rerun cwd should not be passed as a revdiff argument");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -575,7 +617,8 @@ async function testStagedSmartDetection(): Promise<void> {
 
 await testCommandRoutesToSkill();
 await testToolReturnsAnnotations();
-testReviewCwdExpansion();
+testReviewCwdResolution();
+await testToolRejectsInvalidCwd();
 await testToolCwdParameter();
 await testSignalTerminatedReviewFails();
 await testArgumentResolution();

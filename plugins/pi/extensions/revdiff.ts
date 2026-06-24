@@ -25,6 +25,7 @@ interface AnnotationItem {
 interface ReviewResult {
 	args: string[];
 	argsText: string;
+	cwd: string;
 	label: string;
 	rawOutput: string;
 	annotations: AnnotationItem[];
@@ -279,13 +280,14 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: s
 		return undefined;
 	}
 
-	return buildResult(launch, rawOutput);
+	return buildResult(launch, rawOutput, cwd);
 }
 
-function buildResult(launch: LaunchSpec, rawOutput: string): ReviewResult {
+function buildResult(launch: LaunchSpec, rawOutput: string, cwd: string): ReviewResult {
 	return {
 		args: [...launch.args],
 		argsText: shellJoin(launch.args),
+		cwd,
 		label: launch.label,
 		rawOutput,
 		annotations: parseAnnotations(rawOutput),

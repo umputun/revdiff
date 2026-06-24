@@ -56,7 +56,7 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
    - `Done with review` — stop
 5. Before editing repository files, list the planned file/code changes.
 6. Apply code-change directives.
-7. Rerun the original `revdiff_review` target only after repository files changed or when the user chooses to continue reviewing.
+7. Rerun the original `revdiff_review` target only after repository files changed or when the user chooses to continue reviewing; preserve the original `cwd` parameter when one was used.
 8. Add `--untracked` on reruns when agent-created files should be included.
 
 ## User commands
