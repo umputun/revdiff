@@ -124,11 +124,14 @@ if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
     AGTERM_TARGET=(--target "$AGTERM_SESSION_ID")
     [ -n "${AGTERM_SOCKET:-}" ] && AGTERM_TARGET+=(--socket "$AGTERM_SOCKET")
     # claude code does not flag the session blocked while revdiff owns the overlay, so set it here
-    # (blocked + blink draws attention from other windows); restore active once revdiff exits.
+    # (blocked + blink draws attention from other windows). the EXIT trap restores active on every
+    # exit path, and INT/TERM exit through it, so an interrupt never leaves the indicator stuck.
     agtermctl session status blocked --blink "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true
+    trap 'agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     rc=0
     agtermctl session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD" --block || rc=$?
-    agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true
     print_output_and_exit "$rc"
 fi
 
