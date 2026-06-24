@@ -114,12 +114,21 @@ POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 # code directly — so, unlike the sentinel-polling backends below, no sentinel is needed. Checked
 # first so an agterm session always uses its native overlay even when a multiplexer is also present.
 # Needs $AGTERM_SESSION_ID (set in every agterm session) and agtermctl on PATH; passes the bound
-# $AGTERM_SOCKET so it reaches the agterm instance hosting this session.
+# $AGTERM_SOCKET so it reaches the agterm instance hosting this session. Passes --cwd "$CWD" so the
+# overlay runs in the launcher's working directory (e.g. a PR worktree) instead of agtermctl's
+# default of the agent session's current directory. Sets the session's agent-status indicator to
+# blocked (blinking) while the overlay is up and back to active after, since claude code does not
+# flag the session blocked while revdiff owns the overlay.
 if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
-    AGTERM_ARGS=(agtermctl session overlay open "$REVDIFF_CMD" --target "$AGTERM_SESSION_ID" --block)
-    [ -n "${AGTERM_SOCKET:-}" ] && AGTERM_ARGS+=(--socket "$AGTERM_SOCKET")
+    # shared target (+ socket) for every agtermctl call in this branch
+    AGTERM_TARGET=(--target "$AGTERM_SESSION_ID")
+    [ -n "${AGTERM_SOCKET:-}" ] && AGTERM_TARGET+=(--socket "$AGTERM_SOCKET")
+    # claude code does not flag the session blocked while revdiff owns the overlay, so set it here
+    # (blocked + blink draws attention from other windows); restore active once revdiff exits.
+    agtermctl session status blocked --blink "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true
     rc=0
-    "${AGTERM_ARGS[@]}" || rc=$?
+    agtermctl session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD" --block || rc=$?
+    agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true
     print_output_and_exit "$rc"
 fi
 
