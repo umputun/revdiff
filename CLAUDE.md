@@ -60,8 +60,8 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 ## Claude Code Plugin
 - Plugin lives at `.claude-plugin/` with `plugin.json`, `marketplace.json`, and `skills/`
 - Skills path in `plugin.json` is relative to repo root, not to `.claude-plugin/`
-- **CRITICAL: After any plugin file change, ask user if they want to bump the plugin version**
-- When bumping, update version in both `plugin.json` and `marketplace.json`
+- **CRITICAL: Version bumps happen at release only — never per-PR or per-change.** Do NOT prompt to bump `plugin.json` / `marketplace.json` after a plugin file change; the bump is done as part of the release process.
+- When bumping at release, update version in both `plugin.json` and `marketplace.json`
 - **CRITICAL: Defer plugin version bumps when the change depends on a new binary feature.** If a plugin/launcher change relies on a `revdiff` binary feature, flag, env var, or exit code that is not yet in a tagged release, do NOT bump `plugin.json` / `marketplace.json` / `package.json` on the feature branch. The plugin (marketplace) and the binary (brew / `go install`) version independently — bumping the plugin early ships an updated launcher to users still running an old binary, causing a hard mismatch (e.g. the launcher passes an unknown flag, the old binary exits 1, every plugin-triggered review fails). Bump plugin/package versions as part of the binary version release, after the binary is tagged.
 - Reference docs at `.claude-plugin/skills/revdiff/references/` — keep in sync with README.md:
   - `install.md` — installation methods and plugin setup
@@ -84,7 +84,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Pi package defined in root `package.json`, extensions and skills in `plugins/pi/`
 - Pi review path is direct-terminal only: `/revdiff [args]` suspends pi, runs the `revdiff` binary directly, and sends captured annotations to the agent immediately. There is no Pi overlay mode, pending annotation widget/panel, `/revdiff-rerun`, `/revdiff-results`, `/revdiff-apply`, `/revdiff-clear`, or default post-edit reminder command.
 - Pi ships its own copy of `detect-ref.sh` at `plugins/pi/scripts/detect-ref.sh` (source-of-truth is `.claude-plugin/skills/revdiff/scripts/detect-ref.sh` — keep in sync, same pattern as the codex copy). The pi extension resolves the script relative to its own plugin root, never via `.claude-plugin/`; the pi package must stay installable standalone with no Claude plugin files present. Do not re-add `launch-revdiff.sh` to the Pi package surface unless the workflow is explicitly changed.
-- **CRITICAL: After any pi plugin file change, ask user if they want to bump the version in `package.json`**
+- **CRITICAL: Version bumps happen at release only — never per-PR or per-change.** Do NOT prompt to bump `package.json` after a pi plugin file change; the bump is done as part of the release process.
 - Version in `package.json` is independently versioned (does not track the project's git tags)
 
 ## Gotchas
