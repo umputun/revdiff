@@ -376,6 +376,12 @@ async function testToolReturnsAnnotations(): Promise<void> {
 	}
 }
 
+function testReviewCwdExpansion(): void {
+	const base = process.cwd();
+	const resolvedHome = resolveReviewCwd("~/", base);
+	testAssert(resolvedHome === homedir(), "~/ should expand to the home directory");
+}
+
 async function testToolCwdParameter(): Promise<void> {
 	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-cwd-"));
 	const fakeBin = path.join(tempDir, "revdiff");
@@ -569,6 +575,7 @@ async function testStagedSmartDetection(): Promise<void> {
 
 await testCommandRoutesToSkill();
 await testToolReturnsAnnotations();
+testReviewCwdExpansion();
 await testToolCwdParameter();
 await testSignalTerminatedReviewFails();
 await testArgumentResolution();

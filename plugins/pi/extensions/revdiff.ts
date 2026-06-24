@@ -138,7 +138,7 @@ function expandHome(value: string): string {
 	if (value === "~") {
 		return homedir();
 	}
-	if (value.startsWith(`~${path.sep}`)) {
+	if (value.startsWith("~/") || value.startsWith("~\\")) {
 		return path.join(homedir(), value.slice(2));
 	}
 	return value;
