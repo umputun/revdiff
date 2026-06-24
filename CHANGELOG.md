@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.8.1 - 2026-06-24
+
+### Improvements
+
+- pi: add cwd support to revdiff_review #241 @terrorobe
+
+### Bug Fixes
+
+- agterm overlay: open in the launcher's working directory and flag blocked status #242 @umputun
+
 ## v1.8.0 - 2026-06-23
 
 ### New Features
