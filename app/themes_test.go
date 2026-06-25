@@ -372,6 +372,15 @@ func TestResolveAutoThemeName(t *testing.T) {
 	}
 }
 
+func TestResolveThemeName(t *testing.T) {
+	t.Run("concrete theme passes through unchanged", func(t *testing.T) {
+		assert.Equal(t, "dracula", resolveThemeName(options{Theme: "dracula"}))
+	})
+	t.Run("empty theme passes through unchanged", func(t *testing.T) {
+		assert.Empty(t, resolveThemeName(options{Theme: ""}))
+	})
+}
+
 func TestHandleThemes_LoadThemeNotFound(t *testing.T) {
 	themesDir := filepath.Join(t.TempDir(), "themes")
 	cat := theme.NewCatalog(themesDir)

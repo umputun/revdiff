@@ -87,15 +87,22 @@ func handleThemes(opts *options, cat *theme.Catalog, stdout, stderr io.Writer) (
 		_, _ = fmt.Fprintln(stderr, "warning: --no-colors ignored when --theme is set")
 		opts.NoColors = false
 	}
-	if opts.Theme == autoThemeName {
-		opts.Theme = resolveAutoThemeName(*opts, termenv.HasDarkBackground())
-	}
+	opts.Theme = resolveThemeName(*opts)
 	th, err := cat.Load(opts.Theme)
 	if err != nil {
 		return false, fmt.Errorf("load theme: %w", err)
 	}
 	applyTheme(opts, th, cat.OptionalColorKeys())
 	return false, nil
+}
+
+// resolveThemeName resolves the "auto" sentinel to a concrete theme via the terminal
+// background; any other theme name is returned unchanged.
+func resolveThemeName(opts options) string {
+	if opts.Theme != autoThemeName {
+		return opts.Theme
+	}
+	return resolveAutoThemeName(opts, termenv.HasDarkBackground())
 }
 
 func resolveAutoThemeName(opts options, darkBackground bool) string {
