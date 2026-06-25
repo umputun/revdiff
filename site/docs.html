@@ -412,7 +412,9 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--no-mouse</code></td><td>Disable mouse support (scroll wheel, click)</td><td><code>false</code></td></tr>
                 <tr><td><code>--vim-motion</code></td><td>Enable vim-style motion preset (counts, <code>gg</code>, <code>G</code>, <code>H</code>/<code>M</code>/<code>L</code>, <code>zz</code>/<code>zt</code>/<code>zb</code>, <code>ZZ</code>/<code>ZQ</code>)</td><td><code>false</code></td></tr>
                 <tr><td><code>--chroma-style</code></td><td>Syntax highlighting theme</td><td><code>catppuccin-macchiato</code></td></tr>
-                <tr><td><code>--theme</code></td><td>Load color theme from <code>~/.config/revdiff/themes/</code></td><td></td></tr>
+                <tr><td><code>--theme</code></td><td>Load color theme from <code>~/.config/revdiff/themes/</code>; use <code>auto</code> to choose by terminal background</td><td></td></tr>
+                <tr><td><code>--auto-theme-dark</code></td><td>Theme used by <code>--theme auto</code> on dark terminal backgrounds</td><td><code>revdiff</code></td></tr>
+                <tr><td><code>--auto-theme-light</code></td><td>Theme used by <code>--theme auto</code> on light terminal backgrounds</td><td><code>catppuccin-latte</code></td></tr>
                 <tr><td><code>--dump-theme</code></td><td>Print resolved colors as theme file and exit</td><td></td></tr>
                 <tr><td><code>--list-themes</code></td><td>Print available theme names and exit</td><td></td></tr>
                 <tr><td><code>--init-themes</code></td><td>Write bundled theme files to themes dir and exit</td><td></td></tr>
@@ -443,12 +445,13 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
         <p>Eight bundled color themes: <strong>basic</strong>, <strong>catppuccin-latte</strong>, <strong>catppuccin-mocha</strong>, <strong>dracula</strong>, <strong>gruvbox</strong>, <strong>nord</strong>, <strong>revdiff</strong>, and <strong>solarized-dark</strong>. Stored in <code>~/.config/revdiff/themes/</code>, auto-created on first run.</p>
         <p>Press <code>T</code> inside revdiff to open the interactive theme selector with live preview &mdash; browse themes, see colors applied instantly, and persist your choice on confirm.</p>
         <div class="code-block"><code>revdiff --theme dracula          <span class="code-comment"># apply a theme</span>
+revdiff --theme auto             <span class="code-comment"># choose by terminal background</span>
 revdiff --list-themes            <span class="code-comment"># list available</span>
 revdiff --init-themes            <span class="code-comment"># re-create bundled themes</span>
 revdiff --install-theme nord     <span class="code-comment"># install a specific gallery theme</span>
 revdiff --init-all-themes        <span class="code-comment"># install all gallery themes</span>
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom</code></div>
-        <p>Set default in config: <code>theme = dracula</code>. Or env: <code>REVDIFF_THEME=dracula</code>.</p>
+        <p>Set default in config: <code>theme = dracula</code>. Or env: <code>REVDIFF_THEME=dracula</code>. Use <code>theme = auto</code> to choose by terminal background &mdash; <code>auto-theme-dark</code> / <code>auto-theme-light</code> (defaults <code>revdiff</code> / <code>catppuccin-latte</code>).</p>
         <h3>Creating custom themes</h3>
         <p>Two approaches:</p>
         <ol>
