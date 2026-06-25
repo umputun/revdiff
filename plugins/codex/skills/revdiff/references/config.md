@@ -38,7 +38,9 @@ Then uncomment and edit the values you want to change.
 | `--no-mouse` | `REVDIFF_NO_MOUSE` | Disable mouse support (scroll wheel, click) | `false` |
 | `--vim-motion` | `REVDIFF_VIM_MOTION` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`) | `false` |
 | `--chroma-style` | `REVDIFF_CHROMA_STYLE` | Chroma color theme for syntax highlighting | `catppuccin-macchiato` |
-| `--theme` | `REVDIFF_THEME` | Load color theme from `~/.config/revdiff/themes/` | |
+| `--theme` | `REVDIFF_THEME` | Load color theme from `~/.config/revdiff/themes/`; use `auto` to choose by terminal background | |
+| `--auto-theme-dark` | `REVDIFF_AUTO_THEME_DARK` | Theme used by `--theme auto` on dark terminal backgrounds | `revdiff` |
+| `--auto-theme-light` | `REVDIFF_AUTO_THEME_LIGHT` | Theme used by `--theme auto` on light terminal backgrounds | `catppuccin-latte` |
 | `--dump-theme` | | Print currently resolved colors as theme file and exit | |
 | `--list-themes` | | Print available theme names and exit | |
 | `--init-themes` | | Write bundled theme files to themes dir and exit | |
@@ -76,6 +78,7 @@ Press `T` inside revdiff to open the interactive theme selector with live previe
 
 ```bash
 revdiff --theme dracula          # apply a theme
+revdiff --theme auto             # choose by terminal background
 revdiff --list-themes            # list available themes
 revdiff --init-themes            # re-create bundled themes
 revdiff --install-theme nord     # install a specific gallery theme
@@ -83,7 +86,7 @@ revdiff --init-all-themes        # install all gallery themes
 revdiff --dump-theme > ~/.config/revdiff/themes/my-custom  # export current colors
 ```
 
-Set default theme in config: `theme = dracula`. Or env: `REVDIFF_THEME=dracula`.
+Set default theme in config: `theme = dracula`. Or env: `REVDIFF_THEME=dracula`. Use `theme = auto` to query the terminal background and choose `auto-theme-dark` or `auto-theme-light`.
 
 **Custom themes:** customize colors in config or via `--color-*` flags, then `revdiff --dump-theme > ~/.config/revdiff/themes/my-custom`. Or copy a bundled theme file and edit directly — each has all 23 color keys + `chroma-style`.
 
