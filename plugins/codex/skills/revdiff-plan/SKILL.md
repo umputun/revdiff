@@ -49,23 +49,6 @@ Use `$SCRIPT_DIR` and `$LAUNCHER_DIR` in place of script paths throughout this s
 
 ## Workflow
 
-### Step 0: Verify Installation
-
-```bash
-which revdiff
-```
-
-If not found, guide installation:
-- `brew install umputun/apps/revdiff`
-- Binary releases: https://github.com/umputun/revdiff/releases
-
-Also verify jq is installed (required for rollout extraction):
-```bash
-which jq
-```
-
-If not found: `brew install jq`
-
 ### Step 1: Extract Last Assistant Message
 
 Run the extraction script with `--skip-current` to avoid picking up this session's own output:
