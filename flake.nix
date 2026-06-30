@@ -30,6 +30,9 @@
 
           subPackages = [ "app" ];
 
+          # Tests need the git working tree, which is absent in the Nix sandbox.
+          doCheck = false;
+
           # The project builds with cgo disabled.
           env.CGO_ENABLED = 0;
 
