@@ -714,6 +714,24 @@ func TestGit_UntrackedRenames_NoCommits(t *testing.T) {
 	assert.Empty(t, renames)
 }
 
+func TestGit_UntrackedRenames_RealErrorNotSwallowed(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+
+	writeFile(t, dir, "old.txt", "one\ntwo\n")
+	gitCmd(t, dir, "add", "old.txt")
+	gitCmd(t, dir, "commit", "-m", "initial")
+	err := os.Rename(filepath.Join(dir, "old.txt"), filepath.Join(dir, "new.txt"))
+	require.NoError(t, err)
+
+	// force temp-index creation to fail with ENOENT (missing TMPDIR); the index
+	// itself exists, so this must propagate as a real error rather than be treated
+	// as the fresh-repo no-index case and silently disable detection.
+	t.Setenv("TMPDIR", filepath.Join(dir, "no-such-tmpdir"))
+	_, err = g.UntrackedRenames([]string{"new.txt"})
+	require.Error(t, err, "temp-index ENOENT must propagate, not be swallowed as no-index")
+}
+
 func TestGit_FileDiff(t *testing.T) {
 	dir := setupTestRepo(t)
 	g := NewGit(dir)

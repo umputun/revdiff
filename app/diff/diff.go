@@ -418,6 +418,10 @@ func (g *Git) parseNameStatusEntries(out string) []FileEntry {
 	return entries
 }
 
+// errNoIndex signals that the repo has no index file yet (a fresh repo with no
+// commits). UntrackedRenames treats it as "no renames possible" rather than an error.
+var errNoIndex = errors.New("git index not found")
+
 // UntrackedRenames detects working-tree renames whose new side is still untracked.
 // A plain `mv old new` (no `git mv`, no staging) leaves `old` as an unstaged deletion
 // and `new` untracked, so `git diff -M` never pairs them. This pairs them off a
@@ -434,7 +438,9 @@ func (g *Git) UntrackedRenames(untracked []string) ([]FileEntry, error) {
 	if err != nil {
 		// no index (fresh repo with no commits) means nothing is tracked, so no
 		// deletion exists to pair an untracked file against — no renames possible.
-		if errors.Is(err, fs.ErrNotExist) {
+		// only suppress that specific case; any other error (e.g. a missing TMPDIR
+		// failing temp creation) must propagate so the caller warns.
+		if errors.Is(err, errNoIndex) {
 			return nil, nil
 		}
 		return nil, err
@@ -476,6 +482,11 @@ func (g *Git) tempIndexWithIntentToAdd(paths []string) (indexPath string, cleanu
 	}
 	src, err := os.ReadFile(realIndex) //nolint:gosec // path resolved from git rev-parse, not user input
 	if err != nil {
+		// a fresh repo with no commits has no index yet; signal that distinctly so
+		// the caller can treat it as "no renames possible" rather than a real error.
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil, errNoIndex
+		}
 		return "", nil, fmt.Errorf("read git index: %w", err)
 	}
 
