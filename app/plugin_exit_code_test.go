@@ -764,6 +764,8 @@ func cleanOverlayEnv() map[string]string {
 		"__CFBundleIdentifier":  "",
 		"ITERM_SESSION_ID":      "",
 		"INSIDE_EMACS":          "",
+		"AGTERM_SESSION_ID":     "",
+		"AGTERM_SOCKET":         "",
 		"REVDIFF_CONFIG":        "",
 	}
 }
