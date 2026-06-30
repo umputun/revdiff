@@ -21,13 +21,14 @@ const maxAnnotationsFileSize = 1 << 20
 // All helpers are methods so call-sites stay free of the wide parameter
 // lists earlier shapes accumulated.
 type preloader struct {
-	store       *annotation.Store
-	renderer    ui.Renderer
-	ref         string
-	staged      bool
-	untrackedFn func() ([]string, error)
-	workDir     string
-	warnOut     io.Writer
+	store              *annotation.Store
+	renderer           ui.Renderer
+	ref                string
+	staged             bool
+	untrackedFn        func() ([]string, error)
+	untrackedRenamesFn func([]string) ([]diff.FileEntry, error)
+	workDir            string
+	warnOut            io.Writer
 
 	// lineCache memoises the (line, change-type) set per file so
 	// repeated annotations on the same file do not re-fetch its diff.
@@ -53,7 +54,8 @@ type lineKey struct {
 // against them round-trip; their line-set is read from disk as all-added
 // lines, mirroring ui.resolveEmptyDiff. Dropped records are warned to warnOut.
 func preloadAnnotations(path string, store *annotation.Store, renderer ui.Renderer, ref string, staged bool,
-	untrackedFn func() ([]string, error), workDir string, warnOut io.Writer,
+	untrackedFn func() ([]string, error), untrackedRenamesFn func([]string) ([]diff.FileEntry, error),
+	workDir string, warnOut io.Writer,
 ) error {
 	records, err := readAnnotationsFile(path)
 	if err != nil {
@@ -61,15 +63,16 @@ func preloadAnnotations(path string, store *annotation.Store, renderer ui.Render
 	}
 
 	p := &preloader{
-		store:       store,
-		renderer:    renderer,
-		ref:         ref,
-		staged:      staged,
-		untrackedFn: untrackedFn,
-		workDir:     workDir,
-		warnOut:     warnOut,
-		lineCache:   make(map[string]map[lineKey]struct{}),
-		renames:     make(map[string]string),
+		store:              store,
+		renderer:           renderer,
+		ref:                ref,
+		staged:             staged,
+		untrackedFn:        untrackedFn,
+		untrackedRenamesFn: untrackedRenamesFn,
+		workDir:            workDir,
+		warnOut:            warnOut,
+		lineCache:          make(map[string]map[lineKey]struct{}),
+		renames:            make(map[string]string),
 	}
 	return p.load(records)
 }
@@ -169,6 +172,7 @@ func (p *preloader) resolveKnownFiles() (map[string]diff.FileStatus, error) {
 					known[path] = diff.FileUntracked
 				}
 			}
+			p.foldUntrackedRenames(ut, known)
 		}
 	}
 	if p.ref != "" || p.staged || len(files) > 0 {
@@ -188,6 +192,29 @@ func (p *preloader) resolveKnownFiles() (map[string]diff.FileStatus, error) {
 		}
 	}
 	return known, nil
+}
+
+// foldUntrackedRenames upgrades untracked files that are actually working-tree
+// renames (plain `mv old new`, new still untracked) to FileRenamed, records the
+// rename origin in p.renames, and drops the standalone deletion of the origin.
+// This mirrors ui.detectUntrackedRenames + mergeUntrackedEntries so the preload's
+// per-file diff matches the displayed rename-aware diff and annotations on removed
+// or context lines round-trip. No-op unless a git detector is wired and the review
+// is in unstaged working-tree mode (the only mode where new stays untracked).
+func (p *preloader) foldUntrackedRenames(untracked []string, known map[string]diff.FileStatus) {
+	if p.untrackedRenamesFn == nil || p.ref != "" || p.staged {
+		return
+	}
+	renames, err := p.untrackedRenamesFn(untracked)
+	if err != nil {
+		p.warnf("warning: --annotations: detect untracked renames: %v\n", err)
+		return
+	}
+	for _, r := range renames {
+		known[r.Path] = diff.FileRenamed
+		p.renames[r.Path] = r.OldPath
+		delete(known, r.OldPath)
+	}
 }
 
 // lookupLineSet returns the cached line-set for file, fetching FileDiff on

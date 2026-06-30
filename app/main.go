@@ -158,7 +158,7 @@ func run(opts options) (int, error) {
 	}
 
 	if opts.Annotations != "" {
-		if perr := preloadAnnotations(opts.Annotations, store, renderer, opts.ref(), opts.Staged, untrackedFn, workDir, os.Stderr); perr != nil {
+		if perr := preloadAnnotations(opts.Annotations, store, renderer, opts.ref(), opts.Staged, untrackedFn, untrackedRenamesFn, workDir, os.Stderr); perr != nil {
 			return 0, perr
 		}
 	}

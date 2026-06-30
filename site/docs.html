@@ -183,7 +183,7 @@
             <li><code>revdiff main..feature</code> &mdash; same as above, git dot-dot syntax</li>
             <li><code>revdiff main...feature</code> &mdash; changes since feature diverged from main</li>
         </ul>
-        <p>In git modes (<code>--staged</code>, single-ref, two-ref) renamed files are detected automatically: the diff-pane header shows the rename origin as <code>old &rarr; new</code> and the diff renders only the real line changes instead of a full delete-and-add. Rename detection is git-only; <code>hg</code> and <code>jj</code> show renames as separate delete/add entries.</p>
+        <p>In git modes (<code>--staged</code>, single-ref, two-ref) renamed files are detected automatically: the diff-pane header shows the rename origin as <code>old &rarr; new</code> and the diff renders only the real line changes instead of a full delete-and-add. With <code>--untracked</code>, a plain working-tree <code>mv old new</code> (where the new file is still untracked) is paired as a rename too. Rename detection is git-only; <code>hg</code> and <code>jj</code> show renames as separate delete/add entries.</p>
 
         <h2 id="examples">Examples</h2>
         <div class="code-block"><code><span class="code-comment"># review uncommitted changes</span>

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -431,11 +432,16 @@ func (g *Git) UntrackedRenames(untracked []string) ([]FileEntry, error) {
 	}
 	indexPath, cleanup, err := g.tempIndexWithIntentToAdd(untracked)
 	if err != nil {
+		// no index (fresh repo with no commits) means nothing is tracked, so no
+		// deletion exists to pair an untracked file against — no renames possible.
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	defer cleanup()
 
-	out, err := g.runGitEnv([]string{"GIT_INDEX_FILE=" + indexPath},
+	out, err := g.runGitEnv(g.renameIndexEnv(indexPath),
 		"diff", "--no-color", "--no-ext-diff", "--name-status", "-M", "-z")
 	if err != nil {
 		return nil, fmt.Errorf("detect untracked renames: %w", err)
@@ -477,7 +483,15 @@ func (g *Git) tempIndexWithIntentToAdd(paths []string) (indexPath string, cleanu
 	if err != nil {
 		return "", nil, fmt.Errorf("create temp index: %w", err)
 	}
-	tmpPath := tmp.Name()
+	// git resolves GIT_INDEX_FILE relative to cmd.Dir (g.workDir), but cleanup
+	// removes via the process cwd — make the path absolute so both agree even
+	// when TMPDIR is relative.
+	tmpPath, err := filepath.Abs(tmp.Name())
+	if err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+		return "", nil, fmt.Errorf("resolve temp index path: %w", err)
+	}
 	cleanup = func() { _ = os.Remove(tmpPath) }
 	if _, err = tmp.Write(src); err != nil {
 		_ = tmp.Close()
@@ -490,11 +504,19 @@ func (g *Git) tempIndexWithIntentToAdd(paths []string) (indexPath string, cleanu
 	}
 
 	addArgs := append([]string{"add", "-N", "--"}, paths...)
-	if _, err = g.runGitEnv([]string{"GIT_INDEX_FILE=" + tmpPath}, addArgs...); err != nil {
+	if _, err = g.runGitEnv(g.renameIndexEnv(tmpPath), addArgs...); err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("intent-to-add untracked: %w", err)
 	}
 	return tmpPath, cleanup, nil
+}
+
+// renameIndexEnv builds the environment for git commands in the untracked-rename
+// path: GIT_INDEX_FILE points at the throwaway index, and GIT_LITERAL_PATHSPECS
+// makes git treat path arguments literally so a working-tree filename that looks
+// like pathspec magic (e.g. ":(top)x") is not misinterpreted.
+func (g *Git) renameIndexEnv(indexPath string) []string {
+	return []string{"GIT_INDEX_FILE=" + indexPath, "GIT_LITERAL_PATHSPECS=1"}
 }
 
 // FileDiff returns the diff view for a single file.
@@ -571,7 +593,7 @@ func (g *Git) untrackedRenameDiff(req FileDiffRequest) ([]DiffLine, error) {
 
 	args := g.diffArgs(req.Ref, req.Staged)
 	args = append(args, unifiedContextArg(req.ContextLines), "-M", "--", req.OldPath, req.Path)
-	out, err := g.runGitEnv([]string{"GIT_INDEX_FILE=" + indexPath}, args...)
+	out, err := g.runGitEnv(g.renameIndexEnv(indexPath), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get file diff for %s: %w", req.Path, err)
 	}

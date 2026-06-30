@@ -82,10 +82,8 @@ func (m Model) detectUntrackedRenames(untracked []string) ([]diff.FileEntry, str
 // with a single rename entry; the remaining untracked paths are appended as additions,
 // skipping any already present (including rename new-sides) to avoid duplicates.
 func (m Model) mergeUntrackedEntries(entries []diff.FileEntry, untracked []string, renames []diff.FileEntry) []diff.FileEntry {
-	renameNew := make(map[string]bool, len(renames))
 	renameOld := make(map[string]bool, len(renames))
 	for _, r := range renames {
-		renameNew[r.Path] = true
 		renameOld[r.OldPath] = true
 	}
 
@@ -102,12 +100,14 @@ func (m Model) mergeUntrackedEntries(entries []diff.FileEntry, untracked []strin
 	}
 	entries = append(entries, renames...)
 
+	// rename new-sides are already in entries (appended above), so entrySet covers
+	// them — any untracked path equal to a rename new-side is skipped here too.
 	entrySet := make(map[string]bool, len(entries))
 	for _, e := range entries {
 		entrySet[e.Path] = true
 	}
 	for _, f := range untracked {
-		if !renameNew[f] && !entrySet[f] {
+		if !entrySet[f] {
 			entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
 		}
 	}

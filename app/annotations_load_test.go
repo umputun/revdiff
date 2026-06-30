@@ -40,7 +40,7 @@ func TestParseArgs_AnnotationsDefaultEmpty(t *testing.T) {
 func TestPreloadAnnotations_FileNotFound(t *testing.T) {
 	store := annotation.NewStore()
 	r := &mocks.RendererMock{}
-	err := preloadAnnotations(filepath.Join(t.TempDir(), "missing.md"), store, r, "", false, nil, "", &bytes.Buffer{})
+	err := preloadAnnotations(filepath.Join(t.TempDir(), "missing.md"), store, r, "", false, nil, nil, "", &bytes.Buffer{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "open annotations file")
 	assert.Equal(t, 0, store.Count())
@@ -52,7 +52,7 @@ func TestPreloadAnnotations_ParseError(t *testing.T) {
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 	}
-	err := preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{})
+	err := preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "parse annotations")
 }
@@ -63,7 +63,7 @@ func TestPreloadAnnotations_ChangedFilesError(t *testing.T) {
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, errors.New("boom") },
 	}
-	err := preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{})
+	err := preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolve diff")
 }
@@ -91,7 +91,7 @@ func TestPreloadAnnotations_DropsOrphans(t *testing.T) {
 		},
 	}
 	warn := &bytes.Buffer{}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", warn))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", warn))
 
 	assert.Equal(t, 2, store.Count())
 	all := store.All()
@@ -117,7 +117,7 @@ func TestPreloadAnnotations_RemovedLineMatchesOldNum(t *testing.T) {
 			}, nil
 		},
 	}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{}))
 	assert.Equal(t, 1, store.Count())
 	assert.True(t, store.Has("a.go", 4, "-"))
 }
@@ -135,7 +135,7 @@ func TestPreloadAnnotations_ContextMatchesNewNum(t *testing.T) {
 			}, nil
 		},
 	}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{}))
 	assert.True(t, store.Has("a.go", 7, " "))
 }
 
@@ -150,7 +150,7 @@ func TestPreloadAnnotations_DuplicateLastWriteWins(t *testing.T) {
 			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{}))
 	assert.Equal(t, 1, store.Count())
 	got := store.Get("a.go")
 	require.Len(t, got, 1)
@@ -181,7 +181,7 @@ func TestPreloadAnnotations_StagedOnlyAddedFile(t *testing.T) {
 		},
 	}
 	warn := &bytes.Buffer{}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", warn))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", warn))
 	assert.Equal(t, 2, store.Count(), "warnings: %s", warn.String())
 	assert.True(t, store.Has("new.go", 2, "+"))
 }
@@ -207,7 +207,7 @@ func TestPreloadAnnotations_UntrackedFile(t *testing.T) {
 	untracked := func() ([]string, error) { return []string{"new.go"}, nil }
 
 	warn := &bytes.Buffer{}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, untracked, dir, warn))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, untracked, nil, dir, warn))
 
 	assert.Equal(t, 2, store.Count(), "warnings: %s", warn.String())
 	assert.True(t, store.Has("new.go", 0, ""), "file-level annotation must round-trip")
@@ -237,7 +237,7 @@ func TestPreloadAnnotations_RenamedFileUsesRenameAwareDiff(t *testing.T) {
 		},
 	}
 	warn := &bytes.Buffer{}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", warn))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", warn))
 
 	assert.Equal(t, "old.go", gotReq.OldPath, "FileDiff must receive the rename origin")
 	assert.Equal(t, "new.go", gotReq.Path)
@@ -245,6 +245,41 @@ func TestPreloadAnnotations_RenamedFileUsesRenameAwareDiff(t *testing.T) {
 	assert.True(t, store.Has("new.go", 2, "+"), "edited line annotation round-trips")
 	assert.False(t, store.Has("new.go", 1, "+"), "context line is not an add in the rename-aware diff")
 	assert.Contains(t, warn.String(), "new.go:1")
+}
+
+func TestPreloadAnnotations_UntrackedRenameUsesRenameAwareDiff(t *testing.T) {
+	// An untracked rename (plain `mv old new`, new still untracked) must be folded
+	// in via the rename detector so the per-file diff is rename-aware. Without it the
+	// preloader reads new as all-added and drops the removed-line annotation.
+	body := "## new.go:2 (-)\nremoved line\n"
+	path := writeTempAnnotations(t, body)
+	store := annotation.NewStore()
+	var gotReq diff.FileDiffRequest
+	r := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "old.go", Status: diff.FileDeleted}}, nil
+		},
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			gotReq = req
+			return []diff.DiffLine{
+				{OldNum: 1, NewNum: 1, Content: "one", ChangeType: diff.ChangeContext},
+				{OldNum: 2, NewNum: 0, Content: "two", ChangeType: diff.ChangeRemove},
+				{OldNum: 0, NewNum: 2, Content: "TWO", ChangeType: diff.ChangeAdd},
+			}, nil
+		},
+	}
+	untracked := func() ([]string, error) { return []string{"new.go"}, nil }
+	untrackedRenames := func([]string) ([]diff.FileEntry, error) {
+		return []diff.FileEntry{{Path: "new.go", OldPath: "old.go", Status: diff.FileRenamed}}, nil
+	}
+	warn := &bytes.Buffer{}
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, untracked, untrackedRenames, "", warn))
+
+	assert.Equal(t, "old.go", gotReq.OldPath, "FileDiff must receive the rename origin")
+	assert.Equal(t, "new.go", gotReq.Path)
+	assert.Equal(t, 1, store.Count(), "removed-line annotation must round-trip; warnings: %s", warn.String())
+	assert.True(t, store.Has("new.go", 2, "-"), "removed-line annotation matches the rename-aware diff")
+	assert.Empty(t, warn.String())
 }
 
 func TestPreloadAnnotations_NonRenameHasEmptyOldPath(t *testing.T) {
@@ -260,7 +295,7 @@ func TestPreloadAnnotations_NonRenameHasEmptyOldPath(t *testing.T) {
 			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{}))
 	assert.Empty(t, gotReq.OldPath, "non-rename entries carry no rename origin")
 	assert.True(t, store.Has("a.go", 5, "+"))
 }
@@ -276,7 +311,7 @@ func TestPreloadAnnotations_UntrackedListError(t *testing.T) {
 	untracked := func() ([]string, error) { return nil, errors.New("git boom") }
 
 	warn := &bytes.Buffer{}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, untracked, "", warn))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, untracked, nil, "", warn))
 	assert.Equal(t, 1, store.Count(), "tracked annotations survive when untracked listing fails")
 	assert.Contains(t, warn.String(), "list untracked files")
 }
@@ -291,7 +326,7 @@ func TestPreloadAnnotations_RejectsNonRegularFile(t *testing.T) {
 
 	store := annotation.NewStore()
 	r := &mocks.RendererMock{}
-	err := preloadAnnotations(fifo, store, r, "", false, nil, "", &bytes.Buffer{})
+	err := preloadAnnotations(fifo, store, r, "", false, nil, nil, "", &bytes.Buffer{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a regular file")
 }
@@ -304,7 +339,7 @@ func TestPreloadAnnotations_RejectsOversizeFile(t *testing.T) {
 
 	store := annotation.NewStore()
 	r := &mocks.RendererMock{}
-	err := preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{})
+	err := preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exceeds")
 }
@@ -324,7 +359,7 @@ func TestPreloadAnnotations_SanitizesCommentText(t *testing.T) {
 			return []diff.DiffLine{{NewNum: 5, ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{}))
 	got := store.Get("a.go")
 	require.Len(t, got, 1)
 	assert.NotContains(t, got[0].Comment, "\x1b")
@@ -346,6 +381,6 @@ func TestPreloadAnnotations_EmptyFile(t *testing.T) {
 	r := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
 	}
-	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, "", &bytes.Buffer{}))
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", &bytes.Buffer{}))
 	assert.Equal(t, 0, store.Count())
 }
