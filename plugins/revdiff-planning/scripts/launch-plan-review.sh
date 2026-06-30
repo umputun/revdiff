@@ -123,13 +123,13 @@ LAUNCHER
     fi
 
     if [ -n "$ZELLIJ_ORIG_TAB_ID" ] && zellij run --floating --close-on-exit --tab-id "$ZELLIJ_ORIG_TAB_ID" \
-            --width 90 --height 90 \
+            --width 90% --height 90% \
             --name "$OVERLAY_TITLE" \
             -- "$LAUNCH_SCRIPT" >/dev/null 2>&1; then
         :
     else
         zellij run --floating --close-on-exit \
-            --width 90 --height 90 \
+            --width 90% --height 90% \
             --name "$OVERLAY_TITLE" \
             -- "$LAUNCH_SCRIPT" >/dev/null 2>&1
     fi
