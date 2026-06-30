@@ -51,19 +51,67 @@ func (m Model) loadFiles() tea.Cmd {
 			if utErr != nil {
 				warnings = append(warnings, fmt.Sprintf("untracked files: %v", utErr))
 			} else {
-				entrySet := make(map[string]bool, len(entries))
-				for _, e := range entries {
-					entrySet[e.Path] = true
+				renames, rWarn := m.detectUntrackedRenames(ut)
+				if rWarn != "" {
+					warnings = append(warnings, rWarn)
 				}
-				for _, f := range ut {
-					if !entrySet[f] {
-						entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
-					}
-				}
+				entries = m.mergeUntrackedEntries(entries, ut, renames)
 			}
 		}
 		return filesLoadedMsg{seq: seq, entries: entries, warnings: warnings}
 	}
+}
+
+// detectUntrackedRenames pairs untracked renames with their deleted origin. It is a
+// no-op (returns nil) unless a git rename detector is wired and the review is in
+// unstaged working-tree mode — the only mode where a `mv old new` leaves new untracked
+// and old deleted. The returned warning string is non-empty only when detection failed.
+func (m Model) detectUntrackedRenames(untracked []string) ([]diff.FileEntry, string) {
+	if m.loadUntrackedRenames == nil || m.cfg.ref != "" || m.cfg.staged {
+		return nil, ""
+	}
+	renames, err := m.loadUntrackedRenames(untracked)
+	if err != nil {
+		return nil, fmt.Sprintf("untracked renames: %v", err)
+	}
+	return renames, ""
+}
+
+// mergeUntrackedEntries folds untracked files and detected untracked renames into the
+// tracked-change entries. Each rename replaces the standalone deletion of its origin
+// with a single rename entry; the remaining untracked paths are appended as additions,
+// skipping any already present (including rename new-sides) to avoid duplicates.
+func (m Model) mergeUntrackedEntries(entries []diff.FileEntry, untracked []string, renames []diff.FileEntry) []diff.FileEntry {
+	renameNew := make(map[string]bool, len(renames))
+	renameOld := make(map[string]bool, len(renames))
+	for _, r := range renames {
+		renameNew[r.Path] = true
+		renameOld[r.OldPath] = true
+	}
+
+	// drop standalone deletions that are actually rename origins, then add the renames
+	if len(renameOld) > 0 {
+		kept := make([]diff.FileEntry, 0, len(entries))
+		for _, e := range entries {
+			if e.Status == diff.FileDeleted && renameOld[e.Path] {
+				continue
+			}
+			kept = append(kept, e)
+		}
+		entries = kept
+	}
+	entries = append(entries, renames...)
+
+	entrySet := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		entrySet[e.Path] = true
+	}
+	for _, f := range untracked {
+		if !renameNew[f] && !entrySet[f] {
+			entries = append(entries, diff.FileEntry{Path: f, Status: diff.FileUntracked})
+		}
+	}
+	return entries
 }
 
 // loadCommits returns a command that fetches the commit log for the current ref range.

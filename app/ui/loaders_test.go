@@ -558,6 +558,152 @@ func TestModel_UntrackedToggle(t *testing.T) {
 	})
 }
 
+func TestModel_UntrackedRenames(t *testing.T) {
+	t.Run("rename replaces deletion with single rename entry", func(t *testing.T) {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return []diff.FileEntry{{Path: "old.txt", Status: diff.FileDeleted}}, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return []string{"new.txt"}, nil },
+			LoadUntrackedRenames: func([]string) ([]diff.FileEntry, error) {
+				return []diff.FileEntry{{Path: "new.txt", OldPath: "old.txt", Status: diff.FileRenamed}}, nil
+			},
+		})
+
+		flMsg := m.loadFiles()().(filesLoadedMsg)
+		require.Len(t, flMsg.entries, 1, "deletion+untracked-add collapse into one rename")
+		assert.Equal(t, diff.FileRenamed, flMsg.entries[0].Status)
+		assert.Equal(t, "new.txt", flMsg.entries[0].Path)
+		assert.Equal(t, "old.txt", flMsg.entries[0].OldPath)
+	})
+
+	t.Run("non-rename untracked files still appended", func(t *testing.T) {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return []diff.FileEntry{{Path: "old.txt", Status: diff.FileDeleted}}, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return []string{"new.txt", "extra.txt"}, nil },
+			LoadUntrackedRenames: func([]string) ([]diff.FileEntry, error) {
+				return []diff.FileEntry{{Path: "new.txt", OldPath: "old.txt", Status: diff.FileRenamed}}, nil
+			},
+		})
+
+		flMsg := m.loadFiles()().(filesLoadedMsg)
+		byPath := make(map[string]diff.FileStatus, len(flMsg.entries))
+		for _, e := range flMsg.entries {
+			byPath[e.Path] = e.Status
+		}
+		assert.Equal(t, diff.FileRenamed, byPath["new.txt"])
+		assert.Equal(t, diff.FileUntracked, byPath["extra.txt"])
+		assert.NotContains(t, byPath, "old.txt", "rename origin deletion is dropped")
+		assert.Len(t, flMsg.entries, 2)
+	})
+
+	t.Run("detector failure surfaces a warning and keeps untracked files", func(t *testing.T) {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+				return nil, nil
+			},
+		}
+		store := annotation.NewStore()
+		m := testNewModel(t, renderer, store, noopHighlighter(), ModelConfig{
+			TreeWidthRatio: 3,
+			ShowUntracked:  true,
+			LoadUntracked:  func() ([]string, error) { return []string{"new.txt"}, nil },
+			LoadUntrackedRenames: func([]string) ([]diff.FileEntry, error) {
+				return nil, errors.New("boom")
+			},
+		})
+
+		flMsg := m.loadFiles()().(filesLoadedMsg)
+		require.Len(t, flMsg.entries, 1)
+		assert.Equal(t, "new.txt", flMsg.entries[0].Path)
+		require.Len(t, flMsg.warnings, 1)
+		assert.Contains(t, flMsg.warnings[0], "untracked renames")
+	})
+}
+
+func TestModel_detectUntrackedRenames(t *testing.T) {
+	renames := []diff.FileEntry{{Path: "new.txt", OldPath: "old.txt", Status: diff.FileRenamed}}
+	detector := func([]string) ([]diff.FileEntry, error) { return renames, nil }
+
+	tests := []struct {
+		name     string
+		detector func([]string) ([]diff.FileEntry, error)
+		ref      string
+		staged   bool
+		want     int
+	}{
+		{"working-tree unstaged runs detection", detector, "", false, 1},
+		{"nil detector is a no-op", nil, "", false, 0},
+		{"ref set skips detection", detector, "HEAD~1", false, 0},
+		{"staged skips detection", detector, "", true, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := Model{loadUntrackedRenames: tt.detector}
+			m.cfg.ref = tt.ref
+			m.cfg.staged = tt.staged
+			got, warn := m.detectUntrackedRenames([]string{"new.txt"})
+			assert.Empty(t, warn)
+			assert.Len(t, got, tt.want)
+		})
+	}
+}
+
+func TestModel_mergeUntrackedEntries(t *testing.T) {
+	rename := diff.FileEntry{Path: "new.txt", OldPath: "old.txt", Status: diff.FileRenamed}
+
+	tests := []struct {
+		name      string
+		entries   []diff.FileEntry
+		untracked []string
+		renames   []diff.FileEntry
+		want      map[string]diff.FileStatus
+	}{
+		{
+			name:      "no renames appends untracked as-is",
+			entries:   []diff.FileEntry{{Path: "mod.txt", Status: diff.FileModified}},
+			untracked: []string{"fresh.txt"},
+			want:      map[string]diff.FileStatus{"mod.txt": diff.FileModified, "fresh.txt": diff.FileUntracked},
+		},
+		{
+			name:      "rename drops origin deletion and skips its new-side untracked dup",
+			entries:   []diff.FileEntry{{Path: "old.txt", Status: diff.FileDeleted}},
+			untracked: []string{"new.txt"},
+			renames:   []diff.FileEntry{rename},
+			want:      map[string]diff.FileStatus{"new.txt": diff.FileRenamed},
+		},
+		{
+			name:      "unrelated deletion is preserved",
+			entries:   []diff.FileEntry{{Path: "old.txt", Status: diff.FileDeleted}, {Path: "gone.txt", Status: diff.FileDeleted}},
+			untracked: []string{"new.txt"},
+			renames:   []diff.FileEntry{rename},
+			want:      map[string]diff.FileStatus{"new.txt": diff.FileRenamed, "gone.txt": diff.FileDeleted},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := Model{}.mergeUntrackedEntries(tt.entries, tt.untracked, tt.renames)
+			byPath := make(map[string]diff.FileStatus, len(got))
+			for _, e := range got {
+				byPath[e.Path] = e.Status
+			}
+			assert.Equal(t, tt.want, byPath)
+		})
+	}
+}
+
 func TestModel_StagedOnlyFiles(t *testing.T) {
 	t.Run("staged-only new files included in file list", func(t *testing.T) {
 		// simulate: working tree has no changes, but index has a new file

@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -377,6 +379,14 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 		return nil, fmt.Errorf("get changed files: %w", err)
 	}
 
+	return g.parseNameStatusEntries(out), nil
+}
+
+// parseNameStatusEntries parses NUL-separated `git diff --name-status -z` output into
+// FileEntry values. For renames/copies (R<score>, C<score>) it consumes two paths —
+// the first is the rename origin (OldPath), the second is the new/current name — and
+// normalizes the status to a single letter (R100 -> R).
+func (g *Git) parseNameStatusEntries(out string) []FileEntry {
 	var entries []FileEntry
 	fields := strings.Split(strings.TrimRight(out, "\x00"), "\x00")
 	for i := 0; i < len(fields); {
@@ -391,8 +401,6 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 		}
 		path := fields[i]
 		i++
-		// for renames/copies (R100, C100), consume two paths: the first is the
-		// rename origin (old path), the second is the new/current name
 		var oldPath string
 		if rawStatus[0] == 'R' || rawStatus[0] == 'C' {
 			if i < len(fields) {
@@ -401,13 +409,92 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 				i++
 			}
 		}
-		// normalize status to single letter (R100 -> R)
 		if len(rawStatus) > 1 {
 			rawStatus = rawStatus[:1]
 		}
 		entries = append(entries, FileEntry{Path: path, OldPath: oldPath, Status: FileStatus(rawStatus)})
 	}
-	return entries, nil
+	return entries
+}
+
+// UntrackedRenames detects working-tree renames whose new side is still untracked.
+// A plain `mv old new` (no `git mv`, no staging) leaves `old` as an unstaged deletion
+// and `new` untracked, so `git diff -M` never pairs them. This pairs them off a
+// throwaway index: it copies the repo index, marks the given untracked paths
+// intent-to-add (-N) against that copy, and runs `git diff -M --name-status`, which
+// then reports the pairs as renames. The real index and working tree are never
+// modified. It returns one FileEntry{Status: FileRenamed, Path: new, OldPath: old}
+// per detected rename; genuinely new untracked files (no rename origin) are omitted.
+func (g *Git) UntrackedRenames(untracked []string) ([]FileEntry, error) {
+	if len(untracked) == 0 {
+		return nil, nil
+	}
+	indexPath, cleanup, err := g.tempIndexWithIntentToAdd(untracked)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	out, err := g.runGitEnv([]string{"GIT_INDEX_FILE=" + indexPath},
+		"diff", "--no-color", "--no-ext-diff", "--name-status", "-M", "-z")
+	if err != nil {
+		return nil, fmt.Errorf("detect untracked renames: %w", err)
+	}
+
+	untrackedSet := make(map[string]bool, len(untracked))
+	for _, u := range untracked {
+		untrackedSet[u] = true
+	}
+	var renames []FileEntry
+	for _, e := range g.parseNameStatusEntries(out) {
+		if e.Status == FileRenamed && untrackedSet[e.Path] {
+			renames = append(renames, e)
+		}
+	}
+	return renames, nil
+}
+
+// tempIndexWithIntentToAdd copies the repo index to a throwaway file and marks the
+// given untracked paths intent-to-add (-N) against the copy. Callers run git with
+// GIT_INDEX_FILE set to the returned path so `git diff -M` pairs working-tree renames
+// whose new side is still untracked. cleanup removes the temp file; the real index
+// and working tree are never modified.
+func (g *Git) tempIndexWithIntentToAdd(paths []string) (indexPath string, cleanup func(), err error) {
+	realIndex, err := g.runGit("rev-parse", "--git-path", "index")
+	if err != nil {
+		return "", nil, fmt.Errorf("resolve git index path: %w", err)
+	}
+	realIndex = strings.TrimSpace(realIndex)
+	if !filepath.IsAbs(realIndex) {
+		realIndex = filepath.Join(g.workDir, realIndex)
+	}
+	src, err := os.ReadFile(realIndex) //nolint:gosec // path resolved from git rev-parse, not user input
+	if err != nil {
+		return "", nil, fmt.Errorf("read git index: %w", err)
+	}
+
+	tmp, err := os.CreateTemp("", "revdiff-index-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("create temp index: %w", err)
+	}
+	tmpPath := tmp.Name()
+	cleanup = func() { _ = os.Remove(tmpPath) }
+	if _, err = tmp.Write(src); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return "", nil, fmt.Errorf("write temp index: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("close temp index: %w", err)
+	}
+
+	addArgs := append([]string{"add", "-N", "--"}, paths...)
+	if _, err = g.runGitEnv([]string{"GIT_INDEX_FILE=" + tmpPath}, addArgs...); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("intent-to-add untracked: %w", err)
+	}
+	return tmpPath, cleanup, nil
 }
 
 // FileDiff returns the diff view for a single file.
@@ -417,6 +504,10 @@ func (g *Git) ChangedFiles(ref string, staged bool) ([]FileEntry, error) {
 // contextLines controls surrounding context: 0 or >= fullContextSentinel requests full-file
 // context; positive values below the sentinel request that many lines on each side of a hunk.
 func (g *Git) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
+	if g.isUntrackedRename(req) {
+		return g.untrackedRenameDiff(req)
+	}
+
 	args := g.diffArgs(req.Ref, req.Staged)
 	args = append(args, unifiedContextArg(req.ContextLines))
 	args = append(args, g.pathArgs(req)...)
@@ -456,6 +547,40 @@ func (g *Git) pathArgs(req FileDiffRequest) []string {
 		return []string{"-M", "--", req.OldPath, req.Path}
 	}
 	return []string{"--", req.Path}
+}
+
+// isUntrackedRename reports whether req describes a working-tree rename whose new side
+// is still untracked. In unstaged working-tree mode (no ref, not staged) a rename
+// always has an untracked new path that git's normal diff cannot see, so a
+// throwaway-index pass is required. OldPath is only populated in this mode by
+// UntrackedRenames, so the condition uniquely identifies that case.
+func (g *Git) isUntrackedRename(req FileDiffRequest) bool {
+	return req.Ref == "" && !req.Staged && req.OldPath != "" && req.OldPath != req.Path
+}
+
+// untrackedRenameDiff renders the diff for a rename whose new side is untracked by
+// running git against a throwaway index that intent-to-adds the new path (see
+// tempIndexWithIntentToAdd). Without it, `git diff -M -- old new` reports only the
+// deletion of old because the untracked new path is invisible to git.
+func (g *Git) untrackedRenameDiff(req FileDiffRequest) ([]DiffLine, error) {
+	indexPath, cleanup, err := g.tempIndexWithIntentToAdd([]string{req.Path})
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	args := g.diffArgs(req.Ref, req.Staged)
+	args = append(args, unifiedContextArg(req.ContextLines), "-M", "--", req.OldPath, req.Path)
+	out, err := g.runGitEnv([]string{"GIT_INDEX_FILE=" + indexPath}, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get file diff for %s: %w", req.Path, err)
+	}
+
+	total := 0
+	if req.ContextLines > 0 && req.ContextLines < fullContextSentinel {
+		total = g.totalOldLines(req)
+	}
+	return parseUnifiedDiff(out, total)
 }
 
 // totalOldLines returns the line count of the pre-change version of file, used by
@@ -526,10 +651,25 @@ func (g *Git) runGit(args ...string) (string, error) {
 	return runVCS(g.workDir, "git", args...)
 }
 
+// runGitEnv runs git with extra environment entries (e.g. GIT_INDEX_FILE) appended
+// to the process environment, used by the throwaway-index rename detection path.
+func (g *Git) runGitEnv(extraEnv []string, args ...string) (string, error) {
+	return runVCSEnv(g.workDir, extraEnv, "git", args...)
+}
+
 // runVCS executes a VCS command in the given directory and returns its output.
 func runVCS(workDir, binary string, args ...string) (string, error) {
+	return runVCSEnv(workDir, nil, binary, args...)
+}
+
+// runVCSEnv executes a VCS command in the given directory with extra environment
+// entries appended to os.Environ() and returns its output.
+func runVCSEnv(workDir string, extraEnv []string, binary string, args ...string) (string, error) {
 	cmd := exec.CommandContext(context.Background(), binary, args...) //nolint:gosec // args constructed internally, not user input
 	cmd.Dir = workDir
+	if len(extraEnv) > 0 {
+		cmd.Env = append(os.Environ(), extraEnv...)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError

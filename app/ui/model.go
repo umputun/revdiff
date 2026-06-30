@@ -538,9 +538,10 @@ type Model struct {
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
 	filesLoadSeq uint64 // bumped before each new file-list load; stale filesLoadedMsg (seq mismatch) is dropped
 
-	blamer        Blamer                   // optional blame provider (nil when git unavailable)
-	loadUntracked func() ([]string, error) // fetches untracked files; nil when unavailable
-	blameNow      time.Time                // snapshot of time.Now() set once per render pass for blame age
+	blamer               Blamer                                   // optional blame provider (nil when git unavailable)
+	loadUntracked        func() ([]string, error)                 // fetches untracked files; nil when unavailable
+	loadUntrackedRenames func([]string) ([]diff.FileEntry, error) // pairs untracked renames against their deleted origin; nil for non-git
+	blameNow             time.Time                                // snapshot of time.Now() set once per render pass for blame age
 
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
@@ -636,8 +637,13 @@ type ModelConfig struct {
 	// --- Optional dependencies ---
 	Blamer        Blamer                   // optional blame provider (nil when git unavailable)
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
-	Keymap        *keymap.Keymap           // custom key bindings (nil uses defaults)
-	Editor        ExternalEditor           // external-editor driver (nil uses app/editor.Editor{})
+	// LoadUntrackedRenames pairs untracked renames (a working-tree `mv` whose new
+	// side is still untracked) with their deleted origin so the tree shows one rename
+	// entry instead of a delete + all-add pair. Nil for non-git VCS (rename detection
+	// is git-only); only consulted in unstaged working-tree mode.
+	LoadUntrackedRenames func([]string) ([]diff.FileEntry, error)
+	Keymap               *keymap.Keymap // custom key bindings (nil uses defaults)
+	Editor               ExternalEditor // external-editor driver (nil uses app/editor.Editor{})
 	// CommitLog enumerates commits in the current ref range for the info popup's
 	// commit-log section. When nil, NewModel attempts to derive the source by
 	// type-asserting the Renderer against diff.CommitLogger; if the assertion
@@ -825,11 +831,12 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			cfg:                    reviewCfg,
 			descriptionHighlighted: precomputeDescriptionHighlight(cfg.Highlighter, descriptionFromConfig(reviewCfg)),
 		},
-		reload:          reloadState{applicable: cfg.ReloadApplicable},
-		compact:         compactState{applicable: cfg.CompactApplicable},
-		annot:           annotationState{rowCache: make(map[annotCacheKey][]string)},
-		loadUntracked:   cfg.LoadUntracked,
-		activeThemeName: cfg.ActiveThemeName,
+		reload:               reloadState{applicable: cfg.ReloadApplicable},
+		compact:              compactState{applicable: cfg.CompactApplicable},
+		annot:                annotationState{rowCache: make(map[annotCacheKey][]string)},
+		loadUntracked:        cfg.LoadUntracked,
+		loadUntrackedRenames: cfg.LoadUntrackedRenames,
+		activeThemeName:      cfg.ActiveThemeName,
 	}, nil
 }
 

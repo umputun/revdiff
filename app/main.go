@@ -109,14 +109,15 @@ func run(opts options) (int, error) {
 	km := keymap.LoadOrDefault(resolveKeysPath(opts))
 
 	var (
-		renderer     ui.Renderer
-		workDir      string
-		gitRoot      string
-		blamer       ui.Blamer
-		untrackedFn  func() ([]string, error)
-		commitLogger diff.CommitLogger
-		vcsType      diff.VCSType
-		err          error
+		renderer           ui.Renderer
+		workDir            string
+		gitRoot            string
+		blamer             ui.Blamer
+		untrackedFn        func() ([]string, error)
+		untrackedRenamesFn func([]string) ([]diff.FileEntry, error)
+		commitLogger       diff.CommitLogger
+		vcsType            diff.VCSType
+		err                error
 	)
 
 	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
@@ -151,6 +152,7 @@ func run(opts options) (int, error) {
 		workDir = setup.workDir
 		blamer = setup.blamer
 		untrackedFn = filterUntracked(setup.untrackedFn, opts.Include, opts.Exclude)
+		untrackedRenamesFn = setup.untrackedRenamesFn
 		commitLogger = setup.commitLogger
 		vcsType = setup.vcsType
 	}
@@ -178,37 +180,38 @@ func run(opts options) (int, error) {
 	}
 
 	model, err := ui.NewModel(ui.ModelConfig{
-		Renderer:          renderer,
-		Store:             store,
-		Highlighter:       hl,
-		StyleResolver:     res,
-		StyleRenderer:     style.NewRenderer(res),
-		SGR:               style.SGR{},
-		WordDiffer:        worddiff.New(),
-		Overlay:           overlay.NewManager(),
-		Themes:            themes,
-		Blamer:            blamer,
-		LoadUntracked:     untrackedFn,
-		Keymap:            km,
-		CommitLog:         commitLogger,
-		CommitsApplicable: commitsApplicable(opts, commitLogger),
-		ReloadApplicable:  reloadApplicable(opts),
-		CompactApplicable: compactApplicable(opts, renderer),
-		NoColors:          opts.NoColors,
-		MouseTracking:     !opts.NoMouse,
-		NoStatusBar:       opts.NoStatusBar,
-		NoConfirmDiscard:  opts.NoConfirmDiscard,
-		Wrap:              opts.Wrap,
-		WrapIndent:        opts.WrapIndent,
-		Collapsed:         opts.Collapsed,
-		Compact:           opts.Compact,
-		CompactContext:    opts.CompactContext,
-		CrossFileHunks:    opts.CrossFileHunks,
-		LineNumbers:       opts.LineNumbers,
-		ShowBlame:         opts.Blame,
-		ShowUntracked:     opts.startupUntracked(),
-		WordDiff:          opts.WordDiff,
-		VimMotion:         opts.VimMotion,
+		Renderer:             renderer,
+		Store:                store,
+		Highlighter:          hl,
+		StyleResolver:        res,
+		StyleRenderer:        style.NewRenderer(res),
+		SGR:                  style.SGR{},
+		WordDiffer:           worddiff.New(),
+		Overlay:              overlay.NewManager(),
+		Themes:               themes,
+		Blamer:               blamer,
+		LoadUntracked:        untrackedFn,
+		LoadUntrackedRenames: untrackedRenamesFn,
+		Keymap:               km,
+		CommitLog:            commitLogger,
+		CommitsApplicable:    commitsApplicable(opts, commitLogger),
+		ReloadApplicable:     reloadApplicable(opts),
+		CompactApplicable:    compactApplicable(opts, renderer),
+		NoColors:             opts.NoColors,
+		MouseTracking:        !opts.NoMouse,
+		NoStatusBar:          opts.NoStatusBar,
+		NoConfirmDiscard:     opts.NoConfirmDiscard,
+		Wrap:                 opts.Wrap,
+		WrapIndent:           opts.WrapIndent,
+		Collapsed:            opts.Collapsed,
+		Compact:              opts.Compact,
+		CompactContext:       opts.CompactContext,
+		CrossFileHunks:       opts.CrossFileHunks,
+		LineNumbers:          opts.LineNumbers,
+		ShowBlame:            opts.Blame,
+		ShowUntracked:        opts.startupUntracked(),
+		WordDiff:             opts.WordDiff,
+		VimMotion:            opts.VimMotion,
 		ReviewInfo: reviewInfoFromOptions(opts, reviewInfoInputs{
 			workDir:     workDir,
 			vcsType:     vcsType,

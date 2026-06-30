@@ -10,13 +10,14 @@ import (
 )
 
 type vcsSetup struct {
-	renderer     ui.Renderer
-	vcsType      diff.VCSType
-	gitRoot      string // set only when VCS is git; used by history module to run git commands
-	workDir      string
-	blamer       ui.Blamer
-	untrackedFn  func() ([]string, error)
-	commitLogger diff.CommitLogger // VCS-backed commit log source; nil when VCS lacks the capability
+	renderer           ui.Renderer
+	vcsType            diff.VCSType
+	gitRoot            string // set only when VCS is git; used by history module to run git commands
+	workDir            string
+	blamer             ui.Blamer
+	untrackedFn        func() ([]string, error)
+	untrackedRenamesFn func([]string) ([]diff.FileEntry, error) // git-only; pairs untracked renames with their origin
+	commitLogger       diff.CommitLogger                        // VCS-backed commit log source; nil when VCS lacks the capability
 }
 
 // setupVCSRenderer detects the VCS and creates the appropriate renderer, blamer, and untracked function.
@@ -34,7 +35,7 @@ func setupVCSRenderer(opts options) (vcsSetup, error) {
 		if err != nil {
 			return vcsSetup{}, err
 		}
-		return vcsSetup{renderer: r, vcsType: diff.VCSGit, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles, commitLogger: g}, nil
+		return vcsSetup{renderer: r, vcsType: diff.VCSGit, gitRoot: vcsRoot, workDir: workDir, blamer: g, untrackedFn: g.UntrackedFiles, untrackedRenamesFn: g.UntrackedRenames, commitLogger: g}, nil
 	case diff.VCSHg:
 		if opts.Staged {
 			fmt.Fprintln(os.Stderr, "warning: --staged ignored in mercurial repository (no staging area)")
