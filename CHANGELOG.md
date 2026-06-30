@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.9.1 - 2026-06-30
+
+### Bug Fixes
+
+- detect renames when the new file is untracked #246 @umputun
+
 ## v1.9.0 - 2026-06-29
 
 ### New Features
