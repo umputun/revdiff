@@ -302,6 +302,7 @@ type modelConfigState struct {
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
 	annotPrefix        string             // cached: marker + " "
 	annotFilePrefix    string             // cached: marker + " file: "
+	outputPath         string             // --output destination for the O in-session flush; empty disables it
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -530,6 +531,7 @@ type Model struct {
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 	compact     compactState      // applicability + transient hint for compact diff mode
 	editorState editorState       // transient hint state for source-file editor launches
+	output      outputState       // transient hint state for the O in-session output flush
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
 	vim         vimState          // count accumulator, pending letter leader, and transient hint for vim-motion preset
 	wheel       wheelState        // diff-pane mouse wheel coalescing (debounced render via wheelDebounceMsg)
@@ -711,6 +713,10 @@ type ModelConfig struct {
 	// behavior used by focused tests — every derived path (footer, rows, stats
 	// trigger) treats nil as the off-switch.
 	ReviewInfo *ReviewInfoConfig
+	// OutputPath is the --output destination for the O in-session flush. Empty
+	// disables the flush (there is no file to write to); a non-empty path enables
+	// it. Copied into modelConfigState.outputPath as a plain value.
+	OutputPath string
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -808,6 +814,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			wrapIndent:         max(0, cfg.WrapIndent),
 			annotPrefix:        cfg.AnnotationMarker + " ",
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
+			outputPath:         cfg.OutputPath,
 		},
 		layout: layoutState{
 			focus: paneTree,

@@ -151,11 +151,11 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - Create: `app/ui/output.go`
 - Create: `app/ui/output_test.go`
 
-- [ ] add `OutputPath string` to `ModelConfig` with a doc comment consistent with surrounding `ModelConfig` fields
-- [ ] add `outputPath string` to `modelConfigState` and set `outputPath: cfg.OutputPath` in the `NewModel` `modelConfigState` literal
-- [ ] add `output outputState` field to `Model`; add `type outputState struct { hint string }` to `app/ui/output.go`
-- [ ] write tests: `NewModel` copies `OutputPath` into `m.cfg.outputPath` (present and empty cases)
-- [ ] run `go test ./app/ui/... -race` — must pass before next task
+- [x] add `OutputPath string` to `ModelConfig` with a doc comment consistent with surrounding `ModelConfig` fields
+- [x] add `outputPath string` to `modelConfigState` and set `outputPath: cfg.OutputPath` in the `NewModel` `modelConfigState` literal
+- [x] add `output outputState` field to `Model`; add `type outputState struct { hint string }` to `app/ui/output.go`
+- [x] write tests: `NewModel` copies `OutputPath` into `m.cfg.outputPath` (present and empty cases)
+- [x] run `go test ./app/ui/... -race` — must pass before next task
 
 ### Task 4: handleFlushOutput handler, dispatch, hint render + reset
 
