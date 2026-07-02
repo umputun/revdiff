@@ -204,11 +204,11 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - [x] **DO NOT** bump `plugin.json` / `marketplace.json` / `package.json` — this depends on a new binary feature not yet released (plugin-version-bump-deferral rule)
 
 ### Task 7: Verify acceptance criteria and finalize
-- [ ] verify Overview requirements: `O` flushes to `-o` file without exiting; hint feedback; no-op-with-hint when `-o` absent; exit-time write is atomic and byte-identical to before
-- [ ] manual smoke: `revdiff -o /tmp/a.md`, add an annotation, press `O`, confirm `/tmp/a.md` contents match a normal quit's output while revdiff stays open; press `O` with no annotations (hint, no file clobber); run without `-o` and press `O` (hint only)
-- [ ] run full suite: `make test` and `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
-- [ ] run `~/.claude/format.sh`
-- [ ] move this plan to `docs/plans/completed/`
+- [x] verify Overview requirements: `O` flushes to `-o` file without exiting; hint feedback; no-op-with-hint when `-o` absent; exit-time write is atomic and byte-identical to before
+- [x] manual smoke: `revdiff -o /tmp/a.md`, add an annotation, press `O`, confirm `/tmp/a.md` contents match a normal quit's output while revdiff stays open; press `O` with no annotations (hint, no file clobber); run without `-o` and press `O` (hint only) — TUI keypress paths covered by Model unit tests (`TestModel_HandleFlushOutput_Success`/`_EmptyStore`/`_EmptyPath`), the plan's designated e2e substitute; interactive tty run left for the manual permanent-tab verification below
+- [x] run full suite: `make test` and `golangci-lint run --max-issues-per-linter=0 --max-same-issues=0`
+- [x] run `~/.claude/format.sh`
+- [x] move this plan to `docs/plans/completed/`
 
 ## Post-Completion
 *Items requiring manual intervention or external systems — no checkboxes, informational only*
