@@ -136,13 +136,13 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - Modify: `app/keymap/keymap.go`
 - Modify: `app/keymap/keymap_test.go`
 
-- [ ] add `ActionFlushOutput Action = "flush_output"` constant
-- [ ] add `ActionFlushOutput: true` to the `validActions` map
-- [ ] add `{ActionFlushOutput, "flush annotations to output file", "Annotations"}` to the action-descriptions table (feeds both help overlay and `Dump`)
-- [ ] add `"O": ActionFlushOutput` to `defaultBindings()`
-- [ ] add `{"O", ActionFlushOutput}` to the `TestDefault_allExpectedBindings` table (`keymap_test.go`) — it ends with `assert.Len(t, km.bindings, len(tests))`, so a new binding without a table entry breaks the count assertion
-- [ ] write/extend tests: `O` resolves to `ActionFlushOutput`; action is valid; description/Dump line present
-- [ ] run `go test ./app/keymap/... -race` — must pass before next task
+- [x] add `ActionFlushOutput Action = "flush_output"` constant
+- [x] add `ActionFlushOutput: true` to the `validActions` map
+- [x] add `{ActionFlushOutput, "flush annotations to output file", "Annotations"}` to the action-descriptions table (feeds both help overlay and `Dump`)
+- [x] add `"O": ActionFlushOutput` to `defaultBindings()`
+- [x] add `{"O", ActionFlushOutput}` to the `TestDefault_allExpectedBindings` table (`keymap_test.go`) — it ends with `assert.Len(t, km.bindings, len(tests))`, so a new binding without a table entry breaks the count assertion
+- [x] write/extend tests: `O` resolves to `ActionFlushOutput`; action is valid; description/Dump line present
+- [x] run `go test ./app/keymap/... -race` — must pass before next task
 
 ### Task 3: Model output-path config value + outputState
 

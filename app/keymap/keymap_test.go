@@ -36,7 +36,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"/", ActionSearch},
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList}, {"ctrl+e", ActionOpenEditor},
-		{"}", ActionNextAnnotation}, {"{", ActionPrevAnnotation},
+		{"}", ActionNextAnnotation}, {"{", ActionPrevAnnotation}, {"O", ActionFlushOutput},
 		{"v", ActionToggleCollapsed}, {"C", ActionToggleCompact}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
 		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
 		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter},
@@ -295,6 +295,36 @@ func TestActionOpenFileInEditor_HelpEntry(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "ActionOpenFileInEditor should have a help entry")
+}
+
+func TestActionFlushOutput_IsValid(t *testing.T) {
+	assert.True(t, IsValidAction(ActionFlushOutput))
+}
+
+func TestActionFlushOutput_DefaultBinding(t *testing.T) {
+	km := Default()
+	assert.Equal(t, ActionFlushOutput, km.Resolve("O"))
+}
+
+func TestActionFlushOutput_HelpEntry(t *testing.T) {
+	entries := defaultDescriptions()
+	var found bool
+	for _, e := range entries {
+		if e.Action == ActionFlushOutput {
+			assert.Equal(t, "flush annotations to output file", e.Description)
+			assert.Equal(t, "Annotations", e.Section)
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "ActionFlushOutput should have a help entry")
+}
+
+func TestActionFlushOutput_DumpEntry(t *testing.T) {
+	km := Default()
+	var buf strings.Builder
+	require.NoError(t, km.Dump(&buf))
+	assert.Contains(t, buf.String(), "map O flush_output")
 }
 
 func TestActionScrollConstants_InNavigationActions(t *testing.T) {
