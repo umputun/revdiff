@@ -166,12 +166,12 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - Modify: `app/ui/view.go` (`transientHint` case + comment)
 - Modify: `app/ui/mouse.go` (hint reset)
 
-- [ ] implement `handleFlushOutput` (empty-path hint; empty-store hint + no write; success hint with count; write error → `[WARN]` log + hint) calling `m.store.WriteFile(m.cfg.outputPath)`
-- [ ] add `case keymap.ActionFlushOutput: return m.handleFlushOutput()` to the action switch (`model.go:~1008`)
-- [ ] add `m.output.hint` case to `transientHint()` (after `reload`) and update its priority comment (keep it lowercase, non-godoc — `transientHint` is unexported)
-- [ ] add `m.output.hint = ""` to the hint-reset blocks in `handleKey` (`model.go:~912-916`) and `mouse.go` (`~156-158`)
-- [ ] write tests (real store + `t.TempDir()`): empty path → hint only, no file; empty store → "No annotations to flush", no file; success → file content equals `store.FormatOutput()`, hint has correct count/pluralization; write error (bad dir) → "Flush failed" hint; dispatch of `ActionFlushOutput` reaches the handler; hint appears in `transientHint()` and clears on next key
-- [ ] run `go test ./app/ui/... -race` — must pass before next task
+- [x] implement `handleFlushOutput` (empty-path hint; empty-store hint + no write; success hint with count; write error → `[WARN]` log + hint) calling `m.store.WriteFile(m.cfg.outputPath)`
+- [x] add `case keymap.ActionFlushOutput: return m.handleFlushOutput()` to the action switch (`model.go:~1008`)
+- [x] add `m.output.hint` case to `transientHint()` (after `reload`) and update its priority comment (keep it lowercase, non-godoc — `transientHint` is unexported)
+- [x] add `m.output.hint = ""` to the hint-reset blocks in `handleKey` (`model.go:~912-916`) and `mouse.go` (`~156-158`)
+- [x] write tests (real store + `t.TempDir()`): empty path → hint only, no file; empty store → "No annotations to flush", no file; success → file content equals `store.FormatOutput()`, hint has correct count/pluralization; write error (bad dir) → "Flush failed" hint; dispatch of `ActionFlushOutput` reaches the handler; hint appears in `transientHint()` and clears on next key
+- [x] run `go test ./app/ui/... -race` — must pass before next task
 
 ### Task 5: Unify exit-time write on the atomic store write + main wiring
 

@@ -917,6 +917,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// transient hints persist for exactly one render cycle; any key that reaches
 	// this point dismisses the last hint before the new action runs.
 	m.reload.hint = ""
+	m.output.hint = ""
 	m.compact.hint = ""
 	m.editorState.hint = ""
 	m.keys.hint = ""
@@ -1014,6 +1015,8 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m.handleAnnotNav(action == keymap.ActionNextAnnotation)
 	case keymap.ActionReload:
 		return m.handleReload()
+	case keymap.ActionFlushOutput:
+		return m.handleFlushOutput()
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 

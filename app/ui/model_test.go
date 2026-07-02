@@ -720,13 +720,6 @@ func (r rendererWithCommitLog) CommitLog(ref string) ([]diff.CommitInfo, error) 
 }
 
 func TestNewModel_CommitLogResolution(t *testing.T) {
-	plainRenderer := func() *mocks.RendererMock {
-		return &mocks.RendererMock{
-			ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-			FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
-		}
-	}
-
 	t.Run("explicit CommitLog wins over renderer capability", func(t *testing.T) {
 		explicit := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
 			return []diff.CommitInfo{{Hash: "explicit"}}, nil
