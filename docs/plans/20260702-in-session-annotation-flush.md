@@ -179,10 +179,10 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - Modify: `app/main.go`
 - Modify: `app/main_test.go`
 
-- [ ] set `ModelConfig.OutputPath: opts.Output` in the `NewModel` call
-- [ ] replace `os.WriteFile(...)` in the `writeAnnotationOutput` file branch with the store's atomic write (`m.Store().WriteFile(opts.Output)` at the callsite, or thread the store into `annotationOutputReq`); keep stdout branch, empty-output skip, and exit-code logic
-- [ ] write/adjust tests: exit-time file write still produces identical content and still returns the right exit code; the write is atomic (no partial file); `OutputPath` empty when `-o` absent, set when present
-- [ ] run `go test ./app/... -race` — must pass before next task
+- [x] set `ModelConfig.OutputPath: opts.Output` in the `NewModel` call
+- [x] replace `os.WriteFile(...)` in the `writeAnnotationOutput` file branch with the store's atomic write (`m.Store().WriteFile(opts.Output)` at the callsite, or thread the store into `annotationOutputReq`); keep stdout branch, empty-output skip, and exit-code logic
+- [x] write/adjust tests: exit-time file write still produces identical content and still returns the right exit code; the write is atomic (no partial file); `OutputPath` empty when `-o` absent, set when present
+- [x] run `go test ./app/... -race` — must pass before next task
 
 ### Task 6: Documentation and plugin surfaces
 
