@@ -167,6 +167,8 @@ The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means an
 
 This fallback is safe because revdiff writes the output file atomically on exit — there is never a partial read.
 
+A reviewer may also keep revdiff open on purpose and press `O` to flush the current annotations to the same output file mid-session, without quitting. The flush uses the same atomic write, so the fallback read above still returns a complete file. When the user says something like "I flushed my notes, go ahead" while the overlay is still open, read the most recent output file exactly as in the timeout fallback and process the annotations; do NOT relaunch revdiff. After you finish the code changes, the reviewer reloads with `R` and continues in the same session. No launcher flags change for this — the launcher already passes an output file, and `O` reuses it.
+
 If the script produces output, the user made annotations. The output format is:
 
 ```

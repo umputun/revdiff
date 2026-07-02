@@ -196,12 +196,12 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - Modify: `plugins/pi/skills/revdiff/SKILL.md`
 - Modify: `CLAUDE.md`
 
-- [ ] document the `O` key (flush annotations to `--output` file without exiting; requires `-o`) in README keybindings table and `site/docs.html` (keep the two in sync)
-- [ ] add the key to `references/usage.md` key-bindings list and note the flush/`-o` relationship in `references/config.md`
-- [ ] update the three `SKILL.md` files: teach agents that a human reviewer may keep revdiff open and flush with `O`; do NOT add new launcher flags (launchers are block-until-exit and unaffected)
-- [ ] add a `CLAUDE.md` gotcha entry: `O` flush is gated on `m.cfg.outputPath` (from `-o`), persists via `annotation.Store.WriteFile` (atomic temp+rename, shared with the exit-time write), reports via `outputState.hint`; empty path = disabled
-- [ ] verify no stray "at startup"/toggle-cross-reference phrasing per the CLI-description style rule (this is a runtime key, not a flag — keep it in the keybindings table only)
-- [ ] **DO NOT** bump `plugin.json` / `marketplace.json` / `package.json` — this depends on a new binary feature not yet released (plugin-version-bump-deferral rule)
+- [x] document the `O` key (flush annotations to `--output` file without exiting; requires `-o`) in README keybindings table and `site/docs.html` (keep the two in sync)
+- [x] add the key to `references/usage.md` key-bindings list and note the flush/`-o` relationship in `references/config.md`
+- [x] update the three `SKILL.md` files: teach agents that a human reviewer may keep revdiff open and flush with `O`; do NOT add new launcher flags (launchers are block-until-exit and unaffected)
+- [x] add a `CLAUDE.md` gotcha entry: `O` flush is gated on `m.cfg.outputPath` (from `-o`), persists via `annotation.Store.WriteFile` (atomic temp+rename, shared with the exit-time write), reports via `outputState.hint`; empty path = disabled
+- [x] verify no stray "at startup"/toggle-cross-reference phrasing per the CLI-description style rule (this is a runtime key, not a flag — keep it in the keybindings table only)
+- [x] **DO NOT** bump `plugin.json` / `marketplace.json` / `package.json` — this depends on a new binary feature not yet released (plugin-version-bump-deferral rule)
 
 ### Task 7: Verify acceptance criteria and finalize
 - [ ] verify Overview requirements: `O` flushes to `-o` file without exiting; hint feedback; no-op-with-hint when `-o` absent; exit-time write is atomic and byte-identical to before

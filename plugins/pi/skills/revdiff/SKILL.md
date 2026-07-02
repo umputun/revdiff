@@ -122,4 +122,5 @@ When the user wants to review comments already present in the current conversati
 - The extension launches the external `revdiff` binary in the current terminal session, temporarily suspending pi while revdiff is running.
 - If `revdiff` is not on `PATH`, set `REVDIFF_BIN` to its absolute path.
 - The extension sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; `10` means annotations were captured, not failure.
+- Inside a review the user can press `O` to flush annotations to the output file mid-session, but the pi flow does not need it: pi is suspended until revdiff exits and returns the captured annotations on quit. The keep-open flush loop matters only for standalone use outside pi.
 - You can still use revdiff standalone outside pi; the extension is only a convenience layer around the existing binary.
