@@ -125,10 +125,10 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd)
 - Modify: `app/annotation/store.go`
 - Modify: `app/annotation/store_test.go`
 
-- [ ] add `(s *Store) WriteFile(path string) error` — `FormatOutput()` + atomic temp-file+rename over `path` (0o600, temp cleaned up on error), temp+rename inline (no standalone helper)
-- [ ] add godoc starting with `WriteFile`
-- [ ] write tests: success overwrite of existing file; empty store writes an empty file; target directory missing → error; resulting mode is 0o600; no leftover temp file after success; error path removes the temp file; written bytes equal `FormatOutput()`
-- [ ] run `go test ./app/annotation/... -race` — must pass before next task
+- [x] add `(s *Store) WriteFile(path string) error` — `FormatOutput()` + atomic temp-file+rename over `path` (0o600, temp cleaned up on error), temp+rename inline (no standalone helper)
+- [x] add godoc starting with `WriteFile`
+- [x] write tests: success overwrite of existing file; empty store writes an empty file; target directory missing → error; resulting mode is 0o600; no leftover temp file after success; error path removes the temp file; written bytes equal `FormatOutput()`
+- [x] run `go test ./app/annotation/... -race` — must pass before next task
 
 ### Task 2: Keymap action `flush_output` + default `O` binding
 

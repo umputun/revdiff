@@ -1,6 +1,9 @@
 package annotation
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -483,6 +486,95 @@ func TestStore_Clear(t *testing.T) {
 	s.Clear()
 	assert.Equal(t, 0, s.Count(), "Clear must remove all annotations")
 	assert.Empty(t, s.All(), "All must return empty map after Clear")
+}
+
+func TestStore_WriteFile(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "use errors.Is()"})
+
+	path := filepath.Join(t.TempDir(), "output.md")
+	require.NoError(t, s.WriteFile(path))
+
+	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
+	require.NoError(t, err)
+	assert.Equal(t, s.FormatOutput(), string(got), "written bytes must equal FormatOutput()")
+}
+
+func TestStore_WriteFileOverwritesExisting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "output.md")
+	require.NoError(t, os.WriteFile(path, []byte("stale content that is longer than the new content"), 0o600))
+
+	s := NewStore()
+	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "note"})
+	require.NoError(t, s.WriteFile(path))
+
+	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
+	require.NoError(t, err)
+	assert.Equal(t, s.FormatOutput(), string(got), "overwrite must replace stale content entirely")
+}
+
+func TestStore_WriteFileEmptyStore(t *testing.T) {
+	s := NewStore()
+	path := filepath.Join(t.TempDir(), "output.md")
+	require.NoError(t, s.WriteFile(path))
+
+	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
+	require.NoError(t, err)
+	assert.Empty(t, string(got), "empty store writes an empty file")
+}
+
+func TestStore_WriteFileMode(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+
+	path := filepath.Join(t.TempDir(), "output.md")
+	require.NoError(t, s.WriteFile(path))
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm(), "resulting file mode must be 0o600")
+}
+
+func TestStore_WriteFileNoLeftoverTempOnSuccess(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore()
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	require.NoError(t, s.WriteFile(filepath.Join(dir, "output.md")))
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "only the target file should remain")
+	assert.Equal(t, "output.md", entries[0].Name(), "no temp file should be left behind")
+}
+
+func TestStore_WriteFileMissingDir(t *testing.T) {
+	s := NewStore()
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+
+	dir := filepath.Join(t.TempDir(), "does-not-exist")
+	err := s.WriteFile(filepath.Join(dir, "output.md"))
+	require.Error(t, err, "writing into a missing directory must fail")
+
+	// no temp file should be created in the missing directory
+	_, statErr := os.Stat(dir)
+	assert.True(t, os.IsNotExist(statErr), "missing directory must not be created")
+}
+
+func TestStore_WriteFileRemovesTempOnRenameError(t *testing.T) {
+	dir := t.TempDir()
+	// target path is an existing directory: rename of a file over it fails,
+	// so the temp file must be created and then removed on the error path
+	target := filepath.Join(dir, "output.md")
+	require.NoError(t, os.Mkdir(target, 0o750))
+
+	s := NewStore()
+	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	require.Error(t, s.WriteFile(target), "rename over a directory must fail")
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1, "temp file must be removed on error")
+	assert.Equal(t, "output.md", entries[0].Name(), "only the pre-existing directory should remain")
 }
 
 func TestStore_Count(t *testing.T) {
