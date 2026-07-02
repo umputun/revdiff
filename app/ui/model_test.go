@@ -1076,6 +1076,28 @@ func TestTransientHint_VimLowestPriority(t *testing.T) {
 	}
 }
 
+func TestTransientHint_OutputPriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		setHint func(m *Model)
+		want    string
+	}{
+		{name: "output hint alone", setHint: func(m *Model) { m.output.hint = "Wrote 1 annotation to output file" }, want: "Wrote 1 annotation to output file"},
+		{name: "reload beats output", setHint: func(m *Model) {
+			m.reload.hint = "press y to reload"
+			m.output.hint = "Wrote 1 annotation to output file"
+		}, want: "press y to reload"},
+		{name: "output beats compact", setHint: func(m *Model) { m.output.hint = "Wrote 1 annotation to output file"; m.compact.hint = "compact off" }, want: "Wrote 1 annotation to output file"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			tc.setHint(&m)
+			assert.Equal(t, tc.want, m.transientHint())
+		})
+	}
+}
+
 func TestHandleKey_EntersChordPending(t *testing.T) {
 	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)

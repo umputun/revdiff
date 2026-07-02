@@ -201,7 +201,7 @@ Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, n
 
 ### app/annotation/ — annotation store
 
-In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export. `FormatOutput` escapes body lines that start with `## ` (with trailing space, matching the record-header form) by prefixing a single space so downstream parsers cannot confuse a comment line for a new record header. Lines starting with `###` or `##` without a space are left unchanged.
+In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export. `FormatOutput` escapes body lines that start with `## ` (with trailing space, matching the record-header form) by prefixing a single space so downstream parsers cannot confuse a comment line for a new record header. Lines starting with `###` or `##` without a space are left unchanged. `WriteFile(path)` formats via `FormatOutput` and writes atomically (temp file in the target directory + rename, mode 0o600), used by both the exit-time file write and the in-session `O` flush so a concurrent reader never sees a truncated file.
 
 ### app/editor/ — external editor invocation
 
@@ -329,7 +329,8 @@ User presses 'a' on diff line
           content == ""  → cancelAnnotation (preserve existing annotation)
           otherwise      → saveComment(content, fileLevel, line, type)
   → re-render shows annotation (multi-line aware) below diff line
-  → on quit: store.FormatOutput() → structured output to stdout/file
+  → 'O' (flush_output, requires --output): store.WriteFile(path) → atomic write, revdiff stays open (annotate → flush → hand to agent → 'R' reload loop)
+  → on quit: store.FormatOutput() → structured output to stdout/file (file branch uses store.WriteFile)
   → (optional) history.Save() → markdown to ~/.config/revdiff/history/ (best-effort warnings only)
   → if --exit-code-on-annotations is enabled and output is non-empty: exit 10
 ```

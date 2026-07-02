@@ -17,7 +17,7 @@ type outputState struct {
 // handleFlushOutput writes the current annotations to the configured --output
 // file without exiting. It is a pure export — the store is never mutated, so
 // annotations persist in-session and can be re-flushed. Feedback is reported
-// through output.hint. Value receiver matches handleReload.
+// through output.hint.
 func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 	if m.cfg.outputPath == "" {
 		m.output.hint = "Output flush requires -o/--output"
