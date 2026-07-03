@@ -14,6 +14,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/fsutil"
 	"github.com/umputun/revdiff/app/highlight"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
@@ -201,6 +202,7 @@ func run(opts options) (int, error) {
 		MouseTracking:        !opts.NoMouse,
 		NoStatusBar:          opts.NoStatusBar,
 		NoConfirmDiscard:     opts.NoConfirmDiscard,
+		NoConfirmReload:      opts.NoConfirmReload,
 		Wrap:                 opts.Wrap,
 		WrapIndent:           opts.WrapIndent,
 		Collapsed:            opts.Collapsed,
@@ -226,6 +228,7 @@ func run(opts options) (int, error) {
 		SourceEditor:     sourceEditorPolicy(opts, workDir),
 		ActiveThemeName:  themes.catalog.ActiveName(opts.Theme),
 		AnnotationMarker: opts.AnnotationMarker,
+		OutputPath:       opts.Output,
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},
@@ -274,7 +277,7 @@ type annotationOutputReq struct {
 func writeAnnotationOutput(r annotationOutputReq) (int, error) {
 	code := annotationExitCode(r.opts.ExitCodeOnAnnotations, r.output)
 	if r.opts.Output != "" {
-		if err := os.WriteFile(r.opts.Output, []byte(r.output), 0o600); err != nil {
+		if err := fsutil.AtomicWriteFile(r.opts.Output, []byte(r.output)); err != nil {
 			return 0, fmt.Errorf("write output: %w", err)
 		}
 		return code, nil

@@ -720,13 +720,6 @@ func (r rendererWithCommitLog) CommitLog(ref string) ([]diff.CommitInfo, error) 
 }
 
 func TestNewModel_CommitLogResolution(t *testing.T) {
-	plainRenderer := func() *mocks.RendererMock {
-		return &mocks.RendererMock{
-			ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-			FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
-		}
-	}
-
 	t.Run("explicit CommitLog wins over renderer capability", func(t *testing.T) {
 		explicit := &fakeCommitLog{fn: func(string) ([]diff.CommitInfo, error) {
 			return []diff.CommitInfo{{Hash: "explicit"}}, nil
@@ -1073,6 +1066,28 @@ func TestTransientHint_VimLowestPriority(t *testing.T) {
 		{name: "reload beats vim", setHint: func(m *Model) { m.reload.hint = "Reloaded"; m.vim.hint = "5" }, want: "Reloaded"},
 		{name: "compact beats vim", setHint: func(m *Model) { m.compact.hint = "compact off"; m.vim.hint = "5" }, want: "compact off"},
 		{name: "keys beats vim", setHint: func(m *Model) { m.keys.hint = "Pending: ctrl+w"; m.vim.hint = "5" }, want: "Pending: ctrl+w"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			tc.setHint(&m)
+			assert.Equal(t, tc.want, m.transientHint())
+		})
+	}
+}
+
+func TestTransientHint_OutputPriority(t *testing.T) {
+	tests := []struct {
+		name    string
+		setHint func(m *Model)
+		want    string
+	}{
+		{name: "output hint alone", setHint: func(m *Model) { m.output.hint = "Wrote 1 annotation to output file" }, want: "Wrote 1 annotation to output file"},
+		{name: "reload beats output", setHint: func(m *Model) {
+			m.reload.hint = "press y to reload"
+			m.output.hint = "Wrote 1 annotation to output file"
+		}, want: "press y to reload"},
+		{name: "output beats compact", setHint: func(m *Model) { m.output.hint = "Wrote 1 annotation to output file"; m.compact.hint = "compact off" }, want: "Wrote 1 annotation to output file"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

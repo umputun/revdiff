@@ -1000,11 +1000,13 @@ func TestModel_HandleMouse_ClearsTransientHints(t *testing.T) {
 		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeContext}},
 	})
 	m.reload.hint = "press y to reload"
+	m.output.hint = "Wrote 1 annotation to output file"
 	m.compact.hint = "not applicable"
 
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
 	assert.Empty(t, model.reload.hint)
+	assert.Empty(t, model.output.hint)
 	assert.Empty(t, model.compact.hint)
 }
 

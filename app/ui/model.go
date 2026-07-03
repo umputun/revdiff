@@ -296,12 +296,14 @@ type modelConfigState struct {
 	mouseTracking      bool               // true when the session enabled mouse tracking
 	noStatusBar        bool               // hide the status bar
 	noConfirmDiscard   bool               // skip confirmation prompt on discard quit
+	noConfirmReload    bool               // skip confirmation prompt on reload (R)
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
 	treeWidthRatio     int                // 1-10 units for file tree panel
 	tabSpaces          string             // spaces to replace tabs with
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
 	annotPrefix        string             // cached: marker + " "
 	annotFilePrefix    string             // cached: marker + " file: "
+	outputPath         string             // --output destination for the O in-session flush; empty disables it
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -530,6 +532,7 @@ type Model struct {
 	reload      reloadState       // pending-confirmation state and applicability for R reload
 	compact     compactState      // applicability + transient hint for compact diff mode
 	editorState editorState       // transient hint state for source-file editor launches
+	output      outputState       // transient hint state for the O in-session output flush
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
 	vim         vimState          // count accumulator, pending letter leader, and transient hint for vim-motion preset
 	wheel       wheelState        // diff-pane mouse wheel coalescing (debounced render via wheelDebounceMsg)
@@ -661,6 +664,7 @@ type ModelConfig struct {
 	MouseTracking    bool     // enable mouse tracking for clicks and wheel events
 	NoStatusBar      bool     // hide the status bar
 	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
+	NoConfirmReload  bool     // skip confirmation prompt when dropping annotations on reload
 	Wrap             bool     // enable line wrapping
 	WrapIndent       int      // extra indent (cols) for wrap continuation rows; 0 disables
 	Collapsed        bool     // start in collapsed diff mode
@@ -711,6 +715,10 @@ type ModelConfig struct {
 	// behavior used by focused tests — every derived path (footer, rows, stats
 	// trigger) treats nil as the off-switch.
 	ReviewInfo *ReviewInfoConfig
+	// OutputPath is the --output destination for the O in-session flush. Empty
+	// disables the flush (there is no file to write to); a non-empty path enables
+	// it. Copied into modelConfigState.outputPath as a plain value.
+	OutputPath string
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -802,12 +810,14 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			mouseTracking:      cfg.MouseTracking,
 			noStatusBar:        cfg.NoStatusBar,
 			noConfirmDiscard:   cfg.NoConfirmDiscard,
+			noConfirmReload:    cfg.NoConfirmReload,
 			crossFileHunks:     cfg.CrossFileHunks,
 			treeWidthRatio:     cfg.TreeWidthRatio,
 			tabSpaces:          strings.Repeat(" ", cfg.TabWidth),
 			wrapIndent:         max(0, cfg.WrapIndent),
 			annotPrefix:        cfg.AnnotationMarker + " ",
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
+			outputPath:         cfg.OutputPath,
 		},
 		layout: layoutState{
 			focus: paneTree,
@@ -910,6 +920,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// transient hints persist for exactly one render cycle; any key that reaches
 	// this point dismisses the last hint before the new action runs.
 	m.reload.hint = ""
+	m.output.hint = ""
 	m.compact.hint = ""
 	m.editorState.hint = ""
 	m.keys.hint = ""
@@ -1007,6 +1018,8 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m.handleAnnotNav(action == keymap.ActionNextAnnotation)
 	case keymap.ActionReload:
 		return m.handleReload()
+	case keymap.ActionFlushOutput:
+		return m.handleFlushOutput()
 	default: // remaining actions (navigation, search, etc.) handled by pane-specific handlers below
 	}
 
@@ -1124,7 +1137,7 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 		m.reload.hint = "Reload not available in stdin mode"
 		return m, nil
 	}
-	if m.store.Count() > 0 && !m.cfg.noStatusBar {
+	if m.store.Count() > 0 && !m.cfg.noStatusBar && !m.cfg.noConfirmReload {
 		m.reload.pending = true
 		m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
 		return m, nil

@@ -54,7 +54,9 @@ func TestWriteAnnotationOutput(t *testing.T) {
 	})
 
 	t.Run("output file annotations exit code", func(t *testing.T) {
-		outFile := filepath.Join(t.TempDir(), "annotations.txt")
+		dir := t.TempDir()
+		outFile := filepath.Join(dir, "annotations.txt")
+
 		code, err := writeAnnotationOutput(annotationOutputReq{
 			opts:   options{ExitCodeOnAnnotations: true, Output: outFile},
 			output: output,
@@ -65,6 +67,24 @@ func TestWriteAnnotationOutput(t *testing.T) {
 		got, err := os.ReadFile(outFile) //nolint:gosec // test reads a file created under t.TempDir
 		require.NoError(t, err)
 		assert.Equal(t, output, string(got))
+
+		// atomic write leaves no temp file behind in the target directory
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		require.Len(t, entries, 1)
+		assert.Equal(t, "annotations.txt", entries[0].Name())
+	})
+
+	t.Run("output file write error", func(t *testing.T) {
+		badPath := filepath.Join(t.TempDir(), "missing", "annotations.txt")
+		code, err := writeAnnotationOutput(annotationOutputReq{
+			opts:   options{ExitCodeOnAnnotations: true, Output: badPath},
+			output: output,
+			stdout: &bytes.Buffer{},
+		})
+		assert.Equal(t, 0, code)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "write output")
 	})
 
 	t.Run("stdout write error", func(t *testing.T) {
