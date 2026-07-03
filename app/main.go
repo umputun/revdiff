@@ -14,6 +14,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/fsutil"
 	"github.com/umputun/revdiff/app/highlight"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
@@ -264,12 +265,11 @@ func run(opts options) (int, error) {
 
 	saveHistory(histReq{opts: opts, annotations: output, gitRoot: gitRoot, workDir: workDir, files: m.Store().Files()})
 
-	return writeAnnotationOutput(annotationOutputReq{opts: opts, store: m.Store(), output: output, stdout: os.Stdout})
+	return writeAnnotationOutput(annotationOutputReq{opts: opts, output: output, stdout: os.Stdout})
 }
 
 type annotationOutputReq struct {
 	opts   options
-	store  *annotation.Store
 	output string
 	stdout io.Writer
 }
@@ -277,7 +277,7 @@ type annotationOutputReq struct {
 func writeAnnotationOutput(r annotationOutputReq) (int, error) {
 	code := annotationExitCode(r.opts.ExitCodeOnAnnotations, r.output)
 	if r.opts.Output != "" {
-		if err := r.store.WriteFile(r.opts.Output); err != nil {
+		if err := fsutil.AtomicWriteFile(r.opts.Output, []byte(r.output)); err != nil {
 			return 0, fmt.Errorf("write output: %w", err)
 		}
 		return code, nil

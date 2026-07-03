@@ -9,8 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/umputun/revdiff/app/annotation"
 )
 
 type errWriter struct{}
@@ -58,13 +56,9 @@ func TestWriteAnnotationOutput(t *testing.T) {
 	t.Run("output file annotations exit code", func(t *testing.T) {
 		dir := t.TempDir()
 		outFile := filepath.Join(dir, "annotations.txt")
-		store := annotation.NewStore()
-		store.Add(annotation.Annotation{File: "file.go", Line: 1, Type: "+", Comment: "comment"})
-		require.Equal(t, output, store.FormatOutput())
 
 		code, err := writeAnnotationOutput(annotationOutputReq{
 			opts:   options{ExitCodeOnAnnotations: true, Output: outFile},
-			store:  store,
 			output: output,
 			stdout: &bytes.Buffer{},
 		})
@@ -82,12 +76,9 @@ func TestWriteAnnotationOutput(t *testing.T) {
 	})
 
 	t.Run("output file write error", func(t *testing.T) {
-		store := annotation.NewStore()
-		store.Add(annotation.Annotation{File: "file.go", Line: 1, Type: "+", Comment: "comment"})
 		badPath := filepath.Join(t.TempDir(), "missing", "annotations.txt")
 		code, err := writeAnnotationOutput(annotationOutputReq{
 			opts:   options{ExitCodeOnAnnotations: true, Output: badPath},
-			store:  store,
 			output: output,
 			stdout: &bytes.Buffer{},
 		})

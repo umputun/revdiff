@@ -3,10 +3,10 @@ package annotation
 import (
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/umputun/revdiff/app/fsutil"
 )
 
 // Annotation represents a user comment on a specific diff line.
@@ -171,29 +171,12 @@ func (s *Store) FormatOutput() string {
 	return buf.String()
 }
 
-// WriteFile writes FormatOutput to path atomically, replacing any existing file.
-// It writes to a temp file in path's directory and renames it over path (mode
+// WriteFile writes FormatOutput to path atomically (temp file + rename, mode
 // 0o600), so a concurrent reader sees either the old or the new complete file,
-// never a truncated one. The temp file is removed if any step fails.
+// never a truncated one.
 func (s *Store) WriteFile(path string) error {
-	content := s.FormatOutput()
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".revdiff-output-*")
-	if err != nil {
-		return fmt.Errorf("create temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.WriteString(content); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("write temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("close temp file: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("rename temp file to %s: %w", path, err)
+	if err := fsutil.AtomicWriteFile(path, []byte(s.FormatOutput())); err != nil {
+		return fmt.Errorf("write annotations to %s: %w", path, err)
 	}
 	return nil
 }
