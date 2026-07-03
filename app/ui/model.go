@@ -296,6 +296,7 @@ type modelConfigState struct {
 	mouseTracking      bool               // true when the session enabled mouse tracking
 	noStatusBar        bool               // hide the status bar
 	noConfirmDiscard   bool               // skip confirmation prompt on discard quit
+	noConfirmReload    bool               // skip confirmation prompt on reload (R)
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
 	treeWidthRatio     int                // 1-10 units for file tree panel
 	tabSpaces          string             // spaces to replace tabs with
@@ -663,6 +664,7 @@ type ModelConfig struct {
 	MouseTracking    bool     // enable mouse tracking for clicks and wheel events
 	NoStatusBar      bool     // hide the status bar
 	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
+	NoConfirmReload  bool     // skip confirmation prompt when dropping annotations on reload
 	Wrap             bool     // enable line wrapping
 	WrapIndent       int      // extra indent (cols) for wrap continuation rows; 0 disables
 	Collapsed        bool     // start in collapsed diff mode
@@ -808,6 +810,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			mouseTracking:      cfg.MouseTracking,
 			noStatusBar:        cfg.NoStatusBar,
 			noConfirmDiscard:   cfg.NoConfirmDiscard,
+			noConfirmReload:    cfg.NoConfirmReload,
 			crossFileHunks:     cfg.CrossFileHunks,
 			treeWidthRatio:     cfg.TreeWidthRatio,
 			tabSpaces:          strings.Repeat(" ", cfg.TabWidth),
@@ -1134,7 +1137,7 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 		m.reload.hint = "Reload not available in stdin mode"
 		return m, nil
 	}
-	if m.store.Count() > 0 && !m.cfg.noStatusBar {
+	if m.store.Count() > 0 && !m.cfg.noStatusBar && !m.cfg.noConfirmReload {
 		m.reload.pending = true
 		m.reload.hint = "Annotations will be dropped — press y to confirm, any other key to cancel"
 		return m, nil

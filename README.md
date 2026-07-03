@@ -345,6 +345,7 @@ Positional arguments support several forms:
 | `--annotation-marker` | Prefix shown before annotation lines, env: `REVDIFF_ANNOTATION_MARKER` | `💬` |
 | `--exit-code-on-annotations` | Exit 10 when annotations are produced, env: `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, config: `exit-code-on-annotations` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
+| `--no-confirm-reload` | Skip confirmation when dropping annotations on reload with R, env: `REVDIFF_NO_CONFIRM_RELOAD` | `false` |
 | `--no-mouse` | Disable mouse support (scroll wheel, click), env: `REVDIFF_NO_MOUSE` | `false` |
 | `--vim-motion` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`), env: `REVDIFF_VIM_MOTION` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |

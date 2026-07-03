@@ -554,6 +554,27 @@ func TestModel_ActionReload_OtherKeyCancels(t *testing.T) {
 	assert.Nil(t, cmd, "no reload command on cancel")
 }
 
+func TestModel_ActionReload_NoConfirmReload_DirectReload(t *testing.T) {
+	store := annotation.NewStore()
+	store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(ref string, staged bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "a.go"}}, nil
+		},
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := testNewModel(t, renderer, store, noopHighlighter(),
+		ModelConfig{ReloadApplicable: true, NoConfirmReload: true})
+	require.True(t, m.cfg.noConfirmReload, "noConfirmReload must be wired from ModelConfig")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+	model := result.(Model)
+	assert.False(t, model.reload.pending, "no confirmation when noConfirmReload is set")
+	assert.Equal(t, "Reloaded", model.reload.hint)
+	assert.Equal(t, 0, store.Count(), "annotations dropped immediately on reload")
+	assert.NotNil(t, cmd, "reload command must be returned")
+}
+
 // TestModel_HandleFilterToggle_TurnsOffWhenNoAnnotations is a regression test
 // for the || m.tree.FilterActive() branch at handlers.go:181.
 // The filter must be toggle-able off even when all annotations have been deleted

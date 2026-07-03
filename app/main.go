@@ -201,6 +201,7 @@ func run(opts options) (int, error) {
 		MouseTracking:        !opts.NoMouse,
 		NoStatusBar:          opts.NoStatusBar,
 		NoConfirmDiscard:     opts.NoConfirmDiscard,
+		NoConfirmReload:      opts.NoConfirmReload,
 		Wrap:                 opts.Wrap,
 		WrapIndent:           opts.WrapIndent,
 		Collapsed:            opts.Collapsed,
