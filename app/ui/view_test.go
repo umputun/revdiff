@@ -1373,12 +1373,12 @@ func TestModel_ReviewedStatusBar(t *testing.T) {
 	assert.NotContains(t, status, "✓ 0")
 
 	// mark one file as reviewed
-	m.tree.ToggleReviewed("a.go")
+	m.tree.SetReviewed("a.go", "fp-a")
 	status = m.statusBarText()
 	assert.Contains(t, status, "✓ 1/3", "status bar should show reviewed progress")
 
 	// mark another
-	m.tree.ToggleReviewed("b.go")
+	m.tree.SetReviewed("b.go", "fp-b")
 	status = m.statusBarText()
 	assert.Contains(t, status, "✓ 2/3")
 }
@@ -1391,7 +1391,7 @@ func TestModel_ReviewedModeIcon(t *testing.T) {
 	assert.Contains(t, icons, "✓", "reviewed icon should always be present")
 
 	// when no files reviewed, icon should use muted color
-	m.tree.ToggleReviewed("a.go")
+	m.tree.SetReviewed("a.go", "fp-a")
 	icons = m.statusModeIcons()
 	assert.Contains(t, icons, "✓", "reviewed icon should be present when files reviewed")
 }

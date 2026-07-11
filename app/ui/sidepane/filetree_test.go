@@ -588,26 +588,65 @@ func TestFileTree_RenderViewportCursorAlwaysVisible(t *testing.T) {
 		"cursor file must be visible after page up")
 }
 
-func TestFileTree_ToggleReviewed(t *testing.T) {
+func TestFileTree_ReviewedState(t *testing.T) {
 	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
 
 	assert.Equal(t, 0, ft.ReviewedCount())
 
-	ft.ToggleReviewed("a.go")
-	assert.True(t, ft.reviewed["a.go"])
+	ft.SetReviewed("a.go", "fp-a")
+	assert.True(t, ft.IsReviewed("a.go"))
+	assert.Equal(t, "fp-a", ft.ReviewedFingerprints()["a.go"])
 	assert.Equal(t, 1, ft.ReviewedCount())
 
-	ft.ToggleReviewed("b.go")
+	ft.SetReviewed("b.go", "fp-b")
 	assert.Equal(t, 2, ft.ReviewedCount())
 
-	// toggle off
-	ft.ToggleReviewed("a.go")
-	assert.False(t, ft.reviewed["a.go"])
+	ft.Unreview("a.go")
+	assert.False(t, ft.IsReviewed("a.go"))
 	assert.Equal(t, 1, ft.ReviewedCount())
 
 	// no-op for empty path
-	ft.ToggleReviewed("")
+	ft.SetReviewed("", "ignored")
+	ft.SetReviewed("c.go", "")
 	assert.Equal(t, 1, ft.ReviewedCount())
+}
+
+func TestFileTree_ReconcileReviewed(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft.SetReviewed("a.go", "same")
+	ft.SetReviewed("b.go", "old")
+	ft.SetReviewed("c.go", "missing")
+
+	before := ft.ReviewedFingerprints()
+	ft.ReconcileReviewed(before, map[string]string{"a.go": "same", "b.go": "new"})
+
+	assert.True(t, ft.IsReviewed("a.go"), "matching fingerprint survives")
+	assert.False(t, ft.IsReviewed("b.go"), "changed fingerprint is cleared")
+	assert.False(t, ft.IsReviewed("c.go"), "missing fingerprint is cleared")
+}
+
+func TestFileTree_ReconcileReviewedPreservesNewMarkAfterSnapshot(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft.SetReviewed("a.go", "old-a")
+	before := ft.ReviewedFingerprints()
+	ft.SetReviewed("b.go", "new-b")
+
+	ft.ReconcileReviewed(before, map[string]string{"a.go": "old-a"})
+
+	assert.True(t, ft.IsReviewed("a.go"))
+	assert.True(t, ft.IsReviewed("b.go"), "mark added after snapshot must not be reconciled as missing")
+	ft.ReconcileReviewedPath("b.go", "changed-b")
+	assert.False(t, ft.IsReviewed("b.go"), "subsequent file load validates the new mark")
+}
+
+func TestFileTree_ReviewedFingerprintsReturnsCopy(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go"))
+	ft.SetReviewed("a.go", "original")
+
+	snapshot := ft.ReviewedFingerprints()
+	snapshot["a.go"] = "mutated"
+
+	assert.Equal(t, "original", ft.ReviewedFingerprints()["a.go"])
 }
 
 func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
@@ -618,11 +657,11 @@ func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
 	result := ft.Render(FileTreeRender{Width: 40, Height: 10, Resolver: res, Renderer: rnd})
 	assert.NotContains(t, result, "✓")
 
-	ft.ToggleReviewed("a.go")
+	ft.SetReviewed("a.go", "fp-a")
 	result = ft.Render(FileTreeRender{Width: 40, Height: 10, Resolver: res, Renderer: rnd})
 	assert.Contains(t, result, "✓")
 
-	ft.ToggleReviewed("b.go")
+	ft.SetReviewed("b.go", "fp-b")
 	annotated := map[string]bool{"b.go": true}
 	result = ft.Render(FileTreeRender{Width: 40, Height: 10, Annotated: annotated, Resolver: res, Renderer: rnd})
 	assert.Contains(t, result, "✓")
@@ -632,7 +671,7 @@ func TestFileTree_RenderReviewedCheckmark(t *testing.T) {
 func TestFileTree_RenderFileEntryRestoresNormalForegroundAfterColoredPrefix(t *testing.T) {
 	ft := NewFileTree([]diff.FileEntry{{Path: "a.go", Status: diff.FileAdded}})
 	ft.cursor = 0 // keep the file unselected so the inline ANSI path is used
-	ft.ToggleReviewed("a.go")
+	ft.SetReviewed("a.go", "fp-a")
 
 	res := style.NewResolver(style.Colors{Normal: "#d0d0d0", AddFg: "#87d787", Muted: "#6c6c6c"})
 	rnd := style.NewRenderer(res)
@@ -666,26 +705,26 @@ func TestFileTree_TruncateDirName(t *testing.T) {
 
 func TestFileTreeRebuild(t *testing.T) {
 	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
-	ft.ToggleReviewed("a.go")
-	ft.ToggleReviewed("b.go")
+	ft.SetReviewed("a.go", "fp-a")
+	ft.SetReviewed("b.go", "fp-b")
 	ft.Move(MotionLast)
 	assert.Equal(t, "c.go", ft.SelectedFile())
 	assert.Equal(t, 2, ft.ReviewedCount())
 
 	t.Run("reviewed map preserved for files still present", func(t *testing.T) {
 		ft.Rebuild(fileEntries("a.go", "b.go", "d.go"))
-		assert.True(t, ft.reviewed["a.go"], "a.go was reviewed and still present")
-		assert.True(t, ft.reviewed["b.go"], "b.go was reviewed and still present")
+		assert.True(t, ft.IsReviewed("a.go"), "a.go was reviewed and still present")
+		assert.True(t, ft.IsReviewed("b.go"), "b.go was reviewed and still present")
 		assert.Equal(t, 2, ft.ReviewedCount())
 	})
 
 	t.Run("reviewed map pruned for removed files", func(t *testing.T) {
-		ft.ToggleReviewed("d.go")
+		ft.SetReviewed("d.go", "fp-d")
 		assert.Equal(t, 3, ft.ReviewedCount())
 		ft.Rebuild(fileEntries("a.go", "e.go"))
-		assert.True(t, ft.reviewed["a.go"], "a.go still present")
-		assert.False(t, ft.reviewed["b.go"], "b.go was removed")
-		assert.False(t, ft.reviewed["d.go"], "d.go was removed")
+		assert.True(t, ft.IsReviewed("a.go"), "a.go still present")
+		assert.False(t, ft.IsReviewed("b.go"), "b.go was removed")
+		assert.False(t, ft.IsReviewed("d.go"), "d.go was removed")
 		assert.Equal(t, 1, ft.ReviewedCount())
 	})
 
@@ -852,5 +891,5 @@ func TestNewFileTree_Nil(t *testing.T) {
 	assert.NotPanics(t, func() { ft.Move(MotionDown) })
 	assert.NotPanics(t, func() { ft.StepFile(DirectionNext) })
 	assert.NotPanics(t, func() { ft.EnsureVisible(10) })
-	assert.NotPanics(t, func() { ft.ToggleReviewed("x.go") })
+	assert.NotPanics(t, func() { ft.SetReviewed("x.go", "fp-x") })
 }

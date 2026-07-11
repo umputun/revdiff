@@ -1,6 +1,7 @@
 package sidepane
 
 import (
+	"maps"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -20,7 +21,7 @@ type FileTree struct {
 	offset       int                        // first visible entry index for viewport scrolling
 	allFiles     []string                   // original full file paths
 	filter       bool                       // when true, show only annotated files
-	reviewed     map[string]bool            // files marked as reviewed by the user
+	reviewed     map[string]string          // semantic diff fingerprint for files marked reviewed
 	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
 	oldPaths     map[string]string          // rename origin keyed by new path, empty for non-renames
 }
@@ -47,7 +48,7 @@ func NewFileTree(entries []diff.FileEntry) *FileTree {
 	paths := diff.FileEntryPaths(entries)
 	ft := &FileTree{
 		allFiles:     paths,
-		reviewed:     make(map[string]bool),
+		reviewed:     make(map[string]string),
 		fileStatuses: make(map[string]diff.FileStatus),
 		oldPaths:     make(map[string]string),
 	}
@@ -106,6 +107,17 @@ func (ft *FileTree) FilterActive() bool {
 // ReviewedCount returns the number of files marked as reviewed.
 func (ft *FileTree) ReviewedCount() int {
 	return len(ft.reviewed)
+}
+
+// ReviewedFingerprints returns a copy of the reviewed path-to-fingerprint map.
+func (ft *FileTree) ReviewedFingerprints() map[string]string {
+	return maps.Clone(ft.reviewed)
+}
+
+// IsReviewed reports whether path is currently marked reviewed.
+func (ft *FileTree) IsReviewed(path string) bool {
+	_, ok := ft.reviewed[path]
+	return ok
 }
 
 // HasFile returns true if there is a file entry in the given direction
@@ -309,15 +321,39 @@ func (ft *FileTree) RefreshFilter(annotatedFiles map[string]bool) {
 	}
 }
 
-// ToggleReviewed toggles the reviewed state of the given file path.
-func (ft *FileTree) ToggleReviewed(path string) {
-	if path == "" {
+// SetReviewed marks path reviewed at the supplied semantic diff fingerprint.
+func (ft *FileTree) SetReviewed(path, fingerprint string) {
+	if path == "" || fingerprint == "" {
 		return
 	}
-	if ft.reviewed[path] {
+	ft.reviewed[path] = fingerprint
+}
+
+// Unreview removes the reviewed mark for path.
+func (ft *FileTree) Unreview(path string) {
+	delete(ft.reviewed, path)
+}
+
+// ReconcileReviewed validates the marks captured when a file-list load began.
+// Marks added or changed after that snapshot are left alone for their subsequent
+// file load to validate.
+func (ft *FileTree) ReconcileReviewed(before, current map[string]string) {
+	for path, reviewedFingerprint := range before {
+		storedFingerprint, stillReviewed := ft.reviewed[path]
+		if !stillReviewed || storedFingerprint != reviewedFingerprint {
+			continue
+		}
+		if currentFingerprint, ok := current[path]; !ok || currentFingerprint != reviewedFingerprint {
+			delete(ft.reviewed, path)
+		}
+	}
+}
+
+// ReconcileReviewedPath validates a reviewed mark when that file's refreshed
+// effective diff is loaded.
+func (ft *FileTree) ReconcileReviewedPath(path, currentFingerprint string) {
+	if reviewedFingerprint, ok := ft.reviewed[path]; ok && reviewedFingerprint != currentFingerprint {
 		delete(ft.reviewed, path)
-	} else {
-		ft.reviewed[path] = true
 	}
 }
 
@@ -409,7 +445,7 @@ func (ft *FileTree) renderFileEntry(e treeEntry, idx, width int, rc renderCtx) s
 	// use raw ANSI fg-only sequences for inline colored elements to avoid
 	// lipgloss \033[0m full reset that breaks outer TreeBg backgrounds.
 	reviewMark := "  "
-	if ft.reviewed[e.path] {
+	if ft.IsReviewed(e.path) {
 		if isSelected {
 			reviewMark = "✓ "
 		} else {

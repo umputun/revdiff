@@ -45,11 +45,14 @@ func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
 	m.layout.focus = paneTree
 	m.tree.Move(sidepane.MotionDown) // cursor -> b.go while the diff pane still shows a.go
 
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = model.Update(cmd())
+	model = result.(Model)
 	assert.Equal(t, 1, model.tree.ReviewedCount(), "space in tree pane should mark selected file (b.go)")
-	// verify it's b.go that's reviewed by toggling it off and checking count drops
-	model.tree.ToggleReviewed("b.go")
+	// verify it's b.go that's reviewed by removing that exact mark
+	model.tree.Unreview("b.go")
 	assert.Equal(t, 0, model.tree.ReviewedCount(), "b.go was the reviewed file")
 }
 
@@ -66,6 +69,52 @@ func TestModel_MarkReviewedFromDiffPane(t *testing.T) {
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	model := result.(Model)
 	assert.Equal(t, 1, model.tree.ReviewedCount(), "space in diff pane should mark currFile as reviewed")
+}
+
+func TestModel_MarkReviewedDropsAsyncResultFromStaleFileList(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.layout.focus = paneTree
+	m.tree.Move(sidepane.MotionDown)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	model.filesLoadSeq++ // another file-list generation starts before the fingerprint returns
+
+	result, _ = model.Update(cmd())
+	model = result.(Model)
+
+	assert.False(t, model.tree.IsReviewed("b.go"))
+	assert.NotContains(t, model.reviewed.pending, "b.go")
+}
+
+func TestModel_MarkReviewedDropsAsyncResultForPathRemovedDuringReload(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.layout.focus = paneTree
+	m.tree.Move(sidepane.MotionDown)
+	m.filesLoadSeq++ // reload begins; the old tree remains visible until filesLoadedMsg arrives
+
+	result, markCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	require.NotNil(t, markCmd)
+	result, _ = model.Update(filesLoadedMsg{
+		seq:     model.filesLoadSeq,
+		entries: []diff.FileEntry{{Path: "a.go"}},
+	})
+	model = result.(Model)
+
+	result, _ = model.Update(markCmd())
+	model = result.(Model)
+
+	assert.False(t, model.tree.IsReviewed("b.go"))
+	assert.Equal(t, 0, model.tree.ReviewedCount())
+	assert.Equal(t, 1, model.tree.TotalFiles())
 }
 
 func TestModel_FKeyFilterToggle(t *testing.T) {

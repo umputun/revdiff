@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -237,8 +238,35 @@ func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 	if file == "" {
 		file = m.tree.SelectedFile()
 	}
-	m.tree.ToggleReviewed(file)
-	return m, nil
+	if file == "" {
+		return m, nil
+	}
+	if m.tree.IsReviewed(file) {
+		m.tree.Unreview(file)
+		delete(m.reviewed.pending, file)
+		return m, nil
+	}
+	if _, pending := m.reviewed.pending[file]; pending {
+		delete(m.reviewed.pending, file)
+		return m, nil
+	}
+	if file == m.file.name {
+		entry := diff.FileEntry{Path: file, OldPath: m.tree.OldPath(file), Status: m.tree.FileStatus(file)}
+		fingerprint := diff.FileFingerprint(entry, m.file.lines)
+		m.reviewed.cache[file] = fingerprint
+		m.tree.SetReviewed(file, fingerprint)
+		return m, nil
+	}
+	if fingerprint := m.reviewed.cache[file]; fingerprint != "" {
+		m.tree.SetReviewed(file, fingerprint)
+		return m, nil
+	}
+
+	m.reviewed.loadSeq++
+	seq := m.reviewed.loadSeq
+	m.reviewed.pending[file] = seq
+	entry := diff.FileEntry{Path: file, OldPath: m.tree.OldPath(file), Status: m.tree.FileStatus(file)}
+	return m, m.loadReviewFingerprint(entry, seq)
 }
 
 // handleFileOrSearchNav handles next/prev item navigation: navigates search matches when a search

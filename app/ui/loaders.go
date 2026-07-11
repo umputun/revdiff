@@ -3,7 +3,9 @@ package ui
 import (
 	"fmt"
 	"log"
+	"maps"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +22,7 @@ import (
 // so handleFilesLoaded can drop stale results from earlier in-flight loads.
 func (m Model) loadFiles() tea.Cmd {
 	seq := m.filesLoadSeq
+	reviewed := m.tree.ReviewedFingerprints()
 	return func() tea.Msg {
 		var warnings []string
 		entries, err := m.diffRenderer.ChangedFiles(m.cfg.ref, m.cfg.staged)
@@ -58,8 +61,77 @@ func (m Model) loadFiles() tea.Cmd {
 				entries = m.mergeUntrackedEntries(entries, ut, renames)
 			}
 		}
-		return filesLoadedMsg{seq: seq, entries: entries, warnings: warnings}
+		fingerprints, fingerprintWarnings := m.loadReviewedFingerprints(entries, reviewed)
+		warnings = append(warnings, fingerprintWarnings...)
+		return filesLoadedMsg{
+			seq:                  seq,
+			entries:              entries,
+			reviewedBefore:       reviewed,
+			reviewedFingerprints: fingerprints,
+			warnings:             warnings,
+		}
 	}
+}
+
+const maxReviewFingerprintWorkers = 4
+
+// loadReviewedFingerprints refreshes identities only for paths that were
+// reviewed before this file-list load. A small worker pool prevents a large
+// review from serializing one VCS process per file without creating unbounded
+// subprocess concurrency.
+func (m Model) loadReviewedFingerprints(entries []diff.FileEntry, reviewed map[string]string) (map[string]string, []string) {
+	current := make(map[string]string, len(reviewed))
+	if len(reviewed) == 0 {
+		return current, nil
+	}
+
+	jobs := make([]diff.FileEntry, 0, len(reviewed))
+	for _, entry := range entries {
+		if _, ok := reviewed[entry.Path]; ok {
+			jobs = append(jobs, entry)
+		}
+	}
+	if len(jobs) == 0 {
+		return current, nil
+	}
+
+	type fingerprintResult struct {
+		path        string
+		fingerprint string
+		err         error
+	}
+	jobCh := make(chan diff.FileEntry, len(jobs))
+	resultCh := make(chan fingerprintResult, len(jobs))
+	for _, entry := range jobs {
+		jobCh <- entry
+	}
+	close(jobCh)
+
+	workers := min(maxReviewFingerprintWorkers, len(jobs))
+	for range workers {
+		go func() {
+			for entry := range jobCh {
+				lines, err := m.fetchEffectiveFileDiff(entry, 0, true)
+				result := fingerprintResult{path: entry.Path, err: err}
+				if err == nil {
+					result.fingerprint = diff.FileFingerprint(entry, lines)
+				}
+				resultCh <- result
+			}
+		}()
+	}
+
+	warnings := make([]string, 0)
+	for range jobs {
+		result := <-resultCh
+		if result.err != nil {
+			warnings = append(warnings, fmt.Sprintf("reviewed fingerprint %s: %v", result.path, result.err))
+			continue
+		}
+		current[result.path] = result.fingerprint
+	}
+	sort.Strings(warnings)
+	return current, warnings
 }
 
 // detectUntrackedRenames pairs untracked renames with their deleted origin. It is a
@@ -142,16 +214,65 @@ func (m Model) loadCommits() tea.Cmd {
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
 	contextLines := m.currentContextLines()
-	oldPath := m.tree.OldPath(file)
+	entry := diff.FileEntry{Path: file, OldPath: m.tree.OldPath(file), Status: m.tree.FileStatus(file)}
 	return func() tea.Msg {
-		lines, err := m.diffRenderer.FileDiff(diff.FileDiffRequest{
-			Ref:          m.cfg.ref,
-			Path:         file,
-			OldPath:      oldPath,
-			Staged:       m.cfg.staged,
-			ContextLines: contextLines,
-		})
-		return fileLoadedMsg{file: file, oldName: oldPath, seq: seq, lines: lines, err: err}
+		lines, err := m.fetchEffectiveFileDiff(entry, contextLines, false)
+		return fileLoadedMsg{file: file, oldName: entry.OldPath, seq: seq, lines: lines, resolved: true, err: err}
+	}
+}
+
+// fetchEffectiveFileDiff applies the same staged-only and untracked fallbacks
+// used by the visible diff. Fingerprints call this helper too, so review state
+// is always based on the content revdiff would actually display.
+func (m Model) fetchEffectiveFileDiff(entry diff.FileEntry, contextLines int, strict bool) ([]diff.DiffLine, error) {
+	req := diff.FileDiffRequest{
+		Ref:          m.cfg.ref,
+		Path:         entry.Path,
+		OldPath:      entry.OldPath,
+		Staged:       m.cfg.staged,
+		ContextLines: contextLines,
+	}
+	lines, err := m.diffRenderer.FileDiff(req)
+	if err != nil {
+		return lines, fmt.Errorf("load effective diff %s: %w", entry.Path, err)
+	}
+	if len(lines) > 0 {
+		return lines, nil
+	}
+
+	if !m.cfg.staged && entry.Status == diff.FileAdded {
+		req.Staged = true
+		if cachedLines, cachedErr := m.diffRenderer.FileDiff(req); cachedErr != nil {
+			return cachedLines, fmt.Errorf("load staged effective diff %s: %w", entry.Path, cachedErr)
+		} else if len(cachedLines) > 0 {
+			return cachedLines, nil
+		}
+	}
+	if m.cfg.workDir != "" && entry.Status == diff.FileUntracked {
+		added, readErr := diff.ReadFileAsAdded(filepath.Join(m.cfg.workDir, entry.Path))
+		if readErr != nil && !strict {
+			log.Printf("[WARN] read untracked file %s: %v", entry.Path, readErr)
+			return nil, nil
+		}
+		if readErr != nil {
+			return added, fmt.Errorf("read untracked file %s: %w", entry.Path, readErr)
+		}
+		return added, nil
+	}
+	return lines, nil
+}
+
+// loadReviewFingerprint fetches a semantic identity for a tree selection that
+// was marked before its normal visible diff load completed.
+func (m Model) loadReviewFingerprint(entry diff.FileEntry, seq uint64) tea.Cmd {
+	filesSeq := m.filesLoadSeq
+	return func() tea.Msg {
+		lines, err := m.fetchEffectiveFileDiff(entry, 0, true)
+		msg := reviewFingerprintLoadedMsg{path: entry.Path, seq: seq, filesSeq: filesSeq, err: err}
+		if err == nil {
+			msg.fingerprint = diff.FileFingerprint(entry, lines)
+		}
+		return msg
 	}
 }
 
@@ -224,6 +345,9 @@ func (m *Model) triggerReload() tea.Cmd {
 	m.review.statsLoaded = false
 	m.review.statsRequested = false
 	m.review.statsLoadSeq++ // invalidate any in-flight stats fetch
+	m.reviewed.loadSeq++
+	m.reviewed.cache = make(map[string]string)
+	m.reviewed.pending = make(map[string]uint64)
 	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
@@ -256,7 +380,14 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.layout.viewport.SetContent("no files match --only filter")
 		return m, statsCmd
 	}
+	// Pending marks were started against the previous tree. Cancel them before
+	// applying this file-list snapshot so a late fingerprint cannot reintroduce
+	// a path that the refreshed list removed.
+	m.reviewed.pending = make(map[string]uint64)
 	m.tree.Rebuild(entries)
+	m.tree.ReconcileReviewed(msg.reviewedBefore, msg.reviewedFingerprints)
+	m.reviewed.cache = make(map[string]string, len(msg.reviewedFingerprints))
+	maps.Copy(m.reviewed.cache, msg.reviewedFingerprints)
 	if m.tree.FilterActive() {
 		m.tree.RefreshFilter(m.annotatedFiles())
 	}
@@ -321,7 +452,13 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.file.name = msg.file
 	m.file.oldName = msg.oldName
 	m.file.lines = msg.lines
-	m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
+	if !msg.resolved {
+		m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
+	}
+	entry := diff.FileEntry{Path: msg.file, OldPath: m.tree.OldPath(msg.file), Status: m.tree.FileStatus(msg.file)}
+	fingerprint := diff.FileFingerprint(entry, m.file.lines)
+	m.reviewed.cache[msg.file] = fingerprint
+	m.tree.ReconcileReviewedPath(msg.file, fingerprint)
 	m.invalidateAnnotationRows()
 	m.clearSearch()
 	m.computeFileStats()
@@ -380,6 +517,24 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.layout.viewport.GotoTop()
 	return m, blameCmd
+}
+
+func (m Model) handleReviewFingerprintLoaded(msg reviewFingerprintLoadedMsg) (tea.Model, tea.Cmd) {
+	seq, pending := m.reviewed.pending[msg.path]
+	if !pending || seq != msg.seq {
+		return m, nil
+	}
+	delete(m.reviewed.pending, msg.path)
+	if msg.filesSeq != m.filesLoadSeq {
+		return m, nil
+	}
+	if msg.err != nil {
+		log.Printf("[WARN] fingerprint reviewed file %s: %v", msg.path, msg.err)
+		return m, nil
+	}
+	m.reviewed.cache[msg.path] = msg.fingerprint
+	m.tree.SetReviewed(msg.path, msg.fingerprint)
+	return m, nil
 }
 
 // resolveEmptyDiff populates m.file.lines when git diff returns empty.
