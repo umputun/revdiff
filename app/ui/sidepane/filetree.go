@@ -304,7 +304,7 @@ func (ft *FileTree) ToggleUnreviewedFilter() {
 	} else {
 		ft.entries = ft.buildEntries(ft.allFiles)
 	}
-	ft.selectAfterRebuild("")
+	ft.selectAfterRebuild("", "")
 }
 
 // RefreshUnreviewedFilter rebuilds the unreviewed-only view after reviewed
@@ -315,8 +315,9 @@ func (ft *FileTree) RefreshUnreviewedFilter() {
 		return
 	}
 	previous := ft.SelectedFile()
+	next := ft.nextUnreviewedAfterCursor()
 	ft.entries = ft.buildEntries(ft.unreviewedFiles())
-	ft.selectAfterRebuild(previous)
+	ft.selectAfterRebuild(previous, next)
 }
 
 // RefreshFilter rebuilds the filtered tree if the filter is active, preserving cursor position.
@@ -434,29 +435,16 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 	return b.String()
 }
 
-// selectAfterRebuild restores previous when it is still visible. If a newly
-// reviewed file disappeared, it selects the next visible file in source order,
-// falling back to the first visible file.
-func (ft *FileTree) selectAfterRebuild(previous string) {
+// selectAfterRebuild restores previous when it is still visible, then tries
+// preferred, and finally falls back to the first visible file.
+func (ft *FileTree) selectAfterRebuild(previous, preferred string) {
 	ft.cursor = 0
 	ft.offset = 0
 	if previous != "" && ft.SelectByPath(previous) {
 		return
 	}
-	if previous != "" {
-		previousIdx := slices.Index(ft.allFiles, previous)
-		visible := make(map[string]struct{}, len(ft.entries))
-		for _, entry := range ft.entries {
-			if !entry.isDir {
-				visible[entry.path] = struct{}{}
-			}
-		}
-		for _, path := range ft.allFiles[previousIdx+1:] {
-			if _, ok := visible[path]; ok {
-				ft.SelectByPath(path)
-				return
-			}
-		}
+	if preferred != "" && ft.SelectByPath(preferred) {
+		return
 	}
 	for i, e := range ft.entries {
 		if !e.isDir {
@@ -464,6 +452,18 @@ func (ft *FileTree) selectAfterRebuild(previous string) {
 			return
 		}
 	}
+}
+
+// nextUnreviewedAfterCursor follows the rendered tree order, which can differ
+// from the renderer-provided allFiles order after directory grouping.
+func (ft *FileTree) nextUnreviewedAfterCursor() string {
+	start := min(max(ft.cursor+1, 0), len(ft.entries))
+	for _, entry := range ft.entries[start:] {
+		if !entry.isDir && !ft.IsReviewed(entry.path) {
+			return entry.path
+		}
+	}
+	return ""
 }
 
 // buildEntries groups files by directory and creates a flat entry list.

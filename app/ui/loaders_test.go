@@ -1832,3 +1832,30 @@ func TestModel_LoadFilesPreservesMarkAddedAfterReviewedSnapshot(t *testing.T) {
 
 	assert.True(t, m.tree.IsReviewed(entry.Path), "fresh mark must survive reconciliation of the older snapshot")
 }
+
+func TestModel_FilesReloadPreservesUnreviewedAutoAdvanceSelection(t *testing.T) {
+	entries := []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}}
+	lines := []diff.DiffLine{{Content: "changed", ChangeType: diff.ChangeAdd}}
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return lines, nil },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{})
+	m.tree.Rebuild(entries)
+	m.tree.ToggleUnreviewedFilter()
+	require.True(t, m.tree.SelectByPath("b.go"))
+	m.file.name = "b.go"
+	m.file.lines = lines
+
+	reloadCmd := m.loadFiles() // captures reviewed state before b.go is marked
+	result, advanceCmd := m.handleMarkReviewed()
+	m = result.(Model)
+	require.NotNil(t, advanceCmd)
+	require.Equal(t, "c.go", m.tree.SelectedFile())
+
+	result, followupCmd := m.Update(reloadCmd())
+	m = result.(Model)
+
+	assert.Equal(t, "c.go", m.tree.SelectedFile(), "reload must not jump back to the first unreviewed file")
+	assert.NotNil(t, followupCmd, "reload should issue a fresh load for the preserved selection")
+}

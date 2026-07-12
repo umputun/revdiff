@@ -188,6 +188,18 @@ func TestFileTree_ToggleUnreviewedFilter(t *testing.T) {
 	assert.Equal(t, "a.go", ft.SelectedFile())
 }
 
+func TestFileTree_UnreviewedAdvanceFollowsDisplayOrder(t *testing.T) {
+	// Renderer order differs from the tree's directory-grouped display order:
+	// b.go, a/c.go, a/d.go.
+	ft := NewFileTree(fileEntries("a/c.go", "b.go", "a/d.go"))
+	ft.ToggleUnreviewedFilter()
+	require.Equal(t, "b.go", ft.SelectedFile())
+
+	ft.SetReviewed("b.go", "fp-b")
+
+	assert.Equal(t, "a/c.go", ft.SelectedFile(), "advance should follow the next file on screen")
+}
+
 func TestFileTree_UnreviewedAndAnnotatedFiltersAreExclusive(t *testing.T) {
 	ft := NewFileTree(fileEntries("a.go", "b.go"))
 	ft.ToggleUnreviewedFilter()
