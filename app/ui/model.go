@@ -578,12 +578,11 @@ type Model struct {
 
 // fileLoadedMsg is sent when a file's diff has been loaded.
 type fileLoadedMsg struct {
-	file     string
-	oldName  string // rename origin of the file, empty for non-renames
-	seq      uint64
-	lines    []diff.DiffLine
-	resolved bool // true when effective staged/untracked fallbacks were already applied
-	err      error
+	file    string
+	oldName string // rename origin of the file, empty for non-renames
+	seq     uint64
+	lines   []diff.DiffLine
+	err     error
 }
 
 // reviewFingerprintLoadedMsg is sent when mark_reviewed had to fetch a file's

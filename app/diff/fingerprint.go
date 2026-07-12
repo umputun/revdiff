@@ -52,6 +52,19 @@ func FileFingerprint(entry FileEntry, lines []DiffLine) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// ReviewFingerprintStable reports whether the rendered diff exposes enough
+// content to compare fingerprints across reloads. Binary and placeholder rows
+// are opaque: their display text may stay identical while the underlying file
+// changes, so their reviewed mark is conservatively cleared on reload.
+func ReviewFingerprintStable(lines []DiffLine) bool {
+	for _, line := range lines {
+		if line.IsBinary || line.IsPlaceholder {
+			return false
+		}
+	}
+	return true
+}
+
 // writeFingerprintField uses length-prefix framing so distinct field sequences
 // cannot collide through delimiter-like file content.
 func writeFingerprintField(h hash.Hash, value string) {

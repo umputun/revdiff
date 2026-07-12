@@ -99,7 +99,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `model.go` | Model struct, sub-state structs, `NewModel`, `Init`, `Update`, `handleKey`, interfaces |
 | `view.go` | `View()`, status bar rendering, ANSI helpers |
 | `handlers.go` | Modal handlers (enter/esc, discard, filter, reviewed), help spec |
-| `loaders.go` | Async file/blame loading, loaded-message handlers, data helpers |
+| `loaders.go` | Async file/blame loading, reviewed-fingerprint reconciliation, loaded-message handlers, data helpers |
 | `diffview.go` | Diff line rendering, gutters, line styling, search highlights |
 | `diffnav.go` | Cursor movement, hunk navigation, viewport sync, horizontal scroll |
 | `scrollbar.go` | Vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
@@ -143,7 +143,7 @@ Three main types:
 ### app/ui/sidepane/ — left-pane navigation
 
 Two independent component types, both with cursor/offset management, rendering, and keyboard navigation:
-- **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), filtering (annotated-only), reviewed tracking, directory grouping
+- **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), filtering (annotated-only), semantic-fingerprint reviewed tracking, directory grouping. File-list reloads revalidate only paths reviewed before the load; marks added during the load are reconciled when that file's refreshed diff arrives.
 - **`TOC`** — markdown table-of-contents. Activated for single-file full-context markdown. Active section tracking, header-level navigation
 
 Both constructed via factory closures in `main.go`, consumed through `FileTreeComponent`/`TOCComponent` interfaces.

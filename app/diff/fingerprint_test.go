@@ -52,3 +52,9 @@ func TestFileFingerprintContextOnlySource(t *testing.T) {
 	assert.NotEqual(t, FileFingerprint(entry, first), FileFingerprint(entry, second))
 	assert.Equal(t, FileFingerprint(entry, first), FileFingerprint(entry, append(first, DiffLine{ChangeType: ChangeDivider, Content: "ignored"})))
 }
+
+func TestReviewFingerprintStable(t *testing.T) {
+	assert.True(t, ReviewFingerprintStable([]DiffLine{{Content: "text", ChangeType: ChangeAdd}}))
+	assert.False(t, ReviewFingerprintStable([]DiffLine{{Content: BinaryPlaceholder, IsBinary: true}}))
+	assert.False(t, ReviewFingerprintStable([]DiffLine{{Content: "(broken symlink)", IsPlaceholder: true}}))
+}

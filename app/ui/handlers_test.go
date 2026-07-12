@@ -117,6 +117,59 @@ func TestModel_MarkReviewedDropsAsyncResultForPathRemovedDuringReload(t *testing
 	assert.Equal(t, 1, model.tree.TotalFiles())
 }
 
+func TestModel_MarkReviewedKeepsAsyncResultForPathSurvivingReload(t *testing.T) {
+	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines, "b.go": lines})
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.layout.focus = paneTree
+	m.tree.Move(sidepane.MotionDown)
+	m.filesLoadSeq++
+
+	result, markCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model := result.(Model)
+	require.NotNil(t, markCmd)
+	result, _ = model.Update(filesLoadedMsg{
+		seq:     model.filesLoadSeq,
+		entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}},
+	})
+	model = result.(Model)
+	require.Contains(t, model.reviewed.pending, "b.go")
+
+	result, _ = model.Update(markCmd())
+	model = result.(Model)
+
+	assert.True(t, model.tree.IsReviewed("b.go"))
+}
+
+func TestModel_HandleReviewFingerprintLoadedGuards(t *testing.T) {
+	t.Run("stale per-path sequence is ignored", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.reviewed.pending["a.go"] = 2
+
+		result, _ := m.Update(reviewFingerprintLoadedMsg{path: "a.go", seq: 1, filesSeq: m.filesLoadSeq, fingerprint: "stale"})
+		model := result.(Model)
+
+		assert.False(t, model.tree.IsReviewed("a.go"))
+		assert.Equal(t, uint64(2), model.reviewed.pending["a.go"])
+	})
+
+	t.Run("load error clears pending without marking", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.tree = testNewFileTree([]string{"a.go"})
+		m.reviewed.pending["a.go"] = 1
+
+		result, _ := m.Update(reviewFingerprintLoadedMsg{
+			path: "a.go", seq: 1, filesSeq: m.filesLoadSeq, err: errors.New("diff unavailable"),
+		})
+		model := result.(Model)
+
+		assert.False(t, model.tree.IsReviewed("a.go"))
+		assert.NotContains(t, model.reviewed.pending, "a.go")
+	})
+}
+
 func TestModel_FKeyFilterToggle(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
 	m.tree = testNewFileTree([]string{"a.go", "b.go"})

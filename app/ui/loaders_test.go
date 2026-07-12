@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1749,28 +1750,65 @@ func TestModel_LoadFilesReconcilesReviewedFingerprints(t *testing.T) {
 
 		assert.False(t, model.tree.IsReviewed("a.go"))
 	})
+
+	t.Run("opaque binary diff clears reviewed state", func(t *testing.T) {
+		binary := []diff.DiffLine{{Content: diff.BinaryPlaceholder, IsBinary: true}}
+		m := setup(t, []diff.FileEntry{entry}, func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			return binary, nil
+		})
+		m.tree.SetReviewed(entry.Path, diff.FileFingerprint(entry, binary))
+
+		result, _ := m.Update(m.loadFiles()())
+		model := result.(Model)
+
+		assert.False(t, model.tree.IsReviewed("a.go"))
+	})
 }
 
 func TestModel_LoadFilesFingerprintsOnlyReviewedPaths(t *testing.T) {
 	entries := []diff.FileEntry{
 		{Path: "a.go", Status: diff.FileModified},
 		{Path: "b.go", Status: diff.FileModified},
+		{Path: "c.go", Status: diff.FileModified},
+		{Path: "d.go", Status: diff.FileModified},
+		{Path: "e.go", Status: diff.FileModified},
+		{Path: "unreviewed.go", Status: diff.FileModified},
 	}
+	var mu sync.Mutex
 	var requested []string
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return entries, nil },
 		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			mu.Lock()
 			requested = append(requested, req.Path)
+			mu.Unlock()
 			return []diff.DiffLine{{Content: req.Path, ChangeType: diff.ChangeAdd}}, nil
 		},
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{})
 	m.tree.Rebuild(entries)
-	m.tree.SetReviewed("a.go", "old-fingerprint")
+	for _, path := range []string{"a.go", "b.go", "c.go", "d.go", "e.go"} {
+		m.tree.SetReviewed(path, "old-fingerprint")
+	}
 
 	_ = m.loadFiles()()
 
-	assert.Equal(t, []string{"a.go"}, requested)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.ElementsMatch(t, []string{"a.go", "b.go", "c.go", "d.go", "e.go"}, requested)
+}
+
+func TestModel_FetchEffectiveFileDiffStrictUntrackedError(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{WorkDir: t.TempDir()})
+
+	_, err := m.fetchEffectiveFileDiff(diff.FileEntry{Path: "missing.bin", Status: diff.FileUntracked}, 0, true)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read untracked file missing.bin")
 }
 
 func TestModel_LoadFilesPreservesMarkAddedAfterReviewedSnapshot(t *testing.T) {

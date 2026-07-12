@@ -98,6 +98,7 @@ func (m Model) loadReviewedFingerprints(entries []diff.FileEntry, reviewed map[s
 	type fingerprintResult struct {
 		path        string
 		fingerprint string
+		stable      bool
 		err         error
 	}
 	jobCh := make(chan diff.FileEntry, len(jobs))
@@ -115,6 +116,7 @@ func (m Model) loadReviewedFingerprints(entries []diff.FileEntry, reviewed map[s
 				result := fingerprintResult{path: entry.Path, err: err}
 				if err == nil {
 					result.fingerprint = diff.FileFingerprint(entry, lines)
+					result.stable = diff.ReviewFingerprintStable(lines)
 				}
 				resultCh <- result
 			}
@@ -126,6 +128,9 @@ func (m Model) loadReviewedFingerprints(entries []diff.FileEntry, reviewed map[s
 		result := <-resultCh
 		if result.err != nil {
 			warnings = append(warnings, fmt.Sprintf("reviewed fingerprint %s: %v", result.path, result.err))
+			continue
+		}
+		if !result.stable {
 			continue
 		}
 		current[result.path] = result.fingerprint
@@ -217,7 +222,7 @@ func (m Model) loadFileDiff(file string) tea.Cmd {
 	entry := diff.FileEntry{Path: file, OldPath: m.tree.OldPath(file), Status: m.tree.FileStatus(file)}
 	return func() tea.Msg {
 		lines, err := m.fetchEffectiveFileDiff(entry, contextLines, false)
-		return fileLoadedMsg{file: file, oldName: entry.OldPath, seq: seq, lines: lines, resolved: true, err: err}
+		return fileLoadedMsg{file: file, oldName: entry.OldPath, seq: seq, lines: lines, err: err}
 	}
 }
 
@@ -242,9 +247,11 @@ func (m Model) fetchEffectiveFileDiff(entry diff.FileEntry, contextLines int, st
 
 	if !m.cfg.staged && entry.Status == diff.FileAdded {
 		req.Staged = true
-		if cachedLines, cachedErr := m.diffRenderer.FileDiff(req); cachedErr != nil {
+		cachedLines, cachedErr := m.diffRenderer.FileDiff(req)
+		if cachedErr != nil {
 			return cachedLines, fmt.Errorf("load staged effective diff %s: %w", entry.Path, cachedErr)
-		} else if len(cachedLines) > 0 {
+		}
+		if len(cachedLines) > 0 {
 			return cachedLines, nil
 		}
 	}
@@ -380,10 +387,18 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.layout.viewport.SetContent("no files match --only filter")
 		return m, statsCmd
 	}
-	// Pending marks were started against the previous tree. Cancel them before
-	// applying this file-list snapshot so a late fingerprint cannot reintroduce
-	// a path that the refreshed list removed.
-	m.reviewed.pending = make(map[string]uint64)
+	// Pending marks were started against the previous tree. Keep requests for
+	// surviving paths, but cancel removed ones so a late fingerprint cannot
+	// reintroduce an invisible reviewed entry.
+	present := make(map[string]struct{}, len(entries))
+	for _, entry := range entries {
+		present[entry.Path] = struct{}{}
+	}
+	for path := range m.reviewed.pending {
+		if _, ok := present[path]; !ok {
+			delete(m.reviewed.pending, path)
+		}
+	}
 	m.tree.Rebuild(entries)
 	m.tree.ReconcileReviewed(msg.reviewedBefore, msg.reviewedFingerprints)
 	m.reviewed.cache = make(map[string]string, len(msg.reviewedFingerprints))
@@ -452,9 +467,6 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.file.name = msg.file
 	m.file.oldName = msg.oldName
 	m.file.lines = msg.lines
-	if !msg.resolved {
-		m.resolveEmptyDiff(msg.file, m.tree.FileStatus(msg.file))
-	}
 	entry := diff.FileEntry{Path: msg.file, OldPath: m.tree.OldPath(msg.file), Status: m.tree.FileStatus(msg.file)}
 	fingerprint := diff.FileFingerprint(entry, m.file.lines)
 	m.reviewed.cache[msg.file] = fingerprint
@@ -535,33 +547,6 @@ func (m Model) handleReviewFingerprintLoaded(msg reviewFingerprintLoadedMsg) (te
 	m.reviewed.cache[msg.path] = msg.fingerprint
 	m.tree.SetReviewed(msg.path, msg.fingerprint)
 	return m, nil
-}
-
-// resolveEmptyDiff populates m.file.lines when git diff returns empty.
-// For staged-only FileAdded files (new files in the index), retries with --cached.
-// For untracked files, reads from disk as all-added lines.
-func (m *Model) resolveEmptyDiff(file string, fileStatus diff.FileStatus) {
-	if len(m.file.lines) > 0 {
-		return
-	}
-	// staged-only files: retry with git diff --cached
-	if !m.cfg.staged && fileStatus == diff.FileAdded && m.diffRenderer != nil {
-		req := diff.FileDiffRequest{Ref: m.cfg.ref, Path: file, OldPath: m.tree.OldPath(file), Staged: true, ContextLines: m.currentContextLines()}
-		if cachedLines, err := m.diffRenderer.FileDiff(req); err == nil && len(cachedLines) > 0 {
-			m.file.lines = cachedLines
-			return
-		}
-	}
-	// untracked files: read from disk as all-added lines
-	if m.cfg.workDir != "" && fileStatus == diff.FileUntracked {
-		added, err := diff.ReadFileAsAdded(filepath.Join(m.cfg.workDir, file))
-		if err != nil {
-			log.Printf("[WARN] read untracked file %s: %v", file, err)
-		}
-		if len(added) > 0 {
-			m.file.lines = added
-		}
-	}
 }
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.
