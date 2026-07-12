@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.11.0 - 2026-07-12
+
+### New Features
+
+- filter unreviewed files (F key) #257 @melonamin
+
+### Improvements
+
+- reset reviewed files when their diffs change #256 @melonamin
+
 ## v1.10.0 - 2026-07-03
 
 ### New Features
