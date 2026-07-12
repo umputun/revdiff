@@ -21,6 +21,7 @@ type FileTree struct {
 	offset       int                        // first visible entry index for viewport scrolling
 	allFiles     []string                   // original full file paths
 	filter       bool                       // when true, show only annotated files
+	unreviewed   bool                       // when true, show only files not marked reviewed
 	reviewed     map[string]string          // semantic diff fingerprint for files marked reviewed
 	fileStatuses map[string]diff.FileStatus // file change status from git, empty for non-git
 	oldPaths     map[string]string          // rename origin keyed by new path, empty for non-renames
@@ -102,6 +103,12 @@ func (ft *FileTree) OldPath(path string) string {
 // FilterActive returns true when the file tree is showing only annotated files.
 func (ft *FileTree) FilterActive() bool {
 	return ft.filter
+}
+
+// UnreviewedFilterActive returns true when the file tree is showing only
+// files that have not been marked reviewed.
+func (ft *FileTree) UnreviewedFilterActive() bool {
+	return ft.unreviewed
 }
 
 // ReviewedCount returns the number of files marked as reviewed.
@@ -215,8 +222,8 @@ func (ft *FileTree) EnsureVisible(height int) {
 // Rebuild rebuilds the file tree from new entries in-place.
 // preserves reviewed map (pruned to files still present), resets cursor/offset,
 // positions cursor on first file entry, and preserves filter state.
-// entries are rebuilt from all files regardless of filter flag;
-// call RefreshFilter afterward when FilterActive returns true.
+// entries are rebuilt from all files regardless of filter flags; callers
+// refresh whichever filter is active after reviewed state is reconciled.
 func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	paths := diff.FileEntryPaths(entries)
 	ft.allFiles = paths
@@ -270,6 +277,7 @@ func (ft *FileTree) ToggleFilter(annotatedFiles map[string]bool) {
 			ft.filter = false // nothing to filter, stay on all
 			return
 		}
+		ft.unreviewed = false
 		ft.entries = ft.buildEntries(filtered)
 	} else {
 		ft.entries = ft.buildEntries(ft.allFiles)
@@ -283,6 +291,32 @@ func (ft *FileTree) ToggleFilter(annotatedFiles map[string]bool) {
 			return
 		}
 	}
+}
+
+// ToggleUnreviewedFilter switches between showing all files and only files
+// that have not been marked reviewed. It is mutually exclusive with the
+// annotated-only filter.
+func (ft *FileTree) ToggleUnreviewedFilter() {
+	ft.unreviewed = !ft.unreviewed
+	if ft.unreviewed {
+		ft.filter = false
+		ft.entries = ft.buildEntries(ft.unreviewedFiles())
+	} else {
+		ft.entries = ft.buildEntries(ft.allFiles)
+	}
+	ft.selectAfterRebuild("")
+}
+
+// RefreshUnreviewedFilter rebuilds the unreviewed-only view after reviewed
+// state changes, keeping the current file when possible and otherwise moving
+// forward to the next unfinished file.
+func (ft *FileTree) RefreshUnreviewedFilter() {
+	if !ft.unreviewed {
+		return
+	}
+	previous := ft.SelectedFile()
+	ft.entries = ft.buildEntries(ft.unreviewedFiles())
+	ft.selectAfterRebuild(previous)
 }
 
 // RefreshFilter rebuilds the filtered tree if the filter is active, preserving cursor position.
@@ -327,11 +361,13 @@ func (ft *FileTree) SetReviewed(path, fingerprint string) {
 		return
 	}
 	ft.reviewed[path] = fingerprint
+	ft.RefreshUnreviewedFilter()
 }
 
 // Unreview removes the reviewed mark for path.
 func (ft *FileTree) Unreview(path string) {
 	delete(ft.reviewed, path)
+	ft.RefreshUnreviewedFilter()
 }
 
 // ReconcileReviewed validates the marks captured when a file-list load began.
@@ -347,6 +383,7 @@ func (ft *FileTree) ReconcileReviewed(before, current map[string]string) {
 			delete(ft.reviewed, path)
 		}
 	}
+	ft.RefreshUnreviewedFilter()
 }
 
 // ReconcileReviewedPath validates a reviewed mark when that file's refreshed
@@ -354,6 +391,7 @@ func (ft *FileTree) ReconcileReviewed(before, current map[string]string) {
 func (ft *FileTree) ReconcileReviewedPath(path, currentFingerprint string) {
 	if reviewedFingerprint, ok := ft.reviewed[path]; ok && reviewedFingerprint != currentFingerprint {
 		delete(ft.reviewed, path)
+		ft.RefreshUnreviewedFilter()
 	}
 }
 
@@ -367,6 +405,9 @@ func (ft *FileTree) ScrollState() ScrollState {
 // it adjusts the internal offset so the cursor stays within the visible window.
 func (ft *FileTree) Render(r FileTreeRender) string {
 	if len(ft.entries) == 0 {
+		if ft.unreviewed && len(ft.allFiles) > 0 {
+			return "  all files reviewed"
+		}
 		return "  no changed files"
 	}
 
@@ -391,6 +432,38 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 		}
 	}
 	return b.String()
+}
+
+// selectAfterRebuild restores previous when it is still visible. If a newly
+// reviewed file disappeared, it selects the next visible file in source order,
+// falling back to the first visible file.
+func (ft *FileTree) selectAfterRebuild(previous string) {
+	ft.cursor = 0
+	ft.offset = 0
+	if previous != "" && ft.SelectByPath(previous) {
+		return
+	}
+	if previous != "" {
+		previousIdx := slices.Index(ft.allFiles, previous)
+		visible := make(map[string]struct{}, len(ft.entries))
+		for _, entry := range ft.entries {
+			if !entry.isDir {
+				visible[entry.path] = struct{}{}
+			}
+		}
+		for _, path := range ft.allFiles[previousIdx+1:] {
+			if _, ok := visible[path]; ok {
+				ft.SelectByPath(path)
+				return
+			}
+		}
+	}
+	for i, e := range ft.entries {
+		if !e.isDir {
+			ft.cursor = i
+			return
+		}
+	}
 }
 
 // buildEntries groups files by directory and creates a flat entry list.
@@ -506,6 +579,16 @@ func (ft *FileTree) filterFiles(annotatedFiles map[string]bool) []string {
 	for _, f := range ft.allFiles {
 		if annotatedFiles[f] {
 			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+func (ft *FileTree) unreviewedFiles() []string {
+	filtered := make([]string, 0, len(ft.allFiles))
+	for _, path := range ft.allFiles {
+		if !ft.IsReviewed(path) {
+			filtered = append(filtered, path)
 		}
 	}
 	return filtered

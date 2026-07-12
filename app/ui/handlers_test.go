@@ -35,6 +35,36 @@ func TestModel_MarkReviewedFromTreePane(t *testing.T) {
 	assert.Equal(t, 0, model.tree.ReviewedCount(), "space should unmark reviewed file")
 }
 
+func TestModel_UnreviewedFilterAdvancesAsFilesAreReviewed(t *testing.T) {
+	lines := map[string][]diff.DiffLine{
+		"a.go": {{NewNum: 1, Content: "a", ChangeType: diff.ChangeAdd}},
+		"b.go": {{NewNum: 1, Content: "b", ChangeType: diff.ChangeAdd}},
+	}
+	m := testModel([]string{"a.go", "b.go"}, lines)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.file.lines = lines["a.go"]
+	m.layout.focus = paneTree
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	model := result.(Model)
+	require.True(t, model.tree.UnreviewedFilterActive())
+
+	result, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	model = result.(Model)
+	assert.True(t, model.tree.IsReviewed("a.go"))
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
+	require.NotNil(t, cmd, "advancing to the next unreviewed file loads its diff")
+
+	msg := cmd()
+	loaded, ok := msg.(fileLoadedMsg)
+	require.True(t, ok)
+	assert.Equal(t, "b.go", loaded.file)
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	assert.False(t, result.(Model).tree.UnreviewedFilterActive())
+}
+
 func TestModel_MarkReviewedFromTreePaneUsesSelectedFile(t *testing.T) {
 	lines := []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{

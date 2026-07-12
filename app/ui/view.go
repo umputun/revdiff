@@ -440,6 +440,10 @@ func (m Model) statusModeIcons() string {
 		icon   string
 		active bool
 	}
+	reviewIcon := "✓"
+	if m.tree.UnreviewedFilterActive() {
+		reviewIcon = "○"
+	}
 	indicators := []indicator{
 		{"▼", m.modes.collapsed.enabled},
 		{"⊂", m.modes.compact},
@@ -450,7 +454,7 @@ func (m Model) statusModeIcons() string {
 		{"#", m.modes.lineNumbers},
 		{"b", m.modes.showBlame},
 		{"±", m.modes.wordDiff},
-		{"✓", m.tree.ReviewedCount() > 0},
+		{reviewIcon, m.tree.ReviewedCount() > 0 || m.tree.UnreviewedFilterActive()},
 		{"∅", m.modes.showUntracked},
 	}
 

@@ -1394,6 +1394,10 @@ func TestModel_ReviewedModeIcon(t *testing.T) {
 	m.tree.SetReviewed("a.go", "fp-a")
 	icons = m.statusModeIcons()
 	assert.Contains(t, icons, "✓", "reviewed icon should be present when files reviewed")
+
+	m.tree.ToggleUnreviewedFilter()
+	icons = m.statusModeIcons()
+	assert.Contains(t, icons, "○", "unreviewed filter replaces the reviewed marker with its active state")
 }
 
 func TestModel_ViewOutput(t *testing.T) {

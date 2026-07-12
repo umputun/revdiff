@@ -58,6 +58,7 @@ const (
 	ActionToggleHunk       Action = "toggle_hunk"
 	ActionToggleUntracked  Action = "toggle_untracked"
 	ActionMarkReviewed     Action = "mark_reviewed"
+	ActionFilterUnreviewed Action = "filter_unreviewed"
 	ActionFilter           Action = "filter"
 	ActionQuit             Action = "quit"
 	ActionDiscardQuit      Action = "discard_quit"
@@ -88,7 +89,7 @@ var validActions = map[Action]bool{
 	ActionNextAnnotation: true, ActionPrevAnnotation: true,
 	ActionToggleCollapsed: true, ActionToggleCompact: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
-	ActionMarkReviewed: true, ActionFilter: true, ActionToggleUntracked: true,
+	ActionMarkReviewed: true, ActionFilterUnreviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
 	ActionInfo:             true,
 	ActionReload:           true,
@@ -235,6 +236,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionToggleHunk, "toggle hunk in collapsed", "View"},
 		{ActionToggleUntracked, "show/hide untracked files", "View"},
 		{ActionMarkReviewed, "mark file as reviewed", "View"},
+		{ActionFilterUnreviewed, "show unreviewed files", "View"},
 		{ActionFilter, "filter files", "View"},
 		{ActionThemeSelect, "theme selector", "View"},
 		{ActionInfo, "show review info popup", "View"},
@@ -293,6 +295,7 @@ func defaultBindings() map[string]Action {
 		"W":      ActionToggleWordDiff,
 		".":      ActionToggleHunk,
 		" ":      ActionMarkReviewed,
+		"F":      ActionFilterUnreviewed,
 		"u":      ActionToggleUntracked,
 		"f":      ActionFilter,
 		"q":      ActionQuit,

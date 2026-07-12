@@ -198,6 +198,8 @@ type FileTreeComponent interface {
 	OldPath(path string) string
 	// FilterActive returns true when the file tree is showing only annotated files.
 	FilterActive() bool
+	// UnreviewedFilterActive returns true when only unreviewed files are visible.
+	UnreviewedFilterActive() bool
 	// ReviewedCount returns the number of files marked as reviewed.
 	ReviewedCount() int
 	// ReviewedFingerprints returns a copy of reviewed paths and their semantic diff identities.
@@ -222,8 +224,12 @@ type FileTreeComponent interface {
 	Rebuild(entries []diff.FileEntry)
 	// ToggleFilter toggles between showing all files and only annotated files.
 	ToggleFilter(annotated map[string]bool)
+	// ToggleUnreviewedFilter toggles between all files and unreviewed files.
+	ToggleUnreviewedFilter()
 	// RefreshFilter updates the filtered view with the current annotation state.
 	RefreshFilter(annotated map[string]bool)
+	// RefreshUnreviewedFilter updates the view after reviewed state changes.
+	RefreshUnreviewedFilter()
 	// SetReviewed marks a path reviewed at the supplied semantic diff identity.
 	SetReviewed(path, fingerprint string)
 	// Unreview removes the reviewed mark for a path.
@@ -1035,6 +1041,8 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keymap.ActionFilter:
 		return m.handleFilterToggle()
+	case keymap.ActionFilterUnreviewed:
+		return m.handleUnreviewedFilterToggle()
 	case keymap.ActionNextItem:
 		return m.handleFileOrSearchNav(true)
 	case keymap.ActionPrevItem:

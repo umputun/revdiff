@@ -729,7 +729,7 @@ Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_
 
 Press `O` to write the current annotations to the `--output` file without exiting (`flush_output` — rebindable). This keeps revdiff open while handing the file to an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session. Each flush overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit. `O` requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
 
-Press `Space` to mark the focused file reviewed. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
+Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
 
 **View:**
 
@@ -745,6 +745,7 @@ Press `Space` to mark the focused file reviewed. On `R` reload, revdiff keeps th
 | `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
 | `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only (shown when annotations exist) |
+| `F` | Toggle filter: all files / unreviewed only |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle info popup — review scope (mode, VCS, ref, filters, file/status counts, aggregate `+/-` stats) plus the commit log for the current ref range when applicable |
 | `R` | Reload diff from VCS (warns if annotations exist) |
@@ -766,7 +767,7 @@ The status bar shows a fixed row of mode indicators on the right side. All slots
 | `#` | `L` | Line numbers visible in gutter |
 | `b` | `B` | Blame gutter visible |
 | `±` | `W` | Intra-line word-diff highlighting |
-| `✓` | `Space` | Reviewed count (revalidated on reload) |
+| `✓` / `○` | `Space` / `F` | Reviewed files / unreviewed-only filter active |
 | `∅` | `u` | Untracked files visible in tree |
 
 On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.
@@ -846,7 +847,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`, `open_editor`, `next_annotation`, `prev_annotation`, `flush_output`
 
-**View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `info`, `reload`
+**View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `filter_unreviewed`, `theme_select`, `filter`, `info`, `reload`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 

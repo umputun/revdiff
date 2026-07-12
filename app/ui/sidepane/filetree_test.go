@@ -170,6 +170,49 @@ func TestFileTree_ToggleFilterNoAnnotations(t *testing.T) {
 	assert.False(t, ft.FilterActive())
 }
 
+func TestFileTree_ToggleUnreviewedFilter(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go"))
+	ft.SetReviewed("a.go", "fp-a")
+
+	ft.ToggleUnreviewedFilter()
+	assert.True(t, ft.UnreviewedFilterActive())
+	assert.Equal(t, "b.go", ft.SelectedFile())
+	assert.True(t, ft.HasFile(DirectionNext))
+
+	ft.SetReviewed("b.go", "fp-b")
+	assert.Equal(t, "c.go", ft.SelectedFile(), "marking reviewed advances to the next unfinished file")
+	assert.False(t, ft.HasFile(DirectionNext))
+
+	ft.ToggleUnreviewedFilter()
+	assert.False(t, ft.UnreviewedFilterActive())
+	assert.Equal(t, "a.go", ft.SelectedFile())
+}
+
+func TestFileTree_UnreviewedAndAnnotatedFiltersAreExclusive(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go"))
+	ft.ToggleUnreviewedFilter()
+	require.True(t, ft.UnreviewedFilterActive())
+
+	ft.ToggleFilter(map[string]bool{"a.go": true})
+	assert.True(t, ft.FilterActive())
+	assert.False(t, ft.UnreviewedFilterActive())
+
+	ft.ToggleUnreviewedFilter()
+	assert.True(t, ft.UnreviewedFilterActive())
+	assert.False(t, ft.FilterActive())
+}
+
+func TestFileTree_UnreviewedFilterEmptyState(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go"))
+	ft.SetReviewed("a.go", "fp-a")
+	ft.ToggleUnreviewedFilter()
+
+	res := style.NewResolver(style.Colors{})
+	rnd := style.NewRenderer(res)
+	result := ft.Render(FileTreeRender{Width: 30, Height: 10, Resolver: res, Renderer: rnd})
+	assert.Contains(t, result, "all files reviewed")
+}
+
 func TestFileTree_Render(t *testing.T) {
 	ft := NewFileTree(fileEntries("internal/handler.go", "main.go"))
 	ft.cursor = 1 // select handler.go

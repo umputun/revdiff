@@ -406,6 +406,9 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.tree.FilterActive() {
 		m.tree.RefreshFilter(m.annotatedFiles())
 	}
+	if m.tree.UnreviewedFilterActive() {
+		m.tree.RefreshUnreviewedFilter()
+	}
 	if m.file.name != "" {
 		m.tree.SelectByPath(m.file.name)
 	}
@@ -546,7 +549,7 @@ func (m Model) handleReviewFingerprintLoaded(msg reviewFingerprintLoadedMsg) (te
 	}
 	m.reviewed.cache[msg.path] = msg.fingerprint
 	m.tree.SetReviewed(msg.path, msg.fingerprint)
-	return m, nil
+	return m.loadSelectedIfChanged()
 }
 
 // handleBlameLoaded processes asynchronously loaded blame data for a file.

@@ -228,6 +228,19 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleUnreviewedFilterToggle toggles the sidebar between all files and files
+// still awaiting review. It is unavailable in single-file mode.
+func (m Model) handleUnreviewedFilterToggle() (tea.Model, tea.Cmd) {
+	if m.file.singleFile {
+		return m, nil
+	}
+	m.pendingAnnotJump = nil
+	m.nav.pendingHunkJump = nil
+	m.tree.ToggleUnreviewedFilter()
+	m.tree.EnsureVisible(m.treePageSize())
+	return m.loadSelectedIfChanged()
+}
+
 // handleMarkReviewed toggles the reviewed state of the focused file.
 // tree focus uses the selected row; diff/TOC focus uses the displayed file.
 func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
@@ -244,7 +257,7 @@ func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 	if m.tree.IsReviewed(file) {
 		m.tree.Unreview(file)
 		delete(m.reviewed.pending, file)
-		return m, nil
+		return m.loadSelectedIfChanged()
 	}
 	if _, pending := m.reviewed.pending[file]; pending {
 		delete(m.reviewed.pending, file)
@@ -255,11 +268,11 @@ func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 		fingerprint := diff.FileFingerprint(entry, m.file.lines)
 		m.reviewed.cache[file] = fingerprint
 		m.tree.SetReviewed(file, fingerprint)
-		return m, nil
+		return m.loadSelectedIfChanged()
 	}
 	if fingerprint := m.reviewed.cache[file]; fingerprint != "" {
 		m.tree.SetReviewed(file, fingerprint)
-		return m, nil
+		return m.loadSelectedIfChanged()
 	}
 
 	m.reviewed.loadSeq++
