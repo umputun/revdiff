@@ -200,6 +200,58 @@ func TestFileTree_UnreviewedAdvanceFollowsDisplayOrder(t *testing.T) {
 	assert.Equal(t, "a/c.go", ft.SelectedFile(), "advance should follow the next file on screen")
 }
 
+func TestFileTree_UnreviewedAdvancePreservesVisibleRow(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go"))
+	ft.ToggleUnreviewedFilter()
+
+	for range 7 {
+		ft.Move(MotionDown)
+	}
+	ft.EnsureVisible(5)
+	ft.Move(MotionUp)
+	ft.Move(MotionUp)
+	require.Equal(t, "f.go", ft.SelectedFile())
+	require.Equal(t, 2, ft.cursor-ft.offset, "selected file starts in the middle of the viewport")
+
+	ft.SetReviewed("f.go", "fp-f")
+	ft.EnsureVisible(5)
+
+	assert.Equal(t, "g.go", ft.SelectedFile(), "marking reviewed advances to the next unfinished file")
+	assert.Equal(t, 2, ft.cursor-ft.offset, "next file should stay on the same visible row")
+}
+
+func TestFileTree_EnableUnreviewedFilterPreservesVisibleSelection(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go"))
+	ft.SetReviewed("a.go", "fp-a")
+	ft.SetReviewed("b.go", "fp-b")
+	require.True(t, ft.SelectByPath("h.go"))
+	ft.EnsureVisible(5)
+	ft.Move(MotionUp)
+	ft.Move(MotionUp)
+	require.Equal(t, "f.go", ft.SelectedFile())
+	require.Equal(t, 2, ft.cursor-ft.offset, "selected file starts in the middle of the viewport")
+
+	ft.ToggleUnreviewedFilter()
+	ft.EnsureVisible(5)
+
+	assert.Equal(t, "f.go", ft.SelectedFile())
+	assert.Equal(t, 2, ft.cursor-ft.offset, "filter toggle should keep the selected file on the same row")
+}
+
+func TestFileTree_EnableUnreviewedFilterWithoutAnchorResetsViewport(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go"))
+	require.True(t, ft.SelectByPath("h.go"))
+	ft.EnsureVisible(5)
+	require.Positive(t, ft.offset)
+	ft.SetReviewed("h.go", "fp-h")
+
+	ft.ToggleUnreviewedFilter()
+
+	assert.Equal(t, "a.go", ft.SelectedFile())
+	assert.Zero(t, ft.offset, "fallback selection should reset the viewport")
+	assert.Equal(t, "./", ft.entries[ft.offset].name, "the root header should remain visible")
+}
+
 func TestFileTree_UnreviewedAndAnnotatedFiltersAreExclusive(t *testing.T) {
 	ft := NewFileTree(fileEntries("a.go", "b.go"))
 	ft.ToggleUnreviewedFilter()
@@ -223,6 +275,21 @@ func TestFileTree_UnreviewedFilterEmptyState(t *testing.T) {
 	rnd := style.NewRenderer(res)
 	result := ft.Render(FileTreeRender{Width: 30, Height: 10, Resolver: res, Renderer: rnd})
 	assert.Contains(t, result, "all files reviewed")
+}
+
+func TestFileTree_UnreviewedFilterEmptyStateResetsOffset(t *testing.T) {
+	paths := []string{"a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go"}
+	ft := NewFileTree(fileEntries(paths...))
+	ft.ToggleUnreviewedFilter()
+	require.True(t, ft.SelectByPath("h.go"))
+	ft.EnsureVisible(5)
+	require.Positive(t, ft.offset)
+
+	for _, path := range paths {
+		ft.SetReviewed(path, "fp-"+path)
+	}
+
+	assert.Equal(t, ScrollState{Total: 0, Offset: 0}, ft.ScrollState())
 }
 
 func TestFileTree_Render(t *testing.T) {

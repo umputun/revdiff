@@ -219,12 +219,23 @@ func (ft *FileTree) EnsureVisible(height int) {
 	ensureVisible(&ft.cursor, &ft.offset, len(ft.entries), height)
 }
 
+func (ft *FileTree) visibleRow() int {
+	return ft.cursor - ft.offset
+}
+
 // Rebuild rebuilds the file tree from new entries in-place.
-// preserves reviewed map (pruned to files still present), resets cursor/offset,
-// positions cursor on first file entry, and preserves filter state.
+// preserves reviewed map (pruned to files still present), filter state, and the
+// selected file's visible row for the unreviewed filter. Other rebuilds reset
+// the cursor and offset to the first file entry.
 // entries are rebuilt from all files regardless of filter flags; callers
 // refresh whichever filter is active after reviewed state is reconciled.
 func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
+	selected, visibleRow := "", 0
+	if ft.unreviewed {
+		selected = ft.SelectedFile()
+		visibleRow = ft.visibleRow()
+	}
+
 	paths := diff.FileEntryPaths(entries)
 	ft.allFiles = paths
 
@@ -257,15 +268,8 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	// without annotated map here — refreshFilter will be called separately if needed
 	ft.entries = ft.buildEntries(paths)
 
-	// reset cursor/offset and position on first file entry
-	ft.cursor = 0
-	ft.offset = 0
-	for i, e := range ft.entries {
-		if !e.isDir {
-			ft.cursor = i
-			break
-		}
-	}
+	// This temporary unfiltered anchor is load-bearing: it carries the visible row into RefreshUnreviewedFilter.
+	ft.selectAfterRebuild(selected, "", visibleRow)
 }
 
 // ToggleFilter switches between showing all files and only annotated files.
@@ -297,14 +301,17 @@ func (ft *FileTree) ToggleFilter(annotatedFiles map[string]bool) {
 // that have not been marked reviewed. It is mutually exclusive with the
 // annotated-only filter.
 func (ft *FileTree) ToggleUnreviewedFilter() {
+	previous := ft.SelectedFile()
+	visibleRow := ft.visibleRow()
 	ft.unreviewed = !ft.unreviewed
 	if ft.unreviewed {
 		ft.filter = false
 		ft.entries = ft.buildEntries(ft.unreviewedFiles())
-	} else {
-		ft.entries = ft.buildEntries(ft.allFiles)
+		ft.selectAfterRebuild(previous, "", visibleRow)
+		return
 	}
-	ft.selectAfterRebuild("", "")
+	ft.entries = ft.buildEntries(ft.allFiles)
+	ft.selectAfterRebuild("", "", 0)
 }
 
 // RefreshUnreviewedFilter rebuilds the unreviewed-only view after reviewed
@@ -316,8 +323,9 @@ func (ft *FileTree) RefreshUnreviewedFilter() {
 	}
 	previous := ft.SelectedFile()
 	next := ft.nextUnreviewedAfterCursor()
+	visibleRow := ft.visibleRow()
 	ft.entries = ft.buildEntries(ft.unreviewedFiles())
-	ft.selectAfterRebuild(previous, next)
+	ft.selectAfterRebuild(previous, next, visibleRow)
 }
 
 // RefreshFilter rebuilds the filtered tree if the filter is active, preserving cursor position.
@@ -436,16 +444,24 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 }
 
 // selectAfterRebuild restores previous when it is still visible, then tries
-// preferred, and finally falls back to the first visible file.
-func (ft *FileTree) selectAfterRebuild(previous, preferred string) {
+// preferred, and finally resets to the first visible file. Anchored selections
+// preserve their row in the viewport.
+func (ft *FileTree) selectAfterRebuild(previous, preferred string, visibleRow int) {
 	ft.cursor = 0
-	ft.offset = 0
+	if len(ft.entries) == 0 {
+		ft.offset = 0
+		return
+	}
+	visibleRow = max(visibleRow, 0)
 	if previous != "" && ft.SelectByPath(previous) {
+		ft.offset = max(ft.cursor-visibleRow, 0)
 		return
 	}
 	if preferred != "" && ft.SelectByPath(preferred) {
+		ft.offset = max(ft.cursor-visibleRow, 0)
 		return
 	}
+	ft.offset = 0
 	for i, e := range ft.entries {
 		if !e.isDir {
 			ft.cursor = i

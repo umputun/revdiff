@@ -399,18 +399,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 			delete(m.reviewed.pending, path)
 		}
 	}
-	// Preserve the visible selection across a reload. In unreviewed-only mode
-	// the displayed diff may still be the file that was just hidden while its
-	// auto-advance load is in flight, so m.file.name cannot restore the intended
-	// next selection below.
-	selectedBeforeRebuild := ""
-	if m.tree.UnreviewedFilterActive() {
-		selectedBeforeRebuild = m.tree.SelectedFile()
-	}
 	m.tree.Rebuild(entries)
-	if selectedBeforeRebuild != "" {
-		m.tree.SelectByPath(selectedBeforeRebuild)
-	}
 	m.tree.ReconcileReviewed(msg.reviewedBefore, msg.reviewedFingerprints)
 	m.reviewed.cache = make(map[string]string, len(msg.reviewedFingerprints))
 	maps.Copy(m.reviewed.cache, msg.reviewedFingerprints)

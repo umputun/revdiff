@@ -1859,3 +1859,69 @@ func TestModel_FilesReloadPreservesUnreviewedAutoAdvanceSelection(t *testing.T) 
 	assert.Equal(t, "c.go", m.tree.SelectedFile(), "reload must not jump back to the first unreviewed file")
 	assert.NotNil(t, followupCmd, "reload should issue a fresh load for the preserved selection")
 }
+
+func TestModel_FilesReloadPreservesUnreviewedScrollOffset(t *testing.T) {
+	entries := []diff.FileEntry{
+		{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}, {Path: "d.go"}, {Path: "e.go"},
+		{Path: "f.go"}, {Path: "g.go"}, {Path: "h.go"}, {Path: "i.go"},
+	}
+	m := testModel(nil, nil)
+	m.tree.Rebuild(entries)
+	m.tree.SetReviewed("a.go", "fp-a")
+	m.tree.SetReviewed("b.go", "fp-b")
+	reviewed := map[string]string{"a.go": "fp-a", "b.go": "fp-b"}
+	m.tree.ToggleUnreviewedFilter()
+	require.True(t, m.tree.SelectByPath("h.go"))
+	m.tree.EnsureVisible(5)
+	m.tree.Move(sidepane.MotionUp)
+	m.tree.Move(sidepane.MotionUp)
+	require.Equal(t, "f.go", m.tree.SelectedFile())
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Equal(t, "f.go", m.tree.SelectedFile(), "selected file starts in the middle of the viewport")
+
+	m.file.name = "f.go"
+	for range 3 {
+		m.triggerReload()
+		result, _ := m.Update(filesLoadedMsg{
+			seq: m.filesLoadSeq, entries: entries,
+			reviewedBefore: reviewed, reviewedFingerprints: reviewed,
+		})
+		m = result.(Model)
+		m.tree.EnsureVisible(5)
+
+		assert.Equal(t, "f.go", m.tree.SelectedFile())
+		require.True(t, m.tree.SelectByVisibleRow(2))
+		require.Equal(t, "f.go", m.tree.SelectedFile(), "repeated reloads should keep the selected file on the same row")
+	}
+}
+
+func TestModel_FilesReloadPreservesVisibleRowWhenFilesAboveChange(t *testing.T) {
+	entries := []diff.FileEntry{
+		{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}, {Path: "d.go"}, {Path: "e.go"},
+		{Path: "f.go"}, {Path: "g.go"}, {Path: "h.go"}, {Path: "i.go"},
+	}
+	m := testModel(nil, nil)
+	m.tree.Rebuild(entries)
+	m.tree.ToggleUnreviewedFilter()
+	require.True(t, m.tree.SelectByPath("h.go"))
+	m.tree.EnsureVisible(5)
+	m.tree.Move(sidepane.MotionUp)
+	m.tree.Move(sidepane.MotionUp)
+	require.Equal(t, "f.go", m.tree.SelectedFile())
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Equal(t, "f.go", m.tree.SelectedFile(), "selected file starts in the middle of the viewport")
+
+	m.file.name = "f.go"
+	m.triggerReload()
+	reloaded := []diff.FileEntry{
+		{Path: "a.go"}, {Path: "d.go"}, {Path: "e.go"}, {Path: "f.go"},
+		{Path: "g.go"}, {Path: "h.go"}, {Path: "i.go"},
+	}
+	result, _ := m.Update(filesLoadedMsg{seq: m.filesLoadSeq, entries: reloaded})
+	m = result.(Model)
+	m.tree.EnsureVisible(5)
+
+	assert.Equal(t, "f.go", m.tree.SelectedFile())
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Equal(t, "f.go", m.tree.SelectedFile(), "reload should preserve the row when files above disappear")
+}
