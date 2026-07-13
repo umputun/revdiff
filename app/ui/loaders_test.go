@@ -1867,22 +1867,32 @@ func TestModel_FilesReloadPreservesUnreviewedScrollOffset(t *testing.T) {
 	}
 	m := testModel(nil, nil)
 	m.tree.Rebuild(entries)
+	m.tree.SetReviewed("a.go", "fp-a")
+	m.tree.SetReviewed("b.go", "fp-b")
+	reviewed := map[string]string{"a.go": "fp-a", "b.go": "fp-b"}
 	m.tree.ToggleUnreviewedFilter()
 	require.True(t, m.tree.SelectByPath("h.go"))
 	m.tree.EnsureVisible(5)
 	m.tree.Move(sidepane.MotionUp)
 	m.tree.Move(sidepane.MotionUp)
 	require.Equal(t, "f.go", m.tree.SelectedFile())
-	before := m.tree.ScrollState().Offset
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Equal(t, "f.go", m.tree.SelectedFile(), "selected file starts in the middle of the viewport")
 
 	m.file.name = "f.go"
-	m.triggerReload()
-	result, _ := m.Update(filesLoadedMsg{seq: m.filesLoadSeq, entries: entries})
-	m = result.(Model)
-	m.tree.EnsureVisible(5)
+	for range 3 {
+		m.triggerReload()
+		result, _ := m.Update(filesLoadedMsg{
+			seq: m.filesLoadSeq, entries: entries,
+			reviewedBefore: reviewed, reviewedFingerprints: reviewed,
+		})
+		m = result.(Model)
+		m.tree.EnsureVisible(5)
 
-	assert.Equal(t, "f.go", m.tree.SelectedFile())
-	assert.Equal(t, before, m.tree.ScrollState().Offset, "reload should keep the selected file on the same visible row")
+		assert.Equal(t, "f.go", m.tree.SelectedFile())
+		require.True(t, m.tree.SelectByVisibleRow(2))
+		require.Equal(t, "f.go", m.tree.SelectedFile(), "repeated reloads should keep the selected file on the same row")
+	}
 }
 
 func TestModel_FilesReloadPreservesVisibleRowWhenFilesAboveChange(t *testing.T) {
@@ -1898,7 +1908,8 @@ func TestModel_FilesReloadPreservesVisibleRowWhenFilesAboveChange(t *testing.T) 
 	m.tree.Move(sidepane.MotionUp)
 	m.tree.Move(sidepane.MotionUp)
 	require.Equal(t, "f.go", m.tree.SelectedFile())
-	before := m.tree.SelectedVisibleRow()
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Equal(t, "f.go", m.tree.SelectedFile(), "selected file starts in the middle of the viewport")
 
 	m.file.name = "f.go"
 	m.triggerReload()
@@ -1911,5 +1922,6 @@ func TestModel_FilesReloadPreservesVisibleRowWhenFilesAboveChange(t *testing.T) 
 	m.tree.EnsureVisible(5)
 
 	assert.Equal(t, "f.go", m.tree.SelectedFile())
-	assert.Equal(t, before, m.tree.SelectedVisibleRow(), "reload should preserve the row when files above disappear")
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Equal(t, "f.go", m.tree.SelectedFile(), "reload should preserve the row when files above disappear")
 }
