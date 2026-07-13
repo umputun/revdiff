@@ -224,22 +224,19 @@ func (ft *FileTree) SelectedVisibleRow() int {
 	return ft.cursor - ft.offset
 }
 
-// SelectByPathAtVisibleRow selects path and adjusts the offset to place it on row.
-func (ft *FileTree) SelectByPathAtVisibleRow(path string, row int) bool {
-	if !ft.SelectByPath(path) {
-		return false
-	}
-	ft.offset = max(ft.cursor-max(row, 0), 0)
-	return true
-}
-
 // Rebuild rebuilds the file tree from new entries in-place.
-// preserves reviewed map (pruned to files still present), resets the cursor,
-// positions it on the first file entry, and preserves filter state. The offset
-// is also preserved for the unreviewed filter so reloads retain visual context.
+// preserves reviewed map (pruned to files still present), filter state, and the
+// selected file's visible row for the unreviewed filter. Other rebuilds reset
+// the cursor and offset to the first file entry.
 // entries are rebuilt from all files regardless of filter flags; callers
 // refresh whichever filter is active after reviewed state is reconciled.
 func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
+	selected, visibleRow := "", 0
+	if ft.unreviewed {
+		selected = ft.SelectedFile()
+		visibleRow = ft.SelectedVisibleRow()
+	}
+
 	paths := diff.FileEntryPaths(entries)
 	ft.allFiles = paths
 
@@ -272,17 +269,18 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	// without annotated map here — refreshFilter will be called separately if needed
 	ft.entries = ft.buildEntries(paths)
 
-	// reset cursor and position on first file entry. Preserve the unreviewed
-	// viewport across reloads; EnsureVisible will clamp it after filtering.
+	// reset cursor and offset, then restore the unreviewed viewport anchor when
+	// its selected file survived the rebuild.
 	ft.cursor = 0
-	if !ft.unreviewed || len(ft.entries) == 0 {
-		ft.offset = 0
-	}
+	ft.offset = 0
 	for i, e := range ft.entries {
 		if !e.isDir {
 			ft.cursor = i
 			break
 		}
+	}
+	if selected != "" && ft.SelectByPath(selected) {
+		ft.offset = max(ft.cursor-max(visibleRow, 0), 0)
 	}
 }
 

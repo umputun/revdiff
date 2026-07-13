@@ -222,8 +222,6 @@ type FileTreeComponent interface {
 	EnsureVisible(height int)
 	// SelectedVisibleRow returns the selected entry's row relative to the viewport.
 	SelectedVisibleRow() int
-	// SelectByPathAtVisibleRow selects path and adjusts the offset to place it on row.
-	SelectByPathAtVisibleRow(path string, row int) bool
 	// Rebuild rebuilds the file tree from new entries in-place.
 	Rebuild(entries []diff.FileEntry)
 	// ToggleFilter toggles between showing all files and only annotated files.
