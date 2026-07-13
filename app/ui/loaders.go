@@ -404,12 +404,14 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 	// auto-advance load is in flight, so m.file.name cannot restore the intended
 	// next selection below.
 	selectedBeforeRebuild := ""
+	selectedVisibleRow := 0
 	if m.tree.UnreviewedFilterActive() {
 		selectedBeforeRebuild = m.tree.SelectedFile()
+		selectedVisibleRow = m.tree.SelectedVisibleRow()
 	}
 	m.tree.Rebuild(entries)
 	if selectedBeforeRebuild != "" {
-		m.tree.SelectByPath(selectedBeforeRebuild)
+		m.tree.SelectByPathAtVisibleRow(selectedBeforeRebuild, selectedVisibleRow)
 	}
 	m.tree.ReconcileReviewed(msg.reviewedBefore, msg.reviewedFingerprints)
 	m.reviewed.cache = make(map[string]string, len(msg.reviewedFingerprints))

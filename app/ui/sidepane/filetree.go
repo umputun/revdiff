@@ -219,6 +219,20 @@ func (ft *FileTree) EnsureVisible(height int) {
 	ensureVisible(&ft.cursor, &ft.offset, len(ft.entries), height)
 }
 
+// SelectedVisibleRow returns the selected entry's row relative to the viewport.
+func (ft *FileTree) SelectedVisibleRow() int {
+	return ft.cursor - ft.offset
+}
+
+// SelectByPathAtVisibleRow selects path and adjusts the offset to place it on row.
+func (ft *FileTree) SelectByPathAtVisibleRow(path string, row int) bool {
+	if !ft.SelectByPath(path) {
+		return false
+	}
+	ft.offset = max(ft.cursor-max(row, 0), 0)
+	return true
+}
+
 // Rebuild rebuilds the file tree from new entries in-place.
 // preserves reviewed map (pruned to files still present), resets the cursor,
 // positions it on the first file entry, and preserves filter state. The offset
@@ -440,8 +454,8 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 }
 
 // selectAfterRebuild restores previous when it is still visible, then tries
-// preferred, and finally falls back to the first visible file. The viewport
-// offset is preserved so EnsureVisible only scrolls when the selection is hidden.
+// preferred, and finally resets to the first visible file. Anchored selections
+// preserve the offset so EnsureVisible only scrolls when they are hidden.
 func (ft *FileTree) selectAfterRebuild(previous, preferred string) {
 	ft.cursor = 0
 	if len(ft.entries) == 0 {
@@ -454,6 +468,7 @@ func (ft *FileTree) selectAfterRebuild(previous, preferred string) {
 	if preferred != "" && ft.SelectByPath(preferred) {
 		return
 	}
+	ft.offset = 0
 	for i, e := range ft.entries {
 		if !e.isDir {
 			ft.cursor = i

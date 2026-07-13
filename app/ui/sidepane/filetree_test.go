@@ -220,6 +220,19 @@ func TestFileTree_UnreviewedAdvancePreservesVisibleRow(t *testing.T) {
 	assert.Equal(t, 2, ft.cursor-ft.offset, "next file should stay on the same visible row")
 }
 
+func TestFileTree_ToggleUnreviewedFilterResetsScrolledViewport(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go"))
+	require.True(t, ft.SelectByPath("h.go"))
+	ft.EnsureVisible(5)
+	require.Positive(t, ft.offset)
+
+	ft.ToggleUnreviewedFilter()
+	ft.EnsureVisible(5)
+
+	assert.Equal(t, "a.go", ft.SelectedFile())
+	assert.Zero(t, ft.offset, "toggle should restore the directory header at the top")
+}
+
 func TestFileTree_UnreviewedAndAnnotatedFiltersAreExclusive(t *testing.T) {
 	ft := NewFileTree(fileEntries("a.go", "b.go"))
 	ft.ToggleUnreviewedFilter()
