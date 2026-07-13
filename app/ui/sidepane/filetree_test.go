@@ -238,6 +238,20 @@ func TestFileTree_EnableUnreviewedFilterPreservesVisibleSelection(t *testing.T) 
 	assert.Equal(t, 2, ft.cursor-ft.offset, "filter toggle should keep the selected file on the same row")
 }
 
+func TestFileTree_EnableUnreviewedFilterWithoutAnchorResetsViewport(t *testing.T) {
+	ft := NewFileTree(fileEntries("a.go", "b.go", "c.go", "d.go", "e.go", "f.go", "g.go", "h.go", "i.go"))
+	require.True(t, ft.SelectByPath("h.go"))
+	ft.EnsureVisible(5)
+	require.Positive(t, ft.offset)
+	ft.SetReviewed("h.go", "fp-h")
+
+	ft.ToggleUnreviewedFilter()
+
+	assert.Equal(t, "a.go", ft.SelectedFile())
+	assert.Zero(t, ft.offset, "fallback selection should reset the viewport")
+	assert.Equal(t, "./", ft.entries[ft.offset].name, "the root header should remain visible")
+}
+
 func TestFileTree_UnreviewedAndAnnotatedFiltersAreExclusive(t *testing.T) {
 	ft := NewFileTree(fileEntries("a.go", "b.go"))
 	ft.ToggleUnreviewedFilter()

@@ -219,6 +219,10 @@ func (ft *FileTree) EnsureVisible(height int) {
 	ensureVisible(&ft.cursor, &ft.offset, len(ft.entries), height)
 }
 
+func (ft *FileTree) visibleRow() int {
+	return ft.cursor - ft.offset
+}
+
 // Rebuild rebuilds the file tree from new entries in-place.
 // preserves reviewed map (pruned to files still present), filter state, and the
 // selected file's visible row for the unreviewed filter. Other rebuilds reset
@@ -229,7 +233,7 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	selected, visibleRow := "", 0
 	if ft.unreviewed {
 		selected = ft.SelectedFile()
-		visibleRow = ft.cursor - ft.offset
+		visibleRow = ft.visibleRow()
 	}
 
 	paths := diff.FileEntryPaths(entries)
@@ -264,6 +268,7 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	// without annotated map here — refreshFilter will be called separately if needed
 	ft.entries = ft.buildEntries(paths)
 
+	// This temporary unfiltered anchor is load-bearing: it carries the visible row into RefreshUnreviewedFilter.
 	ft.selectAfterRebuild(selected, "", visibleRow)
 }
 
@@ -297,7 +302,7 @@ func (ft *FileTree) ToggleFilter(annotatedFiles map[string]bool) {
 // annotated-only filter.
 func (ft *FileTree) ToggleUnreviewedFilter() {
 	previous := ft.SelectedFile()
-	visibleRow := ft.cursor - ft.offset
+	visibleRow := ft.visibleRow()
 	ft.unreviewed = !ft.unreviewed
 	if ft.unreviewed {
 		ft.filter = false
@@ -318,7 +323,7 @@ func (ft *FileTree) RefreshUnreviewedFilter() {
 	}
 	previous := ft.SelectedFile()
 	next := ft.nextUnreviewedAfterCursor()
-	visibleRow := ft.cursor - ft.offset
+	visibleRow := ft.visibleRow()
 	ft.entries = ft.buildEntries(ft.unreviewedFiles())
 	ft.selectAfterRebuild(previous, next, visibleRow)
 }
