@@ -220,8 +220,9 @@ func (ft *FileTree) EnsureVisible(height int) {
 }
 
 // Rebuild rebuilds the file tree from new entries in-place.
-// preserves reviewed map (pruned to files still present), resets cursor/offset,
-// positions cursor on first file entry, and preserves filter state.
+// preserves reviewed map (pruned to files still present), resets the cursor,
+// positions it on the first file entry, and preserves filter state. The offset
+// is also preserved for the unreviewed filter so reloads retain visual context.
 // entries are rebuilt from all files regardless of filter flags; callers
 // refresh whichever filter is active after reviewed state is reconciled.
 func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
@@ -257,9 +258,12 @@ func (ft *FileTree) Rebuild(entries []diff.FileEntry) {
 	// without annotated map here — refreshFilter will be called separately if needed
 	ft.entries = ft.buildEntries(paths)
 
-	// reset cursor/offset and position on first file entry
+	// reset cursor and position on first file entry. Preserve the unreviewed
+	// viewport across reloads; EnsureVisible will clamp it after filtering.
 	ft.cursor = 0
-	ft.offset = 0
+	if !ft.unreviewed || len(ft.entries) == 0 {
+		ft.offset = 0
+	}
 	for i, e := range ft.entries {
 		if !e.isDir {
 			ft.cursor = i
@@ -436,10 +440,14 @@ func (ft *FileTree) Render(r FileTreeRender) string {
 }
 
 // selectAfterRebuild restores previous when it is still visible, then tries
-// preferred, and finally falls back to the first visible file.
+// preferred, and finally falls back to the first visible file. The viewport
+// offset is preserved so EnsureVisible only scrolls when the selection is hidden.
 func (ft *FileTree) selectAfterRebuild(previous, preferred string) {
 	ft.cursor = 0
-	ft.offset = 0
+	if len(ft.entries) == 0 {
+		ft.offset = 0
+		return
+	}
 	if previous != "" && ft.SelectByPath(previous) {
 		return
 	}

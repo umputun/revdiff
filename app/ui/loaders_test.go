@@ -1859,3 +1859,28 @@ func TestModel_FilesReloadPreservesUnreviewedAutoAdvanceSelection(t *testing.T) 
 	assert.Equal(t, "c.go", m.tree.SelectedFile(), "reload must not jump back to the first unreviewed file")
 	assert.NotNil(t, followupCmd, "reload should issue a fresh load for the preserved selection")
 }
+
+func TestModel_FilesReloadPreservesUnreviewedScrollOffset(t *testing.T) {
+	entries := []diff.FileEntry{
+		{Path: "a.go"}, {Path: "b.go"}, {Path: "c.go"}, {Path: "d.go"}, {Path: "e.go"},
+		{Path: "f.go"}, {Path: "g.go"}, {Path: "h.go"}, {Path: "i.go"},
+	}
+	m := testModel(nil, nil)
+	m.tree.Rebuild(entries)
+	m.tree.ToggleUnreviewedFilter()
+	require.True(t, m.tree.SelectByPath("h.go"))
+	m.tree.EnsureVisible(5)
+	m.tree.Move(sidepane.MotionUp)
+	m.tree.Move(sidepane.MotionUp)
+	require.Equal(t, "f.go", m.tree.SelectedFile())
+	before := m.tree.ScrollState().Offset
+
+	m.file.name = "f.go"
+	m.triggerReload()
+	result, _ := m.Update(filesLoadedMsg{seq: m.filesLoadSeq, entries: entries})
+	m = result.(Model)
+	m.tree.EnsureVisible(5)
+
+	assert.Equal(t, "f.go", m.tree.SelectedFile())
+	assert.Equal(t, before, m.tree.ScrollState().Offset, "reload should keep the selected file on the same visible row")
+}
