@@ -9,8 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/muesli/termenv"
-
 	"github.com/umputun/revdiff/app/fsutil"
 	"github.com/umputun/revdiff/app/highlight"
 	"github.com/umputun/revdiff/app/theme"
@@ -102,7 +100,7 @@ func resolveThemeName(opts options) string {
 	if opts.Theme != autoThemeName {
 		return opts.Theme
 	}
-	return resolveAutoThemeName(opts, termenv.HasDarkBackground())
+	return resolveAutoThemeName(opts, detectDarkBackground())
 }
 
 func resolveAutoThemeName(opts options, darkBackground bool) string {
