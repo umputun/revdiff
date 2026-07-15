@@ -62,7 +62,7 @@ func (m Model) View() string {
 			Width(diffPaneW).
 			Height(ph).
 			Render(diffContent)
-		mainView = m.applyScrollbar(diffPane)
+		mainView = m.applyDiffTopLabel(m.applyDiffBottomLabel(m.applyScrollbar(diffPane)))
 
 	case m.file.singleFile && m.file.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
@@ -112,7 +112,7 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 		Width(diffPaneW).
 		Height(ph).
 		Render(diffContent)
-	diffPane = m.applyScrollbar(diffPane)
+	diffPane = m.applyDiffTopLabel(m.applyDiffBottomLabel(m.applyScrollbar(diffPane)))
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
 }

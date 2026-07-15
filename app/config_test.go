@@ -564,6 +564,37 @@ func TestParseArgs_VimMotion(t *testing.T) {
 	})
 }
 
+func TestParseArgs_FrameLabels(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.False(t, opts.FrameLabels)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--frame-labels"))
+		require.NoError(t, err)
+		assert.True(t, opts.FrameLabels)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_FRAME_LABELS", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.FrameLabels)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nframe-labels = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.FrameLabels)
+	})
+}
+
 func TestParseArgs_OutputFlag(t *testing.T) {
 	opts, err := parseArgs([]string{"-o", "/tmp/out.txt"})
 	require.NoError(t, err)

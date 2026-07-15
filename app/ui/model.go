@@ -320,6 +320,7 @@ type modelConfigState struct {
 	annotPrefix        string             // cached: marker + " "
 	annotFilePrefix    string             // cached: marker + " file: "
 	outputPath         string             // --output destination for the O in-session flush; empty disables it
+	frameLabels        bool               // draw off-screen change-count hints in the diff frame borders
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -746,6 +747,10 @@ type ModelConfig struct {
 	// the modal-key handler and keymap.Resolve. Copied into modes.vimMotion at
 	// construction; the feature is gated on that field everywhere.
 	VimMotion bool
+	// FrameLabels enables the off-screen change-count hints drawn into the diff
+	// pane's top ("+x/-y changes above") and bottom ("+x/-y modified lines
+	// below") border lines. Off by default; copied into modelConfigState.frameLabels.
+	FrameLabels bool
 	// AnnotationMarker is the prefix shown before annotation lines.
 	// Empty is preserved so callers can intentionally render no marker.
 	AnnotationMarker string
@@ -857,6 +862,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			annotPrefix:        cfg.AnnotationMarker + " ",
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
 			outputPath:         cfg.OutputPath,
+			frameLabels:        cfg.FrameLabels,
 		},
 		layout: layoutState{
 			focus: paneTree,

@@ -342,6 +342,7 @@ Positional arguments support several forms:
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
 | `--blame` | Show blame gutter, env: `REVDIFF_BLAME` | `false` |
 | `--word-diff` | Highlight intra-line word-level changes in paired add/remove lines, env: `REVDIFF_WORD_DIFF` | `false` |
+| `--frame-labels` | Show off-screen change counts in the diff frame, env: `REVDIFF_FRAME_LABELS` | `false` |
 | `--annotation-marker` | Prefix shown before annotation lines, env: `REVDIFF_ANNOTATION_MARKER` | `💬` |
 | `--exit-code-on-annotations` | Exit 10 when annotations are produced, env: `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, config: `exit-code-on-annotations` | `false` |
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |

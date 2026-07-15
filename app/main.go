@@ -214,6 +214,7 @@ func run(opts options) (int, error) {
 		ShowUntracked:        opts.startupUntracked(),
 		WordDiff:             opts.WordDiff,
 		VimMotion:            opts.VimMotion,
+		FrameLabels:          opts.FrameLabels,
 		ReviewInfo: reviewInfoFromOptions(opts, reviewInfoInputs{
 			workDir:     workDir,
 			vcsType:     vcsType,
