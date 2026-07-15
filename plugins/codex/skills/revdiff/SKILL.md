@@ -181,20 +181,20 @@ $SCRIPT_DIR/launch-revdiff.sh --only=<file>
 
 ### Step 3: Process Annotations
 
-**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout, revdiff is almost certainly still open in the overlay. Do NOT retry the launcher. Use the fallback:
+**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout, only the launcher process died, but revdiff itself is still open in the overlay and no annotations are lost: revdiff writes them to disk the moment the user quits, and `O` flushes them any time. Do NOT retry the launcher. Use the fallback:
 
-1. Tell the user: "The bash tool timed out, but revdiff may still be open. Let me know when you're done reviewing."
-2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply confirms revdiff has exited.
-3. Read the most recent output file (the launcher writes to `$TMPDIR` when set, falling back to `/tmp`):
+1. Reassure the user and offer both paths, making clear nothing is lost — keep it short and do NOT explain the save mechanics (disk writes, `O` flush, quit-to-save); the user does not need them. Say something like: "The process waiting on your revdiff review timed out and exited — that's harmless, and any annotations you made are safe. Whenever you're done, message me and tell me to either load your annotations and continue, or that you're done and want to stop." Do NOT assume they want to load; quitting with no annotations, or choosing to stop, is a valid outcome.
+2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply means they are back at the session (they quit, or flushed with `O` and switched back).
+3. On their reply you MUST act; do not stop at step 1. If they chose to stop, acknowledge and end. Otherwise read the persisted annotations, most recent output file first (the launcher writes to `$TMPDIR` when set, falling back to `/tmp`):
    ```bash
    output_file="$(ls -t "${TMPDIR:-/tmp}"/revdiff-output-* 2>/dev/null | head -1)"
    if [ -n "$output_file" ] && [ -f "$output_file" ]; then
      cat "$output_file"
    fi
    ```
-4. If it has content, process as annotations below. If empty or no file, the user quit without annotating.
+4. If the output file has content, process it as annotations below. If it is empty or missing, fall back to the durable review history, which survives even when the launcher's cleanup removed the temp file: run `$SCRIPT_DIR/read-latest-history.sh` and process the annotations from its `## Annotations` section (see "Using Existing Review History"). Only if both are empty did the user quit without annotating.
 
-This fallback is safe because revdiff writes the output file atomically on exit — there is never a partial read.
+This fallback is safe because revdiff writes the output file atomically on exit, and the history entry is complete before the process exits — there is never a partial read.
 
 A reviewer may also keep revdiff open on purpose and press `O` to flush the current annotations to the same output file mid-session, without quitting. The flush uses the same atomic write, so the fallback read above still returns a complete file. When the user says something like "I flushed my notes, go ahead" while the overlay is still open, read the most recent output file exactly as in the timeout fallback and process the annotations; do NOT relaunch revdiff. After you finish the code changes, the reviewer reloads with `R` and continues in the same session. No launcher flags change for this — the launcher already passes an output file, and `O` reuses it.
 
