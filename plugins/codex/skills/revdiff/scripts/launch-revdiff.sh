@@ -153,8 +153,58 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     [ -f "$_RD_SCRIPT_DIR/agentdeck-window.sh" ] && . "$_RD_SCRIPT_DIR/agentdeck-window.sh"
 fi
 
-# tmux: display-popup -E blocks until command exits
+# tmux: revdiff runs in a detached session named revdiff-<pid>; the popup is
+# just a client attached to it. Detaching (prefix+d or a user toggle binding)
+# closes the popup while the review keeps running — reattaching later resumes
+# with all state intact. Completion is therefore signalled by a sentinel file
+# (like the zellij/kitty backends), NOT by popup exit: a detach must not read
+# as "review finished".
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
+    rm -f "$SENTINEL"
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+
+    TMUX_BIN=$(command -v tmux)
+    SESSION="revdiff-$$"
+    # target every follow-up call by session ID ($N): IDs are exact by
+    # definition, whereas name targets prefix-match and set-option/show-options
+    # (unlike has-session/kill-session) reject the "=" exact-match prefix
+    SESSION_ID=$(tmux new-session -d -P -F '#{session_id}' -s "$SESSION" -c "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")")
+    # a cancelled launcher (INT/TERM) must not leave the invisible session
+    # running forever; bash skips the EXIT trap on untrapped fatal signals, so
+    # kill the session here and route through exit for the file cleanup trap
+    trap 'tmux kill-session -t "$SESSION_ID" 2>/dev/null || true; exit 130' INT
+    trap 'tmux kill-session -t "$SESSION_ID" 2>/dev/null || true; exit 143' TERM
+    # per-session overrides: no status bar inside the popup; quitting revdiff
+    # must detach the popup client (a global detach-on-destroy=off would switch
+    # the popup to another session instead of closing it); a backgrounded
+    # session must survive with no client attached. One chained tmux call (one
+    # server round-trip), and "|| true" because a fast-failing revdiff (bad ref,
+    # old binary) can destroy the session before this runs — the sentinel below
+    # still carries revdiff's real exit code
+    tmux set-option -t "$SESSION_ID" status off \; \
+        set-option -t "$SESSION_ID" detach-on-destroy on \; \
+        set-option -t "$SESSION_ID" destroy-unattached off \; \
+        set-option -t "$SESSION_ID" @revdiff_title "$OVERLAY_TITLE" 2>/dev/null || true
+    # user-supplied session options: whitespace-separated key=value tokens
+    # (values cannot contain spaces), applied before any client attaches.
+    # Lets external session tooling tag and recognize this transient session,
+    # e.g. REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1". set -f keeps
+    # glob characters in tokens literal; "--" keeps a "-"-prefixed key from
+    # being parsed as a set-option flag; a token tmux rejects only warns —
+    # a typo'd env var must not abort the review
+    set -f
+    for kv in ${REVDIFF_TMUX_SESSION_OPTIONS:-}; do
+        case "$kv" in
+            *=*)
+                tmux set-option -t "$SESSION_ID" -- "${kv%%=*}" "${kv#*=}" 2>/dev/null \
+                    || echo "warn: tmux rejected REVDIFF_TMUX_SESSION_OPTIONS token: $kv" >&2
+                ;;
+            *) echo "warn: ignoring malformed REVDIFF_TMUX_SESSION_OPTIONS token: $kv" >&2 ;;
+        esac
+    done
+    set +f
+
     # -T (title) requires tmux 3.3+; skip on older versions
     TMUX_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
     if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
@@ -162,10 +212,31 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
             TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
         fi
     fi
-    TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")
-    rc=0
-    "${TMUX_ARGS[@]}" || rc=$?
-    print_output_and_exit "$rc"
+    # TMUX= lifts the nesting guard so the popup job can attach to the same server
+    TMUX_ARGS+=(-d "$CWD" -- sh -c "TMUX= exec $(sq "$TMUX_BIN") attach-session -t $(sq "$SESSION_ID")")
+    popup_rc=0
+    "${TMUX_ARGS[@]}" || popup_rc=$?
+    # nonzero popup + no sentinel + live session = the popup never opened
+    # (tmux < 3.2 has no display-popup; no attachable client; size errors).
+    # Without this check the wait loop below would spin forever against the
+    # invisible session. A detach exits 0, so backgrounding is unaffected.
+    if [ "$popup_rc" -ne 0 ] && [ ! -f "$SENTINEL" ] && tmux has-session -t "$SESSION_ID" 2>/dev/null; then
+        tmux kill-session -t "$SESSION_ID" 2>/dev/null || true
+        echo "error: tmux display-popup failed (rc=$popup_rc); tmux 3.2+ required" >&2
+        print_output_and_exit "$popup_rc"
+    fi
+
+    # popup closed: either revdiff exited (sentinel present) or the user
+    # detached to background the review — keep waiting until revdiff exits
+    # or the session is killed out from under us. This loop only spins while
+    # the review is backgrounded, so a 1s poll is plenty
+    while [ ! -f "$SENTINEL" ]; do
+        tmux has-session -t "$SESSION_ID" 2>/dev/null || break
+        sleep 1
+    done
+    rc=$(read_rc "$SENTINEL")
+    rm -f "$SENTINEL"
+    print_output_and_exit "${rc:-1}"
 fi
 
 # zellij: floating pane with sentinel file for blocking
