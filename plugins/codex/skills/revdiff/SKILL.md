@@ -138,6 +138,8 @@ When you are launching revdiff for the user (e.g., right after a refactor or ana
 
 **When the recent change likely created new untracked files** (new packages, new test files, new docs, new scripts that haven't been `git add`-ed yet), pass `--untracked` so those files appear in the tree. Use this in working-tree mode (no ref, no `--staged`); skip it for ref-to-ref reviews where untracked files are not part of the historical diff.
 
+**When the user explicitly requests the file tree on a side**, pass `--tree-position=left` or `--tree-position=right`. Otherwise omit it and respect the user's config.
+
 Run the launcher script:
 
 ```bash

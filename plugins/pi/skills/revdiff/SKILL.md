@@ -23,6 +23,7 @@ Reference resolution rules:
 - For date requests, resolve the commit first. Examples: `2 weeks ago`, `yesterday`, `last Friday` → run `git rev-list -1 --before=<phrase> HEAD`, then pass the resulting commit hash as `args`.
 - For file targets, use `args: "--only <path>"`.
 - For all-files requests, map excludes explicitly. Example: `all files exclude vendor and dist` → `args: "--all-files --exclude=vendor --exclude=dist"`.
+- When the user explicitly requests the file tree on a side, pass `--tree-position=left` or `--tree-position=right`; otherwise respect their config.
 - For explicit refs, ranges, flags, or two-ref requests, pass them through as revdiff args.
 - If the requested natural language target cannot be resolved, say what failed and ask for a concrete ref/path. Do not guess silently.
 
@@ -34,6 +35,7 @@ Tool examples:
 - `args: "--untracked"`: review untracked files with working-tree changes
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
+- `args: "--tree-position=right main"`: review with the file tree on the right
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes

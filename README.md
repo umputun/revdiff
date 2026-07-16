@@ -20,7 +20,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Blame gutter: shows author name and commit age per line, toggle with `B`
 - Annotate any line in the diff (added, removed, or context) plus file-level notes
 - Single-file auto-detection: when a diff contains exactly one file, hides the tree pane and gives full terminal width to the diff view
-- Two-pane TUI: file tree (left) + colorized diff viewport (right)
+- Two-pane TUI: file tree and colorized diff viewport, with configurable tree position (left by default)
 - Vim-style `/` search within diff with `n`/`N` match navigation
 - Hunk navigation to jump between change groups
 - Annotation list popup (`@`): browse all annotations across files, jump to any annotation
@@ -354,6 +354,7 @@ Positional arguments support several forms:
 | `--staged` | Show staged changes, env: `REVDIFF_STAGED` | `false` |
 | `--untracked` | Show untracked files in the tree, env: `REVDIFF_UNTRACKED` | `false` |
 | `--tree-width` | File tree panel width in units (1-10), env: `REVDIFF_TREE_WIDTH` | `2` |
+| `--tree-position` | File tree and markdown TOC position (`left` or `right`), env: `REVDIFF_TREE_POSITION` | `left` |
 | `--tab-width` | Number of spaces per tab character, env: `REVDIFF_TAB_WIDTH` | `4` |
 | `--no-colors` | Disable all colors including syntax highlighting, env: `REVDIFF_NO_COLORS` | `false` |
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
@@ -412,7 +413,11 @@ mkdir -p ~/.config/revdiff
 revdiff --dump-config > ~/.config/revdiff/config
 ```
 
-Then uncomment and edit the values you want to change.
+Then uncomment and edit the values you want to change. For example, place the file tree and markdown TOC on the right:
+
+```ini
+tree-position = right
+```
 
 ### Themes
 
@@ -665,7 +670,7 @@ revdiff HEAD~3 --description-file=.review-description.md
 
 ### Markdown TOC Navigation
 
-When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md` or `printf '# title\n' | revdiff --stdin --stdin-name plan.md`), revdiff shows a table-of-contents pane on the left listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
+When reviewing a single markdown file in context-only mode (e.g., `revdiff --only=README.md` or `printf '# title\n' | revdiff --stdin --stdin-name plan.md`), revdiff shows a table-of-contents pane on the configured tree side (left by default) listing all markdown headers. Use `Tab` to switch focus between the TOC and diff panes, `j`/`k` to navigate headers, and `Enter` to jump to a header in the diff. The TOC automatically highlights the current section as you scroll through the file.
 
 This mode activates when all three conditions are met: single file, markdown extension (`.md`/`.markdown`), and all lines are context (no diff changes). Headers inside fenced code blocks are excluded from the TOC.
 

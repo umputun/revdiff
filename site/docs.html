@@ -289,7 +289,7 @@ revdiff HEAD~3 --description-file=.review-description.md</code></div>
         <p><code>--description</code> and <code>--description-file</code> are mutually exclusive. The description section is hidden when neither is set, so the flag is purely additive.</p>
 
         <h2 id="markdown-toc">Markdown TOC navigation</h2>
-        <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. This works for <code>--only</code> files and for <code>--stdin</code> when <code>--stdin-name</code> ends with <code>.md</code> or <code>.markdown</code>. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
+        <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the configured tree side (left by default) listing all markdown headers. This works for <code>--only</code> files and for <code>--stdin</code> when <code>--stdin-name</code> ends with <code>.md</code> or <code>.markdown</code>. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
 
         <h2 id="beyond-code-review">Beyond code review</h2>
         <p>The <code>--only</code> and <code>--stdin</code> flags enable use cases beyond git diffs. Files and ephemeral command output can both be loaded for annotation, no git repo required.</p>
@@ -388,6 +388,7 @@ revdiff --only=/tmp/draft-comment.md</code></div>
         <p>Precedence: CLI flags &gt; env vars &gt; config file &gt; built-in defaults. For annotation exit status, use <code>REVDIFF_EXIT_CODE_ON_ANNOTATIONS</code> or <code>exit-code-on-annotations = true</code>.</p>
         <div class="code-block"><code>mkdir -p ~/.config/revdiff
 revdiff --dump-config > ~/.config/revdiff/config</code></div>
+        <p>Set <code>tree-position = right</code> to place the file tree and markdown TOC on the right.</p>
 
         <h2 id="options">Options</h2>
         <table>
@@ -396,6 +397,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--staged</code></td><td>Show staged changes</td><td><code>false</code></td></tr>
                 <tr><td><code>--untracked</code></td><td>Show untracked files in the tree</td><td><code>false</code></td></tr>
                 <tr><td><code>--tree-width</code></td><td>File tree width in units (1-10)</td><td><code>2</code></td></tr>
+                <tr><td><code>--tree-position</code></td><td>File tree and markdown TOC position (<code>left</code> or <code>right</code>)</td><td><code>left</code></td></tr>
                 <tr><td><code>--tab-width</code></td><td>Spaces per tab character</td><td><code>4</code></td></tr>
                 <tr><td><code>--no-colors</code></td><td>Disable all colors</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-status-bar</code></td><td>Hide the status bar</td><td><code>false</code></td></tr>

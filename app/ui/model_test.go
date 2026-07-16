@@ -260,6 +260,11 @@ func TestNewModel_OptionalDefaults(t *testing.T) {
 		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: 5})
 		assert.Equal(t, 5, m.cfg.treeWidthRatio)
 	})
+
+	t.Run("TreeOnRight is kept", func(t *testing.T) {
+		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeOnRight: true})
+		assert.True(t, m.cfg.treeOnRight)
+	})
 }
 
 func TestModel_Init(t *testing.T) {

@@ -21,6 +21,7 @@ Then uncomment and edit the values you want to change.
 | `--staged` | `REVDIFF_STAGED` | Show staged changes | `false` |
 | `--untracked` | `REVDIFF_UNTRACKED` | Show untracked files in the tree | `false` |
 | `--tree-width` | `REVDIFF_TREE_WIDTH` | File tree panel width in units (1-10) | `2` |
+| `--tree-position` | `REVDIFF_TREE_POSITION` | File tree and markdown TOC position (`left` or `right`) | `left` |
 | `--tab-width` | `REVDIFF_TAB_WIDTH` | Spaces per tab character | `4` |
 | `--no-colors` | `REVDIFF_NO_COLORS` | Disable all colors including syntax highlighting | `false` |
 | `--no-status-bar` | `REVDIFF_NO_STATUS_BAR` | Hide the status bar | `false` |
@@ -60,7 +61,7 @@ Then uncomment and edit the values you want to change.
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
 
-Config-backed options use long flag names without leading `--`; for annotation exit status use `exit-code-on-annotations = true`.
+Config-backed options use long flag names without leading `--`; for example, use `tree-position = right` to put the file tree and markdown TOC on the right. For annotation exit status use `exit-code-on-annotations = true`.
 
 ## Popup Size (Claude Code plugin)
 
