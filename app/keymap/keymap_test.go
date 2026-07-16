@@ -311,7 +311,7 @@ func TestActionFlushOutput_HelpEntry(t *testing.T) {
 	var found bool
 	for _, e := range entries {
 		if e.Action == ActionFlushOutput {
-			assert.Equal(t, "flush annotations to output file", e.Description)
+			assert.Equal(t, "flush annotations to output file / agent", e.Description)
 			assert.Equal(t, "Annotations", e.Section)
 			found = true
 			break

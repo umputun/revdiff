@@ -223,7 +223,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionOpenEditor, "open annotation in $EDITOR", "Annotations"},
 		{ActionNextAnnotation, "next annotation (across files)", "Annotations"},
 		{ActionPrevAnnotation, "previous annotation (across files)", "Annotations"},
-		{ActionFlushOutput, "flush annotations to output file", "Annotations"},
+		{ActionFlushOutput, "flush annotations to output file / agent", "Annotations"},
 
 		// view toggles
 		{ActionToggleCollapsed, "toggle collapsed view", "View"},

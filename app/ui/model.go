@@ -542,6 +542,7 @@ type Model struct {
 	keymap       *keymap.Keymap
 	themes       ThemeCatalog   // theme catalog for discovery, resolve, and persistence
 	editor       ExternalEditor // launches $EDITOR for annotation editing and source-file opening
+	agent        AgentSink      // optional external agent sink for the O flush (nil disables)
 
 	// grouped state
 	cfg    modelConfigState // immutable session config
@@ -686,6 +687,11 @@ type ModelConfig struct {
 	LoadUntrackedRenames func([]string) ([]diff.FileEntry, error)
 	Keymap               *keymap.Keymap // custom key bindings (nil uses defaults)
 	Editor               ExternalEditor // external-editor driver (nil uses app/editor.Editor{})
+	// Agent receives the annotation output on the O flush, piped to its stdin.
+	// Nil disables the agent flush (the flush then targets only the --output
+	// file, or reports that neither sink is configured). Wired from --agent-cmd
+	// in main.go; a typed-nil is collapsed to nil like the Editor guard.
+	Agent AgentSink
 	// CommitLog enumerates commits in the current ref range for the info popup's
 	// commit-log section. When nil, NewModel attempts to derive the source by
 	// type-asserting the Renderer against diff.CommitLogger; if the assertion
@@ -821,6 +827,10 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if ed == nil || isNilValue(ed) {
 		ed = editor.Editor{}
 	}
+	ag := cfg.Agent
+	if isNilValue(ag) {
+		ag = nil // collapse a typed-nil sink to interface-nil so guards see it as disabled
+	}
 	cls := resolveCommitLogSource(cfg.CommitLog, cfg.Renderer)
 	reviewCfg := cloneReviewInfoConfig(cfg.ReviewInfo)
 
@@ -839,6 +849,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		parseTOC:     cfg.ParseTOC,
 		themes:       cfg.Themes,
 		editor:       ed,
+		agent:        ag,
 		cfg: modelConfigState{
 			ref:                cfg.Ref,
 			staged:             cfg.Staged,
@@ -938,6 +949,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSourceEditorFinished(msg)
 	case wheelDebounceMsg:
 		return m.handleWheelDebounce(msg)
+	case agentFlushedMsg:
+		return m.handleAgentFlushed(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)

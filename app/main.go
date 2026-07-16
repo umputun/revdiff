@@ -12,6 +12,7 @@ import (
 	"github.com/jessevdk/go-flags"
 	"github.com/muesli/termenv"
 
+	"github.com/umputun/revdiff/app/agent"
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/fsutil"
@@ -180,6 +181,11 @@ func run(opts options) (int, error) {
 		configPath: configPath,
 	}
 
+	var agentSink ui.AgentSink
+	if opts.AgentCmd != "" {
+		agentSink = agent.Runner{Command: opts.AgentCmd}
+	}
+
 	model, err := ui.NewModel(ui.ModelConfig{
 		Renderer:             renderer,
 		Store:                store,
@@ -194,6 +200,7 @@ func run(opts options) (int, error) {
 		LoadUntracked:        untrackedFn,
 		LoadUntrackedRenames: untrackedRenamesFn,
 		Keymap:               km,
+		Agent:                agentSink,
 		CommitLog:            commitLogger,
 		CommitsApplicable:    commitsApplicable(opts, commitLogger),
 		ReloadApplicable:     reloadApplicable(opts),
