@@ -962,6 +962,46 @@ func TestModel_ToggleCompactMode_ResetsToTopWhenNoAnchor(t *testing.T) {
 	assert.Equal(t, 1, model.nav.diffCursor, "with no anchor, cursor resets to the first non-divider line")
 }
 
+func TestModel_ToggleCompactMode_PreservesCursorCompactToFull(t *testing.T) {
+	// compact view: cursor on the added line (NewNum 41) at index 2
+	compactDiff := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{NewNum: 40, Content: "context before", ChangeType: diff.ChangeContext},
+		{NewNum: 41, Content: "added line", ChangeType: diff.ChangeAdd},
+		{NewNum: 42, Content: "context after", ChangeType: diff.ChangeContext},
+	}
+	// full view returned by the re-fetch: the added line moves to index 3
+	fullDiff := []diff.DiffLine{
+		{NewNum: 38, Content: "a", ChangeType: diff.ChangeContext},
+		{NewNum: 39, Content: "b", ChangeType: diff.ChangeContext},
+		{NewNum: 40, Content: "context before", ChangeType: diff.ChangeContext},
+		{NewNum: 41, Content: "added line", ChangeType: diff.ChangeAdd},
+		{NewNum: 42, Content: "context after", ChangeType: diff.ChangeContext},
+	}
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return fullDiff, nil },
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.diffRenderer = renderer
+	m.compact.applicable = true
+	m.modes.compact = true // currently in compact view
+	m.modes.compactContext = 5
+	m.file.name = "a.go"
+	m.file.lines = compactDiff
+	m.nav.diffCursor = 2 // on the added line (NewNum 41)
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = model.Update(cmd())
+	model = result.(Model)
+
+	assert.False(t, model.modes.compact, "C toggles compact off")
+	assert.Equal(t, 3, model.nav.diffCursor,
+		"cursor must follow the change line (NewNum 41) into the full diff")
+}
+
 func TestDisplayKeyName(t *testing.T) {
 	m := testModel(nil, nil)
 	tests := []struct{ input, want string }{

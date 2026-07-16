@@ -1766,10 +1766,13 @@ func TestModel_ApplyCompactAnchor(t *testing.T) {
 		m.file.name = "a.go"
 		m.file.lines = []diff.DiffLine{
 			{ChangeType: diff.ChangeDivider},
+			{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
 			{NewNum: 41, Content: "add", ChangeType: diff.ChangeAdd},
 		}
+		// hunk 0 starts at index 2; skipInitialDividers would land on index 1
+		// (the context line), so cursor==2 proves the hunk-fallback branch ran
 		m.applyCompactAnchor(&compactAnchor{srcLine: 0, changeType: diff.ChangeDivider, hunkIdx: 0})
-		assert.Equal(t, 1, m.nav.diffCursor)
+		assert.Equal(t, 2, m.nav.diffCursor)
 	})
 
 	t.Run("skips to first visible line when no hunks", func(t *testing.T) {
@@ -1783,6 +1786,56 @@ func TestModel_ApplyCompactAnchor(t *testing.T) {
 		m.applyCompactAnchor(&compactAnchor{srcLine: 999, changeType: diff.ChangeContext, hunkIdx: -1})
 		assert.Equal(t, 1, m.nav.diffCursor) // skipInitialDividers lands on first non-divider
 	})
+
+	t.Run("restores cursor to matching removed line by old number", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
+			{OldNum: 88, Content: "removed", ChangeType: diff.ChangeRemove},
+			{NewNum: 41, Content: "added", ChangeType: diff.ChangeAdd},
+		}
+		// findDiffLineIndex resolves a remove anchor by OldNum, not NewNum
+		m.applyCompactAnchor(&compactAnchor{srcLine: 88, changeType: diff.ChangeRemove, hunkIdx: 0})
+		assert.Equal(t, 2, m.nav.diffCursor)
+	})
+
+	t.Run("collapsed mode keeps restored cursor visible", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.modes.collapsed.enabled = true
+		m.file.lines = []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
+			{OldNum: 88, Content: "removed", ChangeType: diff.ChangeRemove},
+			{NewNum: 41, Content: "added", ChangeType: diff.ChangeAdd},
+		}
+		// the removed line (index 2) is collapsed-hidden; adjustCursorIfHidden must
+		// nudge the cursor to the nearest visible line (the added line at index 3)
+		m.applyCompactAnchor(&compactAnchor{srcLine: 88, changeType: diff.ChangeRemove, hunkIdx: 0})
+		assert.Equal(t, 3, m.nav.diffCursor)
+		assert.False(t, m.isCollapsedHidden(m.nav.diffCursor, m.findHunks()),
+			"restored cursor must be on a visible line in collapsed mode")
+	})
+}
+
+func TestModel_HandleFileLoaded_DropsStaleCompactAnchor(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.file.name = "a.go"
+	m.file.loadSeq = 5
+	// stale anchor: its seq predates the current load, so the seq guard must drop
+	// it and fall through to the default top positioning rather than reposition
+	m.compact.pendingAnchor = &compactAnchor{seq: 4, srcLine: 41, changeType: diff.ChangeAdd, hunkIdx: 0}
+	msg := fileLoadedMsg{file: "a.go", seq: 5, lines: []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
+		{NewNum: 41, Content: "add", ChangeType: diff.ChangeAdd},
+	}}
+	result, _ := m.handleFileLoaded(msg)
+	model := result.(Model)
+	assert.Nil(t, model.compact.pendingAnchor, "stale anchor must be cleared")
+	assert.Equal(t, 1, model.nav.diffCursor, "stale anchor must not reposition; cursor resets to first visible line")
 }
 
 func TestModel_LoadFilesReconcilesReviewedFingerprints(t *testing.T) {

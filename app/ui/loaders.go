@@ -326,18 +326,22 @@ func (m Model) captureCompactAnchor() *compactAnchor {
 // compact toggle and centers the viewport on it. It resolves the anchor by
 // source line number; when that line is absent from the re-fetched diff (a
 // context line dropped in the full→compact direction), it falls back to the
-// nearest hunk captured at toggle time, then to the first visible line.
+// nearest hunk captured at toggle time, then to the first visible line. In
+// collapsed mode adjustCursorIfHidden nudges the cursor off a hidden removed
+// line (e.g. a modify hunk's start) so it never lands out of sight.
 func (m *Model) applyCompactAnchor(a *compactAnchor) {
 	m.annot.cursorOnAnnotation = false
 	if a.srcLine > 0 && a.changeType != diff.ChangeDivider {
 		if idx := m.findDiffLineIndex(a.srcLine, string(a.changeType)); idx >= 0 {
 			m.nav.diffCursor = idx
+			m.adjustCursorIfHidden()
 			m.centerViewportOnCursor()
 			return
 		}
 	}
 	if hunks := m.findHunks(); a.hunkIdx >= 0 && a.hunkIdx < len(hunks) {
 		m.nav.diffCursor = hunks[a.hunkIdx]
+		m.adjustCursorIfHidden()
 		m.centerViewportOnCursor()
 		return
 	}
