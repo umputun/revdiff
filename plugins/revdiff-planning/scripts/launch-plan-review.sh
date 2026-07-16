@@ -85,6 +85,35 @@ is_cmux_session() {
     return 1
 }
 
+# agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a full-pane overlay over
+# the agent's own session and blocks until it exits — like tmux's display-popup -E, so no sentinel is
+# needed. checked first so an agterm session always uses its native overlay even when a multiplexer is
+# also present. needs $AGTERM_SESSION_ID (set in every agterm session) and agtermctl on PATH; passes
+# $AGTERM_SOCKET so it reaches the agterm instance hosting this session, and --cwd "$CWD" so the
+# overlay runs in the launcher's directory. the overlay-open stdout is discarded so only the review
+# output reaches this script's stdout (the hook reads it for annotations); revdiff's own exit code is
+# propagated. sets the session status indicator to blocked while the overlay is up and restores active
+# on every exit path.
+if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
+    AGTERM_TARGET=(--target "$AGTERM_SESSION_ID")
+    [ -n "${AGTERM_SOCKET:-}" ] && AGTERM_TARGET+=(--socket "$AGTERM_SOCKET")
+    # record which pane owns the block so agterm nav lands on the reviewing pane; agterm defaults to
+    # the left pane otherwise, which misroutes navigation from a split or scratch session. only a
+    # recognized value is passed, so anything else falls back to agterm's own default.
+    AGTERM_STATUS=(session status blocked --blink)
+    case "${AGTERM_PANE:-}" in
+        left|right|scratch) AGTERM_STATUS+=(--pane "$AGTERM_PANE") ;;
+    esac
+    agtermctl "${AGTERM_STATUS[@]}" "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true
+    trap 'agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true; rm -f "$OUTPUT_FILE"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    rc=0
+    agtermctl session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD" --block >/dev/null || rc=$?
+    cat "$OUTPUT_FILE"
+    exit "$rc"
+fi
+
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # -T (title) requires tmux 3.3+; skip on older versions
@@ -488,5 +517,5 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
-echo "error: no overlay terminal available (requires tmux, zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires agterm, tmux, zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
