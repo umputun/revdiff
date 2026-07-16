@@ -560,5 +560,5 @@ LAUNCHER
     print_output_and_exit "${rc:-1}"
 fi
 
-echo "error: no overlay terminal available (requires tmux, zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires agterm, tmux, zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
