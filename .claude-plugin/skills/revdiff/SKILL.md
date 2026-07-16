@@ -38,6 +38,8 @@ ${CLAUDE_SKILL_DIR}/scripts/read-latest-history.sh
 
 The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file found. Each history file contains a header (path, refs, and — when available — a git commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. The `commit:` line and diff block are captured from git only; in hg/jj repos the diff block will be empty and no commit hash is recorded. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
 
+The history file is also the recovery path when a review is cut short by a lost connection: on signal termination (a SIGHUP from a dropped SSH/tmux client, or a SIGTERM) revdiff saves the current annotations to history — never the `-o` output — so `read-latest-history.sh` still recovers them.
+
 ## Opening an In-Session Review
 
 When the user asks to open an in-session review in revdiff (the conversation already contains review comments produced earlier in the session), write those comments to a temp file (e.g. `/tmp/revdiff-review-XXXXXX.md`) using the format documented in `references/usage.md` ("Output Format" section), then run the normal launcher flow (Step 1 ref detection, Step 2 invocation) with `--annotations=<temp-path>` appended. Step 3 onward handles the curated annotations as usual.
@@ -141,6 +143,8 @@ The resolver and launcher MUST run in the same bash invocation — the resolver 
 **Failure mode**: if the resolver fails (no launcher in any layer), the command substitution produces an empty string and bash reports `: command not found` with exit 127. The resolver's stderr (`error: launcher not found in override chain: launch-revdiff.sh`) is preserved on the same output stream — check it to confirm the override path is correct (executable bit set, file present in one of the two layers).
 
 **IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on many harnesses. Set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher on OpenCode). The resolver itself returns in milliseconds — the timeout cap applies to the launcher only. Do NOT use `run_in_background` for this — background-task handling is unreliable for interactive TUI launchers (processes may be killed unprompted, and polling loops can leave the session idle after the review finishes). If the review outlasts the timeout cap, the fallback in Step 3 handles it.
+
+**Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
 The script:
 - Detects available terminal (tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)

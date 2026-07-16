@@ -71,6 +71,10 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 | `REVDIFF_POPUP_WIDTH` | Tmux/Zellij popup width (e.g., `100%`, `80%`) | `90%` |
 | `REVDIFF_POPUP_HEIGHT` | Tmux/Zellij popup height / wezterm split percent | `90%` |
 
+## Disconnect-Resilient Window Mode (tmux)
+
+Set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
+
 ## Themes
 
 Eight bundled themes: **basic**, **catppuccin-latte**, **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **revdiff**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.

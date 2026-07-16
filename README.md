@@ -111,6 +111,8 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 >
 > Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.
 
+> **Disconnect-resilient tmux window mode:** set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
+
 **Install:**
 
 ```bash
@@ -675,6 +677,8 @@ Each history file contains:
 - Raw git diff for annotated files only
 
 History auto-save is always on and silent — errors are logged to stderr, never fail the process. No history is saved on discard quit (`Q`) or when there are no annotations. For `--stdin` mode, files are saved under `stdin/` subdirectory; for `--only` without git, the parent directory name is used instead of a repo name.
+
+The history file is also a crash-recovery save when the process is terminated by a signal — a SIGHUP from a dropped SSH or tmux client, or a SIGTERM. On a signal exit only the history file is written, never the `-o` output, because a signal is not the deliberate handoff that `q` and `O` perform. Recover the annotations the usual way — load the newest history file. A signal-delivered SIGTERM previously wrote the `-o` output; it no longer does.
 
 Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env var, or `history-dir` in the config file.
 

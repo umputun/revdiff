@@ -40,12 +40,13 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 | File | Responsibility |
 |------|---------------|
-| `main.go` | `main()`, early-exit commands (version, dump-config, dump-keys), `run()` orchestration |
+| `main.go` | `main()`, early-exit commands (version, dump-config, dump-keys), `run()` orchestration, `finalize()` (history safety-net vs `-o` handoff after `p.Run()`) |
 | `config.go` | `options` struct, `parseArgs`, `dumpConfig`, `loadConfigFile`, config-path helpers |
 | `stdin.go` | stdin validation, `/dev/tty` reopen, stdin renderer prep |
 | `renderer_setup.go` | `DetectVCS` wiring, `setupVCSRenderer` (git/hg/jj/no-VCS/all-files) |
 | `themes.go` | theme CLI commands (`--init-themes`, `--install-theme`, `--list-themes`, `--theme`), `applyTheme()`, `themeCatalog` adapter (composes `theme.Catalog` + config persistence for `ui.ThemeCatalog` interface) |
 | `history_save.go` | `histReq` struct and `saveHistory` |
+| `signal.go` | `shutdownGuard` (turns SIGHUP/SIGTERM into a single graceful `Quit` + a `wasSignaled` flag; SIGINT is caught and drained so a Ctrl-C during an external `$EDITOR` does not quit revdiff) and the consumer-side `quitter` interface |
 
 Key wiring pattern — all concrete types constructed here, injected into `ui.Model` through interfaces and factory closures:
 
@@ -217,6 +218,8 @@ Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/edit
 
 `Save(Params)` writes review session as markdown to `~/.config/revdiff/history/`. Includes header, annotations, and git diff for annotated files.
 
+On a signal-delivered exit (a SIGHUP from a dropped SSH/tmux client, or a SIGTERM) `finalize()` in `main.go` invokes this save as a crash-recovery net and stops there — history only, never the `-o` output. This is a deliberate semantic change: a signal-delivered SIGTERM no longer writes `-o`, because a signal is not the deliberate handoff that `q`/`O` perform. The wiring lives at the composition root — `shutdownGuard` in `app/signal.go` plus `tea.WithoutSignalHandler()` so revdiff owns SIGHUP/SIGTERM instead of bubbletea. SIGINT is caught and drained so a Ctrl-C during an external `$EDITOR` does not quit revdiff. The guard is stopped (default signal disposition restored for all three) before `finalize()` runs, so a slow or hung finalize (`saveHistory` shells out to git) stays killable by a second signal.
+
 ## Key Interfaces
 
 All consumer-side — defined in `app/ui/model.go`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
@@ -250,8 +253,8 @@ main()  [main.go]
       → setupVCSRenderer [renderer_setup.go] (otherwise)
       → construct style, theme catalog adapter, all dependencies
       → ui.NewModel(ModelConfig{...})
-      → tea.NewProgram(model).Run()
-      → saveHistory()   [history_save.go]
+      → tea.NewProgram(model, WithoutSignalHandler).Run()  [shutdownGuard owns SIGHUP/SIGTERM; SIGINT drained]
+      → finalize()      [main.go] → saveHistory() on non-discarded, non-empty exit; -o output only on graceful (non-signal) exit
 ```
 
 ### File Loading (async)

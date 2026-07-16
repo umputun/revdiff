@@ -109,6 +109,8 @@ Behavior:
 
 If the user says "use my latest revdiff annotations", "pull up my last revdiff review", or similar, do not launch revdiff again. Read the newest markdown file from the revdiff history directory and process its annotations through the same annotation handling loop. Also use history as a fallback only when a revdiff launch reports annotations but the tool did not return annotation text, or when the review did not complete and recent history may contain the saved annotations.
 
+revdiff also writes to history when the process is terminated by a signal (a SIGHUP from a lost connection, or a SIGTERM), saving the current annotations there — never the `-o` output — so a review cut short mid-session is still recoverable from history.
+
 - Use `$REVDIFF_HISTORY_DIR` when set; otherwise use `~/.config/revdiff/history/`.
 - Prefer the history subdirectory matching the current repository root name when present.
 - History files contain annotation blocks in `## file:line (type)` format, usually followed by captured diff context.
