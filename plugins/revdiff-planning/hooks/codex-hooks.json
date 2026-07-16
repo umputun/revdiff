@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${PLUGIN_ROOT}/scripts/codex-plan-review-hook.py\"",
+            "timeout": 345600,
+            "statusMessage": "Reviewing proposed plan with RevDiff"
+          }
+        ]
+      }
+    ]
+  }
+}

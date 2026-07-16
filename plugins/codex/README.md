@@ -18,7 +18,16 @@ This directory contains the **Codex CLI** skills for revdiff.
 
 ## Install
 
-Clone the repo first:
+Install automatic Plan-mode review as an opt-in plugin:
+
+```bash
+codex plugin marketplace add umputun/revdiff
+codex plugin add revdiff-planning@revdiff
+```
+
+Start a new session and trust the hook through `/hooks`. It runs only in Plan mode and first checks the current Stop payload's `last_assistant_message`. If that field has no complete `<proposed_plan>`, the hook reads the exact event transcript and selects the last assistant message for the matching session and turn, regardless of provider-specific phase fields. Annotated revisions use rolling snapshot comparisons; `/revdiff-plan` below remains the manual fallback.
+
+Install the manual skills by cloning the repository first:
 
 ```bash
 git clone https://github.com/umputun/revdiff.git
@@ -67,8 +76,8 @@ The skill reads `~/.codex/sessions/` rollout JSONL files, extracts the most rece
 
 ## Differences from Claude Code plugin
 
-- No hook-based automatic plan review — Codex lacks hook support, so plan review is manual via `/revdiff-plan`
-- Uses Codex rollout files (`~/.codex/sessions/`) instead of Claude session logs for message extraction
+- Automatic review uses a Codex `Stop` hook; Claude Code uses `PreToolUse/ExitPlanMode`
+- The automatic hook falls back whenever `last_assistant_message` lacks a complete plan, then uses the last assistant message for the exact transcript/session/turn; manual `/revdiff-plan` uses best-effort rollout discovery
 - Script path resolution falls back to `$CODEX_HOME` (or `~/.codex`) instead of `$CLAUDE_SKILL_DIR`
 - `AskUserQuestion` tool replaced with numbered-list prompts (Codex convention)
 - `EnterPlanMode` replaced with inline markdown plan + confirmation prompt

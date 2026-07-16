@@ -1,0 +1,32 @@
+{
+  "name": "revdiff-planning",
+  "version": "0.3.8",
+  "description": "Automatic plan review with revdiff",
+  "author": {
+    "name": "umputun"
+  },
+  "homepage": "https://github.com/umputun/revdiff/tree/master/plugins/revdiff-planning",
+  "repository": "https://github.com/umputun/revdiff",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "plan-review",
+    "revdiff"
+  ],
+  "hooks": "./hooks/codex-hooks.json",
+  "interface": {
+    "displayName": "RevDiff Planning",
+    "shortDescription": "Review Codex plans before implementation.",
+    "longDescription": "Automatically opens completed Codex plans in RevDiff for inline annotation and revision before implementation begins.",
+    "developerName": "Umputun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://revdiff.com",
+    "defaultPrompt": [
+      "Review my completed Codex plan in RevDiff."
+    ]
+  }
+}

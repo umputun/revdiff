@@ -1,15 +1,24 @@
 # revdiff-planning
 
-Claude Code plugin that intercepts `ExitPlanMode` and opens the proposed plan in the [revdiff](https://github.com/umputun/revdiff) TUI for interactive annotation. Annotations captured in the overlay are returned as the deny reason, prompting Claude to adjust the plan and call `ExitPlanMode` again.
+Opt-in plugin that opens completed Claude Code or Codex plans in the [revdiff](https://github.com/umputun/revdiff) TUI for interactive annotation. Claude uses `PreToolUse/ExitPlanMode`; Codex uses `Stop` in Plan mode, preferring a complete plan in `last_assistant_message` and falling back to the exact event transcript and turn whenever that field has no complete block. Annotations are returned as continuation feedback so the agent revises the plan and presents it for review again.
 
-## Install
+## Claude Code install
 
 ```bash
 /plugin marketplace add umputun/revdiff
 /plugin install revdiff-planning@revdiff
 ```
 
-Requires the `revdiff` binary in `PATH` and one of: agterm, tmux, Zellij, herdr, kitty, wezterm, cmux, ghostty (macOS), iTerm2 (macOS), or Emacs vterm.
+## Codex install
+
+```bash
+codex plugin marketplace add umputun/revdiff
+codex plugin add revdiff-planning@revdiff
+```
+
+Start a new Codex session, open `/hooks`, and trust the plugin hook before using Plan mode. The hook only opens RevDiff for a complete `<proposed_plan>` in a root `Stop` payload with `permission_mode` set to `plan`; normal Build/default/`bypassPermissions` responses are ignored even if they quote those tags. Transcript fallback requires the event's `transcript_path` filename to contain its `session_id` and selects the last assistant message matching its `turn_id`, without requiring a provider-specific `phase`. A readable transcript without a complete plan is treated as a clarification. Missing, unreadable, or mismatched transcript data warns and fails open. `/revdiff-plan` remains available as a manual fallback.
+
+Requires the `revdiff` binary in `PATH` and one of: agterm, tmux, Zellij, herdr, kitty, wezterm, cmux, ghostty (macOS), iTerm2 (macOS), or Emacs vterm. Missing dependencies or launcher failures are reported as warnings and fail open.
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
 
@@ -24,6 +33,8 @@ The plugin registers a `PreToolUse` hook on `ExitPlanMode` that:
 5. Launches revdiff against the new snapshot — `--compare-old=<prev> --compare-new=<new> --collapsed` when the marker resolved, `--only=<new>` otherwise.
 6. Returns the annotations (if any) as the deny reason; otherwise allows the original `ExitPlanMode` to proceed.
 
+For Codex, the manifest explicitly loads `hooks/codex-hooks.json` instead of Claude's default `hooks/hooks.json`. Its `Stop` hook extracts the complete `<proposed_plan>`, creates the same guarded snapshot, and invokes the same launcher contract. If the review has annotations, the block reason requires the complete revised `<proposed_plan>` and places the next snapshot marker on the first line inside that block.
+
 ## Rolling reviews
 
 After the first round, every iteration shows only what changed since the previous revision instead of re-rendering the whole plan. The chain is held together by an HTML-comment marker the hook tells the agent to put on the first line of its revised plan:
@@ -34,7 +45,7 @@ After the first round, every iteration shows only what changed since the previou
 
 The marker is stripped from the saved snapshot, and the path it points at drives `--compare`. Each chain references its own snapshot, so parallel sessions can't collide.
 
-**Snapshot lifecycle.** New snapshots are created on every invocation. The previous snapshot (`old_snap`) is deleted only when the launcher exits 0 or 10 — i.e., the user actually saw the diff. Exit 10 means annotations were captured. On launcher failure (no overlay terminal available, AppleScript split error, etc.) `old_snap` is preserved so the next attempt can resolve the same marker, and the user sees an `ask` response noting the launcher exit code instead of a misleading "no annotations" success. The new snapshot is kept on `deny` (so the agent's next revision can compare against it) and deleted on the clean `ask` path.
+**Snapshot lifecycle.** New snapshots are created on every invocation. The previous snapshot (`old_snap`) is deleted only when the launcher exits 0 or 10 — i.e., the user actually saw the diff. Exit 10 means annotations were captured. On launcher failure (no overlay terminal available, AppleScript split error, etc.) `old_snap` is preserved so the next attempt can resolve the same marker, and the hook fails open with a warning instead of reporting a misleading clean review. The new snapshot is kept when annotations block the plan (so the agent's next revision can compare against it) and deleted after a clean review.
 
 **Agent-discipline failure mode.** The chain assumes the agent prepends the marker on every revised plan. If it forgets — context truncation, model swap, tool drift — the hook treats the revision as a fresh v1 and falls back to `--only`. The user sees the full file again for that round but the loop self-heals: the deny reason re-issues the marker contract every time, so the next round resumes the rolling compare. Failure is recoverable, never fatal.
 
@@ -44,10 +55,10 @@ The hook resolves `launch-plan-review.sh` through a two-layer chain (first-found
 
 | Layer | Path | Scope |
 |---|---|---|
-| User | `${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh` | every project (per-user, lives under `~/.claude/plugins/data/<plugin-id>/`) |
-| Bundled | `${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh` | default — ships with the plugin, used when no override is present |
+| User | `${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh` (Claude) or `${PLUGIN_DATA}/scripts/launch-plan-review.sh` (Codex) | every project for that installed runtime |
+| Bundled | `${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh` (Claude) or `${PLUGIN_ROOT}/scripts/launch-plan-review.sh` (Codex) | default — ships with the plugin, used when no override is present |
 
-There is no project-level (`.claude/...`) override layer by design: the hook fires automatically on every `ExitPlanMode` in any repo Claude opens, and a repo-controlled executable layer would let an untrusted repo run arbitrary code on routine Claude actions without per-repo opt-in.
+There is no project-level (`.claude/...` or `.codex/...`) override layer by design: the hook fires automatically in repositories opened by the runtime, and a repo-controlled executable layer would let an untrusted repo run arbitrary code on routine agent actions without per-repo opt-in.
 
 The override file must be **executable** (`chmod +x`). A non-executable file in the user layer is treated as absent — the resolver falls through to the bundled default rather than erroring. Using `chmod -x` is a quick way to disable an override without deleting the file.
 
@@ -59,6 +70,8 @@ cp "${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh" "${CLAUDE_PLUGIN_DATA}/
 chmod +x "${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh"
 # edit "${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh" to taste
 ```
+
+For Codex, use the same commands with `PLUGIN_DATA` and `PLUGIN_ROOT`.
 
 ### Launcher contract
 

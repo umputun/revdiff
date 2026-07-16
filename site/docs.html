@@ -730,8 +730,12 @@ map alt+t&gt;n theme_select</code></div>
         </ul>
 
         <h2 id="plugin-planning">Plan review plugin</h2>
-        <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude exits plan mode, letting you annotate the plan before approving it. If you add annotations, Claude revises the plan and asks again, looping until you're satisfied. Exit code <code>10</code> means annotations were captured, not launcher failure.</p>
+        <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude or Codex completes a plan, letting you annotate it before implementation. If you add annotations, the agent revises the full plan and presents it again, looping until you're satisfied. Exit code <code>10</code> means annotations were captured, not launcher failure.</p>
+        <p>Claude Code:</p>
         <div class="code-block"><code>/plugin install revdiff-planning@revdiff</code></div>
+        <p>Codex:</p>
+        <div class="code-block"><code>codex plugin marketplace add umputun/revdiff<br>codex plugin add revdiff-planning@revdiff</code></div>
+        <p>Start a new Codex session and trust the hook through <code>/hooks</code>. Automatic review only fires for complete <code>&lt;proposed_plan&gt;</code> blocks in Plan mode; <code>/revdiff-plan</code> remains the manual fallback.</p>
         <p>This plugin is independent from the main <code>revdiff</code> plugin and does not conflict with other planning plugins.</p>
 
         <h2 id="plugin-overrides">Custom launchers</h2>
@@ -740,14 +744,20 @@ map alt+t&gt;n theme_select</code></div>
             <thead><tr><th>Plugin</th><th>User layer</th><th>Bundled default</th></tr></thead>
             <tbody>
                 <tr><td>diff-review (<code>revdiff</code>)</td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-revdiff.sh</code></td><td><code>${CLAUDE_SKILL_DIR}/scripts/launch-revdiff.sh</code></td></tr>
-                <tr><td>plan-review (<code>revdiff-planning</code>)</td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh</code></td><td><code>${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh</code></td></tr>
+                <tr><td>plan-review (<code>revdiff-planning</code>)</td><td><code>${CLAUDE_PLUGIN_DATA}/scripts/launch-plan-review.sh</code> (Claude) or <code>${PLUGIN_DATA}/scripts/launch-plan-review.sh</code> (Codex)</td><td><code>${CLAUDE_PLUGIN_ROOT}/scripts/launch-plan-review.sh</code> (Claude) or <code>${PLUGIN_ROOT}/scripts/launch-plan-review.sh</code> (Codex)</td></tr>
             </tbody>
         </table>
-        <p>There is no project-level (<code>.claude/...</code>) override layer by design: the planning hook fires automatically on every <code>ExitPlanMode</code> in any repo Claude opens, and a repo-controlled executable layer would let an untrusted repo run arbitrary code on routine Claude actions. The diff-review skill keeps the same two-layer shape for symmetry. The override file must be executable (<code>chmod +x</code>) — a non-executable file is treated as absent and the resolver falls through. The override chain is Claude-only: the pi extension and the Codex plugin do not honor it (no <code>CLAUDE_PLUGIN_DATA</code> in those runtimes; codex users edit <code>~/.codex/skills/revdiff/scripts/launch-revdiff.sh</code> directly). See <a href="https://github.com/umputun/revdiff/blob/master/.claude-plugin/skills/revdiff/references/install.md">install.md</a> and <a href="https://github.com/umputun/revdiff/blob/master/plugins/revdiff-planning/README.md">revdiff-planning README</a> for working examples.</p>
+        <p>There is no project-level executable override by design: the planning hook auto-fires in repositories opened by Claude or Codex, and a repo-controlled launcher would run on routine agent actions. The override file must be executable (<code>chmod +x</code>). Claude uses <code>${CLAUDE_PLUGIN_DATA}</code>; the Codex planning hook uses <code>${PLUGIN_DATA}</code>. The Pi extension and manual Codex diff-review skill do not honor this plugin-data override. See <a href="https://github.com/umputun/revdiff/blob/master/.claude-plugin/skills/revdiff/references/install.md">install.md</a> and <a href="https://github.com/umputun/revdiff/blob/master/plugins/revdiff-planning/README.md">revdiff-planning README</a> for working examples.</p>
 
         <!-- codex plugin -->
         <h2 id="codex-install">Codex plugin</h2>
         <p>revdiff ships with a <a href="https://github.com/openai/codex">Codex CLI</a> plugin for interactive diff review and plan annotation directly from a Codex session.</p>
+        <p>Install automatic Plan-mode review:</p>
+        <div class="code-block"><code>codex plugin marketplace add umputun/revdiff
+codex plugin add revdiff-planning@revdiff</code></div>
+        <p>Start a new session and trust the hook through <code>/hooks</code>. The hook runs only in Plan mode and first checks that session's <code>last_assistant_message</code>. Whenever no complete <code>&lt;proposed_plan&gt;</code> is present, it reads the exact event transcript and selects the last assistant message for the matching session and turn without requiring a provider-specific phase. Clarifications are ignored; missing or mismatched event data, dependencies, and launcher failures warn and fail open.</p>
+        <p>Annotated revisions include a guarded snapshot marker on the first line inside <code>&lt;proposed_plan&gt;</code>, so later rounds open a rolling compare. Reviewed snapshots are replaced and a clean review removes the final snapshot.</p>
+        <p>Install the manual skills:</p>
         <div class="code-block"><code><span class="code-comment"># clone the repo first</span>
 git clone https://github.com/umputun/revdiff.git
 cd revdiff
@@ -755,7 +765,7 @@ cd revdiff
 <span class="code-comment"># copy skills to Codex skills directory</span>
 cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
 cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div>
-        <p>Requirements: <code>revdiff</code> binary on PATH, <code>jq</code> (for <code>/revdiff-plan</code>), and a supported terminal multiplexer.</p>
+        <p>Requirements: <code>revdiff</code> binary on PATH, <code>jq</code> (only for manual <code>/revdiff-plan</code>), and a supported terminal multiplexer.</p>
 
         <h2 id="codex-skills">Skills</h2>
         <p>The plugin provides two skills:</p>
@@ -770,8 +780,8 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div
 
         <h2 id="codex-differences">Differences from Claude Code plugin</h2>
         <ul>
-            <li>No hook-based automatic plan review &mdash; Codex lacks hook support, so plan review is manual via <code>/revdiff-plan</code></li>
-            <li>Uses Codex rollout files (<code>~/.codex/sessions/</code>) instead of Claude session logs for message extraction</li>
+            <li>Automatic Plan-mode review uses the opt-in <code>revdiff-planning</code> plugin; <code>/revdiff-plan</code> remains the manual fallback</li>
+            <li>The automatic hook falls back whenever <code>last_assistant_message</code> lacks a complete plan, then selects the last assistant message for the exact transcript, session, and turn; manual <code>/revdiff-plan</code> uses best-effort rollout discovery</li>
             <li>Scripts are portable copies from the Claude Code plugin, not symlinks</li>
         </ul>
 

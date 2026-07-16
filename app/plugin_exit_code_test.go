@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"maps"
 	"os"
@@ -97,9 +98,13 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 }
 
 func TestPlanReviewHookAnnotationExitCodes(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	python := "/usr/bin/python3"
+	_, err := os.Stat(python)
 	if err != nil {
-		t.Skip("python3 not found")
+		python, err = exec.LookPath("python3")
+		if err != nil {
+			t.Skip("python3 not found")
+		}
 	}
 
 	root := testRepoRoot(t)
@@ -163,6 +168,212 @@ func TestPlanReviewHookAnnotationExitCodes(t *testing.T) {
 			assert.Len(t, planSnapshots(t, tmp), tc.wantSnapshots)
 		})
 	}
+}
+
+func TestCodexPlanReviewHook(t *testing.T) {
+	python := "/usr/bin/python3"
+	_, err := os.Stat(python)
+	if err != nil {
+		python, err = exec.LookPath("python3")
+		if err != nil {
+			t.Skip("python3 not found")
+		}
+	}
+
+	root := testRepoRoot(t)
+	hook := filepath.Join(root, "plugins", "revdiff-planning", "scripts", "codex-plan-review-hook.py")
+	basePayload := `{"hook_event_name":"Stop","permission_mode":"plan","stop_hook_active":false,"cwd":"` + root + `","last_assistant_message":"<proposed_plan>\n# Plan\n- item\n</proposed_plan>"}`
+	planTranscript := `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<proposed_plan>\n# Plan from transcript\n- item\n</proposed_plan>"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-current"}}}` + "\n"
+	cases := []struct {
+		name       string
+		payload    string
+		transcript string
+		code       int
+		output     string
+		withBinary bool
+		wantJSON   map[string]any
+		wantLaunch bool
+		wantPlan   string
+	}{
+		{name: "non Stop event", payload: strings.Replace(basePayload, `"Stop"`, `"SubagentStop"`, 1), withBinary: true, wantJSON: map[string]any{}},
+		{name: "default mode quoted plan skip", payload: strings.Replace(basePayload, `"plan"`, `"default"`, 1), withBinary: true, wantJSON: map[string]any{}},
+		{name: "build mode quoted plan skip", payload: strings.Replace(basePayload, `"plan"`, `"acceptEdits"`, 1), withBinary: true, wantJSON: map[string]any{}},
+		{name: "bypass mode quoted plan skip", payload: strings.Replace(basePayload, `"plan"`, `"bypassPermissions"`, 1), withBinary: true, wantJSON: map[string]any{}},
+		{name: "clean message plan", payload: basePayload, withBinary: true, wantJSON: map[string]any{}, wantLaunch: true, wantPlan: "# Plan\n- item"},
+		{name: "active revise loop still launches", payload: strings.Replace(basePayload, `false`, `true`, 1), withBinary: true, wantJSON: map[string]any{}, wantLaunch: true, wantPlan: "# Plan\n- item"},
+		{name: "annotations", payload: basePayload, code: exitCodeAnnotations, output: "## plan.md:2 (+)\nrevise this\n", withBinary: true, wantJSON: map[string]any{"decision": "block"}, wantLaunch: true, wantPlan: "# Plan\n- item"},
+		{name: "mixed prose falls back to transcript", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-current","transcript_path":"$TRANSCRIPT","last_assistant_message":"I completed the plan; it follows below."}`, transcript: planTranscript, withBinary: true, wantJSON: map[string]any{}, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "null message uses exact turn transcript", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-current","transcript_path":"$TRANSCRIPT","last_assistant_message":null}`, transcript: planTranscript, withBinary: true, wantJSON: map[string]any{}, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "last assistant message wins without phase", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-current","transcript_path":"$TRANSCRIPT","last_assistant_message":"stripped plan"}`, transcript: `{"type":"response_item","payload":{"type":"message","role":"assistant","phase":"analysis","content":[{"type":"output_text","text":"<proposed_plan>\n# Old plan\n</proposed_plan>"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-current"}}}` + "\n" + `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<proposed_plan>\n# New plan\n- later\n</proposed_plan>"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-current"}}}` + "\n", withBinary: true, wantJSON: map[string]any{}, wantLaunch: true, wantPlan: "# New plan\n- later"},
+		{name: "clarification transcript skips", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-current","transcript_path":"$TRANSCRIPT","last_assistant_message":"Need one clarification"}`, transcript: `{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Which database should this use?"}],"internal_chat_message_metadata_passthrough":{"turn_id":"turn-current"}}}` + "\n", withBinary: true, wantJSON: map[string]any{}},
+		{name: "transcript has no matching turn", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-missing","transcript_path":"$TRANSCRIPT","last_assistant_message":null}`, transcript: planTranscript, withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}},
+		{name: "transcript from another session", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-other","turn_id":"turn-current","transcript_path":"$TRANSCRIPT","last_assistant_message":null}`, transcript: planTranscript, withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}},
+		{name: "missing transcript", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-current","transcript_path":"/tmp/missing-session-current.jsonl","last_assistant_message":null}`, withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}},
+		{name: "malformed transcript", payload: `{"hook_event_name":"Stop","permission_mode":"plan","session_id":"session-current","turn_id":"turn-current","transcript_path":"$TRANSCRIPT","last_assistant_message":null}`, transcript: "{not-json\n", withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}},
+		{name: "missing fallback identifiers", payload: `{"hook_event_name":"Stop","permission_mode":"plan","last_assistant_message":"No plan block"}`, withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}},
+		{name: "missing revdiff", payload: basePayload, wantJSON: map[string]any{"systemMessage": "present"}},
+		{name: "launcher failure", payload: basePayload, code: 1, withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}, wantLaunch: true, wantPlan: "# Plan\n- item"},
+		{name: "malformed json", payload: `{`, withBinary: true, wantJSON: map[string]any{"systemMessage": "present"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			payload := tc.payload
+			if tc.transcript != "" {
+				transcript := filepath.Join(tmp, "rollout-session-current.jsonl")
+				writeTestFile(t, transcript, tc.transcript)
+				payload = strings.Replace(payload, "$TRANSCRIPT", transcript, 1)
+			}
+			pluginRoot := filepath.Join(tmp, "plugin")
+			launcher := filepath.Join(tmp, "launch-plan-review.sh")
+			launchLog := filepath.Join(tmp, "launch.log")
+			argsLog := filepath.Join(tmp, "args.log")
+			binDir := filepath.Join(tmp, "bin")
+			writeExecutable(t, launcher, "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$#\" > \"$FAKE_ARGS\"\ncp \"$1\" \"$FAKE_LOG\"\nprintf \"%s\" \"${FAKE_OUTPUT:-}\"\nexit \"${FAKE_RC:-0}\"\n")
+			writeExecutable(t, filepath.Join(pluginRoot, "scripts", "resolve-launcher.sh"), resolverScript(launcher))
+			if tc.withBinary {
+				writeExecutable(t, filepath.Join(binDir, "revdiff"), "#!/bin/sh\nexit 0\n")
+			}
+			pathValue := "/usr/bin:/bin"
+			if tc.withBinary {
+				pathValue = binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+			}
+
+			res := runTestCmd(t, cmdReq{
+				dir:   root,
+				name:  python,
+				args:  []string{hook},
+				stdin: payload,
+				env: map[string]string{
+					"PLUGIN_ROOT": pluginRoot,
+					"FAKE_OUTPUT": tc.output,
+					"FAKE_RC":     strconv.Itoa(tc.code),
+					"FAKE_LOG":    launchLog,
+					"FAKE_ARGS":   argsLog,
+					"PATH":        pathValue,
+					"TMPDIR":      tmp,
+				},
+			})
+			require.Equal(t, 0, res.code, "stderr: %s", res.stderr)
+			var got map[string]any
+			require.NoError(t, json.Unmarshal([]byte(res.stdout), &got), "stdout: %s", res.stdout)
+			if _, want := tc.wantJSON["systemMessage"]; want {
+				assert.NotEmpty(t, got["systemMessage"])
+			} else if decision, want := tc.wantJSON["decision"]; want {
+				assert.Equal(t, decision, got["decision"])
+				assert.Contains(t, got["reason"], strings.TrimSpace(tc.output))
+			} else {
+				assert.Empty(t, got)
+			}
+			_, logErr := os.Stat(launchLog)
+			assert.Equal(t, tc.wantLaunch, logErr == nil)
+			if tc.wantLaunch {
+				plan, readErr := os.ReadFile(launchLog) //nolint:gosec // path is a test-owned temp file
+				require.NoError(t, readErr)
+				assert.Equal(t, tc.wantPlan, string(plan))
+				args, readArgsErr := os.ReadFile(argsLog) //nolint:gosec // path is a test-owned temp file
+				require.NoError(t, readArgsErr)
+				assert.Equal(t, "1\n", string(args))
+			}
+		})
+	}
+}
+
+func TestCodexPlanReviewHookRollingReview(t *testing.T) {
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not found")
+	}
+
+	root := testRepoRoot(t)
+	hook := filepath.Join(root, "plugins", "revdiff-planning", "scripts", "codex-plan-review-hook.py")
+	tmp := t.TempDir()
+	pluginRoot := filepath.Join(tmp, "plugin")
+	launcher := filepath.Join(tmp, "launch-plan-review.sh")
+	launchLog := filepath.Join(tmp, "launch.log")
+	oldLog := filepath.Join(tmp, "old.log")
+	argsLog := filepath.Join(tmp, "args.log")
+	binDir := filepath.Join(tmp, "bin")
+	writeExecutable(t, launcher, "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s\\n' \"$#\" > \"$FAKE_ARGS\"\ncp \"$1\" \"$FAKE_LOG\"\nif [ \"$#\" -eq 2 ]; then cp \"$2\" \"$FAKE_OLD\"; fi\nprintf \"%s\" \"${FAKE_OUTPUT:-}\"\nexit \"${FAKE_RC:-0}\"\n")
+	writeExecutable(t, filepath.Join(pluginRoot, "scripts", "resolve-launcher.sh"), resolverScript(launcher))
+	writeExecutable(t, filepath.Join(binDir, "revdiff"), "#!/bin/sh\nexit 0\n")
+
+	runHook := func(payload string, code int, output string) map[string]any {
+		t.Helper()
+		res := runTestCmd(t, cmdReq{
+			dir:   root,
+			name:  python,
+			args:  []string{hook},
+			stdin: payload,
+			env: map[string]string{
+				"PLUGIN_ROOT": pluginRoot,
+				"FAKE_OUTPUT": output,
+				"FAKE_RC":     strconv.Itoa(code),
+				"FAKE_LOG":    launchLog,
+				"FAKE_OLD":    oldLog,
+				"FAKE_ARGS":   argsLog,
+				"PATH":        binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+				"TMPDIR":      tmp,
+			},
+		})
+		require.Equal(t, 0, res.code, "stderr: %s", res.stderr)
+		var response map[string]any
+		require.NoError(t, json.Unmarshal([]byte(res.stdout), &response), "stdout: %s", res.stdout)
+		return response
+	}
+
+	first := runHook(`{"hook_event_name":"Stop","permission_mode":"plan","stop_hook_active":false,"last_assistant_message":"<proposed_plan>\n# Plan\n- first\n</proposed_plan>"}`, exitCodeAnnotations, "revise first")
+	assert.Equal(t, "block", first["decision"])
+	firstSnapshots := planSnapshots(t, tmp)
+	require.Len(t, firstSnapshots, 1)
+	firstSnapshot := firstSnapshots[0]
+	assert.Contains(t, first["reason"], "<!-- previous revision: "+firstSnapshot+" -->")
+	assertFileContent(t, argsLog, "1\n")
+
+	secondPayload := `{"hook_event_name":"Stop","permission_mode":"plan","stop_hook_active":true,"last_assistant_message":"<proposed_plan>\n<!-- previous revision: ` + firstSnapshot + ` -->\n# Revised plan\n- second\n</proposed_plan>"}`
+	second := runHook(secondPayload, exitCodeAnnotations, "revise second")
+	assert.Equal(t, "block", second["decision"])
+	secondSnapshots := planSnapshots(t, tmp)
+	require.Len(t, secondSnapshots, 1)
+	secondSnapshot := secondSnapshots[0]
+	assert.NotEqual(t, firstSnapshot, secondSnapshot)
+	assert.NoFileExists(t, firstSnapshot)
+	assert.Contains(t, second["reason"], "<!-- previous revision: "+secondSnapshot+" -->")
+	assertFileContent(t, argsLog, "2\n")
+	assertFileContent(t, launchLog, "# Revised plan\n- second")
+	assertFileContent(t, oldLog, "# Plan\n- first")
+
+	failedPayload := `{"hook_event_name":"Stop","permission_mode":"plan","last_assistant_message":"<proposed_plan>\n<!-- previous revision: ` + secondSnapshot + ` -->\n# Failed attempt\n</proposed_plan>"}`
+	failed := runHook(failedPayload, 1, "")
+	assert.NotEmpty(t, failed["systemMessage"])
+	assert.FileExists(t, secondSnapshot)
+	assert.Equal(t, []string{secondSnapshot}, planSnapshots(t, tmp))
+
+	cleanPayload := `{"hook_event_name":"Stop","permission_mode":"plan","last_assistant_message":"<proposed_plan>\n<!-- previous revision: ` + secondSnapshot + ` -->\n# Final plan\n</proposed_plan>"}`
+	clean := runHook(cleanPayload, 0, "")
+	assert.Empty(t, clean)
+	assert.Empty(t, planSnapshots(t, tmp))
+	assertFileContent(t, argsLog, "2\n")
+	assertFileContent(t, launchLog, "# Final plan")
+	assertFileContent(t, oldLog, "# Revised plan\n- second")
+}
+
+func TestPlanningPluginHookWiring(t *testing.T) {
+	root := testRepoRoot(t)
+	claudeManifest := readRepoFile(t, root, "plugins", "revdiff-planning", ".claude-plugin", "plugin.json")
+	claudeHooks := readRepoFile(t, root, "plugins", "revdiff-planning", "hooks", "hooks.json")
+	codexManifest := readRepoFile(t, root, "plugins", "revdiff-planning", ".codex-plugin", "plugin.json")
+	codexHooks := readRepoFile(t, root, "plugins", "revdiff-planning", "hooks", "codex-hooks.json")
+
+	assert.NotContains(t, claudeManifest, `"hooks"`)
+	assert.Contains(t, claudeHooks, `"PreToolUse"`)
+	assert.Contains(t, claudeHooks, `"ExitPlanMode"`)
+	assert.NotContains(t, claudeHooks, `"Stop"`)
+	assert.Contains(t, codexManifest, `"hooks": "./hooks/codex-hooks.json"`)
+	assert.Contains(t, codexHooks, `"Stop"`)
+	assert.Contains(t, codexHooks, `${PLUGIN_ROOT}/scripts/codex-plan-review-hook.py`)
+	assert.NoFileExists(t, filepath.Join(root, "plugins", "revdiff-planning", "hooks", "claude-hooks.json"))
 }
 
 func TestOpenCodeCallersPreserveAnnotationExitCode(t *testing.T) {
@@ -784,4 +995,11 @@ func planSnapshots(t *testing.T, dir string) []string {
 	matches, err := filepath.Glob(filepath.Join(dir, "plan-rev-*.md"))
 	require.NoError(t, err)
 	return matches
+}
+
+func assertFileContent(t *testing.T, path, want string) {
+	t.Helper()
+	content, err := os.ReadFile(path) //nolint:gosec // path is a test-owned temp file
+	require.NoError(t, err)
+	assert.Equal(t, want, string(content))
 }
