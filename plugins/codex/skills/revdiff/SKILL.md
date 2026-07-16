@@ -164,7 +164,7 @@ The script:
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
-The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures. On failure the launcher relays revdiff's own error text on stderr (captured from inside the overlay) — read it and report it instead of guessing which flag or argument was at fault.
 
 #### Agterm sessions and approval escalation
 

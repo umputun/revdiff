@@ -152,11 +152,11 @@ The script:
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
-The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures. On failure the launcher relays revdiff's own error text on stderr (captured from inside the overlay) — read it and report it instead of guessing which flag or argument was at fault.
 
 ### Step 3: Process Annotations
 
-**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout (on Claude Code the task keeps running in the background after the 10-minute cap; on other harnesses it may be killed outright), only the launcher process died, but revdiff itself is still open in the overlay and no annotations are lost: revdiff writes them to disk the moment the user quits, and `O` flushes them any time. Do NOT retry the launcher. Use the fallback:
+**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout (the harness kills the waiting launcher process at its cap — 10 minutes on Claude Code), only the launcher process died: the overlay and the review survive it, and no annotations are lost: revdiff writes them to disk the moment the user quits, and `O` flushes them any time. Do NOT retry the launcher. Use the fallback:
 
 1. Reassure the user and offer both paths, making clear nothing is lost — keep it short and do NOT explain the save mechanics (disk writes, `O` flush, quit-to-save); the user does not need them. Say something like: "The process waiting on your revdiff review timed out and exited — that's harmless, and any annotations you made are safe. Whenever you're done, message me and tell me to either load your annotations and continue, or that you're done and want to stop." Do NOT assume they want to load; quitting with no annotations, or choosing to stop, is a valid outcome.
 2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply means they are back at the session (they quit, or flushed with `O` and switched back).
