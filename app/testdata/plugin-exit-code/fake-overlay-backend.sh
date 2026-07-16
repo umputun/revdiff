@@ -121,6 +121,28 @@ case "$cmd_name" in
                 ;;
         esac
         ;;
+    agtermctl)
+        case "${1:-} ${2:-}" in
+            "session overlay")
+                # session overlay open <cmd> --target ... --cwd ... --block; run
+                # the command string in a shell and propagate its exit code,
+                # mirroring agtermctl running the overlay command and returning rc
+                if [ "${3:-}" = "open" ]; then
+                    sh -c "${4:-}"
+                    exit $?
+                fi
+                exit 0
+                ;;
+            "session status")
+                # blocked/active indicator toggles; no-op in the fake
+                exit 0
+                ;;
+            *)
+                echo "unexpected agtermctl command: $*" >&2
+                exit 1
+                ;;
+        esac
+        ;;
     *)
         echo "unexpected fake backend: $cmd_name" >&2
         exit 1
