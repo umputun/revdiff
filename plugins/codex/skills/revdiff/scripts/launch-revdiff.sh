@@ -34,19 +34,24 @@ for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
 done
 
+# both rc writers capture revdiff's stderr to <sentinel>.err: the overlay
+# closes the moment a fast-failing revdiff exits (bad ref, unknown flag from
+# an old binary), so without the capture the error text is unrecoverable and
+# the caller sees a bare nonzero exit
 write_rc_cmd() {
     local sentinel="$1"
     # single-quoted format keeps $?/$rc literal for the generated inner script
     # shellcheck disable=SC2016
-    printf '%s; rc=$?; printf "%%s" "$rc" > %s.tmp && mv -f %s.tmp %s' \
-        "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")"
+    printf '%s 2>%s.err; rc=$?; printf "%%s" "$rc" > %s.tmp && mv -f %s.tmp %s' \
+        "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")"
 }
 
 write_fifo_rc_cmd() {
     local sentinel="$1"
     # single-quoted format keeps $?/$rc literal for the generated inner script
     # shellcheck disable=SC2016
-    printf '%s; rc=$?; echo "$rc" > %s; exit' "$REVDIFF_CMD" "$(sq "$sentinel")"
+    printf '%s 2>%s.err; rc=$?; echo "$rc" > %s; exit' \
+        "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")"
 }
 
 read_rc() {
@@ -55,6 +60,11 @@ read_rc() {
 
 print_output_and_exit() {
     local rc="${1:-0}"
+    # exit 0 is a clean quit and 10 is "annotations captured"; anything else is
+    # a real failure, so replay the stderr captured inside the overlay
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 10 ] && [ -n "${SENTINEL:-}" ] && [ -s "$SENTINEL.err" ]; then
+        cat "$SENTINEL.err" >&2
+    fi
     cat "$OUTPUT_FILE"
     exit "$rc"
 }
@@ -162,7 +172,7 @@ fi
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err"' EXIT
 
     TMUX_BIN=$(command -v tmux)
     SESSION="revdiff-$$"
@@ -170,11 +180,16 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     # definition, whereas name targets prefix-match and set-option/show-options
     # (unlike has-session/kill-session) reject the "=" exact-match prefix
     SESSION_ID=$(tmux new-session -d -P -F '#{session_id}' -s "$SESSION" -c "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")")
-    # a cancelled launcher (INT/TERM) must not leave the invisible session
-    # running forever; bash skips the EXIT trap on untrapped fatal signals, so
-    # kill the session here and route through exit for the file cleanup trap
+    # INT means the caller cancelled the review: kill the invisible session so
+    # it does not linger forever (bash skips the EXIT trap on untrapped fatal
+    # signals, so route through exit for the file cleanup trap). TERM is
+    # different: harnesses send it on command timeouts while the reviewer is
+    # mid-review, and the popup + detached session survive the launcher's
+    # death — so leave the review running and keep the output/sentinel files
+    # (trap - EXIT) as the recovery artifacts. revdiff writes annotations to
+    # the output file and review history when the reviewer quits.
     trap 'tmux kill-session -t "$SESSION_ID" 2>/dev/null || true; exit 130' INT
-    trap 'tmux kill-session -t "$SESSION_ID" 2>/dev/null || true; exit 143' TERM
+    trap 'echo "warn: launcher terminated (timeout?); the review keeps running in tmux session $SESSION — annotations land in $OUTPUT_FILE and review history when the reviewer quits" >&2; trap - EXIT; exit 143' TERM
     # per-session overrides: no status bar inside the popup; quitting revdiff
     # must detach the popup client (a global detach-on-destroy=off would switch
     # the popup to another session instead of closing it); a backgrounded
@@ -234,6 +249,11 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
         tmux has-session -t "$SESSION_ID" 2>/dev/null || break
         sleep 1
     done
+    # session gone with no sentinel means something killed it out from under
+    # the reviewer (kill-session, server exit) — say so instead of a bare rc=1
+    if [ ! -f "$SENTINEL" ]; then
+        echo "warn: review session ended without reporting a result; check revdiff history for auto-saved annotations" >&2
+    fi
     rc=$(read_rc "$SENTINEL")
     rm -f "$SENTINEL"
     print_output_and_exit "${rc:-1}"
@@ -245,7 +265,7 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -288,7 +308,7 @@ if [ "${HERDR_ENV:-}" = "1" ] && command -v herdr >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -354,7 +374,7 @@ KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err"' EXIT
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd=current)
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
@@ -387,7 +407,7 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
 
         WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
         WEZTERM_PCT="${WEZTERM_PCT%%%}"
-        trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+        trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err"' EXIT
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
             --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")" >/dev/null 2>&1
 
@@ -410,7 +430,7 @@ if is_cmux_session; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -451,7 +471,7 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -500,10 +520,10 @@ if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
 
     # use launcher script to avoid single-quote injection in paths
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-cd "\$1" && $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > "\$2.tmp" && mv -f "\$2.tmp" "\$2"
+cd "\$1" && $REVDIFF_CMD 2>"\$2.err"; rc=\$?; printf "%s" "\$rc" > "\$2.tmp" && mv -f "\$2.tmp" "\$2"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -581,7 +601,7 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
     # use launcher script to avoid shell interpolation issues in elisp strings;
     # embed all paths directly so vterm-shell needs no arguments
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 cd $(sq "$CWD") && $(write_fifo_rc_cmd "$SENTINEL")
