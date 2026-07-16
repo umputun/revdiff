@@ -723,6 +723,62 @@ func TestHandleSourceEditorFinished_ReloadAfterCleanExit(t *testing.T) {
 	}
 }
 
+func TestHandleSourceEditorFinished_RestoresMouseTracking(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantHint string
+	}{
+		{name: "clean exit", wantHint: "Returned from editor"},
+		{name: "editor error", err: errors.New("editor failed"), wantHint: "Editor failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+
+			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
+				err:          tt.err,
+				fileName:     "a.go",
+				restoreMouse: true,
+			})
+			model := result.(Model)
+
+			require.NotNil(t, cmd)
+			assert.IsType(t, tea.EnableMouseCellMotion(), cmd())
+			assert.Equal(t, tt.wantHint, model.editorState.hint)
+		})
+	}
+}
+
+func TestHandleSourceEditorFinished_DoesNotRestoreDisabledMouseTracking(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+
+	_, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{fileName: "a.go"})
+
+	assert.Nil(t, cmd)
+}
+
+func TestHandleSourceEditorFinished_CombinesMouseRestoreAndReload(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.file.name = "a.go"
+	beforeSeq := m.file.loadSeq
+
+	result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
+		fileName:             "a.go",
+		reloadAfterCleanExit: true,
+		restoreMouse:         true,
+	})
+	model := result.(Model)
+
+	require.NotNil(t, cmd)
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(t, ok)
+	require.Len(t, batch, 2)
+	assert.IsType(t, tea.EnableMouseCellMotion(), batch[0]())
+	assert.Greater(t, model.file.loadSeq, beforeSeq)
+}
+
 func TestHandleSourceEditorFinished_SkipsReloadWhenFileChanged(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)
 	m.file.name = "b.go"

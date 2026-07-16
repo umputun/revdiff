@@ -113,6 +113,7 @@ type sourceEditorFinishedMsg struct {
 	err                  error
 	fileName             string
 	reloadAfterCleanExit bool
+	restoreMouse         bool
 }
 
 // sourceEditorTargetResult is the UI-side decision for one source-editor
@@ -153,7 +154,12 @@ func (m *Model) openSourceEditor() tea.Cmd {
 		}
 	}
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
-		return sourceEditorFinishedMsg{err: runErr, fileName: result.fileName, reloadAfterCleanExit: result.reloadAfterCleanExit}
+		return sourceEditorFinishedMsg{
+			err:                  runErr,
+			fileName:             result.fileName,
+			reloadAfterCleanExit: result.reloadAfterCleanExit,
+			restoreMouse:         m.cfg.mouseTracking,
+		}
 	})
 }
 
@@ -334,25 +340,32 @@ func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Model, tea.Cmd) {
+	var restoreMouseCmd tea.Cmd
+	if msg.restoreMouse {
+		restoreMouseCmd = tea.EnableMouseCellMotion
+	}
 	if msg.err != nil {
 		log.Printf("[WARN] source editor session error: %v", msg.err)
 		m.editorState.hint = "Editor failed"
-		return m, nil
+		return m, restoreMouseCmd
 	}
 	m.editorState.hint = "Returned from editor"
 	if !msg.reloadAfterCleanExit {
-		return m, nil
+		return m, restoreMouseCmd
 	}
 	// Cross-file hunk navigation can advance the tree selection before the
 	// selected file load finishes. In that window, the editor returned for a
 	// stale displayed file, so leave the queued load in control.
 	if msg.fileName != m.tree.SelectedFile() {
 		m.nav.pendingHunkJump = nil
-		return m, nil
+		return m, restoreMouseCmd
 	}
 	if msg.fileName != m.file.name {
-		return m, nil
+		return m, restoreMouseCmd
 	}
-	cmd := m.reloadCurrentFile()
-	return m, cmd
+	reloadCmd := m.reloadCurrentFile()
+	if restoreMouseCmd == nil {
+		return m, reloadCmd
+	}
+	return m, tea.Batch(restoreMouseCmd, reloadCmd)
 }
