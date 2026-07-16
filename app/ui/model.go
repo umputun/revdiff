@@ -471,8 +471,24 @@ type reloadState struct {
 // the reload.hint lifecycle. The user-controlled toggle state (on/off,
 // context size) lives on modeState alongside the other view toggles.
 type compactState struct {
-	applicable bool   // true when current mode supports compact diffs
-	hint       string // transient status-bar message; cleared on next key press
+	applicable    bool           // true when current mode supports compact diffs
+	hint          string         // transient status-bar message; cleared on next key press
+	pendingAnchor *compactAnchor // cursor position captured before a toggle, restored after the re-fetch
+}
+
+// compactAnchor captures the cursor's semantic position before a compact-mode
+// toggle so it can be restored after the file re-fetches at the new context
+// size. Line indices differ between the compact and full diffs, so the anchor
+// resolves by source line number (srcLine + changeType); when that line is
+// absent from the re-fetched diff (a context line outside a hunk's retained
+// window in the full→compact direction), it falls back to the nearest hunk
+// captured at toggle time (hunkIdx). seq ties the anchor to the exact reload
+// the toggle issued, so an intervening file switch or reload discards it.
+type compactAnchor struct {
+	seq        uint64          // file.loadSeq of the reload this anchor belongs to
+	srcLine    int             // diffLineNum at the cursor (0 for dividers)
+	changeType diff.ChangeType // change type at the cursor, for the index lookup
+	hunkIdx    int             // 0-based nearest hunk at/before cursor; -1 when none
 }
 
 // editorState holds transient feedback for opening worktree files in the
@@ -1348,14 +1364,22 @@ func (m *Model) toggleUntracked() tea.Cmd {
 // size takes effect. Other files re-fetch naturally on next navigation. When
 // the feature is not applicable in the current mode (e.g. --stdin, --all-files,
 // standalone FileReader), sets a transient status-bar hint and returns nil —
-// mode stays unchanged and no re-fetch is issued.
+// mode stays unchanged and no re-fetch is issued. The cursor position is
+// preserved across the toggle via a compactAnchor captured before the re-fetch
+// and restored in handleFileLoaded, instead of resetting to the top.
 func (m *Model) toggleCompactMode() tea.Cmd {
 	if !m.compact.applicable {
 		m.compact.hint = "compact not applicable in this mode"
 		return nil
 	}
+	anchor := m.captureCompactAnchor()
 	m.modes.compact = !m.modes.compact
-	return m.reloadCurrentFile()
+	cmd := m.reloadCurrentFile()
+	if cmd != nil && anchor != nil {
+		anchor.seq = m.file.loadSeq
+		m.compact.pendingAnchor = anchor
+	}
+	return cmd
 }
 
 // handleViewToggle dispatches view mode toggle actions.

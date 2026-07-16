@@ -1040,6 +1040,46 @@ func TestModel_CurrentHunkNoChanges(t *testing.T) {
 	assert.Equal(t, 0, hunk)
 	assert.Equal(t, 0, total)
 }
+
+func TestModel_NearestHunkIndex(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.file.name = "a.go"
+	m.file.lines = []diff.DiffLine{
+		{NewNum: 1, ChangeType: diff.ChangeContext}, // 0
+		{NewNum: 2, ChangeType: diff.ChangeAdd},     // 1 hunk 0 start
+		{NewNum: 3, ChangeType: diff.ChangeContext}, // 2
+		{NewNum: 4, ChangeType: diff.ChangeContext}, // 3
+		{NewNum: 5, ChangeType: diff.ChangeAdd},     // 4 hunk 1 start
+		{NewNum: 6, ChangeType: diff.ChangeContext}, // 5
+	}
+	tests := []struct {
+		name string
+		idx  int
+		want int
+	}{
+		{"before first hunk", 0, 0},
+		{"on first hunk", 1, 0},
+		{"between hunks", 3, 0},
+		{"on second hunk", 4, 1},
+		{"after second hunk", 5, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, m.nearestHunkIndex(tt.idx))
+		})
+	}
+
+	t.Run("no hunks returns -1", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{NewNum: 1, ChangeType: diff.ChangeContext},
+			{NewNum: 2, ChangeType: diff.ChangeContext},
+		}
+		assert.Equal(t, -1, m.nearestHunkIndex(0))
+	})
+}
+
 func TestModel_MoveToNextHunk(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},  // 0

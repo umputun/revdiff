@@ -857,10 +857,16 @@ func TestModel_ToggleCompactMode_DoesNotReloadFilesOrCommits(t *testing.T) {
 	assert.Equal(t, 1, fileDiffCalls, "toggle must trigger exactly one FileDiff call (current file only)")
 }
 
-func TestModel_ToggleCompactMode_CursorResetsAfterReload(t *testing.T) {
-	// simulates the full toggle flow: press C, then process the fileLoadedMsg
-	// from the triggered re-fetch. verifies skipInitialDividers ran and the
-	// cursor landed on the first non-divider visible line.
+func TestModel_ToggleCompactMode_PreservesCursorAcrossToggle(t *testing.T) {
+	// full-file view: cursor sits on the added line (NewNum 41) deep in the file
+	fullDiff := []diff.DiffLine{
+		{NewNum: 38, Content: "a", ChangeType: diff.ChangeContext},
+		{NewNum: 39, Content: "b", ChangeType: diff.ChangeContext},
+		{NewNum: 40, Content: "context before", ChangeType: diff.ChangeContext},
+		{NewNum: 41, Content: "added line", ChangeType: diff.ChangeAdd},
+		{NewNum: 42, Content: "context after", ChangeType: diff.ChangeContext},
+	}
+	// compact view of the same file: the added line moves to index 2
 	compactDiff := []diff.DiffLine{
 		{ChangeType: diff.ChangeDivider},
 		{NewNum: 40, Content: "context before", ChangeType: diff.ChangeContext},
@@ -869,26 +875,91 @@ func TestModel_ToggleCompactMode_CursorResetsAfterReload(t *testing.T) {
 	}
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) {
-			return compactDiff, nil
-		},
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return compactDiff, nil },
 	}
 	m := testModel([]string{"a.go"}, nil)
 	m.diffRenderer = renderer
 	m.compact.applicable = true
 	m.modes.compactContext = 5
 	m.file.name = "a.go"
-	m.nav.diffCursor = 999 // pretend cursor was somewhere deep in a full-file view
+	m.file.lines = fullDiff
+	m.nav.diffCursor = 3 // on the added line (NewNum 41)
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
 	model := result.(Model)
 	require.NotNil(t, cmd)
-	msg := cmd()
-	result, _ = model.Update(msg)
+	result, _ = model.Update(cmd())
 	model = result.(Model)
 
-	// after skipInitialDividers, cursor should skip index 0 (divider) and land on 1
-	assert.Equal(t, 1, model.nav.diffCursor, "cursor must reset to first non-divider line after compact re-fetch")
+	assert.Equal(t, 2, model.nav.diffCursor,
+		"cursor must follow the anchored change line (NewNum 41) into the compact diff, not reset to top")
+}
+
+func TestModel_ToggleCompactMode_FallsBackToHunkWhenAnchorLineDropped(t *testing.T) {
+	// full-file view: cursor sits on a context line (NewNum 5) far from any hunk
+	fullDiff := []diff.DiffLine{
+		{NewNum: 3, Content: "x", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "y", ChangeType: diff.ChangeContext},
+		{NewNum: 5, Content: "far context", ChangeType: diff.ChangeContext},
+		{NewNum: 6, Content: "z", ChangeType: diff.ChangeContext},
+		{NewNum: 40, Content: "hunk add", ChangeType: diff.ChangeAdd},
+	}
+	// compact view: the far context line (NewNum 5) is gone; only the hunk remains
+	compactDiff := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{NewNum: 39, Content: "context", ChangeType: diff.ChangeContext},
+		{NewNum: 40, Content: "hunk add", ChangeType: diff.ChangeAdd},
+	}
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return compactDiff, nil },
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.diffRenderer = renderer
+	m.compact.applicable = true
+	m.modes.compactContext = 5
+	m.file.name = "a.go"
+	m.file.lines = fullDiff
+	m.nav.diffCursor = 2 // context line NewNum 5, dropped in compact
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = model.Update(cmd())
+	model = result.(Model)
+
+	assert.Equal(t, 2, model.nav.diffCursor,
+		"cursor must fall back to the nearest hunk when the anchored context line is dropped from compact")
+}
+
+func TestModel_ToggleCompactMode_ResetsToTopWhenNoAnchor(t *testing.T) {
+	// when the pre-toggle cursor cannot be anchored (out of range / no lines),
+	// the toggle falls back to default top positioning: skipInitialDividers
+	// lands the cursor on the first non-divider visible line.
+	compactDiff := []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{NewNum: 40, Content: "context before", ChangeType: diff.ChangeContext},
+		{NewNum: 41, Content: "added line", ChangeType: diff.ChangeAdd},
+		{NewNum: 42, Content: "context after", ChangeType: diff.ChangeContext},
+	}
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return compactDiff, nil },
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.diffRenderer = renderer
+	m.compact.applicable = true
+	m.modes.compactContext = 5
+	m.file.name = "a.go"
+	m.nav.diffCursor = 999 // no lines set → cursor out of range → no anchor captured
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = model.Update(cmd())
+	model = result.(Model)
+
+	assert.Equal(t, 1, model.nav.diffCursor, "with no anchor, cursor resets to the first non-divider line")
 }
 
 func TestDisplayKeyName(t *testing.T) {

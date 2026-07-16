@@ -306,6 +306,45 @@ func (m *Model) reloadCurrentFile() tea.Cmd {
 	return m.loadFileDiff(m.file.name)
 }
 
+// captureCompactAnchor records the cursor's semantic position before a compact
+// toggle so applyCompactAnchor can restore the view after the re-fetch at the
+// new context size. Returns nil when no file is loaded or the cursor is unset,
+// in which case the toggle falls back to the default top positioning.
+func (m Model) captureCompactAnchor() *compactAnchor {
+	if m.file.name == "" || m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
+		return nil
+	}
+	dl := m.file.lines[m.nav.diffCursor]
+	return &compactAnchor{
+		srcLine:    m.diffLineNum(dl),
+		changeType: dl.ChangeType,
+		hunkIdx:    m.nearestHunkIndex(m.nav.diffCursor),
+	}
+}
+
+// applyCompactAnchor restores the cursor to the position captured before a
+// compact toggle and centers the viewport on it. It resolves the anchor by
+// source line number; when that line is absent from the re-fetched diff (a
+// context line dropped in the full→compact direction), it falls back to the
+// nearest hunk captured at toggle time, then to the first visible line.
+func (m *Model) applyCompactAnchor(a *compactAnchor) {
+	m.annot.cursorOnAnnotation = false
+	if a.srcLine > 0 && a.changeType != diff.ChangeDivider {
+		if idx := m.findDiffLineIndex(a.srcLine, string(a.changeType)); idx >= 0 {
+			m.nav.diffCursor = idx
+			m.centerViewportOnCursor()
+			return
+		}
+	}
+	if hunks := m.findHunks(); a.hunkIdx >= 0 && a.hunkIdx < len(hunks) {
+		m.nav.diffCursor = hunks[a.hunkIdx]
+		m.centerViewportOnCursor()
+		return
+	}
+	m.skipInitialDividers()
+	m.centerViewportOnCursor()
+}
+
 // loadBlame returns a command that fetches blame data for the given file.
 // returns nil if no blamer is configured.
 func (m Model) loadBlame(file string) tea.Cmd {
@@ -527,6 +566,18 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		m.applyPendingHunkJump()
 		m.centerViewportOnCursor()
 		return m, blameCmd
+	}
+
+	// handle pending compact-toggle anchor: restore the cursor to where it was
+	// before the toggle instead of resetting to the top. seq ties the anchor to
+	// this exact reload, so a stale anchor from a superseded load is dropped.
+	if m.compact.pendingAnchor != nil {
+		a := m.compact.pendingAnchor
+		m.compact.pendingAnchor = nil
+		if a.seq == msg.seq {
+			m.applyCompactAnchor(a)
+			return m, blameCmd
+		}
 	}
 
 	m.layout.viewport.SetContent(m.renderDiff())

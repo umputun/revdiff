@@ -491,6 +491,24 @@ func (m Model) currentHunk() (int, int) {
 	return cur, len(hunks)
 }
 
+// nearestHunkIndex returns the 0-based index of the change hunk starting at or
+// before idx, or 0 when idx precedes the first hunk. Returns -1 when the file
+// has no hunks. Used as the compact-toggle reposition fallback when the cursor
+// sat on a context line that is absent from the re-fetched compact diff.
+func (m Model) nearestHunkIndex(idx int) int {
+	hunks := m.findHunks()
+	if len(hunks) == 0 {
+		return -1
+	}
+	nearest := 0
+	for i, start := range hunks {
+		if start <= idx {
+			nearest = i
+		}
+	}
+	return nearest
+}
+
 // moveToNextHunk moves the diff cursor to the start of the next change hunk.
 // in collapsed mode, advances past hidden removed lines to the first visible line in the hunk.
 func (m *Model) moveToNextHunk() {

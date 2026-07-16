@@ -1680,6 +1680,111 @@ func TestModel_ReloadCurrentFileNoOpWhenEmpty(t *testing.T) {
 	assert.Equal(t, beforeSeq, m.file.loadSeq, "no load implies no seq bump")
 }
 
+func TestModel_CaptureCompactAnchor(t *testing.T) {
+	lines := []diff.DiffLine{
+		{NewNum: 10, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 11, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 12, Content: "added", ChangeType: diff.ChangeAdd},
+	}
+
+	t.Run("nil when no file loaded", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = ""
+		m.file.lines = lines
+		m.nav.diffCursor = 1
+		assert.Nil(t, m.captureCompactAnchor())
+	})
+
+	t.Run("nil when cursor out of range", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = lines
+		m.nav.diffCursor = 99
+		assert.Nil(t, m.captureCompactAnchor())
+	})
+
+	t.Run("nil when cursor negative", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = lines
+		m.nav.diffCursor = -1
+		assert.Nil(t, m.captureCompactAnchor())
+	})
+
+	t.Run("captures added line by new number", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = lines
+		m.nav.diffCursor = 2
+		a := m.captureCompactAnchor()
+		require.NotNil(t, a)
+		assert.Equal(t, 12, a.srcLine)
+		assert.Equal(t, diff.ChangeAdd, a.changeType)
+		assert.Equal(t, 0, a.hunkIdx) // single hunk starts at index 1
+	})
+
+	t.Run("captures removed line by old number", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = lines
+		m.nav.diffCursor = 1
+		a := m.captureCompactAnchor()
+		require.NotNil(t, a)
+		assert.Equal(t, 11, a.srcLine)
+		assert.Equal(t, diff.ChangeRemove, a.changeType)
+	})
+}
+
+func TestModel_ApplyCompactAnchor(t *testing.T) {
+	t.Run("restores cursor to matching change line", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
+			{NewNum: 41, Content: "add", ChangeType: diff.ChangeAdd},
+		}
+		m.applyCompactAnchor(&compactAnchor{srcLine: 41, changeType: diff.ChangeAdd, hunkIdx: 0})
+		assert.Equal(t, 2, m.nav.diffCursor)
+	})
+
+	t.Run("falls back to nearest hunk when line absent", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
+			{NewNum: 41, Content: "add", ChangeType: diff.ChangeAdd},
+		}
+		// context line NewNum 5 not present → fall back to hunk 0 (index 2)
+		m.applyCompactAnchor(&compactAnchor{srcLine: 5, changeType: diff.ChangeContext, hunkIdx: 0})
+		assert.Equal(t, 2, m.nav.diffCursor)
+	})
+
+	t.Run("divider anchor skips line lookup and uses hunk", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{NewNum: 41, Content: "add", ChangeType: diff.ChangeAdd},
+		}
+		m.applyCompactAnchor(&compactAnchor{srcLine: 0, changeType: diff.ChangeDivider, hunkIdx: 0})
+		assert.Equal(t, 1, m.nav.diffCursor)
+	})
+
+	t.Run("skips to first visible line when no hunks", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.file.name = "a.go"
+		m.file.lines = []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{NewNum: 40, Content: "c", ChangeType: diff.ChangeContext},
+			{NewNum: 41, Content: "d", ChangeType: diff.ChangeContext},
+		}
+		m.applyCompactAnchor(&compactAnchor{srcLine: 999, changeType: diff.ChangeContext, hunkIdx: -1})
+		assert.Equal(t, 1, m.nav.diffCursor) // skipInitialDividers lands on first non-divider
+	})
+}
+
 func TestModel_LoadFilesReconcilesReviewedFingerprints(t *testing.T) {
 	entry := diff.FileEntry{Path: "a.go", Status: diff.FileModified}
 	original := []diff.DiffLine{
