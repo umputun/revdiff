@@ -7,6 +7,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 ## Features
 
 - Structured annotation output to stdout - pipe into AI agents, scripts, or other tools
+- Keep-open agent handoff: flush annotations to a file (`-o`) and/or pipe them to a command (`--agent-cmd`) with `O` without exiting, then reload with `R` and keep reviewing
 - Full-file diff view with syntax highlighting
 - Intra-line word-diff: highlights the specific changed words within paired add/remove lines using a brighter background overlay, off by default — enable with `--word-diff` or toggle with `W`
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
@@ -370,6 +371,7 @@ Positional arguments support several forms:
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
+| `--agent-cmd` | Pipe annotations to this command's stdin, env: `REVDIFF_AGENT_CMD` | |
 | `--annotations` | Preload annotations from a markdown file in `-o` format | |
 | `--history-dir` | Directory for review history auto-saves, env: `REVDIFF_HISTORY_DIR` | `~/.config/revdiff/history/` |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
@@ -556,6 +558,9 @@ some-command | revdiff --stdin --output /tmp/annotations.txt
 revdiff -o review.md HEAD~1
 $EDITOR review.md
 revdiff --annotations=review.md HEAD~1
+
+# pipe annotations to a command on each O flush (e.g. a relay into an agent session)
+revdiff --agent-cmd 'my-relay-script' HEAD~1
 ```
 
 `--annotations` reads the same markdown format that `-o` writes (see [Output Format](#output-format) below), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source — each record is `## path/to/file.go:LINE (+)` followed by the comment body — then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with `q` to write the final set to stdout (or to `-o`).
@@ -723,7 +728,7 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
-| `O` | Flush annotations to the `--output` file without exiting (requires `-o`) |
+| `O` | Flush annotations to the `--output` file and/or `--agent-cmd` command without exiting |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation (`open_editor` — rebindable) |
 | `Esc` | Cancel annotation input |
 
@@ -731,7 +736,12 @@ While the annotation input is active, press `Ctrl+E` (or whatever key is bound t
 
 Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_editor` — rebindable) when revdiff has a stable source path. Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive either `$EDITOR +N path` or `$EDITOR --goto path:N` as appropriate; unknown editors receive only the file path. File lines are resolved on a best-effort basis. For working tree changes, a clean editor exit reloads the displayed file. For `--staged` or refs, a clean editor exit returns to revdiff without reloading the displayed diff. In compare mode, `e` opens the `--compare-new` side. Working tree files with line annotations cannot be opened for editing because edits can orphan those annotations. Diffs read with `--stdin` do not support opening files. Unsupported rows or files and editor errors show a status hint instead of launching an editor or changing the diff.
 
-Press `O` to write the current annotations to the `--output` file without exiting (`flush_output` — rebindable). This keeps revdiff open while handing the file to an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session. Each flush overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit. `O` requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
+Press `O` to hand the current annotations off without exiting (`flush_output` — rebindable). This keeps revdiff open while an AI agent picks up the annotations: annotate, flush with `O`, let the agent read them and edit code, then reload with `R` and continue in the same session. The flush targets a file, a command, or both:
+
+- With `-o`/`--output`, it overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit.
+- With `--agent-cmd`, it pipes that same annotation output to the command's stdin and runs it asynchronously, so a slow command never blocks the review. This lets revdiff push annotations straight to an agent or relay on each flush instead of relying on something else to watch the output file. A non-zero exit shows a status hint; the store is never mutated.
+
+`O` requires `-o`/`--output` or `--agent-cmd`; with neither configured, or with no annotations yet, it shows a status hint and does nothing.
 
 Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
 

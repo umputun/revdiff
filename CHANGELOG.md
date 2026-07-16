@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+
+- pipe annotations to a command's stdin on the `O` flush with `--agent-cmd` / `REVDIFF_AGENT_CMD`
+
 ## v1.11.1 - 2026-07-13
 
 ### Improvements

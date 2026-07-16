@@ -53,6 +53,7 @@ Then uncomment and edit the values you want to change.
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
+| `--agent-cmd` | `REVDIFF_AGENT_CMD` | Pipe annotations to this command's stdin | |
 | `--history-dir` | `REVDIFF_HISTORY_DIR` | Directory for review history auto-saves | `~/.config/revdiff/history/` |
 | `--keys` | `REVDIFF_KEYS` | Path to keybindings file | `~/.config/revdiff/keybindings` |
 | `--dump-keys` | | Print effective keybindings to stdout and exit | |
@@ -151,4 +152,4 @@ Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half
 
 Fixed modal keys (Enter, Esc in annotation/search input, confirm discard) are not remappable. Keymap-resolved actions like `open_editor` work during annotation input and can be rebound. Chord bindings do not fire during text input — use single-key `ctrl+*` bindings for actions that need to work during annotation input.
 
-The `flush_output` action (default `O`) writes the current annotations to the `--output` file without exiting revdiff, so a reviewer can hand the file to an AI agent and reload with `R` in the same session. It requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
+The `flush_output` action (default `O`) hands the current annotations off without exiting revdiff — writing them to the `--output` file and/or piping them to the `--agent-cmd` command — so a reviewer can pass annotations to an AI agent and reload with `R` in the same session. It requires `-o`/`--output` or `--agent-cmd`; with neither configured, or with no annotations yet, it shows a status hint and does nothing. The agent command receives the same annotation output on its stdin and runs asynchronously, so a slow command never blocks the review.

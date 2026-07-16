@@ -27,6 +27,7 @@ revdiff --only=docs/notes.txt        # review a file with no VCS changes (contex
 revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md  # diff two arbitrary files (no VCS needed)
 printf '# Plan\n\nBody\n' | revdiff --stdin --stdin-name plan.md  # review piped text as markdown
 some-command | revdiff --stdin --output /tmp/annotations.txt      # annotate generated output
+revdiff --agent-cmd 'my-relay-script' HEAD~1                      # pipe annotations to a command on each O flush
 ```
 
 ## Single-File Mode
@@ -144,7 +145,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
-| `O` | Flush annotations to the `--output` file without exiting (requires `-o`) |
+| `O` | Flush annotations to the `--output` file and/or `--agent-cmd` command without exiting |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation (`open_editor` — rebindable) |
 | `Esc` | Cancel annotation input |
 
@@ -152,7 +153,7 @@ While the annotation input is active, press `Ctrl+E` (or whatever key is bound t
 
 Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_editor` — rebindable) when revdiff has a stable source path. Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive either `$EDITOR +N path` or `$EDITOR --goto path:N` as appropriate; unknown editors receive only the file path. File lines are resolved on a best-effort basis. For working tree changes, a clean editor exit reloads the displayed file. For `--staged` or refs, a clean editor exit returns to revdiff without reloading the displayed diff. In compare mode, `e` opens the `--compare-new` side. Working tree files with line annotations cannot be opened for editing because edits can orphan those annotations. Diffs read with `--stdin` do not support opening files. Unsupported rows or files and editor errors show a status hint instead of launching an editor or changing the diff.
 
-Press `O` to write the current annotations to the `--output` file without exiting (`flush_output` — rebindable). This keeps revdiff open while handing the file to an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session. Each flush overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit. `O` requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
+Press `O` to hand the current annotations off without exiting (`flush_output` — rebindable). This keeps revdiff open while an AI agent picks up the annotations: annotate, flush with `O`, let the agent read them and edit code, then reload with `R` and continue in the same session. With `-o`/`--output`, each flush overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit. With `--agent-cmd`, the same annotation output is piped to the command's stdin and run asynchronously, so a slow command never blocks the review — letting revdiff push annotations straight to an agent or relay on each flush instead of relying on something else to watch the output file. `O` requires `-o`/`--output` or `--agent-cmd`; with neither configured, or with no annotations yet, it shows a status hint and does nothing.
 
 Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
 
@@ -296,7 +297,7 @@ When annotation text contains the keyword "hunk" (case-insensitive, whole word),
 
 Comment body lines starting with `## ` (the record-header form) are prefixed with a single space on output so parsers that split on `## ` record headers cannot confuse a multi-line comment for a new record.
 
-Use `--output` / `-o` flag to write annotations to a file instead of stdout.
+Use `--output` / `-o` flag to write annotations to a file instead of stdout. Use `--agent-cmd` to also pipe the annotation output to a command's stdin on each `O` flush (e.g. a relay that forwards annotations into an agent session).
 
 Exit status: `0` = no annotations, discarded annotations, or default mode; `10` = annotations were produced with `--exit-code-on-annotations`, `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`, or `exit-code-on-annotations`; `1` = real errors. Agent launchers set `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` and treat `10` as success-with-annotations.
 
