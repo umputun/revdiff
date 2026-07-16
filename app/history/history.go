@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/umputun/revdiff/app/fsutil"
 )
 
 // Params holds parameters for saving a review history entry.
@@ -76,7 +78,7 @@ func (s *Service) Save(p Params) {
 		}
 	}
 
-	if err := os.WriteFile(fname, []byte(buf.String()), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(fname, []byte(buf.String())); err != nil {
 		log.Printf("[WARN] history: write %s: %v", fname, err)
 		return
 	}

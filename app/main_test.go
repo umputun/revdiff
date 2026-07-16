@@ -35,6 +35,77 @@ func TestAnnotationExitCode(t *testing.T) {
 	}
 }
 
+func TestFinalize(t *testing.T) {
+	output := "## file.go:1 (+)\ncomment\n"
+	tests := []struct {
+		name           string
+		output         string
+		discarded      bool
+		signaled       bool
+		withOutputFile bool
+		wantHistory    bool
+		wantHandoff    bool
+	}{
+		{name: "signaled saves history only", output: output, signaled: true, wantHistory: true, wantHandoff: false},
+		{name: "signaled with output file writes no handoff", output: output, signaled: true, withOutputFile: true, wantHistory: true, wantHandoff: false},
+		{name: "graceful with output file", output: output, withOutputFile: true, wantHistory: true, wantHandoff: true},
+		{name: "graceful to stdout", output: output, wantHistory: true, wantHandoff: true},
+		{name: "discarded writes nothing", output: output, discarded: true, wantHistory: false, wantHandoff: false},
+		{name: "discarded during signal still writes nothing", output: output, discarded: true, signaled: true, wantHistory: false, wantHandoff: false},
+		{name: "empty output writes nothing", output: "", wantHistory: false, wantHandoff: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			histDir := t.TempDir()
+			opts := options{HistoryDir: histDir}
+			var outFile string
+			if tt.withOutputFile {
+				outFile = filepath.Join(t.TempDir(), "annotations.txt")
+				opts.Output = outFile
+			}
+
+			var buf bytes.Buffer
+			code, err := finalize(finalizeReq{
+				opts:        opts,
+				annotations: tt.output,
+				files:       []string{"file.go"},
+				discarded:   tt.discarded,
+				gitRoot:     "",
+				workDir:     "repo",
+				signaled:    tt.signaled,
+				stdout:      &buf,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, 0, code)
+			assert.Equal(t, tt.wantHistory, historyFileCount(t, histDir) > 0)
+
+			if tt.withOutputFile {
+				assert.Empty(t, buf.String())
+				if tt.wantHandoff {
+					got, rerr := os.ReadFile(outFile) //nolint:gosec // test reads a file under t.TempDir
+					require.NoError(t, rerr)
+					assert.Equal(t, tt.output, string(got))
+				} else {
+					assert.NoFileExists(t, outFile)
+				}
+				return
+			}
+			if tt.wantHandoff {
+				assert.Equal(t, tt.output, buf.String())
+				return
+			}
+			assert.Empty(t, buf.String())
+		})
+	}
+}
+
+func historyFileCount(t *testing.T, dir string) int {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(dir, "*", "*.md"))
+	require.NoError(t, err)
+	return len(matches)
+}
+
 func TestWriteAnnotationOutput(t *testing.T) {
 	output := "## file.go:1 (+)\ncomment\n"
 	t.Run("stdout default exit zero", func(t *testing.T) {

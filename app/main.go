@@ -121,7 +121,7 @@ func run(opts options) (int, error) {
 		err                error
 	)
 
-	programOptions := []tea.ProgramOption{tea.WithAltScreen()}
+	programOptions := []tea.ProgramOption{tea.WithAltScreen(), tea.WithoutSignalHandler()}
 	if !opts.NoMouse {
 		programOptions = append(programOptions, tea.WithMouseCellMotion())
 	}
@@ -245,27 +245,66 @@ func run(opts options) (int, error) {
 	}
 
 	p := tea.NewProgram(model, programOptions...)
-	finalModel, err := p.Run()
-	if err != nil {
-		return 0, fmt.Errorf("TUI error: %w", err)
-	}
+	guard := &shutdownGuard{}
+	stop := guard.watch(p)
+	defer stop()
+	finalModel, runErr := p.Run()
+	// capture the signal flag once: a signal can land between reads, so a graceful
+	// runErr==nil exit must not observe wasSignaled flipping to true mid-tail.
+	signaled := guard.wasSignaled()
+	// restore default signal disposition before finalize. saveHistory shells out
+	// to git and writes files, so a slow or hung finalize must stay interruptible
+	// by a second signal (default disposition terminates) rather than being caught
+	// and swallowed by the guard. defer stop() above stays as a panic safety net —
+	// stop is idempotent.
+	stop()
 
-	// output annotations to stdout or file
-	m, ok := finalModel.(ui.Model)
-	if !ok {
+	// persist annotations: history safety net + optional -o handoff. a
+	// signal-driven exit can still surface a TUI error — a PTY hangup returns
+	// EIO that races the guard's QuitMsg — so the history safety net must run
+	// whenever the model is available and the exit was graceful or signaled.
+	if m, ok := finalModel.(ui.Model); ok && (runErr == nil || signaled) {
+		return finalize(finalizeReq{
+			opts:        opts,
+			annotations: m.Store().FormatOutput(),
+			files:       m.Store().Files(),
+			discarded:   m.Discarded(),
+			gitRoot:     gitRoot,
+			workDir:     workDir,
+			signaled:    signaled,
+			stdout:      os.Stdout,
+		})
+	}
+	if runErr != nil {
+		return 0, fmt.Errorf("TUI error: %w", runErr)
+	}
+	return 0, nil
+}
+
+type finalizeReq struct {
+	opts        options
+	annotations string
+	files       []string
+	discarded   bool
+	gitRoot     string
+	workDir     string
+	signaled    bool
+	stdout      io.Writer
+}
+
+// finalize persists the review after p.Run() joins. A discarded review or one
+// with no annotations writes nothing. Otherwise the history safety-net save
+// always runs; a signal-driven exit (r.signaled) stops there — history only,
+// never the -o handoff — while a graceful exit also writes the annotation output.
+func finalize(r finalizeReq) (int, error) {
+	if r.discarded || r.annotations == "" {
 		return 0, nil
 	}
-	if m.Discarded() {
+	saveHistory(histReq{opts: r.opts, annotations: r.annotations, gitRoot: r.gitRoot, workDir: r.workDir, files: r.files})
+	if r.signaled {
 		return 0, nil
 	}
-	output := m.Store().FormatOutput()
-	if output == "" {
-		return 0, nil
-	}
-
-	saveHistory(histReq{opts: opts, annotations: output, gitRoot: gitRoot, workDir: workDir, files: m.Store().Files()})
-
-	return writeAnnotationOutput(annotationOutputReq{opts: opts, output: output, stdout: os.Stdout})
+	return writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: r.annotations, stdout: r.stdout})
 }
 
 type annotationOutputReq struct {

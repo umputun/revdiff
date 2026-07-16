@@ -419,6 +419,38 @@ func TestSave_FilenameHasMilliseconds(t *testing.T) {
 	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}\.md$`, name)
 }
 
+func TestSave_FileModeAndCompleteContent(t *testing.T) {
+	histDir := t.TempDir()
+	annotations := "## readme.md:10 (+)\nfix typo\n"
+	p := Params{Annotations: annotations, Path: "/some/project"}
+	New(histDir).Save(p)
+
+	files, err := os.ReadDir(filepath.Join(histDir, "project"))
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+
+	fpath := filepath.Join(histDir, "project", files[0].Name())
+
+	// atomic write must land a file with mode 0o600
+	info, err := os.Stat(fpath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+	// content must be written completely — only the header timestamp varies
+	data, err := os.ReadFile(fpath) //nolint:gosec // test helper reading from temp dir
+	require.NoError(t, err)
+	lines := strings.SplitN(string(data), "\n", 2)
+	require.Len(t, lines, 2)
+	assert.True(t, strings.HasPrefix(lines[0], "# Review: "), "first line should be review header")
+	expectedRest := "path: /some/project\n\n## Annotations\n\n" + annotations
+	assert.Equal(t, expectedRest, lines[1])
+
+	// no leftover temp files from the atomic write
+	entries, err := os.ReadDir(filepath.Join(histDir, "project"))
+	require.NoError(t, err)
+	assert.Len(t, entries, 1, "atomic write should leave no temp files behind")
+}
+
 // setupGitRepo creates a temp git repo with one commit containing hello.txt.
 func setupGitRepo(t *testing.T, dir string) {
 	t.Helper()
