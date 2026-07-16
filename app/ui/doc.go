@@ -59,7 +59,7 @@
 // (styleResolver, styleRenderer, sgrProcessor) defined in model.go; concrete
 // implementations live in the style sub-package.
 //
-// Left-pane navigation components live in the [sidepane] sub-package (app/ui/sidepane/).
+// Navigation-pane components live in the [sidepane] sub-package (app/ui/sidepane/).
 // It owns the file tree (FileTree) and markdown table-of-contents (TOC) types,
 // including cursor/offset management, entry parsing, and rendering logic.
 // Model holds sidepane types through consumer-side interfaces (FileTreeComponent,

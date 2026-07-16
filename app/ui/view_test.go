@@ -607,6 +607,65 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 	})
 }
 
+func TestModel_ViewTreePosition(t *testing.T) {
+	assertOrder := func(t *testing.T, view, diffLabel, navigationLabel string, navigationOnRight bool) {
+		t.Helper()
+		labelColumn := func(lines []string, label string) int {
+			for _, line := range lines {
+				if idx := strings.Index(line, label); idx >= 0 {
+					return idx
+				}
+			}
+			return -1
+		}
+
+		lines := strings.Split(ansi.Strip(view), "\n")
+		diffIdx := labelColumn(lines, diffLabel)
+		navigationIdx := labelColumn(lines, navigationLabel)
+		require.NotEqual(t, -1, diffIdx, "diff label must appear in the rendered view")
+		require.NotEqual(t, -1, navigationIdx, "navigation label must appear in the rendered view")
+		if navigationOnRight {
+			assert.Less(t, diffIdx, navigationIdx)
+			return
+		}
+		assert.Less(t, navigationIdx, diffIdx)
+	}
+
+	for _, tc := range []struct {
+		name              string
+		navigationOnRight bool
+	}{
+		{name: "file tree on left"},
+		{name: "file tree on right", navigationOnRight: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"tree.go", "other.go"}, nil)
+			m.tree = testNewFileTree([]string{"tree.go", "other.go"})
+			m.file.name = "current.go"
+			m.cfg.treeOnRight = tc.navigationOnRight
+			m.cfg.noStatusBar = true
+
+			assertOrder(t, m.View(), "current.go", "tree.go", tc.navigationOnRight)
+		})
+	}
+
+	t.Run("markdown TOC follows tree position", func(t *testing.T) {
+		m := testModel([]string{"plan.md"}, nil)
+		m.tree = testNewFileTree([]string{"plan.md"})
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(
+			[]diff.DiffLine{{NewNum: 1, Content: "# Navigation section", ChangeType: diff.ChangeContext}},
+			"plan.md",
+		)
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "plan.md"
+		m.cfg.treeOnRight = true
+		m.cfg.noStatusBar = true
+
+		assertOrder(t, m.View(), "plan.md", "Navigation section", true)
+	})
+}
+
 func TestModel_ViewRenameHeader(t *testing.T) {
 	t.Run("renamed file header shows old to new", func(t *testing.T) {
 		m := testModel([]string{"new.go"}, nil)

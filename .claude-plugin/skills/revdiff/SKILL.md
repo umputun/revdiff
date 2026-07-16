@@ -124,6 +124,8 @@ When you are launching revdiff for the user (e.g., right after a refactor or ana
 
 Pass `--start-at-change` only when the user explicitly asks for that cursor preference; never infer it automatically.
 
+**When the user explicitly requests the file tree on a side**, pass `--tree-position=left` or `--tree-position=right`. Otherwise omit it and respect the user's config.
+
 Run the launcher through the override-chain resolver:
 
 ```bash

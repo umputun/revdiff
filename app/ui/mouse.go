@@ -93,8 +93,8 @@ func (m Model) treeTopRow() int {
 // hitTest classifies a screen coordinate into a hitZone for mouse-event routing.
 // the classification is pure arithmetic over m.layout state and does not
 // inspect any dynamic UI content. ordering matters: status bar is checked
-// first (y at bottom), then x is used to split tree vs diff columns, and
-// finally y is used within each column to reject the diff header row or tree
+// first (y at bottom), then x is used to identify the configured tree side,
+// and finally y is used within each pane to reject the diff header row or tree
 // top border.
 func (m Model) hitTest(x, y int) hitZone {
 	if x < 0 || y < 0 || x >= m.layout.width || y >= m.layout.height {
@@ -111,14 +111,18 @@ func (m Model) hitTest(x, y int) hitZone {
 		return hitNone
 	}
 
-	// tree block spans columns [0, treeWidth+1] when visible: left border +
-	// treeWidth content columns + right border = treeWidth+2 columns total.
-	// diff block picks up at column treeWidth+2.
-	if !m.treePaneHidden() && x < m.layout.treeWidth+2 {
-		if y < m.treeTopRow() {
-			return hitNone
+	if !m.treePaneHidden() {
+		treeStart := 0
+		if m.cfg.treeOnRight {
+			// pane width includes the content plus its left and right borders.
+			treeStart = m.layout.width - m.layout.treeWidth - 2
 		}
-		return hitTree
+		if x >= treeStart && x < treeStart+m.layout.treeWidth+2 {
+			if y < m.treeTopRow() {
+				return hitNone
+			}
+			return hitTree
+		}
 	}
 
 	if y == 0 {

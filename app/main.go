@@ -251,6 +251,7 @@ func run(opts options) (int, error) {
 		Ref:              opts.ref(),
 		Staged:           opts.Staged,
 		TreeWidthRatio:   opts.TreeWidth,
+		TreeOnRight:      opts.TreePosition == "right",
 		Only:             opts.Only,
 		WorkDir:          workDir,
 		SourceEditor:     sourceEditorPolicy(opts, workDir),
