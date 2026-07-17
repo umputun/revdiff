@@ -115,17 +115,18 @@ def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | No
     return message, None
 
 
-def resolve_launcher(plugin_root: Path, data_dir: str, cwd: str | None) -> Path | None:
+def resolve_launcher(plugin_root: Path, data_dir: str, cwd: object) -> Path | None:
     resolver = plugin_root / "scripts" / "resolve-launcher.sh"
     if not resolver.is_file():
         return None
+    working_dir = cwd if isinstance(cwd, str) and Path(cwd).is_dir() else None
     try:
         result = subprocess.run(
             [str(resolver), "launch-plan-review.sh", data_dir],
             capture_output=True,
             text=True,
             timeout=10,
-            cwd=cwd if cwd and Path(cwd).is_dir() else None,
+            cwd=working_dir,
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
@@ -200,7 +201,6 @@ def main() -> None:
             capture_output=True,
             text=True,
             timeout=345600,
-            env={**os.environ},
             check=False,
         )
     except subprocess.TimeoutExpired:
