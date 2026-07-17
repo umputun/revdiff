@@ -46,3 +46,9 @@ __pycache__/
 # ralphex progress logs
 .ralphex/progress/
 .pi/
+
+# track .claude/rules despite global gitignore
+!.claude/
+.claude/*
+!.claude/rules
+!.claude/rules/**
