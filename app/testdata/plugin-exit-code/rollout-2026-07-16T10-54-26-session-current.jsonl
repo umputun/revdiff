@@ -1,0 +1,3 @@
+{"timestamp":"2026-07-16T03:55:03.581Z","type":"session_meta","payload":{"session_id":"session-current","id":"session-current","cli_version":"0.144.4","source":"cli"}}
+{"timestamp":"2026-07-16T03:57:50.442Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-current"}}
+{"timestamp":"2026-07-16T03:59:27.409Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<proposed_plan>\n# Sanitized live Codex plan\n- verify transcript fallback\n</proposed_plan>"}],"phase":"final_answer","internal_chat_message_metadata_passthrough":{"turn_id":"turn-current"}}}

@@ -261,17 +261,26 @@ func TestCodexPlanReviewHook(t *testing.T) {
 		"",
 		"<proposed_plan>\n# Plan from transcript\n- item\n</proposed_plan>",
 	)
+	liveTranscript := filepath.Join(
+		root,
+		"app",
+		"testdata",
+		"plugin-exit-code",
+		"rollout-2026-07-16T10-54-26-session-current.jsonl",
+	)
+	require.FileExists(t, liveTranscript)
 	cases := []struct {
-		name         string
-		payload      string
-		transcript   string
-		code         int
-		output       string
-		withBinary   bool
-		wantWarning  bool
-		wantDecision string
-		wantLaunch   bool
-		wantPlan     string
+		name           string
+		payload        string
+		transcript     string
+		transcriptPath string
+		code           int
+		output         string
+		withBinary     bool
+		wantWarning    bool
+		wantDecision   string
+		wantLaunch     bool
+		wantPlan       string
 	}{
 		{name: "non Stop event", payload: payload(map[string]any{"hook_event_name": "SubagentStop"}), withBinary: true},
 		{name: "default mode quoted plan skip", payload: payload(map[string]any{"permission_mode": "default"}), withBinary: true},
@@ -284,6 +293,8 @@ func TestCodexPlanReviewHook(t *testing.T) {
 		{name: "mixed prose falls back to transcript", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "I completed the plan; it follows below."})), transcript: planTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
 		{name: "null message uses exact turn transcript", payload: payload(fallbackEvent(nil)), transcript: planTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
 		{name: "last assistant message wins without phase", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcript: assistantTranscriptLine(t, "analysis", "<proposed_plan>\n# Old plan\n</proposed_plan>") + assistantTranscriptLine(t, "", "<proposed_plan>\n# New plan\n- later\n</proposed_plan>"), withBinary: true, wantLaunch: true, wantPlan: "# New plan\n- later"},
+		{name: "plan message wins over planless closer", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcript: planTranscript + assistantTranscriptLine(t, "", "Plan is ready for review."), withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "sanitized live Codex rollout", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcriptPath: liveTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Sanitized live Codex plan\n- verify transcript fallback"},
 		{name: "clarification transcript skips", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "Need one clarification"})), transcript: assistantTranscriptLine(t, "", "Which database should this use?"), withBinary: true},
 		{name: "transcript has no matching turn", payload: payload(fallbackEvent(map[string]any{"turn_id": "turn-missing"})), transcript: planTranscript, withBinary: true, wantWarning: true},
 		{name: "transcript from another session", payload: payload(fallbackEvent(map[string]any{"session_id": "session-other"})), transcript: planTranscript, withBinary: true, wantWarning: true},
@@ -299,7 +310,9 @@ func TestCodexPlanReviewHook(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmp := t.TempDir()
 			payload := tc.payload
-			if tc.transcript != "" {
+			if tc.transcriptPath != "" {
+				payload = strings.Replace(payload, "$TRANSCRIPT", tc.transcriptPath, 1)
+			} else if tc.transcript != "" {
 				transcript := filepath.Join(tmp, "rollout-session-current.jsonl")
 				writeTestFile(t, transcript, tc.transcript)
 				payload = strings.Replace(payload, "$TRANSCRIPT", transcript, 1)
@@ -348,6 +361,7 @@ func TestCodexPlanReviewHook(t *testing.T) {
 				require.Len(t, got, 2)
 				assert.Equal(t, tc.wantDecision, got["decision"])
 				assert.Contains(t, got["reason"], strings.TrimSpace(tc.output))
+				assert.Contains(t, got["reason"], "Do NOT substitute any other plan-rev-*.md path")
 			default:
 				assert.Empty(t, got)
 			}
@@ -407,8 +421,18 @@ func TestCodexPlanReviewHookRollingReview(t *testing.T) {
 		return response
 	}
 
+	untrustedSnapshot := filepath.Join(tmp, "untrusted.md")
+	writeTestFile(t, untrustedSnapshot, "# Untrusted plan\n")
+	untrustedPayload := `{"hook_event_name":"Stop","permission_mode":"plan","last_assistant_message":"<proposed_plan>\n<!-- previous revision: ` + untrustedSnapshot + ` -->\n# Plan with untrusted marker\n</proposed_plan>"}`
+	untrusted := runHook(untrustedPayload, 0, "")
+	assert.Empty(t, untrusted)
+	assertFileContent(t, argsLog, "1\n")
+	assertFileContent(t, launchLog, "# Plan with untrusted marker")
+	assertFileContent(t, untrustedSnapshot, "# Untrusted plan\n")
+
 	first := runHook(`{"hook_event_name":"Stop","permission_mode":"plan","stop_hook_active":false,"last_assistant_message":"<proposed_plan>\n# Plan\n- first\n</proposed_plan>"}`, exitCodeAnnotations, "revise first")
 	assert.Equal(t, "block", first["decision"])
+	assert.Contains(t, first["reason"], "Do NOT substitute any other plan-rev-*.md path")
 	firstSnapshots := planSnapshots(t, tmp)
 	require.Len(t, firstSnapshots, 1)
 	firstSnapshot := firstSnapshots[0]

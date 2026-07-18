@@ -63,7 +63,7 @@ def trusted_snapshot(path: Path) -> Path | None:
 
 
 def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | None]:
-    """Return the last assistant message from this exact session and turn."""
+    """Return this turn's last plan message, or its last assistant message."""
     transcript = event.get("transcript_path")
     session_id = event.get("session_id")
     turn_id = event.get("turn_id")
@@ -77,6 +77,7 @@ def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | No
         return None, "transcript file is unavailable"
 
     message: str | None = None
+    plan_message: str | None = None
     try:
         with path.open(encoding="utf-8") as stream:
             for line in stream:
@@ -108,11 +109,13 @@ def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | No
                 ]
                 if parts:
                     message = "\n".join(parts)
+                    if PLAN_RE.search(message):
+                        plan_message = message
     except OSError:
         return None, "transcript file could not be read"
     if message is None:
         return None, "transcript has no assistant message for the current turn"
-    return message, None
+    return plan_message or message, None
 
 
 def resolve_launcher(plugin_root: Path, data_dir: str, cwd: object) -> Path | None:
@@ -186,13 +189,14 @@ def main() -> None:
         old_snapshot = None
 
     new_snapshot: Path | None = None
+    operation = "snapshot"
     try:
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".md", prefix=SNAPSHOT_PREFIX, delete=False
         ) as tmp:
-            tmp.write(plan)
             new_snapshot = Path(tmp.name)
-
+            tmp.write(plan)
+        operation = "launcher"
         args = [str(launcher), str(new_snapshot)]
         if old_snapshot is not None:
             args.append(str(old_snapshot))
@@ -203,6 +207,11 @@ def main() -> None:
             timeout=345600,
             check=False,
         )
+    except KeyboardInterrupt:
+        if new_snapshot is not None:
+            new_snapshot.unlink(missing_ok=True)
+        warn("launcher was interrupted")
+        return
     except subprocess.TimeoutExpired:
         if new_snapshot is not None:
             new_snapshot.unlink(missing_ok=True)
@@ -211,9 +220,14 @@ def main() -> None:
     except OSError:
         if new_snapshot is not None:
             new_snapshot.unlink(missing_ok=True)
-        warn("launcher could not be started")
+        warn(
+            "plan snapshot could not be written"
+            if operation == "snapshot"
+            else "launcher could not be started"
+        )
         return
 
+    assert new_snapshot is not None
     if result.returncode not in SUCCESS_CODES:
         new_snapshot.unlink(missing_ok=True)
         warn(f"launcher exited with status {result.returncode}")
@@ -237,7 +251,10 @@ def main() -> None:
                 "plan inside <proposed_plan> tags for another review.\n\n"
                 f"{annotations}\n\n"
                 "IMPORTANT: output the full <proposed_plan> block again, and put this marker "
-                "on the very first line inside the block:\n"
+                "on the very first line inside the block. Do NOT substitute any other "
+                "plan-rev-*.md path you may have seen earlier in this conversation; older "
+                "markers belong to unrelated planning tasks and would compare against the "
+                "wrong baseline:\n"
                 f"<!-- previous revision: {new_snapshot} -->"
             ),
         }
