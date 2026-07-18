@@ -294,6 +294,8 @@ func TestCodexPlanReviewHook(t *testing.T) {
 		{name: "null message uses exact turn transcript", payload: payload(fallbackEvent(nil)), transcript: planTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
 		{name: "last assistant message wins without phase", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcript: assistantTranscriptLine(t, "analysis", "<proposed_plan>\n# Old plan\n</proposed_plan>") + assistantTranscriptLine(t, "", "<proposed_plan>\n# New plan\n- later\n</proposed_plan>"), withBinary: true, wantLaunch: true, wantPlan: "# New plan\n- later"},
 		{name: "plan message wins over planless closer", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcript: planTranscript + assistantTranscriptLine(t, "", "Plan is ready for review."), withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "plan message wins over empty block closer", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcript: planTranscript + assistantTranscriptLine(t, "", "<proposed_plan>\n</proposed_plan>"), withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "last non-empty block wins within message", payload: payload(map[string]any{"last_assistant_message": "<proposed_plan>\n# Valid plan\n- item\n</proposed_plan>\n<proposed_plan>\n</proposed_plan>"}), withBinary: true, wantLaunch: true, wantPlan: "# Valid plan\n- item"},
 		{name: "sanitized live Codex rollout", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "stripped plan"})), transcriptPath: liveTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Sanitized live Codex plan\n- verify transcript fallback"},
 		{name: "clarification transcript skips", payload: payload(fallbackEvent(map[string]any{"last_assistant_message": "Need one clarification"})), transcript: assistantTranscriptLine(t, "", "Which database should this use?"), withBinary: true},
 		{name: "transcript has no matching turn", payload: payload(fallbackEvent(map[string]any{"turn_id": "turn-missing"})), transcript: planTranscript, withBinary: true, wantWarning: true},
@@ -429,6 +431,18 @@ func TestCodexPlanReviewHookRollingReview(t *testing.T) {
 	assertFileContent(t, argsLog, "1\n")
 	assertFileContent(t, launchLog, "# Plan with untrusted marker")
 	assertFileContent(t, untrustedSnapshot, "# Untrusted plan\n")
+
+	outsideDir, err := os.MkdirTemp("", "revdiff-plan-review-")
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, os.RemoveAll(outsideDir)) })
+	outsideSnapshot := filepath.Join(outsideDir, "plan-rev-outside.md")
+	writeTestFile(t, outsideSnapshot, "# Outside plan\n")
+	outsidePayload := `{"hook_event_name":"Stop","permission_mode":"plan","last_assistant_message":"<proposed_plan>\n<!-- previous revision: ` + outsideSnapshot + ` -->\n# Plan with outside marker\n</proposed_plan>"}`
+	outside := runHook(outsidePayload, 0, "")
+	assert.Empty(t, outside)
+	assertFileContent(t, argsLog, "1\n")
+	assertFileContent(t, launchLog, "# Plan with outside marker")
+	assertFileContent(t, outsideSnapshot, "# Outside plan\n")
 
 	first := runHook(`{"hook_event_name":"Stop","permission_mode":"plan","stop_hook_active":false,"last_assistant_message":"<proposed_plan>\n# Plan\n- first\n</proposed_plan>"}`, exitCodeAnnotations, "revise first")
 	assert.Equal(t, "block", first["decision"])

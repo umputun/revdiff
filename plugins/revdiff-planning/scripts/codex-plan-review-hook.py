@@ -40,11 +40,11 @@ def read_event() -> dict[str, Any] | None:
 
 
 def extract_plan(message: str) -> str | None:
-    matches = PLAN_RE.findall(message)
-    if not matches:
-        return None
-    plan = matches[-1].strip()
-    return plan or None
+    for match in reversed(PLAN_RE.findall(message)):
+        plan = match.strip()
+        if plan:
+            return plan
+    return None
 
 
 def trusted_snapshot(path: Path) -> Path | None:
@@ -109,7 +109,7 @@ def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | No
                 ]
                 if parts:
                     message = "\n".join(parts)
-                    if PLAN_RE.search(message):
+                    if extract_plan(message) is not None:
                         plan_message = message
     except OSError:
         return None, "transcript file could not be read"
