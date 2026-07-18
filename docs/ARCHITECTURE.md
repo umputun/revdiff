@@ -25,6 +25,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 │  app/highlight/   — chroma syntax coloring          │
 │  app/annotation/  — in-memory annotation store      │
 │  app/editor/      — external $EDITOR invocation     │
+│  app/handoff/     — post-flush command preparation  │
 │  app/keymap/      — configurable keybindings        │
 │  app/theme/       — Catalog-centric theme system    │
 │  app/history/     — review session auto-save        │
@@ -109,6 +110,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `annotlist.go` | Annotation list spec building, cross-file jump logic (`jumpToAnnotationTarget` for the `@` popup, `tryJumpToAnnotationTarget` returning a jumped-bool for the `}`/`{` walker) |
 | `annotnav.go` | Cross-file annotation navigation (`}` / `{`): builds the flat annotation list, computes adjacent target via exact-match or insertion-point fallback, retries through non-jumpable targets so a hidden annotation cannot trap the walker |
 | `editor.go` | `$EDITOR` handoffs for annotation temp-file editing and source-file opening: `openEditor()` / `openSourceEditor()` wrap `app/editor.Editor` in `tea.ExecProcess`, capture target state, route completion, and refresh the current file after a clean source-editor exit |
+| `output.go` | In-session annotation flush and optional post-flush command handoff through injected `PostFlushHook` + `tea.ExecProcess` |
 | `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `search.go` | Search input handling, match computation, navigation |
 | `mouse.go` | Mouse event routing: `handleMouse` dispatch, `hitTest` pane classification (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers (`statusBarHeight`, `diffTopRow`, `treeTopRow`). Diff-pane wheel events defer both the cursor pin and the `SetContent(renderDiff())` call via a single in-flight `tea.Tick(wheelRenderDelay)` debounce (issue #179) — `wheelState.tickInFlight` ensures one tick at a time across an entire burst (subsequent wheels just bump `gen`); stale ticks reschedule, matching ticks flush. `flushWheelPending()` is called from `handleWheelDebounce`, `handleKey`, `handleResize`, and `handleBlameLoaded` (any path that runs `syncViewportToCursor` or reads `m.nav.diffCursor` must flush first). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set |
@@ -214,6 +216,10 @@ Single stateless type `Editor` bundling all behavior as methods (no standalone f
 
 Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.
 
+### app/handoff/ — post-flush command preparation
+
+Prepares the user-configured shell command for an explicit `O` handoff. `New` returns nil for an empty command; a constructed runner's `Prepare(content)` is infallible, supplies the exact annotation snapshot on stdin, and suppresses stdout so commands such as `tee` do not overwrite the TUI. stderr remains attached when `app/ui` runs the command through `tea.ExecProcess`, and a command may write OSC 52 directly through `/dev/tty`. The optional `PostFlushHook` interface is defined on the UI consumer side and wired at the composition root only when `--post-flush-command` is set.
+
 ### app/history/ — session auto-save
 
 `Save(Params)` writes review session as markdown to `~/.config/revdiff/history/`. Includes header, annotations, and git diff for annotated files.
@@ -222,7 +228,7 @@ On a signal-delivered exit (a SIGHUP from a dropped SSH/tmux client, or a SIGTER
 
 ## Key Interfaces
 
-All consumer-side — defined in `app/ui/model.go`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
+All consumer-side — defined in `app/ui`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
 
 | Interface | Methods | Implementors |
 |-----------|---------|-------------|
@@ -239,6 +245,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
 | `ExternalEditor` | `Command(content)` for annotation temp-file editing, `SourceCommand(path string, line int)` for opening source files | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
+| `PostFlushHook` | `Prepare(content)` | `handoff.Runner` (optional wiring via `ModelConfig.PostFlushHook`) |
 
 ## Data Flow
 
@@ -333,6 +340,7 @@ User presses 'a' on diff line
           otherwise      → saveComment(content, fileLevel, line, type)
   → re-render shows annotation (multi-line aware) below diff line
   → 'O' (flush_output, requires --output): store.WriteFile(path) → atomic write, revdiff stays open (annotate → flush → hand to agent → 'R' reload loop)
+      → optional PostFlushHook.Prepare(snapshot) → tea.ExecProcess → command reads snapshot from stdin
   → on quit: store.FormatOutput() → structured output to stdout/file (file branch uses store.WriteFile)
   → (optional) history.Save() → markdown to ~/.config/revdiff/history/ (best-effort warnings only)
   → if --exit-code-on-annotations is enabled and output is non-empty: exit 10

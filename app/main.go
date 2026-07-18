@@ -15,6 +15,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/fsutil"
+	"github.com/umputun/revdiff/app/handoff"
 	"github.com/umputun/revdiff/app/highlight"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/theme"
@@ -180,6 +181,12 @@ func run(opts options) (int, error) {
 		configPath: configPath,
 	}
 
+	// Configure the optional post-flush handoff separately from theme settings.
+	var postFlushHook ui.PostFlushHook
+	if hook := handoff.New(opts.PostFlushCommand); hook != nil {
+		postFlushHook = hook
+	}
+
 	model, err := ui.NewModel(ui.ModelConfig{
 		Renderer:             renderer,
 		Store:                store,
@@ -194,6 +201,7 @@ func run(opts options) (int, error) {
 		LoadUntracked:        untrackedFn,
 		LoadUntrackedRenames: untrackedRenamesFn,
 		Keymap:               km,
+		PostFlushHook:        postFlushHook,
 		CommitLog:            commitLogger,
 		CommitsApplicable:    commitsApplicable(opts, commitLogger),
 		ReloadApplicable:     reloadApplicable(opts),

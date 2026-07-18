@@ -52,6 +52,7 @@ type options struct {
 	Only                  []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
 	HistoryDir            string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
 	Output                string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
+	PostFlushCommand      string   `long:"post-flush-command" ini-name:"post-flush-command" env:"REVDIFF_POST_FLUSH_COMMAND" description:"run command after flushing annotations"`
 	Keys                  string   `long:"keys" env:"REVDIFF_KEYS" no-ini:"true" description:"path to keybindings file"`
 	DumpKeys              bool     `long:"dump-keys" no-ini:"true" description:"print effective keybindings to stdout and exit"`
 	Theme                 string   `long:"theme" ini-name:"theme" env:"REVDIFF_THEME" description:"load theme from themes directory"`
@@ -168,6 +169,7 @@ func parseArgs(args []string) (options, error) {
 	if opts.Description != "" && opts.DescriptionFile != "" {
 		return options{}, errors.New("--description and --description-file are mutually exclusive")
 	}
+	opts.PostFlushCommand = strings.TrimSpace(opts.PostFlushCommand)
 
 	if err := validateStdinFlags(opts); err != nil {
 		return options{}, err
