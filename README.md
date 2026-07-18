@@ -734,7 +734,15 @@ Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_
 
 Press `O` to write the current annotations to the `--output` file without exiting (`flush_output` — rebindable). This keeps revdiff open while handing the file to an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session. Each flush overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit. `O` requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
 
-An OSC 52 helper can automatically copy annotations after each flush: run revdiff with `--post-flush-command=osc-copy` (or set `post-flush-command = osc-copy` in config). The command receives the annotation snapshot on stdin and can emit the clipboard sequence through `/dev/tty`.
+One possible use is copying annotations to the terminal clipboard after every flush with OSC 52. revdiff does not include an OSC 52 helper; create an `osc-copy` shell script on your `PATH` that reads stdin and writes the clipboard sequence to `/dev/tty`:
+
+```sh
+#!/bin/sh
+data=$(base64 | tr -d '\n')
+printf '\033]52;c;%s\007' "$data" > /dev/tty
+```
+
+After making the script executable, run revdiff with `--post-flush-command=osc-copy` or set `post-flush-command = osc-copy` in the config file.
 
 Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
 

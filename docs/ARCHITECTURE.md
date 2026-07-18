@@ -228,7 +228,7 @@ On a signal-delivered exit (a SIGHUP from a dropped SSH/tmux client, or a SIGTER
 
 ## Key Interfaces
 
-All consumer-side — defined in `app/ui`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
+All consumer-side — defined in `app/ui/model.go`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
 
 | Interface | Methods | Implementors |
 |-----------|---------|-------------|
