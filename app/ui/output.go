@@ -29,8 +29,8 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 		m.output.hint = "Output flush requires -o/--output"
 		return m, nil
 	}
-	content := m.store.FormatOutput()
-	if content == "" {
+	n := m.store.Count()
+	if n == 0 {
 		m.output.hint = "No annotations to flush"
 		return m, nil
 	}
@@ -39,7 +39,6 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 		m.output.hint = "Flush failed"
 		return m, nil
 	}
-	n := m.store.Count()
 	noun := "annotations"
 	if n == 1 {
 		noun = "annotation"
@@ -50,6 +49,7 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	content := m.store.FormatOutput()
 	cmd := m.postFlushHook.Prepare(content)
 	m.output.hint = writtenHint + "; running post-flush command"
 	return m, tea.ExecProcess(cmd, func(runErr error) tea.Msg {
