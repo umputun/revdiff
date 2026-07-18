@@ -3,15 +3,9 @@ package ui
 import (
 	"fmt"
 	"log"
-	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
-
-// PostFlushHook prepares the external command run after an in-session output flush.
-type PostFlushHook interface {
-	Prepare(content string) *exec.Cmd
-}
 
 // outputState holds transient feedback for the O in-session output flush.
 // hint is a status-bar message cleared on the next key press, mirroring

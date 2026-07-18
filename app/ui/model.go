@@ -15,6 +15,7 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
@@ -117,6 +118,11 @@ type overlayManager interface {
 // that hides the underlying VCS). Defined on the consumer side per Go convention.
 type commitLogSource interface {
 	CommitLog(ref string) ([]diff.CommitInfo, error)
+}
+
+// PostFlushHook prepares the external command run after an in-session output flush.
+type PostFlushHook interface {
+	Prepare(content string) *exec.Cmd
 }
 
 // ThemeCatalog is what Model needs for theme discovery and persistence.
