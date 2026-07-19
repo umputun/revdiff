@@ -40,6 +40,8 @@ const (
 	ActionNextHunk         Action = "next_hunk"
 	ActionPrevHunk         Action = "prev_hunk"
 	ActionTogglePane       Action = "toggle_pane"
+	ActionFocusLeft        Action = "focus_left"
+	ActionFocusRight       Action = "focus_right"
 	ActionFocusTree        Action = "focus_tree"
 	ActionFocusDiff        Action = "focus_diff"
 	ActionSearch           Action = "search"
@@ -85,7 +87,8 @@ var validActions = map[Action]bool{
 	ActionScrollDiffDown: true, ActionScrollDiffUp: true,
 	ActionNextItem: true, ActionPrevItem: true, ActionJumpFile: true,
 	ActionNextHunk: true, ActionPrevHunk: true,
-	ActionTogglePane: true, ActionFocusTree: true, ActionFocusDiff: true,
+	ActionTogglePane: true, ActionFocusLeft: true, ActionFocusRight: true,
+	ActionFocusTree: true, ActionFocusDiff: true,
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionNextAnnotation: true, ActionPrevAnnotation: true,
@@ -212,6 +215,8 @@ func defaultDescriptions() []HelpEntry {
 
 		// pane
 		{ActionTogglePane, "toggle pane focus", SectionPane},
+		{ActionFocusLeft, "focus left pane", SectionPane},
+		{ActionFocusRight, "focus right pane", SectionPane},
 		{ActionFocusTree, "focus tree pane", SectionPane},
 		{ActionFocusDiff, "focus diff pane", SectionPane},
 
@@ -253,19 +258,9 @@ func defaultDescriptions() []HelpEntry {
 	}
 }
 
-// TreePosition is the side of the screen the file tree (or markdown TOC)
-// pane renders on. The zero value is TreePositionLeft, the default layout.
-type TreePosition int
-
-const (
-	TreePositionLeft TreePosition = iota
-	TreePositionRight
-)
-
 // defaultBindings returns the default key-to-action mapping.
-// h/l follow the visual pane order while the actions remain semantic.
-func defaultBindings(pos TreePosition) map[string]Action {
-	bindings := map[string]Action{
+func defaultBindings() map[string]Action {
+	return map[string]Action{
 		"j":      ActionDown,
 		"k":      ActionUp,
 		"down":   ActionDown,
@@ -288,8 +283,8 @@ func defaultBindings(pos TreePosition) map[string]Action {
 		"[":      ActionPrevHunk,
 		"e":      ActionOpenFileInEditor,
 		"tab":    ActionTogglePane,
-		"h":      ActionFocusTree,
-		"l":      ActionFocusDiff,
+		"h":      ActionFocusLeft,
+		"l":      ActionFocusRight,
 		"/":      ActionSearch,
 		"a":      ActionConfirm,
 		"enter":  ActionConfirm,
@@ -320,23 +315,12 @@ func defaultBindings(pos TreePosition) map[string]Action {
 		"R":      ActionReload,
 		"esc":    ActionDismiss,
 	}
-	if pos == TreePositionRight {
-		bindings["h"] = ActionFocusDiff
-		bindings["l"] = ActionFocusTree
-	}
-	return bindings
 }
 
 // Default returns a Keymap with all default bindings.
 func Default() *Keymap {
-	return DefaultForTreePosition(TreePositionLeft)
-}
-
-// DefaultForTreePosition returns the default keymap with h/l following the
-// visual pane order for the given tree position.
-func DefaultForTreePosition(pos TreePosition) *Keymap {
 	return &Keymap{
-		bindings:     defaultBindings(pos),
+		bindings:     defaultBindings(),
 		descriptions: defaultDescriptions(),
 	}
 }
@@ -654,10 +638,6 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 // Load reads a keybindings file from path and returns a Keymap with defaults
 // overridden by the file contents. Returns error if the file cannot be opened or parsed.
 func Load(path string) (*Keymap, error) {
-	return load(path, TreePositionLeft)
-}
-
-func load(path string, pos TreePosition) (*Keymap, error) {
 	f, err := os.Open(path) //nolint:gosec // path is user-provided config file location
 	if err != nil {
 		return nil, fmt.Errorf("opening keybindings file: %w", err)
@@ -669,7 +649,7 @@ func load(path string, pos TreePosition) (*Keymap, error) {
 		return nil, err
 	}
 
-	km := DefaultForTreePosition(pos)
+	km := Default()
 
 	// apply unmaps first, then maps (so "unmap q" + "map x quit" works)
 	for _, key := range unmaps {
@@ -702,29 +682,19 @@ func (km *Keymap) resolveConflicts() {
 	km.chordPrefixCache = nil
 }
 
-// LoadOrDefault loads keybindings from path if it exists, otherwise returns
-// Default. Parse errors are logged as warnings and defaults are returned.
+// LoadOrDefault loads keybindings from path if the file exists, otherwise returns
+// Default(). Parse errors are logged as warnings and Default() is returned.
 func LoadOrDefault(path string) *Keymap {
-	return loadOrDefault(path, TreePositionLeft)
-}
-
-// LoadOrDefaultForTreePosition loads keybindings over defaults whose h/l
-// bindings follow the visual pane order for the given tree position.
-func LoadOrDefaultForTreePosition(path string, pos TreePosition) *Keymap {
-	return loadOrDefault(path, pos)
-}
-
-func loadOrDefault(path string, pos TreePosition) *Keymap {
 	if path == "" {
-		return DefaultForTreePosition(pos)
+		return Default()
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return DefaultForTreePosition(pos)
+		return Default()
 	}
-	km, err := load(path, pos)
+	km, err := Load(path)
 	if err != nil {
 		log.Printf("[WARN] failed to load keybindings from %s: %v, using defaults", path, err)
-		return DefaultForTreePosition(pos)
+		return Default()
 	}
 	return km
 }

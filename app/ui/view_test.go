@@ -608,7 +608,7 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 }
 
 func TestModel_ViewTreePosition(t *testing.T) {
-	assertOrder := func(t *testing.T, view, diffLabel, navigationLabel string, treePos keymap.TreePosition) {
+	assertOrder := func(t *testing.T, view, diffLabel, navigationLabel string, treePos TreePosition) {
 		t.Helper()
 		labelColumn := func(lines []string, label string) int {
 			for _, line := range lines {
@@ -624,7 +624,7 @@ func TestModel_ViewTreePosition(t *testing.T) {
 		navigationIdx := labelColumn(lines, navigationLabel)
 		require.NotEqual(t, -1, diffIdx, "diff label must appear in the rendered view")
 		require.NotEqual(t, -1, navigationIdx, "navigation label must appear in the rendered view")
-		if treePos == keymap.TreePositionRight {
+		if treePos == TreePositionRight {
 			assert.Less(t, diffIdx, navigationIdx)
 			return
 		}
@@ -633,10 +633,10 @@ func TestModel_ViewTreePosition(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
-		treePos keymap.TreePosition
+		treePos TreePosition
 	}{
 		{name: "file tree on left"},
-		{name: "file tree on right", treePos: keymap.TreePositionRight},
+		{name: "file tree on right", treePos: TreePositionRight},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel([]string{"tree.go", "other.go"}, nil)
@@ -659,10 +659,10 @@ func TestModel_ViewTreePosition(t *testing.T) {
 		)
 		require.NotNil(t, m.file.mdTOC)
 		m.file.name = "plan.md"
-		m.cfg.treePosition = keymap.TreePositionRight
+		m.cfg.treePosition = TreePositionRight
 		m.cfg.noStatusBar = true
 
-		assertOrder(t, m.View(), "plan.md", "Navigation section", keymap.TreePositionRight)
+		assertOrder(t, m.View(), "plan.md", "Navigation section", TreePositionRight)
 	})
 }
 
@@ -1103,8 +1103,7 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 		m.file.name = "README.md"
 		m.file.lines = mdLines
 		m.layout.focus = paneDiff
-		m.cfg.treePosition = keymap.TreePositionRight
-		m.keymap = keymap.DefaultForTreePosition(keymap.TreePositionRight)
+		m.cfg.treePosition = TreePositionRight
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 		model := result.(Model)

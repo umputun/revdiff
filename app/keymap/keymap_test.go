@@ -18,13 +18,6 @@ func TestDefault(t *testing.T) {
 	assert.NotEmpty(t, km.descriptions)
 }
 
-func TestDefaultForTreePosition(t *testing.T) {
-	right := DefaultForTreePosition(TreePositionRight)
-	assert.Equal(t, ActionFocusDiff, right.Resolve("h"))
-	assert.Equal(t, ActionFocusTree, right.Resolve("l"))
-	assert.Equal(t, ActionDown, right.Resolve("j"), "unrelated defaults must stay unchanged")
-}
-
 func TestDefault_allExpectedBindings(t *testing.T) {
 	km := Default()
 	tests := []struct {
@@ -40,7 +33,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"n", ActionNextItem}, {"N", ActionPrevItem}, {"p", ActionPrevItem},
 		{"ctrl+p", ActionJumpFile},
 		{"]", ActionNextHunk}, {"[", ActionPrevHunk}, {"e", ActionOpenFileInEditor},
-		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
+		{"tab", ActionTogglePane}, {"h", ActionFocusLeft}, {"l", ActionFocusRight},
 		{"/", ActionSearch},
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList}, {"ctrl+e", ActionOpenEditor},
@@ -411,6 +404,10 @@ func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))
+	assert.True(t, IsValidAction(ActionFocusLeft))
+	assert.True(t, IsValidAction(ActionFocusRight))
+	assert.True(t, IsValidAction(ActionFocusTree))
+	assert.True(t, IsValidAction(ActionFocusDiff))
 	assert.True(t, IsValidAction(ActionInfo))
 	assert.True(t, IsValidAction(Action("commit_info")), "deprecated alias must validate")
 	assert.False(t, IsValidAction(Action("nonexistent")))
@@ -764,16 +761,6 @@ func TestLoadOrDefault_withFile(t *testing.T) {
 	km := LoadOrDefault(tmpFile)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))
 	assert.Equal(t, ActionDown, km.Resolve("j")) // defaults still present
-}
-
-func TestLoadOrDefaultForTreePosition_UserOverrides(t *testing.T) {
-	tmpFile := t.TempDir() + "/keybindings"
-	err := os.WriteFile(tmpFile, []byte("map h quit\nunmap l\n"), 0o600)
-	require.NoError(t, err)
-
-	km := LoadOrDefaultForTreePosition(tmpFile, TreePositionRight)
-	assert.Equal(t, ActionQuit, km.Resolve("h"))
-	assert.Empty(t, km.Resolve("l"))
 }
 
 func TestLoad_unmapOfUnboundKey(t *testing.T) {
