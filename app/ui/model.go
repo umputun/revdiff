@@ -859,7 +859,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	}
 	km := cfg.Keymap
 	if km == nil {
-		km = keymap.Default()
+		km = keymap.DefaultForTreePosition(cfg.TreeOnRight)
 	}
 	ed := cfg.Editor
 	if ed == nil || isNilValue(ed) {

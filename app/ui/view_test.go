@@ -1095,6 +1095,22 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 		assert.Equal(t, paneTree, model.layout.focus, "h key should switch to TOC pane")
 	})
 
+	t.Run("l key in diff pane switches to right-positioned TOC", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
+		m.layout.focus = paneDiff
+		m.cfg.treeOnRight = true
+		m.keymap = keymap.DefaultForTreePosition(true)
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+		model := result.(Model)
+		assert.Equal(t, paneTree, model.layout.focus, "l key should switch to the right-positioned TOC pane")
+	})
+
 	t.Run("h key no-op in single-file without TOC", func(t *testing.T) {
 		m := testModel([]string{"main.go"}, nil)
 		m.file.singleFile = true

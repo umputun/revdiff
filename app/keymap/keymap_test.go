@@ -18,6 +18,17 @@ func TestDefault(t *testing.T) {
 	assert.NotEmpty(t, km.descriptions)
 }
 
+func TestDefaultForTreePosition(t *testing.T) {
+	left := DefaultForTreePosition(false)
+	assert.Equal(t, ActionFocusTree, left.Resolve("h"))
+	assert.Equal(t, ActionFocusDiff, left.Resolve("l"))
+
+	right := DefaultForTreePosition(true)
+	assert.Equal(t, ActionFocusDiff, right.Resolve("h"))
+	assert.Equal(t, ActionFocusTree, right.Resolve("l"))
+	assert.Equal(t, ActionDown, right.Resolve("j"), "unrelated defaults must stay unchanged")
+}
+
 func TestDefault_allExpectedBindings(t *testing.T) {
 	km := Default()
 	tests := []struct {
@@ -762,6 +773,16 @@ func TestLoadOrDefault_withFile(t *testing.T) {
 	km := LoadOrDefault(tmpFile)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))
 	assert.Equal(t, ActionDown, km.Resolve("j")) // defaults still present
+}
+
+func TestLoadOrDefaultForTreePosition_UserOverridesDefaults(t *testing.T) {
+	tmpFile := t.TempDir() + "/keybindings"
+	err := os.WriteFile(tmpFile, []byte("map h quit\nunmap l\n"), 0o600)
+	require.NoError(t, err)
+
+	km := LoadOrDefaultForTreePosition(tmpFile, true)
+	assert.Equal(t, ActionQuit, km.Resolve("h"))
+	assert.Empty(t, km.Resolve("l"))
 }
 
 func TestLoad_unmapOfUnboundKey(t *testing.T) {
