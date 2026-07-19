@@ -232,9 +232,8 @@ navigation:
 - **`TOC`** — markdown table-of-contents. Activated for single-file full-context markdown. Active
   section tracking, header-level navigation
 
-Both are constructed via factory closures in `main.go`, consumed through
-`FileTreeComponent`/`TOCComponent` interfaces, and rendered on the left or right according to
-`tree-position`.
+Both are constructed via factory closures in `main.go` and consumed through
+`FileTreeComponent`/`TOCComponent` interfaces.
 
 ### app/ui/overlay/ — popup layers
 

@@ -231,7 +231,7 @@ func TestNewModel_OptionalDefaults(t *testing.T) {
 		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
 	}
 
-	t.Run("nil keymap defaults to keymap.Default(keymap.TreePositionLeft)", func(t *testing.T) {
+	t.Run("nil keymap defaults to keymap.Default()", func(t *testing.T) {
 		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{})
 		require.NotNil(t, m.keymap)
 		// verify a known default binding works
@@ -240,7 +240,7 @@ func TestNewModel_OptionalDefaults(t *testing.T) {
 	})
 
 	t.Run("custom keymap is used when provided", func(t *testing.T) {
-		km := keymap.Default(keymap.TreePositionLeft)
+		km := keymap.Default()
 		km.Unbind("q")
 		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{Keymap: km})
 		action := m.keymap.Resolve("q")
@@ -260,13 +260,6 @@ func TestNewModel_OptionalDefaults(t *testing.T) {
 	t.Run("TreeWidthRatio in range is kept", func(t *testing.T) {
 		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeWidthRatio: 5})
 		assert.Equal(t, 5, m.cfg.treeWidthRatio)
-	})
-
-	t.Run("TreePosition is kept and default pane keys follow layout", func(t *testing.T) {
-		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreePosition: keymap.TreePositionRight})
-		assert.Equal(t, keymap.TreePositionRight, m.cfg.treePosition)
-		assert.Equal(t, keymap.ActionFocusDiff, m.keymap.Resolve("h"))
-		assert.Equal(t, keymap.ActionFocusTree, m.keymap.Resolve("l"))
 	})
 }
 
@@ -509,32 +502,36 @@ func TestModel_TreeNavigation(t *testing.T) {
 }
 
 func TestModel_FocusSwitching(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		treePos   keymap.TreePosition
-		toDiffKey rune
-		toTreeKey rune
-	}{
-		{name: "tree on left", toDiffKey: 'l', toTreeKey: 'h'},
-		{name: "tree on right", treePos: keymap.TreePositionRight, toDiffKey: 'h', toTreeKey: 'l'},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			m := testModel([]string{"a.go"}, nil)
-			m.tree = testNewFileTree([]string{"a.go"})
-			m.keymap = keymap.Default(tc.treePos)
-			m.cfg.treePosition = tc.treePos
-			m.file.name = "a.go" // pretend a file is loaded
-			m.layout.focus = paneTree
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.file.name = "a.go" // pretend a file is loaded
+	m.layout.focus = paneTree
 
-			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.toDiffKey}})
-			model := result.(Model)
-			assert.Equal(t, paneDiff, model.layout.focus)
+	// l switches to diff pane
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.layout.focus)
 
-			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.toTreeKey}})
-			model = result.(Model)
-			assert.Equal(t, paneTree, model.layout.focus)
-		})
-	}
+	// h switches back to tree
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	model = result.(Model)
+	assert.Equal(t, paneTree, model.layout.focus)
+}
+
+func TestModel_FocusSwitching_RightTree(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go"})
+	m.keymap = keymap.DefaultForTreePosition(keymap.TreePositionRight)
+	m.file.name = "a.go"
+	m.layout.focus = paneTree
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	model := result.(Model)
+	assert.Equal(t, paneDiff, model.layout.focus)
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	model = result.(Model)
+	assert.Equal(t, paneTree, model.layout.focus)
 }
 
 func TestModel_WindowResize(t *testing.T) {
@@ -580,7 +577,7 @@ func TestModel_TreeWidthRatio(t *testing.T) {
 
 func TestModel_CustomKeymapQuitOverride(t *testing.T) {
 	// map "x" to quit, unbind "q" — verify "x" quits and "q" does not
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("x", keymap.ActionQuit)
 	km.Unbind("q")
 
@@ -601,7 +598,7 @@ func TestModel_CustomKeymapQuitOverride(t *testing.T) {
 
 func TestModel_CustomKeymapViewToggle(t *testing.T) {
 	// map "x" to toggle_wrap — verify "x" toggles wrap and "w" still works
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("x", keymap.ActionToggleWrap)
 
 	lines := []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
@@ -626,7 +623,7 @@ func TestModel_CustomKeymapViewToggle(t *testing.T) {
 
 func TestModel_CustomKeymapTreeNav(t *testing.T) {
 	// map "x" to down, unbind "j" — verify "x" moves tree cursor and "j" does not
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("x", keymap.ActionDown)
 	km.Unbind("j")
 
@@ -665,7 +662,7 @@ func TestModel_CustomKeymapTreeFocusDiff(t *testing.T) {
 
 func TestModel_AcceptanceAdditiveQuitBinding(t *testing.T) {
 	// map x quit (additive) — both x and q should quit
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("x", keymap.ActionQuit)
 
 	m := testModel([]string{"a.go"}, nil)
@@ -689,7 +686,7 @@ func TestModel_AcceptanceAdditiveQuitBinding(t *testing.T) {
 func TestModel_AcceptanceDefaultBehaviorNoKeybindingsFile(t *testing.T) {
 	// no keybindings file → identical behavior to current defaults
 	m := testModel([]string{"a.go"}, nil)
-	// m.keymap is set to Default(false) in testModel via NewModel
+	// m.keymap is set to Default() in testModel via NewModel
 
 	// q should quit
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -950,7 +947,7 @@ func TestDispatchAction_PaneNavFallback_Tree(t *testing.T) {
 }
 
 func TestHandleChordSecond_ResolvedDispatches(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -968,7 +965,7 @@ func TestHandleChordSecond_ResolvedDispatches(t *testing.T) {
 }
 
 func TestHandleChordSecond_UnboundShowsHint(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -984,7 +981,7 @@ func TestHandleChordSecond_UnboundShowsHint(t *testing.T) {
 }
 
 func TestHandleChordSecond_EscCancels(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -1000,7 +997,7 @@ func TestHandleChordSecond_EscCancels(t *testing.T) {
 }
 
 func TestHandleChordSecond_LayoutFallback(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -1030,7 +1027,7 @@ func TestHandleChordSecond_DispatchesToTOCWhenFocused(t *testing.T) {
 		{NewNum: 2, Content: "text", ChangeType: diff.ChangeContext},
 		{NewNum: 3, Content: "## Second", ChangeType: diff.ChangeContext},
 	}
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionDown)
 
 	m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
@@ -1119,7 +1116,7 @@ func TestTransientHint_OutputPriority(t *testing.T) {
 }
 
 func TestHandleKey_EntersChordPending(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -1133,7 +1130,7 @@ func TestHandleKey_EntersChordPending(t *testing.T) {
 }
 
 func TestHandleKey_ChordSecondCoexistenceGuard(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -1156,7 +1153,7 @@ func TestHandleKey_ChordSecondCoexistenceGuard(t *testing.T) {
 }
 
 func TestHandleKey_ChordIgnoredWhenPendingReload(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -1176,7 +1173,7 @@ func TestHandleKey_ChordIgnoredWhenPendingReload(t *testing.T) {
 }
 
 func TestHandleKey_LeaderWithStandaloneActionDoesNotEnterChord(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	// bind ctrl+w as a standalone action (no chord binding for ctrl+w>*)
 	km.Bind("ctrl+w", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
@@ -1561,7 +1558,7 @@ func TestHandleKey_ChordPrecedence(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			km := keymap.Default(keymap.TreePositionLeft)
+			km := keymap.Default()
 			km.Bind("ctrl+w>x", keymap.ActionQuit)
 			m := testModel([]string{"a.go"}, nil)
 			m.keymap = km
@@ -1600,7 +1597,7 @@ func TestHandleKey_VimMotionOn_DigitAccumulates(t *testing.T) {
 }
 
 func TestHandleKey_VimMotionOn_ChordSecondWins(t *testing.T) {
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("ctrl+w>x", keymap.ActionQuit)
 	m := testModel([]string{"a.go"}, nil)
 	m.keymap = km
@@ -1710,7 +1707,7 @@ func TestHandleKey_NonKeyMessagesPreserveChordState(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			km := keymap.Default(keymap.TreePositionLeft)
+			km := keymap.Default()
 			km.Bind("ctrl+w>x", keymap.ActionQuit)
 			m := testModel([]string{"a.go"}, nil)
 			m.keymap = km

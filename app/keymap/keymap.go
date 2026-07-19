@@ -327,9 +327,14 @@ func defaultBindings(pos TreePosition) map[string]Action {
 	return bindings
 }
 
-// Default returns a Keymap with all default bindings; h/l pane bindings
-// follow the visual pane order for the given tree position.
-func Default(pos TreePosition) *Keymap {
+// Default returns a Keymap with all default bindings.
+func Default() *Keymap {
+	return DefaultForTreePosition(TreePositionLeft)
+}
+
+// DefaultForTreePosition returns the default keymap with h/l following the
+// visual pane order for the given tree position.
+func DefaultForTreePosition(pos TreePosition) *Keymap {
 	return &Keymap{
 		bindings:     defaultBindings(pos),
 		descriptions: defaultDescriptions(),
@@ -648,7 +653,11 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 
 // Load reads a keybindings file from path and returns a Keymap with defaults
 // overridden by the file contents. Returns error if the file cannot be opened or parsed.
-func Load(path string, pos TreePosition) (*Keymap, error) {
+func Load(path string) (*Keymap, error) {
+	return load(path, TreePositionLeft)
+}
+
+func load(path string, pos TreePosition) (*Keymap, error) {
 	f, err := os.Open(path) //nolint:gosec // path is user-provided config file location
 	if err != nil {
 		return nil, fmt.Errorf("opening keybindings file: %w", err)
@@ -660,7 +669,7 @@ func Load(path string, pos TreePosition) (*Keymap, error) {
 		return nil, err
 	}
 
-	km := Default(pos)
+	km := DefaultForTreePosition(pos)
 
 	// apply unmaps first, then maps (so "unmap q" + "map x quit" works)
 	for _, key := range unmaps {
@@ -693,19 +702,29 @@ func (km *Keymap) resolveConflicts() {
 	km.chordPrefixCache = nil
 }
 
-// LoadOrDefault loads keybindings from path if the file exists, otherwise returns
-// Default(pos). Parse errors are logged as warnings and defaults are returned.
-func LoadOrDefault(path string, pos TreePosition) *Keymap {
+// LoadOrDefault loads keybindings from path if it exists, otherwise returns
+// Default. Parse errors are logged as warnings and defaults are returned.
+func LoadOrDefault(path string) *Keymap {
+	return loadOrDefault(path, TreePositionLeft)
+}
+
+// LoadOrDefaultForTreePosition loads keybindings over defaults whose h/l
+// bindings follow the visual pane order for the given tree position.
+func LoadOrDefaultForTreePosition(path string, pos TreePosition) *Keymap {
+	return loadOrDefault(path, pos)
+}
+
+func loadOrDefault(path string, pos TreePosition) *Keymap {
 	if path == "" {
-		return Default(pos)
+		return DefaultForTreePosition(pos)
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return Default(pos)
+		return DefaultForTreePosition(pos)
 	}
-	km, err := Load(path, pos)
+	km, err := load(path, pos)
 	if err != nil {
 		log.Printf("[WARN] failed to load keybindings from %s: %v, using defaults", path, err)
-		return Default(pos)
+		return DefaultForTreePosition(pos)
 	}
 	return km
 }

@@ -12,25 +12,21 @@ import (
 )
 
 func TestDefault(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	require.NotNil(t, km)
 	assert.NotEmpty(t, km.bindings)
 	assert.NotEmpty(t, km.descriptions)
 }
 
-func TestDefault_TreePosition(t *testing.T) {
-	left := Default(TreePositionLeft)
-	assert.Equal(t, ActionFocusTree, left.Resolve("h"))
-	assert.Equal(t, ActionFocusDiff, left.Resolve("l"))
-
-	right := Default(TreePositionRight)
+func TestDefaultForTreePosition(t *testing.T) {
+	right := DefaultForTreePosition(TreePositionRight)
 	assert.Equal(t, ActionFocusDiff, right.Resolve("h"))
 	assert.Equal(t, ActionFocusTree, right.Resolve("l"))
 	assert.Equal(t, ActionDown, right.Resolve("j"), "unrelated defaults must stay unchanged")
 }
 
 func TestDefault_allExpectedBindings(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	tests := []struct {
 		key    string
 		action Action
@@ -83,7 +79,7 @@ func TestDefault_specialKeysMatchBubbletea(t *testing.T) {
 		{tea.KeyTab, "tab"},
 	}
 
-	km := Default(TreePositionLeft)
+	km := Default()
 	for _, tt := range tests {
 		msg := tea.KeyMsg{Type: tt.keyType}
 		actual := msg.String()
@@ -99,7 +95,7 @@ func TestDefault_ctrlKeysMatchBubbletea(t *testing.T) {
 	ctrlD := tea.KeyMsg{Type: tea.KeyCtrlD}
 	ctrlU := tea.KeyMsg{Type: tea.KeyCtrlU}
 
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionHalfPageDown, km.Resolve(ctrlD.String()))
 	assert.Equal(t, ActionHalfPageUp, km.Resolve(ctrlU.String()))
 }
@@ -146,7 +142,7 @@ func TestActionJumpFile_CustomConfiguration(t *testing.T) {
 }
 
 func TestResolve(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 
 	t.Run("existing key", func(t *testing.T) {
 		assert.Equal(t, ActionDown, km.Resolve("j"))
@@ -163,7 +159,7 @@ func TestResolve(t *testing.T) {
 }
 
 func TestKeysFor(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 
 	t.Run("single key action", func(t *testing.T) {
 		keys := km.KeysFor(ActionSearch)
@@ -191,7 +187,7 @@ func TestKeysFor(t *testing.T) {
 }
 
 func TestBind(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("x", ActionQuit)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))
 	// original binding still works
@@ -199,7 +195,7 @@ func TestBind(t *testing.T) {
 }
 
 func TestUnbind(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Unbind("q")
 	assert.Equal(t, Action(""), km.Resolve("q"))
 	// other bindings unaffected
@@ -207,13 +203,13 @@ func TestUnbind(t *testing.T) {
 }
 
 func TestUnbind_noop(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Unbind("nonexistent") // should not panic
 	assert.Equal(t, ActionDown, km.Resolve("j"))
 }
 
 func TestHelpSections(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	sections := km.HelpSections()
 
 	require.NotEmpty(t, sections)
@@ -241,7 +237,7 @@ func TestHelpSections(t *testing.T) {
 }
 
 func TestHelpSections_unmappedActionOmitted(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	// unbind all keys for quit
 	km.Unbind("q")
 	sections := km.HelpSections()
@@ -256,7 +252,7 @@ func TestHelpSections_unmappedActionOmitted(t *testing.T) {
 }
 
 func TestHelpSections_customBindingReflected(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("x", ActionQuit)
 	sections := km.HelpSections()
 
@@ -286,7 +282,7 @@ func TestActionToggleCompact_IsValid(t *testing.T) {
 }
 
 func TestActionToggleCompact_DefaultBinding(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionToggleCompact, km.Resolve("C"))
 }
 
@@ -309,7 +305,7 @@ func TestActionOpenEditor_IsValid(t *testing.T) {
 }
 
 func TestActionOpenEditor_DefaultBinding(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionOpenEditor, km.Resolve("ctrl+e"))
 }
 
@@ -332,7 +328,7 @@ func TestActionOpenFileInEditor_IsValid(t *testing.T) {
 }
 
 func TestActionOpenFileInEditor_DefaultBinding(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionOpenFileInEditor, km.Resolve("e"))
 }
 
@@ -355,7 +351,7 @@ func TestActionFlushOutput_IsValid(t *testing.T) {
 }
 
 func TestActionFlushOutput_DefaultBinding(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionFlushOutput, km.Resolve("O"))
 }
 
@@ -374,7 +370,7 @@ func TestActionFlushOutput_HelpEntry(t *testing.T) {
 }
 
 func TestActionFlushOutput_DumpEntry(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	var buf strings.Builder
 	require.NoError(t, km.Dump(&buf))
 	assert.Contains(t, buf.String(), "map O flush_output")
@@ -411,7 +407,7 @@ func TestActionScrollConstants_InHelpEntries(t *testing.T) {
 func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
 	// vim-motion interceptor is the only way to reach these actions by default;
 	// there must be NO single-key bindings in defaultBindings.
-	km := Default(TreePositionLeft)
+	km := Default()
 	for _, a := range []Action{ActionScrollCenter, ActionScrollTop, ActionScrollBottom} {
 		assert.Empty(t, km.KeysFor(a), "action %q must have no default bindings", a)
 	}
@@ -456,7 +452,7 @@ func TestParse_acceptsDeprecatedCommitInfoAlias(t *testing.T) {
 
 func TestInfo_roundTrip(t *testing.T) {
 	// default binding resolves correctly
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionInfo, km.Resolve("i"))
 
 	// action appears in help sections
@@ -490,7 +486,7 @@ func TestInfo_roundTrip(t *testing.T) {
 }
 
 func TestKeysFor_sorted(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	keys := km.KeysFor(ActionDown)
 	// should be sorted: "down" before "j"
 	assert.Equal(t, []string{"down", "j"}, keys)
@@ -719,7 +715,7 @@ func TestLoad_withOverrides(t *testing.T) {
 	err := os.WriteFile(tmpFile, []byte("map x quit\nunmap j\n"), 0o600)
 	require.NoError(t, err)
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))    // new binding
 	assert.Equal(t, ActionQuit, km.Resolve("q"))    // default still works
@@ -732,14 +728,14 @@ func TestLoad_unmapThenRemap(t *testing.T) {
 	err := os.WriteFile(tmpFile, []byte("unmap q\nmap x quit\n"), 0o600)
 	require.NoError(t, err)
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 	assert.Equal(t, Action(""), km.Resolve("q")) // unmapped
 	assert.Equal(t, ActionQuit, km.Resolve("x")) // remapped
 }
 
 func TestLoad_missingFile(t *testing.T) {
-	_, err := Load("/nonexistent/path/keybindings", TreePositionLeft)
+	_, err := Load("/nonexistent/path/keybindings")
 	assert.Error(t, err)
 }
 
@@ -748,20 +744,20 @@ func TestLoad_malformedLines(t *testing.T) {
 	err := os.WriteFile(tmpFile, []byte("garbage line\nmap x quit\n"), 0o600)
 	require.NoError(t, err)
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 	assert.Equal(t, ActionQuit, km.Resolve("x")) // valid line still applied
 }
 
 func TestLoadOrDefault_noFile(t *testing.T) {
-	km := LoadOrDefault("/nonexistent/path/keybindings", TreePositionLeft)
+	km := LoadOrDefault("/nonexistent/path/keybindings")
 	// should return defaults
 	assert.Equal(t, ActionDown, km.Resolve("j"))
 	assert.Equal(t, ActionQuit, km.Resolve("q"))
 }
 
 func TestLoadOrDefault_emptyPath(t *testing.T) {
-	km := LoadOrDefault("", TreePositionLeft)
+	km := LoadOrDefault("")
 	assert.Equal(t, ActionDown, km.Resolve("j"))
 }
 
@@ -770,17 +766,17 @@ func TestLoadOrDefault_withFile(t *testing.T) {
 	err := os.WriteFile(tmpFile, []byte("map x quit\n"), 0o600)
 	require.NoError(t, err)
 
-	km := LoadOrDefault(tmpFile, TreePositionLeft)
+	km := LoadOrDefault(tmpFile)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))
 	assert.Equal(t, ActionDown, km.Resolve("j")) // defaults still present
 }
 
-func TestLoadOrDefault_TreePositionUserOverrides(t *testing.T) {
+func TestLoadOrDefaultForTreePosition_UserOverrides(t *testing.T) {
 	tmpFile := t.TempDir() + "/keybindings"
 	err := os.WriteFile(tmpFile, []byte("map h quit\nunmap l\n"), 0o600)
 	require.NoError(t, err)
 
-	km := LoadOrDefault(tmpFile, TreePositionRight)
+	km := LoadOrDefaultForTreePosition(tmpFile, TreePositionRight)
 	assert.Equal(t, ActionQuit, km.Resolve("h"))
 	assert.Empty(t, km.Resolve("l"))
 }
@@ -790,14 +786,14 @@ func TestLoad_unmapOfUnboundKey(t *testing.T) {
 	err := os.WriteFile(tmpFile, []byte("unmap z\n"), 0o600)
 	require.NoError(t, err)
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 	// should not panic, defaults should be intact
 	assert.Equal(t, ActionDown, km.Resolve("j"))
 }
 
 func TestDump_format(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	var buf strings.Builder
 	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
@@ -821,7 +817,7 @@ func TestDump_format(t *testing.T) {
 }
 
 func TestDump_roundTrip(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	var buf strings.Builder
 	require.NoError(t, km.Dump(&buf))
 
@@ -848,7 +844,7 @@ func TestDump_roundTrip(t *testing.T) {
 }
 
 func TestDump_customBindings(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Unbind("q")
 	km.Bind("x", ActionQuit)
 
@@ -887,7 +883,7 @@ func TestDump_chordWithSpaceSecondStageRoundTrip(t *testing.T) {
 }
 
 func TestDump_spaceKeyRoundTrip(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind(" ", ActionPageDown) // bind space to an action
 
 	var buf strings.Builder
@@ -910,7 +906,7 @@ func TestDump_spaceKeyRoundTrip(t *testing.T) {
 }
 
 func TestDump_unmappedActionOmitted(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Unbind("/") // search only has one key
 
 	var buf strings.Builder
@@ -922,7 +918,7 @@ func TestDump_unmappedActionOmitted(t *testing.T) {
 }
 
 func TestDump_failingWriter(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	w := &failWriter{errAfter: 0}
 	err := km.Dump(w)
 	require.Error(t, err)
@@ -930,7 +926,7 @@ func TestDump_failingWriter(t *testing.T) {
 }
 
 func TestDump_failingWriterAfterSomeOutput(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	w := &failWriter{errAfter: 5} // fail after 5 successful writes
 	err := km.Dump(w)
 	require.Error(t, err)
@@ -955,7 +951,7 @@ func (w *failWriter) Write(p []byte) (int, error) {
 
 func TestAcceptance_defaultKeymapPreservesAllBindings(t *testing.T) {
 	// no keybindings file → identical behavior to current defaults
-	km := Default(TreePositionLeft)
+	km := Default()
 	assert.Equal(t, ActionDown, km.Resolve("j"))
 	assert.Equal(t, ActionUp, km.Resolve("k"))
 	assert.Equal(t, ActionQuit, km.Resolve("q"))
@@ -969,7 +965,7 @@ func TestAcceptance_defaultKeymapPreservesAllBindings(t *testing.T) {
 
 func TestAcceptance_additiveBinding(t *testing.T) {
 	// map x quit → x quits, q still quits (additive, not replacement)
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("x", ActionQuit)
 	assert.Equal(t, ActionQuit, km.Resolve("x"), "x should quit after binding")
 	assert.Equal(t, ActionQuit, km.Resolve("q"), "q should still quit (additive)")
@@ -977,7 +973,7 @@ func TestAcceptance_additiveBinding(t *testing.T) {
 
 func TestAcceptance_unmapThenRemap(t *testing.T) {
 	// unmap q + map x quit → only x quits
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Unbind("q")
 	km.Bind("x", ActionQuit)
 	assert.Equal(t, ActionQuit, km.Resolve("x"), "x should quit")
@@ -986,7 +982,7 @@ func TestAcceptance_unmapThenRemap(t *testing.T) {
 
 func TestAcceptance_dumpKeysShowsEffective(t *testing.T) {
 	// --dump-keys prints all effective bindings in parseable format
-	km := Default(TreePositionLeft)
+	km := Default()
 	var buf strings.Builder
 	require.NoError(t, km.Dump(&buf))
 	output := buf.String()
@@ -1004,7 +1000,7 @@ func TestAcceptance_loadCustomFile(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tmp.Close())
 
-	km, err := Load(tmp.Name(), TreePositionLeft)
+	km, err := Load(tmp.Name())
 	require.NoError(t, err)
 	assert.Equal(t, ActionQuit, km.Resolve("x"))
 	assert.Equal(t, Action(""), km.Resolve("q"))
@@ -1012,7 +1008,7 @@ func TestAcceptance_loadCustomFile(t *testing.T) {
 
 func TestAcceptance_helpReflectsCustomBindings(t *testing.T) {
 	// help overlay reflects custom bindings
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("x", ActionQuit)
 	sections := km.HelpSections()
 
@@ -1040,7 +1036,7 @@ func TestAcceptance_invalidActionWarnsNoCrash(t *testing.T) {
 }
 
 func TestIsChordLeader(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w>x", ActionQuit)
 
 	assert.True(t, km.IsChordLeader("ctrl+w"), "ctrl+w should be a chord leader")
@@ -1051,13 +1047,13 @@ func TestIsChordLeader(t *testing.T) {
 
 func TestIsChordLeader_standaloneIsNotLeader(t *testing.T) {
 	// standalone ctrl+w without any ctrl+w>* chord → not a leader
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w", ActionQuit)
 	assert.False(t, km.IsChordLeader("ctrl+w"), "standalone-only binding should not be a chord leader")
 }
 
 func TestIsChordLeader_LazyAndInvalidated(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	// no chord bindings yet
 	assert.False(t, km.IsChordLeader("ctrl+w"))
 
@@ -1081,7 +1077,7 @@ func TestLoad_ConflictDropsStandalone(t *testing.T) {
 	content := "map ctrl+w quit\nmap ctrl+w>x help\n"
 	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o600))
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 
 	// the chord binding survives
@@ -1097,7 +1093,7 @@ func TestLoad_NoConflictKeepsBoth(t *testing.T) {
 	content := "map ctrl+w>x help\nmap ctrl+t quit\n"
 	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o600))
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 
 	// chord survives
@@ -1117,7 +1113,7 @@ func TestLoad_ConflictInvalidatesChordCache(t *testing.T) {
 	content := "map ctrl+d>x help\n"
 	require.NoError(t, os.WriteFile(tmpFile, []byte(content), 0o600))
 
-	km, err := Load(tmpFile, TreePositionLeft)
+	km, err := Load(tmpFile)
 	require.NoError(t, err)
 
 	// the default ctrl+d standalone binding was dropped by resolveConflicts
@@ -1160,7 +1156,7 @@ func TestNormalizeKey_UnmappedRunePassThrough(t *testing.T) {
 }
 
 func TestResolveChord_Direct(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w>x", ActionQuit)
 	assert.Equal(t, ActionQuit, km.ResolveChord("ctrl+w", "x"))
 }
@@ -1168,13 +1164,13 @@ func TestResolveChord_Direct(t *testing.T) {
 func TestResolveChord_LayoutFallback(t *testing.T) {
 	// ч (Cyrillic che) sits on the same physical key as x on QWERTY.
 	// chord bound under the latin "x" must still resolve when user presses ч.
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w>x", ActionHelp)
 	assert.Equal(t, ActionHelp, km.ResolveChord("ctrl+w", "ч"))
 }
 
 func TestResolveChord_Unbound(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w>x", ActionQuit)
 	assert.Equal(t, Action(""), km.ResolveChord("ctrl+w", "q"))
 	assert.Equal(t, Action(""), km.ResolveChord("ctrl+t", "x"))
@@ -1182,7 +1178,7 @@ func TestResolveChord_Unbound(t *testing.T) {
 
 func TestResolveChord_PrefixOnly(t *testing.T) {
 	// only the leader is bound (no chord under it) → ResolveChord returns empty
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w", ActionQuit)
 	assert.Equal(t, Action(""), km.ResolveChord("ctrl+w", "x"))
 }
@@ -1190,7 +1186,7 @@ func TestResolveChord_PrefixOnly(t *testing.T) {
 func TestResolveChord_LayoutFallbackMissingForMultiRuneSecond(t *testing.T) {
 	// layout fallback only applies when second is a single rune; multi-rune
 	// strings like "esc" should not trigger a translation attempt
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w>esc", ActionDismiss)
 	assert.Equal(t, ActionDismiss, km.ResolveChord("ctrl+w", "esc"))
 	assert.Equal(t, Action(""), km.ResolveChord("ctrl+w", "tab"))
@@ -1239,7 +1235,7 @@ func TestDump_RoundTripsChords(t *testing.T) {
 }
 
 func TestKeysFor_IncludesChordKeys(t *testing.T) {
-	km := Default(TreePositionLeft)
+	km := Default()
 	km.Bind("ctrl+w>x", ActionQuit)
 
 	keys := km.KeysFor(ActionQuit)

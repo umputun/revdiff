@@ -63,7 +63,7 @@ Then uncomment and edit the values you want to change.
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
 
-Config-backed options use long flag names without leading `--`; for example, use `tree-position = right` to put the file tree and markdown TOC on the right. For annotation exit status use `exit-code-on-annotations = true`.
+Config-backed options use long flag names without leading `--`; for annotation exit status use `exit-code-on-annotations = true`.
 
 ## Popup Size (Claude Code plugin)
 

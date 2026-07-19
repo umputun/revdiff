@@ -38,7 +38,6 @@ Tool examples:
 - `args: "--no-tree"`: review with the file tree pane hidden
 - `args: "--page-overlap=2"`: keep 2 lines from the previous screen when paging
 - `args: "--start-at-change"`: position the cursor on the first changed line
-- `args: "--tree-position=right main"`: review with the file tree on the right
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
