@@ -254,8 +254,9 @@ func defaultDescriptions() []HelpEntry {
 }
 
 // defaultBindings returns the default key-to-action mapping.
-func defaultBindings() map[string]Action {
-	return map[string]Action{
+// h/l follow the visual pane order while the actions remain semantic.
+func defaultBindings(treeOnRight bool) map[string]Action {
+	bindings := map[string]Action{
 		"j":      ActionDown,
 		"k":      ActionUp,
 		"down":   ActionDown,
@@ -310,12 +311,23 @@ func defaultBindings() map[string]Action {
 		"R":      ActionReload,
 		"esc":    ActionDismiss,
 	}
+	if treeOnRight {
+		bindings["h"] = ActionFocusDiff
+		bindings["l"] = ActionFocusTree
+	}
+	return bindings
 }
 
-// Default returns a Keymap with all default bindings.
+// Default returns a Keymap with the default left-positioned tree bindings.
 func Default() *Keymap {
+	return DefaultForTreePosition(false)
+}
+
+// DefaultForTreePosition returns a Keymap whose h/l pane bindings follow the
+// visual pane order for the configured tree position.
+func DefaultForTreePosition(treeOnRight bool) *Keymap {
 	return &Keymap{
-		bindings:     defaultBindings(),
+		bindings:     defaultBindings(treeOnRight),
 		descriptions: defaultDescriptions(),
 	}
 }
@@ -633,6 +645,10 @@ func parse(r io.Reader) (maps []mapEntry, unmaps []string, err error) {
 // Load reads a keybindings file from path and returns a Keymap with defaults
 // overridden by the file contents. Returns error if the file cannot be opened or parsed.
 func Load(path string) (*Keymap, error) {
+	return load(path, false)
+}
+
+func load(path string, treeOnRight bool) (*Keymap, error) {
 	f, err := os.Open(path) //nolint:gosec // path is user-provided config file location
 	if err != nil {
 		return nil, fmt.Errorf("opening keybindings file: %w", err)
@@ -644,7 +660,7 @@ func Load(path string) (*Keymap, error) {
 		return nil, err
 	}
 
-	km := Default()
+	km := DefaultForTreePosition(treeOnRight)
 
 	// apply unmaps first, then maps (so "unmap q" + "map x quit" works)
 	for _, key := range unmaps {
@@ -680,16 +696,22 @@ func (km *Keymap) resolveConflicts() {
 // LoadOrDefault loads keybindings from path if the file exists, otherwise returns
 // Default(). Parse errors are logged as warnings and Default() is returned.
 func LoadOrDefault(path string) *Keymap {
+	return LoadOrDefaultForTreePosition(path, false)
+}
+
+// LoadOrDefaultForTreePosition loads user overrides on top of defaults whose
+// h/l pane bindings follow the configured tree position.
+func LoadOrDefaultForTreePosition(path string, treeOnRight bool) *Keymap {
 	if path == "" {
-		return Default()
+		return DefaultForTreePosition(treeOnRight)
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return Default()
+		return DefaultForTreePosition(treeOnRight)
 	}
-	km, err := Load(path)
+	km, err := load(path, treeOnRight)
 	if err != nil {
 		log.Printf("[WARN] failed to load keybindings from %s: %v, using defaults", path, err)
-		return Default()
+		return DefaultForTreePosition(treeOnRight)
 	}
 	return km
 }

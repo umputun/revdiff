@@ -261,9 +261,11 @@ func TestNewModel_OptionalDefaults(t *testing.T) {
 		assert.Equal(t, 5, m.cfg.treeWidthRatio)
 	})
 
-	t.Run("TreeOnRight is kept", func(t *testing.T) {
+	t.Run("TreeOnRight is kept and default pane keys follow layout", func(t *testing.T) {
 		m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{TreeOnRight: true})
 		assert.True(t, m.cfg.treeOnRight)
+		assert.Equal(t, keymap.ActionFocusDiff, m.keymap.Resolve("h"))
+		assert.Equal(t, keymap.ActionFocusTree, m.keymap.Resolve("l"))
 	})
 }
 
@@ -506,20 +508,32 @@ func TestModel_TreeNavigation(t *testing.T) {
 }
 
 func TestModel_FocusSwitching(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.tree = testNewFileTree([]string{"a.go"})
-	m.file.name = "a.go" // pretend a file is loaded
-	m.layout.focus = paneTree
+	for _, tc := range []struct {
+		name        string
+		treeOnRight bool
+		toDiffKey   rune
+		toTreeKey   rune
+	}{
+		{name: "tree on left", toDiffKey: 'l', toTreeKey: 'h'},
+		{name: "tree on right", treeOnRight: true, toDiffKey: 'h', toTreeKey: 'l'},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			m.tree = testNewFileTree([]string{"a.go"})
+			m.keymap = keymap.DefaultForTreePosition(tc.treeOnRight)
+			m.cfg.treeOnRight = tc.treeOnRight
+			m.file.name = "a.go" // pretend a file is loaded
+			m.layout.focus = paneTree
 
-	// l switches to diff pane
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	model := result.(Model)
-	assert.Equal(t, paneDiff, model.layout.focus)
+			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.toDiffKey}})
+			model := result.(Model)
+			assert.Equal(t, paneDiff, model.layout.focus)
 
-	// h switches back to tree
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	model = result.(Model)
-	assert.Equal(t, paneTree, model.layout.focus)
+			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.toTreeKey}})
+			model = result.(Model)
+			assert.Equal(t, paneTree, model.layout.focus)
+		})
+	}
 }
 
 func TestModel_WindowResize(t *testing.T) {
