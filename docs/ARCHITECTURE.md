@@ -152,7 +152,7 @@ Two independent component types, both with cursor/offset management, rendering, 
 - **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), filtering (annotated-only), semantic-fingerprint reviewed tracking, directory grouping. File-list reloads revalidate only paths reviewed before the load; marks added during the load are reconciled when that file's refreshed diff arrives. `VisibleFiles()` exposes file paths in rendered order after active filters for consumers such as the file picker.
 - **`TOC`** — markdown table-of-contents. Activated for single-file full-context markdown. Active section tracking, header-level navigation
 
-Both are constructed via factory closures in `main.go`, consumed through `FileTreeComponent`/`TOCComponent` interfaces, and rendered on the left or right according to `tree-position`.
+Both constructed via factory closures in `main.go`, consumed through `FileTreeComponent`/`TOCComponent` interfaces.
 
 ### app/ui/overlay/ — popup layers
 

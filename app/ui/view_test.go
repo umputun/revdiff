@@ -1104,7 +1104,7 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 		m.file.lines = mdLines
 		m.layout.focus = paneDiff
 		m.cfg.treePosition = keymap.TreePositionRight
-		m.keymap = keymap.Default(keymap.TreePositionRight)
+		m.keymap = keymap.DefaultForTreePosition(keymap.TreePositionRight)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 		model := result.(Model)

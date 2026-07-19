@@ -2212,7 +2212,7 @@ func TestModel_ActiveSectionTrackingOnScroll(t *testing.T) {
 }
 func TestModel_CustomKeymapDiffNavNextHunk(t *testing.T) {
 	// map "x" to next_hunk, unbind "]" — verify "x" jumps to next hunk and "]" does not
-	km := keymap.Default(keymap.TreePositionLeft)
+	km := keymap.Default()
 	km.Bind("x", keymap.ActionNextHunk)
 	km.Unbind("]")
 

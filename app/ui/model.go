@@ -327,12 +327,13 @@ type modelConfigState struct {
 	noConfirmReload    bool               // skip confirmation prompt on reload (R)
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
 	treeWidthRatio     int                // 1-10 units for file tree panel
-	treePosition       keymap.TreePosition // side the file tree or markdown TOC renders on
 	tabSpaces          string             // spaces to replace tabs with
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
 	annotPrefix        string             // cached: marker + " "
 	annotFilePrefix    string             // cached: marker + " file: "
 	outputPath         string             // --output destination for the O in-session flush; empty disables it
+
+	treePosition keymap.TreePosition // side the file tree or markdown TOC renders on
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -729,7 +730,6 @@ type ModelConfig struct {
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TreePosition     keymap.TreePosition // side the file tree or markdown TOC renders on
 	TabWidth         int      // number of spaces per tab character
 	NoColors         bool     // disable all colors including syntax highlighting
 	MouseTracking    bool     // enable mouse tracking for clicks and wheel events
@@ -790,6 +790,8 @@ type ModelConfig struct {
 	// disables the flush (there is no file to write to); a non-empty path enables
 	// it. Copied into modelConfigState.outputPath as a plain value.
 	OutputPath string
+
+	TreePosition keymap.TreePosition // side the file tree or markdown TOC renders on
 }
 
 // NewModel creates a new Model from the given configuration. All dependencies
@@ -847,7 +849,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	}
 	km := cfg.Keymap
 	if km == nil {
-		km = keymap.Default(cfg.TreePosition)
+		km = keymap.DefaultForTreePosition(cfg.TreePosition)
 	}
 	ed := cfg.Editor
 	if ed == nil || isNilValue(ed) {

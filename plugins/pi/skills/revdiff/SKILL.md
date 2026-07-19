@@ -35,7 +35,6 @@ Tool examples:
 - `args: "--untracked"`: review untracked files with working-tree changes
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
-- `args: "--tree-position=right main"`: review with the file tree on the right
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
