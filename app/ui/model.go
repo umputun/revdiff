@@ -327,7 +327,7 @@ type modelConfigState struct {
 	noConfirmReload    bool               // skip confirmation prompt on reload (R)
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
 	treeWidthRatio     int                // 1-10 units for file tree panel
-	treeOnRight        bool               // render the file tree or markdown TOC to the right of the diff
+	treePosition       keymap.TreePosition // side the file tree or markdown TOC renders on
 	tabSpaces          string             // spaces to replace tabs with
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
 	annotPrefix        string             // cached: marker + " "
@@ -729,7 +729,7 @@ type ModelConfig struct {
 	Ref              string
 	Staged           bool
 	TreeWidthRatio   int
-	TreeOnRight      bool     // render the file tree or markdown TOC to the right of the diff
+	TreePosition     keymap.TreePosition // side the file tree or markdown TOC renders on
 	TabWidth         int      // number of spaces per tab character
 	NoColors         bool     // disable all colors including syntax highlighting
 	MouseTracking    bool     // enable mouse tracking for clicks and wheel events
@@ -847,7 +847,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	}
 	km := cfg.Keymap
 	if km == nil {
-		km = keymap.DefaultForTreePosition(cfg.TreeOnRight)
+		km = keymap.Default(cfg.TreePosition)
 	}
 	ed := cfg.Editor
 	if ed == nil || isNilValue(ed) {
@@ -889,7 +889,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			noConfirmReload:    cfg.NoConfirmReload,
 			crossFileHunks:     cfg.CrossFileHunks,
 			treeWidthRatio:     cfg.TreeWidthRatio,
-			treeOnRight:        cfg.TreeOnRight,
+			treePosition:       cfg.TreePosition,
 			tabSpaces:          strings.Repeat(" ", cfg.TabWidth),
 			wrapIndent:         max(0, cfg.WrapIndent),
 			annotPrefix:        cfg.AnnotationMarker + " ",

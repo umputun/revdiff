@@ -608,7 +608,7 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 }
 
 func TestModel_ViewTreePosition(t *testing.T) {
-	assertOrder := func(t *testing.T, view, diffLabel, navigationLabel string, navigationOnRight bool) {
+	assertOrder := func(t *testing.T, view, diffLabel, navigationLabel string, treePos keymap.TreePosition) {
 		t.Helper()
 		labelColumn := func(lines []string, label string) int {
 			for _, line := range lines {
@@ -624,7 +624,7 @@ func TestModel_ViewTreePosition(t *testing.T) {
 		navigationIdx := labelColumn(lines, navigationLabel)
 		require.NotEqual(t, -1, diffIdx, "diff label must appear in the rendered view")
 		require.NotEqual(t, -1, navigationIdx, "navigation label must appear in the rendered view")
-		if navigationOnRight {
+		if treePos == keymap.TreePositionRight {
 			assert.Less(t, diffIdx, navigationIdx)
 			return
 		}
@@ -632,20 +632,20 @@ func TestModel_ViewTreePosition(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name              string
-		navigationOnRight bool
+		name    string
+		treePos keymap.TreePosition
 	}{
 		{name: "file tree on left"},
-		{name: "file tree on right", navigationOnRight: true},
+		{name: "file tree on right", treePos: keymap.TreePositionRight},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel([]string{"tree.go", "other.go"}, nil)
 			m.tree = testNewFileTree([]string{"tree.go", "other.go"})
 			m.file.name = "current.go"
-			m.cfg.treeOnRight = tc.navigationOnRight
+			m.cfg.treePosition = tc.treePos
 			m.cfg.noStatusBar = true
 
-			assertOrder(t, m.View(), "current.go", "tree.go", tc.navigationOnRight)
+			assertOrder(t, m.View(), "current.go", "tree.go", tc.treePos)
 		})
 	}
 
@@ -659,10 +659,10 @@ func TestModel_ViewTreePosition(t *testing.T) {
 		)
 		require.NotNil(t, m.file.mdTOC)
 		m.file.name = "plan.md"
-		m.cfg.treeOnRight = true
+		m.cfg.treePosition = keymap.TreePositionRight
 		m.cfg.noStatusBar = true
 
-		assertOrder(t, m.View(), "plan.md", "Navigation section", true)
+		assertOrder(t, m.View(), "plan.md", "Navigation section", keymap.TreePositionRight)
 	})
 }
 
@@ -1103,8 +1103,8 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 		m.file.name = "README.md"
 		m.file.lines = mdLines
 		m.layout.focus = paneDiff
-		m.cfg.treeOnRight = true
-		m.keymap = keymap.DefaultForTreePosition(true)
+		m.cfg.treePosition = keymap.TreePositionRight
+		m.keymap = keymap.Default(keymap.TreePositionRight)
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 		model := result.(Model)

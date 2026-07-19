@@ -795,7 +795,7 @@ func TestModel_HandleAnnotNav_FileLevelDoesNotSetCursorOnAnnotation(t *testing.T
 }
 
 func TestModel_HandleAnnotNav_DefaultBindings(t *testing.T) {
-	km := keymap.Default()
+	km := keymap.Default(keymap.TreePositionLeft)
 	assert.Equal(t, keymap.ActionNextAnnotation, km.Resolve("}"))
 	assert.Equal(t, keymap.ActionPrevAnnotation, km.Resolve("{"))
 }

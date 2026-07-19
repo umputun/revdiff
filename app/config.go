@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/jessevdk/go-flags"
+
+	"github.com/umputun/revdiff/app/keymap"
 )
 
 type options struct {
@@ -118,6 +120,14 @@ func (o options) startupUntracked() bool {
 		return false
 	}
 	return true
+}
+
+// treePosition resolves the --tree-position flag value to its typed position.
+func (o options) treePosition() keymap.TreePosition {
+	if o.TreePosition == "right" {
+		return keymap.TreePositionRight
+	}
+	return keymap.TreePositionLeft
 }
 
 // parseArgs parses CLI arguments with config file support.
