@@ -121,7 +121,7 @@ func TestLayoutResolve(t *testing.T) {
 }
 
 func TestKeymap_ResolveLayoutFallback(t *testing.T) {
-	km := Default()
+	km := Default(TreePositionLeft)
 
 	t.Run("russian: г triggers toggle_untracked (u)", func(t *testing.T) {
 		assert.Equal(t, ActionToggleUntracked, km.Resolve("г"))
@@ -155,7 +155,7 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 	})
 
 	t.Run("direct binding takes precedence over alias", func(t *testing.T) {
-		customKm := Default()
+		customKm := Default(TreePositionLeft)
 		// bind a Cyrillic character directly to a different action
 		customKm.Bind("г", ActionQuit)
 		// should use the direct binding, not the layout alias to ActionToggleUntracked
@@ -176,7 +176,7 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 	})
 
 	t.Run("layout alias does not pollute KeysFor", func(t *testing.T) {
-		km := Default()
+		km := Default(TreePositionLeft)
 		keys := km.KeysFor(ActionDown)
 		assert.NotContains(t, keys, "ш")
 		assert.NotContains(t, keys, "ξ")
@@ -186,7 +186,7 @@ func TestKeymap_ResolveLayoutFallback(t *testing.T) {
 	})
 
 	t.Run("layout alias does not pollute HelpSections", func(t *testing.T) {
-		km := Default()
+		km := Default(TreePositionLeft)
 		sections := km.HelpSections()
 		for _, sec := range sections {
 			for _, entry := range sec.Entries {

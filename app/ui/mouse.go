@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
@@ -113,7 +114,7 @@ func (m Model) hitTest(x, y int) hitZone {
 
 	if !m.treePaneHidden() {
 		treeStart := 0
-		if m.cfg.treeOnRight {
+		if m.cfg.treePosition == keymap.TreePositionRight {
 			// pane width includes the content plus its left and right borders.
 			treeStart = m.layout.width - m.layout.treeWidth - 2
 		}

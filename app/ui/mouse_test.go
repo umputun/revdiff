@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/umputun/revdiff/app/annotation"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -96,28 +97,28 @@ func TestModel_hitTest(t *testing.T) {
 		{
 			name: "right tree: last diff column",
 			setup: func(m *Model) {
-				m.cfg.treeOnRight = true
+				m.cfg.treePosition = keymap.TreePositionRight
 			},
 			x: 81, y: 10, want: hitDiff,
 		},
 		{
 			name: "right tree: first tree column",
 			setup: func(m *Model) {
-				m.cfg.treeOnRight = true
+				m.cfg.treePosition = keymap.TreePositionRight
 			},
 			x: 82, y: 10, want: hitTree,
 		},
 		{
 			name: "right tree: tree top border",
 			setup: func(m *Model) {
-				m.cfg.treeOnRight = true
+				m.cfg.treePosition = keymap.TreePositionRight
 			},
 			x: 100, y: 0, want: hitNone,
 		},
 		{
 			name: "right tree: diff header on left",
 			setup: func(m *Model) {
-				m.cfg.treeOnRight = true
+				m.cfg.treePosition = keymap.TreePositionRight
 			},
 			x: 5, y: 1, want: hitHeader,
 		},
@@ -462,7 +463,7 @@ func TestModel_HandleMouse_WheelInTreeMovesTreeCursor(t *testing.T) {
 
 	t.Run("right-positioned tree receives wheel events on the right", func(t *testing.T) {
 		m := mouseTestModel(t, files, diffs)
-		m.cfg.treeOnRight = true
+		m.cfg.treePosition = keymap.TreePositionRight
 		require.Equal(t, "aa.go", m.tree.SelectedFile())
 
 		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 100, 3, false))
