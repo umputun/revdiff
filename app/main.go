@@ -56,7 +56,7 @@ func main() {
 	}
 
 	if opts.DumpKeys {
-		km := keymap.LoadOrDefaultForTreePosition(resolveFlagPath(os.Args[1:], "keys", "REVDIFF_KEYS", defaultKeysPath), opts.treePosition())
+		km := keymap.LoadOrDefault(resolveFlagPath(os.Args[1:], "keys", "REVDIFF_KEYS", defaultKeysPath))
 		if err := km.Dump(os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -109,7 +109,7 @@ func run(opts options) (int, error) {
 
 	store := annotation.NewStore()
 	hl := highlight.New(opts.ChromaStyle, !opts.NoColors)
-	km := keymap.LoadOrDefaultForTreePosition(resolveKeysPath(opts), opts.treePosition())
+	km := keymap.LoadOrDefault(resolveKeysPath(opts))
 
 	var (
 		renderer           ui.Renderer

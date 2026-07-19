@@ -906,7 +906,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **File/Hunk:** `next_item`, `prev_item`, `jump_file`, `next_hunk`, `prev_hunk`, `open_file_in_editor`
 
-**Pane:** `toggle_pane`, `focus_tree`, `focus_diff`
+**Pane:** `toggle_pane`, `focus_left`, `focus_right`, `focus_tree`, `focus_diff`
 
 **Search:** `search`
 

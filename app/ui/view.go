@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/diff"
-	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
@@ -112,7 +111,7 @@ func (m Model) renderTwoPaneLayout(navigationContent, diffContent string, naviga
 		Render(diffContent)
 	diffPane = m.applyScrollbar(diffPane)
 
-	if m.cfg.treePosition == keymap.TreePositionRight {
+	if m.cfg.treePosition == TreePositionRight {
 		return lipgloss.JoinHorizontal(lipgloss.Top, diffPane, navigationPane)
 	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, navigationPane, diffPane)
