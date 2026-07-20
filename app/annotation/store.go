@@ -172,13 +172,14 @@ func (s *Store) FormatOutput() string {
 }
 
 // WriteFile writes FormatOutput to path atomically (temp file + rename, mode
-// 0o600), so a concurrent reader sees either the old or the new complete file,
-// never a truncated one.
-func (s *Store) WriteFile(path string) error {
-	if err := fsutil.AtomicWriteFile(path, []byte(s.FormatOutput())); err != nil {
-		return fmt.Errorf("write annotations to %s: %w", path, err)
+// 0o600) and returns the exact snapshot written, so a concurrent reader sees
+// either the old or the new complete file, never a truncated one.
+func (s *Store) WriteFile(path string) (string, error) {
+	content := s.FormatOutput()
+	if err := fsutil.AtomicWriteFile(path, []byte(content)); err != nil {
+		return "", fmt.Errorf("write annotations to %s: %w", path, err)
 	}
-	return nil
+	return content, nil
 }
 
 // escapeHeaderLines prefixes any body line whose first non-space content is

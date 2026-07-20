@@ -34,7 +34,8 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 		m.output.hint = "No annotations to flush"
 		return m, nil
 	}
-	if err := m.store.WriteFile(m.cfg.outputPath); err != nil {
+	content, err := m.store.WriteFile(m.cfg.outputPath)
+	if err != nil {
 		log.Printf("[WARN] flush annotations to output: %v", err)
 		m.output.hint = "Flush failed"
 		return m, nil
@@ -49,7 +50,6 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	content := m.store.FormatOutput()
 	cmd := m.postFlushHook.Prepare(content)
 	m.output.hint = writtenHint + "; running post-flush command"
 	return m, tea.ExecProcess(cmd, func(runErr error) tea.Msg {

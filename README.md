@@ -370,7 +370,7 @@ Positional arguments support several forms:
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
-| `--post-flush-command` | Run command after flushing annotations, env: `REVDIFF_POST_FLUSH_COMMAND`, config: `post-flush-command` | |
+| `--post-flush-command` | Run command after a successful `O` flush (requires `-o`/`--output`), env: `REVDIFF_POST_FLUSH_COMMAND`, config: `post-flush-command` | |
 | `--annotations` | Preload annotations from a markdown file in `-o` format | |
 | `--history-dir` | Directory for review history auto-saves, env: `REVDIFF_HISTORY_DIR` | `~/.config/revdiff/history/` |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
@@ -743,6 +743,8 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty
 ```
 
 After making the script executable, run revdiff with `--post-flush-command=osc-copy` or set `post-flush-command = osc-copy` in the config file.
+
+The post-flush command runs synchronously. Use a fast, non-interactive command because revdiff waits for it to finish before restoring the TUI.
 
 Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
 
