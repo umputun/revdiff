@@ -15,6 +15,7 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"reflect"
 	"strconv"
 	"strings"
@@ -117,6 +118,11 @@ type overlayManager interface {
 // that hides the underlying VCS). Defined on the consumer side per Go convention.
 type commitLogSource interface {
 	CommitLog(ref string) ([]diff.CommitInfo, error)
+}
+
+// PostFlushHook prepares the external command run after an in-session output flush.
+type PostFlushHook interface {
+	Prepare(content string) *exec.Cmd
 }
 
 // ThemeCatalog is what Model needs for theme discovery and persistence.
@@ -546,18 +552,19 @@ type annotationState struct {
 // Model is the top-level bubbletea model for revdiff.
 type Model struct {
 	// injected dependencies
-	resolver     styleResolver
-	renderer     styleRenderer
-	sgr          sgrProcessor
-	differ       wordDiffer
-	overlay      overlayManager
-	tree         FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
-	parseTOC     func(lines []diff.DiffLine, filename string) TOCComponent
-	store        *annotation.Store
-	diffRenderer Renderer
-	keymap       *keymap.Keymap
-	themes       ThemeCatalog   // theme catalog for discovery, resolve, and persistence
-	editor       ExternalEditor // launches $EDITOR for annotation editing and source-file opening
+	resolver      styleResolver
+	renderer      styleRenderer
+	sgr           sgrProcessor
+	differ        wordDiffer
+	overlay       overlayManager
+	tree          FileTreeComponent // never nil after NewModel; starts empty, gets Rebuilt on filesLoadedMsg
+	parseTOC      func(lines []diff.DiffLine, filename string) TOCComponent
+	store         *annotation.Store
+	diffRenderer  Renderer
+	keymap        *keymap.Keymap
+	themes        ThemeCatalog   // theme catalog for discovery, resolve, and persistence
+	editor        ExternalEditor // launches $EDITOR for annotation editing and source-file opening
+	postFlushHook PostFlushHook  // optional command run after an in-session output flush
 
 	// grouped state
 	cfg    modelConfigState // immutable session config
@@ -702,6 +709,7 @@ type ModelConfig struct {
 	LoadUntrackedRenames func([]string) ([]diff.FileEntry, error)
 	Keymap               *keymap.Keymap // custom key bindings (nil uses defaults)
 	Editor               ExternalEditor // external-editor driver (nil uses app/editor.Editor{})
+	PostFlushHook        PostFlushHook  // optional command run after an in-session output flush
 	// CommitLog enumerates commits in the current ref range for the info popup's
 	// commit-log section. When nil, NewModel attempts to derive the source by
 	// type-asserting the Renderer against diff.CommitLogger; if the assertion
@@ -837,24 +845,29 @@ func NewModel(cfg ModelConfig) (Model, error) {
 	if ed == nil || isNilValue(ed) {
 		ed = editor.Editor{}
 	}
+	postFlushHook := cfg.PostFlushHook
+	if isNilValue(postFlushHook) {
+		postFlushHook = nil
+	}
 	cls := resolveCommitLogSource(cfg.CommitLog, cfg.Renderer)
 	reviewCfg := cloneReviewInfoConfig(cfg.ReviewInfo)
 
 	return Model{
-		resolver:     cfg.StyleResolver,
-		renderer:     cfg.StyleRenderer,
-		sgr:          cfg.SGR,
-		differ:       cfg.WordDiffer,
-		overlay:      cfg.Overlay,
-		keymap:       km,
-		store:        cfg.Store,
-		diffRenderer: cfg.Renderer,
-		highlighter:  cfg.Highlighter,
-		blamer:       cfg.Blamer,
-		tree:         cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
-		parseTOC:     cfg.ParseTOC,
-		themes:       cfg.Themes,
-		editor:       ed,
+		resolver:      cfg.StyleResolver,
+		renderer:      cfg.StyleRenderer,
+		sgr:           cfg.SGR,
+		differ:        cfg.WordDiffer,
+		overlay:       cfg.Overlay,
+		keymap:        km,
+		store:         cfg.Store,
+		diffRenderer:  cfg.Renderer,
+		highlighter:   cfg.Highlighter,
+		blamer:        cfg.Blamer,
+		tree:          cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
+		parseTOC:      cfg.ParseTOC,
+		themes:        cfg.Themes,
+		editor:        ed,
+		postFlushHook: postFlushHook,
 		cfg: modelConfigState{
 			ref:                cfg.Ref,
 			staged:             cfg.Staged,
@@ -952,6 +965,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEditorFinished(msg)
 	case sourceEditorFinishedMsg:
 		return m.handleSourceEditorFinished(msg)
+	case postFlushFinishedMsg:
+		return m.handlePostFlushFinished(msg)
 	case wheelDebounceMsg:
 		return m.handleWheelDebounce(msg)
 	}

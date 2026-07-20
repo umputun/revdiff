@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -12,6 +14,15 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/ui/mocks"
 )
+
+type postFlushHookStub struct {
+	content string
+}
+
+func (s *postFlushHookStub) Prepare(content string) *exec.Cmd {
+	s.content = content
+	return exec.Command("sh", "-c", "exit 0")
+}
 
 func TestNewModel_OutputPath(t *testing.T) {
 	tests := []struct {
@@ -105,6 +116,55 @@ func TestModel_HandleFlushOutput_WriteError(t *testing.T) {
 	assert.Equal(t, "Flush failed", model.output.hint)
 	assert.Nil(t, cmd)
 	assert.NoFileExists(t, path)
+}
+
+func TestModel_HandleFlushOutput_PostFlushHook(t *testing.T) {
+	store := annotation.NewStore()
+	store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+	path := filepath.Join(t.TempDir(), "out.md")
+	hook := &postFlushHookStub{}
+	m := testNewModel(t, plainRenderer(), store, noopHighlighter(), ModelConfig{
+		OutputPath:    path,
+		PostFlushHook: hook,
+		MouseTracking: true,
+	})
+
+	result, cmd := m.handleFlushOutput()
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, store.FormatOutput(), hook.content)
+	assert.Equal(t, "Wrote 1 annotation to output file; running post-flush command", model.output.hint)
+	assert.FileExists(t, path)
+}
+
+func TestModel_HandlePostFlushFinished(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
+			writtenHint:  "Wrote 2 annotations to output file",
+			restoreMouse: true,
+		})
+		model := result.(Model)
+		assert.Equal(t, "Wrote 2 annotations to output file and ran post-flush command", model.output.hint)
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("failure", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
+			err:         errors.New("exit status 1"),
+			writtenHint: "Wrote 1 annotation to output file",
+		})
+		model := result.(Model)
+		assert.Equal(t, "Wrote 1 annotation to output file; post-flush command failed", model.output.hint)
+		assert.Nil(t, cmd)
+	})
+}
+
+func TestNewModel_TypedNilPostFlushHook(t *testing.T) {
+	var hook *postFlushHookStub
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{PostFlushHook: hook})
+	assert.Nil(t, m.postFlushHook)
 }
 
 func TestModel_ActionFlushOutput_Dispatch(t *testing.T) {

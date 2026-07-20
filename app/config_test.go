@@ -40,6 +40,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.ExitCodeOnAnnotations)
 	assert.False(t, opts.Stdin)
 	assert.Empty(t, opts.Output)
+	assert.Empty(t, opts.PostFlushCommand)
 	assert.Empty(t, opts.StdinName)
 	assert.Empty(t, opts.Refs.Base)
 	assert.Empty(t, opts.Refs.Against)
@@ -574,6 +575,39 @@ func TestParseArgs_OutputFlag(t *testing.T) {
 	assert.Equal(t, "/tmp/out2.txt", opts.Output)
 }
 
+func TestParseArgs_PostFlushCommand(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--post-flush-command", "osc-copy"))
+		require.NoError(t, err)
+		assert.Equal(t, "osc-copy", opts.PostFlushCommand)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_POST_FLUSH_COMMAND", "osc-copy")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, "osc-copy", opts.PostFlushCommand)
+	})
+
+	t.Run("custom config file", func(t *testing.T) {
+		cfgPath := filepath.Join(t.TempDir(), "custom.ini")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\npost-flush-command = osc-copy\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, "osc-copy", opts.PostFlushCommand)
+	})
+
+	t.Run("cli overrides custom config", func(t *testing.T) {
+		cfgPath := filepath.Join(t.TempDir(), "custom.ini")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\npost-flush-command = config-hook\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath, "--post-flush-command", "cli-hook"})
+		require.NoError(t, err)
+		assert.Equal(t, "cli-hook", opts.PostFlushCommand)
+	})
+}
+
 func TestParseArgs_Flags(t *testing.T) {
 	opts, err := parseArgs([]string{"--staged", "--tree-width=5", "--tab-width=8", "--no-colors", "--chroma-style=dracula", "HEAD~3"})
 	require.NoError(t, err)
@@ -825,6 +859,7 @@ func TestDumpConfig(t *testing.T) {
 	assert.Contains(t, output, "exit-code-on-annotations = false")
 	assert.Contains(t, output, "no-mouse = false")
 	assert.Contains(t, output, "wrap-indent = 0")
+	assert.Contains(t, output, "post-flush-command =")
 	assert.Contains(t, output, "[color options]")
 	assert.Contains(t, output, "color-accent = #D5895F")
 	assert.NotContains(t, output, "\ncolors =", "should not have spurious colors= line")

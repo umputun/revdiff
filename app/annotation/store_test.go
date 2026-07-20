@@ -493,11 +493,13 @@ func TestStore_WriteFile(t *testing.T) {
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "use errors.Is()"})
 
 	path := filepath.Join(t.TempDir(), "output.md")
-	require.NoError(t, s.WriteFile(path))
+	snapshot, err := s.WriteFile(path)
+	require.NoError(t, err)
 
 	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
 	require.NoError(t, err)
-	assert.Equal(t, s.FormatOutput(), string(got), "written bytes must equal FormatOutput()")
+	assert.Equal(t, s.FormatOutput(), snapshot, "returned snapshot must equal FormatOutput()")
+	assert.Equal(t, snapshot, string(got), "returned snapshot must equal the written bytes")
 }
 
 func TestStore_WriteFileOverwritesExisting(t *testing.T) {
@@ -506,7 +508,8 @@ func TestStore_WriteFileOverwritesExisting(t *testing.T) {
 
 	s := NewStore()
 	s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "note"})
-	require.NoError(t, s.WriteFile(path))
+	_, err := s.WriteFile(path)
+	require.NoError(t, err)
 
 	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
 	require.NoError(t, err)
@@ -516,7 +519,8 @@ func TestStore_WriteFileOverwritesExisting(t *testing.T) {
 func TestStore_WriteFileEmptyStore(t *testing.T) {
 	s := NewStore()
 	path := filepath.Join(t.TempDir(), "output.md")
-	require.NoError(t, s.WriteFile(path))
+	_, err := s.WriteFile(path)
+	require.NoError(t, err)
 
 	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
 	require.NoError(t, err)
@@ -528,7 +532,8 @@ func TestStore_WriteFileMode(t *testing.T) {
 	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
 
 	path := filepath.Join(t.TempDir(), "output.md")
-	require.NoError(t, s.WriteFile(path))
+	_, err := s.WriteFile(path)
+	require.NoError(t, err)
 
 	info, err := os.Stat(path)
 	require.NoError(t, err)
@@ -539,7 +544,8 @@ func TestStore_WriteFileNoLeftoverTempOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore()
 	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
-	require.NoError(t, s.WriteFile(filepath.Join(dir, "output.md")))
+	_, err := s.WriteFile(filepath.Join(dir, "output.md"))
+	require.NoError(t, err)
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
@@ -552,7 +558,7 @@ func TestStore_WriteFileMissingDir(t *testing.T) {
 	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
 
 	dir := filepath.Join(t.TempDir(), "does-not-exist")
-	err := s.WriteFile(filepath.Join(dir, "output.md"))
+	_, err := s.WriteFile(filepath.Join(dir, "output.md"))
 	require.Error(t, err, "writing into a missing directory must fail")
 
 	// no temp file should be created in the missing directory
@@ -569,7 +575,8 @@ func TestStore_WriteFileRemovesTempOnRenameError(t *testing.T) {
 
 	s := NewStore()
 	s.Add(Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
-	require.Error(t, s.WriteFile(target), "rename over a directory must fail")
+	_, err := s.WriteFile(target)
+	require.Error(t, err, "rename over a directory must fail")
 
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
