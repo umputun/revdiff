@@ -120,6 +120,14 @@ func (p *preloader) load(records []annotation.Annotation) error {
 		// usage on commit Author/Subject/Body.
 		a.Comment = diff.SanitizeCommitText(a.Comment)
 
+		// (description) is not a path, so the checks below find no diff for it
+		// and would drop it as an orphan, losing the description note whenever
+		// an -o snapshot is reloaded with --annotations.
+		if a.File == annotation.DescriptionFile {
+			p.store.Add(a)
+			continue
+		}
+
 		status, ok := known[a.File]
 		if !ok {
 			p.warnf("warning: --annotations: file %q not in diff, dropping annotation\n", a.File)

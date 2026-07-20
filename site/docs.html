@@ -286,7 +286,8 @@ See ticket SEC-441 for context."
 
 # longer descriptions: keep the markdown in a file
 revdiff HEAD~3 --description-file=.review-description.md</code></div>
-        <p><code>--description</code> and <code>--description-file</code> are mutually exclusive. The description section is hidden when neither is set, so the flag is purely additive.</p>
+        <p><code>--description</code> and <code>--description-file</code> are mutually exclusive. The description section is hidden when neither is set.</p>
+        <p>Press <code>e</code> while the info popup is open to edit the description in your editor, seeded on first edit with the description text. Your edit replaces the prose in the popup under a <code>description (edited)</code> header, so a corrected assumption is never shown next to the wrong one it replaced. The edit is emitted in the structured output as <code>## (description) (file-level)</code>; emptying the editor clears it and restores the supplied text.</p>
 
         <h2 id="markdown-toc">Markdown TOC navigation</h2>
         <p>When reviewing a single markdown file in context-only mode, a table-of-contents pane appears on the left listing all markdown headers. This works for <code>--only</code> files and for <code>--stdin</code> when <code>--stdin-name</code> ends with <code>.md</code> or <code>.markdown</code>. Use <code>Tab</code> to switch focus, <code>j</code>/<code>k</code> to navigate, <code>Enter</code> to jump. The TOC highlights the current section as you scroll. Headers inside fenced code blocks are excluded.</p>
@@ -584,6 +585,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
                 <tr><td><code>f</code></td><td>Filter: all files / annotated only</td></tr>
                 <tr><td><code>?</code></td><td>Help overlay</td></tr>
                 <tr><td><code>i</code></td><td>Info popup &mdash; review scope (mode, VCS, ref, filters, file/status counts, aggregate <code>+/-</code> stats) plus the commit log for the current ref range when applicable</td></tr>
+                <tr><td><code>e</code> (in info popup)</td><td>Annotate the <code>--description</code> in <code>$EDITOR</code>; emitted as <code>## (description) (file-level)</code></td></tr>
                 <tr><td><code>R</code></td><td>Reload diff from VCS (warns if annotations exist)</td></tr>
                 <tr><td><code>q</code></td><td>Quit, output annotations</td></tr>
                 <tr><td><code>Q</code></td><td>Discard annotations and quit</td></tr>

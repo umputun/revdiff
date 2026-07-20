@@ -375,6 +375,31 @@ func TestValidateStdinFlags_RejectsAnnotations(t *testing.T) {
 	assert.Contains(t, err.Error(), "--annotations")
 }
 
+func TestPreloadAnnotations_KeepsDescriptionNote(t *testing.T) {
+	body := "## " + annotation.DescriptionFile + " (file-level)\nthe endpoint is not idempotent\n\n" +
+		"## a.go:5 (+)\nline-add note\n"
+	path := writeTempAnnotations(t, body)
+
+	store := annotation.NewStore()
+	r := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "a.go", Status: diff.FileModified}}, nil
+		},
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			assert.Equal(t, "a.go", req.Path, "the synthetic description key must not reach FileDiff")
+			return []diff.DiffLine{{OldNum: 0, NewNum: 5, Content: "added", ChangeType: diff.ChangeAdd}}, nil
+		},
+	}
+	warn := &bytes.Buffer{}
+	require.NoError(t, preloadAnnotations(path, store, r, "", false, nil, nil, "", warn))
+
+	assert.Equal(t, 2, store.Count())
+	got := store.Get(annotation.DescriptionFile)
+	require.Len(t, got, 1)
+	assert.Equal(t, "the endpoint is not idempotent", got[0].Comment)
+	assert.Empty(t, warn.String(), "the description note is not an orphan")
+}
+
 func TestPreloadAnnotations_EmptyFile(t *testing.T) {
 	path := writeTempAnnotations(t, "")
 	store := annotation.NewStore()

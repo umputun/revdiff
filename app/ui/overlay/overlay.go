@@ -159,14 +159,16 @@ type InfoSpec struct {
 	// surface aggregate stats (files, +/-, status, vcs) without spending
 	// body rows on them. Empty leaves the bottom border bare. Both
 	// header and footer gracefully no-op when too wide for the popup.
-	FooterText        string
-	Description       string
-	Rows              []InfoRow
-	Commits           []diff.CommitInfo
-	CommitsApplicable bool
-	CommitsLoaded     bool
-	Truncated         bool
-	CommitsErr        error
+	FooterText            string
+	Description           string
+	DescriptionAnnotation string // reviewer's annotation on the description prose; empty when none
+	DescriptionHint       string // prompt rendered in place of an absent annotation; empty renders no hint
+	Rows                  []InfoRow
+	Commits               []diff.CommitInfo
+	CommitsApplicable     bool
+	CommitsLoaded         bool
+	Truncated             bool
+	CommitsErr            error
 }
 
 // InfoRow is a label/value line rendered in the session section of the info

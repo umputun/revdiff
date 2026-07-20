@@ -123,6 +123,7 @@ func (c *infoOverlay) buildContent(innerWidth int, resolver Resolver) []string {
 		out = append(out, section...)
 	}
 	appendSection(c.buildDescriptionSection(innerWidth, resolver))
+	appendSection(c.buildDescriptionHintSection(innerWidth, resolver))
 	appendSection(c.buildDetailRows(innerWidth, resolver))
 	appendSection(c.buildCommitsSection(innerWidth, resolver))
 	if len(out) == 0 {
@@ -135,18 +136,25 @@ func (c *infoOverlay) buildContent(innerWidth int, resolver Resolver) []string {
 	return out
 }
 
-// buildDescriptionSection renders the optional agent-supplied prose. Empty
-// description returns nil so the section is skipped entirely. The text is
-// wrapped to inner width; newlines in the source are honored as paragraph
-// breaks. Caller is responsible for sanitizing the input before it reaches
-// the spec — this code does not strip control bytes because chroma-style
-// ANSI is preserved verbatim for highlighted output.
+// buildDescriptionSection renders the review context: the reviewer's edit when
+// one exists, otherwise the agent-supplied prose. The edit supersedes the
+// original rather than sitting beside it, so a corrected assumption is never
+// displayed next to the wrong one it replaced. Empty description returns nil so
+// the section is skipped entirely. The text is wrapped to inner width;
+// newlines in the source are honored as paragraph breaks. Caller is
+// responsible for sanitizing the input before it reaches the spec — this code
+// does not strip control bytes because chroma-style ANSI is preserved verbatim
+// for highlighted output.
 func (c *infoOverlay) buildDescriptionSection(innerWidth int, resolver Resolver) []string {
 	if strings.TrimSpace(c.spec.Description) == "" {
 		return nil
 	}
-	out := []string{c.sectionHeader("description", innerWidth, resolver)}
-	for _, raw := range c.splitLines(c.spec.Description) {
+	header, body := "description", c.spec.Description
+	if strings.TrimSpace(c.spec.DescriptionAnnotation) != "" {
+		header, body = "description (edited)", c.spec.DescriptionAnnotation
+	}
+	out := []string{c.sectionHeader(header, innerWidth, resolver)}
+	for _, raw := range c.splitLines(body) {
 		if raw == "" {
 			out = append(out, c.padLine("", innerWidth))
 			continue
@@ -156,6 +164,21 @@ func (c *infoOverlay) buildDescriptionSection(innerWidth int, resolver Resolver)
 		}
 	}
 	return out
+}
+
+// buildDescriptionHintSection advertises the annotate key, and only while the
+// description is still the supplied one: once edited, buildDescriptionSection's
+// "(edited)" header carries that state and a prompt to annotate would read as
+// though nothing had been recorded. Returns nil without a description, so it
+// never appears where the annotate key does nothing.
+func (c *infoOverlay) buildDescriptionHintSection(innerWidth int, _ Resolver) []string {
+	if strings.TrimSpace(c.spec.Description) == "" {
+		return nil
+	}
+	if strings.TrimSpace(c.spec.DescriptionAnnotation) != "" || c.spec.DescriptionHint == "" {
+		return nil
+	}
+	return c.centeredMessage(c.spec.DescriptionHint, innerWidth, true)
 }
 
 // buildDetailRows renders the trimmed session/detail block. Most session

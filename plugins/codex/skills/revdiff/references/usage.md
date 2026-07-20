@@ -85,6 +85,8 @@ revdiff HEAD~3 --description-file=/tmp/review-notes.md
 
 `--description` and `--description-file` are mutually exclusive. Both are optional — omit when there's no useful context to add.
 
+The reviewer can edit the description: pressing `e` while the info popup is open opens `$EDITOR` seeded with the description text, emitted as a `## (description) (file-level)` block (see Output Format). The edit replaces the prose shown in the popup, so the corrected assumption supersedes the original rather than sitting beside it. This is how a reviewer corrects a wrong assumption in the context you supplied.
+
 ## Two-File Diff
 
 Use `--compare-old=<path>` together with `--compare-new=<path>` to diff two arbitrary files on disk using `git diff --no-index`. No VCS repo needed — works anywhere `git` is installed.
@@ -176,6 +178,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 | `F` | Toggle filter: all files / unreviewed only |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle info popup — review scope (mode, VCS, ref, filters, file/status counts, aggregate `+/-` stats) plus the commit log for the current ref range when applicable |
+| `e` (in info popup) | Edit the `--description` in `$EDITOR`; replaces the displayed prose, emitted as `## (description) (file-level)` |
 | `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |
@@ -297,6 +300,8 @@ don't remove this validation
 ```
 
 Each annotation block: `## filename:line[-end] (type)` where type is `(+)` added, `(-)` removed, or `(file-level)`. The `-end` suffix is included when the annotation covers a line range.
+
+A `## (description) (file-level)` block is not a file path: it is the reviewer's annotation on the `--description` you supplied, added with `e` in the info popup. Treat it as a correction to the intent/context of the change, not a comment about a file named `(description)`.
 
 When annotation text contains the keyword "hunk" (case-insensitive, whole word), the output header automatically expands to include the full hunk line range (e.g., `handler.go:43-67 (+)` instead of `handler.go:43 (+)`). This gives AI consumers the range context without any extra steps.
 

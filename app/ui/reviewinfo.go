@@ -2,13 +2,16 @@ package ui
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/review"
 	"github.com/umputun/revdiff/app/ui/overlay"
 )
@@ -142,16 +145,105 @@ func (m *Model) refreshInfoOverlay() {
 // render a "loading commits…" line inside the section.
 func (m Model) buildInfoSpec() overlay.InfoSpec {
 	return overlay.InfoSpec{
-		HeaderText:        m.reviewHeaderText(),
-		FooterText:        m.reviewFooterText(),
-		Description:       m.review.descriptionHighlighted,
-		Rows:              m.reviewRows(),
-		Commits:           m.commits.list,
-		CommitsApplicable: m.commits.applicable && m.commits.source != nil,
-		CommitsLoaded:     m.commits.loaded,
-		Truncated:         m.commits.truncated,
-		CommitsErr:        m.commits.err,
+		HeaderText:            m.reviewHeaderText(),
+		FooterText:            m.reviewFooterText(),
+		Description:           m.review.descriptionHighlighted,
+		DescriptionAnnotation: m.descriptionAnnotation(),
+		DescriptionHint:       m.descriptionHint(),
+		Rows:                  m.reviewRows(),
+		Commits:               m.commits.list,
+		CommitsApplicable:     m.commits.applicable && m.commits.source != nil,
+		CommitsLoaded:         m.commits.loaded,
+		Truncated:             m.commits.truncated,
+		CommitsErr:            m.commits.err,
 	}
+}
+
+// descriptionHint composes the popup's annotate prompt. Chords are excluded
+// because chord dispatch bypasses the info popup's gate in handleModalKey.
+func (m Model) descriptionHint() string {
+	var single []string
+	for _, k := range m.keymap.KeysFor(keymap.ActionOpenFileInEditor) {
+		if strings.Index(k, ">") <= 0 {
+			single = append(single, m.displayKeyName(k))
+		}
+	}
+	if len(single) == 0 {
+		return ""
+	}
+	return "press " + strings.Join(single, " / ") + " to annotate the description"
+}
+
+// descriptionAnnotationRaw returns the reviewer's file-level annotation on the description,
+// or "" when none exists.
+func (m Model) descriptionAnnotationRaw() string {
+	for _, a := range m.store.Get(annotation.DescriptionFile) {
+		if a.Line == 0 {
+			return a.Comment
+		}
+	}
+	return ""
+}
+
+// descriptionAnnotation returns the note sanitized for display, routed through the
+// same strip path as any other untrusted stored comment.
+func (m Model) descriptionAnnotation() string {
+	return diff.SanitizeCommitText(m.descriptionAnnotationRaw())
+}
+
+// descriptionEditorFinishedMsg carries the external-editor result. seed lets the
+// handler tell a launch-time failure (read-back equals seed) from a post-save
+// soft failure, mirroring editorFinishedMsg.
+type descriptionEditorFinishedMsg struct {
+	content      string
+	seed         string
+	err          error
+	restoreMouse bool
+}
+
+// openDescriptionEditor opens $EDITOR seeded with the existing annotation, or the
+// description prose itself on first edit so the reviewer starts from the
+// supplied context rather than a blank file. The caller closes the info popup
+// before launch; the handler reopens it on return.
+func (m Model) openDescriptionEditor() tea.Cmd {
+	seed := m.descriptionAnnotationRaw()
+	if seed == "" {
+		seed = descriptionFromConfig(m.review.cfg)
+	}
+	cmd, complete, err := m.editor.Command(seed)
+	if err != nil {
+		return func() tea.Msg { return descriptionEditorFinishedMsg{err: err, seed: seed} }
+	}
+	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
+		text, finalErr := complete(runErr)
+		return descriptionEditorFinishedMsg{content: text, seed: seed, err: finalErr, restoreMouse: m.cfg.mouseTracking}
+	})
+}
+
+// handleDescriptionEditorFinished stores (empty clears) the annotation and reopens the
+// info popup. Error handling mirrors handleEditorFinished: an unchanged
+// read-back on error is treated as no edit.
+func (m Model) handleDescriptionEditorFinished(msg descriptionEditorFinishedMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	if msg.restoreMouse {
+		cmd = tea.EnableMouseCellMotion
+	}
+	if msg.err != nil {
+		log.Printf("[WARN] description editor session error: %v", msg.err)
+		if msg.content == "" || msg.content == msg.seed {
+			m.overlay.OpenInfo(m.buildInfoSpec())
+			return m, cmd
+		}
+	}
+	// saving an empty buffer is how the reviewer retracts a note; without the
+	// delete there would be no way to remove one. Absent key is a no-op.
+	if msg.content == "" {
+		m.store.Delete(annotation.DescriptionFile, 0, "")
+	} else {
+		m.store.Add(annotation.Annotation{File: annotation.DescriptionFile, Line: 0, Type: "", Comment: msg.content})
+	}
+	m.overlay.OpenInfo(m.buildInfoSpec())
+	return m, cmd
 }
 
 // precomputeDescriptionHighlight runs the description prose through the

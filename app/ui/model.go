@@ -980,6 +980,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleSourceEditorFinished(msg)
 	case postFlushFinishedMsg:
 		return m.handlePostFlushFinished(msg)
+	case descriptionEditorFinishedMsg:
+		return m.handleDescriptionEditorFinished(msg)
 	case wheelDebounceMsg:
 		return m.handleWheelDebounce(msg)
 	}
@@ -1263,6 +1265,12 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 	// overlay popup dispatch (help, annotation list, theme selector)
 	if m.overlay.Active() {
 		action := m.keymap.Resolve(msg.String())
+		// e annotates the description from the info popup. Gated in the Model,
+		// not the overlay, so the overlay package stays free of the store.
+		if m.overlay.Kind() == overlay.KindInfo && action == keymap.ActionOpenFileInEditor && m.review.descriptionHighlighted != "" {
+			m.overlay.Close()
+			return true, m, m.openDescriptionEditor()
+		}
 		out := m.overlay.HandleKey(msg, action)
 		switch out.Kind {
 		case overlay.OutcomeAnnotationChosen:

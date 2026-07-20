@@ -661,7 +661,9 @@ See ticket SEC-441 for context."
 revdiff HEAD~3 --description-file=.review-description.md
 ```
 
-`--description` and `--description-file` are mutually exclusive. The description section is hidden when neither is set, so the flag is purely additive — existing invocations are unchanged.
+`--description` and `--description-file` are mutually exclusive. The description section is hidden when neither is set.
+
+Press `e` while the info popup is open to edit the description in your editor, seeded on first edit with the description text. Your edit replaces the prose in the popup under a `description (edited)` header, so a corrected assumption is never shown next to the wrong one it replaced. The edit is emitted in the structured output as `## (description) (file-level)`; emptying the editor clears it and restores the supplied text.
 
 ### Markdown TOC Navigation
 
@@ -790,6 +792,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 | `F` | Toggle filter: all files / unreviewed only |
 | `?` | Toggle help overlay showing all keybindings |
 | `i` | Toggle info popup — review scope (mode, VCS, ref, filters, file/status counts, aggregate `+/-` stats) plus the commit log for the current ref range when applicable |
+| `e` (in info popup) | Edit the `--description` in `$EDITOR`; replaces the displayed prose, emitted as `## (description) (file-level)` |
 | `R` | Reload diff from VCS (warns if annotations exist) |
 | `q` | Quit, output annotations to stdout |
 | `Q` | Discard all annotations and quit (confirms if annotations exist) |

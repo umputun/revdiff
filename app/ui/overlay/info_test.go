@@ -696,3 +696,59 @@ func TestShortHash(t *testing.T) {
 		})
 	}
 }
+
+func TestInfoOverlay_RenderDescriptionAnnotation(t *testing.T) {
+	t.Run("the edit replaces the prose rather than joining it", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenInfo(InfoSpec{
+			Description:           "the endpoint is idempotent",
+			DescriptionAnnotation: "the endpoint is NOT idempotent",
+			DescriptionHint:       "press e to annotate the description",
+		})
+		out := mgr.info.render(infoRenderCtx(), mgr)
+		assert.Contains(t, out, "description (edited)", "header marks the prose as superseded")
+		assert.Contains(t, out, "the endpoint is NOT idempotent")
+		assert.NotContains(t, out, "the endpoint is idempotent\x1b", "superseded prose must not render alongside the edit")
+		assert.NotContains(t, out, "your annotation", "there is no second section to contradict the first")
+		assert.NotContains(t, out, "to annotate the description", "hint retires once an edit exists")
+	})
+
+	t.Run("unedited description keeps its plain header", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenInfo(InfoSpec{Description: "agent prose", DescriptionHint: "press e to annotate the description"})
+		out := mgr.info.render(infoRenderCtx(), mgr)
+		assert.Contains(t, out, "agent prose")
+		assert.NotContains(t, out, "(edited)", "nothing is marked edited until it is")
+	})
+
+	t.Run("hint renders when a description exists but no annotation", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenInfo(InfoSpec{Description: "agent prose", DescriptionHint: "press e to annotate the description"})
+		out := mgr.info.render(infoRenderCtx(), mgr)
+		assert.Contains(t, out, "press e to annotate the description")
+	})
+
+	t.Run("hint names the bound key", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenInfo(InfoSpec{Description: "agent prose", DescriptionHint: "press Ctrl+X to annotate the description"})
+		out := mgr.info.render(infoRenderCtx(), mgr)
+		assert.Contains(t, out, "press Ctrl+X to annotate the description")
+		assert.NotContains(t, out, "press e to annotate")
+	})
+
+	t.Run("no hint when the action is unbound", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenInfo(InfoSpec{Description: "agent prose"})
+		out := mgr.info.render(infoRenderCtx(), mgr)
+		assert.Contains(t, out, "agent prose")
+		assert.NotContains(t, out, "to annotate the description", "an unbound action advertises no key")
+	})
+
+	t.Run("no annotation affordance without a description", func(t *testing.T) {
+		mgr := NewManager()
+		mgr.OpenInfo(InfoSpec{DescriptionAnnotation: "orphan note", CommitsApplicable: false})
+		out := mgr.info.render(infoRenderCtx(), mgr)
+		assert.NotContains(t, out, "orphan note", "an edit with no description to supersede renders nothing")
+		assert.NotContains(t, out, "description", "section is gated on a present description")
+	})
+}

@@ -9,6 +9,12 @@ import (
 	"github.com/umputun/revdiff/app/fsutil"
 )
 
+// DescriptionFile is the synthetic store key for a note on the review
+// description (the --description prose shown in the info popup). It is never a
+// real path, so it carries no diff to resolve against: consumers that match
+// store keys to files in the diff have to admit it explicitly.
+const DescriptionFile = "(description)"
+
 // Annotation represents a user comment on a specific diff line.
 type Annotation struct {
 	File    string // file path relative to repo root
