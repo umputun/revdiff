@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ const maskedTerm = "xterm-256color"
 
 // tmuxQueryTimeout bounds the tmux subprocess so a wedged tmux server (e.g.
 // blocked on a run-shell hook) degrades to the next detection method instead
-// of stalling startup indefinitely. display-message answers over the local
+// of stalling startup indefinitely. list-clients answers over the local
 // socket in single-digit milliseconds when healthy.
 const tmuxQueryTimeout = 500 * time.Millisecond
 
@@ -27,19 +28,20 @@ const tmuxQueryTimeout = 500 * time.Millisecond
 // tmux its detection never queries the terminal and always falls back to
 // "dark". two tmux-specific paths run first:
 //
-//  1. `tmux display-message -p '#{client_theme}'` (tmux >= 3.5) — fed by the
-//     outer terminal's native light/dark reporting, needs no tty, and works
-//     in display-popup panes where tmux does not answer OSC 11 at all.
+//  1. `tmux list-clients` themes (tmux >= 3.5) — fed by each outer terminal's
+//     native light/dark reporting, needs no tty, and works no matter which
+//     client tmux considers current. The most recently active client that
+//     reports a theme wins.
 //  2. termenv's own OSC 11 query with TERM masked — tmux answers it in
-//     regular panes with the outer terminal's current background.
+//     regular attached panes with the outer terminal's current background.
 //
-// if both fail (old tmux inside a popup), termenv falls back to COLORFGBG
-// and then its dark default — same as before.
+// if both fail (old tmux, or a detached session where tmux answers no tty
+// queries at all), termenv falls back to COLORFGBG and then its dark default.
 func detectDarkBackground() bool {
 	if !insideTmux(os.Getenv("TMUX"), os.Getenv("TERM"), os.Getenv("TERM_PROGRAM")) {
 		return termenv.HasDarkBackground()
 	}
-	if dark, ok := parseTmuxClientTheme(tmuxClientTheme()); ok {
+	if dark, ok := pickTmuxClientTheme(tmuxClientThemes()); ok {
 		return dark
 	}
 	return termenv.NewOutput(os.Stdout, termenv.WithEnvironment(tmuxEnviron{})).HasDarkBackground()
@@ -60,25 +62,52 @@ func insideTmux(tmuxSocket, term, termProgram string) bool {
 	return strings.HasPrefix(term, "screen") && termProgram == "tmux"
 }
 
-// tmuxClientTheme asks tmux for the attached client's reported theme.
-// returns the raw output; empty on error, timeout, or when the format is
-// unknown (tmux < 3.5 expands unknown formats to an empty string).
-// best-effort: with several clients attached to the session, tmux resolves
-// the format against its notion of the current client — the OSC 11 fallback
-// is relayed through the same client choice, so this path is no worse.
-func tmuxClientTheme() string {
+// tmuxClientThemes asks tmux for every server client's reported theme, one
+// "<activity-epoch> <theme>" line per client. The server-wide list sidesteps
+// tmux's current-client resolution: when revdiff runs in a detached session
+// behind a display-popup attach (the plugin launcher's tmux backend), the
+// current client is the popup's own nested tmux client, which never learns a
+// theme — the outer terminal's client, which does, only shows up in the full
+// list. returns the raw output; empty on error, timeout, or when the format
+// is unknown (tmux < 3.5 expands unknown formats to an empty string).
+func tmuxClientThemes() string {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxQueryTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "#{client_theme}").Output()
+	out, err := exec.CommandContext(ctx, "tmux", "list-clients", "-F", "#{client_activity} #{client_theme}").Output()
 	if err != nil {
 		return ""
 	}
 	return string(out)
 }
 
-// parseTmuxClientTheme maps tmux's client_theme output to a dark-background
+// pickTmuxClientTheme scans tmuxClientThemes output and returns the theme of
+// the most recently active client that reports one. Clients with no theme
+// (nested tmux clients, terminals without light/dark reporting) are skipped.
+// with several real terminals attached to the server, recency is a heuristic
+// for "the terminal the user is looking at" — not a guarantee. ok is false
+// when no client reports a theme, signaling the caller to fall through to
+// the next detection method.
+func pickTmuxClientTheme(clientThemes string) (dark, ok bool) {
+	bestActivity := int64(-1)
+	for line := range strings.SplitSeq(clientThemes, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			continue
+		}
+		activity, err := strconv.ParseInt(fields[0], 10, 64)
+		if err != nil || activity <= bestActivity {
+			continue
+		}
+		if lineDark, themeOK := parseTmuxClientTheme(fields[1]); themeOK {
+			bestActivity, dark, ok = activity, lineDark, true
+		}
+	}
+	return dark, ok
+}
+
+// parseTmuxClientTheme maps tmux's client_theme value to a dark-background
 // bool. ok is false when the theme is unknown or unreported, signaling the
-// caller to fall through to the next detection method.
+// caller to skip the client.
 func parseTmuxClientTheme(theme string) (dark, ok bool) {
 	switch strings.TrimSpace(theme) {
 	case "dark":

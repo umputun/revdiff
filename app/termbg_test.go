@@ -32,6 +32,62 @@ func TestInsideTmux(t *testing.T) {
 	}
 }
 
+func TestPickTmuxClientTheme(t *testing.T) {
+	tests := []struct {
+		name         string
+		clientThemes string
+		wantDark     bool
+		wantOK       bool
+	}{
+		{name: "single light client", clientThemes: "1784717957 light\n", wantDark: false, wantOK: true},
+		{name: "single dark client", clientThemes: "1784717957 dark\n", wantDark: true, wantOK: true},
+		{
+			name:         "themeless popup client alongside real client",
+			clientThemes: "1784717957 light\n1784718000 \n",
+			wantDark:     false,
+			wantOK:       true,
+		},
+		{
+			name:         "most recently active themed client wins",
+			clientThemes: "1784717000 dark\n1784718000 light\n",
+			wantDark:     false,
+			wantOK:       true,
+		},
+		{
+			name:         "order independent",
+			clientThemes: "1784718000 light\n1784717000 dark\n",
+			wantDark:     false,
+			wantOK:       true,
+		},
+		{
+			name:         "equal activity keeps first listed",
+			clientThemes: "1784718000 dark\n1784718000 light\n",
+			wantDark:     true,
+			wantOK:       true,
+		},
+		{
+			name:         "line with extra fields skipped",
+			clientThemes: "1784718000 light extra\n1784717000 dark\n",
+			wantDark:     true,
+			wantOK:       true,
+		},
+		{name: "no clients", clientThemes: "", wantOK: false},
+		{name: "only themeless clients", clientThemes: "1784717957 \n1784718000 \n", wantOK: false},
+		{name: "unknown theme value skipped", clientThemes: "1784717957 auto\n", wantOK: false},
+		{name: "malformed activity skipped", clientThemes: "notanumber light\n", wantOK: false},
+		{name: "tmux pre-3.5 empty theme format", clientThemes: "1784717957 \n", wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dark, ok := pickTmuxClientTheme(tt.clientThemes)
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				assert.Equal(t, tt.wantDark, dark)
+			}
+		})
+	}
+}
+
 func TestParseTmuxClientTheme(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -41,7 +97,7 @@ func TestParseTmuxClientTheme(t *testing.T) {
 	}{
 		{name: "dark", theme: "dark", wantDark: true, wantOK: true},
 		{name: "light", theme: "light", wantDark: false, wantOK: true},
-		{name: "trailing newline from display-message", theme: "light\n", wantDark: false, wantOK: true},
+		{name: "trailing newline", theme: "light\n", wantDark: false, wantOK: true},
 		{name: "empty means unreported", theme: "", wantOK: false},
 		{name: "whitespace only", theme: "\n", wantOK: false},
 		{name: "unknown value", theme: "auto", wantOK: false},
