@@ -502,36 +502,31 @@ func TestModel_TreeNavigation(t *testing.T) {
 }
 
 func TestModel_FocusSwitching(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.tree = testNewFileTree([]string{"a.go"})
-	m.file.name = "a.go" // pretend a file is loaded
-	m.layout.focus = paneTree
+	for _, tc := range []struct {
+		name    string
+		treePos TreePosition
+		toDiff  rune // key that moves focus tree→diff
+		toTree  rune // key that moves focus diff→tree
+	}{
+		{name: "left tree", toDiff: 'l', toTree: 'h'},
+		{name: "right tree", treePos: TreePositionRight, toDiff: 'h', toTree: 'l'},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			m.tree = testNewFileTree([]string{"a.go"})
+			m.cfg.treePosition = tc.treePos
+			m.file.name = "a.go" // pretend a file is loaded
+			m.layout.focus = paneTree
 
-	// l switches to diff pane
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	model := result.(Model)
-	assert.Equal(t, paneDiff, model.layout.focus)
+			result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.toDiff}})
+			model := result.(Model)
+			assert.Equal(t, paneDiff, model.layout.focus)
 
-	// h switches back to tree
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	model = result.(Model)
-	assert.Equal(t, paneTree, model.layout.focus)
-}
-
-func TestModel_FocusSwitching_RightTree(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-	m.tree = testNewFileTree([]string{"a.go"})
-	m.cfg.treePosition = TreePositionRight
-	m.file.name = "a.go"
-	m.layout.focus = paneTree
-
-	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	model := result.(Model)
-	assert.Equal(t, paneDiff, model.layout.focus)
-
-	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	model = result.(Model)
-	assert.Equal(t, paneTree, model.layout.focus)
+			result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{tc.toTree}})
+			model = result.(Model)
+			assert.Equal(t, paneTree, model.layout.focus)
+		})
+	}
 }
 
 func TestModel_FocusSwitching_UserSemanticBinding(t *testing.T) {

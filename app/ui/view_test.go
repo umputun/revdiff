@@ -608,9 +608,12 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 }
 
 func TestModel_ViewTreePosition(t *testing.T) {
-	assertOrder := func(t *testing.T, view, diffLabel, navigationLabel string, treePos TreePosition) {
+	// assertLeftOf makes each call site state the expected pane order explicitly
+	// instead of mirroring the production treePosition branch
+	assertLeftOf := func(t *testing.T, view, leftLabel, rightLabel string) {
 		t.Helper()
-		labelColumn := func(lines []string, label string) int {
+		lines := strings.Split(ansi.Strip(view), "\n")
+		labelColumn := func(label string) int {
 			for _, line := range lines {
 				if idx := strings.Index(line, label); idx >= 0 {
 					return idx
@@ -619,24 +622,19 @@ func TestModel_ViewTreePosition(t *testing.T) {
 			return -1
 		}
 
-		lines := strings.Split(ansi.Strip(view), "\n")
-		diffIdx := labelColumn(lines, diffLabel)
-		navigationIdx := labelColumn(lines, navigationLabel)
-		require.NotEqual(t, -1, diffIdx, "diff label must appear in the rendered view")
-		require.NotEqual(t, -1, navigationIdx, "navigation label must appear in the rendered view")
-		if treePos == TreePositionRight {
-			assert.Less(t, diffIdx, navigationIdx)
-			return
-		}
-		assert.Less(t, navigationIdx, diffIdx)
+		leftIdx, rightIdx := labelColumn(leftLabel), labelColumn(rightLabel)
+		require.NotEqual(t, -1, leftIdx, "label %q must appear in the rendered view", leftLabel)
+		require.NotEqual(t, -1, rightIdx, "label %q must appear in the rendered view", rightLabel)
+		assert.Less(t, leftIdx, rightIdx)
 	}
 
 	for _, tc := range []struct {
-		name    string
-		treePos TreePosition
+		name                  string
+		treePos               TreePosition
+		leftLabel, rightLabel string
 	}{
-		{name: "file tree on left"},
-		{name: "file tree on right", treePos: TreePositionRight},
+		{name: "file tree on left", leftLabel: "tree.go", rightLabel: "current.go"},
+		{name: "file tree on right", treePos: TreePositionRight, leftLabel: "current.go", rightLabel: "tree.go"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := testModel([]string{"tree.go", "other.go"}, nil)
@@ -645,7 +643,7 @@ func TestModel_ViewTreePosition(t *testing.T) {
 			m.cfg.treePosition = tc.treePos
 			m.cfg.noStatusBar = true
 
-			assertOrder(t, m.View(), "current.go", "tree.go", tc.treePos)
+			assertLeftOf(t, m.View(), tc.leftLabel, tc.rightLabel)
 		})
 	}
 
@@ -662,7 +660,7 @@ func TestModel_ViewTreePosition(t *testing.T) {
 		m.cfg.treePosition = TreePositionRight
 		m.cfg.noStatusBar = true
 
-		assertOrder(t, m.View(), "plan.md", "Navigation section", TreePositionRight)
+		assertLeftOf(t, m.View(), "plan.md", "Navigation section")
 	})
 }
 

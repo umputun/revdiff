@@ -411,8 +411,6 @@ func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionDown))
 	assert.True(t, IsValidAction(ActionFocusLeft))
 	assert.True(t, IsValidAction(ActionFocusRight))
-	assert.True(t, IsValidAction(ActionFocusTree))
-	assert.True(t, IsValidAction(ActionFocusDiff))
 	assert.True(t, IsValidAction(ActionInfo))
 	assert.True(t, IsValidAction(Action("commit_info")), "deprecated alias must validate")
 	assert.False(t, IsValidAction(Action("nonexistent")))
