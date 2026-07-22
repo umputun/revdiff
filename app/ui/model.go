@@ -103,6 +103,7 @@ type overlayManager interface {
 	OpenHelp(spec overlay.HelpSpec)
 	OpenAnnotList(spec overlay.AnnotListSpec)
 	OpenThemeSelect(spec overlay.ThemeSelectSpec)
+	OpenFilePicker(spec overlay.FilePickerSpec)
 	OpenInfo(spec overlay.InfoSpec)
 	UpdateInfo(spec overlay.InfoSpec)
 	Close()
@@ -196,6 +197,8 @@ var (
 type FileTreeComponent interface {
 	// SelectedFile returns the full path of the currently selected file.
 	SelectedFile() string
+	// VisibleFiles returns visible file paths in rendered order, respecting filters.
+	VisibleFiles() []string
 	// TotalFiles returns the count of original file paths (before filtering).
 	TotalFiles() int
 	// FileStatus returns the git change status for the given file path.
@@ -1125,6 +1128,10 @@ func (m Model) handleOverlayOpen(action keymap.Action) (tea.Model, tea.Cmd, bool
 		m.clearPendingInputState()
 		m.openThemeSelector()
 		return m, nil, true
+	case keymap.ActionJumpFile:
+		m.clearPendingInputState()
+		m.openFilePicker()
+		return m, nil, true
 	case keymap.ActionInfo:
 		m.clearPendingInputState()
 		cmd := m.handleInfo()
@@ -1252,6 +1259,9 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			m.confirmThemeByName(out.ThemeChoice.Name)
 		case overlay.OutcomeThemeCanceled:
 			m.cancelThemeSelect()
+		case overlay.OutcomeFileChosen:
+			model, cmd := m.jumpToFile(out.FileChoice.Path)
+			return true, model, cmd
 		case overlay.OutcomeClosed, overlay.OutcomeNone:
 		}
 		return true, m, nil

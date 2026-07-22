@@ -1,10 +1,11 @@
 // Package overlay owns all layered popup UI for revdiff — help, annotation list,
-// and theme selector overlays. It provides a Manager coordinator that enforces
-// mutual exclusivity (only one overlay visible at a time), routes key dispatch
+// theme selector, and file picker overlays. It provides a Manager coordinator
+// that enforces mutual exclusivity (only one overlay visible at a time), routes key dispatch
 // to the active overlay, and composes the overlay on top of the base view via
 // ANSI-aware centered compositing.
 //
-// Callers supply fully populated spec structs (HelpSpec, AnnotListSpec, ThemeSelectSpec)
+// Callers supply fully populated spec structs (HelpSpec, AnnotListSpec, ThemeSelectSpec,
+// FilePickerSpec)
 // when opening an overlay and handle side effects by switching on the returned Outcome
 // from HandleKey. The overlay package has no dependency on ui.Model, annotation store,
 // theme loading, or any filesystem operation.
@@ -30,6 +31,7 @@ const (
 	KindHelp             // help overlay
 	KindAnnotList        // annotation list popup
 	KindThemeSelect      // theme selector popup
+	KindFilePicker       // filterable file-jump popup
 	KindInfo             // unified info popup (description + session + commits)
 )
 
@@ -43,14 +45,16 @@ const (
 	OutcomeThemePreview                        // cursor moved to a new theme (name in Outcome.ThemeChoice)
 	OutcomeThemeConfirmed                      // user confirmed a theme (name in Outcome.ThemeChoice)
 	OutcomeThemeCanceled                       // user canceled theme selection
+	OutcomeFileChosen                          // user picked a file (path in Outcome.FileChoice)
 )
 
-// Outcome is the return value from HandleKey. Callers switch on Kind and
-// read AnnotationTarget or ThemeChoice for the relevant outcome.
+// Outcome is the return value from HandleKey. Callers switch on Kind and read
+// AnnotationTarget, ThemeChoice, or FileChoice for the relevant outcome.
 type Outcome struct {
 	Kind             OutcomeKind
 	AnnotationTarget *AnnotationTarget
 	ThemeChoice      *ThemeChoice
+	FileChoice       *FileChoice
 }
 
 // RenderCtx carries per-render parameters passed to Compose.
@@ -120,6 +124,17 @@ type ThemeChoice struct {
 	Name string
 }
 
+// FilePickerSpec describes the file picker popup content.
+type FilePickerSpec struct {
+	Paths      []string
+	ActivePath string
+}
+
+// FileChoice carries the selected relative file path.
+type FileChoice struct {
+	Path string
+}
+
 // InfoSpec describes the unified info popup, composed of three optional
 // sections rendered top-to-bottom: an agent-supplied prose description (#130
 // — empty hides the section), invocation/session info from --description-less
@@ -173,6 +188,7 @@ type Manager struct {
 	help     helpOverlay
 	annotLst annotListOverlay
 	themeSel themeSelectOverlay
+	filePick filePickerOverlay
 	info     infoOverlay
 	// bounds is the popup rectangle on screen as of the last Compose call;
 	// used by HandleMouse to hit-test clicks and translate to popup-local coords.
@@ -226,6 +242,13 @@ func (m *Manager) OpenThemeSelect(spec ThemeSelectSpec) {
 	m.themeSel.open(spec)
 }
 
+// OpenFilePicker activates the filterable file-jump popup.
+func (m *Manager) OpenFilePicker(spec FilePickerSpec) {
+	m.Close()
+	m.kind = KindFilePicker
+	m.filePick.open(spec)
+}
+
 // OpenInfo activates the unified info popup with the given spec.
 func (m *Manager) OpenInfo(spec InfoSpec) {
 	m.Close()
@@ -260,6 +283,8 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 		out = m.annotLst.handleKey(msg, action)
 	case KindThemeSelect:
 		out = m.themeSel.handleKey(msg, action)
+	case KindFilePicker:
+		out = m.filePick.handleKey(msg, action)
 	case KindInfo:
 		out = m.info.handleKey(msg, action)
 	default:
@@ -267,7 +292,7 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 	}
 
 	switch out.Kind {
-	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled:
+	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled, OutcomeFileChosen:
 		m.Close()
 	case OutcomeNone, OutcomeThemePreview: // no state change
 	}
@@ -306,6 +331,8 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 		out = m.annotLst.handleMouse(msg)
 	case KindThemeSelect:
 		out = m.themeSel.handleMouse(msg)
+	case KindFilePicker:
+		out = m.filePick.handleMouse(msg)
 	case KindInfo:
 		out = m.info.handleMouse(msg)
 	default: // KindNone handled by the early return above
@@ -313,7 +340,7 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 	}
 
 	switch out.Kind {
-	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled:
+	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled, OutcomeFileChosen:
 		m.Close()
 	case OutcomeNone, OutcomeThemePreview: // no state change
 	}
@@ -334,6 +361,8 @@ func (m *Manager) Compose(base string, ctx RenderCtx) string {
 		fg = m.annotLst.render(ctx, m)
 	case KindThemeSelect:
 		fg = m.themeSel.render(ctx, m)
+	case KindFilePicker:
+		fg = m.filePick.render(ctx, m)
 	case KindInfo:
 		fg = m.info.render(ctx, m)
 	}

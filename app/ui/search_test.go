@@ -1549,7 +1549,9 @@ func TestModel_SearchHistory_UpDownInteractive(t *testing.T) {
 }
 
 func TestModel_SearchHistory_CtrlPCtrlNParity(t *testing.T) {
-	// Ctrl+P / Ctrl+N must behave identically to Up / Down.
+	// Ctrl+P / Ctrl+N must behave identically to Up / Down. Ctrl+P is also the
+	// default jump_file binding outside search, so these assertions lock down
+	// modal precedence.
 	model := newSearchHistoryModel(t)
 
 	model = submitQueryThroughInput(model, "alpha")
@@ -1562,10 +1564,14 @@ func TestModel_SearchHistory_CtrlPCtrlNParity(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
 	model = result.(Model)
 	assert.Equal(t, "beta", model.search.input.Value())
+	assert.True(t, model.search.active)
+	assert.False(t, model.overlay.Active(), "Ctrl+P in search must recall history, not open the file picker")
 
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
 	model = result.(Model)
 	assert.Equal(t, "alpha", model.search.input.Value())
+	assert.True(t, model.search.active)
+	assert.False(t, model.overlay.Active())
 
 	// Ctrl+N = Down.
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlN})

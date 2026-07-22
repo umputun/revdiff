@@ -583,6 +583,26 @@ func TestFileTree_SelectByPath(t *testing.T) {
 	})
 }
 
+func TestFileTree_VisibleFilesRenderedOrderAndFilters(t *testing.T) {
+	ft := NewFileTree(fileEntries("z/b.go", "a.go", "z/a.go"))
+	assert.Equal(t, []string{"a.go", "z/a.go", "z/b.go"}, ft.VisibleFiles())
+
+	t.Run("annotated-only", func(t *testing.T) {
+		filtered := NewFileTree(fileEntries("z/b.go", "a.go", "z/a.go"))
+		filtered.ToggleFilter(map[string]bool{"a.go": true, "z/b.go": true})
+		assert.True(t, filtered.FilterActive())
+		assert.Equal(t, []string{"a.go", "z/b.go"}, filtered.VisibleFiles())
+	})
+
+	t.Run("unreviewed-only", func(t *testing.T) {
+		filtered := NewFileTree(fileEntries("z/b.go", "a.go", "z/a.go"))
+		filtered.SetReviewed("z/a.go", "fingerprint")
+		filtered.ToggleUnreviewedFilter()
+		assert.True(t, filtered.UnreviewedFilterActive())
+		assert.Equal(t, []string{"a.go", "z/b.go"}, filtered.VisibleFiles())
+	})
+}
+
 func TestFileTree_SelectByVisibleRow(t *testing.T) {
 	t.Run("first row at offset zero selects first entry", func(t *testing.T) {
 		ft := NewFileTree(fileEntries("a.go", "b.go"))

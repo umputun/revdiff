@@ -84,6 +84,19 @@ func (ft *FileTree) SelectedFile() string {
 	return ft.entries[ft.cursor].path
 }
 
+// VisibleFiles returns the file paths in their current rendered order.
+// Directory rows are omitted and active annotated-only or unreviewed-only
+// filters are respected because entries is the tree's filtered view.
+func (ft *FileTree) VisibleFiles() []string {
+	files := make([]string, 0, len(ft.entries))
+	for _, entry := range ft.entries {
+		if !entry.isDir {
+			files = append(files, entry.path)
+		}
+	}
+	return files
+}
+
 // TotalFiles returns the count of original file paths (before filtering).
 func (ft *FileTree) TotalFiles() int {
 	return len(ft.allFiles)
