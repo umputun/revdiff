@@ -1073,17 +1073,15 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // resolveDirectionalFocus maps spatial focus actions to semantic pane actions.
 // Explicit user bindings to focus_tree or focus_diff bypass this mapping.
 func (m Model) resolveDirectionalFocus(action keymap.Action) keymap.Action {
+	left, right := keymap.ActionFocusTree, keymap.ActionFocusDiff
+	if m.cfg.treePosition == TreePositionRight {
+		left, right = right, left
+	}
 	switch action {
 	case keymap.ActionFocusLeft:
-		if m.cfg.treePosition == TreePositionRight {
-			return keymap.ActionFocusDiff
-		}
-		return keymap.ActionFocusTree
+		return left
 	case keymap.ActionFocusRight:
-		if m.cfg.treePosition == TreePositionRight {
-			return keymap.ActionFocusTree
-		}
-		return keymap.ActionFocusDiff
+		return right
 	default:
 		return action
 	}

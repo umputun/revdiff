@@ -90,6 +90,16 @@ func (m Model) treeTopRow() int {
 	return 1
 }
 
+// treePaneXRange returns the half-open screen column range [start, end) of the
+// tree pane block: left border + treeWidth content columns + right border.
+// the block hugs the right edge when the tree renders on the right.
+func (m Model) treePaneXRange() (start, end int) {
+	if m.cfg.treePosition == TreePositionRight {
+		start = m.layout.width - m.layout.treeWidth - 2
+	}
+	return start, start + m.layout.treeWidth + 2
+}
+
 // hitTest classifies a screen coordinate into a hitZone for mouse-event routing.
 // the classification is pure arithmetic over m.layout state and does not
 // inspect any dynamic UI content. ordering matters: status bar is checked
@@ -111,18 +121,11 @@ func (m Model) hitTest(x, y int) hitZone {
 		return hitNone
 	}
 
-	if !m.treePaneHidden() {
-		treeStart := 0
-		if m.cfg.treePosition == TreePositionRight {
-			// pane width includes the content plus its left and right borders.
-			treeStart = m.layout.width - m.layout.treeWidth - 2
+	if start, end := m.treePaneXRange(); !m.treePaneHidden() && x >= start && x < end {
+		if y < m.treeTopRow() {
+			return hitNone
 		}
-		if x >= treeStart && x < treeStart+m.layout.treeWidth+2 {
-			if y < m.treeTopRow() {
-				return hitNone
-			}
-			return hitTree
-		}
+		return hitTree
 	}
 
 	if y == 0 {
