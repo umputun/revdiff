@@ -16,7 +16,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 ├─────────────────────────────────────────────────────┤
 │  app/ui/ — bubbletea TUI (single Model struct)      │
 │    ├── overlay/   — popup layers (help, annots,     │
-│    │                themes, file picker)            │
+│    │                theme selector)                 │
 │    ├── sidepane/  — file tree + markdown TOC        │
 │    ├── style/     — color/ANSI resolution           │
 │    └── worddiff/  — intra-line diff engine          │
@@ -147,7 +147,9 @@ Three main types:
 ### app/ui/sidepane/ — left-pane navigation
 
 Two independent component types, both with cursor/offset management, rendering, and keyboard navigation:
-- **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), annotated-only and unreviewed-only filtering, semantic-fingerprint reviewed tracking, and directory grouping. `VisibleFiles()` exposes file paths in rendered order after filters for consumers such as the file picker. File-list reloads revalidate only paths reviewed before the load; marks added during the load are reconciled when that file's refreshed diff arrives.
+- **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), filtering (annotated-only), semantic-fingerprint reviewed tracking, directory grouping. File-list reloads revalidate only paths reviewed before the load; marks added during the load are reconciled when that file's refreshed diff arrives.
+
+`FileTree.VisibleFiles()` exposes file paths in rendered order after active filters for consumers such as the file picker.
 - **`TOC`** — markdown table-of-contents. Activated for single-file full-context markdown. Active section tracking, header-level navigation
 
 Both constructed via factory closures in `main.go`, consumed through `FileTreeComponent`/`TOCComponent` interfaces.
@@ -163,7 +165,9 @@ Layered popup system with mutual exclusivity (one overlay at a time).
 - **`filePickerOverlay`** — type-to-filter visible-file picker with current-file positioning, configured up/down navigation, mouse selection, and basename-preserving path truncation
 - **`infoOverlay`** (`info.go`) — unified info popup (description + session details + commit log). Description prose comes from `--description` / `--description-file`, sanitized to strip ANSI/control bytes, then highlighted via the markdown chroma path once at `NewModel` time and cached on `reviewInfoState.descriptionHighlighted` (the description is static, so re-highlighting on every overlay refresh would just produce identical bytes). Session metadata (mode, scope, filters, file/status counts, aggregate `+/-`) lives in the popup's top/bottom borders; commit log shows subject + body of every commit in the current ref range. Commits are populated eagerly at startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R` reload. `handleInfo` always opens the popup; if the user presses `i` before the fetch lands, the commits section renders an inline "loading commits…" placeholder which flips to the rendered list when `commitsLoadedMsg` arrives (`refreshInfoOverlay` pushes a fresh spec into the open overlay). Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" centered for the empty-list case and a truncated, italicized one-liner for fetch errors (`infoErrMaxLen` caps total length to keep the popup bounded against megabyte stderr).
 
-`Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (annotation/file jumps, theme apply/persist). This keeps overlay package free of Model dependencies. `Manager.HandleMouse()` mirrors the same shape for wheel and click events: `app/ui/mouse.go::handleOverlayMouse` delegates when an overlay is active so info scrolls, selectable overlays move their cursors, the theme selector emits `OutcomeThemePreview` to restyle the background live, and help treats wheel as a no-op. Left-click in annotlist emits `OutcomeAnnotationChosen`; left-click in the file picker emits `OutcomeFileChosen`; left-click in themeselect emits `OutcomeThemeConfirmed` on entry rows (filter and blank separator rows are no-ops). Click hit-testing uses the last-composed popup bounds recorded in `Manager.bounds` during `Compose()`; clicks outside the popup rectangle are swallowed so accidental clicks don't dismiss the overlay.
+`Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies. `Manager.HandleMouse()` mirrors the same shape for wheel and click events: `app/ui/mouse.go::handleOverlayMouse` delegates when an overlay is active so info scrolls, annotlist/themeselect move their cursors (themeselect emits `OutcomeThemePreview` to restyle the background live), and help treats wheel as a no-op. Left-click in annotlist selects the clicked row and emits `OutcomeAnnotationChosen`; left-click in themeselect emits `OutcomeThemeConfirmed` on entry rows (filter and blank separator are no-ops). Click hit-testing uses the last-composed popup bounds recorded in `Manager.bounds` during `Compose()`; clicks outside the popup rectangle are swallowed so accidental clicks don't dismiss the overlay.
+
+The file picker follows the same outcome flow: wheel input moves its cursor, and left-click emits `OutcomeFileChosen` for the selected path.
 
 ### app/ui/worddiff/ — intra-line diff engine
 
@@ -242,7 +246,7 @@ All consumer-side — defined in `app/ui/model.go`, not in implementor packages 
 | `styleRenderer` | `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` | `style.Renderer` |
 | `sgrProcessor` | `Reemit()` | `style.SGR` |
 | `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
-| `FileTreeComponent` | navigation, visible-file/query, mutation, scroll-state, and render methods | `sidepane.FileTree` |
+| `FileTreeComponent` | 17 methods (navigation, query, mutation, scroll-state, render) | `sidepane.FileTree` |
 | `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
 | `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenFilePicker()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
 | `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
