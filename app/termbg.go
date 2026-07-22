@@ -16,30 +16,38 @@ import (
 // multiplexer prefixes so the OSC query path stays enabled.
 const maskedTerm = "xterm-256color"
 
-// tmuxQueryTimeout bounds the tmux subprocess so a wedged tmux server (e.g.
+// tmuxQueryTimeout bounds each tmux subprocess so a wedged tmux server (e.g.
 // blocked on a run-shell hook) degrades to the next detection method instead
-// of stalling startup indefinitely. list-clients answers over the local
-// socket in single-digit milliseconds when healthy.
+// of stalling startup indefinitely. display-message and list-clients answer
+// over the local socket in single-digit milliseconds when healthy.
 const tmuxQueryTimeout = 500 * time.Millisecond
 
 // detectDarkBackground reports whether the terminal background is dark-ish.
 // termenv refuses to send OSC status-report queries when TERM starts with
 // "tmux" or "screen" (multiplexers historically swallowed them), so inside
 // tmux its detection never queries the terminal and always falls back to
-// "dark". two tmux-specific paths run first:
+// "dark". three tmux-specific paths run in order (tmux >= 3.5 for the first
+// two; client themes are fed by each outer terminal's native light/dark
+// reporting and need no tty):
 //
-//  1. `tmux list-clients` themes (tmux >= 3.5) — fed by each outer terminal's
-//     native light/dark reporting, needs no tty, and works no matter which
-//     client tmux considers current. The most recently active client that
-//     reports a theme wins.
-//  2. termenv's own OSC 11 query with TERM masked — tmux answers it in
+//  1. the current client's theme via `tmux display-message` — scoped to the
+//     launching session's client, so with several terminals attached to one
+//     server an unrelated session's client cannot win.
+//  2. the server-wide `tmux list-clients` scan — rescues the detached-session
+//     topology, where the current client is a nested tmux client (the
+//     launcher's display-popup attach) that never learns a theme: the outer
+//     terminal's client only shows up in the full list.
+//  3. termenv's own OSC 11 query with TERM masked — tmux answers it in
 //     regular attached panes with the outer terminal's current background.
 //
-// if both fail (old tmux, or a detached session where tmux answers no tty
+// if all fail (old tmux, or a detached session where tmux answers no tty
 // queries at all), termenv falls back to COLORFGBG and then its dark default.
 func detectDarkBackground() bool {
 	if !insideTmux(os.Getenv("TMUX"), os.Getenv("TERM"), os.Getenv("TERM_PROGRAM")) {
 		return termenv.HasDarkBackground()
+	}
+	if dark, ok := parseTmuxClientTheme(tmuxClientTheme()); ok {
+		return dark
 	}
 	if dark, ok := pickTmuxClientTheme(tmuxClientThemes()); ok {
 		return dark
@@ -62,14 +70,23 @@ func insideTmux(tmuxSocket, term, termProgram string) bool {
 	return strings.HasPrefix(term, "screen") && termProgram == "tmux"
 }
 
+// tmuxClientTheme asks tmux for the current client's reported theme. returns
+// the raw output; empty on error, timeout, or when the format is unknown
+// (tmux < 3.5 expands unknown formats to an empty string).
+func tmuxClientTheme() string {
+	ctx, cancel := context.WithTimeout(context.Background(), tmuxQueryTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "tmux", "display-message", "-p", "#{client_theme}").Output()
+	if err != nil {
+		return ""
+	}
+	return string(out)
+}
+
 // tmuxClientThemes asks tmux for every server client's reported theme, one
-// "<activity-epoch> <theme>" line per client. The server-wide list sidesteps
-// tmux's current-client resolution: when revdiff runs in a detached session
-// behind a display-popup attach (the plugin launcher's tmux backend), the
-// current client is the popup's own nested tmux client, which never learns a
-// theme — the outer terminal's client, which does, only shows up in the full
-// list. returns the raw output; empty on error, timeout, or when the format
-// is unknown (tmux < 3.5 expands unknown formats to an empty string).
+// "<activity-epoch> <theme>" line per client. returns the raw output; empty
+// on error, timeout, or when the format is unknown (tmux < 3.5 expands
+// unknown formats to an empty string).
 func tmuxClientThemes() string {
 	ctx, cancel := context.WithTimeout(context.Background(), tmuxQueryTimeout)
 	defer cancel()
