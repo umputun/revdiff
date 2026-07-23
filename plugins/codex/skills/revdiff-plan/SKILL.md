@@ -49,17 +49,10 @@ Use `$SCRIPT_DIR` and `$LAUNCHER_DIR` in place of script paths throughout this s
 
 ## Workflow
 
-### Step 0: Verify Installation
+### Step 0: Verify jq
 
-```bash
-which revdiff
-```
+jq is required for rollout extraction:
 
-If not found, guide installation:
-- `brew install umputun/apps/revdiff`
-- Binary releases: https://github.com/umputun/revdiff/releases
-
-Also verify jq is installed (required for rollout extraction):
 ```bash
 which jq
 ```
@@ -75,6 +68,7 @@ $SCRIPT_DIR/extract-last-message.sh --skip-current
 ```
 
 The script:
+
 - Uses a best-effort heuristic: picks the second most recent rollout JSONL file by modification time from `~/.codex/sessions/`
 - This assumes the newest file belongs to the active session; if concurrent Codex sessions exist, the wrong file may be selected
 - Falls back to the newest file if only one session exists
@@ -113,6 +107,7 @@ If the bash tool reports a timeout, use the same fallback as the revdiff skill:
 1. Tell the user: "The bash tool timed out, but revdiff may still be open. Let me know when you're done reviewing."
 2. Wait for the user to reply.
 3. Read the most recent output file:
+
    ```bash
    output_file="$(ls -t "${TMPDIR:-/tmp}"/revdiff-output-* 2>/dev/null | head -1)"
    if [ -n "$output_file" ] && [ -f "$output_file" ]; then
@@ -133,6 +128,7 @@ explain why we chose this approach over alternatives
 ```
 
 Each annotation block has:
+
 - `## filename:line (type)` -- which file and line
 - Comment text below -- what the user wants changed or clarified
 
@@ -141,6 +137,7 @@ Each annotation block has:
 Split annotations into two categories:
 
 **Explanation requests** -- annotation matches either rule (case-insensitive):
+
 - contains two or more consecutive question marks anywhere in the text (`??`, `???`, etc.) -- a language-neutral shortcut for "please explain"
 - OR starts with one of: `explain`, `remind`, `describe`, `what is`, `what are`, `how does`, `how do`, `clarify`
 
@@ -164,6 +161,7 @@ These are questions the user wants answered, not plan changes.
 ### Step 4: Address Annotations
 
 For plan-change directives:
+
 - Update the temp plan file with the requested changes
 - Rewrite `$PLAN_FILE` with the updated content
 
@@ -176,6 +174,7 @@ $LAUNCHER_DIR/launch-revdiff.sh --only="$PLAN_FILE"
 ```
 
 The user can:
+
 - Add more annotations -- go back to Step 3
 - Quit without annotations -- review complete
 

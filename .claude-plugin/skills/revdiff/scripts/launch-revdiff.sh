@@ -33,19 +33,24 @@ for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
 done
 
+# both rc writers capture revdiff's stderr to <sentinel>.err: the overlay
+# closes the moment a fast-failing revdiff exits (bad ref, unknown flag from
+# an old binary), so without the capture the error text is unrecoverable and
+# the caller sees a bare nonzero exit
 write_rc_cmd() {
     local sentinel="$1"
     # single-quoted format keeps $?/$rc literal for the generated inner script
     # shellcheck disable=SC2016
-    printf '%s; rc=$?; printf "%%s" "$rc" > %s.tmp && mv -f %s.tmp %s' \
-        "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")"
+    printf '%s 2>%s.err; rc=$?; printf "%%s" "$rc" > %s.tmp && mv -f %s.tmp %s' \
+        "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")"
 }
 
 write_fifo_rc_cmd() {
     local sentinel="$1"
     # single-quoted format keeps $?/$rc literal for the generated inner script
     # shellcheck disable=SC2016
-    printf '%s; rc=$?; echo "$rc" > %s; exit' "$REVDIFF_CMD" "$(sq "$sentinel")"
+    printf '%s 2>%s.err; rc=$?; echo "$rc" > %s; exit' \
+        "$REVDIFF_CMD" "$(sq "$sentinel")" "$(sq "$sentinel")"
 }
 
 read_rc() {
@@ -54,6 +59,11 @@ read_rc() {
 
 print_output_and_exit() {
     local rc="${1:-0}"
+    # exit 0 is a clean quit and 10 is "annotations captured"; anything else is
+    # a real failure, so replay the stderr captured inside the overlay
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 10 ] && [ -n "${SENTINEL:-}" ] && [ -s "$SENTINEL.err" ]; then
+        cat "$SENTINEL.err" >&2
+    fi
     cat "$OUTPUT_FILE"
     exit "$rc"
 }
@@ -152,8 +162,63 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     [ -f "$_RD_SCRIPT_DIR/agentdeck-window.sh" ] && . "$_RD_SCRIPT_DIR/agentdeck-window.sh"
 fi
 
-# tmux: display-popup -E blocks until command exits
+# tmux: revdiff runs in a detached session named revdiff-<pid>; the popup is
+# just a client attached to it. Detaching (prefix+d or a user toggle binding)
+# closes the popup while the review keeps running — reattaching later resumes
+# with all state intact. Completion is therefore signalled by a sentinel file
+# (like the zellij/kitty backends), NOT by popup exit: a detach must not read
+# as "review finished".
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
+    rm -f "$SENTINEL"
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err"' EXIT
+
+    TMUX_BIN=$(command -v tmux)
+    SESSION="revdiff-$$"
+    # target every follow-up call by session ID ($N): IDs are exact by
+    # definition, whereas name targets prefix-match and set-option/show-options
+    # (unlike has-session/kill-session) reject the "=" exact-match prefix
+    SESSION_ID=$(tmux new-session -d -P -F '#{session_id}' -s "$SESSION" -c "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")")
+    # INT means the caller cancelled the review: kill the invisible session so
+    # it does not linger forever (bash skips the EXIT trap on untrapped fatal
+    # signals, so route through exit for the file cleanup trap). TERM is
+    # different: harnesses send it on command timeouts while the reviewer is
+    # mid-review, and the popup + detached session survive the launcher's
+    # death — so leave the review running and keep the output/sentinel files
+    # (trap - EXIT) as the recovery artifacts. revdiff writes annotations to
+    # the output file and review history when the reviewer quits.
+    trap 'tmux kill-session -t "$SESSION_ID" 2>/dev/null || true; exit 130' INT
+    trap 'echo "warn: launcher terminated (timeout?); the review keeps running in tmux session $SESSION — annotations land in $OUTPUT_FILE and review history when the reviewer quits" >&2; trap - EXIT; exit 143' TERM
+    # per-session overrides: no status bar inside the popup; quitting revdiff
+    # must detach the popup client (a global detach-on-destroy=off would switch
+    # the popup to another session instead of closing it); a backgrounded
+    # session must survive with no client attached. One chained tmux call (one
+    # server round-trip), and "|| true" because a fast-failing revdiff (bad ref,
+    # old binary) can destroy the session before this runs — the sentinel below
+    # still carries revdiff's real exit code
+    tmux set-option -t "$SESSION_ID" status off \; \
+        set-option -t "$SESSION_ID" detach-on-destroy on \; \
+        set-option -t "$SESSION_ID" destroy-unattached off \; \
+        set-option -t "$SESSION_ID" @revdiff_title "$OVERLAY_TITLE" 2>/dev/null || true
+    # user-supplied session options: whitespace-separated key=value tokens
+    # (values cannot contain spaces), applied before any client attaches.
+    # Lets external session tooling tag and recognize this transient session,
+    # e.g. REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1". set -f keeps
+    # glob characters in tokens literal; "--" keeps a "-"-prefixed key from
+    # being parsed as a set-option flag; a token tmux rejects only warns —
+    # a typo'd env var must not abort the review
+    set -f
+    for kv in ${REVDIFF_TMUX_SESSION_OPTIONS:-}; do
+        case "$kv" in
+            *=*)
+                tmux set-option -t "$SESSION_ID" -- "${kv%%=*}" "${kv#*=}" 2>/dev/null \
+                    || echo "warn: tmux rejected REVDIFF_TMUX_SESSION_OPTIONS token: $kv" >&2
+                ;;
+            *) echo "warn: ignoring malformed REVDIFF_TMUX_SESSION_OPTIONS token: $kv" >&2 ;;
+        esac
+    done
+    set +f
+
     # -T (title) requires tmux 3.3+; skip on older versions
     TMUX_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
     if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
@@ -161,10 +226,36 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
             TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
         fi
     fi
-    TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")
-    rc=0
-    "${TMUX_ARGS[@]}" || rc=$?
-    print_output_and_exit "$rc"
+    # TMUX= lifts the nesting guard so the popup job can attach to the same server
+    TMUX_ARGS+=(-d "$CWD" -- sh -c "TMUX= exec $(sq "$TMUX_BIN") attach-session -t $(sq "$SESSION_ID")")
+    popup_rc=0
+    "${TMUX_ARGS[@]}" || popup_rc=$?
+    # nonzero popup + no sentinel + live session = the popup never opened
+    # (tmux < 3.2 has no display-popup; no attachable client; size errors).
+    # Without this check the wait loop below would spin forever against the
+    # invisible session. A detach exits 0, so backgrounding is unaffected.
+    if [ "$popup_rc" -ne 0 ] && [ ! -f "$SENTINEL" ] && tmux has-session -t "$SESSION_ID" 2>/dev/null; then
+        tmux kill-session -t "$SESSION_ID" 2>/dev/null || true
+        echo "error: tmux display-popup failed (rc=$popup_rc); tmux 3.2+ required" >&2
+        print_output_and_exit "$popup_rc"
+    fi
+
+    # popup closed: either revdiff exited (sentinel present) or the user
+    # detached to background the review — keep waiting until revdiff exits
+    # or the session is killed out from under us. This loop only spins while
+    # the review is backgrounded, so a 1s poll is plenty
+    while [ ! -f "$SENTINEL" ]; do
+        tmux has-session -t "$SESSION_ID" 2>/dev/null || break
+        sleep 1
+    done
+    # session gone with no sentinel means something killed it out from under
+    # the reviewer (kill-session, server exit) — say so instead of a bare rc=1
+    if [ ! -f "$SENTINEL" ]; then
+        echo "warn: review session ended without reporting a result; check revdiff history for auto-saved annotations" >&2
+    fi
+    rc=$(read_rc "$SENTINEL")
+    rm -f "$SENTINEL"
+    print_output_and_exit "${rc:-1}"
 fi
 
 # zellij: floating pane with sentinel file for blocking
@@ -173,7 +264,7 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -216,7 +307,7 @@ if [ "${HERDR_ENV:-}" = "1" ] && command -v herdr >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -282,7 +373,7 @@ KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err"' EXIT
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd=current)
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
@@ -315,7 +406,7 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
 
         WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
         WEZTERM_PCT="${WEZTERM_PCT%%%}"
-        trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+        trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err"' EXIT
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
             --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")" >/dev/null 2>&1
 
@@ -338,7 +429,7 @@ if is_cmux_session; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -379,7 +470,7 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -428,10 +519,10 @@ if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
 
     # use launcher script to avoid single-quote injection in paths
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
-cd "\$1" && $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > "\$2.tmp" && mv -f "\$2.tmp" "\$2"
+cd "\$1" && $REVDIFF_CMD 2>"\$2.err"; rc=\$?; printf "%s" "\$rc" > "\$2.tmp" && mv -f "\$2.tmp" "\$2"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -509,7 +600,7 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
     # use launcher script to avoid shell interpolation issues in elisp strings;
     # embed all paths directly so vterm-shell needs no arguments
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.err" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 cd $(sq "$CWD") && $(write_fifo_rc_cmd "$SENTINEL")

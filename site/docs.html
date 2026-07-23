@@ -91,6 +91,7 @@
         <a href="#plugin-autodetect">Auto-detection</a>
         <a href="#plugin-planning">Plan review plugin</a>
         <a href="#plugin-overrides">Custom launchers</a>
+        <a href="#session-tagging">Session tagging</a>
 
         <h4>Codex plugin</h4>
         <a href="#codex-install">Installation</a>
@@ -755,6 +756,9 @@ map alt+t&gt;n theme_select</code></div>
             </tbody>
         </table>
         <p>There is no project-level executable override by design: the planning hook auto-fires in repositories opened by Claude or Codex, and a repo-controlled launcher would run on routine agent actions. The override file must be executable (<code>chmod +x</code>). Claude uses <code>${CLAUDE_PLUGIN_DATA}</code>; the Codex planning hook uses <code>${PLUGIN_DATA}</code>. The Pi extension and manual Codex diff-review skill do not honor this plugin-data override. See <a href="https://github.com/umputun/revdiff/blob/master/.claude-plugin/skills/revdiff/references/install.md">install.md</a> and <a href="https://github.com/umputun/revdiff/blob/master/plugins/revdiff-planning/README.md">revdiff-planning README</a> for working examples.</p>
+
+        <h2 id="session-tagging">Tagging the review session (tmux)</h2>
+        <p>The tmux backend runs each review in a transient detached session. If other tooling on your machine reacts to tmux sessions (status bars, session managers, dashboards), set <code>REVDIFF_TMUX_SESSION_OPTIONS</code> to whitespace-separated <code>key=value</code> tokens and the launcher applies each as a tmux session option before any client attaches &mdash; for example <code>REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1"</code> lets a session manager recognize and skip the transient session. Values cannot contain spaces. This variable configures the launcher itself, so set it in the shell environment where the plugin runs (unlike revdiff's own env vars, which don't survive into the overlay). The launcher always sets one option of its own: <code>@revdiff_title</code> holds the popup title, so custom tmux bindings that reattach a backgrounded review can restore it.</p>
 
         <!-- codex plugin -->
         <h2 id="codex-install">Codex plugin</h2>

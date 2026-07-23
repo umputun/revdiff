@@ -64,6 +64,7 @@ When the user asks to open an in-session review in revdiff (the conversation alr
 Some review targets are not the current repo state: a GitHub PR diff, a patch file on disk, or `git format-patch -1 --stdout` output. Pipe the unified diff into `revdiff --stdin` and the input is parsed as a real multi-file diff (one tree entry per file, hunk navigation, per-file annotations) instead of a context-only buffer. revdiff auto-detects the unified-diff signature; on a malformed patch the input falls back silently to raw-text mode.
 
 Use this instead of the normal launcher flow when:
+
 - the user asks to "review PR #N", "review this patch", "review `gh pr diff` output", or supplies a patch URL/path
 - the diff describes commits that are not checked out locally (e.g. someone else's branch on a remote-only PR)
 - the user pastes a unified diff and asks for a review of *that diff*, not the working tree
@@ -89,25 +90,17 @@ cat /tmp/feature.patch | $SCRIPT_DIR/launch-revdiff.sh --stdin
 
 ## Workflow
 
-### Step 0: Verify Installation
-
-```bash
-which revdiff
-```
-
-If not found, guide installation:
-- `brew install umputun/apps/revdiff`
-- Binary releases: https://github.com/umputun/revdiff/releases
-
 ### Step 1: Determine Review Mode
 
 **All-files mode**: If `$ARGUMENTS` matches "all files", "all-files", or "browse all files" (with optional "exclude <prefix>" parts), use **all-files mode**:
+
 - Pass `--all-files` to the launcher
 - If user mentions exclude patterns (e.g., "exclude vendor", "exclude vendor and mocks"), pass each as `--exclude=<prefix>`
 - Skip ref detection entirely, go directly to Step 2
 - Example: "all files exclude vendor" → `--all-files --exclude=vendor`
 
 **File review mode**: If `$ARGUMENTS` is a single token that points at a file on disk (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`, `README.md`, `main.go`, `file.blah`), treat it as file review:
+
 - Decide with `test -f "$ARGUMENTS"` — if the file exists, it's file review mode
 - Also treat as file review if the token starts with `/` or `./`, or contains `/` and has a file extension (e.g., `src/app.go`), even when the file is not yet reachable from the current directory
 - Skip ref detection entirely
@@ -124,6 +117,7 @@ $SCRIPT_DIR/detect-ref.sh
 ```
 
 The script outputs structured fields:
+
 - `branch`, `main_branch`, `is_main`, `has_uncommitted`, `has_staged_only`
 - `suggested_ref` — the ref to pass to revdiff (empty = uncommitted changes)
 - `use_staged` — if `true`, pass `--staged` to the launcher (staged-only changes detected)
@@ -137,6 +131,7 @@ The script outputs structured fields:
 2. **Branch vs {main_branch}** — pass main_branch as ref (full branch diff including uncommitted)
 
 **When `needs_ask: false`**, use `suggested_ref` directly:
+
 - On main + uncommitted → no ref (uncommitted changes)
 - On main + staged only → no ref + `--staged` (staged changes)
 - On main + clean → `HEAD~1` (last commit)
@@ -159,12 +154,13 @@ $SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--only=
 **Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
 The script:
+
 - Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
-The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures. On failure the launcher relays revdiff's own error text on stderr (captured from inside the overlay) — read it and report it instead of guessing which flag or argument was at fault.
 
 #### Agterm sessions and approval escalation
 
@@ -213,6 +209,7 @@ don't remove this validation
 ```
 
 Each annotation block has:
+
 - `## filename:line (type)` — which file and line, `(+)` = added, `(-)` = removed, `(file-level)` = file note
 - Comment text below — what the user wants changed
 
@@ -221,6 +218,7 @@ Each annotation block has:
 Split annotations into two categories:
 
 **Explanation requests** — annotation matches either rule (case-insensitive):
+
 - contains two or more consecutive question marks anywhere in the text (`??`, `???`, etc.) — a language-neutral shortcut for "please explain"
 - OR starts with one of: `explain`, `remind`, `describe`, `what is`, `what are`, `how does`, `how do`, `clarify`
 
@@ -248,6 +246,7 @@ The explanation loop continues until the user quits without annotating. This all
 ### Step 4: Plan Changes
 
 Write the plan as a markdown list analyzing code-change annotations:
+
 - List each annotation with file and line reference
 - Describe the planned change for each
 - Ask the user: "Proceed with these changes?"
@@ -261,6 +260,7 @@ After user approves the plan, fix the actual source code. Each annotation is a d
 ### Step 6: Loop
 
 After fixing (or after "Continue review" from Step 3.5), run the launcher script again with the same ref. The user can:
+
 - Add more annotations → go back to Step 3
 - Quit without annotations → review complete (no output)
 

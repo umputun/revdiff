@@ -49,6 +49,7 @@ When the user asks to open an in-session review in revdiff (the conversation alr
 Some review targets are not the current repo state: a GitHub PR diff, a patch file on disk, or `git format-patch -1 --stdout` output. Pipe the unified diff into `revdiff --stdin` and the input is parsed as a real multi-file diff (one tree entry per file, hunk navigation, per-file annotations) instead of a context-only buffer. revdiff auto-detects the unified-diff signature; on a malformed patch the input falls back silently to raw-text mode.
 
 Use this instead of the normal launcher flow when:
+
 - the user asks to "review PR #N", "review this patch", "review `gh pr diff` output", or supplies a patch URL/path
 - the diff describes commits that are not checked out locally (e.g. someone else's branch on a remote-only PR)
 - the user pastes a unified diff and asks for a review of *that diff*, not the working tree
@@ -74,25 +75,17 @@ cat /tmp/feature.patch | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" la
 
 ## Workflow
 
-### Step 0: Verify Installation
-
-```bash
-which revdiff
-```
-
-If not found, guide installation:
-- `brew install umputun/apps/revdiff`
-- Binary releases: https://github.com/umputun/revdiff/releases
-
 ### Step 1: Determine Review Mode
 
 **All-files mode**: If `$ARGUMENTS` matches "all files", "all-files", or "browse all files" (with optional "exclude <prefix>" parts), use **all-files mode**:
+
 - Pass `--all-files` to the launcher
 - If user mentions exclude patterns (e.g., "exclude vendor", "exclude vendor and mocks"), pass each as `--exclude=<prefix>`
 - Skip ref detection entirely, go directly to Step 2
 - Example: "all files exclude vendor" → `--all-files --exclude=vendor`
 
 **File review mode**: If `$ARGUMENTS` is a single token that points at a file on disk (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`, `README.md`, `main.go`, `file.blah`), treat it as file review:
+
 - Decide with `test -f "$ARGUMENTS"` — if the file exists, it's file review mode
 - Also treat as file review if the token starts with `/` or `./`, or contains `/` and has a file extension (e.g., `src/app.go`), even when the file is not yet reachable from the current directory
 - Skip ref detection entirely
@@ -109,6 +102,7 @@ ${CLAUDE_SKILL_DIR}/scripts/detect-ref.sh
 ```
 
 The script outputs structured fields:
+
 - `branch`, `main_branch`, `is_main`, `has_uncommitted`, `has_staged_only`
 - `suggested_ref` — the ref to pass to revdiff (empty = uncommitted changes)
 - `use_staged` — if `true`, pass `--staged` to the launcher (staged-only changes detected)
@@ -117,10 +111,12 @@ The script outputs structured fields:
 **When `use_staged: true`**, pass `--staged` to the launcher. This means all changes are in the index (staged) with nothing unstaged — without `--staged`, revdiff would show an empty diff.
 
 **When `needs_ask: true`** (on a feature branch with uncommitted changes), use AskUserQuestion:
+
 - **"Uncommitted only"** — pass no ref (review just working changes)
 - **"Branch vs {main_branch}"** — pass main_branch as ref (full branch diff including uncommitted)
 
 **When `needs_ask: false`**, use `suggested_ref` directly:
+
 - On main + uncommitted → no ref (uncommitted changes)
 - On main + staged only → no ref + `--staged` (staged changes)
 - On main + clean → `HEAD~1` (last commit)
@@ -147,16 +143,17 @@ The resolver and launcher MUST run in the same bash invocation — the resolver 
 **Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
 The script:
+
 - Detects available terminal (tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
-The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures.
+The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures. On failure the launcher relays revdiff's own error text on stderr (captured from inside the overlay) — read it and report it instead of guessing which flag or argument was at fault.
 
 ### Step 3: Process Annotations
 
-**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout (on Claude Code the task keeps running in the background after the 10-minute cap; on other harnesses it may be killed outright), only the launcher process died, but revdiff itself is still open in the overlay and no annotations are lost: revdiff writes them to disk the moment the user quits, and `O` flushes them any time. Do NOT retry the launcher. Use the fallback:
+**Collecting launcher output**: In the normal case the launcher returns synchronously with annotations on stdout — process them as described below. If the bash tool reports exit `10`, read stdout and process it as annotations; do not call it a failure. If the bash tool instead reports a timeout (the harness kills the waiting launcher process at its cap — 10 minutes on Claude Code), only the launcher process died: the overlay and the review survive it, and no annotations are lost: revdiff writes them to disk the moment the user quits, and `O` flushes them any time. Do NOT retry the launcher. Use the fallback:
 
 1. Reassure the user and offer both paths, making clear nothing is lost — keep it short and do NOT explain the save mechanics (disk writes, `O` flush, quit-to-save); the user does not need them. Say something like: "The process waiting on your revdiff review timed out and exited — that's harmless, and any annotations you made are safe. Whenever you're done, message me and tell me to either load your annotations and continue, or that you're done and want to stop." Do NOT assume they want to load; quitting with no annotations, or choosing to stop, is a valid outcome.
 2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply means they are back at the session (they quit, or flushed with `O` and switched back).
@@ -184,6 +181,7 @@ don't remove this validation
 ```
 
 Each annotation block has:
+
 - `## filename:line (type)` — which file and line, `(+)` = added, `(-)` = removed, `(file-level)` = file note
 - Comment text below — what the user wants changed
 
@@ -192,6 +190,7 @@ Each annotation block has:
 Split annotations into two categories:
 
 **Explanation requests** — annotation matches either rule (case-insensitive):
+
 - contains two or more consecutive question marks anywhere in the text (`??`, `???`, etc.) — a language-neutral shortcut for "please explain"
 - OR starts with one of: `explain`, `remind`, `describe`, `what is`, `what are`, `how does`, `how do`, `clarify`
 
@@ -219,6 +218,7 @@ The explanation loop continues until the user quits without annotating. This all
 ### Step 4: Plan Changes
 
 Enter plan mode (EnterPlanMode) to analyze code-change annotations:
+
 - List each annotation with file and line reference
 - Describe the planned change for each
 - Get user approval before modifying code
@@ -230,6 +230,7 @@ After plan approval, fix the actual source code. Each annotation is a directive.
 ### Step 6: Loop
 
 After fixing (or after "Continue review" from Step 3.5), run the launcher script again with the same ref. The user can:
+
 - Add more annotations → go back to Step 3
 - Quit without annotations → review complete (no output)
 

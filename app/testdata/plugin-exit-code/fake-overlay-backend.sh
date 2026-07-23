@@ -41,7 +41,31 @@ case "$cmd_name" in
             echo "tmux 3.4"
             exit 0
         fi
-        run_after_double_dash "$@"
+        case "${1:-}" in
+            new-session)
+                # -P -F prints the new session id; the detached command runs
+                # synchronously here (stdout discarded like a real pty), so
+                # the sentinel exists before the launcher's wait loop starts
+                # shellcheck disable=SC2016 # literal $1 is a fake session id
+                echo '$1'
+                run_after_double_dash "$@" >/dev/null
+                ;;
+            set-option|kill-session|attach-session)
+                # attach-session: the diff-review popup only views the session;
+                # revdiff already ran during new-session
+                exit 0
+                ;;
+            has-session)
+                # the synchronous new-session above already ran the command
+                # to completion, so the session is gone
+                exit 1
+                ;;
+            *)
+                # display-popup and any legacy form run the command after "--"
+                # (the plan-review launcher still runs revdiff inside the popup)
+                run_after_double_dash "$@"
+                ;;
+        esac
         ;;
     zellij)
         run_after_double_dash "$@"
