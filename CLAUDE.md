@@ -19,7 +19,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/ui/style/` - color/style resolution: hex-to-ANSI, lipgloss styles, SGR tracking, HSL math. Types: `Resolver`, `Renderer`, `SGR`
 - `app/ui/sidepane/` - file tree + markdown TOC components with cursor/offset management
 - `app/ui/worddiff/` - intra-line word-diff: tokenizer, LCS, line pairing, highlight insertion
-- `app/ui/overlay/` - layered popups: help, annotation list, theme selector. Manager enforces one-at-a-time
+- `app/ui/overlay/` - layered popups: help, annotation list, theme selector, file picker. Manager enforces one-at-a-time
 - `app/highlight/` - chroma syntax highlighting, foreground-only ANSI
 - `app/keymap/` - configurable keybindings (`Action` constants, parser, defaults, dump)
 - `app/theme/` - Catalog-centric theme system: `Theme` (data + serialization) and `Catalog` (discovery, loading, installation, gallery). Zero standalone functions — all logic as methods. Files: `theme.go` (Theme struct), `catalog.go` (Catalog struct + all operations). 7 bundled + community gallery

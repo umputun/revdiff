@@ -305,6 +305,9 @@ type loadedFileState struct {
 	lineNumWidth     int                    // digit width for line number columns
 	singleColLineNum bool                   // true for full-context files: one line-number column
 	loadSeq          uint64                 // monotonic counter to identify the latest load request
+	requestedPath    string                 // path of the outstanding request, empty after it completes
+	canceledLoadSeq  uint64                 // same-sequence request canceled by returning to the displayed file
+	canceledLoadPath string                 // path rejected for canceledLoadSeq
 	mdTOC            TOCComponent           // markdown table-of-contents (nil when not applicable)
 	singleFile       bool                   // true when diff contains exactly one file
 }

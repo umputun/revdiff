@@ -55,6 +55,22 @@ func TestModel_JumpFileOpensPickerAndLoadsSelection(t *testing.T) {
 	assert.Equal(t, "b.go", loaded.file)
 }
 
+func TestModel_JumpFilePrintableNavigationRunesFilter(t *testing.T) {
+	m := filePickerModel([]string{"a.go", "src/jk/file.go"})
+	m.openFilePicker()
+
+	for _, r := range "jk" {
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = result.(Model)
+	}
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(Model)
+
+	assert.Equal(t, "src/jk/file.go", m.tree.SelectedFile(),
+		"default j/k navigation bindings must not consume printable picker input")
+	assert.NotNil(t, cmd)
+}
+
 func TestModel_JumpFileCurrentSelectionFocusesDiffWithoutReload(t *testing.T) {
 	m := filePickerModel([]string{"a.go", "b.go"})
 	m.layout.focus = paneTree
@@ -71,6 +87,32 @@ func TestModel_JumpFileCurrentSelectionFocusesDiffWithoutReload(t *testing.T) {
 	assert.Equal(t, paneDiff, m.layout.focus)
 	assert.Nil(t, m.pendingAnnotJump)
 	assert.Nil(t, m.nav.pendingHunkJump)
+}
+
+func TestModel_JumpFileRejectsLateLoadAfterReturningToDisplayedFile(t *testing.T) {
+	m := filePickerModel([]string{"a.go", "b.go"})
+	originalLines := []diff.DiffLine{{NewNum: 1, Content: "displayed a.go", ChangeType: diff.ChangeContext}}
+	m.file.lines = originalLines
+	m.openFilePicker()
+
+	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = result.(Model)
+	result, lateLoad := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(Model)
+	require.NotNil(t, lateLoad)
+	assert.Equal(t, "b.go", m.tree.SelectedFile())
+	assert.Equal(t, "a.go", m.file.name, "B has not loaded yet")
+
+	m.openFilePicker()
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(Model)
+	assert.Nil(t, cmd, "returning to displayed A should not reload it")
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
+
+	result, _ = m.Update(lateLoad())
+	m = result.(Model)
+	assert.Equal(t, "a.go", m.file.name, "late B response must not replace selected A")
+	assert.Equal(t, originalLines, m.file.lines)
 }
 
 func TestModel_JumpFilePreservesSidebarFilters(t *testing.T) {

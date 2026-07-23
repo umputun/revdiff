@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -114,7 +115,8 @@ func (f *filePickerOverlay) renderFilter(resolver Resolver) string {
 }
 
 func (f *filePickerOverlay) formatEntry(path string, width int, selected bool, resolver Resolver) string {
-	display := truncateFilePath(path, width-2)
+	clean := (style.Resolver{}).SanitizeFilenameForDisplay(path)
+	display := f.truncateFilePath(clean, width-2)
 	if selected {
 		entryStyle := resolver.Style(style.StyleKeyFileSelected)
 		styled := entryStyle.Render("> " + display)
@@ -132,7 +134,7 @@ func (f *filePickerOverlay) formatEntry(path string, width int, selected bool, r
 
 // truncateFilePath trims from the directory side so the basename remains
 // visible. If the basename alone is too wide, its rightmost cells are kept.
-func truncateFilePath(path string, width int) string {
+func (f *filePickerOverlay) truncateFilePath(path string, width int) string {
 	if width <= 0 {
 		return ""
 	}
@@ -166,6 +168,9 @@ func (f *filePickerOverlay) maxVisible() int {
 }
 
 func (f *filePickerOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
+	if f.appendPrintableRunes(msg) {
+		return Outcome{Kind: OutcomeNone}
+	}
 	if action == keymap.ActionJumpFile {
 		return Outcome{Kind: OutcomeClosed}
 	}
@@ -195,13 +200,26 @@ func (f *filePickerOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outc
 			f.applyFilter()
 		}
 		return Outcome{Kind: OutcomeNone}
-	case tea.KeyRunes:
-		f.filter += string(msg.Runes)
-		f.applyFilter()
-		return Outcome{Kind: OutcomeNone}
 	default:
 		return Outcome{Kind: OutcomeNone}
 	}
+}
+
+// appendPrintableRunes gives unmodified text input priority over configured
+// single-rune actions such as the default j/k navigation bindings. Modified
+// runes and non-printable keys remain available for configured actions.
+func (f *filePickerOverlay) appendPrintableRunes(msg tea.KeyMsg) bool {
+	if msg.Type != tea.KeyRunes || msg.Alt || len(msg.Runes) == 0 {
+		return false
+	}
+	for _, r := range msg.Runes {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	f.filter += string(msg.Runes)
+	f.applyFilter()
+	return true
 }
 
 func (f *filePickerOverlay) chooseCurrent() Outcome {

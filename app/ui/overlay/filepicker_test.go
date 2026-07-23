@@ -56,9 +56,9 @@ func TestFilePickerKeyboardNavigationUsesConfiguredActions(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenFilePicker(filePickerSpec())
 
-	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}, keymap.ActionDown)
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true}, keymap.ActionDown)
 	assert.Equal(t, 2, mgr.filePick.cursor)
-	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}, keymap.ActionUp)
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true}, keymap.ActionUp)
 	assert.Equal(t, 1, mgr.filePick.cursor)
 }
 
@@ -129,6 +129,57 @@ func TestFilePickerMouseWheelAndLeftClick(t *testing.T) {
 	assert.Equal(t, "README.md", out.FileChoice.Path)
 }
 
+func TestFilePickerMouseShiftWheelMovesHalfPage(t *testing.T) {
+	paths := make([]string, 20)
+	for i := range paths {
+		paths[i] = fmt.Sprintf("file-%02d.go", i)
+	}
+	mgr := NewManager()
+	mgr.OpenFilePicker(FilePickerSpec{Paths: paths})
+	_ = mgr.filePick.render(filePickerRenderCtx(16), mgr)
+	require.Equal(t, 6, mgr.filePick.maxVisible())
+
+	mgr.filePick.handleMouse(tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true,
+	})
+	assert.Equal(t, 3, mgr.filePick.cursor)
+
+	mgr.filePick.handleMouse(tea.MouseMsg{
+		Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress, Shift: true,
+	})
+	assert.Equal(t, 0, mgr.filePick.cursor)
+}
+
+func TestFilePickerMouseWheelClampsAtBoundaries(t *testing.T) {
+	paths := make([]string, 20)
+	for i := range paths {
+		paths[i] = fmt.Sprintf("file-%02d.go", i)
+	}
+	mgr := NewManager()
+	mgr.OpenFilePicker(FilePickerSpec{Paths: paths})
+	_ = mgr.filePick.render(filePickerRenderCtx(16), mgr)
+
+	mgr.filePick.handleMouse(tea.MouseMsg{
+		Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress, Shift: true,
+	})
+	assert.Equal(t, 0, mgr.filePick.cursor)
+	assert.Equal(t, 0, mgr.filePick.offset)
+
+	for range len(paths) {
+		mgr.filePick.handleMouse(tea.MouseMsg{
+			Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true,
+		})
+	}
+	assert.Equal(t, len(paths)-1, mgr.filePick.cursor)
+	assert.Equal(t, len(paths)-mgr.filePick.maxVisible(), mgr.filePick.offset)
+
+	mgr.filePick.handleMouse(tea.MouseMsg{
+		Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress,
+	})
+	assert.Equal(t, len(paths)-1, mgr.filePick.cursor)
+	assert.Equal(t, len(paths)-mgr.filePick.maxVisible(), mgr.filePick.offset)
+}
+
 func TestFilePickerMouseClickIgnoresChromeAndBlankRows(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenFilePicker(filePickerSpec())
@@ -163,11 +214,45 @@ func TestFilePickerScrollingAndResizeClamp(t *testing.T) {
 }
 
 func TestFilePickerTruncationPreservesBasename(t *testing.T) {
-	assert.Equal(t, "…/file.go", truncateFilePath("very/long/directory/file.go", 9))
-	truncated := truncateFilePath("very/long/directory/exceptionally-long-file.go", 10)
+	picker := &filePickerOverlay{}
+	assert.Equal(t, "…/file.go", picker.truncateFilePath("very/long/directory/file.go", 9))
+	truncated := picker.truncateFilePath("very/long/directory/exceptionally-long-file.go", 10)
 	assert.True(t, strings.HasPrefix(truncated, "…"))
 	assert.True(t, strings.HasSuffix(truncated, "-file.go"))
 	assert.LessOrEqual(t, lipgloss.Width(truncated), 10)
+}
+
+func TestFilePickerDisplaySanitizesUnsafePaths(t *testing.T) {
+	tests := []struct {
+		name   string
+		raw    string
+		filter string
+		want   string
+	}{
+		{name: "newline", raw: "dir/two\nlines.go", filter: "lines.go", want: "dir/twolines.go"},
+		{name: "terminal controls", raw: "escape\x1b]52;c;AAAA\x07\x9bfile.go", filter: "file.go", want: "escape]52;c;AAAAfile.go"},
+		{name: "invalid utf8", raw: string([]byte{'i', 'n', 'v', 0xff, 'a', 'l', 'i', 'd', '.', 'g', 'o'}), filter: "alid.go", want: "invalid.go"},
+		{name: "bidi controls", raw: "safe/\u202eevil.go", filter: "evil.go", want: "safe/evil.go"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			picker := &filePickerOverlay{
+				all:     []string{tt.raw},
+				entries: []string{tt.raw},
+			}
+			entry := picker.formatEntry(tt.raw, 70, false, style.PlainResolver())
+
+			assert.Equal(t, "  "+tt.want, entry)
+			assert.Equal(t, 1, lipgloss.Height(entry), "each path must stay on one visual row")
+			picker.filter = tt.filter
+			picker.applyFilter()
+			require.Equal(t, []string{tt.raw}, picker.entries, "filtering must retain the raw path")
+			choice := picker.chooseCurrent()
+			require.NotNil(t, choice.FileChoice)
+			assert.Equal(t, tt.raw, choice.FileChoice.Path, "selection must retain the raw path")
+		})
+	}
 }
 
 func TestFilePickerRenderSelectedPathAndWidth(t *testing.T) {

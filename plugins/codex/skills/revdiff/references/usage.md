@@ -125,7 +125,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `[` / `]` | Jump to previous/next change hunk in diff |
 | `e` | Open focused file in `$EDITOR` |
 
-The file picker lists paths currently visible in the sidebar, preserving annotated-only and unreviewed-only filters. Type to filter full relative paths, use the configured up/down keys or the mouse wheel to move, and press `Enter` or left-click to jump. `Backspace` edits the filter, `Esc` clears it before closing, and `Ctrl+P` closes the picker.
+The file picker lists paths currently visible in the sidebar, preserving annotated-only and unreviewed-only filters. Type to filter full relative paths, use the configured up/down keys or the mouse wheel to move, and press `Enter` or left-click to jump. `Backspace` edits the filter. The first `Esc` clears a non-empty filter and keeps the picker open; the second closes it. `Ctrl+P` also closes the picker.
 
 **Search:**
 
