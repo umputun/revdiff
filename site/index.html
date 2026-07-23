@@ -305,51 +305,41 @@
         <div class="terminal-grid">
             <div class="terminal-card">
                 <div class="terminal-name">tmux</div>
-                <div class="terminal-method"><code>display-popup</code></div>
-                <div class="terminal-detect"><code>$TMUX</code></div>
+                <div class="terminal-method">Popup</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">zellij</div>
-                <div class="terminal-method"><code>zellij run --floating</code></div>
-                <div class="terminal-detect"><code>$ZELLIJ</code></div>
+                <div class="terminal-method">Floating pane</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">herdr</div>
-                <div class="terminal-method"><code>herdr tab create</code> + <code>herdr pane run</code></div>
-                <div class="terminal-detect"><code>$HERDR_ENV</code></div>
+                <div class="terminal-method">New tab</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">kitty</div>
-                <div class="terminal-method"><code>kitty @ launch --type=overlay</code></div>
-                <div class="terminal-detect"><code>$KITTY_LISTEN_ON</code></div>
+                <div class="terminal-method">Overlay window</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">wezterm / kaku</div>
-                <div class="terminal-method"><code>wezterm cli split-pane</code></div>
-                <div class="terminal-detect"><code>$WEZTERM_PANE</code></div>
+                <div class="terminal-method">Split pane</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">cmux</div>
-                <div class="terminal-method"><code>cmux new-split</code> + <code>cmux send</code></div>
-                <div class="terminal-detect"><code>$CMUX_SURFACE_ID</code>, <code>__CFBundleIdentifier=com.cmuxterm.app</code>, or <code>GHOSTTY_RESOURCES_DIR</code>/<code>GHOSTTY_BIN_DIR</code> containing <code>cmux.app</code></div>
+                <div class="terminal-method">Split pane</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">ghostty</div>
-                <div class="terminal-method">AppleScript split + zoom</div>
-                <div class="terminal-detect"><code>$TERM_PROGRAM</code> + AppleScript probe</div>
+                <div class="terminal-method">Split pane</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">iTerm2</div>
-                <div class="terminal-method">AppleScript split pane</div>
-                <div class="terminal-detect"><code>$ITERM_SESSION_ID</code></div>
+                <div class="terminal-method">Split pane</div>
             </div>
             <div class="terminal-card">
                 <div class="terminal-name">Emacs vterm</div>
-                <div class="terminal-method">New frame via <code>emacsclient</code></div>
-                <div class="terminal-detect"><code>$INSIDE_EMACS</code></div>
+                <div class="terminal-method">New frame</div>
             </div>
         </div>
-        <p class="terminal-priority">Priority: tmux &rarr; zellij &rarr; herdr &rarr; kitty &rarr; wezterm/kaku &rarr; cmux &rarr; ghostty &rarr; iTerm2 &rarr; Emacs vterm</p>
     </div>
 </section>
 

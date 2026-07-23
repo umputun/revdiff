@@ -521,34 +521,8 @@ section h2 {
 }
 
 .terminal-method {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-bottom: 6px;
-    flex: 1;
-}
-.terminal-method code {
-    font-size: 0.7rem;
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--text-muted);
-}
-
-.terminal-detect {
-    font-size: 0.75rem;
-}
-.terminal-detect code {
-    font-size: 0.7rem;
-    color: var(--accent-dim);
-    background: rgba(213, 137, 95, 0.08);
-    border-color: rgba(213, 137, 95, 0.15);
-}
-
-.terminal-priority {
-    text-align: center;
-    font-family: var(--font-mono);
     font-size: 0.8rem;
-    color: var(--text-faint);
+    color: var(--text-muted);
 }
 
 /* === install === */
