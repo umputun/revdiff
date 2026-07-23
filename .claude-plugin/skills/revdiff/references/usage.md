@@ -127,8 +127,11 @@ Examples piping a real diff:
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
+| `Ctrl+P` | Open the file picker (recalls previous history while the search prompt is active) |
 | `[` / `]` | Jump to previous/next change hunk in diff |
 | `e` | Open focused file in `$EDITOR` |
+
+The file picker lists paths currently visible in the sidebar, preserving annotated-only and unreviewed-only filters. Type to filter full relative paths, use the configured up/down keys or the mouse wheel to move, and press `Enter` or left-click to jump. `Backspace` edits the filter. The first `Esc` clears a non-empty filter and keeps the picker open; the second closes it. `Ctrl+P` also closes the picker.
 
 **Search:**
 
@@ -215,6 +218,8 @@ revdiff enables mouse tracking by default so the scroll wheel and left-click wor
 - **Scroll wheel in overlay popups** (info, annotations, themes) — scrolls the popup content or moves its cursor. Shift+wheel uses a half-page step. In the theme selector, wheel previews each theme live. Help overlay has no scrollable or selectable content so mouse events are ignored.
 - **Left-click in the annotation popup** — jumps to the clicked annotation (same as pressing `Enter`).
 - **Left-click in the theme popup** — confirms the clicked theme (same as pressing `Enter`). Clicks on the filter row or blank separator are ignored.
+- **Left-click in the file picker** — jumps to the clicked file (same as pressing `Enter`). Clicks on the filter row or blank separator are ignored.
+- **Scroll wheel in the file picker** — moves the picker cursor. Shift+wheel uses a half-page step.
 
 Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed — dismiss an overlay with `Esc` or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.
 

@@ -197,7 +197,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // handleOverlayMouse routes a mouse event to the active overlay. wheel events
 // drive the overlay's own scroll/cursor navigation; clicks and other buttons
 // are consumed so they don't leak through to the panes underneath. outcomes
-// that need model-side side effects (annotation jump, theme preview/confirm)
+// that need model-side side effects (annotation/file jump, theme preview/confirm)
 // are dispatched through the same helpers as the keyboard path. Canceled and
 // Closed branches mirror the keyboard dispatch for symmetry but the current
 // overlay mouse handlers never emit them — a mouse click either confirms
@@ -213,6 +213,8 @@ func (m Model) handleOverlayMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		m.confirmThemeByName(out.ThemeChoice.Name)
 	case overlay.OutcomeThemeCanceled:
 		m.cancelThemeSelect()
+	case overlay.OutcomeFileChosen:
+		return m.jumpToFile(out.FileChoice.Path)
 	case overlay.OutcomeClosed, overlay.OutcomeNone:
 	}
 	return m, nil

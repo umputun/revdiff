@@ -279,8 +279,7 @@ func (m *Model) deleteFileAnnotation() tea.Cmd {
 	m.tree.RefreshFilter(m.annotatedFiles())
 
 	if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.file.name {
-		m.file.loadSeq++
-		return m.loadFileDiff(newFile)
+		return m.requestFileDiff(newFile)
 	}
 
 	m.syncViewportToCursor()
@@ -314,8 +313,7 @@ func (m *Model) deleteAnnotation() tea.Cmd {
 
 		// if filter moved cursor to a different file, load the new selection
 		if newFile := m.tree.SelectedFile(); newFile != "" && newFile != m.file.name {
-			m.file.loadSeq++
-			return m.loadFileDiff(newFile)
+			return m.requestFileDiff(newFile)
 		}
 
 		m.syncViewportToCursor()

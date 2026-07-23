@@ -36,6 +36,7 @@ const (
 	ActionScrollDiffUp     Action = "scroll_diff_up"
 	ActionNextItem         Action = "next_item"
 	ActionPrevItem         Action = "prev_item"
+	ActionJumpFile         Action = "jump_file"
 	ActionNextHunk         Action = "next_hunk"
 	ActionPrevHunk         Action = "prev_hunk"
 	ActionTogglePane       Action = "toggle_pane"
@@ -82,7 +83,8 @@ var validActions = map[Action]bool{
 	ActionScrollLeft: true, ActionScrollRight: true,
 	ActionScrollCenter: true, ActionScrollTop: true, ActionScrollBottom: true,
 	ActionScrollDiffDown: true, ActionScrollDiffUp: true,
-	ActionNextItem: true, ActionPrevItem: true, ActionNextHunk: true, ActionPrevHunk: true,
+	ActionNextItem: true, ActionPrevItem: true, ActionJumpFile: true,
+	ActionNextHunk: true, ActionPrevHunk: true,
 	ActionTogglePane: true, ActionFocusTree: true, ActionFocusDiff: true,
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
@@ -203,6 +205,7 @@ func defaultDescriptions() []HelpEntry {
 		// file/hunk
 		{ActionNextItem, "next file / search match", "File/Hunk"},
 		{ActionPrevItem, "prev file / search match", "File/Hunk"},
+		{ActionJumpFile, "jump to file", "File/Hunk"},
 		{ActionNextHunk, "next hunk", "File/Hunk"},
 		{ActionPrevHunk, "prev hunk", "File/Hunk"},
 		{ActionOpenFileInEditor, "open focused file in $EDITOR", "File/Hunk"},
@@ -270,6 +273,7 @@ func defaultBindings() map[string]Action {
 		"n":      ActionNextItem,
 		"N":      ActionPrevItem,
 		"p":      ActionPrevItem,
+		"ctrl+p": ActionJumpFile,
 		"]":      ActionNextHunk,
 		"[":      ActionPrevHunk,
 		"e":      ActionOpenFileInEditor,

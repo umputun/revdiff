@@ -1252,6 +1252,21 @@ func TestHandleOverlayOpen_ThemeSelectClearsChord(t *testing.T) {
 	assert.Equal(t, overlay.KindThemeSelect, model.overlay.Kind())
 }
 
+func TestHandleOverlayOpen_FilePickerClearsChord(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.keys.chordPending = "ctrl+w"
+	m.keys.hint = "Pending: ctrl+w, esc to cancel"
+
+	result, _, handled := m.handleOverlayOpen(keymap.ActionJumpFile)
+	model := result.(Model)
+
+	assert.True(t, handled, "ActionJumpFile must be handled by handleOverlayOpen")
+	assert.Empty(t, model.keys.chordPending, "file-picker entry must clear chordPending")
+	assert.Empty(t, model.keys.hint, "file-picker entry must clear chord hint")
+	assert.True(t, model.overlay.Active(), "file picker must be open")
+	assert.Equal(t, overlay.KindFilePicker, model.overlay.Kind())
+}
+
 func TestHandleOverlayOpen_InfoClearsChord(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.commits.source = &fakeCommitLog{}

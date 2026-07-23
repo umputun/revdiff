@@ -31,6 +31,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"left", ActionScrollLeft}, {"right", ActionScrollRight},
 		{"J", ActionScrollDiffDown}, {"K", ActionScrollDiffUp},
 		{"n", ActionNextItem}, {"N", ActionPrevItem}, {"p", ActionPrevItem},
+		{"ctrl+p", ActionJumpFile},
 		{"]", ActionNextHunk}, {"[", ActionPrevHunk}, {"e", ActionOpenFileInEditor},
 		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
 		{"/", ActionSearch},
@@ -86,10 +87,46 @@ func TestDefault_ctrlKeysMatchBubbletea(t *testing.T) {
 	// ctrl+d and ctrl+u: bubbletea represents these as KeyMsg with specific types
 	ctrlD := tea.KeyMsg{Type: tea.KeyCtrlD}
 	ctrlU := tea.KeyMsg{Type: tea.KeyCtrlU}
+	ctrlP := tea.KeyMsg{Type: tea.KeyCtrlP}
 
 	km := Default()
 	assert.Equal(t, ActionHalfPageDown, km.Resolve(ctrlD.String()))
 	assert.Equal(t, ActionHalfPageUp, km.Resolve(ctrlU.String()))
+	assert.Equal(t, ActionJumpFile, km.Resolve(ctrlP.String()))
+}
+
+func TestActionJumpFile_RegistrationHelpAndDump(t *testing.T) {
+	assert.True(t, IsValidAction(ActionJumpFile))
+
+	km := Default()
+	assert.Equal(t, ActionJumpFile, km.Resolve("ctrl+p"))
+	sections := km.HelpSections()
+	found := false
+	for _, section := range sections {
+		for _, entry := range section.Entries {
+			if entry.Action == ActionJumpFile {
+				assert.Equal(t, "File/Hunk", section.Name)
+				assert.Equal(t, "jump to file", entry.Description)
+				assert.Equal(t, "ctrl+p", entry.Keys)
+				found = true
+			}
+		}
+	}
+	assert.True(t, found, "jump_file should appear in File/Hunk help")
+
+	var dumped strings.Builder
+	require.NoError(t, km.Dump(&dumped))
+	assert.Contains(t, dumped.String(), "map ctrl+p jump_file")
+}
+
+func TestActionJumpFile_CustomConfiguration(t *testing.T) {
+	path := t.TempDir() + "/keybindings"
+	require.NoError(t, os.WriteFile(path, []byte("unmap ctrl+p\nmap alt+f jump_file\n"), 0o600))
+
+	km, err := Load(path)
+	require.NoError(t, err)
+	assert.Empty(t, km.Resolve("ctrl+p"))
+	assert.Equal(t, ActionJumpFile, km.Resolve("alt+f"))
 }
 
 func TestResolve(t *testing.T) {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
@@ -117,35 +116,10 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
 }
 
-// sanitizeFilenameForDisplay strips characters that would break or spoof
-// header/status-bar layout: C0 controls (< 0x20), DEL (0x7F), C1 controls
-// (0x80–0x9F), the Unicode replacement character (U+FFFD), and Unicode
-// format/bidi controls (RTL/LTR overrides U+202A–U+202E, isolates
-// U+2066–U+2069, ZWJ/ZWNJ U+200D/U+200C, ZWSP U+200B, BOM U+FEFF).
-// POSIX permits the C0/C1 bytes in paths; ingesting them raw lets crafted
-// paths re-wrap the diff header (and re-break the scrollbar's single-line
-// invariant) or inject terminal escape sequences. The bidi/format strip
-// is a defense-in-depth measure against filename spoofing — the chars
-// are zero-width so they do not affect width math, but they can make a
-// path render as something the user did not actually approve.
+// sanitizeFilenameForDisplay delegates to the shared style-layer sanitizer
+// used by every filename display surface, including the file picker.
 func (m Model) sanitizeFilenameForDisplay(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r < 0x20, r == 0x7F, r >= 0x80 && r <= 0x9F:
-			return -1
-		case r == utf8.RuneError:
-			return -1
-		case r >= 0x200B && r <= 0x200F: // ZWSP, ZWNJ, ZWJ, LRM, RLM
-			return -1
-		case r >= 0x202A && r <= 0x202E: // bidi overrides + embeddings
-			return -1
-		case r >= 0x2066 && r <= 0x2069: // bidi isolates
-			return -1
-		case r == 0xFEFF: // BOM / ZWNBSP
-			return -1
-		}
-		return r
-	}, s)
+	return (style.Resolver{}).SanitizeFilenameForDisplay(s)
 }
 
 // truncateLeftToWidth left-truncates s with a leading "…" so it fits in

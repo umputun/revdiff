@@ -226,6 +226,14 @@ func (m Model) loadFileDiff(file string) tea.Cmd {
 	}
 }
 
+// requestFileDiff records the selected target, advances the load sequence, and
+// returns a command for that exact request.
+func (m *Model) requestFileDiff(file string) tea.Cmd {
+	m.file.requestedPath = file
+	m.file.loadSeq++
+	return m.loadFileDiff(file)
+}
+
 // fetchEffectiveFileDiff applies the same staged-only and untracked fallbacks
 // used by the visible diff. Fingerprints call this helper too, so review state
 // is always based on the content revdiff would actually display.
@@ -302,8 +310,7 @@ func (m *Model) reloadCurrentFile() tea.Cmd {
 	if m.file.name == "" {
 		return nil
 	}
-	m.file.loadSeq++
-	return m.loadFileDiff(m.file.name)
+	return m.requestFileDiff(m.file.name)
 }
 
 // captureCompactAnchor records the cursor's semantic position before a compact
@@ -367,9 +374,15 @@ func (m Model) loadBlame(file string) tea.Cmd {
 // loadSelectedIfChanged ensures the tree is visible and loads the selected file if it changed.
 func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	m.tree.EnsureVisible(m.treePageSize())
-	if f := m.tree.SelectedFile(); f != "" && f != m.file.name {
-		m.file.loadSeq++
-		return m, m.loadFileDiff(f)
+	if f := m.tree.SelectedFile(); f != "" {
+		if f != m.file.name {
+			return m, m.requestFileDiff(f)
+		}
+		if m.file.requestedPath != "" && m.file.requestedPath != f {
+			m.file.canceledLoadSeq = m.file.loadSeq
+			m.file.canceledLoadPath = m.file.requestedPath
+			m.file.requestedPath = ""
+		}
 	}
 	return m, nil
 }
@@ -474,8 +487,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 
 	// auto-select first file
 	if f := m.tree.SelectedFile(); f != "" {
-		m.file.loadSeq++
-		return m, tea.Batch(m.loadFileDiff(f), statsCmd)
+		return m, tea.Batch(m.requestFileDiff(f), statsCmd)
 	}
 	return m, statsCmd
 }
@@ -506,6 +518,13 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	if msg.seq != m.file.loadSeq {
 		return m, nil
 	}
+	// Sequence equality alone is not enough when navigation returns to the
+	// already displayed file without issuing another load. Reject the exact
+	// outstanding request canceled by that no-load selection.
+	if msg.seq == m.file.canceledLoadSeq && msg.file == m.file.canceledLoadPath {
+		return m, nil
+	}
+	m.file.requestedPath = ""
 	if msg.err != nil {
 		m.layout.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
 		return m, nil
