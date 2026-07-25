@@ -3311,10 +3311,11 @@ func TestModel_DownPageMotionTerminatesOnAnnotatedLastLine(t *testing.T) {
 			go func() { defer close(done); tc.motion(&model) }()
 			select {
 			case <-done:
-			case <-time.After(10 * time.Second):
+			case <-time.After(2 * time.Second):
 				t.Fatal("page motion never returned - the walk is not terminating")
 			}
 			assert.Equal(t, 19, model.nav.diffCursor, "walk must settle on the last navigable line")
+			assert.True(t, model.annot.cursorOnAnnotation, "cursor must park on the annotation sub-row, not fall back to the diff row")
 		})
 	}
 }

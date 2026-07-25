@@ -82,7 +82,10 @@ func (m *Model) moveDiffCursorUp() {
 // moveDiffCursorUpWithHunks is the hunks-precomputed variant of moveDiffCursorUp.
 // See moveDiffCursorDownWithHunks for the rationale.
 func (m *Model) moveDiffCursorUpWithHunks(hunks []int) {
-	// if currently on annotation sub-line, move up to the diff line itself
+	// if currently on annotation sub-line, move up to the diff line itself. the sub-row renders below
+	// its diff line (rowOnAnnotationSubLine), so clearing the flag IS the upward move - unlike the
+	// downward walk, where clearing without advancing diffCursor is no movement at all and spins
+	// moveDiffCursorDownBy.
 	if m.annot.cursorOnAnnotation {
 		m.annot.cursorOnAnnotation = false
 		return
