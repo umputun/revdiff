@@ -3261,8 +3261,9 @@ func TestModel_DownPageMotionTerminatesOnAnnotatedLastLine(t *testing.T) {
 	// the downward walk used to spin forever once it reached a final navigable line carrying an
 	// annotation: moveDiffCursorDownWithHunks alternates cursorOnAnnotation false->true (annotation
 	// stop) then true->false (no next line found), so comparing only against the previous step never
-	// saw "no movement", and the visual delta oscillated by one annotation row so the rows budget
-	// never tripped either.
+	// saw "no movement", and the visual delta oscillated by the diff line's own wrapped height
+	// (cursorViewportYFromOffsets adds wrappedLineCount(diffCursor) when the flag is set), which stayed
+	// inside the rows budget in these cases so that check never tripped either.
 	newModel := func(cursor int, onAnnot, trailingDivider bool) Model {
 		lines := make([]diff.DiffLine, 0, 21)
 		for i := range 20 {
