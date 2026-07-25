@@ -975,6 +975,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePostFlushFinished(msg)
 	case wheelDebounceMsg:
 		return m.handleWheelDebounce(msg)
+	case wheelFrameMsg:
+		return m.handleWheelFrame(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)

@@ -14,6 +14,9 @@ import (
 
 // View renders the full TUI.
 func (m Model) View() string {
+	if m.wheel.snapshot != "" {
+		return m.wheel.snapshot
+	}
 	if !m.ready {
 		return "loading..."
 	}
