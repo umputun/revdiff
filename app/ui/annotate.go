@@ -598,7 +598,8 @@ func (m Model) cursorVisualOffsets(hunks []int, annotationSet map[string]bool) [
 }
 
 // cursorViewportYFromOffsets returns the current cursor's visual row from a
-// pre-built line-offset index.
+// pre-built line-offset index. offsets must come from cursorVisualOffsets for
+// the current m.file.lines, and m.nav.diffCursor must be in [-1, len(offsets)).
 func (m Model) cursorViewportYFromOffsets(offsets []int) int {
 	if m.file.name == "" || len(offsets) == 0 {
 		return max(0, m.nav.diffCursor)

@@ -1532,6 +1532,52 @@ func TestModel_CursorViewportYWithWrappedAnnotation(t *testing.T) {
 	})
 }
 
+func TestModel_CursorViewportYFromOffsetsMatchesDirectCalculation(t *testing.T) {
+	longLine := strings.Repeat("wrapped content ", 12)
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: longLine, ChangeType: diff.ChangeContext},
+		{OldNum: 2, Content: "removed", ChangeType: diff.ChangeRemove},
+		{NewNum: 2, Content: "replacement", ChangeType: diff.ChangeAdd},
+		{NewNum: 3, Content: "tail", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.layout.width = 60
+	m.layout.treeWidth = 20
+	m.modes.wrap = true
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = make(map[int]bool)
+	m.store.Add(annotation.Annotation{
+		File: "a.go", Line: 0, Comment: strings.Repeat("file note ", 12),
+	})
+	m.store.Add(annotation.Annotation{
+		File: "a.go", Line: 1, Type: string(diff.ChangeContext),
+		Comment: strings.Repeat("inline note ", 12),
+	})
+
+	hunks := m.findHunks()
+	annotationSet := m.buildAnnotationSet()
+	offsets := m.cursorVisualOffsets(hunks, annotationSet)
+	require.Greater(t, m.wrappedLineCount(0), 1, "fixture must wrap a diff line")
+	require.Greater(t, m.wrappedAnnotationLineCount(annotKeyFile), 1, "fixture must wrap the file annotation")
+	require.Greater(t, m.wrappedAnnotationLineCount(m.annotationKey(1, string(diff.ChangeContext))), 1,
+		"fixture must wrap the inline annotation")
+	require.Zero(t, m.hunkLineHeight(1, hunks, annotationSet), "fixture must contain a collapsed hidden line")
+
+	for cursor := -1; cursor < len(lines); cursor++ {
+		for _, onAnnotation := range []bool{false, true} {
+			m.nav.diffCursor = cursor
+			m.annot.cursorOnAnnotation = onAnnotation
+			assert.Equal(t,
+				m.cursorViewportYUsing(hunks, annotationSet),
+				m.cursorViewportYFromOffsets(offsets),
+				"cursor=%d cursorOnAnnotation=%v", cursor, onAnnotation,
+			)
+		}
+	}
+}
+
 func TestModel_RenderWrappedAnnotation(t *testing.T) {
 	m := testModel(nil, nil)
 	m.file.name = "a.go"
