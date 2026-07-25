@@ -3256,3 +3256,65 @@ func BenchmarkModel_PageNavigation(b *testing.B) {
 		}
 	}
 }
+
+func TestModel_DownPageMotionTerminatesOnAnnotatedLastLine(t *testing.T) {
+	// the downward walk used to spin forever once it reached a final navigable line carrying an
+	// annotation: moveDiffCursorDownWithHunks alternates cursorOnAnnotation false->true (annotation
+	// stop) then true->false (no next line found), so comparing only against the previous step never
+	// saw "no movement", and the visual delta oscillated by one annotation row so the rows budget
+	// never tripped either.
+	newModel := func(cursor int, onAnnot, trailingDivider bool) Model {
+		lines := make([]diff.DiffLine, 0, 21)
+		for i := range 20 {
+			lines = append(lines, diff.DiffLine{NewNum: i + 1, Content: "ctx", ChangeType: diff.ChangeContext})
+		}
+		if trailingDivider {
+			// compact mode leaves a non-navigable divider after the last real line
+			lines = append(lines, diff.DiffLine{Content: "⋯ 12 lines ⋯", ChangeType: diff.ChangeDivider})
+		}
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model = result.(Model)
+		model.layout.focus = paneDiff
+		// annotate the last navigable line, which is the last context row whether or not a
+		// non-navigable divider follows it
+		model.store.Add(annotation.Annotation{File: "a.go", Line: model.diffLineNum(lines[19]),
+			Type: string(diff.ChangeContext), Comment: "note on the last line"})
+		model.invalidateAnnotationRows()
+		model.nav.diffCursor, model.annot.cursorOnAnnotation = cursor, onAnnot
+		return model
+	}
+
+	tests := []struct {
+		name            string
+		cursor          int
+		onAnnot         bool
+		trailingDivider bool
+		motion          func(*Model)
+	}{
+		{"page down parked on last line", 19, false, false, (*Model).moveDiffCursorPageDown},
+		{"page down parked on last annotation", 19, true, false, (*Model).moveDiffCursorPageDown},
+		{"page down walking into last line", 5, false, false, (*Model).moveDiffCursorPageDown},
+		{"half page down parked on last line", 19, false, false, (*Model).moveDiffCursorHalfPageDown},
+		{"half page down walking into last line", 12, false, false, (*Model).moveDiffCursorHalfPageDown},
+		{"page down with trailing divider", 19, false, true, (*Model).moveDiffCursorPageDown},
+		{"page down walking into trailing divider", 5, false, true, (*Model).moveDiffCursorPageDown},
+		{"half page down with trailing divider", 19, true, true, (*Model).moveDiffCursorHalfPageDown},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			model := newModel(tc.cursor, tc.onAnnot, tc.trailingDivider)
+			done := make(chan struct{})
+			go func() { defer close(done); tc.motion(&model) }()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("page motion never returned - the walk is not terminating")
+			}
+			assert.Equal(t, 19, model.nav.diffCursor, "walk must settle on the last navigable line")
+		})
+	}
+}

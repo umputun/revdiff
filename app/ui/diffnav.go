@@ -31,11 +31,14 @@ func (m *Model) moveDiffCursorDown() {
 // Callers that move the cursor repeatedly (e.g. repeatDiffAction for N j/k) call
 // findHunks once and pass the result in to avoid O(N × len(diff)) rescans.
 func (m *Model) moveDiffCursorDownWithHunks(hunks []int) {
-	// if currently on annotation sub-line, move to the next diff line
+	// if currently on annotation sub-line, move to the next diff line. the flag clears only once a
+	// next line is found: with no line left the cursor has nowhere to go, so staying on the
+	// annotation is what "no movement" means. clearing it unconditionally would walk the cursor
+	// back up onto the diff row and, in moveDiffCursorDownBy, read as progress forever.
 	if m.annot.cursorOnAnnotation {
-		m.annot.cursorOnAnnotation = false
 		for i := m.nav.diffCursor + 1; i < len(m.file.lines); i++ {
 			if m.file.lines[i].ChangeType != diff.ChangeDivider && !m.isCollapsedHidden(i, hunks) {
+				m.annot.cursorOnAnnotation = false
 				m.nav.diffCursor = i
 				return
 			}
