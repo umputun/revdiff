@@ -3226,3 +3226,33 @@ func TestModel_JKScrollDiffNoOpWhenContentFits(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkModel_PageNavigation(b *testing.B) {
+	lines := make([]diff.DiffLine, 10_000)
+	for i := range lines {
+		lines[i] = diff.DiffLine{
+			NewNum:     i + 1,
+			Content:    "func pageNavigationBenchmark() {}",
+			ChangeType: diff.ChangeContext,
+		}
+	}
+
+	m := testModel([]string{"large.go"}, map[string][]diff.DiffLine{"large.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 44})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "large.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+	model.nav.diffCursor = len(lines) / 2
+	model.layout.viewport.SetContent(model.renderDiff())
+	model.layout.viewport.SetYOffset(model.nav.diffCursor)
+
+	b.ResetTimer()
+	for i := range b.N {
+		if i%2 == 0 {
+			model.moveDiffCursorPageDown()
+		} else {
+			model.moveDiffCursorPageUp()
+		}
+	}
+}

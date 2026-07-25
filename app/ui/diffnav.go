@@ -137,19 +137,21 @@ func (m *Model) moveDiffCursorHalfPageUp() {
 // transitions onto an annotation sub-row (cursorOnAnnotation flip with no diffCursor change)
 // count as real progress so the loop does not terminate early on annotated lines.
 func (m *Model) moveDiffCursorDownBy(rows int) {
-	startY := m.cursorViewportY()
+	hunks := m.findHunks()
+	offsets := m.cursorVisualOffsets(hunks, m.buildAnnotationSet())
+	startY := m.cursorViewportYFromOffsets(offsets)
 	for {
 		prevCursor := m.nav.diffCursor
 		prevAnnot := m.annot.cursorOnAnnotation
-		m.moveDiffCursorDown()
+		m.moveDiffCursorDownWithHunks(hunks)
 		if m.nav.diffCursor == prevCursor && m.annot.cursorOnAnnotation == prevAnnot {
 			break // no more movement possible (end of content)
 		}
-		if m.cursorViewportY()-startY >= rows {
+		if m.cursorViewportYFromOffsets(offsets)-startY >= rows {
 			break
 		}
 	}
-	actualDelta := m.cursorViewportY() - startY
+	actualDelta := m.cursorViewportYFromOffsets(offsets) - startY
 	maxOffset := max(0, m.layout.viewport.TotalLineCount()-m.layout.viewport.Height)
 	m.layout.viewport.SetYOffset(min(m.layout.viewport.YOffset+actualDelta, maxOffset))
 	m.layout.viewport.SetContent(m.renderDiff())
@@ -162,19 +164,21 @@ func (m *Model) moveDiffCursorDownBy(rows int) {
 // transitions off an annotation sub-row count as real progress so the loop does not
 // terminate early on annotated lines.
 func (m *Model) moveDiffCursorUpBy(rows int) {
-	startY := m.cursorViewportY()
+	hunks := m.findHunks()
+	offsets := m.cursorVisualOffsets(hunks, m.buildAnnotationSet())
+	startY := m.cursorViewportYFromOffsets(offsets)
 	for {
 		prevCursor := m.nav.diffCursor
 		prevAnnot := m.annot.cursorOnAnnotation
-		m.moveDiffCursorUp()
+		m.moveDiffCursorUpWithHunks(hunks)
 		if m.nav.diffCursor == prevCursor && m.annot.cursorOnAnnotation == prevAnnot {
 			break // no more movement possible (start of content)
 		}
-		if startY-m.cursorViewportY() >= rows {
+		if startY-m.cursorViewportYFromOffsets(offsets) >= rows {
 			break
 		}
 	}
-	actualDelta := startY - m.cursorViewportY()
+	actualDelta := startY - m.cursorViewportYFromOffsets(offsets)
 	m.layout.viewport.SetYOffset(max(0, m.layout.viewport.YOffset-actualDelta))
 	m.layout.viewport.SetContent(m.renderDiff())
 }

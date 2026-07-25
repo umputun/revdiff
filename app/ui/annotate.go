@@ -581,6 +581,38 @@ func (m Model) cursorViewportYUsing(hunks []int, annotationSet map[string]bool) 
 	return y
 }
 
+// cursorVisualOffsets returns the top visual row for every diff line. Page
+// motions build this index once so each cursor step can read its visual
+// position in O(1) instead of rescanning all preceding lines.
+func (m Model) cursorVisualOffsets(hunks []int, annotationSet map[string]bool) []int {
+	offsets := make([]int, len(m.file.lines))
+	y := 0
+	if m.hasFileAnnotation() {
+		y = m.wrappedAnnotationLineCount(annotKeyFile)
+	}
+	for i := range m.file.lines {
+		offsets[i] = y
+		y += m.hunkLineHeight(i, hunks, annotationSet)
+	}
+	return offsets
+}
+
+// cursorViewportYFromOffsets returns the current cursor's visual row from a
+// pre-built line-offset index.
+func (m Model) cursorViewportYFromOffsets(offsets []int) int {
+	if m.file.name == "" || len(offsets) == 0 {
+		return max(0, m.nav.diffCursor)
+	}
+	if m.nav.diffCursor == -1 {
+		return 0
+	}
+	y := offsets[m.nav.diffCursor]
+	if m.annot.cursorOnAnnotation {
+		y += m.wrappedLineCount(m.nav.diffCursor)
+	}
+	return y
+}
+
 // cursorVisualRange returns the top and bottom viewport Y coordinates the
 // cursor currently occupies. when the cursor is on a diff row, bottom spans
 // any wrap-continuation rows plus any injected annotation rows below it;
