@@ -75,6 +75,8 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 
 Set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
 
+When the launcher runs from a background session with no terminal of its own (no `$TMUX` in the environment), it probes the default tmux server and, if a client is attached, opens the review as a server-owned window in that client's session instead of failing. Set `REVDIFF_TMUX_TARGET=<session>` to send the review to a specific tmux session explicitly (this also forces window mode and skips the probe). Both are launcher environment variables, not revdiff flags.
+
 ## Themes
 
 Eight bundled themes: **basic**, **catppuccin-latte**, **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **revdiff**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.

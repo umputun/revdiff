@@ -158,6 +158,8 @@ $SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--only=
 
 **Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
+**Headless review handoff**: from a background session with no terminal of its own (no `$TMUX`), the launcher probes the default tmux server and, if a client is attached, opens the review as a server-owned window in that client's session instead of failing — no action needed. When the probe cannot pick the right session (multiple sessions, or none attached), prefix the launcher with `REVDIFF_TMUX_TARGET=<session>` to target one explicitly; it forces window mode and skips the probe. This is a launcher environment variable, not a revdiff flag.
+
 The script:
 - Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay

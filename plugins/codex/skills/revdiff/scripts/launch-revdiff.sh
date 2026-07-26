@@ -168,6 +168,38 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     print_output_and_exit "$rc"
 fi
 
+# headless / background caller: no $TMUX in the environment but a reachable tmux server with an
+# attached client. A background agent session (no controlling terminal) cannot render a TUI itself,
+# so hand the review to the user's live terminal: run revdiff in a server-owned tmux *window*
+# (survives a client disconnect, unlike a display-popup) addressed with an explicit -t at the
+# attached client's session. Probes the DEFAULT tmux server via bare `tmux`; REVDIFF_TMUX_TARGET=<session>
+# forces this path at an explicit session and skips the probe. Falls through untouched when there is
+# no tmux, no server, or no attached client — the later backends and the final error still apply.
+if [ -z "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    _rd_target="${REVDIFF_TMUX_TARGET:-}"
+    if [ -z "$_rd_target" ] && tmux ls >/dev/null 2>&1; then
+        # pick the session of the most-recently-active attached client, so the review lands where
+        # the user is actually looking rather than tmux's ambiguous client-less "current session".
+        _rd_target=$(tmux list-clients -F '#{client_activity} #{client_session}' 2>/dev/null \
+            | sort -rn | head -1 | cut -d' ' -f2- || true)
+    fi
+    if [ -n "$_rd_target" ]; then
+        # shellcheck disable=SC2034  # consumed by the sourced agentdeck-window.sh below
+        REVDIFF_TMUX_WINDOW=1
+        _RD_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+        # shellcheck source=/dev/null  # sibling backend resolved at runtime; not followed at lint time
+        # shellcheck disable=SC1091
+        if [ -f "$_RD_SCRIPT_DIR/agentdeck-window.sh" ]; then
+            . "$_RD_SCRIPT_DIR/agentdeck-window.sh"
+        fi
+        # agentdeck-window.sh exits the process on success (window opened, review ran). Reaching here
+        # means the window could not be opened — surface a targeted error instead of falling through
+        # to the generic "no overlay terminal available" message, which would misdescribe the failure.
+        echo "error: tmux session '$_rd_target' reachable but revdiff review window could not be opened" >&2
+        exit 1
+    fi
+fi
+
 # zellij: floating pane with sentinel file for blocking
 if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")

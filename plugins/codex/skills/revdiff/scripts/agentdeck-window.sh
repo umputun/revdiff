@@ -18,23 +18,39 @@
 # never pops over whatever other session they are working in.
 #
 # Activation:
-#   REVDIFF_TMUX_WINDOW=1   force window mode, focused + restore prior window on exit (any tmux)
-#   REVDIFF_TMUX_WINDOW=0   force the popup path (skip this backend)
-#   unset                   auto: background window mode only when agent-deck is detected
+#   REVDIFF_TMUX_WINDOW=1      force window mode, focused + restore prior window on exit (any tmux)
+#   REVDIFF_TMUX_WINDOW=0      force the popup path (skip this backend)
+#   REVDIFF_TMUX_TARGET=NAME   force window mode + focus at session NAME, addressing it with an
+#                              explicit `-t` so nothing depends on tmux's client-less "current
+#                              session" resolution. This is how a headless caller hands the review
+#                              to a live client's session; also usable from inside tmux to target
+#                              another session.
+#   unset                      auto: background window mode only when agent-deck is detected
 #
-# Reuses from the caller (launch-revdiff.sh): TMPBASE, CWD, DIR_NAME, TITLE_REF and the helpers
-# sq() / write_rc_cmd() / read_rc() / print_output_and_exit(). The caller guarantees $TMUX is
-# set and tmux is on PATH before sourcing this. This file is SOURCED, so it must not install an
-# EXIT trap (that would clobber the caller's cleanup trap); it cleans up explicitly instead and
-# either returns (window mode off → caller falls through to the popup) or exits the process.
+# Reuses from the caller (launch-revdiff.sh): TMPBASE, CWD, DIR_NAME, TITLE_REF, an optional
+# _rd_target, and the helpers sq() / write_rc_cmd() / read_rc() / print_output_and_exit(). The caller
+# guarantees tmux is on PATH and that bare `tmux` reaches the intended server (via $TMUX when inside
+# tmux, or the default socket when a headless caller probed it). This file is SOURCED, so it must not
+# install an EXIT trap (that would clobber the caller's cleanup trap); it cleans up explicitly instead
+# and either returns (window mode off → caller falls through to the popup) or exits the process.
 
-# _rd_focus marks the first-class interactive opt-in: set only when the user explicitly forces
-# window mode with REVDIFF_TMUX_WINDOW=1. Capture it BEFORE the auto-detection below folds user-opt
-# and agent-deck detection into the same _rd_winmode=1 — the focus + restore behavior is opt-in only.
+# explicit target session for the review window (and its prior-window restore). Comes from
+# REVDIFF_TMUX_TARGET or from an _rd_target the caller already resolved (headless server probe).
+# A non-empty target implies window mode + focus: the caller has decided which session hosts the
+# review, so nothing falls back to tmux's client-less "current session" resolution.
+_rd_target="${REVDIFF_TMUX_TARGET:-${_rd_target:-}}"
+
+# _rd_focus marks the first-class interactive opt-in: set when the user forces window mode with
+# REVDIFF_TMUX_WINDOW=1 or when an explicit target session is given. Capture it BEFORE the
+# auto-detection below folds user-opt and agent-deck detection into the same _rd_winmode=1 — the
+# focus + restore behavior is opt-in only (agent-deck auto-detection stays background).
 _rd_focus=0
 [ "${REVDIFF_TMUX_WINDOW:-}" = 1 ] && _rd_focus=1
+[ -n "$_rd_target" ] && _rd_focus=1
 
+# an explicit target forces window mode; otherwise honor REVDIFF_TMUX_WINDOW, else auto-detect.
 _rd_winmode="${REVDIFF_TMUX_WINDOW:-}"
+[ -n "$_rd_target" ] && _rd_winmode=1
 if [ -z "$_rd_winmode" ]; then
     # agent-deck markers: its env var (also mirrored into the tmux session env), with the
     # agentdeck_* session-name prefix as a fallback signal.
@@ -65,7 +81,11 @@ rm -f "$_rd_sentinel"
 # first-class interactive mode: remember the active window so it can be restored after the review.
 _rd_prevwin=""
 if [ "$_rd_focus" = 1 ]; then
-    _rd_prevwin=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+    if [ -n "$_rd_target" ]; then
+        _rd_prevwin=$(tmux display-message -t "$_rd_target" -p '#{window_id}' 2>/dev/null || true)
+    else
+        _rd_prevwin=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+    fi
 fi
 
 # Open the review in a background window (-d: don't steal the active window; -c: start dir).
@@ -73,8 +93,12 @@ fi
 # invocation (every backend runs the command through sh, and REVDIFF_CMD is built sh-compatible).
 # If tmux can't create the window, fail loudly instead of busy-waiting on a sentinel that will
 # never appear.
-if ! _rd_winid=$(tmux new-window -d -P -F '#{window_id}' -c "$CWD" -n "$_rd_winname" \
-        -- sh -c "$(write_rc_cmd "$_rd_sentinel")"); then
+# build the invocation; an explicit target lands the window in the chosen session. The arg array is
+# always non-empty, so "${_rd_neww[@]}" is safe to expand under set -u (bash 3.2 compatible).
+_rd_neww=(new-window -d -P -F '#{window_id}')
+[ -n "$_rd_target" ] && _rd_neww+=(-t "$_rd_target")
+_rd_neww+=(-c "$CWD" -n "$_rd_winname" -- sh -c "$(write_rc_cmd "$_rd_sentinel")")
+if ! _rd_winid=$(tmux "${_rd_neww[@]}"); then
     rm -f "$_rd_sentinel" "$_rd_sentinel".tmp
     echo "revdiff: failed to open tmux review window" >&2
     exit 1
@@ -90,7 +114,9 @@ fi
 # wait on the window still existing rather than a timer: a real review may take a long time, but
 # if the window disappears without a sentinel (killed / tmux died) we stop instead of hanging.
 while [ ! -f "$_rd_sentinel" ]; do
-    tmux list-windows -F '#{window_id}' 2>/dev/null | grep -qxF "$_rd_winid" || break
+    # -a lists windows across every session so the watch finds the review window whichever session
+    # hosts it (window ids are server-global), including an explicit -t target session.
+    tmux list-windows -a -F '#{window_id}' 2>/dev/null | grep -qxF "$_rd_winid" || break
     sleep 0.3
 done
 
