@@ -151,6 +151,7 @@ func TestResolver_Style(t *testing.T) {
 		{"help box", StyleKeyHelpBox},
 		{"theme select box", StyleKeyThemeSelectBox},
 		{"theme select box focused", StyleKeyThemeSelectBoxFocused},
+		{"file picker box", StyleKeyFilePickerBox},
 		{"info box", StyleKeyInfoBox},
 	}
 

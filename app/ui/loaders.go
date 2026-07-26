@@ -376,7 +376,8 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 	m.tree.EnsureVisible(m.treePageSize())
 	if f := m.tree.SelectedFile(); f != "" {
 		if f != m.file.name {
-			return m, m.requestFileDiff(f)
+			cmd := m.requestFileDiff(f)
+			return m, cmd
 		}
 		if m.file.requestedPath != "" && m.file.requestedPath != f {
 			m.file.canceledLoadSeq = m.file.loadSeq

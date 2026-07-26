@@ -52,6 +52,20 @@ func TestFilePickerFilterFullPathCaseInsensitive(t *testing.T) {
 	assert.Contains(t, rendered, "app/ui/view.go")
 }
 
+func TestFilePickerFilterAcceptsTypedSpace(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenFilePicker(FilePickerSpec{
+		Paths: []string{"docs/release-notes.md", "docs/release notes.md"},
+	})
+
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("release")}, "")
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeySpace}, "")
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("notes")}, "")
+
+	assert.Equal(t, "release notes", mgr.filePick.filter)
+	assert.Equal(t, []string{"docs/release notes.md"}, mgr.filePick.entries)
+}
+
 func TestFilePickerKeyboardNavigationUsesConfiguredActions(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenFilePicker(filePickerSpec())
@@ -165,7 +179,7 @@ func TestFilePickerMouseWheelClampsAtBoundaries(t *testing.T) {
 	assert.Equal(t, 0, mgr.filePick.cursor)
 	assert.Equal(t, 0, mgr.filePick.offset)
 
-	for range len(paths) {
+	for range paths {
 		mgr.filePick.handleMouse(tea.MouseMsg{
 			Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true,
 		})
@@ -193,6 +207,27 @@ func TestFilePickerMouseClickIgnoresChromeAndBlankRows(t *testing.T) {
 	for _, msg := range tests {
 		assert.Equal(t, OutcomeNone, mgr.filePick.handleMouse(msg).Kind)
 	}
+}
+
+func TestFilePickerLongFilterStaysOnOneRowAndPreservesClickMapping(t *testing.T) {
+	longFilter := strings.Repeat("nested", 8)
+	path := "docs/" + longFilter + "/release-notes.md"
+	mgr := NewManager()
+	mgr.OpenFilePicker(FilePickerSpec{Paths: []string{path}})
+	ctx := RenderCtx{Width: 34, Height: 20, Resolver: style.PlainResolver()}
+
+	emptyHeight := lipgloss.Height(mgr.filePick.render(ctx, mgr))
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(longFilter)}, "")
+	rendered := mgr.filePick.render(ctx, mgr)
+
+	assert.Equal(t, longFilter, mgr.filePick.filter, "display truncation must not change matching input")
+	assert.Equal(t, emptyHeight, lipgloss.Height(rendered), "filter row must not soft-wrap")
+	out := mgr.filePick.handleMouse(tea.MouseMsg{
+		X: 2, Y: 4, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress,
+	})
+	require.Equal(t, OutcomeFileChosen, out.Kind)
+	require.NotNil(t, out.FileChoice)
+	assert.Equal(t, path, out.FileChoice.Path)
 }
 
 func TestFilePickerScrollingAndResizeClamp(t *testing.T) {

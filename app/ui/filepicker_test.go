@@ -123,6 +123,7 @@ func TestModel_JumpFilePreservesSidebarFilters(t *testing.T) {
 		m.openFilePicker()
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		result, _ = result.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
 		result, _ = result.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
 		m = result.(Model)
 
@@ -139,6 +140,7 @@ func TestModel_JumpFilePreservesSidebarFilters(t *testing.T) {
 		m.openFilePicker()
 
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		result, _ = result.(Model).Update(tea.KeyMsg{Type: tea.KeyDown})
 		result, _ = result.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
 		m = result.(Model)
 

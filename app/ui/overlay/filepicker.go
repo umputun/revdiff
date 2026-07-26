@@ -98,7 +98,7 @@ func (f *filePickerOverlay) render(ctx RenderCtx, mgr *Manager) string {
 	if f.filter != "" {
 		title = fmt.Sprintf(" files (%d/%d) ", len(f.entries), len(f.all))
 	}
-	box := ctx.Resolver.Style(style.StyleKeyThemeSelectBox).Width(f.popupWidth).Render(strings.Join(parts, "\n"))
+	box := ctx.Resolver.Style(style.StyleKeyFilePickerBox).Width(f.popupWidth).Render(strings.Join(parts, "\n"))
 	box = mgr.injectBorderTitle(box, title, borderEdgeText{
 		popupWidth: f.popupWidth,
 		accentFg:   string(ctx.Resolver.Color(style.ColorKeyAccentFg)),
@@ -111,11 +111,13 @@ func (f *filePickerOverlay) renderFilter(resolver Resolver) string {
 	if f.filter == "" {
 		return "  " + string(resolver.Color(style.ColorKeyMutedFg)) + "type to filter..." + string(style.ResetFg)
 	}
-	return "  " + f.filter + string(resolver.Color(style.ColorKeyAccentFg)) + "│" + string(style.ResetFg)
+	filterWidth := max(f.popupWidth-filePickerBorderPad-3, 0) // 2-cell indent + 1-cell cursor
+	displayFilter := runewidth.Truncate(f.filter, filterWidth, "…")
+	return "  " + displayFilter + string(resolver.Color(style.ColorKeyAccentFg)) + "│" + string(style.ResetFg)
 }
 
 func (f *filePickerOverlay) formatEntry(path string, width int, selected bool, resolver Resolver) string {
-	clean := (style.Resolver{}).SanitizeFilenameForDisplay(path)
+	clean := style.SanitizeFilenameForDisplay(path)
 	display := f.truncateFilePath(clean, width-2)
 	if selected {
 		entryStyle := resolver.Style(style.StyleKeyFileSelected)
@@ -146,21 +148,7 @@ func (f *filePickerOverlay) truncateFilePath(path string, width int) string {
 	if runewidth.StringWidth(candidate) <= width {
 		return candidate
 	}
-	if width == 1 {
-		return "…"
-	}
-	runes := []rune(base)
-	used := 0
-	start := len(runes)
-	for i, r := range slices.Backward(runes) {
-		runeWidth := runewidth.RuneWidth(r)
-		if used+runeWidth > width-1 {
-			break
-		}
-		used += runeWidth
-		start = i
-	}
-	return "…" + string(runes[start:])
+	return style.TruncateLeftToWidth(base, width)
 }
 
 func (f *filePickerOverlay) maxVisible() int {
@@ -209,6 +197,11 @@ func (f *filePickerOverlay) handleKey(msg tea.KeyMsg, action keymap.Action) Outc
 // single-rune actions such as the default j/k navigation bindings. Modified
 // runes and non-printable keys remain available for configured actions.
 func (f *filePickerOverlay) appendPrintableRunes(msg tea.KeyMsg) bool {
+	if msg.Type == tea.KeySpace && !msg.Alt {
+		f.filter += " "
+		f.applyFilter()
+		return true
+	}
 	if msg.Type != tea.KeyRunes || msg.Alt || len(msg.Runes) == 0 {
 		return false
 	}
@@ -271,9 +264,14 @@ func (f *filePickerOverlay) wheelStep(shift bool) int {
 }
 
 func (f *filePickerOverlay) handleLeftClick(localX, localY int) Outcome {
-	const entriesTop = 4
-	const horizontalChrome = 2
-	if localX < horizontalChrome || localX >= f.popupWidth-horizontalChrome {
+	// layout inside the box: y=0 border, y=1 top padding, y=2 filter,
+	// y=3 blank separator, y=4+ entries. horizontally: x=0 border, x=1 left
+	// padding, x in [2, popupWidth-2) content, x=popupWidth-2 right padding,
+	// x=popupWidth-1 right border. clicks outside the content rectangle are
+	// no-ops so users cannot accidentally select a file by clicking chrome.
+	const entriesTop = 4      // border (1) + top padding (1) + filter (1) + blank (1)
+	const horizChromeCols = 2 // border (1) + side padding (1) on each side
+	if localX < horizChromeCols || localX >= f.popupWidth-horizChromeCols {
 		return Outcome{Kind: OutcomeNone}
 	}
 	relativeRow := localY - entriesTop

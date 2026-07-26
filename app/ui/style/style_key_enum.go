@@ -63,6 +63,7 @@ var _styleKeyParseMap = map[string]StyleKey{
 	"helpbox":               StyleKeyHelpBox,
 	"themeselectbox":        StyleKeyThemeSelectBox,
 	"themeselectboxfocused": StyleKeyThemeSelectBoxFocused,
+	"filepickerbox":         StyleKeyFilePickerBox,
 	"infobox":               StyleKeyInfoBox,
 }
 
@@ -130,8 +131,10 @@ var (
 	StyleKeyThemeSelectBox = StyleKey{name: "ThemeSelectBox", value: 30}
 	// theme selector focused state
 	StyleKeyThemeSelectBoxFocused = StyleKey{name: "ThemeSelectBoxFocused", value: 31}
+	// file picker box
+	StyleKeyFilePickerBox = StyleKey{name: "FilePickerBox", value: 32}
 	// info overlay box (description + session metadata + commits)
-	StyleKeyInfoBox = StyleKey{name: "InfoBox", value: 32}
+	StyleKeyInfoBox = StyleKey{name: "InfoBox", value: 33}
 )
 
 // StyleKeyValues contains all possible enum values
@@ -168,6 +171,7 @@ var StyleKeyValues = []StyleKey{
 	StyleKeyHelpBox,
 	StyleKeyThemeSelectBox,
 	StyleKeyThemeSelectBoxFocused,
+	StyleKeyFilePickerBox,
 	StyleKeyInfoBox,
 }
 
@@ -205,6 +209,7 @@ var StyleKeyNames = []string{
 	"HelpBox",
 	"ThemeSelectBox",
 	"ThemeSelectBoxFocused",
+	"FilePickerBox",
 	"InfoBox",
 }
 
@@ -293,6 +298,8 @@ var _ = func() bool {
 	var _ styleKey = styleKeyThemeSelectBox
 	// This avoids "defined but not used" linter error for styleKeyThemeSelectBoxFocused
 	var _ styleKey = styleKeyThemeSelectBoxFocused
+	// This avoids "defined but not used" linter error for styleKeyFilePickerBox
+	var _ styleKey = styleKeyFilePickerBox
 	// This avoids "defined but not used" linter error for styleKeyInfoBox
 	var _ styleKey = styleKeyInfoBox
 	return true

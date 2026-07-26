@@ -2,11 +2,9 @@ package ui
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/overlay"
@@ -116,39 +114,6 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
 }
 
-// sanitizeFilenameForDisplay delegates to the shared style-layer sanitizer
-// used by every filename display surface, including the file picker.
-func (m Model) sanitizeFilenameForDisplay(s string) string {
-	return (style.Resolver{}).SanitizeFilenameForDisplay(s)
-}
-
-// truncateLeftToWidth left-truncates s with a leading "…" so it fits in
-// budget visual columns, preserving the meaningful end. returns s unchanged
-// when it already fits, "" when budget <= 0, "…" when budget == 1.
-func (m Model) truncateLeftToWidth(s string, budget int) string {
-	if lipgloss.Width(s) <= budget {
-		return s
-	}
-	if budget <= 0 {
-		return ""
-	}
-	if budget == 1 {
-		return "…"
-	}
-	tailBudget := budget - 1 // 1 cell for the leading "…"
-	runes := []rune(s)
-	w, cutIdx := 0, len(runes)
-	for i, r := range slices.Backward(runes) {
-		rw := runewidth.RuneWidth(r)
-		if w+rw > tailBudget {
-			break
-		}
-		w += rw
-		cutIdx = i
-	}
-	return "…" + string(runes[cutIdx:])
-}
-
 // truncateHeaderTitle returns the diff pane header text shortened to fit
 // in exactly one visual row of width paneW, prefixed with the leading
 // single-cell space the header always renders with. control characters
@@ -158,16 +123,16 @@ func (m Model) truncateLeftToWidth(s string, budget int) string {
 // without the leading space; these are not produced by any realistic
 // terminal layout but the helper must not overflow.
 func (m Model) truncateHeaderTitle(title string, paneW int) string {
-	clean := m.sanitizeFilenameForDisplay(title)
+	clean := style.SanitizeFilenameForDisplay(title)
 	full := " " + clean
 	if lipgloss.Width(full) <= paneW {
 		return full
 	}
 	if paneW <= 1 {
-		return m.truncateLeftToWidth(clean, paneW)
+		return style.TruncateLeftToWidth(clean, paneW)
 	}
 	// paneW >= 2: " " + truncateLeftToWidth(clean, paneW-1) fits in paneW
-	return " " + m.truncateLeftToWidth(clean, paneW-1)
+	return " " + style.TruncateLeftToWidth(clean, paneW-1)
 }
 
 // transientHint returns the first non-empty transient status-bar hint. hints
@@ -221,7 +186,7 @@ func (m Model) statusBarText() string {
 	// filename and diff stats segments. sanitize the filename so crafted
 	// paths (newline/ESC/bidi controls) cannot break or spoof status-bar
 	// layout — same defense-in-depth applied to the diff header.
-	cleanName := m.sanitizeFilenameForDisplay(m.file.name)
+	cleanName := style.SanitizeFilenameForDisplay(m.file.name)
 	if cleanName != "" {
 		segments = append(segments, cleanName, m.fileStatsText())
 	}
@@ -281,7 +246,7 @@ func (m Model) statusBarText() string {
 		// measurement to handle wide characters (CJK, emoji)
 		statsStr := m.fileStatsText()
 		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
-		left = m.truncateLeftToWidth(cleanName, nameMax) + sep + statsStr
+		left = style.TruncateLeftToWidth(cleanName, nameMax) + sep + statsStr
 	}
 
 	return m.joinStatusSections(left, right, sep)
@@ -449,7 +414,7 @@ func (m Model) statusModeIcons() string {
 // statusSegmentsNoSearch returns left segments without search position (for narrow terminals).
 func (m Model) statusSegmentsNoSearch() []string {
 	var segments []string
-	if name := m.sanitizeFilenameForDisplay(m.file.name); name != "" {
+	if name := style.SanitizeFilenameForDisplay(m.file.name); name != "" {
 		segments = append(segments, name, m.fileStatsText())
 	}
 	if hs := m.hunkSegment(); hs != "" {
@@ -464,7 +429,7 @@ func (m Model) statusSegmentsNoSearch() []string {
 // statusSegmentsMinimal returns left segments with only filename and stats.
 func (m Model) statusSegmentsMinimal() []string {
 	var segments []string
-	if name := m.sanitizeFilenameForDisplay(m.file.name); name != "" {
+	if name := style.SanitizeFilenameForDisplay(m.file.name); name != "" {
 		segments = append(segments, name, m.fileStatsText())
 	}
 	return segments
