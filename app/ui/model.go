@@ -975,8 +975,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePostFlushFinished(msg)
 	case wheelDebounceMsg:
 		return m.handleWheelDebounce(msg)
-	case wheelFrameMsg:
-		return m.handleWheelFrame(msg)
 	}
 
 	// forward other messages to textinput when annotating (e.g. cursor blink)
@@ -1339,12 +1337,7 @@ func (m *Model) toggleLineNumbers() {
 func (m Model) computeLineNumWidth() int {
 	maxNum := 0
 	for _, dl := range m.file.lines {
-		if dl.OldNum > maxNum {
-			maxNum = dl.OldNum
-		}
-		if dl.NewNum > maxNum {
-			maxNum = dl.NewNum
-		}
+		maxNum = max(maxNum, dl.OldNum, dl.NewNum)
 	}
 	if maxNum == 0 {
 		return 1

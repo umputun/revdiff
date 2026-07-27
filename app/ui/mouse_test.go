@@ -199,16 +199,12 @@ func wheelMsg(button tea.MouseButton, x, y int, shift bool) tea.MouseMsg {
 	})
 }
 
-// updateWheelAndFlush dispatches a wheel event, its frame tick, and the
-// resulting render-debounce tick so the test sees settled state.
+// updateWheelAndFlush dispatches a wheel event and the resulting
+// render-debounce tick so the test sees settled state.
 func updateWheelAndFlush(t *testing.T, m Model, msg tea.MouseMsg) Model {
 	t.Helper()
 	result, _ := m.Update(msg)
 	model := result.(Model)
-	if model.wheel.frameInFlight {
-		result, _ = model.Update(wheelFrameMsg{gen: model.wheel.frameGen})
-		model = result.(Model)
-	}
 	if model.wheel.renderPending {
 		result, _ = model.Update(wheelDebounceMsg{gen: model.wheel.gen})
 		model = result.(Model)
@@ -382,7 +378,7 @@ func TestModel_HandleMouse_WheelInWrapMode_StraddlePinsToNextLine(t *testing.T) 
 		"cursor must advance to line 1 (first line after the straddling wrapped span)")
 }
 
-func TestModel_HandleMouse_WheelFramePinsPastWrappedAnnotationRows(t *testing.T) {
+func TestModel_HandleMouse_WheelPinsPastWrappedAnnotationRows(t *testing.T) {
 	lines := make([]diff.DiffLine, 80)
 	for i := range lines {
 		lines[i] = diff.DiffLine{NewNum: i + 1, Content: strings.Repeat("wrapped content ", 12), ChangeType: diff.ChangeAdd}
@@ -1242,44 +1238,36 @@ func TestModel_HandleMouse_ClickInDiffSyncsTOCActiveSection(t *testing.T) {
 	assert.Equal(t, 4, idx, "TOC active section must match clicked diff line (Third section at lineIdx=4)")
 }
 
-func TestModel_HandleMouse_WheelFrameAccumulatesExactDistance(t *testing.T) {
+func TestModel_HandleMouse_WheelPacketsMoveContinuously(t *testing.T) {
 	lines := make([]diff.DiffLine, 60)
 	for i := range lines {
-		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: fmt.Sprintf("line %d", i+1), ChangeType: diff.ChangeContext}
 	}
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.lines = lines
 	m.layout.viewport.SetContent(m.renderDiff())
 
 	model := m
-	var firstFrame string
+	previousView := model.View()
 	for i := range 4 {
 		result, cmd := model.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 		model = result.(Model)
-		switch i {
-		case 0:
+		if i == 0 {
 			require.NotNil(t, cmd)
-			assert.Equal(t, wheelStep, model.layout.viewport.YOffset, "first packet must apply immediately")
-			assert.Empty(t, model.wheel.snapshot, "a single packet must not allocate a cached frame")
-			assert.False(t, model.wheel.frameInFlight, "a single packet must not schedule a frame tick")
-			firstFrame = model.View()
-		case 1:
-			require.NotNil(t, cmd, "second packet must start the coalescing frame")
-			assert.Equal(t, firstFrame, model.View(), "second packet must preserve the first packet's frame")
-		default:
-			assert.Nil(t, cmd, "only one frame tick may be scheduled")
-			assert.Equal(t, firstFrame, model.View(), "later packets must reuse the first packet's frame")
+		} else {
+			assert.Nil(t, cmd, "the debounce gate must keep one tick in flight")
 		}
+		assert.Equal(t, (i+1)*wheelStep, model.layout.viewport.YOffset,
+			"every packet must update the visible offset")
+		currentView := model.View()
+		assert.NotEqual(t, previousView, currentView, "every packet must produce a newly scrolled frame")
+		uncached := model
+		uncached.wheel.chrome = wheelChrome{}
+		assert.Equal(t, uncached.View(), currentView, "cached chrome must preserve the complete frame")
+		previousView = currentView
 	}
-	assert.Equal(t, wheelStep, model.layout.viewport.YOffset)
-	assert.Equal(t, 4*wheelStep, model.wheel.targetOffset)
-
-	result, cmd := model.Update(wheelFrameMsg{gen: model.wheel.frameGen})
-	model = result.(Model)
-	assert.Equal(t, 4*wheelStep, model.layout.viewport.YOffset)
-	assert.False(t, model.wheel.frameInFlight)
 	assert.True(t, model.wheel.renderPending)
-	assert.Nil(t, cmd, "the in-flight debounce gate must suppress a second ticker")
+	assert.True(t, model.wheel.chrome.active)
 }
 
 func TestModel_HandleMouse_WheelDeferredRender_NoDebounceWhenYOffsetCannotChange(t *testing.T) {
@@ -1443,23 +1431,18 @@ func TestModel_HandleMouse_WheelBurst_OppositeDirectionProcessesImmediately(t *t
 	for i := 1; i <= 5; i++ {
 		result, cmd := model.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 		model = result.(Model)
-		switch i {
-		case 1:
+		if i == 1 {
 			require.NotNil(t, cmd, "first packet must schedule the render debounce")
-		case 2:
-			require.NotNil(t, cmd, "second packet must schedule the frame tick")
-		default:
+		} else {
 			assert.Nil(t, cmd)
 		}
+		assert.Equal(t, i*wheelStep, model.layout.viewport.YOffset)
 	}
-	require.Equal(t, wheelStep, model.layout.viewport.YOffset)
-	require.Equal(t, 5*wheelStep, model.wheel.targetOffset)
 
 	result, cmd := model.Update(wheelMsg(tea.MouseButtonWheelUp, 60, 10, false))
 	model = result.(Model)
 	assert.Nil(t, cmd, "the existing debounce tick must cover the reversal")
 	assert.Equal(t, 4*wheelStep, model.layout.viewport.YOffset, "wheel-up must shift YOffset by -wheelStep relative to last down")
-	assert.False(t, model.wheel.frameInFlight)
 }
 
 func TestModel_HandleMouse_WheelReversalCanNetToZero(t *testing.T) {
@@ -1478,7 +1461,6 @@ func TestModel_HandleMouse_WheelReversalCanNetToZero(t *testing.T) {
 
 	assert.Nil(t, cmd)
 	assert.Zero(t, model.layout.viewport.YOffset)
-	assert.False(t, model.wheel.frameInFlight)
 }
 
 func TestModel_HandleMouse_WheelReversalAfterBottomEdgeMovesUp(t *testing.T) {
@@ -1498,8 +1480,7 @@ func TestModel_HandleMouse_WheelReversalAfterBottomEdgeMovesUp(t *testing.T) {
 		result, _ := model.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 		model = result.(Model)
 	}
-	require.True(t, model.wheel.frameInFlight)
-	require.Equal(t, maxOffset, model.wheel.targetOffset, "the accumulated target must clamp to the reachable edge")
+	require.Equal(t, maxOffset, model.layout.viewport.YOffset)
 
 	result, _ := model.Update(wheelMsg(tea.MouseButtonWheelUp, 60, 10, false))
 	model = result.(Model)
@@ -1507,38 +1488,7 @@ func TestModel_HandleMouse_WheelReversalAfterBottomEdgeMovesUp(t *testing.T) {
 		"the first reverse packet must move away from the clamped edge")
 }
 
-func TestModel_HandleFileLoaded_DiscardsPendingWheelFrame(t *testing.T) {
-	oldLines := make([]diff.DiffLine, 80)
-	newLines := make([]diff.DiffLine, 80)
-	for i := range oldLines {
-		oldLines[i] = diff.DiffLine{NewNum: i + 1, Content: "old", ChangeType: diff.ChangeContext}
-		newLines[i] = diff.DiffLine{NewNum: i + 1, Content: "new", ChangeType: diff.ChangeContext}
-	}
-	m := mouseTestModel(t, []string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": oldLines, "b.go": newLines})
-	m.file.lines = oldLines
-	m.layout.viewport.SetContent(m.renderDiff())
-
-	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
-	model := result.(Model)
-	result, _ = model.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
-	model = result.(Model)
-	require.True(t, model.wheel.frameInFlight)
-	staleFrame := wheelFrameMsg{gen: model.wheel.frameGen}
-
-	result, _ = model.Update(fileLoadedMsg{file: "b.go", seq: model.file.loadSeq, lines: newLines})
-	model = result.(Model)
-	require.Equal(t, 0, model.layout.viewport.YOffset)
-	assert.False(t, model.wheel.frameInFlight)
-	assert.Empty(t, model.wheel.snapshot)
-	assert.False(t, model.wheel.renderPending)
-	assert.False(t, model.wheel.tickInFlight)
-
-	result, _ = model.Update(staleFrame)
-	model = result.(Model)
-	assert.Equal(t, 0, model.layout.viewport.YOffset, "a stale frame must not scroll the newly loaded file")
-}
-
-func TestModel_HandleMouse_ClickFlushesPendingWheelFrame(t *testing.T) {
+func TestModel_HandleMouse_ClickFlushesPendingWheelRender(t *testing.T) {
 	lines := make([]diff.DiffLine, 60)
 	for i := range lines {
 		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
@@ -1552,7 +1502,6 @@ func TestModel_HandleMouse_ClickFlushesPendingWheelFrame(t *testing.T) {
 	result, _ = model.Update(leftPressAt(60, 2))
 	model = result.(Model)
 
-	assert.False(t, model.wheel.frameInFlight)
 	assert.Equal(t, wheelStep, model.layout.viewport.YOffset)
 	assert.Equal(t, wheelStep, model.nav.diffCursor, "click row must use the flushed YOffset")
 }
@@ -1584,9 +1533,9 @@ func TestModel_HandleKey_FlushesPendingWheelBeforeAction(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
 	model = result.(Model)
 
-	assert.False(t, model.wheel.frameInFlight)
 	assert.False(t, model.wheel.renderPending, "handleKey must flush pending wheel work before processing the key")
 	assert.False(t, model.wheel.tickInFlight, "handleKey flush must also clear tickInFlight")
+	assert.False(t, model.wheel.chrome.active, "external flush must invalidate cached wheel chrome")
 	assert.Equal(t, wheelStep, model.nav.diffCursor, "cursor must be pinned to viewport top by the pre-key flush")
 }
 
@@ -1649,7 +1598,7 @@ func TestModel_HandleBlameLoaded_FlushesPendingWheelBeforeSync(t *testing.T) {
 	assert.Equal(t, wheelStep, model.nav.diffCursor, "cursor must be pinned to viewport top by the pre-blame flush")
 }
 
-func BenchmarkModel_TrackpadWheelFrames(b *testing.B) {
+func BenchmarkModel_TrackpadWheelPackets(b *testing.B) {
 	lines := make([]diff.DiffLine, 10_000)
 	for i := range lines {
 		lines[i] = diff.DiffLine{
@@ -1675,8 +1624,8 @@ func BenchmarkModel_TrackpadWheelFrames(b *testing.B) {
 	for _, packets := range []int{1, 4, 16} {
 		b.Run(fmt.Sprintf("packets_per_frame_%d", packets), func(b *testing.B) {
 			b.ReportAllocs()
-			model := base
 			for range b.N {
+				model := base
 				model.layout.viewport.SetYOffset(100)
 				model.nav.diffCursor = 100
 				model.annot.cursorOnAnnotation = false
@@ -1685,13 +1634,6 @@ func BenchmarkModel_TrackpadWheelFrames(b *testing.B) {
 					model = result.(Model)
 					_ = model.View()
 				}
-				if model.wheel.frameInFlight {
-					result, _ := model.Update(wheelFrameMsg{gen: model.wheel.frameGen})
-					model = result.(Model)
-					_ = model.View()
-				}
-				model.flushWheelPending()
-				_ = model.View()
 			}
 		})
 	}

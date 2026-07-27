@@ -12,12 +12,8 @@ import (
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
-// View renders the full TUI, or reuses the last complete frame while later
-// wheel packets wait for their coalescing tick.
+// View renders the full TUI.
 func (m Model) View() string {
-	if m.wheel.snapshot != "" {
-		return m.wheel.snapshot
-	}
 	if !m.ready {
 		return "loading..."
 	}
@@ -43,15 +39,10 @@ func (m Model) View() string {
 		diffPaneW = m.layout.width - m.layout.treeWidth - 4
 	}
 
-	// diff pane title
-	diffTitle := "no file selected"
-	if m.file.name != "" {
-		diffTitle = m.file.name
-		if m.file.oldName != "" && m.file.oldName != m.file.name {
-			diffTitle = m.file.oldName + " → " + m.file.name
-		}
+	diffHeader := m.wheel.chrome.diffHeader
+	if !m.wheel.chrome.active {
+		diffHeader = m.renderDiffHeader(diffPaneW)
 	}
-	diffHeader := m.resolver.Style(style.StyleKeyDirEntry).Render(m.truncateHeaderTitle(diffTitle, diffPaneW))
 	diffContent := lipgloss.JoinVertical(lipgloss.Left, diffHeader, m.layout.viewport.View())
 
 	var mainView string
@@ -67,13 +58,21 @@ func (m Model) View() string {
 
 	case m.file.singleFile && m.file.mdTOC != nil:
 		// single-file markdown with TOC: two-pane layout with TOC in left pane
-		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
-		mainView = m.renderTwoPaneLayout(tocContent, diffContent, m.file.mdTOC.ScrollState(), ph, diffPaneW)
+		if m.wheel.chrome.active {
+			mainView = m.renderTwoPaneLayout("", diffContent, sidepane.ScrollState{}, ph, diffPaneW)
+		} else {
+			tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
+			mainView = m.renderTwoPaneLayout(tocContent, diffContent, m.file.mdTOC.ScrollState(), ph, diffPaneW)
+		}
 
 	default:
-		annotated := m.annotatedFiles()
-		treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.layout.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
-		mainView = m.renderTwoPaneLayout(treeContent, diffContent, m.tree.ScrollState(), ph, diffPaneW)
+		if m.wheel.chrome.active {
+			mainView = m.renderTwoPaneLayout("", diffContent, sidepane.ScrollState{}, ph, diffPaneW)
+		} else {
+			annotated := m.annotatedFiles()
+			treeContent := m.tree.Render(sidepane.FileTreeRender{Width: m.layout.treeWidth, Height: ph, Annotated: annotated, Resolver: m.resolver, Renderer: m.renderer})
+			mainView = m.renderTwoPaneLayout(treeContent, diffContent, m.tree.ScrollState(), ph, diffPaneW)
+		}
 	}
 
 	mainView = m.overlay.Compose(mainView, overlay.RenderCtx{Width: m.layout.width, Height: m.layout.height, Resolver: m.resolver})
@@ -82,8 +81,26 @@ func (m Model) View() string {
 		return mainView
 	}
 
-	status := m.resolver.Style(style.StyleKeyStatusBar).Width(m.layout.width).Render(m.statusBarText())
+	status := m.wheel.chrome.status
+	if !m.wheel.chrome.active {
+		status = m.renderStatusBar()
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
+}
+
+func (m Model) renderDiffHeader(diffPaneW int) string {
+	diffTitle := "no file selected"
+	if m.file.name != "" {
+		diffTitle = m.file.name
+		if m.file.oldName != "" && m.file.oldName != m.file.name {
+			diffTitle = m.file.oldName + " → " + m.file.name
+		}
+	}
+	return m.resolver.Style(style.StyleKeyDirEntry).Render(m.truncateHeaderTitle(diffTitle, diffPaneW))
+}
+
+func (m Model) renderStatusBar() string {
+	return m.resolver.Style(style.StyleKeyStatusBar).Width(m.layout.width).Render(m.statusBarText())
 }
 
 // renderTwoPaneLayout renders a two-pane layout with left (tree/TOC) and right (diff) content.
@@ -100,14 +117,17 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 		diffStyle = m.resolver.Style(style.StyleKeyDiffPaneActive)
 	}
 
-	leftContent = m.padContentBg(leftContent, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
 	diffContent = m.padContentBg(diffContent, diffPaneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 
-	leftPane := treeStyle.
-		Width(m.layout.treeWidth).
-		Height(ph).
-		Render(leftContent)
-	leftPane = m.applyNavigationScrollbar(leftPane, leftScroll)
+	leftPane := m.wheel.chrome.leftPane
+	if !m.wheel.chrome.active {
+		leftContent = m.padContentBg(leftContent, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
+		leftPane = treeStyle.
+			Width(m.layout.treeWidth).
+			Height(ph).
+			Render(leftContent)
+		leftPane = m.applyNavigationScrollbar(leftPane, leftScroll)
+	}
 
 	diffPane := diffStyle.
 		Width(diffPaneW).
@@ -116,6 +136,42 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 	diffPane = m.applyScrollbar(diffPane)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
+}
+
+// prepareWheelChrome captures only elements that stay stable while wheel
+// cursor pinning is deferred. The diff viewport and scrollbar are never cached.
+func (m *Model) prepareWheelChrome() {
+	if m.wheel.chrome.active || !m.ready || !m.filesLoaded {
+		return
+	}
+	ph := m.paneHeight()
+	diffPaneW := m.layout.width - 2
+	if !m.treePaneHidden() {
+		diffPaneW = m.layout.width - m.layout.treeWidth - 4
+	}
+	m.wheel.chrome.diffHeader = m.renderDiffHeader(diffPaneW)
+	if !m.treePaneHidden() {
+		var content string
+		var scroll sidepane.ScrollState
+		if m.file.singleFile && m.file.mdTOC != nil {
+			content = m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
+			scroll = m.file.mdTOC.ScrollState()
+		} else {
+			content = m.tree.Render(sidepane.FileTreeRender{Width: m.layout.treeWidth, Height: ph, Annotated: m.annotatedFiles(), Resolver: m.resolver, Renderer: m.renderer})
+			scroll = m.tree.ScrollState()
+		}
+		styleForPane := m.resolver.Style(style.StyleKeyTreePane)
+		if m.layout.focus == paneTree {
+			styleForPane = m.resolver.Style(style.StyleKeyTreePaneActive)
+		}
+		content = m.padContentBg(content, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
+		m.wheel.chrome.leftPane = styleForPane.Width(m.layout.treeWidth).Height(ph).Render(content)
+		m.wheel.chrome.leftPane = m.applyNavigationScrollbar(m.wheel.chrome.leftPane, scroll)
+	}
+	if !m.cfg.noStatusBar {
+		m.wheel.chrome.status = m.renderStatusBar()
+	}
+	m.wheel.chrome.active = true
 }
 
 // truncateHeaderTitle returns the diff pane header text shortened to fit
@@ -295,13 +351,9 @@ func (m Model) lineNumberSegment() string {
 		return ""
 	}
 	var maxOld, maxNew int
-	for _, l := range m.file.lines {
-		if l.OldNum > maxOld {
-			maxOld = l.OldNum
-		}
-		if l.NewNum > maxNew {
-			maxNew = l.NewNum
-		}
+	for _, line := range m.file.lines {
+		maxOld = max(maxOld, line.OldNum)
+		maxNew = max(maxNew, line.NewNum)
 	}
 	total := maxNew
 	if dl.ChangeType == diff.ChangeRemove {

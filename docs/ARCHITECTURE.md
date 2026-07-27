@@ -114,7 +114,7 @@ Central package. Single `Model` struct implements bubbletea's `Model` interface.
 | `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
 | `filepicker.go` | File picker open and selected-path jump integration; delegates visible-order/filter ownership to `FileTreeComponent` and loading to the guarded file loader |
 | `search.go` | Search input handling, match computation, navigation |
-| `mouse.go` | Mouse event routing: `handleMouse` dispatch, `hitTest` pane classification (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers (`statusBarHeight`, `diffTopRow`, `treeTopRow`). The first diff-pane wheel packet applies immediately; later same-direction packets accumulate as a clamped target behind a 16 ms frame tick while `View()` reuses the last complete frame. Reversals flush immediately. Cursor pinning and `SetContent(renderDiff())` remain behind the issue #179 idle debounce, with `tickInFlight` limiting it to one live tick. Any path that depends on current viewport, cursor, or rendered diff calls `flushWheelPending()` first; accepted file loads discard unapplied frame input. Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set |
+| `mouse.go` | Mouse event routing: `handleMouse` dispatch, `hitTest` pane classification (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers (`statusBarHeight`, `diffTopRow`, `treeTopRow`). Diff-pane wheel packets update `YOffset` immediately for continuous trackpad motion. Cursor pinning and `SetContent(renderDiff())` remain behind the issue #179 idle debounce, with `tickInFlight` limiting it to one live tick. Any path that depends on current viewport, cursor, or rendered diff calls `flushWheelPending()` first. Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set |
 
 Each source file has a matching `_test.go`.
 
@@ -129,7 +129,7 @@ Each source file has a matching `_test.go`.
 | `navigationState` (`m.nav`) | cursor position | `diffCursor`, `pendingHunkJump` |
 | `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet`, `history`, `historyIdx` |
 | `annotationState` (`m.annot`) | annotation input lifecycle and visual-row cache | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input`, `rowCache` |
-| `wheelState` (`m.wheel`) | immediate wheel response, frame coalescing, and deferred cursor/render work | `targetOffset`, `direction`, `frameGen`, `frameInFlight`, `snapshot`, `gen`, `renderPending`, `tickInFlight` |
+| `wheelState` (`m.wheel`) | immediate wheel response, stable chrome cache, and deferred cursor/render work | `chrome`, `gen`, `renderPending`, `tickInFlight` |
 
 Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create mini-models.
 
