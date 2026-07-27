@@ -152,6 +152,14 @@ The script:
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
 
+**Resuming a dismissed popup (tmux)**: under tmux the review runs in its own session and the popup is only a view of it, so a reviewer who dismisses the popup with `prefix d` has backgrounded the review, not ended it. If the user says they closed or dismissed the popup and want to carry on reviewing, run the launcher with `--resume` and nothing else:
+
+```bash
+"$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" --resume
+```
+
+It re-opens the most recent backgrounded review and returns annotations on the same exit codes as a normal launch. Do NOT relaunch with the original arguments — that starts a second review and abandons the annotations already made. If it reports `no backgrounded revdiff review found`, the review really did finish; fall back to the persisted-output read in Step 3.
+
 The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means annotations were captured and is not a launcher failure. Treat other nonzero statuses as failures. On failure the launcher relays revdiff's own error text on stderr (captured from inside the overlay) — read it and report it instead of guessing which flag or argument was at fault.
 
 ### Step 3: Process Annotations

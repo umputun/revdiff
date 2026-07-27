@@ -92,6 +92,7 @@
         <a href="#plugin-planning">Plan review plugin</a>
         <a href="#plugin-overrides">Custom launchers</a>
         <a href="#session-tagging">Session tagging</a>
+        <a href="#resume-review">Resuming a review</a>
 
         <h4>Codex plugin</h4>
         <a href="#codex-install">Installation</a>
@@ -762,7 +763,10 @@ map alt+t&gt;n theme_select</code></div>
         <p>There is no project-level executable override by design: the planning hook auto-fires in repositories opened by Claude or Codex, and a repo-controlled launcher would run on routine agent actions. The override file must be executable (<code>chmod +x</code>). Claude uses <code>${CLAUDE_PLUGIN_DATA}</code>; the Codex planning hook uses <code>${PLUGIN_DATA}</code>. The Pi extension and manual Codex diff-review skill do not honor this plugin-data override. See <a href="https://github.com/umputun/revdiff/blob/master/.claude-plugin/skills/revdiff/references/install.md">install.md</a> and <a href="https://github.com/umputun/revdiff/blob/master/plugins/revdiff-planning/README.md">revdiff-planning README</a> for working examples.</p>
 
         <h2 id="session-tagging">Tagging the review session (tmux)</h2>
-        <p>The tmux backend runs each review in a transient detached session. If other tooling on your machine reacts to tmux sessions (status bars, session managers, dashboards), set <code>REVDIFF_TMUX_SESSION_OPTIONS</code> to whitespace-separated <code>key=value</code> tokens and the launcher applies each as a tmux session option before any client attaches &mdash; for example <code>REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1"</code> lets a session manager recognize and skip the transient session. Values cannot contain spaces. This variable configures the launcher itself, so set it in the shell environment where the plugin runs (unlike revdiff's own env vars, which don't survive into the overlay). The launcher always sets one option of its own: <code>@revdiff_title</code> holds the popup title, so custom tmux bindings that reattach a backgrounded review can restore it.</p>
+        <p>The tmux backend runs each review in a transient detached session. If other tooling on your machine reacts to tmux sessions (status bars, session managers, dashboards), set <code>REVDIFF_TMUX_SESSION_OPTIONS</code> to whitespace-separated <code>key=value</code> tokens and the launcher applies each as a tmux session option before any client attaches &mdash; for example <code>REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1"</code> lets a session manager recognize and skip the transient session. Values cannot contain spaces. This variable configures the launcher itself, so set it in the shell environment where the plugin runs (unlike revdiff's own env vars, which don't survive into the overlay). The launcher sets three options of its own &mdash; <code>@revdiff_title</code>, <code>@revdiff_output</code> and <code>@revdiff_sentinel</code> &mdash; which are what <code>--resume</code> reads to find a backgrounded review.</p>
+
+        <h2 id="resume-review">Resuming a backgrounded review (tmux)</h2>
+        <p>Dismissing the popup (<code>prefix d</code>) leaves the review running in its session, so nothing is lost. <code>launch-revdiff.sh --resume</code> re-opens the most recent backgrounded review in a fresh popup, waits on it exactly like the original launch did, and prints the annotations on the same exit codes (<code>0</code> clean, <code>10</code> annotations captured). The resume metadata lives on the tmux session rather than in the launcher process, so this still works after the original launcher is gone &mdash; the normal case once an AI harness kills it at its command-timeout cap. <code>--resume</code> takes no other arguments and must run inside tmux.</p>
 
         <!-- codex plugin -->
         <h2 id="codex-install">Codex plugin</h2>

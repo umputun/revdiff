@@ -2,6 +2,7 @@
 # launch revdiff in a terminal overlay (agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
 # source: .claude-plugin/skills/revdiff/scripts/launch-revdiff.sh (keep in sync)
 # usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--only=file1 ...]
+#        launch-revdiff.sh --resume   re-open the newest backgrounded tmux review
 # output: annotation text from revdiff stdout (empty if no annotations)
 # exit: 0 clean, 10 annotations captured, other nonzero failure
 
@@ -34,10 +35,8 @@ for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
 done
 
-# both rc writers capture revdiff's stderr to <sentinel>.err: the overlay
-# closes the moment a fast-failing revdiff exits (bad ref, unknown flag from
-# an old binary), so without the capture the error text is unrecoverable and
-# the caller sees a bare nonzero exit
+# stderr goes to <sentinel>.err because the overlay closes the moment a
+# fast-failing revdiff exits, taking the error text with it
 write_rc_cmd() {
     local sentinel="$1"
     # single-quoted format keeps $?/$rc literal for the generated inner script
@@ -60,13 +59,25 @@ read_rc() {
 
 print_output_and_exit() {
     local rc="${1:-0}"
-    # exit 0 is a clean quit and 10 is "annotations captured"; anything else is
-    # a real failure, so replay the stderr captured inside the overlay
     if [ "$rc" -ne 0 ] && [ "$rc" -ne 10 ] && [ -n "${SENTINEL:-}" ] && [ -s "$SENTINEL.err" ]; then
         cat "$SENTINEL.err" >&2
     fi
     cat "$OUTPUT_FILE"
     exit "$rc"
+}
+
+# echoes revdiff's exit code once the sentinel appears; a vanished session means
+# nobody will write one. Shared by the tmux launch path and --resume.
+wait_for_review_session() {
+    local session="$1" sentinel="$2"
+    while [ ! -f "$sentinel" ]; do
+        tmux has-session -t "$session" 2>/dev/null || break
+        sleep 1
+    done
+    if [ ! -f "$sentinel" ]; then
+        echo "warn: review session ended without reporting a result; check revdiff history for auto-saved annotations" >&2
+    fi
+    read_rc "$sentinel"
 }
 
 is_cmux_session() {
@@ -119,6 +130,58 @@ OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
+# --resume re-opens the newest backgrounded review. Its paths come off the tmux
+# session rather than a launcher process, so this still works once the original
+# launcher is gone — the normal case after a harness command-timeout cap.
+if [ "${1:-}" = "--resume" ]; then
+    if [ "$#" -ne 1 ]; then
+        echo "error: --resume takes no other arguments" >&2
+        exit 2
+    fi
+    if [ -z "${TMUX:-}" ] || ! command -v tmux >/dev/null 2>&1; then
+        echo "error: --resume must run inside tmux (the backgrounded review is a tmux session)" >&2
+        exit 1
+    fi
+    # session_created is a unix timestamp, so a reverse numeric sort picks the newest
+    RESUME_ID=$(tmux list-sessions -F '#{session_created} #{session_id} #{session_name}' 2>/dev/null \
+        | awk '$3 ~ /^revdiff-/ { print $1, $2 }' | sort -rn | head -1 | cut -d' ' -f2- || true)
+    if [ -z "$RESUME_ID" ]; then
+        echo "error: no backgrounded revdiff review found" >&2
+        exit 1
+    fi
+    SENTINEL=$(tmux show-options -v -t "$RESUME_ID" @revdiff_sentinel 2>/dev/null || true)
+    RESUME_OUTPUT=$(tmux show-options -v -t "$RESUME_ID" @revdiff_output 2>/dev/null || true)
+    RESUME_TITLE=$(tmux show-options -v -t "$RESUME_ID" @revdiff_title 2>/dev/null || true)
+    if [ -z "$SENTINEL" ] || [ -z "$RESUME_OUTPUT" ]; then
+        echo "error: review session $RESUME_ID carries no resume metadata; attach it directly with: tmux attach -t $RESUME_ID" >&2
+        exit 1
+    fi
+    # adopt the original run's files; its launcher may still be waiting on them,
+    # so drop this process's own file and trap rather than taking over cleanup
+    rm -f "$OUTPUT_FILE"
+    trap - EXIT
+    OUTPUT_FILE="$RESUME_OUTPUT"
+
+    # -T (title) requires tmux 3.3+; skip on older versions
+    RESUME_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
+    if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
+        if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
+            RESUME_ARGS+=(-T " ${RESUME_TITLE:-$OVERLAY_TITLE} ")
+        fi
+    fi
+    # TMUX= lifts the nesting guard so the popup job can attach to the same server
+    RESUME_ARGS+=(-- sh -c "TMUX= exec $(sq "$(command -v tmux)") attach-session -t $(sq "$RESUME_ID")")
+    resume_popup_rc=0
+    "${RESUME_ARGS[@]}" || resume_popup_rc=$?
+    if [ "$resume_popup_rc" -ne 0 ] && [ ! -f "$SENTINEL" ] && tmux has-session -t "$RESUME_ID" 2>/dev/null; then
+        # unlike the launch path, leave the session alone: the review predates this process
+        echo "error: tmux display-popup failed (rc=$resume_popup_rc); the review is still running, attach it with: tmux attach -t $RESUME_ID" >&2
+        exit "$resume_popup_rc"
+    fi
+    resume_rc=$(wait_for_review_session "$RESUME_ID" "$SENTINEL")
+    print_output_and_exit "${resume_rc:-1}"
+fi
+
 # agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a FULL-pane overlay (no
 # --size-percent) over the agent's own session and blocks until it exits, returning revdiff's exit
 # code directly — so, unlike the sentinel-polling backends below, no sentinel is needed. Checked
@@ -163,12 +226,9 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     [ -f "$_RD_SCRIPT_DIR/agentdeck-window.sh" ] && . "$_RD_SCRIPT_DIR/agentdeck-window.sh"
 fi
 
-# tmux: revdiff runs in a detached session named revdiff-<pid>; the popup is
-# just a client attached to it. Detaching (prefix+d or a user toggle binding)
-# closes the popup while the review keeps running — reattaching later resumes
-# with all state intact. Completion is therefore signalled by a sentinel file
-# (like the zellij/kitty backends), NOT by popup exit: a detach must not read
-# as "review finished".
+# tmux: revdiff runs in a detached session and the popup is only a client attached
+# to it, so detaching backgrounds the review instead of ending it. Completion comes
+# from a sentinel file, since popup exit no longer means revdiff exited.
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
@@ -176,38 +236,29 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
 
     TMUX_BIN=$(command -v tmux)
     SESSION="revdiff-$$"
-    # target every follow-up call by session ID ($N): IDs are exact by
-    # definition, whereas name targets prefix-match and set-option/show-options
-    # (unlike has-session/kill-session) reject the "=" exact-match prefix
+    # follow-up calls target the session ID: name targets prefix-match, and
+    # set-option/show-options reject the "=" exact-match prefix
     SESSION_ID=$(tmux new-session -d -P -F '#{session_id}' -s "$SESSION" -c "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")")
-    # INT means the caller cancelled the review: kill the invisible session so
-    # it does not linger forever (bash skips the EXIT trap on untrapped fatal
-    # signals, so route through exit for the file cleanup trap). TERM is
-    # different: harnesses send it on command timeouts while the reviewer is
-    # mid-review, and the popup + detached session survive the launcher's
-    # death — so leave the review running and keep the output/sentinel files
-    # (trap - EXIT) as the recovery artifacts. revdiff writes annotations to
-    # the output file and review history when the reviewer quits.
+    # INT is an explicit cancel, so kill the invisible session (routed through
+    # exit because bash skips the EXIT trap on untrapped fatal signals). TERM is
+    # a harness command timeout, not a cancel: the review outlives this process,
+    # so leave it running and keep its files as recovery artifacts.
     trap 'tmux kill-session -t "$SESSION_ID" 2>/dev/null || true; exit 130' INT
     trap 'echo "warn: launcher terminated (timeout?); the review keeps running in tmux session $SESSION — annotations land in $OUTPUT_FILE and review history when the reviewer quits" >&2; trap - EXIT; exit 143' TERM
-    # per-session overrides: no status bar inside the popup; quitting revdiff
-    # must detach the popup client (a global detach-on-destroy=off would switch
-    # the popup to another session instead of closing it); a backgrounded
-    # session must survive with no client attached. One chained tmux call (one
-    # server round-trip), and "|| true" because a fast-failing revdiff (bad ref,
-    # old binary) can destroy the session before this runs — the sentinel below
-    # still carries revdiff's real exit code
+    # no status bar in the popup; quitting revdiff must detach its client (a
+    # global detach-on-destroy=off would switch the popup to another session);
+    # a backgrounded session must survive with no client attached. "|| true"
+    # because a fast-failing revdiff can destroy the session before this runs.
     tmux set-option -t "$SESSION_ID" status off \; \
         set-option -t "$SESSION_ID" detach-on-destroy on \; \
         set-option -t "$SESSION_ID" destroy-unattached off \; \
-        set-option -t "$SESSION_ID" @revdiff_title "$OVERLAY_TITLE" 2>/dev/null || true
-    # user-supplied session options: whitespace-separated key=value tokens
-    # (values cannot contain spaces), applied before any client attaches.
-    # Lets external session tooling tag and recognize this transient session,
-    # e.g. REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1". set -f keeps
-    # glob characters in tokens literal; "--" keeps a "-"-prefixed key from
-    # being parsed as a set-option flag; a token tmux rejects only warns —
-    # a typo'd env var must not abort the review
+        set-option -t "$SESSION_ID" @revdiff_title "$OVERLAY_TITLE" \; \
+        set-option -t "$SESSION_ID" @revdiff_output "$OUTPUT_FILE" \; \
+        set-option -t "$SESSION_ID" @revdiff_sentinel "$SENTINEL" 2>/dev/null || true
+    # user-supplied options, whitespace-separated key=value, applied before any
+    # client attaches so external session tooling can recognize this transient
+    # session. set -f keeps globs literal, "--" keeps a "-"-prefixed key from
+    # parsing as a flag, and a rejected token warns rather than aborting.
     set -f
     for kv in ${REVDIFF_TMUX_SESSION_OPTIONS:-}; do
         case "$kv" in
@@ -231,31 +282,17 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     TMUX_ARGS+=(-d "$CWD" -- sh -c "TMUX= exec $(sq "$TMUX_BIN") attach-session -t $(sq "$SESSION_ID")")
     popup_rc=0
     "${TMUX_ARGS[@]}" || popup_rc=$?
-    # nonzero popup + no sentinel + live session = the popup never opened
-    # (tmux < 3.2 has no display-popup; no attachable client; size errors).
-    # Without this check the wait loop below would spin forever against the
-    # invisible session. A detach exits 0, so backgrounding is unaffected.
+    # nonzero popup with no sentinel and a live session means the popup never
+    # opened, and the wait below would spin forever. A detach exits 0.
     if [ "$popup_rc" -ne 0 ] && [ ! -f "$SENTINEL" ] && tmux has-session -t "$SESSION_ID" 2>/dev/null; then
         tmux kill-session -t "$SESSION_ID" 2>/dev/null || true
         echo "error: tmux display-popup failed (rc=$popup_rc); tmux 3.2+ required" >&2
         print_output_and_exit "$popup_rc"
     fi
 
-    # popup closed: either revdiff exited (sentinel present) or the user
-    # detached to background the review — keep waiting until revdiff exits
-    # or the session is killed out from under us. This loop only spins while
-    # the review is backgrounded, so a 1s poll is plenty
-    while [ ! -f "$SENTINEL" ]; do
-        tmux has-session -t "$SESSION_ID" 2>/dev/null || break
-        sleep 1
-    done
-    # session gone with no sentinel means something killed it out from under
-    # the reviewer (kill-session, server exit) — say so instead of a bare rc=1
-    if [ ! -f "$SENTINEL" ]; then
-        echo "warn: review session ended without reporting a result; check revdiff history for auto-saved annotations" >&2
-    fi
-    rc=$(read_rc "$SENTINEL")
-    rm -f "$SENTINEL"
+    # the popup closed, but the user may have only detached
+    rc=$(wait_for_review_session "$SESSION_ID" "$SENTINEL")
+    # the EXIT trap removes the sentinel; removing it here would race a --resume read
     print_output_and_exit "${rc:-1}"
 fi
 

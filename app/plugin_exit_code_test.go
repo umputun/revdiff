@@ -161,6 +161,54 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	}
 }
 
+// TestDiffLauncherResumeRejectsUnusableInvocations covers the --resume guards that
+// need no live tmux server; resuming a real review needs a real detached session.
+func TestDiffLauncherResumeRejectsUnusableInvocations(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	tmux := launcherBackend{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}}
+	outsideTmux := launcherBackend{name: "tmux", command: "tmux"}
+
+	launchers := []struct {
+		name string
+		path string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+	}
+	cases := []struct {
+		name       string
+		args       []string
+		backend    launcherBackend
+		code       int
+		wantStderr string
+	}{
+		{name: "no backgrounded review", args: []string{"--resume"}, backend: tmux, code: 1, wantStderr: "no backgrounded revdiff review found"},
+		{name: "extra arguments", args: []string{"--resume", "HEAD"}, backend: tmux, code: 2, wantStderr: "--resume takes no other arguments"},
+		{name: "outside tmux", args: []string{"--resume"}, backend: outsideTmux, code: 1, wantStderr: "--resume must run inside tmux"},
+	}
+
+	for _, launcher := range launchers {
+		for _, tc := range cases {
+			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				script := filepath.Join(root, launcher.path)
+				res := runTestCmd(t, cmdReq{
+					dir:  root,
+					name: "bash",
+					args: append([]string{script}, tc.args...),
+					env:  fakeLauncherEnv(t, launcherRun{backend: tc.backend}),
+				})
+				assert.Equal(t, tc.code, res.code)
+				assert.Empty(t, res.stdout)
+				assert.Contains(t, res.stderr, tc.wantStderr)
+			})
+		}
+	}
+}
+
 func TestPlanReviewHookAnnotationExitCodes(t *testing.T) {
 	python := python3Path(t)
 

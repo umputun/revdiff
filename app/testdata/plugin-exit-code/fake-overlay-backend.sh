@@ -43,21 +43,19 @@ case "$cmd_name" in
         fi
         case "${1:-}" in
             new-session)
-                # -P -F prints the new session id; the detached command runs
-                # synchronously here (stdout discarded like a real pty), so
-                # the sentinel exists before the launcher's wait loop starts
+                # run the command synchronously so the sentinel exists before the
+                # launcher waits on it; -P -F prints the new session id
                 # shellcheck disable=SC2016 # literal $1 is a fake session id
                 echo '$1'
                 run_after_double_dash "$@" >/dev/null
                 ;;
-            set-option|kill-session|attach-session)
-                # attach-session: the diff-review popup only views the session;
-                # revdiff already ran during new-session
+            # revdiff already ran during new-session, so the session is done and
+            # empty: attaching and inspecting it are no-ops, has-session fails,
+            # and --resume finds no backgrounded review to list
+            set-option|kill-session|attach-session|list-sessions|show-options)
                 exit 0
                 ;;
             has-session)
-                # the synchronous new-session above already ran the command
-                # to completion, so the session is gone
                 exit 1
                 ;;
             *)

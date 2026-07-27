@@ -161,7 +161,15 @@ The plugin supports the full review loop: annotate → plan → fix → re-revie
 
 **Custom launchers:** the Claude diff-review skill and the cross-runtime planning plugin resolve launchers through a two-layer chain (user → bundled). Claude uses `${CLAUDE_PLUGIN_DATA}/scripts/<launcher>`; the Codex planning hook uses `${PLUGIN_DATA}/scripts/launch-plan-review.sh`. There is no project-level executable override by design because these hooks auto-fire in any opened repository. See `.claude-plugin/skills/revdiff/references/install.md` for diff review and [plugins/revdiff-planning/README.md](plugins/revdiff-planning/README.md) for plan review.
 
-**Tagging the review session (tmux):** the tmux backend runs each review in a transient detached session. If other tooling on your machine reacts to tmux sessions (status bars, session managers, dashboards), set `REVDIFF_TMUX_SESSION_OPTIONS` to whitespace-separated `key=value` tokens and the launcher applies each as a tmux session option before any client attaches — for example `REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1"` lets a session manager recognize and skip the transient session. Values cannot contain spaces. This variable configures the launcher itself, so set it in the shell environment where the plugin runs (unlike revdiff's own env vars, which don't survive into the overlay). The launcher always sets one option of its own: `@revdiff_title` holds the popup title, so custom tmux bindings that reattach a backgrounded review can restore it.
+**Tagging the review session (tmux):** the tmux backend runs each review in a transient detached session. If other tooling on your machine reacts to tmux sessions (status bars, session managers, dashboards), set `REVDIFF_TMUX_SESSION_OPTIONS` to whitespace-separated `key=value` tokens and the launcher applies each as a tmux session option before any client attaches — for example `REVDIFF_TMUX_SESSION_OPTIONS="@my-manager-ignore=1"` lets a session manager recognize and skip the transient session. Values cannot contain spaces. This variable configures the launcher itself, so set it in the shell environment where the plugin runs (unlike revdiff's own env vars, which don't survive into the overlay). The launcher sets three options of its own — `@revdiff_title`, `@revdiff_output`, and `@revdiff_sentinel` — which are what `--resume` below reads to find a backgrounded review.
+
+**Resuming a backgrounded review (tmux):** dismissing the popup (`prefix d`) leaves the review running in its session, so nothing is lost. Bring it back with:
+
+```bash
+launch-revdiff.sh --resume
+```
+
+This re-opens the most recent backgrounded review in a fresh popup and waits on it exactly like the original launch did, then prints the annotations. It works even after the process that started the review is gone — for example when an AI agent's command timeout killed the waiting launcher — because everything needed is stored on the tmux session itself. `--resume` takes no other arguments and must run inside tmux.
 
 ### Plan Review Plugin
 
