@@ -15,9 +15,9 @@ import (
 const wheelStep = overlay.WheelStep
 
 // wheelFrameDelay caps diff-pane wheel updates at the terminal's practical
-// render cadence. Raw trackpad packets accumulate until this tick fires, so
+// render cadence. Packets after the first accumulate until this tick fires, so
 // Bubble Tea can keep returning the previous frame instead of rebuilding the
-// full layout for every packet.
+// full layout for every raw trackpad packet.
 const wheelFrameDelay = 16 * time.Millisecond
 
 // wheelRenderDelay is the idle window after the last applied diff-pane wheel
@@ -26,27 +26,26 @@ const wheelRenderDelay = 30 * time.Millisecond
 
 // wheelState tracks the coalescing state for diff-pane wheel events.
 //
-// delta and frameInFlight collect raw packets behind one 16 ms tick. snapshot
-// holds the last complete frame so View stays cheap until the tick applies the
-// exact accumulated distance. frameGen invalidates ticks after an early flush.
+// The first packet in a burst moves the viewport immediately. targetOffset and
+// frameInFlight collect later same-direction packets behind one 16 ms tick.
+// snapshot holds the first packet's complete frame so View stays cheap while
+// those later packets accumulate. direction detects reversals even between
+// frames, and frameGen invalidates ticks after an early flush or a file switch.
 //
 // gen is bumped on every applied frame that shifts YOffset. renderPending stays
 // true while a cursor pin/render is owed (cleared by flushWheelPending).
 //
-// tickInFlight gates tea.Tick scheduling: only ONE tick is alive at a time,
-// regardless of how many wheel events arrive. The first wheel of a burst
-// schedules a tick; subsequent wheels in the same burst just bump gen. If the
-// tick fires with stale gen (burst still going), handleWheelDebounce
-// reschedules a new tick for the current gen. This keeps the debounce-msg
-// count proportional to burst duration (one per wheelRenderDelay), not to
-// wheel event count — drops thousands of redundant Update+View cycles on
-// trackpad/free-spin bursts and stops the wheel-up from queueing behind them.
+// tickInFlight gates render-debounce scheduling: only one debounce tick is alive
+// across the burst. Applied frames bump gen; a stale debounce tick reschedules
+// for the current gen. This keeps debounce traffic proportional to burst
+// duration rather than packet count.
 type wheelState struct {
 	gen           int
 	renderPending bool
 	tickInFlight  bool
 
-	delta         int
+	targetOffset  int
+	direction     int
 	frameGen      int
 	frameInFlight bool
 	snapshot      string
@@ -257,44 +256,61 @@ func (m Model) wheelStepFor(shift bool) int {
 // the highlight stays on screen. this matches less/vim mouse behavior and
 // keeps the cursor from being yanked along with the wheel.
 //
-// when the diff pane scrolls, both the cursor pin and the SetContent
-// (renderDiff()) call are deferred via a tea.Tick debounce — see
-// wheelRenderDelay. the only per-event work is SetYOffset (and the modal/zone
-// checks that were already free), so each event is O(1). this coalesces a
-// burst of wheel events (a trackpad flick or free-spin wheel) into a single
-// pin+render at burst-end, so an opposite-direction wheel event isn't blocked
-// behind a backlog of expensive per-event operations on large diffs.
+// The first diff-pane packet applies immediately so a discrete wheel has no
+// frame delay. Later same-direction packets accumulate as a clamped target
+// behind a 16 ms tick, and View reuses the first packet's completed frame until
+// that target applies. Cursor pinning and SetContent(renderDiff()) remain behind
+// the existing wheelRenderDelay debounce. Reversals flush and apply immediately.
 // fixes #179.
 func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 	switch zone {
 	case hitDiff:
-		// A reversal must not wait behind the current frame. Apply both the
-		// accumulated distance and this first opposite packet immediately so
-		// the viewport visibly changes direction in the next View call.
-		if m.wheel.delta != 0 && (m.wheel.delta < 0) != (delta < 0) {
-			m.wheel.delta += delta
-			return m.flushWheelFrame()
+		if !m.wheel.renderPending {
+			if !m.scrollDiffViewportBy(delta) {
+				return m, nil
+			}
+			m.wheel.direction = delta
+			cmd := m.markWheelRenderPending()
+			return m, cmd
 		}
-		if !m.canScrollDiffViewportBy(m.wheel.delta + delta) {
+
+		// A reversal must not wait behind the current frame. Apply the clamped
+		// target collected so far, then move one packet in the new direction.
+		if (m.wheel.direction < 0) != (delta < 0) {
+			if m.wheel.frameInFlight {
+				flushed, _ := m.flushWheelFrame()
+				m = flushed.(Model)
+			}
+			if m.scrollDiffViewportBy(delta) {
+				m.wheel.direction = delta
+				cmd := m.markWheelRenderPending()
+				return m, cmd
+			}
 			return m, nil
 		}
 
-		// Preserve the last rendered frame while packets accumulate. Building
-		// this snapshot once on the first packet makes all later View calls in
-		// the same frame a cheap string return.
-		if m.wheel.delta == 0 {
+		if !m.wheel.frameInFlight {
 			m.wheel.snapshot = m.View()
+			m.wheel.targetOffset = m.clampedDiffOffset(delta)
+			if m.wheel.targetOffset == m.layout.viewport.YOffset {
+				m.wheel.snapshot = ""
+				return m, nil
+			}
+			m.wheel.frameInFlight = true
+			m.wheel.frameGen++
+			gen := m.wheel.frameGen
+			return m, tea.Tick(wheelFrameDelay, func(time.Time) tea.Msg {
+				return wheelFrameMsg{gen: gen}
+			})
 		}
-		m.wheel.delta += delta
-		if m.wheel.frameInFlight {
+
+		pendingDelta := m.wheel.targetOffset - m.layout.viewport.YOffset + delta
+		target := m.clampedDiffOffset(pendingDelta)
+		if target == m.wheel.targetOffset {
 			return m, nil
 		}
-		m.wheel.frameInFlight = true
-		m.wheel.frameGen++
-		gen := m.wheel.frameGen
-		return m, tea.Tick(wheelFrameDelay, func(time.Time) tea.Msg {
-			return wheelFrameMsg{gen: gen}
-		})
+		m.wheel.targetOffset = target
+		return m, nil
 	case hitTree:
 		m.flushWheelPending()
 		// tree/TOC wheel = direct cursor navigation, one entry per notch.
@@ -320,13 +336,13 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) canScrollDiffViewportBy(delta int) bool {
+// clampedDiffOffset returns the reachable viewport offset after applying delta.
+func (m Model) clampedDiffOffset(delta int) int {
 	if m.file.name == "" {
-		return false
+		return m.layout.viewport.YOffset
 	}
 	maxOffset := max(0, m.layout.viewport.TotalLineCount()-m.layout.viewport.Height)
-	target := max(0, min(m.layout.viewport.YOffset+delta, maxOffset))
-	return target != m.layout.viewport.YOffset
+	return max(0, min(m.layout.viewport.YOffset+delta, maxOffset))
 }
 
 // handleWheelFrame applies one frame's accumulated wheel distance. Stale ticks
@@ -341,25 +357,37 @@ func (m Model) handleWheelFrame(msg wheelFrameMsg) (tea.Model, tea.Cmd) {
 // flushWheelFrame changes YOffset exactly once for all packets collected in
 // the current frame and schedules the existing cursor/render debounce.
 func (m Model) flushWheelFrame() (tea.Model, tea.Cmd) {
-	delta := m.wheel.delta
-	m.wheel.delta = 0
-	m.wheel.snapshot = ""
-	m.wheel.frameInFlight = false
-	m.wheel.frameGen++
-	if !m.scrollDiffViewportBy(delta) {
+	target := m.wheel.targetOffset
+	m.discardWheelFrame()
+	if !m.scrollDiffViewportBy(target - m.layout.viewport.YOffset) {
 		return m, nil
 	}
+	cmd := m.markWheelRenderPending()
+	return m, cmd
+}
 
+// markWheelRenderPending records that the cursor pin and diff render are owed,
+// and keeps at most one debounce tick alive across the burst.
+func (m *Model) markWheelRenderPending() tea.Cmd {
 	m.wheel.renderPending = true
 	m.wheel.gen++
 	gen := m.wheel.gen
 	if m.wheel.tickInFlight {
-		return m, nil
+		return nil
 	}
 	m.wheel.tickInFlight = true
-	return m, tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
+	return tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
 		return wheelDebounceMsg{gen: gen}
 	})
+}
+
+// discardWheelFrame invalidates the frame tick and drops only unapplied wheel
+// input. Deferred cursor/render work for offsets already applied is preserved.
+func (m *Model) discardWheelFrame() {
+	m.wheel.targetOffset = 0
+	m.wheel.snapshot = ""
+	m.wheel.frameInFlight = false
+	m.wheel.frameGen++
 }
 
 // handleWheelDebounce processes a deferred tick for a wheel burst. branches:
@@ -426,17 +454,12 @@ func (m Model) clickTree(y int) (tea.Model, tea.Cmd) {
 // caller should schedule a deferred cursor pin + render); returns false when
 // no file is loaded or the clamped target equals the current offset.
 //
-// Raw packets are accumulated before this helper runs. The expensive cursor pin
-// and full-diff render remain deferred to handleWheelDebounce after the frame
-// changes YOffset. During a burst the cursor stays stale until the debounce or
-// an external cursor-dependent action flushes early.
+// The expensive cursor pin and full-diff render remain deferred to
+// handleWheelDebounce. During a burst the cursor stays stale until the debounce
+// or an external cursor-dependent action flushes early.
 func (m *Model) scrollDiffViewportBy(delta int) bool {
-	if m.file.name == "" {
-		return false
-	}
-	maxOffset := max(0, m.layout.viewport.TotalLineCount()-m.layout.viewport.Height)
 	current := m.layout.viewport.YOffset
-	target := max(0, min(current+delta, maxOffset))
+	target := m.clampedDiffOffset(delta)
 	if target == current {
 		return false
 	}
@@ -444,19 +467,12 @@ func (m *Model) scrollDiffViewportBy(delta int) bool {
 	return true
 }
 
-// flushWheelPending applies the deferred cursor pin + diff re-render owed by
-// an in-flight wheel burst, then clears renderPending AND tickInFlight.
-// callers invoke this before any action that reads m.nav.diffCursor or
-// relies on a fresh diff content string. Production call sites:
-//   - handleKey (model.go) — cursor-relative key actions (j/k, search,
-//     annotate) must see the pinned cursor before they read m.nav.diffCursor
-//   - handleResize (model.go) — syncViewportToCursor must anchor at the
-//     wheeled-to position, not the pre-burst cursor
-//   - handleBlameLoaded (loaders.go) — same syncViewportToCursor rationale
-//   - handleWheelDebounce (mouse.go) — the matching-gen tick path
+// flushWheelPending applies any frame target, then performs the deferred cursor
+// pin and diff re-render owed by the wheel burst. Callers use it before actions
+// that depend on the current viewport, cursor, or rendered diff.
 //
-// no-op when no render is pending. when pinDiffCursorTo returns false (the
-// cursor stayed in view through the burst, no pin needed), syncTOCActiveSection
+// When pinDiffCursorTo returns false (the cursor stayed in view through the
+// burst, no pin needed), syncTOCActiveSection
 // and SetContent are skipped — the existing rendered string already has the
 // correct cursor highlight and the TOC active section is keyed off the
 // (unchanged) cursor index, so a re-render would be redundant. Only the
@@ -469,13 +485,11 @@ func (m *Model) scrollDiffViewportBy(delta int) bool {
 // after the flush hits the !renderPending or stale-gen branches and is
 // harmless.
 func (m *Model) flushWheelPending() {
-	if m.wheel.delta != 0 {
+	if m.wheel.frameInFlight && m.wheel.targetOffset != m.layout.viewport.YOffset {
 		flushed, _ := m.flushWheelFrame()
 		*m = flushed.(Model)
 	}
-	m.wheel.snapshot = ""
-	m.wheel.frameInFlight = false
-	m.wheel.frameGen++
+	m.discardWheelFrame()
 	if !m.wheel.renderPending {
 		return
 	}
@@ -485,6 +499,7 @@ func (m *Model) flushWheelPending() {
 	}
 	m.wheel.renderPending = false
 	m.wheel.tickInFlight = false
+	m.wheel.direction = 0
 }
 
 // pinDiffCursorTo moves the diff cursor onto the visible viewport range when it

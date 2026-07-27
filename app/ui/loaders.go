@@ -526,6 +526,11 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.file.requestedPath = ""
+	m.discardWheelFrame()
+	m.wheel.direction = 0
+	m.wheel.renderPending = false
+	m.wheel.tickInFlight = false
+	m.wheel.gen++
 	if msg.err != nil {
 		m.layout.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
 		return m, nil

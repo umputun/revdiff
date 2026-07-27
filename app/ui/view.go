@@ -12,7 +12,8 @@ import (
 	"github.com/umputun/revdiff/app/ui/style"
 )
 
-// View renders the full TUI.
+// View renders the full TUI, or reuses the last complete frame while later
+// wheel packets wait for their coalescing tick.
 func (m Model) View() string {
 	if m.wheel.snapshot != "" {
 		return m.wheel.snapshot

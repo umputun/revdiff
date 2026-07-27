@@ -591,7 +591,7 @@ type Model struct {
 	output      outputState       // transient hint state for the O in-session output flush
 	keys        keyState          // chord-pending state and transient hint for leader-chord keybindings
 	vim         vimState          // count accumulator, pending letter leader, and transient hint for vim-motion preset
-	wheel       wheelState        // diff-pane mouse wheel coalescing (debounced render via wheelDebounceMsg)
+	wheel       wheelState        // diff-pane wheel frame coalescing and deferred cursor/render state
 
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
