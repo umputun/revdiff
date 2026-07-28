@@ -129,6 +129,11 @@ OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
+# the tmux popup border is the only place a reviewer meets the detach key, and a
+# review that cannot be backgrounded on purpose is the same as one that cannot be
+# backgrounded at all. tmux-only: no other overlay survives being dismissed.
+POPUP_TITLE_HINT=" — prefix d backgrounds"
+
 # --resume re-opens the newest backgrounded review. Its paths come off the tmux
 # session rather than a launcher process, so this still works once the original
 # launcher is gone — the normal case after a harness command-timeout cap.
@@ -165,7 +170,7 @@ if [ "${1:-}" = "--resume" ]; then
     RESUME_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
     if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
         if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
-            RESUME_ARGS+=(-T " ${RESUME_TITLE:-$OVERLAY_TITLE} ")
+            RESUME_ARGS+=(-T " ${RESUME_TITLE:-$OVERLAY_TITLE}$POPUP_TITLE_HINT ")
         fi
     fi
     # TMUX= lifts the nesting guard so the popup job can attach to the same server
@@ -274,7 +279,7 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     TMUX_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
     if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
         if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
-            TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+            TMUX_ARGS+=(-T " $OVERLAY_TITLE$POPUP_TITLE_HINT ")
         fi
     fi
     # TMUX= lifts the nesting guard so the popup job can attach to the same server
