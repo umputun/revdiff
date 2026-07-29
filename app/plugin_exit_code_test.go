@@ -42,6 +42,7 @@ type launcherRun struct {
 	backend launcherBackend
 	code    int
 	output  string
+	stderr  string
 }
 
 type pluginManifest struct {
@@ -154,6 +155,66 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 						})
 						assert.Equal(t, tc.code, res.code)
 						assert.Equal(t, tc.output, res.stdout)
+					})
+				}
+			})
+		}
+	}
+}
+
+func TestShellLaunchersRelayOverlayStderr(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	unknownFlagError := "revdiff: unknown flag `--bogus-flag'"
+
+	launchers := []struct {
+		name string
+		path string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+	}
+	// 0 is a clean quit and 10 means annotations were captured; revdiff writes
+	// ordinary warnings to stderr, so relaying either would put noise on every
+	// successful review
+	cases := []struct {
+		name       string
+		code       int
+		wantStderr string
+	}{
+		{name: "clean", code: 0},
+		{name: "annotations", code: exitCodeAnnotations},
+		{name: "failure", code: 1, wantStderr: unknownFlagError},
+	}
+
+	for _, launcher := range launchers {
+		for _, backend := range launcherBackends() {
+			t.Run(launcher.name+"/"+backend.name, func(t *testing.T) {
+				for _, tc := range cases {
+					t.Run(tc.name, func(t *testing.T) {
+						env := fakeLauncherEnv(t, launcherRun{
+							backend: backend,
+							code:    tc.code,
+							stderr:  unknownFlagError,
+						})
+						res := runTestCmd(t, cmdReq{
+							dir:  root,
+							name: "bash",
+							args: []string{filepath.Join(root, launcher.path)},
+							env:  env,
+						})
+						assert.Equal(t, tc.code, res.code)
+						if tc.wantStderr == "" {
+							assert.Empty(t, res.stderr)
+						} else {
+							assert.Contains(t, res.stderr, tc.wantStderr)
+						}
+						// each backend that overrides the base EXIT trap has to
+						// name the capture file; one that forgets leaks it
+						assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
 					})
 				}
 			})
@@ -1096,6 +1157,7 @@ func fakeLauncherEnv(t *testing.T, r launcherRun) map[string]string {
 	env := cleanOverlayEnv()
 	maps.Copy(env, r.backend.env)
 	env["FAKE_OUTPUT"] = r.output
+	env["FAKE_STDERR"] = r.stderr
 	env["FAKE_RC"] = strconv.Itoa(r.code)
 	env["PATH"] = binDir + string(os.PathListSeparator) + os.Getenv("PATH")
 	env["TMPDIR"] = tmp
@@ -1132,6 +1194,13 @@ func resolverScript(launcher string) string {
 
 func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func leftoverStderrCaptures(t *testing.T, dir string) []string {
+	t.Helper()
+	matches, err := filepath.Glob(filepath.Join(dir, "revdiff-err-*"))
+	require.NoError(t, err)
+	return matches
 }
 
 func planSnapshots(t *testing.T, dir string) []string {

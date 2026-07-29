@@ -5,6 +5,9 @@ if [ "${REVDIFF_EXIT_CODE_ON_ANNOTATIONS:-}" != "true" ]; then
     echo "fake-revdiff: REVDIFF_EXIT_CODE_ON_ANNOTATIONS not set by launcher" >&2
     exit 3
 fi
+if [ -n "${FAKE_STDERR:-}" ]; then
+    printf "%s" "$FAKE_STDERR" >&2
+fi
 out=""
 for arg in "$@"; do
     case "$arg" in
