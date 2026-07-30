@@ -400,6 +400,7 @@ Positional arguments support several forms:
 | `--dump-keys` | Print effective keybindings to stdout and exit | |
 | `--dump-config` | Print default config to stdout and exit | |
 | `-V`, `--version` | Show version info | |
+| `--pprof` | Start a pprof http server for CPU/heap profiling at ADDR; bare `--pprof` binds `:6060`, use `--pprof=ADDR` for a custom address | |
 
 ### Config File
 

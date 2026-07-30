@@ -58,6 +58,7 @@ Then uncomment and edit the values you want to change.
 | `--dump-keys` | | Print effective keybindings to stdout and exit | |
 | `--config` | `REVDIFF_CONFIG` | Path to config file | `~/.config/revdiff/config` |
 | `--dump-config` | | Print default config to stdout and exit | |
+| `--pprof` | | Start a pprof http server for CPU/heap profiling at ADDR; bare `--pprof` binds `:6060`, use `--pprof=ADDR` for a custom address | |
 
 Config-backed options use long flag names without leading `--`; for annotation exit status use `exit-code-on-annotations = true`.
 

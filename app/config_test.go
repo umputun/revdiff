@@ -872,6 +872,25 @@ func TestDefaultConfigPath(t *testing.T) {
 	assert.Contains(t, path, "config")
 }
 
+func TestParseArgs_PprofDefaultDisabled(t *testing.T) {
+	opts, err := parseArgs(noConfigArgs(t))
+	require.NoError(t, err)
+	assert.Empty(t, opts.Pprof)
+}
+
+func TestParseArgs_PprofBareUsesDefaultAddr(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--pprof", "HEAD~3"))
+	require.NoError(t, err)
+	assert.Equal(t, ":6060", opts.Pprof)
+	assert.Equal(t, "HEAD~3", opts.Refs.Base, "bare --pprof must not consume the next positional arg")
+}
+
+func TestParseArgs_PprofCustomAddr(t *testing.T) {
+	opts, err := parseArgs(append(noConfigArgs(t), "--pprof=:7070"))
+	require.NoError(t, err)
+	assert.Equal(t, ":7070", opts.Pprof)
+}
+
 func TestParseArgs_AllFilesFlag(t *testing.T) {
 	opts, err := parseArgs(append(noConfigArgs(t), "--all-files"))
 	require.NoError(t, err)

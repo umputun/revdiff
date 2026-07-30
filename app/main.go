@@ -95,6 +95,8 @@ func main() {
 }
 
 func run(opts options) (int, error) {
+	startPprof(opts.Pprof)
+
 	// force lipgloss to truecolor when colors are enabled. revdiff's raw-ANSI
 	// helpers (style.ansiColor) always emit truecolor, but lipgloss respects
 	// the termenv-detected profile, which can downgrade to ANSI256 / ANSI in

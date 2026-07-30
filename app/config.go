@@ -66,6 +66,7 @@ type options struct {
 	Config                string   `long:"config" env:"REVDIFF_CONFIG" no-ini:"true" description:"path to config file"`
 	DumpConfig            bool     `long:"dump-config" no-ini:"true" description:"print default config to stdout and exit"`
 	Version               bool     `short:"V" long:"version" no-ini:"true" description:"show version info"`
+	Pprof                 string   `long:"pprof" no-ini:"true" optional:"true" optional-value:":6060" description:"start a pprof http server for CPU/heap profiling at ADDR; bare --pprof binds :6060, use --pprof=ADDR for a custom address"`
 
 	Colors struct {
 		Accent       string `long:"color-accent"      ini-name:"color-accent"      env:"REVDIFF_COLOR_ACCENT"      default:"#D5895F" description:"active pane borders and directory names"`
