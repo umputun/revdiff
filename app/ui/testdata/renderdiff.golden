@@ -1,0 +1,259 @@
+===== baseline-cursor-first =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== cursor-mid =====
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== cursor-last =====
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114m}[39m
+
+===== cursor-on-divider =====
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== tree-pane-focused =====
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== line-numbers =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m  1  1   [38;5;114mpackage store[39m
+   2  2   [38;5;114m[39m
+        ⋯ 12 lines ⋯
+  15   [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                     [49m
+     15[38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                         [49m
+  16 16   [38;5;114m        return v, nil[39m
+     17[38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                        [49m
+  17 18   [38;5;114mlong tail content that overflows the pane width long tail content that overflows the p[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+  18   [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                         [49m
+     19[38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                       [49m
+  19 20   [38;5;114m}[39m
+
+===== wrap =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane
+ [48;2;28;28;28m[38;2;88;88;88m ↪ [39m[49mwidth long tail content that overflows the pane width long tail content that overflows the
+ [48;2;28;28;28m[38;2;88;88;88m ↪ [39m[49mpane width long tail content that overflows the pane width long tail content that overflows
+ [48;2;28;28;28m[38;2;88;88;88m ↪ [39m[49mthe pane width [39m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== wrap-and-line-numbers =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m  1  1   [38;5;114mpackage store[39m
+   2  2   [38;5;114m[39m
+        ⋯ 12 lines ⋯
+  15   [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                     [49m
+     15[38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                         [49m
+  16 16   [38;5;114m        return v, nil[39m
+     17[38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                        [49m
+  17 18   [38;5;114mlong tail content that overflows the pane width long tail content that overflows the
+       [48;2;28;28;28m[38;2;88;88;88m ↪ [39m[49mpane width long tail content that overflows the pane width long tail content that
+       [48;2;28;28;28m[38;2;88;88;88m ↪ [39m[49moverflows the pane width long tail content that overflows the pane width long tail
+       [48;2;28;28;28m[38;2;88;88;88m ↪ [39m[49mcontent that overflows the pane width [39m
+  18   [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                         [49m
+     19[38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                       [49m
+  19 20   [38;5;114m}[39m
+
+===== blame =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m eugene  7h   [38;5;114mpackage store[39m
+               [38;5;114m[39m
+             ⋯ 12 lines ⋯
+            [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                [49m
+  paskal  7h[38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                    [49m
+  eugene  7h   [38;5;114m        return v, nil[39m
+            [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                   [49m
+               [38;5;114mlong tail content that overflows the pane width long tail content that overflows [39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+            [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                    [49m
+            [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                  [49m
+  quetz   7h   [38;5;114m}[39m
+
+===== scrolled-right =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m[38;5;114m[39m
+ [38;5;114m[39m
+ 
+ [48;2;77;17;0m[38;2;88;88;88m«[39m[49m[38;2;255;135;135m[39m[38;5;114me[key]; ok {[39m[48;2;77;17;0m                                                                                   [49m
+ [48;2;18;56;0m[38;2;88;88;88m«[39m[49m[38;2;135;215;135m[39m[38;5;114me[key]; ok && !v.stale {[39m[48;2;18;56;0m                                                                       [49m
+ [38;5;114m[39m
+ [48;2;18;56;0m[38;2;88;88;88m«[39m[49m[38;2;135;215;135m[39m[38;5;114mация — 日本語 mixed width[39m[48;2;18;56;0m                                                                      [49m
+ [48;2;28;28;28m[38;2;88;88;88m«[39m[49m[38;5;114m overflows the pane width long tail content that overflows the pane width long tail content th[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [48;2;77;17;0m[38;2;88;88;88m«[39m[49m[38;2;255;135;135m[39m[38;5;114mrMissing[39m[48;2;77;17;0m                                                                                       [49m
+ [48;2;18;56;0m[38;2;88;88;88m«[39m[49m[38;2;135;215;135m[39m[38;5;114mt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                                                     [49m
+ [38;5;114m[39m
+
+===== narrow-pane =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m     [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v[39m[48;2;18;56;0m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mi[39m[48;2;18;56;0m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+    [38;5;114mlong tail content that overflows the p[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m         [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup[39m[48;2;18;56;0m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+    [38;5;114m}[39m
+
+===== search-matches =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        [48;2;74;74;0mreturn[49m v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    [48;2;74;74;0mreturn[48;2;77;17;0m Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    [48;2;74;74;0mreturn[48;2;18;56;0m Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== annotations =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+ [38;2;255;215;0m[48;2;28;28;28m[3m💬 use errors.Is here[23m[39m[49m[48;2;28;28;28m                                                                          [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+ [38;2;255;215;0m[48;2;28;28;28m[3m💬 multi[23m[39m[49m[48;2;28;28;28m                                                                                       [49m
+ [38;2;255;215;0m[48;2;28;28;28m[3m   line[23m[39m[49m[48;2;28;28;28m                                                                                        [49m
+ [38;2;255;215;0m[48;2;28;28;28m[3m   annotation body[23m[39m[49m[48;2;28;28;28m                                                                             [49m
+
+===== annotation-cursor =====
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m[38;2;255;215;0m[48;2;28;28;28m[3m💬 use errors.Is here[23m[39m[49m[48;2;28;28;28m                                                                          [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== file-annotation =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m[38;2;255;215;0m[48;2;28;28;28m[3m💬 file: file-level note[23m[39m[49m[48;2;28;28;28m                                                                       [49m
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== live-input =====
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m[38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+ [38;2;255;215;0m[48;2;28;28;28m[3m💬 [23m[39m[49m> typed so far[48;2;28;28;28m                                                                              [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== live-file-input =====
+ [38;2;255;215;0m[48;2;28;28;28m[3m💬 file: [23m[39m[49m> file note in progress[48;2;28;28;28m                                                               [49m
+    [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+
+===== collapsed =====
+[38;2;187;187;68m[48;2;28;28;28m▶[39m[49m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;245;197;66m ~ [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;61;46;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m[48;2;28;28;28m [49m[48;2;28;28;28m[38;2;88;88;88m»[39m[49m
+ [38;2;245;197;66m ~ [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;61;46;0m                             [49m
+    [38;5;114m}[39m
+
+===== no-colors =====
+[7m▶[27m   [38;5;114mpackage store[39m
+    [38;5;114m[39m
+  ⋯ 12 lines ⋯
+ [38;2;255;135;135m - [39m[38;5;114m    if v, ok := s.cache[key]; ok {[39m[48;2;77;17;0m                                                           [49m
+ [38;2;135;215;135m + [39m[38;5;114m    if v, ok := s.cache[key]; ok && !v.stale {[39m[48;2;18;56;0m                                               [49m
+    [38;5;114m        return v, nil[39m
+ [38;2;135;215;135m + [39m[38;5;114m    // ленивая инвалидация — 日本語 mixed width[39m[48;2;18;56;0m                                              [49m
+    [38;5;114mlong tail content that overflows the pane width long tail content that overflows the pane wi[39m [7m»[27m
+ [38;2;255;135;135m - [39m[38;5;114m    return Value{}, ErrMissing[39m[48;2;77;17;0m                                                               [49m
+ [38;2;135;215;135m + [39m[38;5;114m    return Value{}, fmt.Errorf("lookup %q: %w", key, ErrMissing)[39m[48;2;18;56;0m                             [49m
+    [38;5;114m}[39m
+

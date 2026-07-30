@@ -3189,7 +3189,7 @@ func TestModel_InvalidateAnnotationRows(t *testing.T) {
 	m.annotationVisualRows("\U0001f4ac ", "two")
 	require.Len(t, m.annot.rowCache, 2)
 
-	m.invalidateAnnotationRows()
+	m.invalidateRenderCaches()
 	assert.Empty(t, m.annot.rowCache)
 
 	// cache must be usable after invalidation (not nil-mapped into a no-op)
@@ -3252,7 +3252,7 @@ func TestModel_WrappedAnnotationLineCount_MatchesChokepoint(t *testing.T) {
 }
 
 // TestModel_HandleFileLoaded_InvalidatesAnnotationRows pins the file-load
-// invalidation hook. handleFileLoaded must call invalidateAnnotationRows so
+// invalidation hook. handleFileLoaded must call invalidateRenderCaches so
 // per-file annotation sets don't leak cached rows across files.
 func TestModel_HandleFileLoaded_InvalidatesAnnotationRows(t *testing.T) {
 	m := testModel([]string{"a.go", "b.go"}, nil)

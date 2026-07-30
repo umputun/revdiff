@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -1411,3 +1415,189 @@ func BenchmarkModel_View(b *testing.B) {
 
 // sink prevents the compiler from eliminating benchmark render calls.
 var sink string
+
+var updateGolden = flag.Bool("update-golden", false, "rewrite testdata goldens from current output")
+
+// goldenModel builds a deterministic model for the render golden. The content mixes change types,
+// tabs, wide runes and lines long enough to force horizontal scroll and wrapping, so the golden
+// exercises the gutter, styling, cut and pad paths rather than only the happy one.
+func goldenModel(t *testing.T) Model {
+	t.Helper()
+	lines := []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "package store", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 2, Content: "", ChangeType: diff.ChangeContext},
+		{Content: "⋯ 12 lines ⋯", ChangeType: diff.ChangeDivider},
+		{OldNum: 15, Content: "\tif v, ok := s.cache[key]; ok {", ChangeType: diff.ChangeRemove},
+		{NewNum: 15, Content: "\tif v, ok := s.cache[key]; ok && !v.stale {", ChangeType: diff.ChangeAdd},
+		{OldNum: 16, NewNum: 16, Content: "\t\treturn v, nil", ChangeType: diff.ChangeContext},
+		{NewNum: 17, Content: "\t// ленивая инвалидация — 日本語 mixed width", ChangeType: diff.ChangeAdd},
+		{OldNum: 17, NewNum: 18, Content: strings.Repeat("long tail content that overflows the pane width ", 6), ChangeType: diff.ChangeContext},
+		{OldNum: 18, Content: "\treturn Value{}, ErrMissing", ChangeType: diff.ChangeRemove},
+		{NewNum: 19, Content: "\treturn Value{}, fmt.Errorf(\"lookup %q: %w\", key, ErrMissing)", ChangeType: diff.ChangeAdd},
+		{OldNum: 19, NewNum: 20, Content: "}", ChangeType: diff.ChangeContext},
+	}
+	res := style.NewResolver(style.Colors{
+		Accent: "#D5895F", Border: "#585858", Normal: "#d0d0d0", Muted: "#585858",
+		SelectedFg: "#ffffaf", SelectedBg: "#D5895F", Annotation: "#ffd700", CursorFg: "#bbbb44",
+		AddFg: "#87d787", AddBg: "#123800", RemoveFg: "#ff8787", RemoveBg: "#4D1100",
+		ModifyFg: "#f5c542", ModifyBg: "#3D2E00", StatusFg: "#202020", StatusBg: "#C5794F",
+		SearchFg: "#1a1a1a", SearchBg: "#4a4a00", DiffBg: "#1c1c1c",
+	})
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "store.go"}}, nil
+		},
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return lines, nil },
+	}
+	m, err := NewModel(ModelConfig{
+		Renderer: renderer, Store: annotation.NewStore(), Highlighter: noopHighlighter(),
+		StyleResolver: res, StyleRenderer: style.NewRenderer(res), SGR: style.SGR{},
+		WordDiffer: worddiff.New(), Overlay: overlay.NewManager(), Themes: fakeThemeCatalog{},
+		TreeWidthRatio: 3, AnnotationMarker: "\U0001f4ac",
+		NewFileTree: testFileTreeFactory(), ParseTOC: testParseTOCFactory(),
+	})
+	require.NoError(t, err)
+
+	res2, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = res2.(Model)
+	res2, _ = m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "store.go"}}})
+	m = res2.(Model)
+	res2, _ = m.Update(fileLoadedMsg{file: "store.go", seq: m.file.loadSeq, lines: lines})
+	m = res2.(Model)
+	require.Len(t, m.file.lines, len(lines))
+
+	highlighted := make([]string, len(lines))
+	for i, dl := range lines {
+		highlighted[i] = "\033[38;5;114m" + dl.Content + "\033[39m"
+	}
+	m.file.highlighted = highlighted
+	m.file.lineNumWidth = 2
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+	return m
+}
+
+// goldenStates enumerates the render states the golden covers. Each mutator receives a fresh
+// model from goldenModel, so states never leak into each other.
+func goldenStates() []struct {
+	name  string
+	apply func(t *testing.T, m *Model)
+} {
+	return []struct {
+		name  string
+		apply func(t *testing.T, m *Model)
+	}{
+		{"baseline-cursor-first", func(t *testing.T, m *Model) {}},
+		{"cursor-mid", func(t *testing.T, m *Model) { m.nav.diffCursor = 5 }},
+		{"cursor-last", func(t *testing.T, m *Model) { m.nav.diffCursor = len(m.file.lines) - 1 }},
+		{"cursor-on-divider", func(t *testing.T, m *Model) { m.nav.diffCursor = 2 }},
+		{"tree-pane-focused", func(t *testing.T, m *Model) { m.layout.focus = paneTree }},
+		{"line-numbers", func(t *testing.T, m *Model) { m.modes.lineNumbers = true }},
+		{"wrap", func(t *testing.T, m *Model) { m.modes.wrap = true }},
+		{"wrap-and-line-numbers", func(t *testing.T, m *Model) { m.modes.wrap = true; m.modes.lineNumbers = true }},
+		{"blame", func(t *testing.T, m *Model) {
+			m.modes.showBlame = true
+			m.file.blameAuthorLen = 6
+			blameAt := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+			m.file.blameData = map[int]diff.BlameLine{
+				1: {Author: "eugene", Time: blameAt}, 15: {Author: "paskal", Time: blameAt},
+				16: {Author: "eugene", Time: blameAt}, 20: {Author: "quetz", Time: blameAt},
+			}
+		}},
+		{"scrolled-right", func(t *testing.T, m *Model) { m.layout.scrollX = 24 }},
+		{"narrow-pane", func(t *testing.T, m *Model) { m.layout.width = 46; m.layout.treeWidth = 12 }},
+		{"search-matches", func(t *testing.T, m *Model) {
+			m.search.term = "return"
+			m.search.matches = []int{5, 8, 9}
+		}},
+		{"annotations", func(t *testing.T, m *Model) {
+			m.store.Add(annotation.Annotation{File: "store.go", Line: 15, Type: "+", Comment: "use errors.Is here"})
+			m.store.Add(annotation.Annotation{File: "store.go", Line: 20, Type: " ", Comment: "multi\nline\nannotation body"})
+		}},
+		{"annotation-cursor", func(t *testing.T, m *Model) {
+			m.store.Add(annotation.Annotation{File: "store.go", Line: 15, Type: "+", Comment: "use errors.Is here"})
+			m.nav.diffCursor = 4
+			m.annot.cursorOnAnnotation = true
+		}},
+		{"file-annotation", func(t *testing.T, m *Model) {
+			m.store.Add(annotation.Annotation{File: "store.go", Line: 0, Comment: "file-level note"})
+			m.nav.diffCursor = -1
+		}},
+		{"live-input", func(t *testing.T, m *Model) {
+			m.nav.diffCursor = 4
+			m.startAnnotation()
+			m.annot.input.SetValue("typed so far")
+		}},
+		{"live-file-input", func(t *testing.T, m *Model) {
+			m.startFileAnnotation()
+			m.annot.input.SetValue("file note in progress")
+		}},
+		{"collapsed", func(t *testing.T, m *Model) { m.modes.collapsed.enabled = true }},
+		{"no-colors", func(t *testing.T, m *Model) { m.cfg.noColors = true }},
+	}
+}
+
+// renderGolden renders every state and returns one labeled document.
+func renderGolden(t *testing.T) string {
+	t.Helper()
+	var b strings.Builder
+	for _, st := range goldenStates() {
+		m := goldenModel(t)
+		st.apply(t, &m)
+		b.WriteString("===== " + st.name + " =====\n")
+		b.WriteString(m.renderDiff())
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// TestModel_RenderDiffGolden pins renderDiff's exact bytes across the render states that the
+// per-line cache has to reproduce. It is an equivalence harness, not a description of correct
+// output: regenerate with -update-golden only after confirming a diff is an intended change.
+func TestModel_RenderDiffGolden(t *testing.T) {
+	got := renderGolden(t)
+	path := filepath.Join("testdata", "renderdiff.golden")
+
+	if *updateGolden {
+		require.NoError(t, os.MkdirAll("testdata", 0o750))
+		require.NoError(t, os.WriteFile(path, []byte(got), 0o600))
+		t.Log("golden updated:", path)
+		return
+	}
+
+	want, err := os.ReadFile(path) //nolint:gosec // fixed test path
+	require.NoError(t, err, "golden missing — regenerate with: go test ./app/ui/ -run RenderDiffGolden -update-golden")
+	assert.Equal(t, string(want), got, "renderDiff output changed; if intended, regenerate with -update-golden")
+}
+
+// TestModel_RenderDiffCacheMatchesColdRender is the completeness proof for globalRenderKey.
+// The golden always renders on a fresh model, so it can only catch a wrong render, never a
+// stale one. Here each state is reached on a model that has already rendered a different
+// state, so any render input missing from the key surfaces as a leftover block from the
+// previous state. A failure names the field that is missing, not a cosmetic diff.
+func TestModel_RenderDiffCacheMatchesColdRender(t *testing.T) {
+	states := goldenStates()
+	for _, prev := range states {
+		for _, next := range states {
+			if prev.name == next.name {
+				continue
+			}
+			t.Run(prev.name+"_then_"+next.name, func(t *testing.T) {
+				cold := goldenModel(t)
+				next.apply(t, &cold)
+				want := cold.renderDiff()
+
+				warmer := goldenModel(t)
+				prev.apply(t, &warmer)
+				warmer.renderDiff() // fills the cache with blocks rendered under prev
+
+				// carry only the dirty cache into a model that is otherwise clean, so the two
+				// states' mutations never stack — this is a stale cache, not a merged state
+				got := goldenModel(t)
+				got.renderCache = warmer.renderCache
+				next.apply(t, &got)
+				assert.Equal(t, want, got.renderDiff(), "cached render differs from a cold one")
+			})
+		}
+	}
+}

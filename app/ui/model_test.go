@@ -1725,7 +1725,11 @@ func TestModel_AnnotatingNoOpMessageDoesNotRerenderDiff(t *testing.T) {
 	m.startAnnotation()
 	m.layout.viewport.SetContent(m.renderDiff())
 
+	// mutating line content in place is a test-only shortcut: production replaces the whole
+	// slice in handleFileLoaded, which bumps loadSeq and invalidates the caches itself. Do the
+	// invalidation by hand so the probe below measures the blink, not a stale cached block.
 	m.file.lines[1].Content = "sentinel-after-render"
+	m.invalidateRenderCaches()
 	require.Contains(t, m.renderDiff(), "sentinel-after-render", "a fresh render would pick the change up")
 
 	res, _ = m.Update(bubblecursor.BlinkMsg{})

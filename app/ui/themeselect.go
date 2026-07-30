@@ -90,7 +90,7 @@ func (m *Model) cancelThemeSelect() {
 		log.Printf("[WARN] failed to restore chroma style %q", m.themePreview.origChroma)
 	}
 	m.themePreview = nil
-	m.invalidateAnnotationRows()
+	m.invalidateRenderCaches()
 	m.refreshDiff()
 }
 
@@ -114,7 +114,7 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 			log.Printf("[WARN] failed to apply chroma style %q, keeping %q", spec.ChromaStyle, prevStyle)
 		}
 	}
-	m.invalidateAnnotationRows()
+	m.invalidateRenderCaches()
 	if m.file.name != "" && len(m.file.lines) > 0 {
 		if chromaChanged {
 			m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)

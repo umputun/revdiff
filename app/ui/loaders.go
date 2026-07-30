@@ -537,7 +537,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	fingerprint := diff.FileFingerprint(entry, m.file.lines)
 	m.reviewed.cache[msg.file] = fingerprint
 	m.tree.ReconcileReviewedPath(msg.file, fingerprint)
-	m.invalidateAnnotationRows()
+	m.invalidateRenderCaches()
 	m.clearSearch()
 	m.computeFileStats()
 	m.file.highlighted = m.highlighter.HighlightLines(msg.file, m.file.lines)
@@ -638,6 +638,9 @@ func (m Model) handleBlameLoaded(msg blameLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.file.blameData = msg.data
 	m.file.blameAuthorLen = m.computeBlameAuthorLen()
+	// blameData is not part of globalRenderKey (a map is not comparable), so cached
+	// blocks rendered without blame would otherwise survive the gutter appearing
+	m.invalidateRenderCaches()
 	// flush deferred wheel pin before syncViewportToCursor so the post-blame
 	// scroll is anchored to the user's wheeled-to position rather than the
 	// pre-burst cursor. mirrors the handleResize flush rationale.

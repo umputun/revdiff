@@ -602,6 +602,12 @@ type Model struct {
 	loadUntrackedRenames func([]string) ([]diff.FileEntry, error) // pairs untracked renames against their deleted origin; nil for non-git
 	blameNow             time.Time                                // snapshot of time.Now() set once per render pass for blame age
 
+	// renderCache memoizes per-line rendered blocks for renderDiff. Held behind a
+	// pointer because renderDiff has a value receiver: every Model copy shares one
+	// instance, which is what lets a block rendered by one copy serve the next.
+	// NewModel initializes this; direct Model{} construction is unsupported.
+	renderCache *diffRenderCache
+
 	discarded        bool // true when user chose to discard annotations and quit
 	inConfirmDiscard bool // true when showing discard confirmation prompt
 
@@ -919,6 +925,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		reload:               reloadState{applicable: cfg.ReloadApplicable},
 		compact:              compactState{applicable: cfg.CompactApplicable},
 		annot:                annotationState{rowCache: make(map[annotCacheKey][]string)},
+		renderCache:          &diffRenderCache{},
 		loadUntracked:        cfg.LoadUntracked,
 		loadUntrackedRenames: cfg.LoadUntrackedRenames,
 		activeThemeName:      cfg.ActiveThemeName,

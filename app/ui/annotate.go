@@ -456,7 +456,7 @@ func (m Model) annotationPrefixBody(key string) (prefix, body string) {
 // painter iterates these rows directly. results are memoized on rowCache;
 // invalidation is the caller's responsibility (handleFileLoaded, applyTheme,
 // cancelThemeSelect). pointer receiver is mandatory: the method writes to
-// m.annot.rowCache and the consistency with invalidateAnnotationRows protects
+// m.annot.rowCache and the consistency with invalidateRenderCaches protects
 // against future LRU/slice replacements that would silently no-op on a value
 // receiver.
 func (m *Model) annotationVisualRows(prefix, body string) []string {
@@ -504,12 +504,20 @@ func (m Model) composeAnnotationRows(prefix, body string, wrapW int) []string {
 	return rows
 }
 
-// invalidateAnnotationRows clears the cached visual-row slices. callers:
-// handleFileLoaded (per-file annotation set changes), applyTheme (resolver
-// colors change), and cancelThemeSelect (preview theme rebuilt the resolver).
-// width changes self-invalidate via the cache key, so no call needed on resize.
-func (m *Model) invalidateAnnotationRows() {
+// invalidateRenderCaches clears both render memos: the annotation visual-row
+// slices and the per-line diff render blocks. callers: handleFileLoaded (per-file
+// annotation set changes), applyTheme (resolver colors change), cancelThemeSelect
+// (preview theme rebuilt the resolver), and handleBlameLoaded (blame data feeds
+// the gutter). Width and the other comparable render inputs self-invalidate via
+// the respective cache keys, so no call is needed on resize.
+//
+// This is the invalidation chokepoint for anything the caches read that a key
+// cannot capture: the style resolver and file.blameData are not comparable, so a
+// change to either is only reflected by calling this. Any new runtime toggle that
+// rebuilds the resolver or mutates blame data MUST call it.
+func (m *Model) invalidateRenderCaches() {
 	clear(m.annot.rowCache)
+	m.renderCache.clear()
 }
 
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.

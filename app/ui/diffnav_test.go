@@ -3283,7 +3283,7 @@ func TestModel_DownPageMotionTerminatesOnAnnotatedLastLine(t *testing.T) {
 		// non-navigable divider follows it
 		model.store.Add(annotation.Annotation{File: "a.go", Line: model.diffLineNum(lines[19]),
 			Type: string(diff.ChangeContext), Comment: "note on the last line"})
-		model.invalidateAnnotationRows()
+		model.invalidateRenderCaches()
 		model.nav.diffCursor, model.annot.cursorOnAnnotation = cursor, onAnnot
 		return model
 	}
