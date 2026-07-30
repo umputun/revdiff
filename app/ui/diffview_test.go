@@ -320,6 +320,10 @@ func TestModel_RenderDiffLineHighlighted(t *testing.T) {
 	result, _ := m.Update(fileLoadedMsg{file: "a.go", lines: lines})
 	m = result.(Model)
 	m.file.highlighted = []string{"hl-context", "hl-add", "hl-remove"}
+	// the load above already rendered and cached with no highlighting; file.highlighted is one
+	// of the render inputs that cannot live in globalRenderKey, so assigning it owes an
+	// invalidation exactly as handleFileLoaded and refreshDiff do
+	m.invalidateRenderCaches()
 	m.layout.focus = paneDiff
 	output := m.renderDiff()
 
@@ -1373,6 +1377,9 @@ func benchModel(b *testing.B, n int) Model {
 		highlighted[i] = "\033[38;5;114m" + dl.Content + "\033[39m"
 	}
 	m.file.highlighted = highlighted
+	// handleFileLoaded already rendered and filled the cache while the highlighter returned
+	// nothing; without this the benchmark measures cached unhighlighted blocks
+	m.invalidateRenderCaches()
 	m.layout.focus = paneDiff
 	m.nav.diffCursor = len(lines) / 2
 	m.layout.viewport.SetContent(m.renderDiff())
@@ -1624,5 +1631,111 @@ func TestModel_RenderDiffCacheMatchesColdRender(t *testing.T) {
 				assert.Equal(t, want, got.renderDiff(), "cached render differs from a cold one")
 			})
 		}
+	}
+}
+
+func TestDiffRenderCache(t *testing.T) {
+	flags := func(cursor bool) lineRenderFlags { return lineRenderFlags{cursor: cursor} }
+	key := func(w int) globalRenderKey { return globalRenderKey{width: w} }
+
+	t.Run("serves a block rendered under identical flags", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		c.put(1, flags(false), "block")
+		got, ok := c.get(1, flags(false))
+		assert.True(t, ok)
+		assert.Equal(t, "block", got)
+	})
+
+	t.Run("misses when per-line flags differ", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		c.put(1, flags(false), "block")
+		_, ok := c.get(1, flags(true))
+		assert.False(t, ok)
+	})
+
+	t.Run("rebase drops entries when the global key changes", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		c.put(1, flags(false), "block")
+		c.rebase(key(120), 3)
+		_, ok := c.get(1, flags(false))
+		assert.False(t, ok)
+	})
+
+	t.Run("rebase drops entries when the line count changes", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		c.put(1, flags(false), "block")
+		c.rebase(key(80), 9)
+		_, ok := c.get(1, flags(false))
+		assert.False(t, ok)
+		assert.Len(t, c.blocks, 9)
+	})
+
+	t.Run("live input row is never stored or served", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		live := lineRenderFlags{liveInput: true}
+		c.put(1, live, "typed")
+		_, ok := c.get(1, live)
+		assert.False(t, ok, "must not serve the live input row")
+		assert.False(t, c.filled[1], "must not store the live input row")
+	})
+
+	t.Run("out of range indices are ignored", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 2)
+		assert.NotPanics(t, func() { c.put(5, flags(false), "x"); c.put(-1, flags(false), "x") })
+		_, ok := c.get(5, flags(false))
+		assert.False(t, ok)
+		_, ok = c.get(-1, flags(false))
+		assert.False(t, ok)
+	})
+
+	t.Run("clear resets lastLen so a small file does not pre-size from a large one", func(t *testing.T) {
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		c.put(1, flags(false), "block")
+		c.lastLen = 5_000_000
+		c.clear()
+		assert.Zero(t, c.lastLen, "estimate belongs to content that is gone")
+		_, ok := c.get(1, flags(false))
+		assert.False(t, ok)
+	})
+
+	t.Run("rebase keeps lastLen so the rebuilt render is still pre-sized", func(t *testing.T) {
+		// the render that follows a key change misses on every line and is the expensive
+		// one; zeroing the estimate here would skip Grow on exactly that render
+		c := &diffRenderCache{}
+		c.rebase(key(80), 3)
+		c.lastLen = 4096
+		c.rebase(key(120), 3)
+		assert.Equal(t, 4096, c.lastLen)
+	})
+}
+
+// BenchmarkModel_AnnotatedKeystroke covers the workflow the cache exists for and that the
+// other benchmarks miss: a file that already carries annotations, where every render still
+// has to resolve each line against the annotation map.
+func BenchmarkModel_AnnotatedKeystroke(b *testing.B) {
+	for _, n := range benchDiffSizes {
+		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {
+			m := benchModel(b, n)
+			for i := 4; i < n; i += n/4 + 1 {
+				m.store.Add(annotation.Annotation{File: "large.go", Line: i, Type: " ", Comment: "note"})
+			}
+			m.invalidateRenderCaches()
+			m.startAnnotation()
+			key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				res, _ := m.Update(key)
+				m = res.(Model)
+				sink = m.View()
+			}
+		})
 	}
 }

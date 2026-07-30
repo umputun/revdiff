@@ -511,10 +511,14 @@ func (m Model) composeAnnotationRows(prefix, body string, wrapW int) []string {
 // the gutter). Width and the other comparable render inputs self-invalidate via
 // the respective cache keys, so no call is needed on resize.
 //
-// This is the invalidation chokepoint for anything the caches read that a key
-// cannot capture: the style resolver and file.blameData are not comparable, so a
-// change to either is only reflected by calling this. Any new runtime toggle that
-// rebuilds the resolver or mutates blame data MUST call it.
+// This is the invalidation chokepoint for anything the caches read that a key cannot
+// capture. Four render inputs are not comparable and so cannot live in
+// globalRenderKey: the style resolver, file.blameData, file.highlighted and
+// file.intraRanges. A change to any of them is reflected only by calling this. The
+// last two are also covered today by loadSeq/fileName and the wordDiff key field
+// because of where they happen to be mutated, which is not something to rely on —
+// any new path that rebuilds the resolver, loads blame, re-highlights, or recomputes
+// intra-line ranges MUST call this.
 func (m *Model) invalidateRenderCaches() {
 	clear(m.annot.rowCache)
 	m.renderCache.clear()

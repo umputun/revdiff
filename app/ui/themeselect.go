@@ -124,9 +124,13 @@ func (m *Model) applyTheme(spec ThemeSpec) {
 }
 
 // refreshDiff re-highlights and re-renders the current diff if one is loaded.
+// Invalidates first: file.highlighted feeds every rendered line but is not part of
+// globalRenderKey, so reassigning it without clearing would repaint cached blocks
+// built from the previous highlighting.
 func (m *Model) refreshDiff() {
 	if m.file.name != "" && len(m.file.lines) > 0 {
 		m.file.highlighted = m.highlighter.HighlightLines(m.file.name, m.file.lines)
+		m.invalidateRenderCaches()
 		m.layout.viewport.SetContent(m.renderDiff())
 	}
 }

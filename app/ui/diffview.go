@@ -321,13 +321,16 @@ func (m Model) renderDiff() string {
 // see it, because its single search state made every pair flip searchMatch and miss. Add a
 // state alongside any field added here, or the gap moves with you.
 //
-// Two inputs are deliberately absent because they are not comparable: the style
-// resolver and file.blameData. Those invalidate through invalidateRenderCaches
-// instead — see its doc for the contract.
+// Four inputs are absent because they are not comparable, and all four invalidate
+// through invalidateRenderCaches instead — see its doc for the contract: the style
+// resolver, file.blameData, file.highlighted and file.intraRanges. The last two are
+// additionally covered today by loadSeq/fileName (handleFileLoaded) and the wordDiff
+// key field, but that is a property of their current mutation sites, not a guarantee:
+// any new path that re-highlights or recomputes intra-line ranges owes an explicit
+// invalidation.
 func (m Model) globalRenderKey() globalRenderKey {
 	k := globalRenderKey{
 		width: m.layout.width, treeWidth: m.layout.treeWidth, scrollX: m.layout.scrollX,
-		viewportWidth: m.layout.viewport.Width, focus: m.layout.focus,
 		wrap: m.modes.wrap, lineNumbers: m.modes.lineNumbers,
 		showBlame: m.modes.showBlame, wordDiff: m.modes.wordDiff,
 		noColors: m.cfg.noColors, tabSpaces: m.cfg.tabSpaces, searchTerm: m.search.term,
@@ -347,7 +350,7 @@ func (m Model) globalRenderKey() globalRenderKey {
 }
 
 // lineRenderFlags captures the per-line state a cached block was rendered under.
-func (m Model) lineRenderFlags(idx int, annotationMap map[string]string) lineRenderFlags {
+func (m Model) lineRenderFlags(idx int, annotationMap map[annotLineKey]string) lineRenderFlags {
 	f := lineRenderFlags{
 		cursor:      m.isCursorLine(idx),
 		searchMatch: m.search.matchSet[idx],
@@ -363,7 +366,7 @@ func (m Model) lineRenderFlags(idx int, annotationMap map[string]string) lineRen
 	}
 	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
-		if comment, ok := annotationMap[m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))]; ok {
+		if comment, ok := annotationMap[annotLineKey{line: m.diffLineNum(dl), changeType: dl.ChangeType}]; ok {
 			f.comment = comment
 			f.hasComment = true
 			f.annotCursor = idx == m.nav.diffCursor && m.annot.cursorOnAnnotation && m.layout.focus == paneDiff
@@ -374,15 +377,15 @@ func (m Model) lineRenderFlags(idx int, annotationMap map[string]string) lineRen
 
 // buildAnnotationMap creates a lookup map of line annotations for the current file.
 // returns the annotation map and the file-level comment (empty if none).
-func (m Model) buildAnnotationMap() (annotations map[string]string, fileComment string) {
+func (m Model) buildAnnotationMap() (annotations map[annotLineKey]string, fileComment string) {
 	all := m.store.Get(m.file.name)
-	annotations = make(map[string]string, len(all))
+	annotations = make(map[annotLineKey]string, len(all))
 	for _, a := range all {
 		if a.Line == 0 {
 			fileComment = a.Comment
 			continue
 		}
-		annotations[m.annotationKey(a.Line, a.Type)] = a.Comment
+		annotations[annotLineKey{line: a.Line, changeType: diff.ChangeType(a.Type)}] = a.Comment
 	}
 	return annotations, fileComment
 }
@@ -731,7 +734,7 @@ func (m Model) extendLineBg(styled string, bg style.Color) string {
 }
 
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
-func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[string]string) {
+func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[annotLineKey]string) {
 	if m.annot.annotating && !m.annot.fileAnnotating && idx == m.nav.diffCursor {
 		line := " " + m.renderer.AnnotationInline(m.annotPrefix()) + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
@@ -741,7 +744,7 @@ func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMa
 	}
 	dl := m.file.lines[idx]
 	if dl.ChangeType != diff.ChangeDivider {
-		key := m.annotationKey(m.diffLineNum(dl), string(dl.ChangeType))
+		key := annotLineKey{line: m.diffLineNum(dl), changeType: dl.ChangeType}
 		if comment, ok := annotationMap[key]; ok {
 			cursor := " "
 			if idx == m.nav.diffCursor && m.annot.cursorOnAnnotation && m.layout.focus == paneDiff {
@@ -821,20 +824,36 @@ func (m Model) diffContentWidth() int {
 	return max(10, m.layout.width-m.layout.treeWidth-4-2)
 }
 
+// annotLineKey identifies a line annotation for render-path lookups. Comparable on
+// purpose: lineRenderFlags builds one per line on every render, including renders that
+// are entirely cache hits, so the string form (annotationKey's Sprintf) allocated per
+// line for any file carrying at least one annotation.
+type annotLineKey struct {
+	line       int
+	changeType diff.ChangeType
+}
+
 // globalRenderKey is the comparable fingerprint of non-per-line render state.
 // It is compared by value, so every field must stay comparable.
 type globalRenderKey struct {
-	width         int
-	treeWidth     int
-	scrollX       int
-	viewportWidth int
-	focus         pane
-	wrap          bool
-	lineNumbers   bool
-	showBlame     bool
-	wordDiff      bool
-	noColors      bool
-	annotating    bool
+	width     int
+	treeWidth int
+	scrollX   int
+	// layout.focus is deliberately NOT here. Every focus read inside the cached loop is the
+	// `focus == paneDiff` term of isCursorLine and of the annotCursor condition, both captured
+	// per line by lineRenderFlags, and both can only differ on the cursor line — so a focus
+	// change dirties one line, not the file. Having it here made Tab and every click into the
+	// tree drop the whole cache and pay a cold rebuild. The one remaining read, in
+	// renderFileAnnotationHeader, is outside the loop and never cached.
+	// layout.viewport.Width is likewise absent: nothing in the render path reads it (widths come
+	// from layout.width and treeWidth via diffContentWidth/wrapWidth/gutterExtra) and it only
+	// ever moves alongside those.
+	wrap        bool
+	lineNumbers bool
+	showBlame   bool
+	wordDiff    bool
+	noColors    bool
+	annotating  bool
 	// searchTerm, not just the per-line match bool: highlightSearchMatches locates the
 	// highlighted byte range from the term, so two different terms matching the same set
 	// of lines still paint differently.
@@ -890,7 +909,6 @@ func (c *diffRenderCache) rebase(key globalRenderKey, lines int) {
 	c.blocks = make([]string, lines)
 	c.flags = make([]lineRenderFlags, lines)
 	c.filled = make([]bool, lines)
-	c.lastLen = 0
 }
 
 // get returns the cached block for a line when it was rendered under the same
