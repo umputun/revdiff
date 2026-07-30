@@ -977,11 +977,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWheelDebounce(msg)
 	}
 
-	// forward other messages to textinput when annotating (e.g. cursor blink)
+	// forward other messages to textinput when annotating (e.g. paste completion).
+	// re-render only when the input text actually changed: renderDiff is O(diff lines)
+	// and repainting for a message that left the value untouched is pure waste.
 	if m.annot.annotating {
+		before := m.annot.input.Value()
 		var cmd tea.Cmd
 		m.annot.input, cmd = m.annot.input.Update(msg)
-		m.layout.viewport.SetContent(m.renderDiff()) // re-render so cursor blink updates are visible
+		if m.annot.input.Value() != before {
+			m.layout.viewport.SetContent(m.renderDiff())
+		}
 		return m, cmd
 	}
 

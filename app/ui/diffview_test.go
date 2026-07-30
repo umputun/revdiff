@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/ui/mocks"
+	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/style"
 	"github.com/umputun/revdiff/app/ui/worddiff"
 )
@@ -1292,3 +1294,120 @@ func TestModel_RenderWrappedAnnotation_MultiLine(t *testing.T) {
 		assert.Contains(t, out, "bravo", "second logical line content present")
 	})
 }
+
+// benchDiffLines builds a realistic mixed diff: context, added, and removed lines
+// in roughly the proportions a review diff has, with source-like content.
+func benchDiffLines(n int) []diff.DiffLine {
+	lines := make([]diff.DiffLine, n)
+	bodies := []string{
+		"func (s *Store) Get(key string) (Value, error) {",
+		"\tif v, ok := s.cache[key]; ok { return v, nil }",
+		"\treturn Value{}, fmt.Errorf(\"lookup %q: %w\", key, ErrMissing)",
+		"",
+		"// resolve walks the chain until a terminal node is reached",
+	}
+	oldNum, newNum := 1, 1
+	for i := range lines {
+		content := bodies[i%len(bodies)]
+		switch i % 7 {
+		case 3:
+			lines[i] = diff.DiffLine{OldNum: oldNum, Content: content, ChangeType: diff.ChangeRemove}
+			oldNum++
+		case 4:
+			lines[i] = diff.DiffLine{NewNum: newNum, Content: content, ChangeType: diff.ChangeAdd}
+			newNum++
+		default:
+			lines[i] = diff.DiffLine{OldNum: oldNum, NewNum: newNum, Content: content, ChangeType: diff.ChangeContext}
+			oldNum++
+			newNum++
+		}
+	}
+	return lines
+}
+
+// benchModel builds a Model with the production color palette and pre-computed
+// highlight strings, loaded with an n-line diff and sized to a typical terminal.
+func benchModel(b *testing.B, n int) Model {
+	b.Helper()
+	lines := benchDiffLines(n)
+	res := style.NewResolver(style.Colors{
+		Accent: "#D5895F", Border: "#585858", Normal: "#d0d0d0", Muted: "#585858",
+		SelectedFg: "#ffffaf", SelectedBg: "#D5895F", Annotation: "#ffd700", CursorFg: "#bbbb44",
+		AddFg: "#87d787", AddBg: "#123800", RemoveFg: "#ff8787", RemoveBg: "#4D1100",
+		ModifyFg: "#f5c542", ModifyBg: "#3D2E00", StatusFg: "#202020", StatusBg: "#C5794F",
+		SearchFg: "#1a1a1a", SearchBg: "#4a4a00",
+	})
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) {
+			return []diff.FileEntry{{Path: "large.go"}}, nil
+		},
+		FileDiffFunc: func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return lines, nil },
+	}
+	m, err := NewModel(ModelConfig{
+		Renderer: renderer, Store: annotation.NewStore(), Highlighter: noopHighlighter(),
+		StyleResolver: res, StyleRenderer: style.NewRenderer(res), SGR: style.SGR{},
+		WordDiffer: worddiff.New(), Overlay: overlay.NewManager(), Themes: fakeThemeCatalog{},
+		TreeWidthRatio: 3, AnnotationMarker: "\U0001f4ac",
+		NewFileTree: testFileTreeFactory(), ParseTOC: testParseTOCFactory(),
+	})
+	require.NoError(b, err)
+
+	res2, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 44})
+	m = res2.(Model)
+	res2, _ = m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "large.go"}}})
+	m = res2.(Model)
+	// seq must match the load the file list just issued, or handleFileLoaded drops it as stale
+	res2, _ = m.Update(fileLoadedMsg{file: "large.go", seq: m.file.loadSeq, lines: lines})
+	m = res2.(Model)
+	require.True(b, m.ready && m.filesLoaded, "View must render the real layout, not a loading placeholder")
+	require.Len(b, m.file.lines, n, "renderDiff must walk the loaded diff, not the empty-file shortcut")
+
+	// syntax highlighting is pre-computed per file load in production; mirror that
+	// so renderDiff walks the highlighted path rather than the plain one.
+	highlighted := make([]string, len(lines))
+	for i, dl := range lines {
+		highlighted[i] = "\033[38;5;114m" + dl.Content + "\033[39m"
+	}
+	m.file.highlighted = highlighted
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = len(lines) / 2
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(m.nav.diffCursor)
+	return m
+}
+
+var benchDiffSizes = []int{500, 2_000, 10_000, 50_000}
+
+// BenchmarkModel_RenderDiff measures the full-diff re-render that every keystroke
+// during annotation triggers (annotate.go handleAnnotateKey).
+func BenchmarkModel_RenderDiff(b *testing.B) {
+	for _, n := range benchDiffSizes {
+		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {
+			m := benchModel(b, n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				sink = m.renderDiff()
+			}
+		})
+	}
+}
+
+// BenchmarkModel_View measures the per-frame cost that does NOT include a
+// full re-render: viewport slicing plus lipgloss pane assembly. Compare against
+// BenchmarkModel_RenderDiff to see how much of a keystroke is the re-render.
+func BenchmarkModel_View(b *testing.B) {
+	for _, n := range benchDiffSizes {
+		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {
+			m := benchModel(b, n)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				sink = m.View()
+			}
+		})
+	}
+}
+
+// sink prevents the compiler from eliminating benchmark render calls.
+var sink string

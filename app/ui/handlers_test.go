@@ -460,7 +460,7 @@ func TestModel_HandleFileAnnotateKey(t *testing.T) {
 		result, cmd := m.handleFileAnnotateKey()
 		model := result.(Model)
 		assert.True(t, model.annot.annotating, "should start annotation mode")
-		assert.NotNil(t, cmd, "should return a command")
+		assert.Nil(t, cmd, "annotation input cursor is static, so no blink command is scheduled")
 	})
 
 	t.Run("no-op when focus is tree pane", func(t *testing.T) {

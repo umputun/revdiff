@@ -101,7 +101,7 @@ func TestOpenEditor_FileLevelCapturesTarget(t *testing.T) {
 	m.editor = fake
 
 	cmd := m.startFileAnnotation()
-	require.NotNil(t, cmd)
+	require.Nil(t, cmd, "annotation input cursor is static, so no blink command is scheduled")
 	m.annot.input.SetValue("file-level seed")
 
 	editorCmd := m.openEditor()

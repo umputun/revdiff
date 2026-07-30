@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	bubblecursor "github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
@@ -1704,4 +1705,31 @@ func TestHandleKey_NonKeyMessagesPreserveChordState(t *testing.T) {
 			assert.Equal(t, "Pending: ctrl+w, esc to cancel", after.keys.hint, "chord hint must survive non-key messages")
 		})
 	}
+}
+
+func TestModel_AnnotatingNoOpMessageDoesNotRerenderDiff(t *testing.T) {
+	// pins the cost regression: every message forwarded to the annotation input used to
+	// force SetContent(renderDiff()), which is O(diff lines). the cursor blink alone fired
+	// it twice a second on an idle session.
+	lines := []diff.DiffLine{
+		{NewNum: 1, Content: "original one", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "original two", ChangeType: diff.ChangeContext},
+	}
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	res, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = res.(Model)
+	res, _ = m.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	m = res.(Model)
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+	m.startAnnotation()
+	m.layout.viewport.SetContent(m.renderDiff())
+
+	m.file.lines[1].Content = "sentinel-after-render"
+	require.Contains(t, m.renderDiff(), "sentinel-after-render", "a fresh render would pick the change up")
+
+	res, _ = m.Update(bubblecursor.BlinkMsg{})
+	m = res.(Model)
+	assert.NotContains(t, m.layout.viewport.View(), "sentinel-after-render",
+		"blink left the input value untouched, so the diff must not be re-rendered")
 }

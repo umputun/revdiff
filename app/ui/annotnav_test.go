@@ -551,7 +551,7 @@ func TestModel_HandleAnnotNav_ModalSuppression(t *testing.T) {
 		m.layout.focus = paneDiff
 		// open the annotation modal on the current line
 		cmd := m.startAnnotation()
-		require.NotNil(t, cmd)
+		require.Nil(t, cmd, "annotation input cursor is static, so no blink command is scheduled")
 		require.True(t, m.annot.annotating, "annotation modal must be active for this test")
 		before := m.nav.diffCursor
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'}'}})

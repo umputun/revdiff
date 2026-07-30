@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -42,6 +43,11 @@ var hunkKeywordRe = regexp.MustCompile(`(?i)\bhunk\b`)
 func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinput.Model, tea.Cmd) {
 	ti := textinput.New()
 	ti.Placeholder = placeholder
+	// static cursor, set before Focus so no blink command is scheduled. the input is painted
+	// inside renderDiff, so a blink could only become visible by re-rendering every diff line
+	// (~7us per line) twice a second for a session that is otherwise idle. a static cursor is
+	// what the user already sees between blinks on a large diff.
+	ti.Cursor.SetMode(cursor.CursorStatic)
 	cmd := ti.Focus()
 	ti.CharLimit = annotCharLimit
 	ti.Width = max(10, m.diffContentWidth()-prefixWidth)
