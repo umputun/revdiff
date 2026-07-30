@@ -1498,7 +1498,10 @@ func goldenStates() []struct {
 		{"blame", func(t *testing.T, m *Model) {
 			m.modes.showBlame = true
 			m.file.blameAuthorLen = 6
-			blameAt := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+			// relative, not absolute: RelativeAge buckets by whole hours under 24h, so a
+			// hardcoded instant bakes the hour-of-generation into the golden and goes red at
+			// the next bucket boundary. an offset from now always renders "3h".
+			blameAt := time.Now().Add(-3*time.Hour - 30*time.Minute)
 			m.file.blameData = map[int]diff.BlameLine{
 				1: {Author: "eugene", Time: blameAt}, 15: {Author: "paskal", Time: blameAt},
 				16: {Author: "eugene", Time: blameAt}, 20: {Author: "quetz", Time: blameAt},
@@ -1509,6 +1512,22 @@ func goldenStates() []struct {
 		{"search-matches", func(t *testing.T, m *Model) {
 			m.search.term = "return"
 			m.search.matches = []int{5, 8, 9}
+		}},
+		{"search-other-term", func(t *testing.T, m *Model) {
+			// same match set as search-matches, different term: the only shape that catches a
+			// term missing from globalRenderKey, since searchMatch stays true on every row
+			m.search.term = "eturn"
+			m.search.matches = []int{5, 8, 9}
+		}},
+		{"word-diff", func(t *testing.T, m *Model) {
+			m.modes.wordDiff = true
+			m.file.intraRanges = make([][]worddiff.Range, len(m.file.lines))
+			m.file.intraRanges[3] = []worddiff.Range{{Start: 20, End: 23}}
+			m.file.intraRanges[4] = []worddiff.Range{{Start: 20, End: 34}}
+		}},
+		{"empty-body-annotation", func(t *testing.T, m *Model) {
+			// reachable via --annotations; must still reserve and paint a prefix-only row
+			m.store.Add(annotation.Annotation{File: "store.go", Line: 16, Type: " ", Comment: ""})
 		}},
 		{"annotations", func(t *testing.T, m *Model) {
 			m.store.Add(annotation.Annotation{File: "store.go", Line: 15, Type: "+", Comment: "use errors.Is here"})
@@ -1570,11 +1589,17 @@ func TestModel_RenderDiffGolden(t *testing.T) {
 	assert.Equal(t, string(want), got, "renderDiff output changed; if intended, regenerate with -update-golden")
 }
 
-// TestModel_RenderDiffCacheMatchesColdRender is the completeness proof for globalRenderKey.
-// The golden always renders on a fresh model, so it can only catch a wrong render, never a
-// stale one. Here each state is reached on a model that has already rendered a different
-// state, so any render input missing from the key surfaces as a leftover block from the
-// previous state. A failure names the field that is missing, not a cosmetic diff.
+// TestModel_RenderDiffCacheMatchesColdRender catches stale cached blocks, which the golden
+// structurally cannot: the golden always renders on a fresh model, so it only sees a wrong
+// render, never a leftover one. Here each state is reached on a model whose cache was filled
+// under a different state, so a render input missing from globalRenderKey shows up as a block
+// from the previous state.
+//
+// Its reach is exactly goldenStates: a field is covered only when two states differ in it AND
+// still hit the cache. A state pair that changes something already in the key just misses and
+// proves nothing. searchTerm was missing from the key and this test passed anyway, because the
+// only search state made every pair flip searchMatch. Adding a field to the key means adding a
+// state that isolates it.
 func TestModel_RenderDiffCacheMatchesColdRender(t *testing.T) {
 	states := goldenStates()
 	for _, prev := range states {

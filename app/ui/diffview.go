@@ -315,7 +315,11 @@ func (m Model) renderDiff() string {
 // is not per-line. A change to any field invalidates the whole cache, so the key
 // must list everything renderDiffLine and renderAnnotationOrInput read beyond the
 // line itself — a missing field means stale rows painted after that state moves.
-// TestModel_RenderDiffCacheMatchesColdRender is what proves the list complete.
+// TestModel_RenderDiffCacheMatchesColdRender exercises the list, but only as far as
+// goldenStates reaches: a field is covered only when some pair of states differs in it
+// while still producing a cache hit. searchTerm was missing here and the matrix could not
+// see it, because its single search state made every pair flip searchMatch and miss. Add a
+// state alongside any field added here, or the gap moves with you.
 //
 // Two inputs are deliberately absent because they are not comparable: the style
 // resolver and file.blameData. Those invalidate through invalidateRenderCaches
@@ -326,7 +330,7 @@ func (m Model) globalRenderKey() globalRenderKey {
 		viewportWidth: m.layout.viewport.Width, focus: m.layout.focus,
 		wrap: m.modes.wrap, lineNumbers: m.modes.lineNumbers,
 		showBlame: m.modes.showBlame, wordDiff: m.modes.wordDiff,
-		noColors: m.cfg.noColors, tabSpaces: m.cfg.tabSpaces,
+		noColors: m.cfg.noColors, tabSpaces: m.cfg.tabSpaces, searchTerm: m.search.term,
 		annotPrefix: m.cfg.annotPrefix, annotFilePrefix: m.cfg.annotFilePrefix,
 		fileName: m.file.name, loadSeq: m.file.loadSeq,
 		lineNumWidth: m.file.lineNumWidth, singleColLineNum: m.file.singleColLineNum,
@@ -820,17 +824,21 @@ func (m Model) diffContentWidth() int {
 // globalRenderKey is the comparable fingerprint of non-per-line render state.
 // It is compared by value, so every field must stay comparable.
 type globalRenderKey struct {
-	width            int
-	treeWidth        int
-	scrollX          int
-	viewportWidth    int
-	focus            pane
-	wrap             bool
-	lineNumbers      bool
-	showBlame        bool
-	wordDiff         bool
-	noColors         bool
-	annotating       bool
+	width         int
+	treeWidth     int
+	scrollX       int
+	viewportWidth int
+	focus         pane
+	wrap          bool
+	lineNumbers   bool
+	showBlame     bool
+	wordDiff      bool
+	noColors      bool
+	annotating    bool
+	// searchTerm, not just the per-line match bool: highlightSearchMatches locates the
+	// highlighted byte range from the term, so two different terms matching the same set
+	// of lines still paint differently.
+	searchTerm       string
 	fileAnnotating   bool
 	singleColLineNum bool
 	lineNumWidth     int
@@ -882,6 +890,7 @@ func (c *diffRenderCache) rebase(key globalRenderKey, lines int) {
 	c.blocks = make([]string, lines)
 	c.flags = make([]lineRenderFlags, lines)
 	c.filled = make([]bool, lines)
+	c.lastLen = 0
 }
 
 // get returns the cached block for a line when it was rendered under the same
@@ -911,4 +920,7 @@ func (c *diffRenderCache) clear() {
 	clear(c.blocks)
 	clear(c.filled)
 	clear(c.flags)
+	// the estimate belongs to content that is now gone; keeping it would pre-size the
+	// builder for a 50k-line diff while rendering the 20-line file that replaced it
+	c.lastLen = 0
 }
