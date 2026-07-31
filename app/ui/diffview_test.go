@@ -1516,6 +1516,11 @@ func goldenStates() []struct {
 		}},
 		{"scrolled-right", func(t *testing.T, m *Model) { m.layout.scrollX = 24 }},
 		{"narrow-pane", func(t *testing.T, m *Model) { m.layout.width = 46; m.layout.treeWidth = 12 }},
+		{"tree-hidden", func(t *testing.T, m *Model) {
+			// isolates contentWidth via the treePaneHidden branch: width and treeWidth are
+			// untouched, but diffContentWidth switches from width-treeWidth-6 to width-4
+			m.layout.treeHidden = true
+		}},
 		{"search-matches", func(t *testing.T, m *Model) {
 			m.search.term = "return"
 			m.search.matches = []int{5, 8, 9}
@@ -1636,7 +1641,7 @@ func TestModel_RenderDiffCacheMatchesColdRender(t *testing.T) {
 
 func TestDiffRenderCache(t *testing.T) {
 	flags := func(cursor bool) lineRenderFlags { return lineRenderFlags{cursor: cursor} }
-	key := func(w int) globalRenderKey { return globalRenderKey{width: w} }
+	key := func(w int) globalRenderKey { return globalRenderKey{contentWidth: w} }
 
 	t.Run("serves a block rendered under identical flags", func(t *testing.T) {
 		c := &diffRenderCache{}
@@ -1751,7 +1756,7 @@ func TestModel_InvalidateRenderCaches(t *testing.T) {
 	require.Len(t, m.annot.rowCache, 2)
 
 	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
-	m.renderCache.rebase(globalRenderKey{width: 120}, 1)
+	m.renderCache.rebase(globalRenderKey{contentWidth: 120}, 1)
 	m.renderCache.put(0, lineRenderFlags{}, "cached block")
 	m.renderCache.lastLen = 4096
 
@@ -1780,7 +1785,7 @@ func TestModel_HandleFileLoaded_InvalidatesRenderCaches(t *testing.T) {
 	m.annotationVisualRows("\U0001f4ac ", "one")
 	m.annotationVisualRows("\U0001f4ac ", "two")
 	require.Len(t, m.annot.rowCache, 2)
-	m.renderCache.rebase(globalRenderKey{width: 120}, 1)
+	m.renderCache.rebase(globalRenderKey{contentWidth: 120}, 1)
 	m.renderCache.put(0, lineRenderFlags{}, "block from a.go")
 
 	lines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
@@ -1818,7 +1823,7 @@ func TestModel_ApplyTheme_InvalidatesRenderCaches(t *testing.T) {
 	m.annotationVisualRows("\U0001f4ac ", "one")
 	m.annotationVisualRows("\U0001f4ac ", "two")
 	require.Len(t, m.annot.rowCache, 2)
-	m.renderCache.rebase(globalRenderKey{width: 120}, 1)
+	m.renderCache.rebase(globalRenderKey{contentWidth: 120}, 1)
 	m.renderCache.put(0, lineRenderFlags{}, "block under the old theme")
 
 	m.applyTheme(ThemeSpec{

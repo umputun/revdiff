@@ -330,7 +330,7 @@ func (m Model) renderDiff() string {
 // invalidation.
 func (m Model) globalRenderKey() globalRenderKey {
 	k := globalRenderKey{
-		width: m.layout.width, treeWidth: m.layout.treeWidth, scrollX: m.layout.scrollX,
+		contentWidth: m.diffContentWidth(), scrollX: m.layout.scrollX,
 		wrap: m.modes.wrap, lineNumbers: m.modes.lineNumbers,
 		showBlame: m.modes.showBlame, wordDiff: m.modes.wordDiff,
 		noColors: m.cfg.noColors, tabSpaces: m.cfg.tabSpaces, searchTerm: m.search.term,
@@ -836,18 +836,25 @@ type annotLineKey struct {
 // globalRenderKey is the comparable fingerprint of non-per-line render state.
 // It is compared by value, so every field must stay comparable.
 type globalRenderKey struct {
-	width     int
-	treeWidth int
-	scrollX   int
+	// contentWidth is the resolved diffContentWidth(), not the raw layout.width and
+	// treeWidth it is computed from. Every width consumer in the render path
+	// (applyHorizontalScroll, plainHorizontalCut, extendLineBg, wrapWidth,
+	// annotationVisualRows) goes through diffContentWidth, and that branches on
+	// treePaneHidden() = treeHidden || (singleFile && mdTOC == nil). Keying the raw
+	// inputs missed those three: with treeWidth already 0 while the pane is shown —
+	// reachable after a single-file diff becomes multi-file without treeWidth being
+	// recomputed — pressing `t` moves no key field yet changes the width every line is
+	// cut and padded to. Keying the resolved value cannot drift from what is consumed,
+	// and matches how annotCacheKey already keys on the resolved wrapW.
+	contentWidth int
+	scrollX      int
 	// layout.focus is deliberately NOT here. Every focus read inside the cached loop is the
 	// `focus == paneDiff` term of isCursorLine and of the annotCursor condition, both captured
 	// per line by lineRenderFlags, and both can only differ on the cursor line — so a focus
 	// change dirties one line, not the file. Having it here made Tab and every click into the
 	// tree drop the whole cache and pay a cold rebuild. The one remaining read, in
 	// renderFileAnnotationHeader, is outside the loop and never cached.
-	// layout.viewport.Width is likewise absent: nothing in the render path reads it (widths come
-	// from layout.width and treeWidth via diffContentWidth/wrapWidth/gutterExtra) and it only
-	// ever moves alongside those.
+	// layout.viewport.Width is likewise absent: nothing in the render path reads it at all.
 	wrap        bool
 	lineNumbers bool
 	showBlame   bool
