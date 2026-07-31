@@ -14,7 +14,6 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
-	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
@@ -3179,24 +3178,6 @@ func TestModel_AnnotationVisualRows(t *testing.T) {
 	})
 }
 
-func TestModel_InvalidateAnnotationRows(t *testing.T) {
-	m := testModel(nil, nil)
-	m.file.name = "a.go"
-	m.layout.width = 120
-	m.layout.treeWidth = 20
-
-	m.annotationVisualRows("\U0001f4ac ", "one")
-	m.annotationVisualRows("\U0001f4ac ", "two")
-	require.Len(t, m.annot.rowCache, 2)
-
-	m.invalidateRenderCaches()
-	assert.Empty(t, m.annot.rowCache)
-
-	// cache must be usable after invalidation (not nil-mapped into a no-op)
-	m.annotationVisualRows("\U0001f4ac ", "after")
-	assert.Len(t, m.annot.rowCache, 1)
-}
-
 // TestModel_WrappedAnnotationLineCount_MatchesChokepoint pins the height-vs-paint
 // invariant after the chokepoint refactor: wrappedAnnotationLineCount(key) must
 // equal len(annotationVisualRows(prefix, body)) for every annotation shape. this
@@ -3249,69 +3230,6 @@ func TestModel_WrappedAnnotationLineCount_MatchesChokepoint(t *testing.T) {
 			assert.Equal(t, len(rows), count, "wrappedAnnotationLineCount must equal len(annotationVisualRows)")
 		})
 	}
-}
-
-// TestModel_HandleFileLoaded_InvalidatesAnnotationRows pins the file-load
-// invalidation hook. handleFileLoaded must call invalidateRenderCaches so
-// per-file annotation sets don't leak cached rows across files.
-func TestModel_HandleFileLoaded_InvalidatesAnnotationRows(t *testing.T) {
-	m := testModel([]string{"a.go", "b.go"}, nil)
-	m.tree = testNewFileTree([]string{"a.go", "b.go"})
-	m.file.name = "a.go"
-	m.layout.width = 120
-	m.layout.treeWidth = 20
-
-	// populate the cache from the "current file" state
-	m.annotationVisualRows("\U0001f4ac ", "one")
-	m.annotationVisualRows("\U0001f4ac ", "two")
-	require.Len(t, m.annot.rowCache, 2)
-
-	lines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
-	result, _ := m.Update(fileLoadedMsg{file: "b.go", lines: lines})
-	model := result.(Model)
-
-	assert.Empty(t, model.annot.rowCache, "cache must be cleared after file load")
-}
-
-// TestModel_ApplyTheme_InvalidatesAnnotationRows pins the theme-apply
-// invalidation hook. cached rows bake in AnnotationInline resolver styling, so
-// applyTheme must clear the cache or stale colors persist.
-func TestModel_ApplyTheme_InvalidatesAnnotationRows(t *testing.T) {
-	renderer := &mocks.RendererMock{
-		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
-		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
-	}
-	highlighter := &mocks.SyntaxHighlighterMock{
-		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
-		SetStyleFunc:       func(string) bool { return true },
-		StyleNameFunc:      func() string { return "orig-style" },
-	}
-	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
-		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
-	})
-	m.file.name = "a.go"
-	m.layout.width = 120
-	m.layout.treeWidth = 20
-
-	m.annotationVisualRows("\U0001f4ac ", "one")
-	m.annotationVisualRows("\U0001f4ac ", "two")
-	require.Len(t, m.annot.rowCache, 2)
-
-	m.applyTheme(ThemeSpec{
-		Colors: style.Colors{
-			Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
-			SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
-			CursorFg: "#282a36", CursorBg: "#f8f8f2",
-			AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
-			ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
-			TreeBg: "#21222c", DiffBg: "#282a36",
-			StatusFg: "#f8f8f2", StatusBg: "#44475a",
-			SearchFg: "#282a36", SearchBg: "#f1fa8c",
-		},
-		ChromaStyle: "dracula",
-	})
-
-	assert.Empty(t, m.annot.rowCache, "cache must be cleared after applyTheme")
 }
 
 // TestModel_AnnotationVisualRows_EmptyBodyEmitsPrefixRow pins the regression caught

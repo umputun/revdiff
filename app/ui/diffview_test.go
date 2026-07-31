@@ -1739,3 +1739,103 @@ func BenchmarkModel_AnnotatedKeystroke(b *testing.B) {
 		})
 	}
 }
+
+func TestModel_InvalidateRenderCaches(t *testing.T) {
+	m := testModel(nil, nil)
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+
+	m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext}}
+	m.renderCache.rebase(globalRenderKey{width: 120}, 1)
+	m.renderCache.put(0, lineRenderFlags{}, "cached block")
+	m.renderCache.lastLen = 4096
+
+	m.invalidateRenderCaches()
+	assert.Empty(t, m.annot.rowCache)
+	_, ok := m.renderCache.get(0, lineRenderFlags{})
+	assert.False(t, ok, "diff render blocks must be dropped too, not just annotation rows")
+	assert.Zero(t, m.renderCache.lastLen, "size estimate belongs to content that is gone")
+
+	// cache must be usable after invalidation (not nil-mapped into a no-op)
+	m.annotationVisualRows("\U0001f4ac ", "after")
+	assert.Len(t, m.annot.rowCache, 1)
+}
+
+// TestModel_HandleFileLoaded_InvalidatesRenderCaches pins the file-load
+// invalidation hook. handleFileLoaded must call invalidateRenderCaches so neither
+// per-file annotation rows nor cached diff blocks leak across files.
+func TestModel_HandleFileLoaded_InvalidatesRenderCaches(t *testing.T) {
+	m := testModel([]string{"a.go", "b.go"}, nil)
+	m.tree = testNewFileTree([]string{"a.go", "b.go"})
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+
+	// populate the cache from the "current file" state
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+	m.renderCache.rebase(globalRenderKey{width: 120}, 1)
+	m.renderCache.put(0, lineRenderFlags{}, "block from a.go")
+
+	lines := []diff.DiffLine{{NewNum: 1, Content: "package main", ChangeType: diff.ChangeContext}}
+	result, _ := m.Update(fileLoadedMsg{file: "b.go", lines: lines})
+	model := result.(Model)
+
+	assert.Empty(t, model.annot.rowCache, "annotation rows must be cleared after file load")
+	// handleFileLoaded re-renders after invalidating, so the cache is legitimately warm
+	// again for b.go; what must not survive is a block belonging to a.go
+	block, _ := model.renderCache.get(0, lineRenderFlags{})
+	assert.NotEqual(t, "block from a.go", block, "a block from the previous file must not survive the switch")
+}
+
+// TestModel_ApplyTheme_InvalidatesRenderCaches pins the theme-apply
+// invalidation hook. both memos bake in resolver styling and the resolver is not
+// comparable so it cannot live in globalRenderKey, making this call the only thing
+// standing between a theme change and stale colors.
+func TestModel_ApplyTheme_InvalidatesRenderCaches(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	highlighter := &mocks.SyntaxHighlighterMock{
+		HighlightLinesFunc: func(string, []diff.DiffLine) []string { return nil },
+		SetStyleFunc:       func(string) bool { return true },
+		StyleNameFunc:      func() string { return "orig-style" },
+	}
+	m := testNewModel(t, renderer, annotation.NewStore(), highlighter, ModelConfig{
+		TreeWidthRatio: 3, Overlay: overlay.NewManager(),
+	})
+	m.file.name = "a.go"
+	m.layout.width = 120
+	m.layout.treeWidth = 20
+
+	m.annotationVisualRows("\U0001f4ac ", "one")
+	m.annotationVisualRows("\U0001f4ac ", "two")
+	require.Len(t, m.annot.rowCache, 2)
+	m.renderCache.rebase(globalRenderKey{width: 120}, 1)
+	m.renderCache.put(0, lineRenderFlags{}, "block under the old theme")
+
+	m.applyTheme(ThemeSpec{
+		Colors: style.Colors{
+			Accent: "#bd93f9", Border: "#6272a4", Normal: "#f8f8f2", Muted: "#6272a4",
+			SelectedFg: "#f8f8f2", SelectedBg: "#44475a", Annotation: "#f1fa8c",
+			CursorFg: "#282a36", CursorBg: "#f8f8f2",
+			AddFg: "#50fa7b", AddBg: "#2a4a2a", RemoveFg: "#ff5555", RemoveBg: "#4a2a2a",
+			ModifyFg: "#ffb86c", ModifyBg: "#3a3a2a",
+			TreeBg: "#21222c", DiffBg: "#282a36",
+			StatusFg: "#f8f8f2", StatusBg: "#44475a",
+			SearchFg: "#282a36", SearchBg: "#f1fa8c",
+		},
+		ChromaStyle: "dracula",
+	})
+
+	assert.Empty(t, m.annot.rowCache, "annotation rows must be cleared after applyTheme")
+	_, ok := m.renderCache.get(0, lineRenderFlags{})
+	assert.False(t, ok, "diff blocks bake in resolver colors and must not survive a theme change")
+}
