@@ -1549,9 +1549,7 @@ func TestModel_SearchHistory_UpDownInteractive(t *testing.T) {
 }
 
 func TestModel_SearchHistory_CtrlPCtrlNParity(t *testing.T) {
-	// Ctrl+P / Ctrl+N must behave identically to Up / Down. Ctrl+P is also the
-	// default jump_file binding outside search, so these assertions lock down
-	// modal precedence.
+	// Ctrl+P / Ctrl+N must behave identically to Up / Down.
 	model := newSearchHistoryModel(t)
 
 	model = submitQueryThroughInput(model, "alpha")
@@ -1581,6 +1579,22 @@ func TestModel_SearchHistory_CtrlPCtrlNParity(t *testing.T) {
 	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlN})
 	model = result.(Model)
 	assert.Empty(t, model.search.input.Value(), "Ctrl+N past newest should clear input")
+}
+
+// P is the default jump_file binding, so an active search prompt must swallow
+// it as a literal rune instead of opening the file picker underneath.
+func TestModel_SearchPrompt_SwallowsJumpFileKey(t *testing.T) {
+	model := newSearchHistoryModel(t)
+
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = result.(Model)
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	model = result.(Model)
+
+	assert.Equal(t, "P", model.search.input.Value(), "P must type into the search prompt")
+	assert.True(t, model.search.active)
+	assert.False(t, model.overlay.Active(), "P in search must not open the file picker")
 }
 
 func TestModel_SearchHistory_RecallThenEscThenStartFresh(t *testing.T) {

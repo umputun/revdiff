@@ -273,7 +273,7 @@ func defaultBindings() map[string]Action {
 		"n":      ActionNextItem,
 		"N":      ActionPrevItem,
 		"p":      ActionPrevItem,
-		"ctrl+p": ActionJumpFile,
+		"P":      ActionJumpFile,
 		"]":      ActionNextHunk,
 		"[":      ActionPrevHunk,
 		"e":      ActionOpenFileInEditor,

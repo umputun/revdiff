@@ -10,6 +10,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 )
 
@@ -33,7 +34,7 @@ func TestModel_JumpFileOpensPickerAndLoadsSelection(t *testing.T) {
 	pendingHunk := true
 	m.nav.pendingHunkJump = &pendingHunk
 
-	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
 	require.Nil(t, cmd)
 	m = result.(Model)
 	assert.True(t, m.overlay.Active())
@@ -171,12 +172,34 @@ func TestModel_JumpFileRevealsDistantPathInTree(t *testing.T) {
 	assert.NotNil(t, cmd)
 }
 
-func TestModel_JumpFileToggleClosesPicker(t *testing.T) {
-	m := filePickerModel([]string{"a.go"})
+// the default jump_file key is printable, and the picker gives printable runes
+// priority over configured actions, so it filters rather than toggling closed.
+func TestModel_JumpFileKeyFiltersInsideOpenPicker(t *testing.T) {
+	m := filePickerModel([]string{"a.go", "Parser.go"})
 	m.openFilePicker()
 	require.True(t, m.overlay.Active())
 
-	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
+	m = result.(Model)
+	assert.Nil(t, cmd)
+	require.True(t, m.overlay.Active(), "printable jump_file key must filter, not close")
+
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = result.(Model)
+	assert.False(t, m.overlay.Active())
+	assert.Equal(t, "Parser.go", m.tree.SelectedFile(), "filter 'P' should narrow to the matching path")
+}
+
+// a modified chord bypasses the printable-rune path, so users who rebind
+// jump_file to one keep the toggle-close behavior.
+func TestModel_JumpFileModifiedChordTogglesClosesPicker(t *testing.T) {
+	m := filePickerModel([]string{"a.go"})
+	m.keymap.Unbind("P")
+	m.keymap.Bind("alt+f", keymap.ActionJumpFile)
+	m.openFilePicker()
+	require.True(t, m.overlay.Active())
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}, Alt: true})
 	m = result.(Model)
 	assert.Nil(t, cmd)
 	assert.False(t, m.overlay.Active())

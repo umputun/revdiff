@@ -31,7 +31,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"left", ActionScrollLeft}, {"right", ActionScrollRight},
 		{"J", ActionScrollDiffDown}, {"K", ActionScrollDiffUp},
 		{"n", ActionNextItem}, {"N", ActionPrevItem}, {"p", ActionPrevItem},
-		{"ctrl+p", ActionJumpFile},
+		{"P", ActionJumpFile},
 		{"]", ActionNextHunk}, {"[", ActionPrevHunk}, {"e", ActionOpenFileInEditor},
 		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
 		{"/", ActionSearch},
@@ -87,19 +87,17 @@ func TestDefault_ctrlKeysMatchBubbletea(t *testing.T) {
 	// ctrl+d and ctrl+u: bubbletea represents these as KeyMsg with specific types
 	ctrlD := tea.KeyMsg{Type: tea.KeyCtrlD}
 	ctrlU := tea.KeyMsg{Type: tea.KeyCtrlU}
-	ctrlP := tea.KeyMsg{Type: tea.KeyCtrlP}
 
 	km := Default()
 	assert.Equal(t, ActionHalfPageDown, km.Resolve(ctrlD.String()))
 	assert.Equal(t, ActionHalfPageUp, km.Resolve(ctrlU.String()))
-	assert.Equal(t, ActionJumpFile, km.Resolve(ctrlP.String()))
 }
 
 func TestActionJumpFile_RegistrationHelpAndDump(t *testing.T) {
 	assert.True(t, IsValidAction(ActionJumpFile))
 
 	km := Default()
-	assert.Equal(t, ActionJumpFile, km.Resolve("ctrl+p"))
+	assert.Equal(t, ActionJumpFile, km.Resolve("P"))
 	sections := km.HelpSections()
 	found := false
 	for _, section := range sections {
@@ -107,7 +105,7 @@ func TestActionJumpFile_RegistrationHelpAndDump(t *testing.T) {
 			if entry.Action == ActionJumpFile {
 				assert.Equal(t, "File/Hunk", section.Name)
 				assert.Equal(t, "jump to file", entry.Description)
-				assert.Equal(t, "ctrl+p", entry.Keys)
+				assert.Equal(t, "P", entry.Keys)
 				found = true
 			}
 		}
@@ -116,16 +114,23 @@ func TestActionJumpFile_RegistrationHelpAndDump(t *testing.T) {
 
 	var dumped strings.Builder
 	require.NoError(t, km.Dump(&dumped))
-	assert.Contains(t, dumped.String(), "map ctrl+p jump_file")
+	assert.Contains(t, dumped.String(), "map P jump_file")
+}
+
+// pins the default off ctrl+p: host terminals bind it (agterm session_palette,
+// tmux copy-mode) and swallow it before revdiff sees the key.
+func TestActionJumpFile_NotBoundToCtrlP(t *testing.T) {
+	km := Default()
+	assert.Empty(t, km.Resolve("ctrl+p"), "ctrl+p must stay unbound so host terminals keep it")
 }
 
 func TestActionJumpFile_CustomConfiguration(t *testing.T) {
 	path := t.TempDir() + "/keybindings"
-	require.NoError(t, os.WriteFile(path, []byte("unmap ctrl+p\nmap alt+f jump_file\n"), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte("unmap P\nmap alt+f jump_file\n"), 0o600))
 
 	km, err := Load(path)
 	require.NoError(t, err)
-	assert.Empty(t, km.Resolve("ctrl+p"))
+	assert.Empty(t, km.Resolve("P"))
 	assert.Equal(t, ActionJumpFile, km.Resolve("alt+f"))
 }
 

@@ -381,7 +381,7 @@ the previous row wins.
 ### Overlay Flow
 
 ```
-User presses '?' / '@' / 'T' / Ctrl+P / 'i'
+User presses '?' / '@' / 'T' / 'P' / 'i'
   → Model calls overlay.OpenHelp/OpenAnnotList/OpenThemeSelect/OpenFilePicker/OpenInfo
       (for 'i': review scope is assembled from ReviewInfoConfig and current
        file-load state; aggregate +/- stats are fetched lazily on first open
