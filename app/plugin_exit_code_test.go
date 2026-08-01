@@ -116,24 +116,30 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	root := testRepoRoot(t)
 	planFile := filepath.Join(t.TempDir(), "plan.md")
 	writeTestFile(t, planFile, "# Plan\n")
+	unknownFlagError := "revdiff: unknown flag `--bogus-flag'"
 
 	launchers := []struct {
-		name string
-		path string
-		args []string
+		name         string
+		path         string
+		args         []string
+		relaysStderr bool
 	}{
-		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
-		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", relaysStderr: true},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", relaysStderr: true},
 		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
 	}
+	// stderr relay fires on failure only: 0 is a clean quit and 10 means
+	// annotations were captured, and revdiff writes ordinary warnings to stderr,
+	// so relaying either would put noise on every successful review
 	cases := []struct {
-		name   string
-		code   int
-		output string
+		name       string
+		code       int
+		output     string
+		wantStderr bool
 	}{
 		{name: "clean", code: 0},
 		{name: "annotations", code: exitCodeAnnotations, output: "## file.go:1 (+)\ncomment\n"},
-		{name: "failure", code: 1, output: "partial output\n"},
+		{name: "failure", code: 1, output: "partial output\n", wantStderr: true},
 	}
 
 	for _, launcher := range launchers {
@@ -141,76 +147,25 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 			t.Run(launcher.name+"/"+backend.name, func(t *testing.T) {
 				for _, tc := range cases {
 					t.Run(tc.name, func(t *testing.T) {
+						run := launcherRun{backend: backend, code: tc.code, output: tc.output}
+						if launcher.relaysStderr {
+							run.stderr = unknownFlagError
+						}
+						env := fakeLauncherEnv(t, run)
 						script := filepath.Join(root, launcher.path)
 						args := append([]string{script}, launcher.args...)
 						res := runTestCmd(t, cmdReq{
 							dir:  root,
 							name: "bash",
 							args: args,
-							env: fakeLauncherEnv(t, launcherRun{
-								backend: backend,
-								code:    tc.code,
-								output:  tc.output,
-							}),
-						})
-						assert.Equal(t, tc.code, res.code)
-						assert.Equal(t, tc.output, res.stdout)
-					})
-				}
-			})
-		}
-	}
-}
-
-func TestShellLaunchersRelayOverlayStderr(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("shell launchers are not used on windows")
-	}
-
-	root := testRepoRoot(t)
-	unknownFlagError := "revdiff: unknown flag `--bogus-flag'"
-
-	launchers := []struct {
-		name string
-		path string
-	}{
-		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
-		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
-	}
-	// 0 is a clean quit and 10 means annotations were captured; revdiff writes
-	// ordinary warnings to stderr, so relaying either would put noise on every
-	// successful review
-	cases := []struct {
-		name       string
-		code       int
-		wantStderr string
-	}{
-		{name: "clean", code: 0},
-		{name: "annotations", code: exitCodeAnnotations},
-		{name: "failure", code: 1, wantStderr: unknownFlagError},
-	}
-
-	for _, launcher := range launchers {
-		for _, backend := range launcherBackends() {
-			t.Run(launcher.name+"/"+backend.name, func(t *testing.T) {
-				for _, tc := range cases {
-					t.Run(tc.name, func(t *testing.T) {
-						env := fakeLauncherEnv(t, launcherRun{
-							backend: backend,
-							code:    tc.code,
-							stderr:  unknownFlagError,
-						})
-						res := runTestCmd(t, cmdReq{
-							dir:  root,
-							name: "bash",
-							args: []string{filepath.Join(root, launcher.path)},
 							env:  env,
 						})
 						assert.Equal(t, tc.code, res.code)
-						if tc.wantStderr == "" {
-							assert.Empty(t, res.stderr)
+						assert.Equal(t, tc.output, res.stdout)
+						if launcher.relaysStderr && tc.wantStderr {
+							assert.Contains(t, res.stderr, unknownFlagError)
 						} else {
-							assert.Contains(t, res.stderr, tc.wantStderr)
+							assert.Empty(t, res.stderr)
 						}
 						// each backend that overrides the base EXIT trap has to
 						// name the capture file; one that forgets leaks it
