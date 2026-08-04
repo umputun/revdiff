@@ -1,10 +1,12 @@
 package overlay
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -205,7 +207,7 @@ func TestHelpOverlay_HandleKey_OtherKeysBlocked(t *testing.T) {
 	}
 }
 
-func TestHelpOverlay_HandleMouse_NoOp(t *testing.T) {
+func TestHelpOverlay_HandleMouse_ConsumedWithoutClosing(t *testing.T) {
 	mgr := NewManager()
 	mgr.OpenHelp(helpSpec())
 
@@ -229,4 +231,204 @@ func TestHelpOverlay_HandleKey_DismissAction(t *testing.T) {
 	out := mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}}, keymap.ActionDismiss)
 	assert.Equal(t, OutcomeClosed, out.Kind)
 	assert.False(t, mgr.Active())
+}
+
+// helpTallSpec builds a spec whose two-column form is both taller and wider
+// than any ordinary terminal, so size clamping and scrolling are exercised.
+func helpTallSpec() HelpSpec {
+	sections := make([]HelpSection, 0, 8)
+	for s := range 8 {
+		entries := make([]HelpEntry, 0, 9)
+		for e := range 9 {
+			entries = append(entries, HelpEntry{
+				Keys:        fmt.Sprintf("k%d%d", s, e),
+				Description: fmt.Sprintf("section %d entry %d does something reasonably wordy", s, e),
+			})
+		}
+		sections = append(sections, HelpSection{Title: fmt.Sprintf("Section%d", s), Entries: entries})
+	}
+	return HelpSpec{Sections: sections}
+}
+
+func TestHelpOverlay_FitsTerminal(t *testing.T) {
+	sizes := []struct{ w, h int }{{100, 40}, {80, 24}, {60, 20}, {40, 12}, {200, 60}, {30, 8}, {20, 6}, {20, 5}}
+	for _, sz := range sizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			mgr := NewManager()
+			mgr.OpenHelp(helpTallSpec())
+			box := mgr.help.render(RenderCtx{Width: sz.w, Height: sz.h, Resolver: style.PlainResolver()}, mgr)
+
+			assert.LessOrEqual(t, lipgloss.Height(box), sz.h, "popup must not be taller than the terminal")
+			assert.LessOrEqual(t, lipgloss.Width(box), sz.w, "popup must not be wider than the terminal")
+		})
+	}
+}
+
+func TestHelpOverlay_SingleColumnWhenNarrow(t *testing.T) {
+	spec := HelpSpec{
+		Sections: []HelpSection{
+			{Title: "Left1", Entries: []HelpEntry{{Keys: "a", Description: "a fairly long description of action a"}}},
+			{Title: "Left2", Entries: []HelpEntry{{Keys: "b", Description: "a fairly long description of action b"}}},
+			{Title: "Right1", Entries: []HelpEntry{{Keys: "c", Description: "a fairly long description of action c"}}},
+			{Title: "Right2", Entries: []HelpEntry{{Keys: "d", Description: "a fairly long description of action d"}}},
+		},
+	}
+
+	pairedOnOneRow := func(box string) bool {
+		for line := range strings.SplitSeq(box, "\n") {
+			if strings.Contains(line, "Left1") && strings.Contains(line, "Right1") {
+				return true
+			}
+		}
+		return false
+	}
+
+	mgr := NewManager()
+	mgr.OpenHelp(spec)
+	wide := mgr.help.render(RenderCtx{Width: 200, Height: 40, Resolver: style.PlainResolver()}, mgr)
+	assert.True(t, pairedOnOneRow(wide), "wide terminal should keep the two-column layout")
+
+	narrow := mgr.help.render(RenderCtx{Width: 60, Height: 40, Resolver: style.PlainResolver()}, mgr)
+	assert.False(t, pairedOnOneRow(narrow), "narrow terminal should fall back to a single column")
+	assert.Contains(t, narrow, "Right2", "single column must still render every section")
+}
+
+func TestHelpOverlay_ScrollKeys(t *testing.T) {
+	ctx := RenderCtx{Width: 80, Height: 20, Resolver: style.PlainResolver()}
+	mgr := NewManager()
+	mgr.OpenHelp(helpTallSpec())
+	require.NotContains(t, mgr.help.render(ctx, mgr), "Section7", "last section must start below the fold")
+
+	tests := []struct {
+		name   string
+		msg    tea.KeyMsg
+		action keymap.Action
+		want   int
+	}{
+		{"down", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}, keymap.ActionDown, 1},
+		{"page down", tea.KeyMsg{Type: tea.KeyPgDown}, keymap.ActionPageDown, 11},
+		{"half page down", tea.KeyMsg{Type: tea.KeyCtrlD}, keymap.ActionHalfPageDown, 5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr.help.offset = 0
+			mgr.HandleKey(tt.msg, tt.action)
+			assert.Equal(t, tt.want, mgr.help.offset)
+		})
+	}
+
+	mgr.help.offset = 0
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, keymap.ActionEnd)
+	assert.Contains(t, mgr.help.render(ctx, mgr), "Section7", "End must reach the last section")
+
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyHome}, keymap.ActionHome)
+	assert.Equal(t, 0, mgr.help.offset)
+	assert.Contains(t, mgr.help.render(ctx, mgr), "Section0", "Home must return to the top")
+
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'G'}}, "")
+	assert.Contains(t, mgr.help.render(ctx, mgr), "Section7", "G must reach the last section")
+
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}, "")
+	assert.Equal(t, 0, mgr.help.offset)
+}
+
+func TestHelpOverlay_ScrollKeysClampAtTop(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenHelp(helpTallSpec())
+	mgr.help.render(RenderCtx{Width: 80, Height: 20, Resolver: style.PlainResolver()}, mgr)
+
+	for _, action := range []keymap.Action{keymap.ActionUp, keymap.ActionPageUp, keymap.ActionHalfPageUp} {
+		mgr.help.offset = 0
+		mgr.HandleKey(tea.KeyMsg{Type: tea.KeyUp}, action)
+		assert.Equal(t, 0, mgr.help.offset, "%s must not scroll above the first row", action)
+	}
+}
+
+func TestHelpOverlay_ScrollWheel(t *testing.T) {
+	ctx := RenderCtx{Width: 80, Height: 20, Resolver: style.PlainResolver()}
+	mgr := NewManager()
+	mgr.OpenHelp(helpTallSpec())
+	mgr.help.render(ctx, mgr)
+
+	mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	assert.Equal(t, WheelStep, mgr.help.offset)
+
+	mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+	assert.Equal(t, 0, mgr.help.offset)
+
+	mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress, Shift: true})
+	assert.Equal(t, 5, mgr.help.offset, "shift+wheel moves by half a page")
+
+	mgr.help.offset = 4
+	mgr.HandleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionRelease})
+	assert.Equal(t, 4, mgr.help.offset, "non-press wheel events must not scroll")
+}
+
+func TestHelpOverlay_ScrollHint(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenHelp(helpTallSpec())
+	overflowing := mgr.help.render(RenderCtx{Width: 80, Height: 20, Resolver: style.PlainResolver()}, mgr)
+	assert.Contains(t, overflowing, "↑/↓ scroll · 1-", "overflowing help must advertise scrolling")
+
+	mgr.OpenHelp(helpSpec())
+	fitting := mgr.help.render(RenderCtx{Width: 120, Height: 40, Resolver: style.PlainResolver()}, mgr)
+	assert.NotContains(t, fitting, "↑/↓ scroll", "help that fits must not show a scroll hint")
+}
+
+func TestHelpOverlay_OpenResetsScroll(t *testing.T) {
+	mgr := NewManager()
+	mgr.OpenHelp(helpTallSpec())
+	mgr.help.render(RenderCtx{Width: 80, Height: 20, Resolver: style.PlainResolver()}, mgr)
+	mgr.HandleKey(tea.KeyMsg{Type: tea.KeyEnd}, keymap.ActionEnd)
+	require.NotZero(t, mgr.help.offset)
+
+	mgr.OpenHelp(helpTallSpec())
+	assert.Equal(t, 0, mgr.help.offset, "reopening help must start at the top")
+}
+
+func TestHelpOverlay_BoxWidthStableWhileScrolling(t *testing.T) {
+	ctx := RenderCtx{Width: 100, Height: 24, Resolver: style.PlainResolver()}
+	mgr := NewManager()
+	mgr.OpenHelp(helpTallSpec())
+
+	want := lipgloss.Width(mgr.help.render(ctx, mgr))
+	for range 6 {
+		mgr.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, keymap.ActionPageDown)
+		assert.Equal(t, want, lipgloss.Width(mgr.help.render(ctx, mgr)),
+			"popup width must not change as the body scrolls")
+	}
+}
+
+// pins issue #304: on a ~100x40 terminal the popup used to render at 41x122 and
+// get clipped on all four sides, hiding whole sections with no way to reach them.
+func TestHelpOverlay_AllSectionsReachableOnSmallTerminal(t *testing.T) {
+	ctx := RenderCtx{Width: 100, Height: 40, Resolver: style.PlainResolver()}
+	spec := helpTallSpec()
+	mgr := NewManager()
+	mgr.OpenHelp(spec)
+
+	seen := map[string]bool{}
+	for range 40 {
+		box := mgr.help.render(ctx, mgr)
+		require.LessOrEqual(t, lipgloss.Height(box), ctx.Height)
+		require.LessOrEqual(t, lipgloss.Width(box), ctx.Width)
+		for _, sec := range spec.Sections {
+			if strings.Contains(box, sec.Title) {
+				seen[sec.Title] = true
+			}
+			for _, e := range sec.Entries {
+				if strings.Contains(box, e.Description) {
+					seen[e.Description] = true
+				}
+			}
+		}
+		mgr.HandleKey(tea.KeyMsg{Type: tea.KeyPgDown}, keymap.ActionPageDown)
+	}
+
+	for _, sec := range spec.Sections {
+		assert.True(t, seen[sec.Title], "section %q must be reachable by scrolling", sec.Title)
+		for _, e := range sec.Entries {
+			assert.True(t, seen[e.Description], "entry %q must be reachable by scrolling", e.Description)
+		}
+	}
 }

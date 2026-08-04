@@ -2,9 +2,12 @@ package ui
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1081,5 +1084,44 @@ func TestBuildHelpSpec_VimMotionSectionOn(t *testing.T) {
 			"entry %d key string mismatch", i)
 		assert.NotEmpty(t, vimSection.Entries[i].Description,
 			"entry %d must have a description", i)
+	}
+}
+
+func TestModel_HelpOverlayScrollsOnSmallTerminal(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.layout.width, m.layout.height = 100, 40
+	m.overlay.OpenHelp(m.buildHelpSpec())
+	require.True(t, m.overlay.Active())
+
+	top := m.View()
+	require.NotContains(t, top, "discard and quit", "last section must start below the fold at 100x40")
+
+	scrolled := m
+	for range 4 {
+		result, _ := scrolled.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		scrolled = result.(Model)
+	}
+	view := scrolled.View()
+
+	assert.NotEqual(t, top, view, "page-down must scroll the help body")
+	assert.Contains(t, view, "discard and quit", "paging must reach the last section")
+	assert.True(t, scrolled.overlay.Active(), "scroll keys must not close the help overlay")
+}
+
+func TestModel_HelpOverlayNeverExceedsTerminal(t *testing.T) {
+	sizes := []struct{ w, h int }{{100, 40}, {80, 24}, {60, 20}, {200, 60}}
+	for _, sz := range sizes {
+		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
+			m := testModel([]string{"a.go"}, nil)
+			m.modes.vimMotion = true
+			m.layout.width, m.layout.height = sz.w, sz.h
+			m.overlay.OpenHelp(m.buildHelpSpec())
+
+			view := m.View()
+			assert.LessOrEqual(t, lipgloss.Height(view), sz.h, "view must not grow past the terminal height")
+			for line := range strings.SplitSeq(view, "\n") {
+				assert.LessOrEqual(t, lipgloss.Width(line), sz.w, "no rendered line may exceed the terminal width")
+			}
+		})
 	}
 }
