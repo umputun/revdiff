@@ -39,17 +39,22 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 `package main` is the composition root, split across files by concern:
 
-| File | Responsibility |
-|------|---------------|
-| `main.go` | `main()`, early-exit commands (version, dump-config, dump-keys), `run()` orchestration, `finalize()` (history safety-net vs `-o` handoff after `p.Run()`) |
-| `config.go` | `options` struct, `parseArgs`, `dumpConfig`, `loadConfigFile`, config-path helpers |
-| `stdin.go` | stdin validation, `/dev/tty` reopen, stdin renderer prep |
-| `renderer_setup.go` | `DetectVCS` wiring, `setupVCSRenderer` (git/hg/jj/no-VCS/all-files) |
-| `themes.go` | theme CLI commands (`--init-themes`, `--install-theme`, `--list-themes`, `--theme`), `applyTheme()`, `themeCatalog` adapter (composes `theme.Catalog` + config persistence for `ui.ThemeCatalog` interface) |
-| `history_save.go` | `histReq` struct and `saveHistory` |
-| `signal.go` | `shutdownGuard` (turns SIGHUP/SIGTERM into a single graceful `Quit` + a `wasSignaled` flag; SIGINT is caught and drained so a Ctrl-C during an external `$EDITOR` does not quit revdiff) and the consumer-side `quitter` interface |
+- **`main.go`** — `main()`, early-exit commands (version, dump-config, dump-keys), `run()`
+  orchestration, `finalize()` (history safety-net vs `-o` handoff after `p.Run()`)
+- **`config.go`** — `options` struct, `parseArgs`, `dumpConfig`, `loadConfigFile`, config-path
+  helpers
+- **`stdin.go`** — stdin validation, `/dev/tty` reopen, stdin renderer prep
+- **`renderer_setup.go`** — `DetectVCS` wiring, `setupVCSRenderer` (git/hg/jj/no-VCS/all-files)
+- **`themes.go`** — theme CLI commands (`--init-themes`, `--install-theme`, `--list-themes`,
+  `--theme`), `applyTheme()`, `themeCatalog` adapter (composes `theme.Catalog` + config persistence
+  for `ui.ThemeCatalog` interface)
+- **`history_save.go`** — `histReq` struct and `saveHistory`
+- **`signal.go`** — `shutdownGuard` (turns SIGHUP/SIGTERM into a single graceful `Quit` + a
+  `wasSignaled` flag; SIGINT is caught and drained so a Ctrl-C during an external `$EDITOR` does not
+  quit revdiff) and the consumer-side `quitter` interface
 
-Key wiring pattern — all concrete types constructed here, injected into `ui.Model` through interfaces and factory closures:
+Key wiring pattern — all concrete types constructed here, injected into `ui.Model` through
+interfaces and factory closures:
 
 ```go
 ModelConfig{
@@ -71,187 +76,367 @@ ModelConfig{
 
 Handles all interaction with version control systems and diff parsing.
 
-**VCS detection** (`vcs.go`): `DetectVCS()` walks up directory tree looking for `.jj`/`.git`/`.hg` markers, returns `VCSJJ`, `VCSGit`, `VCSHg`, or `VCSNone`. `.jj` is checked before `.git` so colocated jj+git repositories resolve as jj (reads go through the jj working-copy model instead of bypassing it via git).
+**VCS detection** (`vcs.go`): `DetectVCS()` walks up directory tree looking for `.jj`/`.git`/`.hg`
+markers, returns `VCSJJ`, `VCSGit`, `VCSHg`, or `VCSNone`. `.jj` is checked before `.git` so
+colocated jj+git repositories resolve as jj (reads go through the jj working-copy model instead of
+bypassing it via git).
 
-**Renderer implementations** — all implement the `ui.Renderer` interface (`ChangedFiles()` + `FileDiff()`). `FileDiff` takes a single `FileDiffRequest` value (`Ref`, `Path`, `OldPath`, `Staged`, `ContextLines`) rather than positional args — bundled to stay under the 4-param limit and to carry the rename origin:
-- `Git` — runs `git diff`, parses unified diff output. Rename-aware: `ChangedFiles` keeps the rename origin on `FileEntry.OldPath`, and `FileDiff` passes `-M` plus both old/new paths (`pathArgs`) so git pairs the rename into a minimal diff instead of rendering the file as fully added. Untracked renames (plain `mv old new`, where `new` is untracked so `git diff -M` can't pair it) are recovered by `UntrackedRenames` off a throwaway index (`tempIndexWithIntentToAdd` copies `.git/index`, `git add -N` the untracked paths against the copy with `GIT_INDEX_FILE`, then `git diff -M` reports the pair); `FileDiff` renders them the same way via `untrackedRenameDiff`. Git-only — `Hg`/`Jj` never set `OldPath`, so they ignore it
+**Renderer implementations** — all implement the `ui.Renderer` interface (`ChangedFiles()` +
+`FileDiff()`). `FileDiff` takes a single `FileDiffRequest` value (`Ref`, `Path`, `OldPath`,
+`Staged`, `ContextLines`) rather than positional args — bundled to stay under the 4-param limit and
+to carry the rename origin:
+- `Git` — runs `git diff`, parses unified diff output. Rename-aware: `ChangedFiles` keeps the rename
+  origin on `FileEntry.OldPath`, and `FileDiff` passes `-M` plus both old/new paths (`pathArgs`) so
+  git pairs the rename into a minimal diff instead of rendering the file as fully added. Untracked
+  renames (plain `mv old new`, where `new` is untracked so `git diff -M` can't pair it) are
+  recovered by `UntrackedRenames` off a throwaway index (`tempIndexWithIntentToAdd` copies
+  `.git/index`, `git add -N` the untracked paths against the copy with `GIT_INDEX_FILE`, then
+  `git diff -M` reports the pair); `FileDiff` renders them the same way via `untrackedRenameDiff`.
+  Git-only — `Hg`/`Jj` never set `OldPath`, so they ignore it
 - `Hg` — runs `hg diff --git`, parses unified diff output
-- `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B) translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker so `parseUnifiedDiff` produces a binary placeholder.
+- `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B)
+  translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so
+  `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker
+  so `parseUnifiedDiff` produces a binary placeholder.
 
-**CommitLogger capability** (`CommitLog(ref string) ([]CommitInfo, error)`) — an additive capability interface implemented by `Git`/`Hg`/`Jj` and consumed by the `i` info overlay. Separate from the base `Renderer` so non-VCS renderers (`FileReader`, `DirectoryReader`, `StdinReader`) stay unaffected. Each VCS translates the pre-combined ref string to its own log syntax (`X..HEAD` for git, `X::.` for hg, `X..@` for jj), caps results at 500 commits, and strips raw `\x1b` bytes from subject/body at parse time so the overlay can render without re-scanning for ANSI injection. Hg uses ASCII US/RS separators (`\x1f`/`\x1e`) because literal NUL is invalid in argv; git and jj use NUL/SOH via stdout.
+**CommitLogger capability** (`CommitLog(ref string) ([]CommitInfo, error)`) — an additive capability
+interface implemented by `Git`/`Hg`/`Jj` and consumed by the `i` info overlay. Separate from the
+base `Renderer` so non-VCS renderers (`FileReader`, `DirectoryReader`, `StdinReader`) stay
+unaffected. Each VCS translates the pre-combined ref string to its own log syntax (`X..HEAD` for
+git, `X::.` for hg, `X..@` for jj), caps results at 500 commits, and strips raw `\x1b` bytes from
+subject/body at parse time so the overlay can render without re-scanning for ANSI injection. Hg uses
+ASCII US/RS separators (`\x1f`/`\x1e`) because literal NUL is invalid in argv; git and jj use
+NUL/SOH via stdout.
 - `FileReader` — reads standalone files as full-context (no VCS needed)
-- `DirectoryReader` — lists all tracked files via a pluggable lister (`git ls-files` by default; `NewJjDirectoryReader` uses `jj file list`) for `--all-files` mode
+- `DirectoryReader` — lists all tracked files via a pluggable lister (`git ls-files` by default;
+  `NewJjDirectoryReader` uses `jj file list`) for `--all-files` mode
 - `StdinReader` — reads from stdin as scratch buffer
 - `FallbackRenderer` — wraps a primary renderer with fallback for files not in diff
 - `ExcludeFilter` / `IncludeFilter` — decorators for prefix-based file filtering
 
-**Diff parsing** (`parseUnifiedDiff`): converts unified diff output into `[]DiffLine`. Each `DiffLine` carries:
+**Diff parsing** (`parseUnifiedDiff`): converts unified diff output into `[]DiffLine`. Each
+`DiffLine` carries:
 - `Content` — line text without `+`/`-` prefix (prefix re-added at render time)
 - `Change` — `ChangeAdd`, `ChangeRemove`, `ChangeContext`, or `ChangeDivider`
 - `OldNum` / `NewNum` — original and new line numbers (0 for non-applicable)
 
-**Blame** (`blame.go`, `hgblame.go`, `jjblame.go`): `Blamer` interface provides `FileBlame()` returning `map[int]BlameLine` keyed by new line number. jj blame uses `jj file annotate -T <template>` with a tab-separated template.
+**Blame** (`blame.go`, `hgblame.go`, `jjblame.go`): `Blamer` interface provides `FileBlame()`
+returning `map[int]BlameLine` keyed by new line number. jj blame uses
+`jj file annotate -T <template>` with a tab-separated template.
 
 ### app/ui/ — TUI package
 
-Central package. Single `Model` struct implements bubbletea's `Model` interface. Methods split across files by concern to keep files under ~500 lines:
+Central package. Single `Model` struct implements bubbletea's `Model` interface. Methods split
+across files by concern to keep files under ~500 lines:
 
-| File | Responsibility |
-|------|---------------|
-| `model.go` | Model struct, sub-state structs, `NewModel`, `Init`, `Update`, `handleKey`, interfaces |
-| `view.go` | `View()`, status bar rendering, ANSI helpers |
-| `handlers.go` | Modal handlers (enter/esc, discard, filter, reviewed), help spec |
-| `loaders.go` | Async file/blame loading, reviewed-fingerprint reconciliation, loaded-message handlers, data helpers |
-| `diffview.go` | Diff line rendering, gutters, line styling, search highlights |
-| `diffnav.go` | Cursor movement, hunk navigation, viewport sync, horizontal scroll |
-| `scrollbar.go` | Vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion) |
-| `collapsed.go` | Collapsed diff mode: hide removes, show modified markers |
-| `annotate.go` | Annotation input lifecycle (start, save, cancel, delete) and the visual-row chokepoint: `annotationVisualRows` is the single source of truth for "how many rows + what content does this annotation paint as." Memoized on `annot.rowCache`, invalidated by `handleFileLoaded`, `applyTheme`, and `cancelThemeSelect` |
-| `annotlist.go` | Annotation list spec building, cross-file jump logic (`jumpToAnnotationTarget` for the `@` popup, `tryJumpToAnnotationTarget` returning a jumped-bool for the `}`/`{` walker) |
-| `annotnav.go` | Cross-file annotation navigation (`}` / `{`): builds the flat annotation list, computes adjacent target via exact-match or insertion-point fallback, retries through non-jumpable targets so a hidden annotation cannot trap the walker |
-| `editor.go` | `$EDITOR` handoffs for annotation temp-file editing and source-file opening: `openEditor()` / `openSourceEditor()` wrap `app/editor.Editor` in `tea.ExecProcess`, capture target state, route completion, and refresh the current file after a clean source-editor exit |
-| `output.go` | In-session annotation flush and optional post-flush command handoff through injected `PostFlushHook` + `tea.ExecProcess` |
-| `themeselect.go` | Theme selector operations: open, preview, confirm, apply (via injected `ThemeCatalog`) |
-| `filepicker.go` | File picker open and selected-path jump integration; delegates visible-order/filter ownership to `FileTreeComponent` and loading to the guarded file loader |
-| `search.go` | Search input handling, match computation, navigation |
-| `mouse.go` | Mouse event routing: `handleMouse` dispatch, `hitTest` pane classification (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers (`statusBarHeight`, `diffTopRow`, `treeTopRow`). Diff-pane wheel events defer both the cursor pin and the `SetContent(renderDiff())` call via a single in-flight `tea.Tick(wheelRenderDelay)` debounce (issue #179) — `wheelState.tickInFlight` ensures one tick at a time across an entire burst (subsequent wheels just bump `gen`); stale ticks reschedule, matching ticks flush. `flushWheelPending()` is called from `handleWheelDebounce`, `handleKey`, `handleResize`, and `handleBlameLoaded` (any path that runs `syncViewportToCursor` or reads `m.nav.diffCursor` must flush first). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set |
+- **`model.go`** — Model struct, sub-state structs, `NewModel`, `Init`, `Update`, `handleKey`,
+  interfaces
+- **`view.go`** — `View()`, status bar rendering, ANSI helpers
+- **`handlers.go`** — modal handlers (enter/esc, discard, filter, reviewed), help spec
+- **`loaders.go`** — async file/blame loading, reviewed-fingerprint reconciliation, loaded-message
+  handlers, data helpers
+- **`diffview.go`** — diff line rendering, gutters, line styling, search highlights
+- **`diffnav.go`** — cursor movement, hunk navigation, viewport sync, horizontal scroll
+- **`scrollbar.go`** — vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes
+  (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion)
+- **`collapsed.go`** — collapsed diff mode: hide removes, show modified markers
+- **`annotate.go`** — annotation input lifecycle (start, save, cancel, delete) and the visual-row
+  chokepoint: `annotationVisualRows` is the single source of truth for "how many rows + what content
+  does this annotation paint as." Memoized on `annot.rowCache`, invalidated by `handleFileLoaded`,
+  `applyTheme`, and `cancelThemeSelect`
+- **`annotlist.go`** — annotation list spec building, cross-file jump logic
+  (`jumpToAnnotationTarget` for the `@` popup, `tryJumpToAnnotationTarget` returning a jumped-bool
+  for the `}`/`{` walker)
+- **`annotnav.go`** — cross-file annotation navigation (`}` / `{`): builds the flat annotation list,
+  computes adjacent target via exact-match or insertion-point fallback, retries through non-jumpable
+  targets so a hidden annotation cannot trap the walker
+- **`editor.go`** — `$EDITOR` handoffs for annotation temp-file editing and source-file opening:
+  `openEditor()` / `openSourceEditor()` wrap `app/editor.Editor` in `tea.ExecProcess`, capture
+  target state, route completion, and refresh the current file after a clean source-editor exit
+- **`output.go`** — in-session annotation flush and optional post-flush command handoff through
+  injected `PostFlushHook` + `tea.ExecProcess`
+- **`themeselect.go`** — theme selector operations: open, preview, confirm, apply (via injected
+  `ThemeCatalog`)
+- **`filepicker.go`** — file picker open and selected-path jump integration; delegates
+  visible-order/filter ownership to `FileTreeComponent` and loading to the guarded file loader
+- **`search.go`** — search input handling, match computation, navigation
+- **`mouse.go`** — mouse event routing: `handleMouse` dispatch, `hitTest` pane classification
+  (`hitZone`), wheel/left-click helpers (`clickTree`, `clickDiff`), layout helpers
+  (`statusBarHeight`, `diffTopRow`, `treeTopRow`). Diff-pane wheel events defer both the cursor pin
+  and the `SetContent(renderDiff())` call via a single in-flight `tea.Tick(wheelRenderDelay)`
+  debounce (issue #179) — `wheelState.tickInFlight` ensures one tick at a time across an entire
+  burst (subsequent wheels just bump `gen`); stale ticks reschedule, matching ticks flush.
+  `flushWheelPending()` is called from `handleWheelDebounce`, `handleKey`, `handleResize`, and
+  `handleBlameLoaded` (any path that runs `syncViewportToCursor` or reads `m.nav.diffCursor` must
+  flush first). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in
+  `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set
 
 Each source file has a matching `_test.go`.
 
 **Model state grouping** — `Model` fields are organized into explicit sub-structs by concern:
 
-| Sub-struct | Purpose | Key fields |
-|------------|---------|------------|
-| `modelConfigState` (`m.cfg`) | immutable session config | `ref`, `staged`, `only`, `noColors`, `tabSpaces`, etc. |
-| `layoutState` (`m.layout`) | viewport and pane geometry | `viewport`, `focus`, `treeHidden`, `width`, `height`, `scrollX` |
-| `loadedFileState` (`m.file`) | current file's loaded state | `lines`, `highlighted`, `intraRanges`, `blameData`, `mdTOC`, `singleFile` |
-| `modeState` (`m.modes`) | user-togglable view modes | `wrap`, `collapsed`, `compact`, `compactContext`, `lineNumbers`, `wordDiff`, `showBlame` |
-| `navigationState` (`m.nav`) | cursor position | `diffCursor`, `pendingHunkJump` |
-| `searchState` (`m.search`) | search lifecycle | `active`, `term`, `matches`, `cursor`, `input`, `matchSet`, `history`, `historyIdx` |
-| `annotationState` (`m.annot`) | annotation input lifecycle and visual-row cache | `annotating`, `fileAnnotating`, `cursorOnAnnotation`, `input`, `rowCache` |
-| `wheelState` (`m.wheel`) | diff-pane wheel coalescing (issue #179) | `gen`, `renderPending`, `tickInFlight` |
+- **`modelConfigState` (`m.cfg`)** — immutable session config: `ref`, `staged`, `only`, `noColors`,
+  `tabSpaces`, etc.
+- **`layoutState` (`m.layout`)** — viewport and pane geometry: `viewport`, `focus`, `treeHidden`,
+  `width`, `height`, `scrollX`
+- **`loadedFileState` (`m.file`)** — current file's loaded state: `lines`, `highlighted`,
+  `intraRanges`, `blameData`, `mdTOC`, `singleFile`
+- **`modeState` (`m.modes`)** — user-togglable view modes: `wrap`, `collapsed`, `compact`,
+  `compactContext`, `lineNumbers`, `wordDiff`, `showBlame`
+- **`navigationState` (`m.nav`)** — cursor position: `diffCursor`, `pendingHunkJump`
+- **`searchState` (`m.search`)** — search lifecycle: `active`, `term`, `matches`, `cursor`, `input`,
+  `matchSet`, `history`, `historyIdx`
+- **`annotationState` (`m.annot`)** — annotation input lifecycle and visual-row cache: `annotating`,
+  `fileAnnotating`, `cursorOnAnnotation`, `input`, `rowCache`
+- **`wheelState` (`m.wheel`)** — diff-pane wheel coalescing (issue #179): `gen`, `renderPending`,
+  `tickInFlight`
 
-Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create mini-models.
+Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create
+mini-models.
 
-**Theme boundary** — `app/ui` does not import `app/theme` or `app/fsutil`. Theme discovery and persistence are accessed through the `ThemeCatalog` interface (defined in `model.go`), with a concrete adapter wired in `app/themes.go`.
+**Theme boundary** — `app/ui` does not import `app/theme` or `app/fsutil`. Theme discovery and
+persistence are accessed through the `ThemeCatalog` interface (defined in `model.go`), with a
+concrete adapter wired in `app/themes.go`.
 
 ### app/ui/style/ — color, style resolution, and display helpers
 
-Owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking, HSL color math, and semantic color accessors, plus the shared filename-display helpers every path-rendering surface routes through.
+Owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking, HSL color math,
+and semantic color accessors, plus the shared filename-display helpers every path-rendering surface
+routes through.
 
 Three main types:
-- **`Resolver`** — static and runtime style/color lookups. Methods: `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()`
-- **`Renderer`** — compound ANSI rendering for elements that need raw ANSI (not lipgloss). Methods: `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()`
-- **`SGR`** — ANSI SGR stream processor. `Reemit()` re-prepends active fg/bg/bold/italic state at continuation line starts (needed for wrap mode because `ansi.Wrap` doesn't preserve SGR across newlines)
+- **`Resolver`** — static and runtime style/color lookups. Methods: `Color()`, `Style()`,
+  `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()`
+- **`Renderer`** — compound ANSI rendering for elements that need raw ANSI (not lipgloss). Methods:
+  `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`,
+  `FileReviewedMark()`, `FileAnnotationMark()`
+- **`SGR`** — ANSI SGR stream processor. `Reemit()` re-prepends active fg/bg/bold/italic state at
+  continuation line starts (needed for wrap mode because `ansi.Wrap` doesn't preserve SGR across
+  newlines)
 
-`display.go` holds two package-level functions rather than methods on those types: `SanitizeFilenameForDisplay()` strips control, ANSI/OSC, and bidi sequences out of repository-supplied filenames, and `TruncateLeftToWidth()` left-truncates with an ellipsis. Both are shared by the diff-pane header, the status bar, and the file picker; any new filename-rendering surface must route through them.
+`display.go` holds two package-level functions rather than methods on those types:
+`SanitizeFilenameForDisplay()` strips control, ANSI/OSC, and bidi sequences out of
+repository-supplied filenames, and `TruncateLeftToWidth()` left-truncates with an ellipsis. Both are
+shared by the diff-pane header, the status bar, and the file picker; any new filename-rendering
+surface must route through them.
 
 ### app/ui/sidepane/ — left-pane navigation
 
-Two independent component types, both with cursor/offset management, rendering, and keyboard navigation:
-- **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), filtering (annotated-only), semantic-fingerprint reviewed tracking, directory grouping. File-list reloads revalidate only paths reviewed before the load; marks added during the load are reconciled when that file's refreshed diff arrives. `VisibleFiles()` exposes file paths in rendered order after active filters for consumers such as the file picker.
-- **`TOC`** — markdown table-of-contents. Activated for single-file full-context markdown. Active section tracking, header-level navigation
+Two independent component types, both with cursor/offset management, rendering, and keyboard
+navigation:
+- **`FileTree`** — file tree sidebar. Supports navigation (`Move`/`StepFile`), filtering
+  (annotated-only), semantic-fingerprint reviewed tracking, directory grouping. File-list reloads
+  revalidate only paths reviewed before the load; marks added during the load are reconciled when
+  that file's refreshed diff arrives. `VisibleFiles()` exposes file paths in rendered order after
+  active filters for consumers such as the file picker.
+- **`TOC`** — markdown table-of-contents. Activated for single-file full-context markdown. Active
+  section tracking, header-level navigation
 
-Both constructed via factory closures in `main.go`, consumed through `FileTreeComponent`/`TOCComponent` interfaces.
+Both constructed via factory closures in `main.go`, consumed through
+`FileTreeComponent`/`TOCComponent` interfaces.
 
 ### app/ui/overlay/ — popup layers
 
 Layered popup system with mutual exclusivity (one overlay at a time).
 
-- **`Manager`** — coordinator. Routes key events, manages open/close lifecycle, `Compose()` renders popup on top of background using ANSI-aware compositing (`overlayCenter()`)
-- **`helpOverlay`** — scrollable keybinding help popup. Clamps to `term_w - 4` × `term_h - 4` (issue #304 — it previously sized to its content and got clipped on all four sides). Prefers two columns because they roughly halve the height, and falls back to a single column when the two-column form is wider than the terminal allows; anything still too wide after that is truncated. A body taller than the viewport scrolls (`j`/`k`, page/half-page, `Home`/`End`, `g`/`G`, wheel) and spends its last row on a muted `↑/↓ scroll · N-M of T` hint — the only cue that sections exist past the fold. That hint row is why `pageSize()` exists: paging must step by the last rendered viewport height, not by `usableHeight()`, or every page boundary skips the row the hint displaced. Rows are padded to the width of the whole body rather than of the visible slice, so the box does not resize while scrolling
+- **`Manager`** — coordinator. Routes key events, manages open/close lifecycle, `Compose()` renders
+  popup on top of background using ANSI-aware compositing (`overlayCenter()`)
+- **`helpOverlay`** — scrollable keybinding help popup. Clamps to `term_w - 4` × `term_h - 4` (issue
+  #304 — it previously sized to its content and got clipped on all four sides). Prefers two columns
+  because they roughly halve the height, and falls back to a single column when the two-column form
+  is wider than the terminal allows; anything still too wide after that is truncated. A body taller
+  than the viewport scrolls (`j`/`k`, page/half-page, `Home`/`End`, `g`/`G`, wheel) and spends its
+  last row on a muted `↑/↓ scroll · N-M of T` hint — the only cue that sections exist past the fold.
+  That hint row is why `pageSize()` exists: paging must step by the last rendered viewport height,
+  not by `usableHeight()`, or every page boundary skips the row the hint displaced. Rows are padded
+  to the width of the whole body rather than of the visible slice, so the box does not resize while
+  scrolling
 - **`annotListOverlay`** — scrollable annotation list with cross-file jump
 - **`themeSelectOverlay`** — theme picker with fzf-style filter, live swatch preview
-- **`filePickerOverlay`** — type-to-filter visible-file picker with current-file positioning, arrow-key navigation, mouse selection, and basename-preserving path truncation
-- **`infoOverlay`** (`info.go`) — unified info popup (description + session details + commit log). Description prose comes from `--description` / `--description-file`, sanitized to strip ANSI/control bytes, then highlighted via the markdown chroma path once at `NewModel` time and cached on `reviewInfoState.descriptionHighlighted` (the description is static, so re-highlighting on every overlay refresh would just produce identical bytes). Session metadata (mode, scope, filters, file/status counts, aggregate `+/-`) lives in the popup's top/bottom borders; commit log shows subject + body of every commit in the current ref range. Commits are populated eagerly at startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R` reload. `handleInfo` always opens the popup; if the user presses `i` before the fetch lands, the commits section renders an inline "loading commits…" placeholder which flips to the rendered list when `commitsLoadedMsg` arrives (`refreshInfoOverlay` pushes a fresh spec into the open overlay). Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no commits in range" centered for the empty-list case and a truncated, italicized one-liner for fetch errors (`infoErrMaxLen` caps total length to keep the popup bounded against megabyte stderr).
+- **`filePickerOverlay`** — type-to-filter visible-file picker with current-file positioning,
+  arrow-key navigation, mouse selection, and basename-preserving path truncation
+- **`infoOverlay`** (`info.go`) — unified info popup (description + session details + commit log).
+  Description prose comes from `--description` / `--description-file`, sanitized to strip
+  ANSI/control bytes, then highlighted via the markdown chroma path once at `NewModel` time and
+  cached on `reviewInfoState.descriptionHighlighted` (the description is static, so re-highlighting
+  on every overlay refresh would just produce identical bytes). Session metadata (mode, scope,
+  filters, file/status counts, aggregate `+/-`) lives in the popup's top/bottom borders; commit log
+  shows subject + body of every commit in the current ref range. Commits are populated eagerly at
+  startup via `loadCommits()` in parallel with `loadFiles()` under `tea.Batch`; re-fetched on `R`
+  reload. `handleInfo` always opens the popup; if the user presses `i` before the fetch lands, the
+  commits section renders an inline "loading commits…" placeholder which flips to the rendered list
+  when `commitsLoadedMsg` arrives (`refreshInfoOverlay` pushes a fresh spec into the open overlay).
+  Sized via `clamp(term_w * 0.9, 30, 90)` × `term_h - 4`, wraps body text at word boundaries using
+  `ansi.Wrap` from `charmbracelet/x/ansi` (ANSI-aware, preserves inline escapes). Renders "no
+  commits in range" centered for the empty-list case and a truncated, italicized one-liner for fetch
+  errors (`infoErrMaxLen` caps total length to keep the popup bounded against megabyte stderr).
 
-`Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects (file jumps, theme apply/persist). This keeps overlay package free of Model dependencies. `Manager.HandleMouse()` mirrors the same shape for wheel and click events: `app/ui/mouse.go::handleOverlayMouse` delegates when an overlay is active so info and help scroll, annotlist/themeselect move their cursors (themeselect emits `OutcomeThemePreview` to restyle the background live). Left-click in annotlist selects the clicked row and emits `OutcomeAnnotationChosen`; left-click in themeselect emits `OutcomeThemeConfirmed` on entry rows (filter and blank separator are no-ops). Click hit-testing uses the last-composed popup bounds recorded in `Manager.bounds` during `Compose()`; clicks outside the popup rectangle are swallowed so accidental clicks don't dismiss the overlay.
+`Manager.HandleKey()` returns an `Outcome` — Model switches on `OutcomeKind` to perform side effects
+(file jumps, theme apply/persist). This keeps overlay package free of Model dependencies.
+`Manager.HandleMouse()` mirrors the same shape for wheel and click events:
+`app/ui/mouse.go::handleOverlayMouse` delegates when an overlay is active so info and help scroll,
+annotlist/themeselect move their cursors (themeselect emits `OutcomeThemePreview` to restyle the
+background live). Left-click in annotlist selects the clicked row and emits
+`OutcomeAnnotationChosen`; left-click in themeselect emits `OutcomeThemeConfirmed` on entry rows
+(filter and blank separator are no-ops). Click hit-testing uses the last-composed popup bounds
+recorded in `Manager.bounds` during `Compose()`; clicks outside the popup rectangle are swallowed so
+accidental clicks don't dismiss the overlay.
 
-The file picker follows the same outcome flow: wheel input moves its cursor, and left-click emits `OutcomeFileChosen` for the selected path.
+The file picker follows the same outcome flow: wheel input moves its cursor, and left-click emits
+`OutcomeFileChosen` for the selected path.
 
 ### app/ui/worddiff/ — intra-line diff engine
 
 Single stateless type `Differ` grouping all word-diff algorithms:
 - `PairLines()` — matches add/remove lines within hunks for comparison
 - `ComputeIntraRanges()` — token-level LCS diff producing byte-offset ranges
-- `InsertHighlightMarkers()` — ANSI-aware highlight insertion, shared by both word-diff and search highlighting
+- `InsertHighlightMarkers()` — ANSI-aware highlight insertion, shared by both word-diff and search
+  highlighting
 
-30% similarity gate discards ranges for dissimilar pairs. Ranges are byte offsets on tab-replaced content, aligning with `prepareLineContent` output.
+30% similarity gate discards ranges for dissimilar pairs. Ranges are byte offsets on tab-replaced
+content, aligning with `prepareLineContent` output.
 
 ### app/highlight/ — syntax highlighting
 
-Chroma-based syntax highlighter. Produces foreground-only ANSI output (no backgrounds) so that diff line backgrounds from the style system are preserved. Highlighted lines pre-computed once per file load, stored parallel to `diffLines`.
+Chroma-based syntax highlighter. Produces foreground-only ANSI output (no backgrounds) so that diff
+line backgrounds from the style system are preserved. Highlighted lines pre-computed once per file
+load, stored parallel to `diffLines`.
 
 ### app/keymap/ — keybindings
 
-~30 `Action` constants (e.g., `ActionDown`, `ActionQuit`). `Keymap` type maps key strings to actions. Loaded from file (`map <key> <action>` / `unmap <key>` format) or defaults.
+~30 `Action` constants (e.g., `ActionDown`, `ActionQuit`). `Keymap` type maps key strings to
+actions. Loaded from file (`map <key> <action>` / `unmap <key>` format) or defaults.
 
-Handlers use `m.keymap.Resolve(msg.String())` instead of raw key strings. Modal text-entry keys (annotation input, search input, confirm discard) stay hardcoded. Overlay key dispatch uses keymap actions for j/k/up/down but keeps `enter` and `esc` hardcoded.
+Handlers use `m.keymap.Resolve(msg.String())` instead of raw key strings. Modal text-entry keys
+(annotation input, search input, confirm discard) stay hardcoded. Overlay key dispatch uses keymap
+actions for j/k/up/down but keeps `enter` and `esc` hardcoded.
 
-Two-stage chord bindings (kitty-style, e.g. `map ctrl+w>x mark_reviewed`) are supported with a ctrl+/alt+ leader restriction. Storage is flat strings in `bindings` (`"ctrl+w>x" → Action`); a lazy `chordPrefixCache` provides O(1) `IsChordLeader` lookups. `Load` resolves conflicts by dropping a standalone whose key is also a chord leader. `ResolveChord` applies the same Latin layout-resolve fallback as `Resolve` for the second-stage key. Chord dispatch lives in `app/ui` on `keyState` (`handleChordSecond`, `clearPendingInputState`) and flows through the shared `dispatchAction` path so chord-resolved actions share handlers with single-key actions.
+Two-stage chord bindings (kitty-style, e.g. `map ctrl+w>x mark_reviewed`) are supported with a
+ctrl+/alt+ leader restriction. Storage is flat strings in `bindings` (`"ctrl+w>x" → Action`); a lazy
+`chordPrefixCache` provides O(1) `IsChordLeader` lookups. `Load` resolves conflicts by dropping a
+standalone whose key is also a chord leader. `ResolveChord` applies the same Latin layout-resolve
+fallback as `Resolve` for the second-stage key. Chord dispatch lives in `app/ui` on `keyState`
+(`handleChordSecond`, `clearPendingInputState`) and flows through the shared `dispatchAction` path
+so chord-resolved actions share handlers with single-key actions.
 
 Help overlay dynamically rendered from `m.keymap.HelpSections()`.
 
 ### app/theme/ — theme system
 
-Catalog-centric API with two types: `Theme` (data + serialization) and `Catalog` (directory-aware operations). Zero standalone functions — all logic lives as methods on `Theme` or `Catalog`.
+Catalog-centric API with two types: `Theme` (data + serialization) and `Catalog` (directory-aware
+operations). Zero standalone functions — all logic lives as methods on `Theme` or `Catalog`.
 
 **`Theme`** — color palette data with metadata. Methods: `Dump(io.Writer)` for serialization.
 
-**`Catalog`** — theme discovery, loading, installation, and gallery access. Created via `NewCatalog(themesDir)`. Public methods: `Entries`, `Load`, `Resolve`, `InitBundled`, `InitAll`, `Install`, `PrintList`, `ActiveName`, `OptionalColorKeys`.
+**`Catalog`** — theme discovery, loading, installation, and gallery access. Created via
+`NewCatalog(themesDir)`. Public methods: `Entries`, `Load`, `Resolve`, `InitBundled`, `InitAll`,
+`Install`, `PrintList`, `ActiveName`, `OptionalColorKeys`.
 
 File layout:
 - `theme.go` — `Theme` struct, `Dump`, package-level vars (`colorKeys`, `optionalColorKeys`)
-- `catalog.go` — `Catalog` struct, `NewCatalog`, all catalog methods (discovery, loading, installation, gallery)
+- `catalog.go` — `Catalog` struct, `NewCatalog`, all catalog methods (discovery, loading,
+  installation, gallery)
 
-Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark. Community themes live in `themes/gallery/`.
+Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark.
+Community themes live in `themes/gallery/`.
 
-23 color keys mapped via `colorFieldPtrs()` in `app/themes.go` — single source of truth for color key to struct field mapping.
+23 color keys mapped via `colorFieldPtrs()` in `app/themes.go` — single source of truth for color
+key to struct field mapping.
 
 ### app/annotation/ — annotation store
 
-In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting for export. `FormatOutput` escapes body lines that start with `## ` (with trailing space, matching the record-header form) by prefixing a single space so downstream parsers cannot confuse a comment line for a new record header. Lines starting with `###` or `##` without a space are left unchanged. `WriteFile(path)` formats once via `FormatOutput`, persists atomically by delegating to `fsutil.AtomicWriteFile` (temp file + rename, mode 0o600), and returns the exact snapshot written for the optional post-flush hook; it backs the in-session `O` flush. The exit-time file write calls `fsutil.AtomicWriteFile` directly with the already-formatted output, so both paths share the same atomic writer and a concurrent reader never sees a truncated file.
+In-memory store for annotations. Each `Annotation` has file, line, text, and optional `EndLine` for
+hunk range headers (triggered when comment contains "hunk" keyword). Structured output formatting
+for export. `FormatOutput` escapes body lines that start with `## ` (with trailing space, matching
+the record-header form) by prefixing a single space so downstream parsers cannot confuse a comment
+line for a new record header. Lines starting with `###` or `##` without a space are left unchanged.
+`WriteFile(path)` formats once via `FormatOutput`, persists atomically by delegating to
+`fsutil.AtomicWriteFile` (temp file + rename, mode 0o600), and returns the exact snapshot written
+for the optional post-flush hook; it backs the in-session `O` flush. The exit-time file write calls
+`fsutil.AtomicWriteFile` directly with the already-formatted output, so both paths share the same
+atomic writer and a concurrent reader never sees a truncated file.
 
 ### app/editor/ — external editor invocation
 
-Prepares external editor processes for annotation temp-file editing and source-file opening. TUI-agnostic — the caller wraps the returned `*exec.Cmd` with bubbletea's `tea.ExecProcess` (or runs it directly).
+Prepares external editor processes for annotation temp-file editing and source-file opening.
+TUI-agnostic — the caller wraps the returned `*exec.Cmd` with bubbletea's `tea.ExecProcess` (or runs
+it directly).
 
 Single stateless type `Editor` bundling all behavior as methods (no standalone functions):
-- `Command(content)` — writes content to a `revdiff-annot-*.md` temp file, resolves the editor (`$EDITOR` → `$VISUAL` → `vi`, whitespace-split so `code --wait` works), returns `*exec.Cmd` + a `complete(runErr) (string, error)` function. `complete` reads the file, removes it regardless of outcome, and preserves `runErr` — content is still returned alongside a non-nil `runErr` so callers can keep user work on soft editor failures.
-- `SourceCommand(path string, line int)` — checks that the source path exists and is a regular file as part of preparing an editor command, resolves the same editor chain, and returns an editor command for the existing source file. Known editors receive line-navigation arguments: `vi`, `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use `--goto path:N`. Unknown editors receive only the file path.
+- `Command(content)` — writes content to a `revdiff-annot-*.md` temp file, resolves the editor
+  (`$EDITOR` → `$VISUAL` → `vi`, whitespace-split so `code --wait` works), returns `*exec.Cmd` + a
+  `complete(runErr) (string, error)` function. `complete` reads the file, removes it regardless of
+  outcome, and preserves `runErr` — content is still returned alongside a non-nil `runErr` so
+  callers can keep user work on soft editor failures.
+- `SourceCommand(path string, line int)` — checks that the source path exists and is a regular file
+  as part of preparing an editor command, resolves the same editor chain, and returns an editor
+  command for the existing source file. Known editors receive line-navigation arguments: `vi`,
+  `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use
+  `--goto path:N`. Unknown editors receive only the file path.
 
-Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.
+Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer
+side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.
 
 ### app/handoff/ — post-flush command preparation
 
-Prepares the user-configured shell command for an explicit `O` handoff. `New` returns nil for an empty command; a constructed runner's `Prepare(content)` is infallible, supplies the exact annotation snapshot on stdin, and suppresses stdout so commands such as `tee` do not overwrite the TUI. stderr remains attached when `app/ui` runs the command through `tea.ExecProcess`, and a command may write OSC 52 directly through `/dev/tty`. The optional `PostFlushHook` interface is defined on the UI consumer side and wired at the composition root only when `--post-flush-command` is set.
+Prepares the user-configured shell command for an explicit `O` handoff. `New` returns nil for an
+empty command; a constructed runner's `Prepare(content)` is infallible, supplies the exact
+annotation snapshot on stdin, and suppresses stdout so commands such as `tee` do not overwrite the
+TUI. stderr remains attached when `app/ui` runs the command through `tea.ExecProcess`, and a command
+may write OSC 52 directly through `/dev/tty`. The optional `PostFlushHook` interface is defined on
+the UI consumer side and wired at the composition root only when `--post-flush-command` is set.
 
 ### app/history/ — session auto-save
 
-`Save(Params)` writes review session as markdown to `~/.config/revdiff/history/`. Includes header, annotations, and git diff for annotated files.
+`Save(Params)` writes review session as markdown to `~/.config/revdiff/history/`. Includes header,
+annotations, and git diff for annotated files.
 
-On a signal-delivered exit (a SIGHUP from a dropped SSH/tmux client, or a SIGTERM) `finalize()` in `main.go` invokes this save as a crash-recovery net and stops there — history only, never the `-o` output. This is a deliberate semantic change: a signal-delivered SIGTERM no longer writes `-o`, because a signal is not the deliberate handoff that `q`/`O` perform. The wiring lives at the composition root — `shutdownGuard` in `app/signal.go` plus `tea.WithoutSignalHandler()` so revdiff owns SIGHUP/SIGTERM instead of bubbletea. SIGINT is caught and drained so a Ctrl-C during an external `$EDITOR` does not quit revdiff. The guard is stopped (default signal disposition restored for all three) before `finalize()` runs, so a slow or hung finalize (`saveHistory` shells out to git) stays killable by a second signal.
+On a signal-delivered exit (a SIGHUP from a dropped SSH/tmux client, or a SIGTERM) `finalize()` in
+`main.go` invokes this save as a crash-recovery net and stops there — history only, never the `-o`
+output. This is a deliberate semantic change: a signal-delivered SIGTERM no longer writes `-o`,
+because a signal is not the deliberate handoff that `q`/`O` perform. The wiring lives at the
+composition root — `shutdownGuard` in `app/signal.go` plus `tea.WithoutSignalHandler()` so revdiff
+owns SIGHUP/SIGTERM instead of bubbletea. SIGINT is caught and drained so a Ctrl-C during an
+external `$EDITOR` does not quit revdiff. The guard is stopped (default signal disposition restored
+for all three) before `finalize()` runs, so a slow or hung finalize (`saveHistory` shells out to
+git) stays killable by a second signal.
 
 ## Key Interfaces
 
-All consumer-side — defined in `app/ui/model.go`, not in implementor packages (exception: `diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces belong to the consumer.
+All consumer-side — defined in `app/ui/model.go`, not in implementor packages (exception:
+`diff.Renderer` is a local mirror exported for moq generation). This is idiomatic Go: interfaces
+belong to the consumer.
 
-| Interface | Methods | Implementors |
-|-----------|---------|-------------|
-| `Renderer` | `ChangedFiles()`, `FileDiff()` | `diff.Git`, `diff.Hg`, `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.FallbackRenderer`, `diff.ExcludeFilter`, `diff.IncludeFilter` |
-| `commitLogSource` | `CommitLog(ref)` | `diff.Git`, `diff.Hg`, `diff.Jj` (via `diff.CommitLogger` capability; resolved at Model construction by type-assertion on the Renderer when `ModelConfig.CommitLog` is nil) |
-| `SyntaxHighlighter` | `HighlightLines()`, `SetStyle()`, `StyleName()` | `highlight.Highlighter` |
-| `Blamer` | `FileBlame()` | `diff.Git`, `diff.Hg` |
-| `styleResolver` | `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`, `IndicatorBg()` | `style.Resolver` |
-| `styleRenderer` | `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`, `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()` | `style.Renderer` |
-| `sgrProcessor` | `Reemit()` | `style.SGR` |
-| `wordDiffer` | `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()` | `worddiff.Differ` |
-| `FileTreeComponent` | 27 methods (navigation, query, mutation, scroll-state, render) | `sidepane.FileTree` |
-| `TOCComponent` | 9 methods (navigation, cursor/section query+set, scroll-state, render) | `sidepane.TOC` |
-| `overlayManager` | `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`, `OpenFilePicker()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`, `Compose()` | `overlay.Manager` |
-| `ThemeCatalog` | `Entries()`, `Resolve()`, `Persist()` | `themeCatalog` adapter in `app/themes.go` (composes `theme.Catalog` + config persistence) |
-| `ExternalEditor` | `Command(content)` for annotation temp-file editing, `SourceCommand(path string, line int)` for opening source files | `editor.Editor` (default wiring via `ModelConfig.Editor`; stubbed in tests) |
-| `PostFlushHook` | `Prepare(content)` | `handoff.Runner` (optional wiring via `ModelConfig.PostFlushHook`) |
+- **`Renderer`** — `ChangedFiles()`, `FileDiff()`; implemented by `diff.Git`, `diff.Hg`,
+  `diff.FileReader`, `diff.DirectoryReader`, `diff.StdinReader`, `diff.FallbackRenderer`,
+  `diff.ExcludeFilter`, `diff.IncludeFilter`
+- **`commitLogSource`** — `CommitLog(ref)`; implemented by `diff.Git`, `diff.Hg`, `diff.Jj` (via
+  `diff.CommitLogger` capability; resolved at Model construction by type-assertion on the Renderer
+  when `ModelConfig.CommitLog` is nil)
+- **`SyntaxHighlighter`** — `HighlightLines()`, `SetStyle()`, `StyleName()`; implemented by
+  `highlight.Highlighter`
+- **`Blamer`** — `FileBlame()`; implemented by `diff.Git`, `diff.Hg`
+- **`styleResolver`** — `Color()`, `Style()`, `LineBg()`, `LineStyle()`, `WordDiffBg()`,
+  `IndicatorBg()`; implemented by `style.Resolver`
+- **`styleRenderer`** — `AnnotationInline()`, `DiffCursor()`, `StatusBarSeparator()`,
+  `FileStatusMark()`, `FileReviewedMark()`, `FileAnnotationMark()`; implemented by `style.Renderer`
+- **`sgrProcessor`** — `Reemit()`; implemented by `style.SGR`
+- **`wordDiffer`** — `ComputeIntraRanges()`, `PairLines()`, `InsertHighlightMarkers()`; implemented
+  by `worddiff.Differ`
+- **`FileTreeComponent`** — 27 methods (navigation, query, mutation, scroll-state, render);
+  implemented by `sidepane.FileTree`
+- **`TOCComponent`** — 9 methods (navigation, cursor/section query+set, scroll-state, render);
+  implemented by `sidepane.TOC`
+- **`overlayManager`** — `Active()`, `Kind()`, `OpenHelp()`, `OpenAnnotList()`, `OpenThemeSelect()`,
+  `OpenFilePicker()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`,
+  `Compose()`; implemented by `overlay.Manager`
+- **`ThemeCatalog`** — `Entries()`, `Resolve()`, `Persist()`; implemented by `themeCatalog` adapter
+  in `app/themes.go` (composes `theme.Catalog` + config persistence)
+- **`ExternalEditor`** — `Command(content)` for annotation temp-file editing,
+  `SourceCommand(path string, line int)` for opening source files; implemented by `editor.Editor`
+  (default wiring via `ModelConfig.Editor`; stubbed in tests)
+- **`PostFlushHook`** — `Prepare(content)`; implemented by `handoff.Runner` (optional wiring via
+  `ModelConfig.PostFlushHook`)
 
 ## Data Flow
 
@@ -283,15 +468,13 @@ Model.Init() → loadFiles cmd
             → (optional) loadBlame cmd → blameLoadedMsg
 ```
 
-`View()` is gated on two flags so the user never sees an empty two-pane layout
-during async initialisation: it returns the literal `"loading..."` while
-`!m.ready` (before the first `WindowSizeMsg`), then `"loading files..."` while
-`m.ready && !m.filesLoaded` (after resize, before an accepted `filesLoadedMsg`).
-`filesLoaded` flips to true on every accepted `filesLoadedMsg` (success or
-error), so the loading screen always exits once the current in-flight load
-returns. Stale responses (`msg.seq != m.filesLoadSeq`, e.g. an older load still
-in flight after `toggleUntracked` bumped the sequence) are dropped and do not
-flip the flag or rebuild the tree.
+`View()` is gated on two flags so the user never sees an empty two-pane layout during async
+initialisation: it returns the literal `"loading..."` while `!m.ready` (before the first
+`WindowSizeMsg`), then `"loading files..."` while `m.ready && !m.filesLoaded` (after resize, before
+an accepted `filesLoadedMsg`). `filesLoaded` flips to true on every accepted `filesLoadedMsg`
+(success or error), so the loading screen always exits once the current in-flight load returns.
+Stale responses (`msg.seq != m.filesLoadSeq`, e.g. an older load still in flight after
+`toggleUntracked` bumped the sequence) are dropped and do not flip the flag or rebuild the tree.
 
 ### Rendering Pipeline
 
@@ -328,7 +511,8 @@ sidepane.Render() (file tree or markdown TOC)
   → terminal
 ```
 
-Each rendering feature (line numbers, blame, word-diff, search, wrap, collapsed) is orthogonal — can be independently toggled.
+Each rendering feature (line numbers, blame, word-diff, search, wrap, collapsed) is orthogonal — can
+be independently toggled.
 
 ### Annotation Flow
 
@@ -369,13 +553,10 @@ User presses 'e' in diff pane
               → return to revdiff without reloading
 ```
 
-Source line navigation is best effort for all worktree-backed reviews.
-Staged and ref reviews still request the focused line when revdiff can derive
-one from the loaded diff,
-but clean editor exits from staged and ref reviews do not reload the displayed
-diff.
-Removed rows target the nearest line that still exists in the current file;
-when previous and next current-file rows are equally near,
+Source line navigation is best effort for all worktree-backed reviews. Staged and ref reviews still
+request the focused line when revdiff can derive one from the loaded diff, but clean editor exits
+from staged and ref reviews do not reload the displayed diff. Removed rows target the nearest line
+that still exists in the current file; when previous and next current-file rows are equally near,
 the previous row wins.
 
 ### Overlay Flow
@@ -413,11 +594,16 @@ User presses '?' / '@' / 'T' / 'P' / 'i'
 - **Keybindings**: `~/.config/revdiff/keybindings` (`map`/`unmap` format)
 - **History**: `~/.config/revdiff/history/` (auto-save dir)
 
-Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*` flags or env vars. Applied via `applyTheme()` in `app/themes.go` which directly overwrites `opts.Colors.*` fields after `parseArgs()`.
+Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*`
+flags or env vars. Applied via `applyTheme()` in `app/themes.go` which directly overwrites
+`opts.Colors.*` fields after `parseArgs()`.
 
-Adding a new color requires changes in three places: `theme.go` colorKeys + options struct + `colorFieldPtrs()` in `app/themes.go`.
+Adding a new color requires changes in three places: `theme.go` colorKeys + options struct +
+`colorFieldPtrs()` in `app/themes.go`.
 
-Theme ownership is split by concern: `app/theme` owns discovery/loading/installation via `Catalog`, `app/ui` consumes a `ThemeCatalog` interface for selector/preview/apply, and `app/themes.go` wires a thin adapter composing `theme.Catalog` + config file persistence.
+Theme ownership is split by concern: `app/theme` owns discovery/loading/installation via `Catalog`,
+`app/ui` consumes a `ThemeCatalog` interface for selector/preview/apply, and `app/themes.go` wires a
+thin adapter composing `theme.Catalog` + config file persistence.
 
 ## Input Modes
 
@@ -430,27 +616,46 @@ Several mutually exclusive input sources, validated at parse time:
 | All tracked files | `--all-files` / `-A` | `DirectoryReader` | Git only, not with refs/staged/only |
 | Single file(s) | `--only` / `-F` | `FileReader` | Not with include |
 | Stdin (raw text) | `--stdin` | `StdinReader` | Sniff fails or returns `ErrNotUnifiedDiff` |
-| Stdin (multi-file diff) | `--stdin` | `MultiFileStdinReader` | Sniffs unified-diff signature, parses each section via `parseUnifiedDiff`; any per-section parse error fails the whole call so the caller falls back to `StdinReader` for the entire input |
+| Stdin (multi-file diff) | `--stdin` | `MultiFileStdinReader` | Sniffs the unified-diff signature |
 
-Filters stack: `--include` narrows first, then `--exclude` removes. Both wrap any renderer as decorators.
+`MultiFileStdinReader` parses each section via `parseUnifiedDiff`; any per-section parse error fails
+the whole call, so the caller falls back to `StdinReader` for the entire input.
+
+Filters stack: `--include` narrows first, then `--exclude` removes. Both wrap any renderer as
+decorators.
 
 ## Design Decisions
 
-**Single Model struct with split files** — bubbletea's architecture centers on one Model. Splitting methods across files by concern keeps each file manageable while avoiding the complexity of multiple coordinating models.
+**Single Model struct with split files** — bubbletea's architecture centers on one Model. Splitting
+methods across files by concern keeps each file manageable while avoiding the complexity of multiple
+coordinating models.
 
-**Consumer-side interfaces** — all interfaces defined in `app/ui/model.go`, not in implementor packages. Idiomatic Go pattern that keeps packages decoupled and makes the dependency direction explicit.
+**Consumer-side interfaces** — all interfaces defined in `app/ui/model.go`, not in implementor
+packages. Idiomatic Go pattern that keeps packages decoupled and makes the dependency direction
+explicit.
 
-**Factory closures for sidepane components** — `NewFileTree` and `ParseTOC` are factory closures, not direct constructor calls, because they need runtime parameters from `main.go` that Model shouldn't know about.
+**Factory closures for sidepane components** — `NewFileTree` and `ParseTOC` are factory closures,
+not direct constructor calls, because they need runtime parameters from `main.go` that Model
+shouldn't know about.
 
-**Raw ANSI instead of lipgloss for inline elements** — lipgloss `Render()` emits `\033[0m` (full reset) which breaks outer backgrounds. Elements rendered inside a lipgloss container (status bar separators, cursor markers, annotation text) use raw ANSI sequences via the style sub-package.
+**Raw ANSI instead of lipgloss for inline elements** — lipgloss `Render()` emits `\033[0m` (full
+reset) which breaks outer backgrounds. Elements rendered inside a lipgloss container (status bar
+separators, cursor markers, annotation text) use raw ANSI sequences via the style sub-package.
 
-**Overlay Outcome pattern** — overlays return `Outcome` values instead of directly modifying Model state. Keeps overlay package independent from Model, makes side effects explicit and testable.
+**Overlay Outcome pattern** — overlays return `Outcome` values instead of directly modifying Model
+state. Keeps overlay package independent from Model, makes side effects explicit and testable.
 
-**Foreground-only syntax highlighting** — chroma output limited to foreground colors so diff line backgrounds (add/remove/modify) from the style system are preserved without conflict.
+**Foreground-only syntax highlighting** — chroma output limited to foreground colors so diff line
+backgrounds (add/remove/modify) from the style system are preserved without conflict.
 
-**Loaded-file state object** — `diffLines`, `highlightedLines`, `intraRanges`, and related per-file metadata are grouped into a single `loadedFileState` struct (`m.file`). This makes the synchronization invariant explicit — all parallel arrays and derived data for the current file are co-located rather than scattered across top-level Model fields.
+**Loaded-file state object** — `diffLines`, `highlightedLines`, `intraRanges`, and related per-file
+metadata are grouped into a single `loadedFileState` struct (`m.file`). This makes the
+synchronization invariant explicit — all parallel arrays and derived data for the current file are
+co-located rather than scattered across top-level Model fields.
 
-**Model state sub-structs** — `Model` fields are grouped into named sub-structs (`cfg`, `layout`, `file`, `modes`, `nav`, `search`, `annot`) by concern. Methods remain on `Model` — the sub-structs make state ownership explicit without splitting into mini-models.
+**Model state sub-structs** — `Model` fields are grouped into named sub-structs (`cfg`, `layout`,
+`file`, `modes`, `nav`, `search`, `annot`) by concern. Methods remain on `Model` — the sub-structs
+make state ownership explicit without splitting into mini-models.
 
 ## Libraries
 
