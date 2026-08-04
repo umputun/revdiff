@@ -124,13 +124,38 @@ case "$cmd_name" in
     agtermctl)
         case "${1:-} ${2:-}" in
             "session overlay")
+                # the --pane feature probe; FAKE_AGTERM_PANE=1 fakes a CLI new
+                # enough to carry the flag
+                if [ "${3:-}" = "open" ] && [ "${4:-}" = "--help" ]; then
+                    echo "  --size-percent <size-percent>"
+                    if [ "${FAKE_AGTERM_PANE:-}" = "1" ]; then
+                        echo "  --pane <pane>  Scope the overlay to ONE split pane"
+                    fi
+                    exit 0
+                fi
                 # session overlay open <cmd> --target ... --cwd ... --block; run
                 # the command string in a shell and propagate its exit code,
                 # mirroring agtermctl running the overlay command and returning rc
                 if [ "${3:-}" = "open" ]; then
+                    if [ -n "${FAKE_AGTERM_ARGS_FILE:-}" ]; then
+                        printf '%s\n' "$*" >> "$FAKE_AGTERM_ARGS_FILE"
+                    fi
+                    # FAKE_AGTERM_PANE_REFUSE=1 mimics agterm rejecting a pane
+                    # overlay without running the command, so the launcher's
+                    # session-wide retry is exercised
+                    if [ "${FAKE_AGTERM_PANE_REFUSE:-}" = "1" ] && printf '%s' "$*" | grep -q -- '--pane'; then
+                        echo "pane not visible" >&2
+                        exit 1
+                    fi
                     sh -c "${4:-}"
                     exit $?
                 fi
+                exit 0
+                ;;
+            "tree --json")
+                # split state for the launcher's pane-overlay gate
+                printf '{"result":{"tree":{"workspaces":[{"sessions":[{"id":"%s","split":%s}]}]}}}\n' \
+                    "${AGTERM_SESSION_ID:-}" "${FAKE_AGTERM_SPLIT:-false}"
                 exit 0
                 ;;
             "session status")

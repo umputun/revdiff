@@ -148,6 +148,8 @@ $SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--only=
 
 **Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
+**Pane-scoped overlay (agterm)**: when running in an agterm split, `REVDIFF_AGTERM_PANE=1` opens revdiff in the agent's own pane instead of over the whole session, leaving the sibling pane live and visible. The user sets it in the environment; it is ignored outside a split. This is a launcher environment variable, not a revdiff flag.
+
 The script:
 - Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay

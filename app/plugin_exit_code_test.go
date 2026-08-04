@@ -177,6 +177,99 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	}
 }
 
+func TestAgtermPaneOverlayOptIn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("the launcher's split check needs jq")
+	}
+
+	root := testRepoRoot(t)
+	launchers := []struct {
+		name string
+		path string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+	}
+	cases := []struct {
+		name      string
+		env       map[string]string
+		wantPane  bool
+		wantOpens int
+	}{
+		{
+			name:      "opt-in in a split scopes the overlay to the pane",
+			env:       map[string]string{"REVDIFF_AGTERM_PANE": "1", "FAKE_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "true"},
+			wantPane:  true,
+			wantOpens: 1,
+		},
+		{
+			name:      "without the opt-in the overlay stays session-wide",
+			env:       map[string]string{"FAKE_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "true"},
+			wantOpens: 1,
+		},
+		{
+			name:      "opt-in without a split stays session-wide",
+			env:       map[string]string{"REVDIFF_AGTERM_PANE": "1", "FAKE_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "false"},
+			wantOpens: 1,
+		},
+		{
+			name:      "opt-in on an older cli stays session-wide",
+			env:       map[string]string{"REVDIFF_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "true"},
+			wantOpens: 1,
+		},
+		{
+			name: "a refused pane overlay retries session-wide",
+			env: map[string]string{"REVDIFF_AGTERM_PANE": "1", "FAKE_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "true",
+				"FAKE_AGTERM_PANE_REFUSE": "1"},
+			wantPane:  true,
+			wantOpens: 2,
+		},
+	}
+
+	output := "## file.go:1 (+)\ncomment\n"
+	for _, launcher := range launchers {
+		for _, tc := range cases {
+			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				backend := launcherBackend{name: "agterm", command: "agtermctl", env: map[string]string{
+					"AGTERM_SESSION_ID": "sess-1",
+					"AGTERM_WINDOW_ID":  "win-1",
+					"AGTERM_PANE":       "left",
+				}}
+				env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: output})
+				argsFile := filepath.Join(env["TMPDIR"], "agterm-args")
+				env["FAKE_AGTERM_ARGS_FILE"] = argsFile
+				maps.Copy(env, tc.env)
+
+				res := runTestCmd(t, cmdReq{
+					dir:  root,
+					name: "bash",
+					args: []string{filepath.Join(root, launcher.path)},
+					env:  env,
+				})
+				assert.Equal(t, exitCodeAnnotations, res.code)
+				assert.Equal(t, output, res.stdout)
+
+				raw, err := os.ReadFile(argsFile) //nolint:gosec // path is a test-owned temp file
+				require.NoError(t, err)
+				opens := strings.Split(strings.TrimSpace(string(raw)), "\n")
+				require.Len(t, opens, tc.wantOpens)
+				if tc.wantPane {
+					assert.Contains(t, opens[0], "--pane left")
+				} else {
+					assert.NotContains(t, opens[0], "--pane")
+				}
+				if len(opens) > 1 {
+					// the retry drops the pane scoping, otherwise agterm refuses it again
+					assert.NotContains(t, opens[len(opens)-1], "--pane")
+				}
+			})
+		}
+	}
+}
+
 func TestPlanReviewHookAnnotationExitCodes(t *testing.T) {
 	python := python3Path(t)
 
@@ -1139,6 +1232,9 @@ func cleanOverlayEnv() map[string]string {
 		"INSIDE_EMACS":          "",
 		"AGTERM_SESSION_ID":     "",
 		"AGTERM_SOCKET":         "",
+		"AGTERM_PANE":           "",
+		"AGTERM_WINDOW_ID":      "",
+		"REVDIFF_AGTERM_PANE":   "",
 		"REVDIFF_TMUX_WINDOW":   "",
 		"AGENTDECK_INSTANCE_ID": "",
 		"REVDIFF_CONFIG":        "",

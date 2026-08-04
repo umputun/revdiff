@@ -70,6 +70,10 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 | `REVDIFF_POPUP_WIDTH` | Tmux/Zellij popup width (e.g., `100%`, `80%`) | `90%` |
 | `REVDIFF_POPUP_HEIGHT` | Tmux/Zellij popup height / wezterm split percent | `90%` |
 
+## Pane-Scoped Overlay (agterm)
+
+Set `REVDIFF_AGTERM_PANE=1` in the launcher's environment to open revdiff in the agent's own split pane instead of over the whole session, leaving the sibling pane live and visible. It applies only when that session is split — the session-wide overlay stands otherwise, and the launcher retries session-wide if agterm refuses the pane. The review gets pane width rather than session width, which is why it is opt-in. This is a launcher environment variable, not a revdiff flag.
+
 ## Themes
 
 Eight bundled themes: **basic**, **catppuccin-latte**, **catppuccin-mocha**, **dracula**, **gruvbox**, **nord**, **revdiff**, **solarized-dark**. Stored in `~/.config/revdiff/themes/`, auto-created on first run.

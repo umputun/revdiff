@@ -120,6 +120,31 @@ OVERLAY_TITLE="rd: ${DIR_NAME}${TITLE_REF:+ [$TITLE_REF]}"
 POPUP_W="${REVDIFF_POPUP_WIDTH:-90%}"
 POPUP_H="${REVDIFF_POPUP_HEIGHT:-90%}"
 
+# whether this agtermctl accepts `--pane` on overlay open. It reached the CLI after agterm v0.9.0, and
+# on an older one it is a usage error that --block would surface as a nonzero exit inside revdiff's own
+# 0/10 vocabulary, so ask the CLI rather than assume. The answer is the PATH agtermctl's, which is not
+# always the CLI belonging to the running app; the refusal fallback below is what covers that skew.
+agterm_supports_pane_overlay() {
+    agtermctl session overlay open --help 2>/dev/null | grep -q -- '--pane'
+}
+
+# 1 when the calling session carries a split, 0 otherwise. Window-scoped because `tree` defaults to the
+# FRONTMOST window, which is not the agent's whenever the user is looking elsewhere — unscoped it would
+# find no session and report every split as absent. jq is what parses it; without jq there is no honest
+# read, so it reports "not split" and the session-wide overlay stands.
+agterm_session_split() {
+    local tree args=(tree --json)
+    command -v jq >/dev/null 2>&1 || { printf '0'; return 0; }
+    [ -n "${AGTERM_WINDOW_ID:-}" ] && args+=(--window "$AGTERM_WINDOW_ID")
+    [ -n "${AGTERM_SOCKET:-}" ] && args+=(--socket "$AGTERM_SOCKET")
+    tree=$(agtermctl "${args[@]}" 2>/dev/null) || tree=""
+    [ -n "$tree" ] || { printf '0'; return 0; }
+    printf '%s' "$tree" | jq -r --arg s "$AGTERM_SESSION_ID" '
+        [.result.tree.workspaces[].sessions[] | select(.id == $s)][0].split // false
+        | if . then 1 else 0 end
+    ' 2>/dev/null || printf '0'
+}
+
 # agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a FULL-pane overlay (no
 # --size-percent) over the agent's own session and blocks until it exits, returning revdiff's exit
 # code directly — so, unlike the sentinel-polling backends below, no sentinel is needed. Checked
@@ -149,8 +174,44 @@ if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
     trap 'agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true; rm -f "$OUTPUT_FILE" "$ERR_FILE"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+
+    # optional pane-scoped overlay (REVDIFF_AGTERM_PANE=1). The overlay above covers the WHOLE session,
+    # so in a visible split the review hides the sibling pane's work; `--pane` scopes it to the agent's
+    # own pane and leaves the sibling live and visible. Opt-in because that also gives the review half
+    # the width, which is the wrong trade for a wide diff — unset leaves the call as it was. Only the
+    # split panes qualify: `scratch` is a full-coverage surface with no sibling to spare.
+    AGTERM_OPEN=(session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD")
+    AGTERM_PANE_SCOPED=0
+    if [ "${REVDIFF_AGTERM_PANE:-}" = 1 ]; then
+        case "${AGTERM_PANE:-}" in
+            left|right)
+                if agterm_supports_pane_overlay && [ "$(agterm_session_split)" = 1 ]; then
+                    AGTERM_OPEN+=(--pane "$AGTERM_PANE")
+                    AGTERM_PANE_SCOPED=1
+                fi
+                ;;
+        esac
+    fi
+
     rc=0
-    agtermctl session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD" --block || rc=$?
+    # agtermctl's own stderr, captured apart from revdiff's (which the command string sends to
+    # $ERR_FILE) so the pane refusal below is decidable; replayed either way so nothing is swallowed.
+    # Its stdout is dropped because print_output_and_exit owns this launcher's stdout, which carries
+    # the annotations alone.
+    AGTERM_ERR=$(agtermctl "${AGTERM_OPEN[@]}" --block 2>&1 >/dev/null) || rc=$?
+    [ -n "$AGTERM_ERR" ] && printf '%s\n' "$AGTERM_ERR" >&2
+    # A pane open agterm refused means revdiff never ran, so the session-wide overlay every version
+    # supports is still worth trying rather than failing the review over geometry. Both refusals are
+    # post-checks and neither is decidable from the split read above: the split can go away between that
+    # read and this call, and a pane's overlay slot is separate from the session-wide one, so a stale
+    # pane overlay is invisible to it. Gated on agterm's own message so a revdiff failure is never
+    # retried — that would run the whole review a second time.
+    if [ "$rc" -ne 0 ] && [ "$AGTERM_PANE_SCOPED" -eq 1 ] &&
+        printf '%s' "$AGTERM_ERR" | grep -qE 'pane overlay already open|pane not visible'; then
+        rc=0
+        agtermctl session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD" --block \
+            >/dev/null || rc=$?
+    fi
     print_output_and_exit "$rc"
 fi
 

@@ -113,6 +113,8 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 
 > **Disconnect-resilient tmux window mode:** set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
 
+> **Pane-scoped overlay (agterm):** set `REVDIFF_AGTERM_PANE=1` in the launcher's environment to open revdiff in the agent's own split pane instead of over the whole session, leaving the sibling pane live and visible. It applies only when that session is split — the session-wide overlay stands otherwise, and the launcher retries session-wide if agterm refuses the pane. The review gets pane width rather than session width, which is why it is opt-in. This is a launcher environment variable, not a revdiff flag.
+
 **Install:**
 
 ```bash
