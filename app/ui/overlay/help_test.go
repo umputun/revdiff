@@ -432,3 +432,23 @@ func TestHelpOverlay_AllSectionsReachableOnSmallTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpOverlay_TruncationMarksCutRows(t *testing.T) {
+	spec := HelpSpec{
+		Sections: []HelpSection{
+			{Title: "Search", Entries: []HelpEntry{
+				{Keys: "↓ / Ctrl+N", Description: "recall next search query / clear (in search prompt)"},
+			}},
+		},
+	}
+	mgr := NewManager()
+	mgr.OpenHelp(spec)
+
+	narrow := mgr.help.render(RenderCtx{Width: 60, Height: 40, Resolver: style.PlainResolver()}, mgr)
+	assert.Contains(t, narrow, helpTruncTail, "a row cut by a narrow terminal must say it was cut")
+	assert.LessOrEqual(t, lipgloss.Width(narrow), 60, "the marker must not push the popup past the terminal")
+
+	wide := mgr.help.render(RenderCtx{Width: 200, Height: 40, Resolver: style.PlainResolver()}, mgr)
+	assert.NotContains(t, wide, helpTruncTail, "a row that fits must not be marked")
+	assert.Contains(t, wide, "recall next search query / clear (in search prompt)")
+}

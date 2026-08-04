@@ -1109,7 +1109,19 @@ func TestModel_HelpOverlayScrollsOnSmallTerminal(t *testing.T) {
 }
 
 func TestModel_HelpOverlayNeverExceedsTerminal(t *testing.T) {
-	sizes := []struct{ w, h int }{{100, 40}, {80, 24}, {60, 20}, {200, 60}}
+	// a height assertion on m.View() would be unfalsifiable: overlayCenter only
+	// assigns into existing background lines and drops the rest, so the view is
+	// always exactly the terminal height however tall the popup is. Clipping
+	// shows up as missing content instead, which is what #304 reported.
+	sizes := []struct {
+		w, h      int
+		overflows bool
+	}{
+		{100, 40, true},
+		{80, 24, true},
+		{60, 20, true},
+		{200, 60, false},
+	}
 	for _, sz := range sizes {
 		t.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(t *testing.T) {
 			m := testModel([]string{"a.go"}, nil)
@@ -1118,7 +1130,10 @@ func TestModel_HelpOverlayNeverExceedsTerminal(t *testing.T) {
 			m.overlay.OpenHelp(m.buildHelpSpec())
 
 			view := m.View()
-			assert.LessOrEqual(t, lipgloss.Height(view), sz.h, "view must not grow past the terminal height")
+			assert.Contains(t, view, "Navigation", "the popup's first row must not be clipped off the top")
+			if sz.overflows {
+				assert.Contains(t, view, "↑/↓ scroll", "the hint is the popup's last row, so its absence means the bottom was clipped")
+			}
 			for line := range strings.SplitSeq(view, "\n") {
 				assert.LessOrEqual(t, lipgloss.Width(line), sz.w, "no rendered line may exceed the terminal width")
 			}

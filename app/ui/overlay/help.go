@@ -21,6 +21,11 @@ const (
 	helpColumnGap        = 4 // spaces between the two columns
 )
 
+// helpTruncTail marks a row cut short by a terminal too narrow for it. The
+// overlay has no horizontal scroll, so without the marker a clipped binding
+// reads as the whole binding. Mirrors the vertical cue in scrollHint.
+const helpTruncTail = "…"
+
 type helpOverlay struct {
 	spec   HelpSpec
 	offset int
@@ -116,7 +121,7 @@ func (h *helpOverlay) buildBlocks(resolver Resolver) []sectionBlock {
 // width, so a terminal too narrow for them falls back to a single column —
 // which is taller and scrolls rather than being cut off at the right edge.
 // Rows still wider than innerWidth after that (a very narrow terminal) are
-// truncated, since the popup must never be wider than the screen.
+// truncated with a marker, since the popup must never be wider than the screen.
 func (h *helpOverlay) layout(blocks []sectionBlock, innerWidth int) []string {
 	rows := h.twoColumnRows(blocks)
 	if h.widest(rows) > innerWidth {
@@ -124,7 +129,7 @@ func (h *helpOverlay) layout(blocks []sectionBlock, innerWidth int) []string {
 	}
 	for i, row := range rows {
 		if lipgloss.Width(row) > innerWidth {
-			rows[i] = ansi.Truncate(row, innerWidth, "")
+			rows[i] = ansi.Truncate(row, innerWidth, helpTruncTail)
 		}
 	}
 	return rows
@@ -215,7 +220,7 @@ func (h *helpOverlay) scrollHint(total, end, bodyWidth int, resolver Resolver) s
 	pad := max((bodyWidth-runewidth.StringWidth(text))/2, 0)
 	hint := strings.Repeat(" ", pad) + string(resolver.Color(style.ColorKeyMutedFg)) + text + string(style.ResetFg)
 	if lipgloss.Width(hint) > bodyWidth {
-		return ansi.Truncate(hint, bodyWidth, "")
+		return ansi.Truncate(hint, bodyWidth, helpTruncTail)
 	}
 	return h.padLine(hint, bodyWidth)
 }
