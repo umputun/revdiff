@@ -28,6 +28,11 @@ jobs:
       - name: set up bun
         uses: oven-sh/setup-bun@v2
 
+      - name: install jq
+        run: |
+          command -v jq >/dev/null || { sudo apt-get update && sudo apt-get install -y jq; }
+          jq --version
+
       - name: build and test
         run: |
           go test -race -timeout=100s -covermode=atomic -coverprofile=$GITHUB_WORKSPACE/profile.cov_tmp ./...
