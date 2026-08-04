@@ -179,6 +179,13 @@ if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
     # own pane and leaves the sibling live and visible. Opt-in because that also gives the review half
     # the width, which is the wrong trade for a wide diff — unset leaves the call as it was. Only the
     # split panes qualify: `scratch` is a full-coverage surface with no sibling to spare.
+    # Known limitation: $AGTERM_PANE is baked into the shell's environ at spawn, so a pane promoted into
+    # the main slot keeps `right`. Promote-then-re-split therefore scopes the overlay to the new sibling
+    # rather than this pane, and agterm reports no error because that pane does exist — the fallback
+    # below cannot see it. `session status` takes a stable `--pane-id` token for exactly this; `overlay
+    # open` does not yet, and the control tree exposes nothing to resolve one against, so there is no
+    # launcher-side fix. Failing closed to the session-wide overlay is deliberately NOT the answer: that
+    # drops the feature for everyone to avoid a rare misplaced surface the user can see and close.
     AGTERM_OPEN=(session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD")
     AGTERM_PANE_SCOPED=0
     if [ "${REVDIFF_AGTERM_PANE:-}" = 1 ]; then
