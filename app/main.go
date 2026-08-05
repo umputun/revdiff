@@ -211,6 +211,7 @@ func run(opts options) (int, error) {
 		NoStatusBar:          opts.NoStatusBar,
 		NoConfirmDiscard:     opts.NoConfirmDiscard,
 		NoConfirmReload:      opts.NoConfirmReload,
+		NoTree:               opts.NoTree,
 		Wrap:                 opts.Wrap,
 		WrapIndent:           opts.WrapIndent,
 		Collapsed:            opts.Collapsed,

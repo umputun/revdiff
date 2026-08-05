@@ -37,6 +37,7 @@ Then uncomment and edit the values you want to change.
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
 | `--no-confirm-reload` | `REVDIFF_NO_CONFIRM_RELOAD` | Skip confirmation when dropping annotations on reload with R | `false` |
 | `--no-mouse` | `REVDIFF_NO_MOUSE` | Disable mouse support (scroll wheel, click) | `false` |
+| `--no-tree` | `REVDIFF_NO_TREE` | Hide the file tree pane | `false` |
 | `--vim-motion` | `REVDIFF_VIM_MOTION` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`) | `false` |
 | `--chroma-style` | `REVDIFF_CHROMA_STYLE` | Chroma color theme for syntax highlighting | `catppuccin-macchiato` |
 | `--theme` | `REVDIFF_THEME` | Load color theme from `~/.config/revdiff/themes/`; use `auto` to choose by terminal background | |

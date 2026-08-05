@@ -1737,3 +1737,42 @@ func TestModel_AnnotatingNoOpMessageDoesNotRerenderDiff(t *testing.T) {
 	assert.NotContains(t, m.layout.viewport.View(), "sentinel-after-render",
 		"blink left the input value untouched, so the diff must not be re-rendered")
 }
+
+func TestNewModel_NoTree(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	newModel := func(noTree bool) Model {
+		return testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{NoTree: noTree, TreeWidthRatio: 3})
+	}
+
+	t.Run("default keeps the tree visible and focused", func(t *testing.T) {
+		m := newModel(false)
+		assert.False(t, m.layout.treeHidden)
+		assert.Equal(t, paneTree, m.layout.focus)
+	})
+
+	t.Run("hidden tree moves focus to the diff", func(t *testing.T) {
+		m := newModel(true)
+		assert.True(t, m.layout.treeHidden)
+		assert.Equal(t, paneDiff, m.layout.focus, "focus must not sit on a pane that is not rendered")
+	})
+
+	t.Run("diff pane spans the full width after resize", func(t *testing.T) {
+		result, _ := newModel(true).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		m := result.(Model)
+		assert.Zero(t, m.layout.treeWidth)
+		assert.Equal(t, 118, m.layout.viewport.Width, "only the diff pane's own borders are subtracted")
+	})
+
+	t.Run("toggle restores the tree", func(t *testing.T) {
+		result, _ := newModel(true).Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		m := result.(Model)
+		m.toggleTreePane()
+		assert.False(t, m.layout.treeHidden)
+		assert.Positive(t, m.layout.treeWidth, "the tree must get its width back")
+		assert.Less(t, m.layout.viewport.Width, 118, "the diff pane must give width back to the tree")
+	})
+}

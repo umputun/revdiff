@@ -34,6 +34,7 @@ Tool examples:
 - `args: "--untracked"`: review untracked files with working-tree changes
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
+- `args: "--no-tree"`: review with the file tree pane hidden
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
@@ -75,6 +76,7 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 /revdiff --all-files --include src
 /revdiff --all-files --exclude vendor
 /revdiff --only README.md
+/revdiff --no-tree
 /revdiff HEAD~3 --description="why this refactor matters"
 /revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
 /revdiff main --annotations=/tmp/revdiff-review.md

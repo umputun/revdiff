@@ -30,6 +30,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.NoConfirmDiscard)
 	assert.False(t, opts.NoConfirmReload)
 	assert.False(t, opts.NoMouse)
+	assert.False(t, opts.NoTree)
 	assert.False(t, opts.Wrap)
 	assert.False(t, opts.Collapsed)
 	assert.False(t, opts.Compact)
@@ -120,6 +121,31 @@ func TestParseArgs_NoMouse(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.NoMouse)
+	})
+}
+
+func TestParseArgs_NoTree(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--no-tree"))
+		require.NoError(t, err)
+		assert.True(t, opts.NoTree)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_NO_TREE", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.NoTree)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nno-tree = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.NoTree)
 	})
 }
 

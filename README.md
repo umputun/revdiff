@@ -385,6 +385,7 @@ Positional arguments support several forms:
 | `--no-confirm-discard` | Skip confirmation when discarding annotations with Q, env: `REVDIFF_NO_CONFIRM_DISCARD` | `false` |
 | `--no-confirm-reload` | Skip confirmation when dropping annotations on reload with R, env: `REVDIFF_NO_CONFIRM_RELOAD` | `false` |
 | `--no-mouse` | Disable mouse support (scroll wheel, click), env: `REVDIFF_NO_MOUSE` | `false` |
+| `--no-tree` | Hide the file tree pane, env: `REVDIFF_NO_TREE` | `false` |
 | `--vim-motion` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`), env: `REVDIFF_VIM_MOTION` | `false` |
 | `--chroma-style` | Chroma color theme for syntax highlighting, env: `REVDIFF_CHROMA_STYLE` | `catppuccin-macchiato` |
 | `--theme` | Load color theme from `~/.config/revdiff/themes/`; use `auto` to choose by terminal background, env: `REVDIFF_THEME` | |
