@@ -397,11 +397,12 @@ LAUNCHER
 
     ITERM_UUID="${ITERM_SESSION_ID##*:}"
 
-    ITERM_NEW_SESSION=$(osascript - "$ITERM_UUID" "$LAUNCH_SCRIPT" "$SENTINEL" <<'APPLESCRIPT' 2>&1
+    ITERM_NEW_SESSION=$(osascript - "$ITERM_UUID" "$LAUNCH_SCRIPT" "$SENTINEL" "$OVERLAY_TITLE" <<'APPLESCRIPT' 2>&1
 on run argv
     set targetId to item 1 of argv
     set launchScript to item 2 of argv
     set sentinel to item 3 of argv
+    set overlayTitle to item 4 of argv
     set cmd to quoted form of launchScript & " " & quoted form of sentinel
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
@@ -417,6 +418,11 @@ on run argv
                                 set newSession to split horizontally with same profile command cmd
                             end if
                         end tell
+                        -- the tab label comes from its active session's name,
+                        -- and the split gets none of its own: it copies the
+                        -- parent's profile but not the session variables that
+                        -- profile's name may interpolate
+                        set name of newSession to overlayTitle
                         return id of newSession
                     end if
                 end repeat
