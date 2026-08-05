@@ -21,6 +21,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	opts, err := parseArgs(noConfigArgs(t))
 	require.NoError(t, err)
 	assert.Equal(t, 2, opts.TreeWidth)
+	assert.Equal(t, "left", opts.TreePosition)
 	assert.Equal(t, 4, opts.TabWidth)
 	assert.Equal(t, "catppuccin-macchiato", opts.ChromaStyle)
 	assert.Equal(t, "💬", opts.AnnotationMarker)
@@ -47,6 +48,36 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.Empty(t, opts.Refs.Against)
 	assert.Equal(t, "revdiff", opts.AutoThemeDark)
 	assert.Equal(t, "catppuccin-latte", opts.AutoThemeLight)
+}
+
+func TestParseArgs_TreePosition(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--tree-position=right"))
+		require.NoError(t, err)
+		assert.Equal(t, "right", opts.TreePosition)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_TREE_POSITION", "right")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, "right", opts.TreePosition)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgPath := filepath.Join(t.TempDir(), "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\ntree-position = right\n"), 0o600)
+		require.NoError(t, err)
+
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, "right", opts.TreePosition)
+	})
+
+	t.Run("invalid", func(t *testing.T) {
+		_, err := parseArgs(append(noConfigArgs(t), "--tree-position=center"))
+		require.Error(t, err)
+	})
 }
 
 func TestParseArgs_NoConfirmDiscard(t *testing.T) {
@@ -881,6 +912,7 @@ func TestDumpConfig(t *testing.T) {
 
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
+	assert.Contains(t, output, "tree-position = left")
 	assert.Contains(t, output, "cross-file-hunks = false")
 	assert.Contains(t, output, "exit-code-on-annotations = false")
 	assert.Contains(t, output, "no-mouse = false")

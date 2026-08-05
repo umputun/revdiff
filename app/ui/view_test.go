@@ -607,6 +607,63 @@ func TestModel_ViewSingleFileMode(t *testing.T) {
 	})
 }
 
+func TestModel_ViewTreePosition(t *testing.T) {
+	// assertLeftOf makes each call site state the expected pane order explicitly
+	// instead of mirroring the production treePosition branch
+	assertLeftOf := func(t *testing.T, view, leftLabel, rightLabel string) {
+		t.Helper()
+		lines := strings.Split(ansi.Strip(view), "\n")
+		labelColumn := func(label string) int {
+			for _, line := range lines {
+				if idx := strings.Index(line, label); idx >= 0 {
+					return idx
+				}
+			}
+			return -1
+		}
+
+		leftIdx, rightIdx := labelColumn(leftLabel), labelColumn(rightLabel)
+		require.NotEqual(t, -1, leftIdx, "label %q must appear in the rendered view", leftLabel)
+		require.NotEqual(t, -1, rightIdx, "label %q must appear in the rendered view", rightLabel)
+		assert.Less(t, leftIdx, rightIdx)
+	}
+
+	for _, tc := range []struct {
+		name                  string
+		treePos               TreePosition
+		leftLabel, rightLabel string
+	}{
+		{name: "file tree on left", leftLabel: "tree.go", rightLabel: "current.go"},
+		{name: "file tree on right", treePos: TreePositionRight, leftLabel: "current.go", rightLabel: "tree.go"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := testModel([]string{"tree.go", "other.go"}, nil)
+			m.tree = testNewFileTree([]string{"tree.go", "other.go"})
+			m.file.name = "current.go"
+			m.cfg.treePosition = tc.treePos
+			m.cfg.noStatusBar = true
+
+			assertLeftOf(t, m.View(), tc.leftLabel, tc.rightLabel)
+		})
+	}
+
+	t.Run("markdown TOC follows tree position", func(t *testing.T) {
+		m := testModel([]string{"plan.md"}, nil)
+		m.tree = testNewFileTree([]string{"plan.md"})
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(
+			[]diff.DiffLine{{NewNum: 1, Content: "# Navigation section", ChangeType: diff.ChangeContext}},
+			"plan.md",
+		)
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "plan.md"
+		m.cfg.treePosition = TreePositionRight
+		m.cfg.noStatusBar = true
+
+		assertLeftOf(t, m.View(), "plan.md", "Navigation section")
+	})
+}
+
 func TestModel_ViewRenameHeader(t *testing.T) {
 	t.Run("renamed file header shows old to new", func(t *testing.T) {
 		m := testModel([]string{"new.go"}, nil)
@@ -1034,6 +1091,21 @@ func TestModel_HKeySwitchesToTOC(t *testing.T) {
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 		model := result.(Model)
 		assert.Equal(t, paneTree, model.layout.focus, "h key should switch to TOC pane")
+	})
+
+	t.Run("l key in diff pane switches to right-positioned TOC", func(t *testing.T) {
+		m := testModel([]string{"README.md"}, map[string][]diff.DiffLine{"README.md": mdLines})
+		m.file.singleFile = true
+		m.file.mdTOC = sidepane.ParseTOC(mdLines, "README.md")
+		require.NotNil(t, m.file.mdTOC)
+		m.file.name = "README.md"
+		m.file.lines = mdLines
+		m.layout.focus = paneDiff
+		m.cfg.treePosition = TreePositionRight
+
+		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+		model := result.(Model)
+		assert.Equal(t, paneTree, model.layout.focus, "l key should switch to the right-positioned TOC pane")
 	})
 
 	t.Run("h key no-op in single-file without TOC", func(t *testing.T) {

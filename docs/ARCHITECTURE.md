@@ -220,7 +220,7 @@ repository-supplied filenames, and `TruncateLeftToWidth()` left-truncates with a
 shared by the diff-pane header, the status bar, and the file picker; any new filename-rendering
 surface must route through them.
 
-### app/ui/sidepane/ — left-pane navigation
+### app/ui/sidepane/ — navigation pane
 
 Two independent component types, both with cursor/offset management, rendering, and keyboard
 navigation:
