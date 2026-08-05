@@ -519,12 +519,13 @@ LAUNCHER
     ITERM_UUID="${ITERM_SESSION_ID##*:}"
 
     # find target session by UUID, auto-detect split direction, capture new session id
-    ITERM_NEW_SESSION=$(osascript - "$ITERM_UUID" "$LAUNCH_SCRIPT" "$CWD" "$SENTINEL" <<'APPLESCRIPT' 2>&1
+    ITERM_NEW_SESSION=$(osascript - "$ITERM_UUID" "$LAUNCH_SCRIPT" "$CWD" "$SENTINEL" "$OVERLAY_TITLE" <<'APPLESCRIPT' 2>&1
 on run argv
     set targetId to item 1 of argv
     set launchScript to item 2 of argv
     set cwd to item 3 of argv
     set sentinel to item 4 of argv
+    set overlayTitle to item 5 of argv
     set cmd to quoted form of launchScript & " " & quoted form of cwd & " " & quoted form of sentinel
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
@@ -540,6 +541,10 @@ on run argv
                                 set newSession to split horizontally with same profile command cmd
                             end if
                         end tell
+                        -- the tab label and window title come from the active
+                        -- session's name, and a split inherits the parent's
+                        -- name setting but not the variables it interpolates
+                        set name of newSession to overlayTitle
                         return id of newSession
                     end if
                 end repeat
