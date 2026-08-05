@@ -177,6 +177,74 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	}
 }
 
+// every other backend labels its overlay through a flag the exit-code matrix
+// already runs (tmux -T, kitty --title); iTerm2 names the session it splits from
+// an AppleScript argv, which nothing else in the suite reads
+func TestIterm2OverlayNamesSession(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	diffTitle := "rd: " + filepath.Base(root) + " [HEAD~1]"
+
+	launchers := []struct {
+		name  string
+		path  string
+		args  []string
+		title string
+	}{
+		{
+			name:  "claude",
+			path:  ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+			args:  []string{"HEAD~1"},
+			title: diffTitle,
+		},
+		{
+			name:  "codex",
+			path:  "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+			args:  []string{"HEAD~1"},
+			title: diffTitle,
+		},
+		{
+			name:  "plan review",
+			path:  "plugins/revdiff-planning/scripts/launch-plan-review.sh",
+			args:  []string{planFile},
+			title: "plan: plan.md",
+		},
+	}
+
+	output := "## file.go:1 (+)\ncomment\n"
+	backend := launcherBackend{name: "iterm2", command: "osascript", env: map[string]string{"ITERM_SESSION_ID": "w0t0p0:ABC"}}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: output})
+			argsFile := filepath.Join(env["TMPDIR"], "osascript-args")
+			env["FAKE_OSASCRIPT_ARGS_FILE"] = argsFile
+
+			res := runTestCmd(t, cmdReq{
+				dir:  root,
+				name: "bash",
+				args: append([]string{filepath.Join(root, launcher.path)}, launcher.args...),
+				env:  env,
+			})
+			assert.Equal(t, exitCodeAnnotations, res.code)
+			assert.Equal(t, output, res.stdout)
+
+			raw, err := os.ReadFile(argsFile) //nolint:gosec // path is a test-owned temp file
+			require.NoError(t, err)
+			calls := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			require.NotEmpty(t, calls)
+			// the title is the last argv item so the stub's positional dispatch
+			// on the launch script keeps matching
+			assert.True(t, strings.HasSuffix(calls[0], " "+launcher.title),
+				"split osascript argv should end with the overlay title, got %q", calls[0])
+		})
+	}
+}
+
 func TestAgtermPaneOverlayOptIn(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launchers are not used on windows")

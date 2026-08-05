@@ -67,6 +67,9 @@ case "$cmd_name" in
         esac
         ;;
     osascript)
+        if [ -n "${FAKE_OSASCRIPT_ARGS_FILE:-}" ]; then
+            printf '%s\n' "$*" >> "$FAKE_OSASCRIPT_ARGS_FILE"
+        fi
         if [ "$#" -ge 5 ] && [ -x "${3:-}" ]; then
             "$3" "$4" "$5"
             echo "session:1"
