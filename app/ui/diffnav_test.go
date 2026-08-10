@@ -579,11 +579,57 @@ func TestModel_PagingAdvancesPastLineTallerThanPage(t *testing.T) {
 	require.Greater(t, offsets[1]-offsets[0], pageHeight,
 		"the annotated line must be taller than a full page for this to exercise the exemption")
 
-	for range 3 {
+	startOffset := model.layout.viewport.YOffset
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.GreaterOrEqual(t, model.layout.viewport.YOffset-startOffset, pageHeight/2,
+		"pgdown must not collapse to a near-zero scroll when the block ahead is taller than the page")
+
+	for range 2 {
 		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
 		model = result.(Model)
 	}
 	assert.Positive(t, model.nav.diffCursor, "paging must get past a line taller than the viewport")
+}
+
+// the upward walk rolls back its overshooting step too: without it, pgup across a tall
+// annotated line retreats the viewport by the line's whole height, past rows never rendered.
+func TestModel_PgUpDoesNotSkipRowsAtTallLineBoundary(t *testing.T) {
+	lines := make([]diff.DiffLine, 200)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeAdd}
+	}
+
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.layout.focus = paneDiff
+
+	pageHeight := model.layout.viewport.Height
+	const tall = 40
+	model.store.Add(annotation.Annotation{File: "a.go", Line: tall + 1, Type: string(diff.ChangeAdd),
+		Comment: strings.Repeat("some long annotation body ", 30)})
+	model.invalidateRenderCaches()
+
+	offsets := model.cursorVisualOffsets(model.findHunks(), model.buildAnnotationSet())
+	require.Greater(t, offsets[tall+1]-offsets[tall], 3,
+		"annotated line must be tall enough to overshoot the page budget")
+
+	// park the cursor just over half a page below the tall line, so the walk up has spent
+	// enough budget to make the rollback worthwhile by the time it reaches the annotation
+	model.nav.diffCursor = tall + pageHeight/2 + 1
+	model.syncViewportToCursor()
+	require.Greater(t, model.layout.viewport.YOffset, pageHeight,
+		"viewport must be far enough down that an over-page retreat would not clamp at zero")
+
+	startOffset := model.layout.viewport.YOffset
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	model = result.(Model)
+	assert.LessOrEqual(t, startOffset-model.layout.viewport.YOffset, pageHeight,
+		"pgup must not retreat the viewport by more than one page, or rows are skipped unseen")
+	assert.Less(t, model.layout.viewport.YOffset, startOffset, "pgup must still retreat the viewport")
 }
 
 // on annotated lines the cursor must stay visible within the viewport after pgdown/pgup,
