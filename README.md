@@ -373,6 +373,7 @@ Positional arguments support several forms:
 | `--no-status-bar` | Hide the status bar, env: `REVDIFF_NO_STATUS_BAR` | `false` |
 | `--wrap` | Enable line wrapping in diff view, env: `REVDIFF_WRAP` | `false` |
 | `--wrap-indent` | Indent wrap continuation rows by N columns so they hang under the first row's content (helps when reviewing markdown lists where unindented continuation can be misread as a new bullet), env: `REVDIFF_WRAP_INDENT` | `0` |
+| `--page-overlap` | Keep N lines from the previous screen when paging the diff, env: `REVDIFF_PAGE_OVERLAP` | `0` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--compact` | Start in compact diff mode (small context around changes), env: `REVDIFF_COMPACT` | `false` |
 | `--compact-context` | Number of context lines around changes when in compact mode, env: `REVDIFF_COMPACT_CONTEXT` | `5` |

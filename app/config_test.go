@@ -149,6 +149,47 @@ func TestParseArgs_NoTree(t *testing.T) {
 	})
 }
 
+func TestParseArgs_PageOverlap(t *testing.T) {
+	t.Run("default is zero", func(t *testing.T) {
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, 0, opts.PageOverlap)
+	})
+
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--page-overlap", "2"))
+		require.NoError(t, err)
+		assert.Equal(t, 2, opts.PageOverlap)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_PAGE_OVERLAP", "3")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.Equal(t, 3, opts.PageOverlap)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\npage-overlap = 4\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.Equal(t, 4, opts.PageOverlap)
+	})
+
+	t.Run("flag overrides config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\npage-overlap = 4\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath, "--page-overlap", "1"})
+		require.NoError(t, err)
+		assert.Equal(t, 1, opts.PageOverlap)
+	})
+}
+
 func TestParseArgs_Wrap(t *testing.T) {
 	t.Run("flag", func(t *testing.T) {
 		opts, err := parseArgs(append(noConfigArgs(t), "--wrap"))

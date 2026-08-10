@@ -1738,6 +1738,29 @@ func TestModel_AnnotatingNoOpMessageDoesNotRerenderDiff(t *testing.T) {
 		"blink left the input value untouched, so the diff must not be re-rendered")
 }
 
+func TestNewModel_PageOverlap(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	newModel := func(overlap int) Model {
+		return testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{PageOverlap: overlap, TreeWidthRatio: 3})
+	}
+
+	t.Run("default is no overlap", func(t *testing.T) {
+		assert.Equal(t, 0, newModel(0).modes.pageOverlap)
+	})
+
+	t.Run("configured value reaches mode state", func(t *testing.T) {
+		assert.Equal(t, 2, newModel(2).modes.pageOverlap)
+	})
+
+	t.Run("negative clamps to zero", func(t *testing.T) {
+		assert.Equal(t, 0, newModel(-5).modes.pageOverlap)
+	})
+}
+
 func TestNewModel_NoTree(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },

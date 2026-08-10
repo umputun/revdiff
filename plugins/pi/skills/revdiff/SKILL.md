@@ -35,6 +35,7 @@ Tool examples:
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
 - `args: "--no-tree"`: review with the file tree pane hidden
+- `args: "--page-overlap=2"`: keep 2 lines from the previous screen when paging
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
@@ -77,6 +78,7 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 /revdiff --all-files --exclude vendor
 /revdiff --only README.md
 /revdiff --no-tree
+/revdiff --page-overlap=2
 /revdiff HEAD~3 --description="why this refactor matters"
 /revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
 /revdiff main --annotations=/tmp/revdiff-review.md

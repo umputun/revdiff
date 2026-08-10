@@ -356,6 +356,7 @@ type modeState struct {
 	showUntracked  bool           // true when untracked files are shown in tree
 	compact        bool           // true when diffs are fetched with small context around changes
 	compactContext int            // number of context lines around changes when compact is enabled
+	pageOverlap    int            // rows carried over from the previous screen on page up/down; 0 disables
 	vimMotion      bool           // true when the --vim-motion preset is active (gates the vim-motion interceptor in handleKey)
 }
 
@@ -743,6 +744,7 @@ type ModelConfig struct {
 	NoConfirmReload  bool     // skip confirmation prompt when dropping annotations on reload
 	Wrap             bool     // enable line wrapping
 	WrapIndent       int      // extra indent (cols) for wrap continuation rows; 0 disables
+	PageOverlap      int      // rows carried over from the previous screen on page up/down; 0 disables
 	Collapsed        bool     // start in collapsed diff mode
 	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
 	LineNumbers      bool     // show line numbers in diff gutter
@@ -921,6 +923,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			showUntracked:  cfg.ShowUntracked && cfg.LoadUntracked != nil,
 			compact:        cfg.Compact && cfg.CompactApplicable,
 			compactContext: cfg.CompactContext,
+			pageOverlap:    max(0, cfg.PageOverlap),
 			vimMotion:      cfg.VimMotion,
 		},
 		commits: commitsState{

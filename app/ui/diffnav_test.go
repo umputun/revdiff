@@ -510,6 +510,70 @@ func TestModel_PgDownPgUpPreservesRelativeCursorPosition(t *testing.T) {
 	})
 }
 
+func TestModel_PageOverlapCarriesRowsAcrossPages(t *testing.T) {
+	lines := make([]diff.DiffLine, 200)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeAdd}
+	}
+
+	newModel := func(overlap int) Model {
+		m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+		m.modes.pageOverlap = overlap
+		result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
+		model := result.(Model)
+		result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+		model = result.(Model)
+		model.layout.focus = paneDiff
+		return model
+	}
+
+	t.Run("zero overlap advances a full page", func(t *testing.T) {
+		model := newModel(0)
+		pageHeight := model.layout.viewport.Height
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Equal(t, pageHeight, model.layout.viewport.YOffset)
+	})
+
+	t.Run("overlap keeps N rows on screen", func(t *testing.T) {
+		model := newModel(2)
+		pageHeight := model.layout.viewport.Height
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Equal(t, pageHeight-2, model.layout.viewport.YOffset,
+			"the last 2 rows of the previous screen must be the first 2 of the new one")
+	})
+
+	t.Run("overlap applies to pgup as well", func(t *testing.T) {
+		model := newModel(2)
+		pageHeight := model.layout.viewport.Height
+		for range 2 {
+			result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+			model = result.(Model)
+		}
+		downOffset := model.layout.viewport.YOffset
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+		model = result.(Model)
+		assert.Equal(t, downOffset-(pageHeight-2), model.layout.viewport.YOffset)
+	})
+
+	t.Run("half page motions ignore the overlap", func(t *testing.T) {
+		model := newModel(2)
+		pageHeight := model.layout.viewport.Height
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+		model = result.(Model)
+		assert.Equal(t, pageHeight/2, model.layout.viewport.YOffset,
+			"ctrl+d already retains half a screen, so the overlap must not shrink it further")
+	})
+
+	t.Run("overlap wider than the pane still advances", func(t *testing.T) {
+		model := newModel(1000)
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Positive(t, model.layout.viewport.YOffset, "paging must never stall on an oversized overlap")
+	})
+}
+
 // a line taller than the remaining page budget must not make paging scroll past unseen rows:
 // the walk used to step onto it and then shift the viewport by the cursor's whole visual delta,
 // skipping the tail of an annotation that was never rendered.
