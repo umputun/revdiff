@@ -142,10 +142,14 @@ func (m *Model) moveDiffCursorHalfPageUp() {
 // accounts for divider lines, wrap continuations, and annotation rows that occupy rendered space.
 // transitions onto an annotation sub-row (cursorOnAnnotation flip with no diffCursor change)
 // count as real progress so the loop does not terminate early on annotated lines.
+// a step that would carry the delta past rows is undone: one cursor step can span many rows
+// (a wrapped line or an annotation block), and scrolling by that whole height would move the
+// viewport further than a page, past rows it never rendered.
 func (m *Model) moveDiffCursorDownBy(rows int) {
 	hunks := m.findHunks()
 	offsets := m.cursorVisualOffsets(hunks, m.buildAnnotationSet())
 	startY := m.cursorViewportYFromOffsets(offsets)
+	moved := false
 	for {
 		prevCursor := m.nav.diffCursor
 		prevAnnot := m.annot.cursorOnAnnotation
@@ -153,7 +157,16 @@ func (m *Model) moveDiffCursorDownBy(rows int) {
 		if m.nav.diffCursor == prevCursor && m.annot.cursorOnAnnotation == prevAnnot {
 			break // no more movement possible (end of content)
 		}
-		if m.cursorViewportYFromOffsets(offsets)-startY >= rows {
+		delta := m.cursorViewportYFromOffsets(offsets) - startY
+		if delta > rows && moved {
+			// the line just stepped onto is taller than the page budget left, so stay put.
+			// the first step is exempt: a line taller than the whole page must still be reachable
+			m.nav.diffCursor = prevCursor
+			m.annot.cursorOnAnnotation = prevAnnot
+			break
+		}
+		moved = true
+		if delta >= rows {
 			break
 		}
 	}
@@ -169,10 +182,13 @@ func (m *Model) moveDiffCursorDownBy(rows int) {
 // accounts for divider lines, wrap continuations, and annotation rows that occupy rendered space.
 // transitions off an annotation sub-row count as real progress so the loop does not
 // terminate early on annotated lines.
+// a step that would carry the delta past rows is undone, for the same reason as the
+// downward walk: scrolling by a tall line's whole height skips rows that were never rendered.
 func (m *Model) moveDiffCursorUpBy(rows int) {
 	hunks := m.findHunks()
 	offsets := m.cursorVisualOffsets(hunks, m.buildAnnotationSet())
 	startY := m.cursorViewportYFromOffsets(offsets)
+	moved := false
 	for {
 		prevCursor := m.nav.diffCursor
 		prevAnnot := m.annot.cursorOnAnnotation
@@ -180,7 +196,16 @@ func (m *Model) moveDiffCursorUpBy(rows int) {
 		if m.nav.diffCursor == prevCursor && m.annot.cursorOnAnnotation == prevAnnot {
 			break // no more movement possible (start of content)
 		}
-		if startY-m.cursorViewportYFromOffsets(offsets) >= rows {
+		delta := startY - m.cursorViewportYFromOffsets(offsets)
+		if delta > rows && moved {
+			// the line just stepped onto is taller than the page budget left, so stay put.
+			// the first step is exempt: a line taller than the whole page must still be reachable
+			m.nav.diffCursor = prevCursor
+			m.annot.cursorOnAnnotation = prevAnnot
+			break
+		}
+		moved = true
+		if delta >= rows {
 			break
 		}
 	}
