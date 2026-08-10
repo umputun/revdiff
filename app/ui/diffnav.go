@@ -222,7 +222,8 @@ func (m *Model) moveDiffCursorUpBy(rows int) {
 // cursor there is no selectable position inside it, so rolling back to a row or two would
 // scroll the pane by almost nothing and the next press would take the same oversized step
 // anyway - worse than simply taking it now. half a page is the bar, matching ctrl+d/ctrl+u.
-// a first step always passes (walked is 0), so the walk can never refuse to move.
+// walked is 0 on the first step, so no rollback can fire there and the walk can never
+// refuse to move.
 func (m Model) worthRollingBack(walked, rows int) bool {
 	return walked*2 >= rows
 }
