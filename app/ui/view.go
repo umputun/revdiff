@@ -62,7 +62,7 @@ func (m Model) View() string {
 		mainView = m.applyScrollbar(diffPane)
 
 	case m.file.singleFile && m.file.mdTOC != nil:
-		// single-file markdown with TOC: two-pane layout with TOC in left pane
+		// single-file markdown with TOC: use the configured navigation pane side
 		tocContent := m.file.mdTOC.Render(sidepane.TOCRender{Width: m.layout.treeWidth, Height: ph, Focused: m.layout.focus == paneTree, Resolver: m.resolver})
 		mainView = m.renderTwoPaneLayout(tocContent, diffContent, m.file.mdTOC.ScrollState(), ph, diffPaneW)
 
@@ -82,12 +82,12 @@ func (m Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, mainView, status)
 }
 
-// renderTwoPaneLayout renders a two-pane layout with left (tree/TOC) and right (diff) content.
+// renderTwoPaneLayout renders the navigation and diff panes in the configured order.
 // applies focus-based pane styles, background padding, scrollbars, and joins horizontally.
 // diffPaneW is the inner width caller passed to truncateHeaderTitle and must
 // match the lipgloss Width() applied here — single source of truth for the
 // scrollbar's single-line-header invariant.
-func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll sidepane.ScrollState, ph, diffPaneW int) string {
+func (m Model) renderTwoPaneLayout(navigationContent, diffContent string, navigationScroll sidepane.ScrollState, ph, diffPaneW int) string {
 	treeStyle := m.resolver.Style(style.StyleKeyTreePane)
 	diffStyle := m.resolver.Style(style.StyleKeyDiffPane)
 	if m.layout.focus == paneTree {
@@ -96,14 +96,14 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 		diffStyle = m.resolver.Style(style.StyleKeyDiffPaneActive)
 	}
 
-	leftContent = m.padContentBg(leftContent, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
+	navigationContent = m.padContentBg(navigationContent, m.layout.treeWidth, m.resolver.Color(style.ColorKeyTreePaneBg))
 	diffContent = m.padContentBg(diffContent, diffPaneW, m.resolver.Color(style.ColorKeyDiffPaneBg))
 
-	leftPane := treeStyle.
+	navigationPane := treeStyle.
 		Width(m.layout.treeWidth).
 		Height(ph).
-		Render(leftContent)
-	leftPane = m.applyNavigationScrollbar(leftPane, leftScroll)
+		Render(navigationContent)
+	navigationPane = m.applyNavigationScrollbar(navigationPane, navigationScroll)
 
 	diffPane := diffStyle.
 		Width(diffPaneW).
@@ -111,7 +111,10 @@ func (m Model) renderTwoPaneLayout(leftContent, diffContent string, leftScroll s
 		Render(diffContent)
 	diffPane = m.applyScrollbar(diffPane)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPane, diffPane)
+	if m.cfg.treePosition == TreePositionRight {
+		return lipgloss.JoinHorizontal(lipgloss.Top, diffPane, navigationPane)
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, navigationPane, diffPane)
 }
 
 // truncateHeaderTitle returns the diff pane header text shortened to fit

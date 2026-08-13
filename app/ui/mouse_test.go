@@ -93,6 +93,34 @@ func TestModel_hitTest(t *testing.T) {
 		{name: "status bar at x=0", setup: func(m *Model) {}, x: 0, y: 39, want: hitStatus},
 		{name: "tree-diff boundary: last tree column", setup: func(m *Model) {}, x: 37, y: 10, want: hitTree},
 		{name: "tree-diff boundary: first diff column", setup: func(m *Model) {}, x: 38, y: 10, want: hitDiff},
+		{
+			name: "right tree: last diff column",
+			setup: func(m *Model) {
+				m.cfg.treePosition = TreePositionRight
+			},
+			x: 81, y: 10, want: hitDiff,
+		},
+		{
+			name: "right tree: first tree column",
+			setup: func(m *Model) {
+				m.cfg.treePosition = TreePositionRight
+			},
+			x: 82, y: 10, want: hitTree,
+		},
+		{
+			name: "right tree: tree top border",
+			setup: func(m *Model) {
+				m.cfg.treePosition = TreePositionRight
+			},
+			x: 100, y: 0, want: hitNone,
+		},
+		{
+			name: "right tree: diff header on left",
+			setup: func(m *Model) {
+				m.cfg.treePosition = TreePositionRight
+			},
+			x: 5, y: 1, want: hitHeader,
+		},
 		{name: "x negative", setup: func(m *Model) {}, x: -1, y: 10, want: hitNone},
 		{name: "y negative", setup: func(m *Model) {}, x: 60, y: -1, want: hitNone},
 		{name: "x out of bounds (= width)", setup: func(m *Model) {}, x: 120, y: 10, want: hitNone},
@@ -430,6 +458,16 @@ func TestModel_HandleMouse_WheelInTreeMovesTreeCursor(t *testing.T) {
 		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 5, 3, false))
 		model := result.(Model)
 		assert.Equal(t, "ab.go", model.tree.SelectedFile(), "single wheel-down notch must advance tree cursor by exactly one entry")
+	})
+
+	t.Run("right-positioned tree receives wheel events on the right", func(t *testing.T) {
+		m := mouseTestModel(t, files, diffs)
+		m.cfg.treePosition = TreePositionRight
+		require.Equal(t, "aa.go", m.tree.SelectedFile())
+
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 100, 3, false))
+		model := result.(Model)
+		assert.Equal(t, "ab.go", model.tree.SelectedFile())
 	})
 
 	t.Run("plain wheel-up retreats exactly one entry", func(t *testing.T) {
