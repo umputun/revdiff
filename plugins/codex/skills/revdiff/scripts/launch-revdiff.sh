@@ -541,10 +541,15 @@ on run argv
                                 set newSession to split horizontally with same profile command cmd
                             end if
                         end tell
-                        -- the tab label comes from its active session's name,
-                        -- and the split gets none of its own: it copies the
-                        -- parent's profile but not the session variables that
-                        -- profile's name may interpolate
+                        -- the tab label comes from the name of its active
+                        -- session, and the split gets none of its own: it
+                        -- copies the parent profile but not the session
+                        -- variables that the profile name may interpolate.
+                        -- keep this comment free of apostrophes: bash 3.2
+                        -- scans the enclosing command substitution for quotes
+                        -- before it processes the heredoc, so an odd count
+                        -- here opens a quote that never closes and the whole
+                        -- script fails to parse
                         set name of newSession to overlayTitle
                         return id of newSession
                     end if
