@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -175,6 +176,72 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 			})
 		}
 	}
+}
+
+// pins #314: an apostrophe in a heredoc nested inside a command substitution
+// breaks the whole launcher under bash 3.2, the stock macOS /bin/bash. the
+// launchers cannot be parse-checked for it here — CI and most dev machines run
+// bash 5, which accepts the broken form — so the guard is textual and portable.
+func TestLauncherNestedHeredocsHaveNoApostrophes(t *testing.T) {
+	root := testRepoRoot(t)
+	paths := []string{
+		".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+		"plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+		"plugins/revdiff-planning/scripts/launch-plan-review.sh",
+	}
+
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			bodies := nestedHeredocBodies(readRepoFile(t, root, path))
+			require.NotEmpty(t, bodies, "no command-substitution heredoc found; the scan no longer matches the script")
+			for _, hd := range bodies {
+				for _, line := range hd.lines {
+					assert.NotContains(t, line.text, "'",
+						"%s:%d is inside the heredoc opened at line %d, which bash 3.2 scans for quotes as part of "+
+							"the enclosing $( ); an apostrophe here fails the whole script. reword to avoid it",
+						path, line.num, hd.openedAt)
+				}
+			}
+		})
+	}
+}
+
+type heredocLine struct {
+	text string
+	num  int
+}
+
+type nestedHeredoc struct {
+	lines    []heredocLine
+	openedAt int
+}
+
+// nestedHeredocBodies returns the body of every heredoc opened on a line that also
+// opens a command substitution. a heredoc outside one is unaffected by the bash 3.2
+// scan, so including it would ban apostrophes the shell handles correctly.
+func nestedHeredocBodies(script string) []nestedHeredoc {
+	opener := regexp.MustCompile(`\$\(.*<<-?\s*'?([A-Za-z_][A-Za-z0-9_]*)'?`)
+	var found []nestedHeredoc
+	var current *nestedHeredoc
+	var terminator string
+
+	for i, line := range strings.Split(script, "\n") {
+		num := i + 1
+		if current != nil {
+			if strings.TrimSpace(line) == terminator {
+				found = append(found, *current)
+				current = nil
+			} else {
+				current.lines = append(current.lines, heredocLine{num: num, text: line})
+			}
+			continue
+		}
+		if m := opener.FindStringSubmatch(line); m != nil {
+			current = &nestedHeredoc{openedAt: num}
+			terminator = m[1]
+		}
+	}
+	return found
 }
 
 // every other backend labels its overlay through a flag the exit-code matrix
