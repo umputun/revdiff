@@ -95,7 +95,19 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			}
 
 			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
-			const result = await runDirectReview(ctx, launch, cwd);
+			// While revdiff owns the terminal (spawnSync stdio:inherit in runDirectReview),
+			// pi's agent loop is parked inside this tool call, so terminal multiplexers
+			// watching the agent see "working" even though the session is waiting on the
+			// user. Signal blocked on pi's shared event bus for the duration of the
+			// review; herdr's omp/pi integration listens for `herdr:blocked` and drives
+			// its sidebar/notifications from it. Emitting is free when nothing listens.
+			pi.events.emit("herdr:blocked", { active: true, label: `revdiff review: ${launch.label}` });
+			let result: ReviewResult | undefined;
+			try {
+				result = await runDirectReview(ctx, launch, cwd);
+			} finally {
+				pi.events.emit("herdr:blocked", { active: false });
+			}
 			if (!result) {
 				return toolTextResult("revdiff review did not complete.");
 			}
