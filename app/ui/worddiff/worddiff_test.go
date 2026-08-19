@@ -22,6 +22,9 @@ func changedRangesHelper(d *Differ, minusLine, plusLine string) ([]Range, []Rang
 	if len(minusToks) == 0 || len(plusToks) == 0 {
 		return nil, nil
 	}
+	if len(minusToks)*len(plusToks) > maxDiffCells {
+		return nil, nil
+	}
 	keepMinus, keepPlus := d.lcsKeptTokens(minusToks, plusToks)
 	return d.buildChangedRanges(minusToks, keepMinus), d.buildChangedRanges(plusToks, keepPlus)
 }
@@ -330,6 +333,65 @@ func TestChangedRanges_SkipsVeryLongLines(t *testing.T) {
 	mr2, pr2 := changedRangesHelper(d, longMinus, shortLine)
 	assert.Nil(t, mr2, "asymmetric long minus should skip")
 	assert.Nil(t, pr2, "asymmetric long minus should skip")
+}
+
+// prose builds a line of roughly nbytes of space-separated words, deterministic across runs.
+func prose(nbytes int) string {
+	words := []string{"the", "review", "annotation", "paragraph", "diff", "highlight", "maintainer", "line"}
+	var sb strings.Builder
+	for i := 0; sb.Len() < nbytes; i++ {
+		sb.WriteString(words[i%len(words)])
+		sb.WriteByte(' ')
+	}
+	return sb.String()[:nbytes]
+}
+
+// pins issue #323: a prose pair far past the old 500-byte cap must still be word-diffed.
+// the guard is the LCS table size, not the byte length of either line.
+func TestComputeIntraRanges_LongProsePairIsDiffed(t *testing.T) {
+	d := New()
+	minus := prose(3602)
+	plus := minus + " and a trailing sentence appended to the paragraph"
+
+	minusRanges, plusRanges := d.ComputeIntraRanges(minus, plus)
+	assert.Empty(t, minusRanges, "nothing removed from the minus line")
+	require.NotEmpty(t, plusRanges, "the appended tail must be highlighted")
+	// whitespace tokens are excluded, so the tail arrives as one range per word
+	assert.Equal(t, len(minus)+1, plusRanges[0].Start, "highlight starts at the first appended word")
+	assert.Equal(t, len(plus), plusRanges[len(plusRanges)-1].End, "highlight runs to the end of the line")
+}
+
+func TestComputeIntraRanges_CostGuards(t *testing.T) {
+	d := New()
+
+	t.Run("over byte pre-filter returns nil", func(t *testing.T) {
+		minus, plus := prose(maxLineLenForDiff+1), prose(maxLineLenForDiff+1)
+		minusRanges, plusRanges := d.ComputeIntraRanges(minus, plus)
+		assert.Nil(t, minusRanges)
+		assert.Nil(t, plusRanges)
+	})
+
+	t.Run("token product over budget returns nil", func(t *testing.T) {
+		minus, plus := prose(maxLineLenForDiff), prose(maxLineLenForDiff-5)+" zzzz"
+		require.LessOrEqual(t, len(minus), maxLineLenForDiff, "must clear the byte pre-filter")
+		require.LessOrEqual(t, len(plus), maxLineLenForDiff, "must clear the byte pre-filter")
+		require.Greater(t, len(d.tokenizeLineWithOffsets(minus))*len(d.tokenizeLineWithOffsets(plus)), maxDiffCells,
+			"fixture must exceed the cell budget")
+
+		minusRanges, plusRanges := d.ComputeIntraRanges(minus, plus)
+		assert.Nil(t, minusRanges)
+		assert.Nil(t, plusRanges)
+	})
+
+	t.Run("few tokens over the old byte cap are diffed", func(t *testing.T) {
+		// a single long run tokenizes to one token, so cost is trivial regardless of byte length
+		minus := strings.Repeat("a", 4000)
+		plus := strings.Repeat("a", 4000) + " b"
+		minusRanges, plusRanges := d.ComputeIntraRanges(minus, plus)
+		assert.Empty(t, minusRanges)
+		require.Len(t, plusRanges, 1)
+		assert.Equal(t, "b", plus[plusRanges[0].Start:plusRanges[0].End])
+	})
 }
 
 func TestPassesSimilarityGateFromKeep(t *testing.T) {

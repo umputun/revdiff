@@ -36,10 +36,16 @@ type Pair struct {
 	AddIdx    int
 }
 
-// maxLineLenForDiff caps intra-line diff to lines up to this many bytes.
-// longer lines skip word-level highlighting to avoid O(m*n) LCS memory blowup
-// on pathological input (minified files, very long configs).
-const maxLineLenForDiff = 500
+// maxLineLenForDiff caps intra-line diff to lines up to this many bytes. it is a cheap
+// pre-filter that keeps pathological input (minified bundles, single-line JSON) out of the
+// tokenizer; maxDiffCells is the actual cost guard.
+const maxLineLenForDiff = 20000
+
+// maxDiffCells caps the LCS table at this many cells (minus tokens * plus tokens).
+// the table dominates cost at 8 bytes per cell, so this budget is ~32MB and ~17ms for a single
+// pair, once per file load or word-diff toggle. byte length is a poor proxy for it: 500 repeated
+// letters tokenize to one token, 500 bytes of minified JSON to nearly 300.
+const maxDiffCells = 4_000_000
 
 // similarityThreshold is the minimum percentage of common tokens for highlighting.
 // pairs with less than this percentage of common content get no intra-line overlay.
@@ -57,8 +63,8 @@ var tokenPattern = regexp.MustCompile(`[\pL\pN_]+|\s+|[^\pL\pN_\s]+`)
 
 // ComputeIntraRanges computes changed byte-offset ranges for a pair of minus/plus lines.
 // returns ranges for the minus line and plus line respectively.
-// returns nil ranges if either line is empty, exceeds maxLineLenForDiff,
-// or fails the similarity gate (< 30% common non-whitespace tokens).
+// returns nil ranges if either line is empty, exceeds maxLineLenForDiff, would need more than
+// maxDiffCells LCS cells, or fails the similarity gate (< 30% common non-whitespace tokens).
 func (d *Differ) ComputeIntraRanges(minusLine, plusLine string) ([]Range, []Range) {
 	if minusLine == "" || plusLine == "" {
 		return nil, nil
@@ -70,6 +76,9 @@ func (d *Differ) ComputeIntraRanges(minusLine, plusLine string) ([]Range, []Rang
 	minusToks := d.tokenizeLineWithOffsets(minusLine)
 	plusToks := d.tokenizeLineWithOffsets(plusLine)
 	if len(minusToks) == 0 || len(plusToks) == 0 {
+		return nil, nil
+	}
+	if len(minusToks)*len(plusToks) > maxDiffCells {
 		return nil, nil
 	}
 

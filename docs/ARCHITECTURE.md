@@ -293,8 +293,10 @@ Single stateless type `Differ` grouping all word-diff algorithms:
 - `InsertHighlightMarkers()` — ANSI-aware highlight insertion, shared by both word-diff and search
   highlighting
 
-30% similarity gate discards ranges for dissimilar pairs. Ranges are byte offsets on tab-replaced
-content, aligning with `prepareLineContent` output.
+30% similarity gate discards ranges for dissimilar pairs. Cost is guarded by a budget on the LCS
+table size (token count of one line times the other), with a byte pre-filter that keeps minified
+input out of the tokenizer — line length alone is not the cost driver. Ranges are byte offsets on
+tab-replaced content, aligning with `prepareLineContent` output.
 
 ### app/highlight/ — syntax highlighting
 
