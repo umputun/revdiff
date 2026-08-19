@@ -365,10 +365,21 @@ func TestComputeIntraRanges_CostGuards(t *testing.T) {
 	d := New()
 
 	t.Run("over byte pre-filter returns nil", func(t *testing.T) {
-		minus, plus := prose(maxLineLenForDiff+1), prose(maxLineLenForDiff+1)
+		// one long run is a single token, so the pair clears the cell budget and the similarity
+		// gate — the byte pre-filter is the only thing that can reject it
+		minus := strings.Repeat("a", maxLineLenForDiff+1)
+		plus := minus + " b"
+		require.LessOrEqual(t, len(d.tokenizeLineWithOffsets(minus))*len(d.tokenizeLineWithOffsets(plus)), maxDiffCells,
+			"fixture must clear the cell budget so only the byte pre-filter can reject it")
+
 		minusRanges, plusRanges := d.ComputeIntraRanges(minus, plus)
 		assert.Nil(t, minusRanges)
 		assert.Nil(t, plusRanges)
+
+		// the same shape sized to fit the pre-filter is diffed, so the nil above is the byte gate
+		under := strings.Repeat("a", maxLineLenForDiff-2)
+		_, underPlus := d.ComputeIntraRanges(under, under+" b")
+		require.Len(t, underPlus, 1, "pair under the pre-filter must still be diffed")
 	})
 
 	t.Run("token product over budget returns nil", func(t *testing.T) {

@@ -42,9 +42,11 @@ type Pair struct {
 const maxLineLenForDiff = 20000
 
 // maxDiffCells caps the LCS table at this many cells (minus tokens * plus tokens).
-// the table dominates cost at 8 bytes per cell, so this budget is ~32MB and ~17ms for a single
-// pair, once per file load or word-diff toggle. byte length is a poor proxy for it: 500 repeated
-// letters tokenize to one token, 500 bytes of minified JSON to nearly 300.
+// the table dominates cost at 8 bytes per cell, so the budget is ~32MB and ~17ms per pair. it bounds
+// one pair and nothing wider: recomputeIntraRanges calls ComputeIntraRanges once per paired
+// remove/add line, so a file whose diff holds many long pairs pays this for each of them.
+// byte length is a poor proxy for the cost: 500 repeated letters tokenize to one token,
+// 500 bytes of minified JSON to nearly 300.
 const maxDiffCells = 4_000_000
 
 // similarityThreshold is the minimum percentage of common tokens for highlighting.
