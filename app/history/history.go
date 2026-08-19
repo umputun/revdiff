@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/fsutil"
 )
 
@@ -134,6 +135,9 @@ func (s *Service) gitDiff(p Params) string {
 
 	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = p.GitRoot
+	// annotated file names come from the working tree, so a file actually named
+	// ":(top)x" must select itself instead of being parsed as a pathspec expression
+	cmd.Env = diff.GitEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError
