@@ -36,6 +36,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.Compact)
 	assert.Equal(t, 5, opts.CompactContext)
 	assert.False(t, opts.CrossFileHunks)
+	assert.False(t, opts.StartAtChange)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
 	assert.False(t, opts.ExitCodeOnAnnotations)
@@ -368,6 +369,31 @@ func TestParseArgs_CrossFileHunks(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.CrossFileHunks)
+	})
+}
+
+func TestParseArgs_StartAtChange(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--start-at-change"))
+		require.NoError(t, err)
+		assert.True(t, opts.StartAtChange)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_START_AT_CHANGE", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.StartAtChange)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nstart-at-change = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.StartAtChange)
 	})
 }
 

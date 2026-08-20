@@ -27,6 +27,7 @@ Then uncomment and edit the values you want to change.
 | `--wrap` | `REVDIFF_WRAP` | Enable line wrapping in diff view | `false` |
 | `--wrap-indent` | `REVDIFF_WRAP_INDENT` | Indent wrap continuation rows by N columns so they hang under the first row's content (helps when reviewing markdown lists where unindented continuation can be misread as a new bullet) | `0` |
 | `--page-overlap` | `REVDIFF_PAGE_OVERLAP` | Keep N lines from the previous screen when paging the diff | `0` |
+| `--start-at-change` | `REVDIFF_START_AT_CHANGE` | Position the cursor on the first changed line | `false` |
 | `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
 | `--compact` | `REVDIFF_COMPACT` | Start in compact diff mode (small context around changes) | `false` |
 | `--compact-context` | `REVDIFF_COMPACT_CONTEXT` | Number of context lines around changes when in compact mode | `5` |

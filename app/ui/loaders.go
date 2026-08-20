@@ -394,7 +394,8 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 // overlay shows loading state (not stale data) while the re-fetch is in
 // flight, then re-runs the same parallel pipeline as startup via tea.Batch.
 // The selected file in the tree is restored by SelectByPath in
-// handleFilesLoaded; the diff cursor resets to the top of the file. Named
+// handleFilesLoaded; the diff cursor resets to the top of the file, or to its
+// first change when start-at-change is enabled. Named
 // triggerReload (not reload) to avoid shadowing the Model.reload field.
 func (m *Model) triggerReload() tea.Cmd {
 	m.filesLoadSeq++
@@ -602,6 +603,14 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 			m.applyCompactAnchor(a)
 			return m, blameCmd
 		}
+	}
+
+	// sits below the three jump branches so an explicit jump target always wins, and must return
+	// early because the GotoTop below would undo the scroll.
+	if m.cfg.startAtChange {
+		m.positionOnFirstChange()
+		m.centerViewportOnCursor()
+		return m, blameCmd
 	}
 
 	m.layout.viewport.SetContent(m.renderDiff())

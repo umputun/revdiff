@@ -122,6 +122,8 @@ When you are launching revdiff for the user (e.g., right after a refactor or ana
 
 **When the recent change likely created new untracked files** (new packages, new test files, new docs, new scripts that haven't been `git add`-ed yet), pass `--untracked` so those files appear in the tree. Use this in working-tree mode (no ref, no `--staged`); skip it for ref-to-ref reviews where untracked files are not part of the historical diff.
 
+Pass `--start-at-change` only when the user explicitly asks for that cursor preference; never infer it automatically.
+
 Run the launcher through the override-chain resolver:
 
 ```bash

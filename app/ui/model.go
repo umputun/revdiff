@@ -326,6 +326,7 @@ type modelConfigState struct {
 	noConfirmDiscard   bool               // skip confirmation prompt on discard quit
 	noConfirmReload    bool               // skip confirmation prompt on reload (R)
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
+	startAtChange      bool               // put the cursor on the first changed line when a file loads
 	treeWidthRatio     int                // 1-10 units for file tree panel
 	tabSpaces          string             // spaces to replace tabs with
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
@@ -747,6 +748,7 @@ type ModelConfig struct {
 	PageOverlap      int      // rows carried over from the previous screen on page up/down; 0 disables
 	Collapsed        bool     // start in collapsed diff mode
 	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
+	StartAtChange    bool     // put the cursor on the first changed line when a file loads
 	LineNumbers      bool     // show line numbers in diff gutter
 	ShowBlame        bool     // show blame gutter; requires Blamer
 	ShowUntracked    bool     // show untracked files in the tree; requires LoadUntracked
@@ -903,6 +905,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			noConfirmDiscard:   cfg.NoConfirmDiscard,
 			noConfirmReload:    cfg.NoConfirmReload,
 			crossFileHunks:     cfg.CrossFileHunks,
+			startAtChange:      cfg.StartAtChange,
 			treeWidthRatio:     cfg.TreeWidthRatio,
 			tabSpaces:          strings.Repeat(" ", cfg.TabWidth),
 			wrapIndent:         max(0, cfg.WrapIndent),
