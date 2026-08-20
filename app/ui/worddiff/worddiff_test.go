@@ -312,8 +312,8 @@ func TestChangedRanges_MultibytePrecision(t *testing.T) {
 
 func TestChangedRanges_SkipsVeryLongLines(t *testing.T) {
 	d := New()
-	// lines above maxLineLenForDiff must skip intra-line diff to prevent
-	// LCS memory blowup on pathological input (minified content).
+	// the byte cap is a pre-filter that keeps long lines out of the tokenizer;
+	// maxDiffCells is what guards the LCS cost itself.
 	longMinus := strings.Repeat("a", maxLineLenForDiff+1)
 	longPlus := strings.Repeat("b", maxLineLenForDiff+1)
 
@@ -335,7 +335,7 @@ func TestChangedRanges_SkipsVeryLongLines(t *testing.T) {
 	assert.Nil(t, pr2, "asymmetric long minus should skip")
 }
 
-// prose builds a line of roughly nbytes of space-separated words, deterministic across runs.
+// prose builds a line of exactly nbytes of space-separated words, deterministic across runs.
 func prose(nbytes int) string {
 	words := []string{"the", "review", "annotation", "paragraph", "diff", "highlight", "maintainer", "line"}
 	var sb strings.Builder
