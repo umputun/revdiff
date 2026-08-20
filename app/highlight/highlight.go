@@ -4,13 +4,29 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
+	"github.com/dlclark/regexp2/v2"
 
 	"github.com/umputun/revdiff/app/diff"
 )
+
+// maxBacktrackingStack raises regexp2's default 100k-slot cap enough for long single-line tokens,
+// such as the 40k-character Go string that exposed the regression. Chroma compiles lexer rules
+// with a bare regexp2.Compile, and matchRules ignores match errors and tries later rules. Affected
+// text can therefore lose its intended color or fall back to chroma.Error. This finite memory
+// budget does not restore regexp2's former unbounded behavior, and multi-megabyte tokens can still
+// exceed it.
+const maxBacktrackingStack = 10_000_000
+
+// chroma defers rule compilation until a lexer is first used, and a Highlighter is the only way
+// into that path, so raising the package default here reaches every lexer revdiff builds.
+var raiseBacktrackingCap = sync.OnceFunc(func() {
+	regexp2.DefaultOptimizationOptions.MaxBacktrackingStackSize = maxBacktrackingStack
+})
 
 // chromaFallbackStyle is the name of the Chroma style that doubles as styles.Fallback.
 // styles.Get returns Fallback for unknown names, but "swapoff" is a real built-in style
@@ -26,6 +42,7 @@ type Highlighter struct {
 // New creates a Highlighter with the given Chroma style name and enabled state.
 // if styleName is empty, defaults to "monokai". Logs a warning if the style name is unknown.
 func New(styleName string, enabled bool) *Highlighter {
+	raiseBacktrackingCap()
 	if styleName == "" {
 		styleName = "monokai"
 	}

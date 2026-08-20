@@ -1,6 +1,7 @@
 package highlight
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -205,4 +206,25 @@ func TestSetStyle_unknownStyle(t *testing.T) {
 	ok := h.SetStyle("nonexistent-style-xyz")
 	assert.False(t, ok)
 	assert.Equal(t, "monokai", h.StyleName(), "style should not change on failure")
+}
+
+func TestHighlighter_LongQuotedStringUsesStringColor(t *testing.T) {
+	// pins the regexp2 v2.7.1 regression that repainted a 40k-character Go quoted string as an error
+	h := New("monokai", true)
+
+	render := func(n int) string {
+		content := `x := "` + strings.Repeat("a", n) + `"`
+		got := h.HighlightLines("main.go", []diff.DiffLine{{NewNum: 1, Content: content, ChangeType: diff.ChangeContext}})
+		require.Len(t, got, 1)
+		return got[0]
+	}
+
+	fg := func(tt chroma.TokenType) string {
+		c := styles.Get("monokai").Get(tt).Colour //nolint:misspell // chroma API uses British spelling
+		return fmt.Sprintf("\033[38;2;%d;%d;%dm", c.Red(), c.Green(), c.Blue())
+	}
+
+	long := render(40000)
+	assert.Contains(t, long, fg(chroma.LiteralString), "long literal must keep the string color")
+	assert.NotContains(t, long, fg(chroma.Error), "long literal must not be painted as an error token")
 }
