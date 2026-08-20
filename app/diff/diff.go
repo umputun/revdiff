@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -42,7 +43,38 @@ const (
 	// BinaryPlaceholder is the content used for binary file placeholders.
 	// parseUnifiedDiff returns this when git reports "Binary files ... differ".
 	BinaryPlaceholder = "(binary file)"
+
+	// literalPathspecs makes git treat every path argument as a literal filename.
+	// Without it a tracked file whose name begins with ":(" or contains a glob
+	// character is parsed as a pathspec expression and selects a different file,
+	// or no file at all.
+	literalPathspecs = "GIT_LITERAL_PATHSPECS=1"
 )
+
+// conflictingPathspecEnv lists the global pathspec settings git refuses to combine
+// with literal mode: with either of them set truthy in the environment every
+// command dies with "global 'literal' pathspec setting is incompatible with all
+// other global pathspec settings". GIT_NOGLOB_PATHSPECS is absent on purpose,
+// git accepts it alongside literal mode.
+var conflictingPathspecEnv = []string{"GIT_GLOB_PATHSPECS=", "GIT_ICASE_PATHSPECS="}
+
+// GitEnv returns the environment for a child git process: the current environment
+// with literal pathspec handling forced on and the settings that conflict with it
+// removed. Paths reach git straight from the VCS listing or from the user, so a
+// file actually named ":(top)x" or "*.go" must select itself rather than be parsed
+// as a pathspec expression; nothing here relies on pathspec magic. Dropping the
+// conflicting entries is harmless, since neither affects a literal path.
+func GitEnv() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if slices.ContainsFunc(conflictingPathspecEnv, func(p string) bool { return strings.HasPrefix(kv, p) }) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, literalPathspecs)
+}
 
 // DiffLine holds parsed line info from a diff.
 type DiffLine struct {
@@ -522,12 +554,11 @@ func (g *Git) tempIndexWithIntentToAdd(paths []string) (indexPath string, cleanu
 	return tmpPath, cleanup, nil
 }
 
-// renameIndexEnv builds the environment for git commands in the untracked-rename
-// path: GIT_INDEX_FILE points at the throwaway index, and GIT_LITERAL_PATHSPECS
-// makes git treat path arguments literally so a working-tree filename that looks
-// like pathspec magic (e.g. ":(top)x") is not misinterpreted.
+// renameIndexEnv builds the extra environment for git commands in the
+// untracked-rename path: GIT_INDEX_FILE points at the throwaway index. Literal
+// pathspec handling comes from GitEnv, which every git call goes through.
 func (g *Git) renameIndexEnv(indexPath string) []string {
-	return []string{"GIT_INDEX_FILE=" + indexPath, "GIT_LITERAL_PATHSPECS=1"}
+	return []string{"GIT_INDEX_FILE=" + indexPath}
 }
 
 // FileDiff returns the diff view for a single file.
@@ -681,13 +712,13 @@ func (g *Git) diffArgs(ref string, staged bool) []string {
 
 // runGit executes a git command in the working directory and returns its output.
 func (g *Git) runGit(args ...string) (string, error) {
-	return runVCS(g.workDir, "git", args...)
+	return runVCSEnv(g.workDir, GitEnv(), "git", args...)
 }
 
-// runGitEnv runs git with extra environment entries (e.g. GIT_INDEX_FILE) appended
-// to the process environment, used by the throwaway-index rename detection path.
+// runGitEnv runs git with extra environment entries (e.g. GIT_INDEX_FILE) on top of
+// GitEnv, used by the throwaway-index rename detection path.
 func (g *Git) runGitEnv(extraEnv []string, args ...string) (string, error) {
-	return runVCSEnv(g.workDir, extraEnv, "git", args...)
+	return runVCSEnv(g.workDir, append(GitEnv(), extraEnv...), "git", args...)
 }
 
 // runVCS executes a VCS command in the given directory and returns its output.
@@ -695,14 +726,12 @@ func runVCS(workDir, binary string, args ...string) (string, error) {
 	return runVCSEnv(workDir, nil, binary, args...)
 }
 
-// runVCSEnv executes a VCS command in the given directory with extra environment
-// entries appended to os.Environ() and returns its output.
-func runVCSEnv(workDir string, extraEnv []string, binary string, args ...string) (string, error) {
+// runVCSEnv executes a VCS command in the given directory and returns its output.
+// A nil env inherits the process environment; otherwise env replaces it wholesale.
+func runVCSEnv(workDir string, env []string, binary string, args ...string) (string, error) {
 	cmd := exec.CommandContext(context.Background(), binary, args...) //nolint:gosec // args constructed internally, not user input
 	cmd.Dir = workDir
-	if len(extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), extraEnv...)
-	}
+	cmd.Env = env
 	out, err := cmd.Output()
 	if err != nil {
 		var exitErr *exec.ExitError

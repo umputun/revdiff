@@ -35,6 +35,7 @@ Terminals using CLI tools (tmux, Zellij, herdr, kitty, wezterm, cmux) are not af
 Automatically opens revdiff when Claude exits plan mode for interactive annotation:
 
 ```bash
+/plugin marketplace add umputun/revdiff
 /plugin install revdiff-planning@revdiff
 ```
 

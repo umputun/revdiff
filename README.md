@@ -183,6 +183,7 @@ A separate `revdiff-planning` plugin automatically opens revdiff when Claude or 
 Claude Code:
 
 ```bash
+/plugin marketplace add umputun/revdiff
 /plugin install revdiff-planning@revdiff
 ```
 

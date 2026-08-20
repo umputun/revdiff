@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1819,4 +1820,85 @@ func TestCountChanges(t *testing.T) {
 			assert.Equal(t, tt.wantRemoves, removes, "removes")
 		})
 	}
+}
+
+func TestGit_FileDiffLiteralPathspec(t *testing.T) {
+	tests := []struct {
+		name      string
+		magic     string // filename git would otherwise read as a pathspec expression
+		decoy     string // file that expression selects instead
+		posixOnly bool
+	}{
+		{name: "top magic prefix", magic: ":(top)f.txt", decoy: "f.txt", posixOnly: true},
+		{name: "glob character", magic: "*.txt", decoy: "f.txt", posixOnly: true},
+		{name: "character class", magic: "[x].txt", decoy: "x.txt"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.posixOnly && runtime.GOOS == "windows" {
+				t.Skip("filenames containing ':' or '*' are not valid on windows")
+			}
+			dir := setupTestRepo(t)
+			writeFile(t, dir, tt.decoy, "one\n")
+			writeFile(t, dir, tt.magic, "one\n")
+			gitCmd(t, dir, "add", "-A")
+			gitCmd(t, dir, "commit", "-m", "init")
+
+			writeFile(t, dir, tt.decoy, "one\ndecoy\n")
+			writeFile(t, dir, tt.magic, "one\nreal\n")
+
+			lines, err := NewGit(dir).FileDiff(FileDiffRequest{Path: tt.magic})
+			require.NoError(t, err)
+
+			added, removed := changeContents(lines)
+			assert.Equal(t, []string{"real"}, added, "diff must come from %q, not %q", tt.magic, tt.decoy)
+			assert.Empty(t, removed)
+		})
+	}
+}
+
+// git refuses to run with literal mode alongside either of these, so an inherited
+// one has to be dropped rather than passed through
+func TestGit_FileDiffWithConflictingPathspecEnv(t *testing.T) {
+	for _, envVar := range []string{"GIT_GLOB_PATHSPECS", "GIT_ICASE_PATHSPECS"} {
+		t.Run(envVar, func(t *testing.T) {
+			t.Setenv(envVar, "1")
+			dir := setupTestRepo(t)
+			writeFile(t, dir, "f.txt", "one\n")
+			gitCmd(t, dir, "add", "-A")
+			gitCmd(t, dir, "commit", "-m", "init")
+			writeFile(t, dir, "f.txt", "one\ntwo\n")
+
+			lines, err := NewGit(dir).FileDiff(FileDiffRequest{Path: "f.txt"})
+			require.NoError(t, err)
+			added, _ := changeContents(lines)
+			assert.Equal(t, []string{"two"}, added)
+		})
+	}
+}
+
+// the listing feeds FileDiff verbatim in the UI, so walk the whole path a
+// magic-looking filename takes: list the change, then diff the listed entry
+func TestGit_ChangedFileWithMagicNameRoundTrips(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filenames containing ':' are not valid on windows")
+	}
+	dir := setupTestRepo(t)
+	writeFile(t, dir, "f.txt", "one\n")
+	writeFile(t, dir, ":(top)f.txt", "one\n")
+	gitCmd(t, dir, "add", "-A")
+	gitCmd(t, dir, "commit", "-m", "init")
+	writeFile(t, dir, ":(top)f.txt", "one\nreal\n")
+
+	g := NewGit(dir)
+	entries, err := g.ChangedFiles("", false)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, ":(top)f.txt", entries[0].Path)
+
+	lines, err := g.FileDiff(FileDiffRequest{Path: entries[0].Path})
+	require.NoError(t, err)
+	added, _ := changeContents(lines)
+	assert.Equal(t, []string{"real"}, added)
 }

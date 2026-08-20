@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -502,4 +503,38 @@ func readHistoryFiles(t *testing.T, histDir string) []string {
 	})
 	require.NoError(t, err)
 	return contents
+}
+
+func TestSave_DiffUsesLiteralPathspec(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("filenames containing ':' are not valid on windows")
+	}
+	gitRoot := t.TempDir()
+	setupGitRepo(t, gitRoot)
+
+	// ":(top)hello.txt" is parsed as "hello.txt relative to the repo root" unless
+	// git runs in literal-pathspec mode, so hello.txt is the decoy here
+	magic := ":(top)hello.txt"
+	err := os.WriteFile(filepath.Join(gitRoot, magic), []byte("magic\n"), 0o600)
+	require.NoError(t, err)
+	runGit(t, gitRoot, "add", "-A")
+	runGit(t, gitRoot, "commit", "-m", "add magic-named file")
+
+	err = os.WriteFile(filepath.Join(gitRoot, magic), []byte("magic changed\n"), 0o600)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(gitRoot, "hello.txt"), []byte("decoy changed\n"), 0o600)
+	require.NoError(t, err)
+
+	histDir := t.TempDir()
+	New(histDir).Save(Params{
+		Annotations:    "## " + magic + ":1 (+)\nlook here\n",
+		Path:           gitRoot,
+		GitRoot:        gitRoot,
+		AnnotatedFiles: []string{magic},
+	})
+
+	entries := readHistoryFiles(t, histDir)
+	require.Len(t, entries, 1)
+	assert.Contains(t, entries[0], "magic changed")
+	assert.NotContains(t, entries[0], "decoy changed")
 }

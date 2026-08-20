@@ -48,7 +48,7 @@ revdiff auto-detects the VCS by walking up from the working directory. Precedenc
 
 ## Claude Code Plugin
 
-Install: `/plugin marketplace add umputun/revdiff && /plugin install revdiff@umputun-revdiff`
+Install: `/plugin marketplace add umputun/revdiff && /plugin install revdiff@revdiff`
 
 Supports tmux, zellij, herdr, kitty, wezterm, kaku, cmux, ghostty, iTerm2, and Emacs vterm overlays. The launcher auto-detects the terminal environment.
 

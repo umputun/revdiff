@@ -754,7 +754,7 @@ explain what this lock protects</code></div>
         <h2 id="plugin-planning">Plan review plugin</h2>
         <p>A separate <code>revdiff-planning</code> plugin automatically opens revdiff when Claude or Codex completes a plan, letting you annotate it before implementation. If you add annotations, the agent revises the full plan and presents it again, looping until you're satisfied. Exit code <code>10</code> means annotations were captured, not launcher failure.</p>
         <p>Claude Code:</p>
-        <div class="code-block"><code>/plugin install revdiff-planning@revdiff</code></div>
+        <div class="code-block"><code>/plugin marketplace add umputun/revdiff<br>/plugin install revdiff-planning@revdiff</code></div>
         <p>Codex:</p>
         <div class="code-block"><code>codex plugin marketplace add umputun/revdiff<br>codex plugin add revdiff-planning@revdiff</code></div>
         <p>Start a new Codex session and trust the hook through <code>/hooks</code>. Automatic review only fires for complete <code>&lt;proposed_plan&gt;</code> blocks in Plan mode; <code>/revdiff-plan</code> remains the manual fallback.</p>
