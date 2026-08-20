@@ -2197,6 +2197,66 @@ func TestModel_HandleFileLoaded_StartAtChange(t *testing.T) {
 	})
 }
 
+// pins the centerViewportOnCursor call in the start-at-change branch of handleFileLoaded. it is the
+// only render on the no-hunk path, and on the hunk path it is what re-applies an offset that
+// centerHunkInViewport clamped against the previous file's length. deleting it as a duplicate render
+// leaves the pane painting the old file.
+func TestModel_StartAtChange_RendersTheLoadedFile(t *testing.T) {
+	short := []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "short file", ChangeType: diff.ChangeContext}}
+
+	// testModel leaves the viewport zero-sized, and a zero-height viewport renders "" — which would
+	// make every assertion below pass against an unrendered pane
+	newModel := func(t *testing.T, files []string) Model {
+		t.Helper()
+		m := testModel(files, nil)
+		m.cfg.startAtChange = true
+		m.layout.viewport.Width, m.layout.viewport.Height = 80, 20
+		return m
+	}
+
+	load := func(t *testing.T, m Model, file string, lines []diff.DiffLine) Model {
+		t.Helper()
+		m.file.name = file
+		m.file.loadSeq++
+		result, _ := m.handleFileLoaded(fileLoadedMsg{file: file, seq: m.file.loadSeq, lines: lines})
+		return result.(Model)
+	}
+
+	t.Run("context-only file replaces the previous file's content", func(t *testing.T) {
+		m := newModel(t, []string{"a.go", "b.md"})
+		m = load(t, m, "a.go", []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "first file only", ChangeType: diff.ChangeContext},
+		})
+
+		m = load(t, m, "b.md", []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "second file only", ChangeType: diff.ChangeContext},
+		})
+
+		painted := m.layout.viewport.View()
+		assert.Contains(t, painted, "second file only", "the pane must paint the file that just loaded")
+		assert.NotContains(t, painted, "first file only", "stale content from the previous file must be gone")
+	})
+
+	t.Run("offset survives a short previous file", func(t *testing.T) {
+		lines := make([]diff.DiffLine, 0, 401)
+		for i := 1; i <= 400; i++ {
+			lines = append(lines, diff.DiffLine{OldNum: i, NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
+		}
+		lines = append(lines, diff.DiffLine{NewNum: 401, Content: "the change", ChangeType: diff.ChangeAdd})
+
+		m := newModel(t, []string{"a.go", "b.go"})
+		m = load(t, m, "a.go", short)
+		require.Zero(t, m.layout.viewport.YOffset, "the short file leaves the viewport at the top")
+
+		m = load(t, m, "b.go", lines)
+
+		require.Equal(t, 400, m.nav.diffCursor)
+		assert.Positive(t, m.layout.viewport.YOffset,
+			"offset must be re-applied after the new content is installed, not clamped against the short file")
+		assert.Contains(t, m.layout.viewport.View(), "the change", "the change must actually be on screen")
+	})
+}
+
 // a markdown TOC is built only for full-context files, which by definition carry no hunks, so
 // start-at-change cannot move the cursor out from under the TOC's active section.
 func TestModel_StartAtChange_MarkdownTOCUnaffected(t *testing.T) {
