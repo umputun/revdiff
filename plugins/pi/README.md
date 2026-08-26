@@ -57,6 +57,7 @@ Natural-language targets are supported because `/revdiff` routes through the ski
 ```text
 /revdiff prev commit
 /revdiff last tag
+/revdiff upstream
 /revdiff 2 weeks ago
 ```
 
