@@ -95,7 +95,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 			}
 
 			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
-			const result = await runDirectReview(ctx, launch, cwd);
+			const result = await runDirectReview(pi, ctx, launch, cwd);
 			if (!result) {
 				return toolTextResult("revdiff review did not complete.");
 			}
@@ -224,7 +224,7 @@ interface InteractiveProcessResult {
 	error?: string;
 }
 
-async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: string): Promise<ReviewResult | undefined> {
+async function runDirectReview(pi: ExtensionAPI, ctx: ExtensionContext, launch: LaunchSpec, cwd: string): Promise<ReviewResult | undefined> {
 	const revdiffBin = resolveRevdiffBin();
 	if (!revdiffBin) {
 		ctx.ui.notify("revdiff binary not found. Install it or set REVDIFF_BIN.", "error");
@@ -236,7 +236,17 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: s
 	const commandArgs = [...launch.args, `--output=${outputFile}`];
 
 	try {
-		const processResult = await runInteractiveProcess(ctx, revdiffBin, commandArgs, cwd);
+		let processResult: InteractiveProcessResult | undefined;
+		try {
+			pi.events.emit("herdr:blocked", {
+				active: true,
+				label: "Waiting for revdiff review",
+			});
+			processResult = await runInteractiveProcess(ctx, revdiffBin, commandArgs, cwd);
+		} finally {
+			pi.events.emit("herdr:blocked", { active: false });
+		}
+
 		const outputExists = existsSync(outputFile);
 		const rawOutput = outputExists ? readFileSync(outputFile, "utf8").trim() : "";
 

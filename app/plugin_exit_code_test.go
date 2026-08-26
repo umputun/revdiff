@@ -794,6 +794,7 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.Contains(t, src, `stdio: "inherit"`)
 	assert.Contains(t, src, `child.once("error"`)
 	assert.Contains(t, src, `child.once("close"`)
+	assert.Contains(t, src, `pi.events.emit("herdr:blocked"`)
 	assert.Contains(t, src, "revdiff terminated by signal")
 	assert.Contains(t, src, "return buildResult(launch, rawOutput, cwd);")
 }
@@ -893,10 +894,17 @@ function fakePi() {
 	const commands = new Map<string, any>();
 	const tools = new Map<string, any>();
 	const sentMessages: string[] = [];
+	const emittedEvents: Array<{ name: string; data: any }> = [];
 	return {
 		commands,
 		tools,
 		sentMessages,
+		emittedEvents,
+		events: {
+			emit(name: string, data: any) {
+				emittedEvents.push({ name, data });
+			},
+		},
 		registerCommand(name: string, command: any) {
 			commands.set(name, command);
 		},
@@ -907,6 +915,18 @@ function fakePi() {
 			sentMessages.push(message);
 		},
 	} as any;
+}
+
+function assertBlockedEventPair(pi: any, message: string): void {
+	testAssert(pi.emittedEvents.length === 2, message + ": expected one blocked event pair");
+	testAssert(pi.emittedEvents[0].name === "herdr:blocked", message + ": active event should use herdr:blocked");
+	testAssert(pi.emittedEvents[0].data.active === true, message + ": first event should activate blocked state");
+	testAssert(
+		pi.emittedEvents[0].data.label === "Waiting for revdiff review",
+		message + ": active event should describe the review wait",
+	);
+	testAssert(pi.emittedEvents[1].name === "herdr:blocked", message + ": inactive event should use herdr:blocked");
+	testAssert(pi.emittedEvents[1].data.active === false, message + ": second event should clear blocked state");
 }
 
 function assertTuiRestoredOnce(ctx: any, message: string): void {
@@ -976,6 +996,7 @@ async function testToolReturnsAnnotations(): Promise<void> {
 		testAssert(text.includes("Annotations:\n## src/app.go:12-14 (+)\nfix it"), "tool result should include raw annotation text");
 		testAssert(result.details.rawOutput.includes("## src/app.go:12-14 (+)"), "tool details should preserve raw output");
 		assertTuiRestoredOnce(ctx, "annotation review");
+		assertBlockedEventPair(pi, "annotation review");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -1099,9 +1120,12 @@ async function testReviewKeepsEventLoopActive(): Promise<void> {
 		const review = pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
 		await new Promise((resolve) => setTimeout(resolve, 20));
 		testAssert(ctx.ui.starts === 0, "TUI should remain stopped while revdiff is running");
+		testAssert(pi.emittedEvents.length === 1, "blocked state should remain active while revdiff is running");
+		testAssert(pi.emittedEvents[0].data.active === true, "review should be blocked during the terminal handoff");
 		const result = await review;
 		testAssert(result.content[0].text.includes("Review complete — no annotations"), "normal exit should complete the review");
 		assertTuiRestoredOnce(ctx, "asynchronous review");
+		assertBlockedEventPair(pi, "asynchronous review");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -1133,6 +1157,7 @@ async function testLaunchErrorRestoresTui(): Promise<void> {
 			"launch failure should notify an error",
 		);
 		assertTuiRestoredOnce(ctx, "launch failure");
+		assertBlockedEventPair(pi, "launch failure");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -1162,6 +1187,7 @@ async function testSignalTerminatedReviewFails(): Promise<void> {
 			"signal-terminated revdiff should notify failure",
 		);
 		assertTuiRestoredOnce(ctx, "signal termination");
+		assertBlockedEventPair(pi, "signal termination");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
