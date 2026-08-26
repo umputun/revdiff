@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
@@ -218,6 +218,12 @@ function uncommittedLaunchSpec(detected: SmartDetectResult): LaunchSpec {
 	return { args: [], label: "uncommitted changes" };
 }
 
+interface InteractiveProcessResult {
+	status: number | null;
+	signal: NodeJS.Signals | null;
+	error?: string;
+}
+
 async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: string): Promise<ReviewResult | undefined> {
 	const revdiffBin = resolveRevdiffBin();
 	if (!revdiffBin) {
@@ -228,59 +234,91 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: s
 	const tempDir = mkdtempSync(path.join(tmpdir(), "revdiff-pi-"));
 	const outputFile = path.join(tempDir, "annotations.txt");
 	const commandArgs = [...launch.args, `--output=${outputFile}`];
-	let launchError = "";
-	let launchSignal = "";
 
-	const exitCode = await ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
-		tui.stop();
-		process.stdout.write("\x1b[2J\x1b[H");
-		const result = spawnSync(revdiffBin, commandArgs, {
-			cwd,
-			env: withAnnotationExitCode(process.env),
-			stdio: "inherit",
-		});
-		if (result.error) {
-			launchError = result.error.message;
+	try {
+		const processResult = await runInteractiveProcess(ctx, revdiffBin, commandArgs, cwd);
+		const outputExists = existsSync(outputFile);
+		const rawOutput = outputExists ? readFileSync(outputFile, "utf8").trim() : "";
+
+		if (processResult?.error) {
+			ctx.ui.notify(`Failed to launch revdiff: ${processResult.error}`, "error");
+			return undefined;
 		}
-		if (result.signal) {
-			launchSignal = result.signal;
+		if (processResult?.signal) {
+			ctx.ui.notify(`revdiff terminated by signal ${processResult.signal}`, "warning");
+			return undefined;
 		}
-		tui.start();
-		tui.requestRender(true);
-		done(result.status ?? 1);
+		if (typeof processResult?.status !== "number") {
+			ctx.ui.notify("revdiff review did not complete", "warning");
+			return undefined;
+		}
+		if (!isRevdiffSuccess(processResult.status)) {
+			ctx.ui.notify(`revdiff exited with code ${processResult.status}`, "warning");
+			return undefined;
+		}
+		if (!outputExists && processResult.status === EXIT_CODE_ANNOTATIONS) {
+			ctx.ui.notify("revdiff reported annotations without writing output", "warning");
+			return undefined;
+		}
+
+		return buildResult(launch, rawOutput, cwd);
+	} finally {
+		try {
+			rmSync(tempDir, { recursive: true, force: true });
+		} catch {
+			// ignore temp cleanup failures
+		}
+	}
+}
+
+async function runInteractiveProcess(
+	ctx: ExtensionContext,
+	command: string,
+	args: string[],
+	cwd: string,
+): Promise<InteractiveProcessResult | undefined> {
+	return ctx.ui.custom<InteractiveProcessResult>((tui, _theme, _kb, done) => {
+		let completed = false;
+		const complete = (result: InteractiveProcessResult): void => {
+			if (completed) {
+				return;
+			}
+			completed = true;
+
+			let error = result.error;
+			try {
+				tui.start();
+			} catch (cause) {
+				error ??= errorMessage(cause);
+			}
+			try {
+				tui.requestRender(true);
+			} catch (cause) {
+				error ??= errorMessage(cause);
+			}
+			done(error ? { ...result, error } : result);
+		};
+
+		try {
+			tui.stop();
+			process.stdout.write("\x1b[2J\x1b[H");
+			const child = spawn(command, args, {
+				cwd,
+				env: withAnnotationExitCode(process.env),
+				stdio: "inherit",
+			});
+			child.once("error", (error) => complete({ status: null, signal: null, error: error.message }));
+			child.once("close", (status, signal) => complete({ status, signal }));
+		} catch (error) {
+			complete({ status: null, signal: null, error: errorMessage(error) });
+		}
+
 		return { render: () => [], invalidate() {} };
 	});
+}
 
-	const outputExists = existsSync(outputFile);
-	const rawOutput = outputExists ? readFileSync(outputFile, "utf8").trim() : "";
-	try {
-		rmSync(tempDir, { recursive: true, force: true });
-	} catch {
-		// ignore temp cleanup failures
-	}
-
-	if (launchError) {
-		ctx.ui.notify(`Failed to launch revdiff: ${launchError}`, "error");
-		return undefined;
-	}
-	if (launchSignal) {
-		ctx.ui.notify(`revdiff terminated by signal ${launchSignal}`, "warning");
-		return undefined;
-	}
-	if (typeof exitCode !== "number") {
-		ctx.ui.notify("revdiff review did not complete", "warning");
-		return undefined;
-	}
-	if (!isRevdiffSuccess(exitCode)) {
-		ctx.ui.notify(`revdiff exited with code ${exitCode}`, "warning");
-		return undefined;
-	}
-	if (!outputExists && exitCode === EXIT_CODE_ANNOTATIONS) {
-		ctx.ui.notify("revdiff reported annotations without writing output", "warning");
-		return undefined;
-	}
-
-	return buildResult(launch, rawOutput, cwd);
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 function buildResult(launch: LaunchSpec, rawOutput: string, cwd: string): ReviewResult {
