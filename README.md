@@ -411,7 +411,7 @@ Positional arguments support several forms:
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
-| `--post-flush-command` | Run command after a successful `O` flush (requires `-o`/`--output`), env: `REVDIFF_POST_FLUSH_COMMAND`, config: `post-flush-command` | |
+| `--post-flush-command` | Run command after a successful `O` flush, env: `REVDIFF_POST_FLUSH_COMMAND`, config: `post-flush-command` | |
 | `--annotations` | Preload annotations from a markdown file in `-o` format | |
 | `--history-dir` | Directory for review history auto-saves, env: `REVDIFF_HISTORY_DIR` | `~/.config/revdiff/history/` |
 | `--config` | Path to config file, env: `REVDIFF_CONFIG` | `~/.config/revdiff/config` |
@@ -768,7 +768,7 @@ The file picker lists paths currently visible in the sidebar, so annotated-only 
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
-| `O` | Flush annotations to the `--output` file without exiting (requires `-o`) |
+| `O` | Export annotations without exiting (requires `--output` and/or `--post-flush-command`) |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation (`open_editor` — rebindable) |
 | `Esc` | Cancel annotation input |
 
@@ -776,9 +776,19 @@ While the annotation input is active, press `Ctrl+E` (or whatever key is bound t
 
 Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_editor` — rebindable) when revdiff has a stable source path. Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive either `$EDITOR +N path` or `$EDITOR --goto path:N` as appropriate; unknown editors receive only the file path. File lines are resolved on a best-effort basis. For working tree changes, a clean editor exit reloads the displayed file. For `--staged` or refs, a clean editor exit returns to revdiff without reloading the displayed diff. In compare mode, `e` opens the `--compare-new` side. Working tree files with line annotations cannot be opened for editing because edits can orphan those annotations. Diffs read with `--stdin` do not support opening files. Unsupported rows or files and editor errors show a status hint instead of launching an editor or changing the diff.
 
-Press `O` to write the current annotations to the `--output` file without exiting (`flush_output` — rebindable). This keeps revdiff open while handing the file to an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session. Each flush overwrites the file with the full current annotation set (a snapshot, not an append log), using the same atomic write as a normal quit. `O` requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
+Press `O` to export the current annotations without exiting (`flush_output`, rebindable). Configure `--output`, `--post-flush-command`, or both. With `--output`, each flush atomically overwrites the file with the full current annotation set (a snapshot, not an append log). With `--post-flush-command`, the same snapshot is sent to the command on stdin. If neither is configured, or if there are no annotations, revdiff shows a status hint and does nothing.
 
-One possible use is copying annotations to the terminal clipboard after every flush with OSC 52. revdiff does not include an OSC 52 helper; create an `osc-copy` shell script on your `PATH` that reads stdin and writes the clipboard sequence to `/dev/tty`:
+The output file supports a keep-open review loop with an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session.
+
+For a local clipboard-only workflow on macOS, set this in `~/.config/revdiff/config`:
+
+```ini
+post-flush-command = pbcopy
+```
+
+Each `O` copies the full current annotation set without requiring `--output`. On Linux, use `xclip -selection clipboard` for X11 or `wl-copy` for Wayland.
+
+For a terminal clipboard over SSH or a multiplexer, use OSC 52. revdiff does not include an OSC 52 helper; create an `osc-copy` shell script on your `PATH` that reads stdin and writes the clipboard sequence to `/dev/tty`:
 
 ```sh
 #!/bin/sh
@@ -786,7 +796,7 @@ data=$(base64 | tr -d '\n')
 printf '\033]52;c;%s\007' "$data" > /dev/tty
 ```
 
-After making the script executable, run revdiff with `--post-flush-command=osc-copy` or set `post-flush-command = osc-copy` in the config file.
+After making the script executable, run revdiff with `--post-flush-command=osc-copy` or set `post-flush-command = osc-copy` in the config file. No output file is required; add `--output` only when the same flush should also write a snapshot file.
 
 The post-flush command runs synchronously. Use a fast, non-interactive command because revdiff waits for it to finish before restoring the TUI.
 

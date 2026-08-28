@@ -57,6 +57,7 @@ Then uncomment and edit the values you want to change.
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
+| `--post-flush-command` | `REVDIFF_POST_FLUSH_COMMAND` | Run command after a successful `O` flush | |
 | `--history-dir` | `REVDIFF_HISTORY_DIR` | Directory for review history auto-saves | `~/.config/revdiff/history/` |
 | `--keys` | `REVDIFF_KEYS` | Path to keybindings file | `~/.config/revdiff/keybindings` |
 | `--dump-keys` | | Print effective keybindings to stdout and exit | |
@@ -163,4 +164,6 @@ Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half
 
 Fixed modal keys (Enter, Esc in annotation/search input, confirm discard) are not remappable. Keymap-resolved actions like `open_editor` work during annotation input and can be rebound. Chord bindings do not fire during text input — use single-key `ctrl+*` bindings for actions that need to work during annotation input.
 
-The `flush_output` action (default `O`) writes the current annotations to the `--output` file without exiting revdiff, so a reviewer can hand the file to an AI agent and reload with `R` in the same session. It requires `-o`/`--output`; with no output file, or with no annotations yet, it shows a status hint and writes nothing.
+The `flush_output` action (default `O`) exports the current annotations without exiting revdiff. `--output` writes the full snapshot to a file; `--post-flush-command` sends it to a command on stdin. They work independently or together. At least one must be configured, and an empty annotation store produces only a status hint.
+
+For clipboard-only flushes on macOS, set `post-flush-command = pbcopy` in the config file. No `--output` flag is required. On Linux, use `xclip -selection clipboard` for X11 or `wl-copy` for Wayland.

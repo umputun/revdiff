@@ -41,26 +41,66 @@ func TestNewModel_OutputPath(t *testing.T) {
 	}
 }
 
-func TestModel_HandleFlushOutput_EmptyPath(t *testing.T) {
-	store := annotation.NewStore()
-	store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
-	m := testNewModel(t, plainRenderer(), store, noopHighlighter(), ModelConfig{OutputPath: ""})
-
-	result, cmd := m.handleFlushOutput()
-	model := result.(Model)
-	assert.Equal(t, "Output flush requires -o/--output", model.output.hint)
-	assert.Nil(t, cmd)
-}
-
 func TestModel_HandleFlushOutput_EmptyStore(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.md")
-	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{OutputPath: path})
+	m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{})
 
 	result, cmd := m.handleFlushOutput()
 	model := result.(Model)
 	assert.Equal(t, "No annotations to flush", model.output.hint)
 	assert.Nil(t, cmd)
 	assert.NoFileExists(t, path, "empty store must not create the output file")
+}
+
+func TestModel_HandleFlushOutput_Modes(t *testing.T) {
+	tests := []struct {
+		name       string
+		withPath   bool
+		withHook   bool
+		wantHint   string
+		wantCmd    bool
+		wantOutput bool
+	}{
+		{name: "neither", wantHint: "Output flush requires -o/--output or --post-flush-command"},
+		{name: "output only", withPath: true, wantHint: "Wrote 1 annotation to output file", wantOutput: true},
+		{name: "hook only", withHook: true, wantHint: "Running post-flush command with 1 annotation", wantCmd: true},
+		{name: "output and hook", withPath: true, withHook: true, wantHint: "Wrote 1 annotation to output file; running post-flush command", wantCmd: true, wantOutput: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := annotation.NewStore()
+			store.Add(annotation.Annotation{File: "a.go", Line: 1, Type: "+", Comment: "note"})
+			path := filepath.Join(t.TempDir(), "out.md")
+			cfg := ModelConfig{}
+			if tc.withPath {
+				cfg.OutputPath = path
+			}
+			var hook *postFlushHookStub
+			if tc.withHook {
+				hook = &postFlushHookStub{}
+				cfg.PostFlushHook = hook
+			}
+			m := testNewModel(t, plainRenderer(), store, noopHighlighter(), cfg)
+
+			result, cmd := m.handleFlushOutput()
+			model := result.(Model)
+			assert.Equal(t, tc.wantHint, model.output.hint)
+			if tc.wantCmd {
+				require.NotNil(t, cmd)
+			} else {
+				assert.Nil(t, cmd)
+			}
+			if tc.wantOutput {
+				assert.FileExists(t, path)
+			} else {
+				assert.NoFileExists(t, path)
+			}
+			if tc.withHook {
+				assert.Equal(t, store.FormatOutput(), hook.content)
+			}
+		})
+	}
 }
 
 func TestModel_HandleFlushOutput_Success(t *testing.T) {
@@ -141,7 +181,8 @@ func TestModel_HandlePostFlushFinished(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
 		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
-			writtenHint:  "Wrote 2 annotations to output file",
+			successHint:  "Wrote 2 annotations to output file and ran post-flush command",
+			failureHint:  "Wrote 2 annotations to output file; post-flush command failed",
 			restoreMouse: true,
 		})
 		model := result.(Model)
@@ -153,10 +194,34 @@ func TestModel_HandlePostFlushFinished(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
 		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
 			err:         errors.New("exit status 1"),
-			writtenHint: "Wrote 1 annotation to output file",
+			successHint: "Wrote 1 annotation to output file and ran post-flush command",
+			failureHint: "Wrote 1 annotation to output file; post-flush command failed",
 		})
 		model := result.(Model)
 		assert.Equal(t, "Wrote 1 annotation to output file; post-flush command failed", model.output.hint)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("hook only", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
+			successHint: "Ran post-flush command with 1 annotation",
+			failureHint: "Post-flush command failed",
+		})
+		model := result.(Model)
+		assert.Equal(t, "Ran post-flush command with 1 annotation", model.output.hint)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("hook only failure", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
+			err:         errors.New("exit status 1"),
+			successHint: "Ran post-flush command with 1 annotation",
+			failureHint: "Post-flush command failed",
+		})
+		model := result.(Model)
+		assert.Equal(t, "Post-flush command failed", model.output.hint)
 		assert.Nil(t, cmd)
 	})
 }

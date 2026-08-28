@@ -386,7 +386,8 @@ empty command; a constructed runner's `Prepare(content)` is infallible, supplies
 annotation snapshot on stdin, and suppresses stdout so commands such as `tee` do not overwrite the
 TUI. stderr remains attached when `app/ui` runs the command through `tea.ExecProcess`, and a command
 may write OSC 52 directly through `/dev/tty`. The optional `PostFlushHook` interface is defined on
-the UI consumer side and wired at the composition root only when `--post-flush-command` is set.
+the UI consumer side and wired at the composition root only when `--post-flush-command` is set. The
+hook is an independent `O` export target; it does not require an output file.
 
 ### app/history/ — session auto-save
 
@@ -531,8 +532,11 @@ User presses 'a' on diff line
           content == ""  → cancelAnnotation (preserve existing annotation)
           otherwise      → saveComment(content, fileLevel, line, type)
   → re-render shows annotation (multi-line aware) below diff line
-  → 'O' (flush_output, requires --output): store.WriteFile(path) → atomic write, revdiff stays open (annotate → flush → hand to agent → 'R' reload loop)
+  → 'O' (flush_output, requires --output and/or PostFlushHook):
+      → empty store: status hint, no export
+      → optional store.WriteFile(path) → atomic file snapshot
       → optional PostFlushHook.Prepare(snapshot) → tea.ExecProcess → command reads snapshot from stdin
+      → revdiff stays open (annotate → flush → hand off → 'R' reload loop)
   → on quit: store.FormatOutput() → structured output to stdout/file (file branch uses store.WriteFile)
   → (optional) history.Save() → markdown to ~/.config/revdiff/history/ (best-effort warnings only)
   → if --exit-code-on-annotations is enabled and output is non-empty: exit 10

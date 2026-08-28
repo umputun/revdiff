@@ -16,44 +16,66 @@ type outputState struct {
 
 type postFlushFinishedMsg struct {
 	err          error
-	writtenHint  string
+	successHint  string
+	failureHint  string
 	restoreMouse bool
 }
 
-// handleFlushOutput writes the current annotations to the configured --output
-// file without exiting. It is a pure export — the store is never mutated, so
-// annotations persist in-session and can be re-flushed. Feedback is reported
-// through output.hint.
+// handleFlushOutput exports the current annotations through the configured
+// output file and/or post-flush command without exiting. The store is never
+// mutated, so annotations persist in-session and can be re-flushed. Feedback
+// is reported through output.hint.
 func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
-	if m.cfg.outputPath == "" {
-		m.output.hint = "Output flush requires -o/--output"
-		return m, nil
-	}
 	n := m.store.Count()
 	if n == 0 {
 		m.output.hint = "No annotations to flush"
 		return m, nil
 	}
-	content, err := m.store.WriteFile(m.cfg.outputPath)
-	if err != nil {
-		log.Printf("[WARN] flush annotations to output: %v", err)
-		m.output.hint = "Flush failed"
+	if m.cfg.outputPath == "" && m.postFlushHook == nil {
+		m.output.hint = "Output flush requires -o/--output or --post-flush-command"
 		return m, nil
 	}
 	noun := "annotations"
 	if n == 1 {
 		noun = "annotation"
 	}
-	writtenHint := fmt.Sprintf("Wrote %d %s to output file", n, noun)
+
+	var content, writtenHint string
+	if m.cfg.outputPath != "" {
+		var err error
+		content, err = m.store.WriteFile(m.cfg.outputPath)
+		if err != nil {
+			log.Printf("[WARN] flush annotations to output: %v", err)
+			m.output.hint = "Flush failed"
+			return m, nil
+		}
+		writtenHint = fmt.Sprintf("Wrote %d %s to output file", n, noun)
+	} else {
+		content = m.store.FormatOutput()
+	}
+
 	if m.postFlushHook == nil {
 		m.output.hint = writtenHint
 		return m, nil
 	}
 
+	runningHint := fmt.Sprintf("Running post-flush command with %d %s", n, noun)
+	successHint := fmt.Sprintf("Ran post-flush command with %d %s", n, noun)
+	failureHint := "Post-flush command failed"
+	if writtenHint != "" {
+		runningHint = writtenHint + "; running post-flush command"
+		successHint = writtenHint + " and ran post-flush command"
+		failureHint = writtenHint + "; post-flush command failed"
+	}
 	cmd := m.postFlushHook.Prepare(content)
-	m.output.hint = writtenHint + "; running post-flush command"
+	m.output.hint = runningHint
 	return m, tea.ExecProcess(cmd, func(runErr error) tea.Msg {
-		return postFlushFinishedMsg{err: runErr, writtenHint: writtenHint, restoreMouse: m.cfg.mouseTracking}
+		return postFlushFinishedMsg{
+			err:          runErr,
+			successHint:  successHint,
+			failureHint:  failureHint,
+			restoreMouse: m.cfg.mouseTracking,
+		}
 	})
 }
 
@@ -64,9 +86,9 @@ func (m Model) handlePostFlushFinished(msg postFlushFinishedMsg) (tea.Model, tea
 	}
 	if msg.err != nil {
 		log.Printf("[WARN] post-flush command failed: %v", msg.err)
-		m.output.hint = msg.writtenHint + "; post-flush command failed"
+		m.output.hint = msg.failureHint
 		return m, cmd
 	}
-	m.output.hint = msg.writtenHint + " and ran post-flush command"
+	m.output.hint = msg.successHint
 	return m, cmd
 }
