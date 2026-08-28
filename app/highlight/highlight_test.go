@@ -209,7 +209,8 @@ func TestSetStyle_unknownStyle(t *testing.T) {
 }
 
 func TestHighlighter_LongQuotedStringUsesStringColor(t *testing.T) {
-	// pins the regexp2 v2.7.1 regression that repainted a 40k-character Go quoted string as an error
+	// pins the regexp2 v2.7.1 regression that repainted a long Go quoted string as an error
+	// 20k stays above the old backtracking cap and below Chroma's fixed 250ms rule timeout
 	h := New("monokai", true)
 
 	render := func(n int) string {
@@ -224,7 +225,7 @@ func TestHighlighter_LongQuotedStringUsesStringColor(t *testing.T) {
 		return fmt.Sprintf("\033[38;2;%d;%d;%dm", c.Red(), c.Green(), c.Blue())
 	}
 
-	long := render(40000)
+	long := render(20000)
 	assert.Contains(t, long, fg(chroma.LiteralString), "long literal must keep the string color")
 	assert.NotContains(t, long, fg(chroma.Error), "long literal must not be painted as an error token")
 }
