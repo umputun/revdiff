@@ -209,8 +209,7 @@ func loadConfigFile(iniParser *flags.IniParser, configPath string) {
 	if err == nil || errors.Is(err, os.ErrNotExist) {
 		return
 	}
-	var pathErr *os.PathError
-	if errors.As(err, &pathErr) {
+	if _, ok := errors.AsType[*os.PathError](err); ok {
 		return // file access error (permission denied, etc.)
 	}
 	fmt.Fprintf(os.Stderr, "warning: config %s: %v\n", configPath, err)

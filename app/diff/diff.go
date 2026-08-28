@@ -734,8 +734,7 @@ func runVCSEnv(workDir string, env []string, binary string, args ...string) (str
 	cmd.Env = env
 	out, err := cmd.Output()
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			return "", fmt.Errorf("%s %s: %s", binary, strings.Join(args, " "), string(exitErr.Stderr))
 		}
 		return "", fmt.Errorf("%s %s: %w", binary, strings.Join(args, " "), err)

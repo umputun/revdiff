@@ -254,8 +254,7 @@ func readFileAsContext(path string) ([]DiffLine, error) {
 
 	lines, err := readReaderAsContext(f)
 	if err != nil {
-		var ctxErr readerContextError
-		if errors.As(err, &ctxErr) {
+		if ctxErr, ok := errors.AsType[readerContextError](err); ok {
 			return nil, fmt.Errorf("%s file %s: %w", ctxErr.op, path, ctxErr.err)
 		}
 		return nil, fmt.Errorf("read file %s: %w", path, err)

@@ -60,8 +60,7 @@ func NewJjDirectoryReader(workDir string) *DirectoryReader {
 func (dr *DirectoryReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 	out, err := dr.listFiles()
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			stderr := strings.TrimSpace(string(exitErr.Stderr))
 			if stderr != "" {
 				return nil, fmt.Errorf("%s: %s", dr.listSource, stderr)
