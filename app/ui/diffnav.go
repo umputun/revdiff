@@ -2,15 +2,25 @@ package ui
 
 import (
 	"slices"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
-const scrollStep = 4 // horizontal scroll step in characters
+const (
+	scrollStep = 4 // horizontal scroll step in characters
+
+	// changePrefixWidth is the display width of the add/remove/context marker
+	// linePrefix re-adds at render time (" + ", " - ", "   "); dividerPrefixWidth
+	// is the single leading space renderDiffLine gives a divider row instead.
+	changePrefixWidth  = 3
+	dividerPrefixWidth = 1
+)
 
 // cursorDiffLine returns the DiffLine at the current cursor position, if valid.
 func (m Model) cursorDiffLine() (diff.DiffLine, bool) {
@@ -278,6 +288,10 @@ func (m *Model) moveDiffCursorToEnd() {
 // the clamp accept a larger target after content grows (e.g. a freshly saved
 // multi-row annotation extending past the prior content end).
 func (m *Model) syncViewportToCursor() {
+	// every layout change that widens the diff pane — resize, tree hide, line-number or
+	// blame toggle — lands here before rendering, and each lowers the horizontal bound
+	// without a horizontal keypress of its own.
+	m.clampHorizontalScroll()
 	cursorTop, cursorBottom := m.cursorVisualRange()
 	m.layout.viewport.SetContent(m.renderDiff())
 	switch {
@@ -646,6 +660,62 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// computeLineWidths returns the rendered display width of every diff line, parallel to
+// file.lines. it measures what applyHorizontalScroll actually cuts: the change prefix plus
+// the tab-expanded content, gutters excluded (those shrink the visible width instead).
+// measured on plain Content rather than the highlighted copy — chroma adds only ANSI, which
+// carries no display width and costs more to scan.
+func (m Model) computeLineWidths() []int {
+	widths := make([]int, len(m.file.lines))
+	for i, dl := range m.file.lines {
+		prefix := changePrefixWidth
+		if dl.ChangeType == diff.ChangeDivider {
+			prefix = dividerPrefixWidth
+		}
+		widths[i] = prefix + lipgloss.Width(strings.ReplaceAll(dl.Content, "\t", m.cfg.tabSpaces))
+	}
+	return widths
+}
+
+// maxHorizontalScroll returns the largest scrollX offset that still shows content, i.e. the
+// widest rendered row minus the columns the pane can display. 0 when everything fits.
+func (m Model) maxHorizontalScroll() int {
+	visible := m.diffContentWidth() - m.gutterExtra()
+	if visible <= 0 {
+		return 0
+	}
+	return max(0, m.maxRenderedContentWidth()-visible)
+}
+
+// ensureLineWidths repopulates the width cache when it has fallen out of step with file.lines.
+// lineWidths is pure derived data, so a miss must cost a scan and never correctness — a caller
+// that sets file.lines without recomputing would otherwise get a zero bound and no horizontal
+// scroll at all. length equality cannot catch a same-length replacement, so production still
+// owes the recompute in handleFileLoaded; this only keeps a miss from being silent.
+func (m *Model) ensureLineWidths() {
+	if len(m.file.lineWidths) != len(m.file.lines) {
+		m.file.lineWidths = m.computeLineWidths()
+	}
+}
+
+// setScrollX stores a horizontal offset bounded to the current rendered document. every
+// nonzero write to layout.scrollX must go through here: an unbounded offset past the widest
+// row makes applyHorizontalScroll cut past every line, blanking the pane with no « indicator
+// to explain it. the two direct `scrollX = 0` assignments (file load, wrap enable) are safe
+// as they are.
+func (m *Model) setScrollX(x int) {
+	m.ensureLineWidths()
+	m.layout.scrollX = min(max(0, x), m.maxHorizontalScroll())
+}
+
+// clampHorizontalScroll re-applies the bound to the stored offset. widening the visible area
+// — a terminal resize, hiding the tree, turning off line numbers or blame — lowers the
+// maximum without any horizontal keypress, so the paths that do those call this before they
+// render.
+func (m *Model) clampHorizontalScroll() {
+	m.setScrollX(m.layout.scrollX)
+}
+
 // handleHorizontalScroll processes left/right scroll keys.
 // direction < 0 scrolls left, direction > 0 scrolls right.
 // no-op when wrap mode is active (content is already fully visible).
@@ -654,9 +724,9 @@ func (m *Model) handleHorizontalScroll(direction int) {
 		return
 	}
 	if direction < 0 {
-		m.layout.scrollX = max(0, m.layout.scrollX-scrollStep)
+		m.setScrollX(m.layout.scrollX - scrollStep)
 	} else {
-		m.layout.scrollX += scrollStep
+		m.setScrollX(m.layout.scrollX + scrollStep)
 	}
 	m.layout.viewport.SetContent(m.renderDiff())
 }

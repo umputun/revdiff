@@ -80,6 +80,50 @@ func (m Model) renderCollapsedDiff() string {
 	return b.String()
 }
 
+// maxRenderedContentWidth returns the widest display width among the rows the diff pane
+// currently renders, measured on the same content applyHorizontalScroll cuts (change prefix
+// plus tab-expanded text, gutters excluded). it walks the same visibility rules as
+// renderCollapsedDiff above — keep the two in step, a row counted here but not rendered
+// there lets the horizontal scroll bound exceed the visible document.
+// returns 0 when no file is loaded.
+func (m Model) maxRenderedContentWidth() int {
+	if len(m.file.lineWidths) == 0 {
+		return 0
+	}
+	if !m.modes.collapsed.enabled {
+		maxW := 0
+		for _, w := range m.file.lineWidths {
+			maxW = max(maxW, w)
+		}
+		return maxW
+	}
+
+	hunks := m.findHunks()
+	maxW := 0
+	hunkIdx := 0
+	for i, dl := range m.file.lines {
+		// moving index rather than hunkStartFor: that helper rescans the whole hunk
+		// slice per line, making this walk O(lines*hunks).
+		for hunkIdx+1 < len(hunks) && hunks[hunkIdx+1] <= i {
+			hunkIdx++
+		}
+		hunkStart := -1
+		if (dl.ChangeType == diff.ChangeAdd || dl.ChangeType == diff.ChangeRemove) && len(hunks) > 0 && hunks[hunkIdx] <= i {
+			hunkStart = hunks[hunkIdx]
+		}
+		expanded := hunkStart >= 0 && m.modes.collapsed.expandedHunks[hunkStart]
+
+		if dl.ChangeType == diff.ChangeRemove && !expanded {
+			if i == hunkStart && m.isDeleteOnlyHunk(hunkStart) {
+				maxW = max(maxW, changePrefixWidth+lipgloss.Width(m.deletePlaceholderText(hunkStart)))
+			}
+			continue // hidden in collapsed mode, contributes no width
+		}
+		maxW = max(maxW, m.file.lineWidths[i])
+	}
+	return maxW
+}
+
 // renderCollapsedAddLine renders an add line in collapsed mode with modify or add styling.
 // when search is active, matching lines use search highlight instead of add/modify styling.
 func (m Model) renderCollapsedAddLine(b *strings.Builder, idx int, dl diff.DiffLine, modified bool) {
@@ -369,6 +413,7 @@ func (m *Model) toggleCollapsedMode() {
 	m.annot.cursorOnAnnotation = false // visible lines change, reset annotation cursor state
 	m.adjustCursorIfHidden()
 	m.realignSearchCursor()
+	m.clampHorizontalScroll() // entering collapsed mode hides wide removes, lowering the bound
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
@@ -390,6 +435,7 @@ func (m *Model) toggleHunkExpansion() {
 	} else {
 		m.modes.collapsed.expandedHunks[hunkStart] = true
 	}
+	m.clampHorizontalScroll() // re-collapsing a hunk re-hides its removes, lowering the bound
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 

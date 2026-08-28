@@ -1838,6 +1838,21 @@ func TestModel_HandleFileLoaded_DropsStaleCompactAnchor(t *testing.T) {
 	assert.Equal(t, 1, model.nav.diffCursor, "stale anchor must not reposition; cursor resets to first visible line")
 }
 
+func TestModel_HandleFileLoaded_PopulatesLineWidths(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.file.name = "a.go"
+	msg := fileLoadedMsg{file: "a.go", seq: 0, lines: []diff.DiffLine{
+		{NewNum: 1, Content: "abc", ChangeType: diff.ChangeContext},
+		{NewNum: 2, Content: "much longer line here", ChangeType: diff.ChangeAdd},
+	}}
+	result, _ := m.handleFileLoaded(msg)
+	model := result.(Model)
+
+	require.Len(t, model.file.lineWidths, 2, "widths must stay parallel to lines")
+	assert.Equal(t, changePrefixWidth+3, model.file.lineWidths[0])
+	assert.Equal(t, changePrefixWidth+21, model.file.lineWidths[1])
+}
+
 func TestModel_LoadFilesReconcilesReviewedFingerprints(t *testing.T) {
 	entry := diff.FileEntry{Path: "a.go", Status: diff.FileModified}
 	original := []diff.DiffLine{

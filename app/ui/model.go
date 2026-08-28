@@ -298,6 +298,7 @@ type loadedFileState struct {
 	lines            []diff.DiffLine        // parsed diff lines
 	highlighted      []string               // pre-computed highlighted content, parallel to lines
 	intraRanges      [][]worddiff.Range     // per-line intra-line word-diff ranges, parallel to lines
+	lineWidths       []int                  // per-line rendered display width, parallel to lines
 	adds             int                    // cached count of added lines
 	removes          int                    // cached count of removed lines
 	blameData        map[int]diff.BlameLine // blame info keyed by 1-based new line number

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2314,11 +2316,13 @@ func TestModel_ScrollBlockedInWrapMode(t *testing.T) {
 	assert.Equal(t, 0, model.layout.scrollX)
 }
 func TestModel_ScrollWorksWithoutWrapMode(t *testing.T) {
-	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "x", NewNum: 1}}
+	wide := strings.Repeat("x", 300) // must overflow the pane, or the clamp correctly refuses to scroll
+	lines := []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: wide, NewNum: 1}}
 	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.name = "a.go"
 	m.file.lines = lines
-	m.file.highlighted = []string{"x"}
+	m.file.highlighted = []string{wide}
+	m.layout.width = 80
 	m.layout.focus = paneDiff
 	m.layout.viewport.Width = 80
 	m.layout.viewport.Height = 20
@@ -3505,4 +3509,187 @@ func TestModel_DownPageMotionTerminatesOnAnnotatedLastLine(t *testing.T) {
 			assert.True(t, model.annot.cursorOnAnnotation, "cursor must park on the annotation sub-row, not fall back to the diff row")
 		})
 	}
+}
+
+// clampTestModel builds a diff-pane model with a hidden tree and a known content width,
+// with lineWidths populated the way handleFileLoaded populates it.
+func clampTestModel(t *testing.T, lines []diff.DiffLine, width int) Model {
+	t.Helper()
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.layout.width = width
+	m.layout.height = 24
+	m.layout.treeHidden = true
+	m.layout.focus = paneDiff
+	m.layout.viewport.Width = width - 4
+	m.layout.viewport.Height = 20
+	m.file.name = "a.go"
+	m.file.lines = lines
+	m.file.highlighted = make([]string, len(lines))
+	for i, dl := range lines {
+		m.file.highlighted[i] = dl.Content
+	}
+	m.file.lineWidths = m.computeLineWidths()
+	return m
+}
+
+func TestModel_ComputeLineWidths(t *testing.T) {
+	tests := []struct {
+		name string
+		line diff.DiffLine
+		want int
+	}{
+		{"context row carries the three-column prefix", diff.DiffLine{ChangeType: diff.ChangeContext, Content: "abc"}, 6},
+		{"added row carries the three-column prefix", diff.DiffLine{ChangeType: diff.ChangeAdd, Content: "abcd"}, 7},
+		{"removed row carries the three-column prefix", diff.DiffLine{ChangeType: diff.ChangeRemove, Content: "ab"}, 5},
+		{"divider row carries a single leading space", diff.DiffLine{ChangeType: diff.ChangeDivider, Content: "abc"}, 4},
+		{"wide runes count two columns each", diff.DiffLine{ChangeType: diff.ChangeContext, Content: "世界"}, 7},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := clampTestModel(t, []diff.DiffLine{tt.line}, 200)
+			assert.Equal(t, tt.want, m.file.lineWidths[0])
+		})
+	}
+}
+
+func TestModel_ComputeLineWidthsExpandsTabs(t *testing.T) {
+	m := clampTestModel(t, []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: "\tx"}}, 200)
+	assert.Equal(t, changePrefixWidth+len(m.cfg.tabSpaces)+1, m.file.lineWidths[0])
+}
+
+func TestModel_HorizontalScrollStopsWithContentVisible(t *testing.T) {
+	wide := strings.Repeat("x", 100) + "ENDTOKEN"
+	m := clampTestModel(t, []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: wide, NewNum: 1}}, 40)
+
+	for range 200 {
+		m.handleHorizontalScroll(1)
+	}
+
+	assert.Equal(t, m.maxHorizontalScroll(), m.layout.scrollX, "scroll must stop at the bound")
+	stripped := ansi.Strip(m.renderDiff())
+	assert.Contains(t, stripped, "ENDTOKEN", "the widest row's tail must stay visible at the bound")
+	assert.NotContains(t, stripped, "»", "nothing is left off the right edge at the bound")
+}
+
+func TestModel_HorizontalScrollLeftClampsAtZero(t *testing.T) {
+	wide := strings.Repeat("x", 100)
+	m := clampTestModel(t, []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: wide, NewNum: 1}}, 40)
+
+	for range 50 {
+		m.handleHorizontalScroll(-1)
+	}
+	assert.Equal(t, 0, m.layout.scrollX)
+}
+
+func TestModel_HorizontalScrollBoundIgnoresCollapsedHiddenLine(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeRemove, Content: strings.Repeat("r", 400), OldNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "short add", NewNum: 1},
+	}
+	m := clampTestModel(t, lines, 40)
+
+	expandedBound := m.maxHorizontalScroll()
+	m.modes.collapsed.enabled = true
+	collapsedBound := m.maxHorizontalScroll()
+
+	assert.Positive(t, expandedBound, "the wide removed line is rendered when not collapsed")
+	assert.Equal(t, 0, collapsedBound, "a hidden removed line must not widen the bound")
+}
+
+func TestModel_HorizontalScrollBoundFollowsHunkExpansion(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeRemove, Content: strings.Repeat("r", 400), OldNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "short add", NewNum: 1},
+	}
+	m := clampTestModel(t, lines, 40)
+	m.modes.collapsed.enabled = true
+
+	hidden := m.maxHorizontalScroll()
+	m.modes.collapsed.expandedHunks = map[int]bool{0: true}
+	expanded := m.maxHorizontalScroll()
+	m.modes.collapsed.expandedHunks = map[int]bool{}
+	rehidden := m.maxHorizontalScroll()
+
+	assert.Equal(t, 0, hidden)
+	assert.Positive(t, expanded, "expanding the hunk reveals the wide removed line")
+	assert.Equal(t, 0, rehidden, "re-collapsing hides it again")
+}
+
+func TestModel_HorizontalScrollBoundCountsDeletePlaceholder(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeRemove, Content: "gone", OldNum: 1},
+		{ChangeType: diff.ChangeRemove, Content: "gone too", OldNum: 2},
+	}
+	m := clampTestModel(t, lines, 20)
+	m.modes.collapsed.enabled = true
+
+	want := changePrefixWidth + lipgloss.Width(m.deletePlaceholderText(0))
+	assert.Equal(t, want, m.maxRenderedContentWidth())
+}
+
+func TestModel_HorizontalScrollReclampsWhenGutterShrinks(t *testing.T) {
+	wide := strings.Repeat("x", 100)
+	m := clampTestModel(t, []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: wide, NewNum: 1}}, 40)
+	m.modes.lineNumbers = true
+	m.file.lineNumWidth = m.computeLineNumWidth()
+
+	for range 200 {
+		m.handleHorizontalScroll(1)
+	}
+	withNumbers := m.layout.scrollX
+
+	m.toggleLineNumbers()
+	assert.Less(t, m.layout.scrollX, withNumbers, "offset must follow the bound down")
+	assert.Equal(t, m.maxHorizontalScroll(), m.layout.scrollX)
+}
+
+func TestModel_HorizontalScrollReclampsOnCollapsedToggle(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeRemove, Content: strings.Repeat("r", 400), OldNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "short add", NewNum: 1},
+	}
+	m := clampTestModel(t, lines, 40)
+
+	for range 200 {
+		m.handleHorizontalScroll(1)
+	}
+	scrolled := m.layout.scrollX
+	require.Positive(t, scrolled)
+
+	m.toggleCollapsedMode()
+
+	assert.Equal(t, 0, m.layout.scrollX, "hiding the widest row must pull the offset back in")
+	assert.Contains(t, ansi.Strip(m.renderDiff()), "short add", "the pane must not blank")
+}
+
+func TestModel_HorizontalScrollReclampsOnHunkRecollapse(t *testing.T) {
+	lines := []diff.DiffLine{
+		{ChangeType: diff.ChangeRemove, Content: strings.Repeat("r", 400), OldNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "short add", NewNum: 1},
+	}
+	m := clampTestModel(t, lines, 40)
+	m.modes.collapsed.enabled = true
+	m.modes.collapsed.expandedHunks = map[int]bool{0: true}
+	m.nav.diffCursor = 0
+
+	for range 200 {
+		m.handleHorizontalScroll(1)
+	}
+	require.Positive(t, m.layout.scrollX)
+
+	m.toggleHunkExpansion()
+
+	assert.Equal(t, 0, m.layout.scrollX, "re-hiding the expanded row must pull the offset back in")
+	assert.Contains(t, ansi.Strip(m.renderDiff()), "short add", "the pane must not blank")
+}
+
+func TestModel_HorizontalScrollHealsMissingWidthCache(t *testing.T) {
+	wide := strings.Repeat("x", 100)
+	m := clampTestModel(t, []diff.DiffLine{{ChangeType: diff.ChangeContext, Content: wide, NewNum: 1}}, 40)
+	m.file.lineWidths = nil
+
+	m.handleHorizontalScroll(1)
+
+	assert.Len(t, m.file.lineWidths, 1, "the cache is rebuilt rather than left empty")
+	assert.Equal(t, scrollStep, m.layout.scrollX, "a missing cache must not disable horizontal scroll")
 }

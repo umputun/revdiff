@@ -476,6 +476,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.file.oldName = ""
 		m.file.lines = nil
 		m.file.highlighted = nil
+		m.file.lineWidths = nil
 		m.layout.viewport.SetContent("")
 		return m, statsCmd
 	}
@@ -543,6 +544,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.computeFileStats()
 	m.file.highlighted = m.highlighter.HighlightLines(msg.file, m.file.lines)
 	m.recomputeIntraRanges()
+	m.file.lineWidths = m.computeLineWidths()
 	if m.modes.lineNumbers {
 		m.file.lineNumWidth = m.computeLineNumWidth()
 	}
