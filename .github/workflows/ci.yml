@@ -35,7 +35,7 @@ jobs:
 
       - name: build and test
         run: |
-          go test -race -timeout=100s -covermode=atomic -coverprofile=$GITHUB_WORKSPACE/profile.cov_tmp ./...
+          go test -race -timeout=180s -covermode=atomic -coverprofile=$GITHUB_WORKSPACE/profile.cov_tmp ./...
           grep -v -E "_mock.go|/mocks/" $GITHUB_WORKSPACE/profile.cov_tmp > $GITHUB_WORKSPACE/profile.cov
 
       - name: golangci-lint

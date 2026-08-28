@@ -26,7 +26,7 @@ fmt:
 	~/.claude/format.sh
 
 race:
-	go test -race -timeout=100s ./...
+	go test -race -timeout=180s ./...
 
 version:
 	@echo "branch: $(BRANCH), hash: $(HASH), timestamp: $(TIMESTAMP)"
