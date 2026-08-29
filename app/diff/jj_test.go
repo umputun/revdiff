@@ -603,3 +603,84 @@ func TestJj_FileDiff_SmallContext(t *testing.T) {
 	}
 	assert.Equal(t, 19, fullCtx, "expected 19 context lines with full-file context")
 }
+
+func TestJj_FilesetPath(t *testing.T) {
+	j := &Jj{}
+	tests := []struct {
+		name, path, want string
+	}{
+		{"plain", "hello.txt", `root-file:"hello.txt"`},
+		{"nested", "app/diff/jj.go", `root-file:"app/diff/jj.go"`},
+		{"dollar", "$test.txt", `root-file:"$test.txt"`},
+		{"glob star", "a*b.txt", `root-file:"a*b.txt"`},
+		{"set operator", "a|b.txt", `root-file:"a|b.txt"`},
+		{"double quote", `a"b.txt`, `root-file:"a\"b.txt"`},
+		{"backslash", `a\b.txt`, `root-file:"a\\b.txt"`},
+		{"backslash then quote", `a\"b.txt`, `root-file:"a\\\"b.txt"`},
+		{"empty", "", `root-file:""`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, j.filesetPath(tt.path))
+		})
+	}
+}
+
+func TestJj_FileDiff_PunctuatedPaths(t *testing.T) {
+	// issue #341: unquoted paths parsed as filesets, so punctuation broke or globbed
+	dir := setupJjRepo(t)
+	j := NewJj(dir)
+
+	names := []string{"a*b.txt", "axb.txt", "$test.txt", "a(b).txt", "a|b.txt", "a?b.txt"}
+	for _, n := range names {
+		writeFile(t, dir, n, n+" old\n")
+	}
+	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
+	jjCmd(t, dir, "new", "-m", "modify", "--quiet")
+	for _, n := range names {
+		writeFile(t, dir, n, n+" new\n")
+	}
+
+	for _, n := range names {
+		t.Run(n, func(t *testing.T) {
+			lines, err := j.FileDiff(FileDiffRequest{Path: n})
+			require.NoError(t, err)
+			require.Len(t, lines, 2, "expected exactly the one-line change for %q, got %+v", n, lines)
+			assert.Equal(t, ChangeRemove, lines[0].ChangeType)
+			assert.Equal(t, n+" old", lines[0].Content)
+			assert.Equal(t, ChangeAdd, lines[1].ChangeType)
+			assert.Equal(t, n+" new", lines[1].Content)
+		})
+	}
+}
+
+func TestJj_TotalOldLines_PunctuatedPath(t *testing.T) {
+	// issue #341: jj file show parses its path as a fileset, so the count came back 0
+	dir := setupJjRepo(t)
+	j := NewJj(dir)
+
+	var sb strings.Builder
+	for i := 1; i <= 20; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	writeFile(t, dir, "$big.txt", sb.String())
+	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
+	jjCmd(t, dir, "new", "-m", "modify", "--quiet")
+
+	sb.Reset()
+	for i := 1; i <= 20; i++ {
+		if i == 5 {
+			fmt.Fprintf(&sb, "line %d CHANGED\n", i)
+			continue
+		}
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	writeFile(t, dir, "$big.txt", sb.String())
+
+	assert.Equal(t, 20, j.totalOldLines("", "$big.txt"))
+
+	lines, err := j.FileDiff(FileDiffRequest{Path: "$big.txt", ContextLines: 2})
+	require.NoError(t, err)
+	require.NotEmpty(t, lines)
+	assert.Equal(t, ChangeDivider, lines[len(lines)-1].ChangeType, "expected a trailing divider")
+}

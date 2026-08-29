@@ -146,7 +146,7 @@ func (j *Jj) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
 	args := make([]string, 0, 5+len(rangeArgs))
 	args = append(args, "diff", "--git", jjContextArg(req.ContextLines))
 	args = append(args, rangeArgs...)
-	args = append(args, "--", req.Path)
+	args = append(args, "--", j.filesetPath(req.Path))
 
 	out, err := j.runJj(args...)
 	if err != nil {
@@ -190,11 +190,21 @@ func (j *Jj) totalOldLines(ref, file string) int {
 	if oldRef == "" {
 		oldRef = "@-"
 	}
-	out, err := j.runJj("file", "show", "-r", oldRef, "--", file)
+	out, err := j.runJj("file", "show", "-r", oldRef, "--", j.filesetPath(file))
 	if err != nil {
 		return 0
 	}
 	return countLines(out)
+}
+
+// filesetPath quotes a path as a jj fileset pattern. jj parses post-`--` arguments as
+// fileset expressions, not literal paths: `$ ( ) : #` and friends fail to parse, while
+// `* ? & | ~` silently resolve to a different set of files. Uses root-file: rather than
+// cwd-file: so it stays correct if workDir ever stops being the repo root.
+// Not for `jj file annotate` (jjblame.go), which takes a literal path and rejects this.
+func (j *Jj) filesetPath(path string) string {
+	esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(path)
+	return `root-file:"` + esc + `"`
 }
 
 // jjContextArg returns the --context argument for jj diff given the caller's
