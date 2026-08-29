@@ -609,15 +609,17 @@ func TestJj_FilesetPath(t *testing.T) {
 	tests := []struct {
 		name, path, want string
 	}{
-		{"plain", "hello.txt", `root-file:"hello.txt"`},
-		{"nested", "app/diff/jj.go", `root-file:"app/diff/jj.go"`},
-		{"dollar", "$test.txt", `root-file:"$test.txt"`},
-		{"glob star", "a*b.txt", `root-file:"a*b.txt"`},
-		{"set operator", "a|b.txt", `root-file:"a|b.txt"`},
-		{"double quote", `a"b.txt`, `root-file:"a\"b.txt"`},
-		{"backslash", `a\b.txt`, `root-file:"a\\b.txt"`},
-		{"backslash then quote", `a\"b.txt`, `root-file:"a\\\"b.txt"`},
-		{"empty", "", `root-file:""`},
+		{"plain", "hello.txt", `cwd-file:"hello.txt"`},
+		{"nested", "app/diff/jj.go", `cwd-file:"app/diff/jj.go"`},
+		{"dollar", "$test.txt", `cwd-file:"$test.txt"`},
+		{"glob star", "a*b.txt", `cwd-file:"a*b.txt"`},
+		{"set operator", "a|b.txt", `cwd-file:"a|b.txt"`},
+		{"double quote", `a"b.txt`, `cwd-file:"a\"b.txt"`},
+		{"backslash", `a\b.txt`, `cwd-file:"a\\b.txt"`},
+		{"backslash then quote", `a\"b.txt`, `cwd-file:"a\\\"b.txt"`},
+		{"absolute", "/tmp/repo/a.txt", `cwd-file:"/tmp/repo/a.txt"`},
+		{"parent relative", "../top.txt", `cwd-file:"../top.txt"`},
+		{"empty", "", `cwd-file:""`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -652,6 +654,31 @@ func TestJj_FileDiff_PunctuatedPaths(t *testing.T) {
 			assert.Equal(t, n+" new", lines[1].Content)
 		})
 	}
+}
+
+func TestJj_FileDiff_AbsolutePath(t *testing.T) {
+	// issue #341 follow-up: root-file: rejected absolute paths, breaking --only=/abs/path
+	dir := setupJjRepo(t)
+	j := NewJj(dir)
+
+	writeFile(t, dir, "changed.txt", "old\n")
+	writeFile(t, dir, "same.txt", "steady\n")
+	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
+	jjCmd(t, dir, "new", "-m", "modify", "--quiet")
+	writeFile(t, dir, "changed.txt", "new\n")
+
+	resolved, err := filepath.EvalSymlinks(dir)
+	require.NoError(t, err)
+
+	lines, err := j.FileDiff(FileDiffRequest{Path: filepath.Join(resolved, "changed.txt")})
+	require.NoError(t, err)
+	require.Len(t, lines, 2)
+	assert.Equal(t, "old", lines[0].Content)
+	assert.Equal(t, "new", lines[1].Content)
+
+	lines, err = j.FileDiff(FileDiffRequest{Path: filepath.Join(resolved, "same.txt")})
+	require.NoError(t, err, "an unchanged file must return empty, not an error")
+	assert.Empty(t, lines)
 }
 
 func TestJj_TotalOldLines_PunctuatedPath(t *testing.T) {

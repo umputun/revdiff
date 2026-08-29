@@ -199,12 +199,16 @@ func (j *Jj) totalOldLines(ref, file string) int {
 
 // filesetPath quotes a path as a jj fileset pattern. jj parses post-`--` arguments as
 // fileset expressions, not literal paths: `$ ( ) : #` and friends fail to parse, while
-// `* ? & | ~` silently resolve to a different set of files. Uses root-file: rather than
-// cwd-file: so it stays correct if workDir ever stops being the repo root.
+// `* ? & | ~` silently resolve to a different set of files.
+//
+// cwd-file: is the only pattern that fits every path reaching here. jj runs with
+// cmd.Dir = workDir and emits paths relative to it, so cwd-file: resolves them as
+// written; root-file: rejects an absolute path and any "../" sibling outright, and
+// silently matches the wrong file for a path below a workDir that is not the repo root.
 // Not for `jj file annotate` (jjblame.go), which takes a literal path and rejects this.
 func (j *Jj) filesetPath(path string) string {
 	esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(path)
-	return `root-file:"` + esc + `"`
+	return `cwd-file:"` + esc + `"`
 }
 
 // jjContextArg returns the --context argument for jj diff given the caller's
