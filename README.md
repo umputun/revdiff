@@ -86,7 +86,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **agterm** | `agtermctl session overlay open … --block` (full-pane overlay, blocks until quit) | `$AGTERM_SESSION_ID` env var |
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
 | **Zellij** | `zellij run --floating` | `$ZELLIJ` env var |
-| **herdr** | `herdr tab create` + `herdr pane run` (new tab) | `$HERDR_ENV` env var |
+| **herdr** | `herdr tab create` + `herdr pane run` (new tab), or a zoomed `herdr pane split` with `REVDIFF_HERDR_PANE=1` | `$HERDR_ENV` env var |
 | **kitty** | `kitty @ launch --type=overlay` | `$KITTY_LISTEN_ON` env var |
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
 | **Kaku** | `kaku cli split-pane` (same API as wezterm) | `$WEZTERM_PANE` env var |
@@ -114,6 +114,8 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 > Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.
 
 > **Disconnect-resilient tmux window mode:** set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
+
+> **Pane-scoped overlay (herdr):** Set `REVDIFF_HERDR_PANE=1` in the launcher's environment to open revdiff in a zoomed split of the agent's own herdr pane instead of a new fullscreen tab, so the agent pane stays one keypress away. It needs a herdr whose CLI carries `pane split`, `pane get` and `pane close`; an unsupported CLI or a refused split falls back to the tab overlay; a split that succeeds but returns no usable pane id fails closed with a warning rather than opening a second surface, and may leave a stray pane to close by hand. This is a launcher environment variable, not a revdiff flag.
 
 > **Pane-scoped overlay (agterm):** set `REVDIFF_AGTERM_PANE=1` in the launcher's environment to open revdiff in the agent's own split pane instead of over the whole session, leaving the sibling pane live and visible. It applies only when that session is split — the session-wide overlay stands otherwise, and the launcher retries session-wide if agterm refuses the pane. The review gets pane width rather than session width, which is why it is opt-in. This is a launcher environment variable, not a revdiff flag.
 
