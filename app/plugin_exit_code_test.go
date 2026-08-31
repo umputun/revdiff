@@ -13,7 +13,9 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,6 +27,9 @@ type cmdReq struct {
 	stdin string
 	args  []string
 	env   map[string]string
+	// own process group: required whenever the command may signal its own group, or the
+	// kill lands on `go test` itself and takes the whole run down
+	setpgid bool
 }
 
 type cmdResult struct {
@@ -402,6 +407,476 @@ func TestAgtermPaneOverlayOptIn(t *testing.T) {
 				if len(opens) > 1 {
 					// the retry drops the pane scoping, otherwise agterm refuses it again
 					assert.NotContains(t, opens[len(opens)-1], "--pane")
+				}
+			})
+		}
+	}
+}
+
+// TestHerdrSignalPaneOwnership pins both halves of the EXIT-trap contract by actually
+// signaling the launcher. While the pane provably holds nothing but a shell -- created, but
+// not yet reached by a dispatch -- a killed launcher must close it, or a zoomed shell pane
+// is stranded over the agent's own. From the dispatch onward the state is no longer provable
+// and the review may be the user's, so it must survive us, per SKILL.md. The pre-dispatch
+// cases -- wedged in the split, interrupted in the split, wedged in the zoom -- are the ones
+// that reach the trap's close; the tab fallthrough closes nothing, and every case from the
+// dispatch onward is the preserve half.
+func TestHerdrSignalPaneOwnership(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+	root := testRepoRoot(t)
+
+	launchers := map[string]string{
+		"claude": filepath.Join(".claude-plugin", "skills", "revdiff", "scripts", "launch-revdiff.sh"),
+		"codex":  filepath.Join("plugins", "codex", "skills", "revdiff", "scripts", "launch-revdiff.sh"),
+	}
+	tests := []struct {
+		name     string
+		extraEnv map[string]string
+		// the fake logs every call BEFORE acting on it, so `pane run` marks "pane exists,
+		// not yet started". For the live case a logged call is not enough: ownership is
+		// evidence-based now, so the test must see the pane's own start marker on disk.
+		waitFor      string // a recorded herdr call
+		waitForStart bool   // the launch script's .started marker, sentinel still absent
+		// the hang/delay only has to outlast the signal, which lands in milliseconds. Kept
+		// short because killing the launcher orphans the fake's sleep.
+		wantClose bool
+		sig       syscall.Signal // defaults to SIGTERM
+		wantCode  int            // 0 skips the check
+
+	}{
+		{
+			// the split is declined, so the launcher falls through to the tab overlay with
+			// no pane to protect. The recording trap must not survive into that path: the
+			// bounded wait above is what catches it if it does.
+			name: "killed on the tab fallthrough still exits",
+			extraEnv: map[string]string{
+				"FAKE_HERDR_SPLIT_FAIL": "1", "FAKE_HERDR_NO_SENTINEL": "1",
+			},
+			waitFor:   "tab create",
+			wantClose: false,
+		},
+		{
+			// wedged in `pane split` itself: the pane comes into existence during the call,
+			// so a signal deferred across it would otherwise be paid before HERDR_TARGET
+			// names the pane, leaving the EXIT trap nothing to close. The launcher records
+			// the signal instead and honors it once ownership is held.
+			name:      "killed during the split closes the pane it created",
+			extraEnv:  map[string]string{"FAKE_HERDR_SPLIT_HANG": "3"},
+			waitFor:   "pane split --pane",
+			wantClose: true,
+		},
+		{
+			// same window, but SIGINT: the recording trap keeps each signal's own status,
+			// so this must exit 130. A boolean flag paid as a fixed `exit 143` reports the
+			// wrong signal here while still closing the pane, which no close assertion sees.
+			name:      "an interrupt during the split reports its own status",
+			extraEnv:  map[string]string{"FAKE_HERDR_SPLIT_HANG": "3"},
+			waitFor:   "pane split --pane",
+			sig:       syscall.SIGINT,
+			wantCode:  130,
+			wantClose: true,
+		},
+		{
+			// wedged in `pane zoom`, which runs after the split and before any dispatch.
+			// Nothing can be running in that pane yet, so this is the one state where the
+			// trap has to destroy what it created -- the half no other case reaches, and
+			// the reason master carried a textual guard over the trap's close.
+			name:      "killed before any dispatch closes the pane",
+			extraEnv:  map[string]string{"FAKE_HERDR_ZOOM_HANG": "3"},
+			waitFor:   "pane zoom " + fakeHerdrPaneID,
+			wantClose: true,
+		},
+		{
+			// herdr is wedged inside `pane run`: it may or may not have delivered the
+			// command, so the state is unknown and must not be destroyed. Ownership is
+			// claimed before the call precisely so this window is preserved.
+			name:      "killed while herdr is wedged preserves the pane",
+			extraEnv:  map[string]string{"FAKE_HERDR_RUN_HANG": "3"},
+			waitFor:   "pane run " + fakeHerdrPaneID,
+			wantClose: false,
+		},
+		{
+			// dispatch was accepted but the pane's shell has not touched the marker yet.
+			// Unknown state must not be destroyed: this is the window HERDR_DISPATCHED
+			// covers, and requiring the marker alone would close a review that may exist.
+			name:      "killed after dispatch but before the marker leaves the pane open",
+			extraEnv:  map[string]string{"FAKE_HERDR_NO_SENTINEL": "1"},
+			waitFor:   "pane run " + fakeHerdrPaneID,
+			wantClose: false,
+		},
+		{
+			// `pane run` returns, so the review is live and must outlive us
+			name:         "killed during a live review leaves the pane open",
+			extraEnv:     map[string]string{"FAKE_HERDR_ASYNC": "1", "FAKE_REVDIFF_DELAY": "5"},
+			waitForStart: true,
+			wantClose:    false,
+		},
+	}
+
+	for lname, lpath := range launchers {
+		for _, tc := range tests {
+			t.Run(lname+"/"+tc.name, func(t *testing.T) {
+				backend := launcherBackend{name: "herdr", command: "herdr", env: map[string]string{"HERDR_ENV": "1"}}
+				env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: "x\n"})
+				argsFile := filepath.Join(env["TMPDIR"], "herdr-args")
+				env["FAKE_HERDR_ARGS_FILE"] = argsFile
+				env["HERDR_PANE_ID"] = fakeHerdrCallerPaneID
+				env["REVDIFF_HERDR_PANE"] = "1"
+				env["FAKE_HERDR_PANE"] = "1"
+				maps.Copy(env, tc.extraEnv)
+
+				cmd := exec.Command("bash", filepath.Join(root, lpath)) //nolint:gosec // fixed repo path
+				cmd.Dir, cmd.Env = root, mergeEnv(env)
+				require.NoError(t, cmd.Start())
+
+				require.Eventually(t, func() bool {
+					if tc.waitForStart {
+						// the review is genuinely mid-flight: started, not yet finished
+						started, _ := filepath.Glob(filepath.Join(env["TMPDIR"], "revdiff-done-*.started"))
+						done, _ := filepath.Glob(filepath.Join(env["TMPDIR"], "revdiff-done-??????"))
+						return len(started) > 0 && len(done) == 0
+					}
+					raw, err := os.ReadFile(argsFile) //nolint:gosec // test-owned temp file
+					return err == nil && strings.Contains(string(raw), tc.waitFor)
+				}, 15*time.Second, 20*time.Millisecond, "launcher never reached the phase under test")
+				sig := tc.sig
+				if sig == 0 {
+					sig = syscall.SIGTERM
+				}
+				require.NoError(t, cmd.Process.Signal(sig))
+				// bounded on purpose: the launcher records signals across the windows where
+				// it owns an unnamed pane, so a restore it forgets would swallow the SIGTERM
+				// and hang here rather than fail. The longest fake hang is 3s.
+				done := make(chan struct{})
+				var waitErr error
+				go func() { waitErr = cmd.Wait(); close(done) }()
+				select {
+				case <-done:
+				case <-time.After(30 * time.Second):
+					_ = cmd.Process.Kill()
+					t.Fatal("launcher did not exit after SIGTERM")
+				}
+
+				if tc.wantCode != 0 {
+					// the recording trap stores the signal's own status, so a recorded INT
+					// must still report 130 and not the TERM value it is paid alongside
+					assert.Equal(t, tc.wantCode, commandExitCode(waitErr), "exit status after %v", sig)
+				}
+
+				raw, err := os.ReadFile(argsFile) //nolint:gosec // test-owned temp file
+				require.NoError(t, err)
+				calls := strings.Split(strings.TrimSpace(string(raw)), "\n")
+				assert.Equal(t, tc.wantClose, countHerdrCalls(calls, "pane close "+fakeHerdrPaneID) > 0,
+					"pane close after %v; calls=%v", sig, calls)
+			})
+		}
+	}
+}
+
+// ids the fake herdr backend hands out; the caller pane is what the test injects as
+// $HERDR_PANE_ID, so asserting against these pins who each call actually targets
+const (
+	fakeHerdrCallerPaneID  = "w1:p0" // the agent's own pane, must never be operated on
+	fakeHerdrPaneID        = "w1-2"  // returned by `pane split`
+	fakeHerdrTabRootPaneID = "w1-1"  // returned by `tab create`
+)
+
+// counts recorded calls matching prefix on a TOKEN boundary, so "pane close w1-2" is not
+// satisfied by a call that targeted w1-20. A bare strings.HasPrefix would match it.
+func countHerdrCalls(calls []string, prefix string) int {
+	n := 0
+	for _, c := range calls {
+		if strings.Contains(c, "--help") {
+			continue
+		}
+		if c == prefix || strings.HasPrefix(c, prefix+" ") {
+			n++
+		}
+	}
+	return n
+}
+
+// TestHerdrPaneOverlayOptIn covers REVDIFF_HERDR_PANE=1, which splits the caller's own
+// herdr pane instead of opening a fullscreen tab. The failure paths carry the weight:
+// with the synchronous fake the sentinel exists before the wait loop starts, so the
+// liveness probe is only observable in the deferred-sentinel cases.
+func TestHerdrPaneOverlayOptIn(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	launchers := []struct {
+		name string
+		path string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+	}
+
+	cases := []struct {
+		name string
+		env  map[string]string
+		// wantCode defaults to exitCodeAnnotations when zero
+		wantCode       int
+		wantTabCreate  bool
+		wantSplit      bool // a non---help `pane split` was attempted
+		wantClose      bool
+		wantZoom       bool // the split must be zoomed, not just created
+		wantGet        bool
+		wantRetriedGet bool
+		// upper bound on `pane get` calls, to pin the poll backoff. Near-fail-safe: a
+		// loaded runner makes FEWER polls per second, so slowness alone lowers the count.
+		// It could only flake the other way if the fake's sentinel timer were delayed
+		// disproportionately more than the poll loop -- ~4s of one-sided skew.
+		maxGets    int
+		wantStderr string
+		notStderr  string
+		// a preserved live review keeps its launch script on purpose: the pane still has
+		// to execute it, so the usual no-temp-files-left assertion does not apply
+		keepsScript bool
+		// lower bound on the launcher's own runtime. Used to pin that the refusal grace was
+		// actually served: a close proves nothing on its own, since a launcher that skipped
+		// the wait closes too. Only a lower bound is safe -- a loaded runner can only make
+		// the run longer, never shorter.
+		minDuration time.Duration
+	}{
+		{
+			name:          "without the opt-in the review opens a tab",
+			env:           map[string]string{"FAKE_HERDR_PANE": "1"},
+			wantTabCreate: true,
+		},
+		{
+			name:      "opt-in splits the caller pane and zooms the review pane",
+			env:       map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1"},
+			wantSplit: true,
+			wantZoom:  true,
+			wantClose: true,
+		},
+		{
+			name:          "opt-in on an older cli falls back to a tab",
+			env:           map[string]string{"REVDIFF_HERDR_PANE": "1"},
+			wantTabCreate: true,
+		},
+		{
+			// both vars are required: with SPLIT_FAIL alone the probe gate would divert
+			// this down the older-cli path and no split would ever be attempted
+			name:          "a refused split falls back to a tab",
+			env:           map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1", "FAKE_HERDR_SPLIT_FAIL": "1"},
+			wantSplit:     true,
+			wantTabCreate: true,
+		},
+		{
+			name:      "a deferred sentinel exercises the liveness probe",
+			env:       map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1", "FAKE_HERDR_ASYNC": "1", "FAKE_REVDIFF_DELAY": "0.5"},
+			wantSplit: true,
+			wantZoom:  true,
+			wantGet:   true,
+			wantClose: true,
+		},
+		{
+			// pane_not_found is authoritative: stop at once, do not close a pane that is
+			// provably gone, and do not complain about failing to
+			name: "a confirmed dead pane stops without closing",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_NO_SENTINEL": "1", "FAKE_HERDR_GET_GONE": "1"},
+			wantCode:  1,
+			wantSplit: true,
+			wantZoom:  true,
+			wantGet:   true,
+			notStderr: "could not close",
+		},
+		{
+			// a generic error is not evidence the pane died, and there is no safe deadline
+			// when the API cannot report liveness: the loop must keep waiting through a
+			// control-plane outage and still finish the review normally. Sustained failures
+			// outlast the warn threshold here, then the sentinel lands. A 0.3s poll puts the
+			// tenth miss at ~3.2s against a 5s sentinel, so the warning lands with roughly
+			// 1.5x headroom; iterations slower than ~0.5s would flake it (fail, never
+			// false-pass). After the warn the poll backs off to 2s, so the run totals ~11
+			// gets, not the ~16 a flat poll would make.
+			name: "a control-plane outage does not end a live review",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_GET_FAIL": "1", "FAKE_HERDR_ASYNC": "1", "FAKE_REVDIFF_DELAY": "5"},
+			wantSplit:      true,
+			wantZoom:       true,
+			wantGet:        true,
+			wantClose:      true,
+			wantRetriedGet: true,
+			// ~11 with the 2s backoff after miss 10; a flat 0.3s poll would make ~16
+			maxGets:    13,
+			wantStderr: "still waiting for the review",
+		},
+		{
+			// the only state where nothing was dispatched: herdr refused and the pane never
+			// announced itself, so the pane it created is ours to clean up
+			name: "a refused pane run closes the pane it created",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_RUN_FAIL": "1"},
+			wantCode:  1,
+			wantSplit: true,
+			wantZoom:  true,
+			wantClose: true,
+		},
+		{
+			// the refusal grace, signaled deterministically: the injected `sleep` raises
+			// the signal before sleeping, so it is already pending when the grace sleep
+			// becomes the foreground command. Launcher-directed, so the grace sleep itself
+			// survives -- this pins the designed behavior, that a signal mid-grace still
+			// completes the evidence check and closes an unannounced pane.
+			name: "a signal during the refusal grace still closes the pane",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_RUN_FAIL": "1", "FAKE_SLEEP_KILL": "parent"},
+			wantCode:  1,
+			wantSplit: true,
+			wantZoom:  true,
+			wantClose: true,
+		},
+		{
+			// same, but the signal goes to the process group, so it kills the grace `sleep`
+			// too. Without the retry the killed sleep returns nonzero, `set -e` aborts
+			// before the evidence check, and the trap's preserve rule strands the pane.
+			name: "a process-group signal during the grace still closes the pane",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_RUN_FAIL": "1", "FAKE_SLEEP_KILL": "group"},
+			wantCode:  1,
+			wantSplit: true,
+			wantZoom:  true,
+			wantClose: true,
+		},
+		{
+			// every sleep in the grace is killed, so nothing is ever waited out by counting
+			// sleeps -- but the grace is measured on the wall clock, so the interval is
+			// served regardless and the absent marker is still real evidence. Pins that no
+			// amount of signaling can talk the launcher out of serving the grace.
+			name: "a relentlessly signaled grace is still served",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_RUN_FAIL": "1", "FAKE_SLEEP_KILL": "group-always"},
+			wantCode:  1,
+			wantSplit: true,
+			wantZoom:  true,
+			wantClose: true,
+			// the close alone would also pass against a launcher that never waited, so the
+			// duration is the assertion that matters here
+			minDuration: 900 * time.Millisecond,
+		},
+		{
+			// a nonzero `pane run` is not evidence the review did not start -- the response
+			// can be lost after delivery. The launcher must not close a pane that already
+			// announced itself, the same rule the wait loop applies to `pane get`.
+			name: "a lost pane run response does not close a started review",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_RUN_FAIL_AFTER_START": "1", "FAKE_REVDIFF_DELAY": "3"},
+			wantCode:    1,
+			wantSplit:   true,
+			wantZoom:    true,
+			keepsScript: true,
+		},
+		{
+			// the worst failure this feature could have: adopting the caller's own id and
+			// closing the agent's terminal. The grep fallback is positional, so a response
+			// naming the source pane first must be refused.
+			name: "a split that returns the caller's own pane is refused",
+			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
+				"FAKE_HERDR_SPLIT_JSON": `{"result":{"pane":{"pane_id":"` + fakeHerdrCallerPaneID + `"}}}`},
+			wantCode:   1,
+			wantSplit:  true,
+			wantStderr: "stray review pane may remain",
+		},
+	}
+
+	output := "## file.go:1 (+)\ncomment\n"
+	for _, launcher := range launchers {
+		for _, tc := range cases {
+			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				backend := launcherBackend{name: "herdr", command: "herdr", env: map[string]string{
+					"HERDR_ENV": "1",
+				}}
+				env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: output})
+				argsFile := filepath.Join(env["TMPDIR"], "herdr-args")
+				env["FAKE_HERDR_ARGS_FILE"] = argsFile
+				// the pane gate needs a caller pane id; cleanOverlayEnv blanks it, so
+				// without this every opt-in case would silently degrade to tab mode
+				env["HERDR_PANE_ID"] = fakeHerdrCallerPaneID
+				maps.Copy(env, tc.env)
+
+				started := time.Now()
+				res := runTestCmd(t, cmdReq{
+					dir:  root,
+					name: "bash",
+					args: []string{filepath.Join(root, launcher.path)},
+					env:  env,
+					// the group-kill case signals its own process group; without this the
+					// signal reaches the test binary instead of the launcher
+					setpgid: strings.HasPrefix(tc.env["FAKE_SLEEP_KILL"], "group"),
+				})
+				if tc.minDuration > 0 {
+					assert.GreaterOrEqual(t, time.Since(started), tc.minDuration,
+						"the refusal grace was not served")
+				}
+
+				wantCode := tc.wantCode
+				if wantCode == 0 {
+					wantCode = exitCodeAnnotations
+				}
+				assert.Equal(t, wantCode, res.code)
+				if wantCode == exitCodeAnnotations {
+					assert.Equal(t, output, res.stdout)
+				}
+				if tc.wantStderr != "" {
+					assert.Contains(t, res.stderr, tc.wantStderr)
+				}
+				if tc.notStderr != "" {
+					assert.NotContains(t, res.stderr, tc.notStderr)
+				}
+
+				raw, err := os.ReadFile(argsFile) //nolint:gosec // path is a test-owned temp file
+				require.NoError(t, err)
+				calls := strings.Split(strings.TrimSpace(string(raw)), "\n")
+
+				closes, gets := countHerdrCalls(calls, "pane close"), countHerdrCalls(calls, "pane get")
+				assert.Equal(t, tc.wantSplit, countHerdrCalls(calls, "pane split") > 0, "pane split; calls=%v", calls)
+				assert.Equal(t, tc.wantTabCreate, countHerdrCalls(calls, "tab create") > 0, "tab create; calls=%v", calls)
+				assert.Equal(t, tc.wantClose, closes > 0, "pane close; calls=%v", calls)
+				assert.Equal(t, tc.wantGet, gets > 0, "pane get; calls=%v", calls)
+
+				// teardown is idempotent: the inline call and the EXIT trap's call must not
+				// both close, and a boolean cannot see a double close
+				assert.LessOrEqual(t, closes, 1, "pane closed more than once; calls=%v", calls)
+				if tc.wantTabCreate {
+					assert.Equal(t, 1, countHerdrCalls(calls, "tab close"), "tab create needs exactly one close; calls=%v", calls)
+				}
+				if tc.maxGets > 0 {
+					assert.LessOrEqual(t, gets, tc.maxGets,
+						"poll did not back off during the outage; calls=%v", calls)
+				}
+				if tc.wantRetriedGet {
+					// the transient path must retry, not give up on the first miss
+					assert.Greater(t, gets, 1, "transient failures must be retried; calls=%v", calls)
+				}
+				if tc.wantSplit {
+					// anchored to the caller, or herdr splits whichever pane is focused
+					assert.Equal(t, 1, countHerdrCalls(calls, "pane split --pane "+fakeHerdrCallerPaneID), "split must anchor to the caller; calls=%v", calls)
+				}
+				if tc.wantZoom {
+					assert.Equal(t, 1, countHerdrCalls(calls, "pane zoom "+fakeHerdrPaneID+" --on"), "the split must be zoomed; calls=%v", calls)
+				}
+				if closes > 0 {
+					// the review pane herdr returned, never the agent's own
+					assert.Equal(t, 1, countHerdrCalls(calls, "pane close "+fakeHerdrPaneID), "close must target the returned pane; calls=%v", calls)
+				}
+				// never-guess: the launcher must not enumerate panes to find one
+				assert.Zero(t, countHerdrCalls(calls, "pane list"), "must not enumerate panes; calls=%v", calls)
+
+				assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+				// a launcher that ran to completion owns no temp files: the dispatched script
+				// removes itself, and the completion path removes it for a pane that died
+				if !tc.keepsScript {
+					left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "revdiff-launch-*"))
+					require.NoError(t, err)
+					assert.Empty(t, left, "leaked launch script; calls=%v", calls)
 				}
 			})
 		}
@@ -1236,6 +1711,9 @@ func runTestCmd(t *testing.T, r cmdReq) cmdResult {
 	cmd := exec.Command(r.name, r.args...) //nolint:gosec // tests execute fixed repo scripts and temp fixtures
 	cmd.Dir = r.dir
 	cmd.Env = mergeEnv(r.env)
+	if r.setpgid {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 	if r.stdin != "" {
 		cmd.Stdin = strings.NewReader(r.stdin)
 	}
@@ -1338,6 +1816,30 @@ func fakeLauncherEnv(t *testing.T, r launcherRun) map[string]string {
 	binDir := filepath.Join(tmp, "bin")
 	writeExecutable(t, filepath.Join(binDir, "revdiff"), testFixtureScript(t, "fake-revdiff-output.sh"))
 	writeExecutable(t, filepath.Join(binDir, r.backend.command), testFixtureScript(t, "fake-overlay-backend.sh"))
+	// A `sleep` that signals before it sleeps. Used to reach the refusal path's 300ms
+	// evidence grace deterministically: the signal is already pending when the grace sleep
+	// becomes the foreground command, so there is no window to race. FAKE_SLEEP_KILL picks
+	// the target -- "parent" is a launcher-directed signal, "group" emulates Ctrl-C, which
+	// kills this sleep too, and "group-always" keeps doing it so every retry dies.
+	//
+	// The once-marker makes "group" hit only the FIRST sleep of the run, which on the
+	// refusal path is the grace. That assumption is load-bearing: combining FAKE_SLEEP_KILL
+	// with anything that sleeps earlier (a backend with its own wait loop, or
+	// FAKE_REVDIFF_DELAY) spends the marker on the wrong sleep and the case passes while
+	// testing nothing. Keep these cases on the refusal path.
+	//
+	// The marker is written BEFORE the kill so the retry that follows runs a real sleep.
+	writeExecutable(t, filepath.Join(binDir, "sleep"), `#!/bin/sh
+if [ -n "${FAKE_SLEEP_KILL:-}" ] &&
+    { [ "$FAKE_SLEEP_KILL" = group-always ] || [ ! -f "$TMPDIR/sleep-killed" ]; }; then
+    : > "$TMPDIR/sleep-killed"
+    case "$FAKE_SLEEP_KILL" in
+        group | group-always) kill -TERM 0 ;;
+        *) kill -TERM "$PPID" ;;
+    esac
+fi
+exec /bin/sleep "$@"
+`)
 
 	env := cleanOverlayEnv()
 	maps.Copy(env, r.backend.env)
@@ -1356,6 +1858,8 @@ func cleanOverlayEnv() map[string]string {
 		"HERDR_ENV":             "",
 		"HERDR_SOCKET_PATH":     "",
 		"HERDR_PANE_ID":         "",
+		"HERDR_WORKSPACE_ID":    "",
+		"REVDIFF_HERDR_PANE":    "",
 		"KITTY_LISTEN_ON":       "",
 		"KITTY_WINDOW_ID":       "",
 		"WEZTERM_PANE":          "",

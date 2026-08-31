@@ -138,6 +138,8 @@ The resolver and launcher MUST run in the same bash invocation — the resolver 
 
 **Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
+**Pane-scoped overlay (herdr)**: when running under herdr, `REVDIFF_HERDR_PANE=1` opens revdiff in a zoomed split of the agent's own pane instead of a new fullscreen tab, keeping the agent pane one keypress away. The user sets it in the environment; it falls back to the tab overlay on an older herdr CLI. This is a launcher environment variable, not a revdiff flag.
+
 **Pane-scoped overlay (agterm)**: when running in an agterm split, `REVDIFF_AGTERM_PANE=1` opens revdiff in the agent's own pane instead of over the whole session, leaving the sibling pane live and visible. The user sets it in the environment; it is ignored outside a split. This is a launcher environment variable, not a revdiff flag.
 
 The script:

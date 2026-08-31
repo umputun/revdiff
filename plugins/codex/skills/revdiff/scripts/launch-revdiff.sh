@@ -290,18 +290,231 @@ fi
 
 # herdr: open a new fullscreen tab via the herdr CLI (must precede kitty —
 # inside herdr-in-kitty KITTY_LISTEN_ON is set, so the kitty branch would
-# otherwise win and open an overlay window herdr cannot composite into its panes)
+# otherwise win and open an overlay window herdr cannot composite into its panes).
+# REVDIFF_HERDR_PANE=1 instead runs the review in a zoomed split of the agent's
+# own pane, which keeps that pane one keypress away; it is self-contained and
+# never falls through to the tab path below except when the split is declined.
 if [ "${HERDR_ENV:-}" = "1" ] && command -v herdr >/dev/null 2>&1; then
+    # $HERDR_PANE_ID is injected by herdr into every managed pane, and the tab path
+    # below reuses that name for the pane it creates — copy the caller's id out first
+    HERDR_CALLER_PANE="${HERDR_PANE_ID:-}"
+    # non-empty once we own a review pane that has to be closed on every exit path
+    HERDR_TARGET=""
+    # the pane's own shell touches this the instant it starts the launch script, so
+    # ownership is decided by evidence FROM the pane rather than by `pane run` returning:
+    # herdr may have started the review before the CLI call returns, and may not have
+    # started it after. Assigned once $SENTINEL exists, below. `touch ... || true` and not
+    # `: >`, because a redirection failure on a special builtin kills a POSIX shell outright,
+    # which would stop revdiff running at all; a $TMPBASE the pane cannot write already
+    # breaks the sentinel the same way, for the tab path too.
+    HERDR_STARTED=""
+    # set BEFORE `pane run` and never cleared again, so the in-flight window is owned
+    # rather than ambiguous: a pending signal is serviced the instant the call returns,
+    # before any later assignment could run. The marker is still needed for the failure
+    # path, where it is the only evidence that a refused-looking dispatch actually started.
+    HERDR_DISPATCHED=0
+
+    # all three are used at runtime; a CLI lacking `get` would read every liveness poll
+    # as a failure and abandon a live review. zoom stays unprobed: it is purely cosmetic.
+    herdr_supports_pane_mode() {
+        herdr pane split --help 2>/dev/null | grep -q -- '--direction' \
+            && herdr pane get   --help >/dev/null 2>&1 \
+            && herdr pane close --help >/dev/null 2>&1
+    }
+
+    # idempotent, and clears HERDR_TARGET before shelling out so a signal during the
+    # close cannot re-enter through the EXIT trap and close the same id twice
+    herdr_close_pane() {
+        local target="$HERDR_TARGET"
+        HERDR_TARGET=""
+        [ -n "$target" ] || return 0
+        if ! herdr pane close "$target" >/dev/null 2>&1; then
+            herdr pane zoom "$target" --off >/dev/null 2>&1 || true
+            printf 'revdiff: could not close herdr review pane %s\n' "$target" >&2
+        fi
+        return 0
+    }
+
+    # EXIT-trap cleanup. A review that has STARTED but not FINISHED belongs to the user:
+    # SKILL.md promises the driving agent that a launcher killed on timeout leaves revdiff
+    # open with nothing lost, so we must not close it and must not delete the script it is
+    # running. Anything else is ours -- a pane that never started one (close it, it holds
+    # only a shell) or one that already finished (close it, it is done).
+    # shellcheck disable=SC2317,SC2329  # invoked from the EXIT trap below, which shellcheck cannot
+    # see. both codes: shellcheck <0.11 reports this as SC2317, 0.11+ as SC2329
+    herdr_cleanup_unlaunched() {
+        # pane mode only: the tab path never sets HERDR_TARGET, so its launch-script
+        # lifecycle stays exactly what master does here and what every other
+        # script-using backend does -- the trap removes it, unconditionally
+        if [ -n "$HERDR_TARGET" ] && [ ! -f "$SENTINEL" ] &&
+            { [ -f "$HERDR_STARTED" ] || [ "$HERDR_DISPATCHED" = 1 ]; }; then
+            return 0
+        fi
+        herdr_close_pane
+        rm -f "$LAUNCH_SCRIPT" "$HERDR_STARTED"
+        return 0
+    }
+
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
+    HERDR_STARTED="$SENTINEL.started"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'herdr_cleanup_unlaunched || true; rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$HERDR_STARTED"' EXIT
+    # same shape as the agterm branch above: INT/TERM exit through the EXIT trap so a
+    # signal never skips cleanup or leaves an unnormalised status
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
+touch $(sq "$HERDR_STARTED") 2>/dev/null || true
 $(write_rc_cmd "$SENTINEL")
+rm -f "\$0"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
+
+    if [ "${REVDIFF_HERDR_PANE:-}" = 1 ] && [ -n "$HERDR_CALLER_PANE" ] && herdr_supports_pane_mode; then
+        # A trapped signal is deferred until the in-flight foreground command returns, then
+        # runs BEFORE the next statement -- so `exit 143` during the split would fire after
+        # the pane exists but before HERDR_TARGET names it, and the EXIT trap would have
+        # nothing to close. Record the signal instead of acting on it, and honor it once
+        # ownership is held. This is a trap with a COMMAND, which children reset to default;
+        # `trap '' INT TERM` would be SIG_IGN, inherited across exec, and would make a hung
+        # herdr unkillable (see CLAUDE.md). It also adds no deferral that `exit 143` did not
+        # already have: both wait out the same wedged split.
+        HERDR_SIGNALLED=0
+        trap 'HERDR_SIGNALLED=130' INT
+        trap 'HERDR_SIGNALLED=143' TERM
+        if HERDR_NEW=$(herdr pane split --pane "$HERDR_CALLER_PANE" --direction right \
+                --cwd "$CWD" --focus 2>&1); then
+            if command -v jq >/dev/null 2>&1; then
+                HERDR_TARGET=$(printf '%s' "$HERDR_NEW" | jq -r '.result.pane.pane_id // empty' 2>/dev/null || true)
+            fi
+            if [ -z "$HERDR_TARGET" ]; then
+                HERDR_TARGET=$(printf '%s' "$HERDR_NEW" | grep -o '"pane_id":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+            fi
+            # the grep fallback is positional, so a response listing the source pane first
+            # would hand us the caller's own id — closing that would kill the agent's pane
+            if [ "$HERDR_TARGET" = "$HERDR_CALLER_PANE" ]; then
+                HERDR_TARGET=""
+            fi
+            if [ -z "$HERDR_TARGET" ]; then
+                # never guess: a pane found by diffing `pane list` may belong to another
+                # herdr client, and closing that would destroy the user's own work
+                printf 'revdiff: herdr pane split returned no pane id; a stray review pane may remain: %s\n' \
+                    "$HERDR_NEW" >&2
+                exit 1
+            fi
+            # ownership is held: back to exiting traps, and pay any signal deferred above
+            # through the EXIT trap, which can now close the pane it created
+            trap 'exit 130' INT
+            trap 'exit 143' TERM
+            [ "$HERDR_SIGNALLED" != 0 ] && exit "$HERDR_SIGNALLED"
+            herdr pane zoom "$HERDR_TARGET" --on >/dev/null 2>&1 || true
+            # claim ownership BEFORE dispatching. A pending signal is serviced the moment
+            # this call returns and before any assignment after it, so ownership taken
+            # afterwards would miss a dispatch herdr had already accepted. Never cleared
+            # again -- the refusal path below says why restoring a reset here is unsafe.
+            HERDR_DISPATCHED=1
+            if ! herdr pane run "$HERDR_TARGET" "sh $(sq "$LAUNCH_SCRIPT")" >/dev/null 2>&1; then
+                # this branch does trust the return code, unlike the trap above: a lost
+                # response after a successful dispatch would close a just-started review,
+                # but stranding a pane on every genuine dispatch failure is the worse default
+                echo "error: herdr pane run failed for pane $HERDR_TARGET" >&2
+                # herdr refused the command, so nothing was dispatched -- unless the pane
+                # announced itself anyway, which would mean the response was lost after
+                # delivery. Give that a moment to show up, then close only a pane that
+                # never announced. Paid on the failure path only.
+                # HERDR_DISPATCHED deliberately stays 1 across the grace: the trap reads it,
+                # so clearing it here would let a signal landing inside the sleep close the
+                # pane before the marker had its chance to appear -- the exact unknown-state
+                # destruction claim-before-dispatch exists to prevent. Clearing it after the
+                # sleep would be dead anyway, since herdr_close_pane discharges ownership by
+                # emptying HERDR_TARGET, which is what the trap gates on.
+                #
+                # The grace must therefore RUN TO COMPLETION even while being signalled: any
+                # exit taken inside it hands the trap a state it must read as "may be live"
+                # and preserve, stranding a pane the finished evidence check would close.
+                # Two things are needed for that, and neither alone is enough:
+                #   - record the signal instead of exiting on it, as the split window does;
+                #   - survive the sleep itself being killed. A process-group signal
+                #     (interactive Ctrl-C, `kill -- -pgid`) hits the foreground `sleep` too,
+                #     which then returns nonzero and lets `set -e` abort the script before
+                #     the evidence check -- resurrecting the strand despite the trap.
+                # The grace is therefore measured in ELAPSED TIME, not in completed sleeps:
+                # $SECONDS is set by the shell from the wall clock, so a killed `sleep` costs
+                # an early wakeup and nothing else, and the interval is served no matter how
+                # many signals arrive. Counting sleeps instead can end with zero time
+                # elapsed, leaving an absent marker that proves nothing. `|| true` keeps an
+                # interrupted sleep from tripping errexit; the loop body cannot fail
+                # otherwise, so it cannot re-arm it either. The marker check is in the
+                # condition, so the common path leaves as soon as the pane announces itself
+                # rather than always paying the full interval.
+                #
+                # `-lt 2`, not `-lt 1`: $SECONDS counts whole-second boundaries crossed since
+                # the assignment, so it can reach 1 a millisecond later if the assignment
+                # lands just before a boundary. Waiting for the second boundary guarantees a
+                # full second was served; the cost is up to about two seconds, on a failure path only.
+                HERDR_SIGNALLED=0
+                trap 'HERDR_SIGNALLED=130' INT
+                trap 'HERDR_SIGNALLED=143' TERM
+                SECONDS=0
+                while [ ! -f "$HERDR_STARTED" ] && [ "$SECONDS" -lt 2 ]; do
+                    sleep 0.3 || true
+                done
+                # the interval was served, so an absent marker is real evidence
+                [ -f "$HERDR_STARTED" ] || herdr_close_pane
+                trap 'exit 130' INT
+                trap 'exit 143' TERM
+                # the refusal is why we are exiting, so it owns the status; a signal that
+                # arrived during the grace has already been honored by the close above
+                exit 1
+            fi
+            HERDR_MISSES=0
+            HERDR_POLL=0.3
+            while [ ! -f "$SENTINEL" ]; do
+                if HERDR_GET=$(herdr pane get "$HERDR_TARGET" 2>&1); then
+                    HERDR_MISSES=0
+                    HERDR_POLL=0.3
+                elif printf '%s' "$HERDR_GET" | grep -q '"code":"pane_not_found"'; then
+                    # authoritative: the pane is gone, so ownership is already discharged --
+                    # nothing to close, and nothing to complain about
+                    HERDR_TARGET=""
+                    break
+                else
+                    # a generic error is NOT proof of death (socket hiccup, server restart),
+                    # and there is no safe deadline when the API cannot report liveness --
+                    # any bound turns unknown liveness into a closed live review. Warn once
+                    # per outage and back off, then keep waiting, exactly as the tab path
+                    # below does for a human review. Both reset on a good poll.
+                    HERDR_MISSES=$((HERDR_MISSES + 1))
+                    if [ "$HERDR_MISSES" = 10 ]; then
+                        printf 'revdiff: herdr pane get keeps failing, still waiting for the review: %s\n' \
+                            "$HERDR_GET" >&2
+                        # stop hammering a control plane that is down; the sentinel is still
+                        # checked every iteration, so finishing costs at most one interval
+                        HERDR_POLL=2
+                    fi
+                fi
+                sleep "$HERDR_POLL"
+            done
+            rc=$(read_rc "$SENTINEL")
+            # the review is over either way: the script ran (and removed itself), or the
+            # pane died before it could and nothing will ever open it now. Only a launcher
+            # killed mid-review leaves it behind, which is deliberate -- the pane may still
+            # be about to open it.
+            rm -f "$LAUNCH_SCRIPT" "$HERDR_STARTED"
+            herdr_close_pane
+            print_output_and_exit "${rc:-1}"
+        fi
+        # nothing was created — fall through to the tab path. Restore the exiting traps
+        # first: the recording trap must not survive into a path with no pane to protect,
+        # or a signal there would be swallowed instead of ending the launcher.
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        [ "$HERDR_SIGNALLED" != 0 ] && exit "$HERDR_SIGNALLED"
+        printf 'revdiff: herdr pane split declined, using tab overlay: %s\n' "$HERDR_NEW" >&2
+    fi
 
     # pin the tab to the caller's workspace: without --workspace, herdr tab create
     # targets the server's focused workspace (what the user is currently viewing),

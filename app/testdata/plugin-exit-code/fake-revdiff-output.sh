@@ -8,6 +8,10 @@ fi
 if [ -n "${FAKE_STDERR:-}" ]; then
     printf "%s" "$FAKE_STDERR" >&2
 fi
+# lets a test hold a review open: the script has started, the sentinel is not yet written
+if [ -n "${FAKE_REVDIFF_DELAY:-}" ]; then
+    sleep "$FAKE_REVDIFF_DELAY"
+fi
 out=""
 for arg in "$@"; do
     case "$arg" in

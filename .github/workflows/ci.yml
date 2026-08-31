@@ -69,5 +69,12 @@ jobs:
         run: python3 .github/scripts/validate-codex-marketplace.py
 
       - name: shellcheck
+        # pinned: the runner image's shellcheck drifts, and a `shellcheck disable=` written
+        # against a newer local version can pass locally and fail here. SC2317 was split into
+        # SC2329 in 0.11, so a suppression naming only one code silently breaks on the other.
+        # digest-pinned: a docker tag is mutable, and a retag would change the checker
+        # silently -- the same failure class the pin exists to prevent.
+        # Contributors can reproduce this exact check with the same image.
         run: |
-          find . -name '*.sh' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 shellcheck
+          find . -name '*.sh' -not -path './.git/*' -not -path './vendor/*' -print0 \
+            | xargs -0 docker run --rm -v "$PWD":/mnt:ro koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
