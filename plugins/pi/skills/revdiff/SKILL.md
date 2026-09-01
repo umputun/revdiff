@@ -72,6 +72,7 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 ```text
 /revdiff
 /revdiff HEAD~1
+/revdiff HEAD~1 HEAD
 /revdiff main
 /revdiff --staged
 /revdiff --untracked
