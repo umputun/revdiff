@@ -604,7 +604,7 @@ func TestJj_FileDiff_SmallContext(t *testing.T) {
 	assert.Equal(t, 19, fullCtx, "expected 19 context lines with full-file context")
 }
 
-func TestJj_FilesetPath(t *testing.T) {
+func TestJj_PathArg(t *testing.T) {
 	j := &Jj{}
 	tests := []struct {
 		name, path, want string
@@ -623,7 +623,7 @@ func TestJj_FilesetPath(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, j.filesetPath(tt.path))
+			assert.Equal(t, tt.want, j.pathArg(tt.path))
 		})
 	}
 }

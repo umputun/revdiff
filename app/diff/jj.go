@@ -146,7 +146,7 @@ func (j *Jj) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
 	args := make([]string, 0, 5+len(rangeArgs))
 	args = append(args, "diff", "--git", jjContextArg(req.ContextLines))
 	args = append(args, rangeArgs...)
-	args = append(args, "--", j.filesetPath(req.Path))
+	args = append(args, "--", j.pathArg(req.Path))
 
 	out, err := j.runJj(args...)
 	if err != nil {
@@ -190,23 +190,23 @@ func (j *Jj) totalOldLines(ref, file string) int {
 	if oldRef == "" {
 		oldRef = "@-"
 	}
-	out, err := j.runJj("file", "show", "-r", oldRef, "--", j.filesetPath(file))
+	out, err := j.runJj("file", "show", "-r", oldRef, "--", j.pathArg(file))
 	if err != nil {
 		return 0
 	}
 	return countLines(out)
 }
 
-// filesetPath quotes a path as a jj fileset pattern. jj parses post-`--` arguments as
-// fileset expressions, not literal paths: `$ ( ) : #` and friends fail to parse, while
-// `* ? & | ~` silently resolve to a different set of files.
+// pathArg quotes a path as a jj fileset pattern. jj parses post-`--` arguments as fileset
+// expressions rather than names, so a bare path is a query: `$ ( ) :` fail to parse and
+// `* ? & | ~` resolve to a different set of files. Unconditional because revdiff needs jj
+// 0.27+ anyway (see README), and 0.27 is where the ui.allow-filesets opt-out was removed —
+// every jj that can run revdiff parses filesets.
 //
-// cwd-file: is the only pattern that fits every path reaching here. jj runs with
-// cmd.Dir = workDir and emits paths relative to it, so cwd-file: resolves them as
-// written; root-file: rejects an absolute path and any "../" sibling outright, and
-// silently matches the wrong file for a path below a workDir that is not the repo root.
-// Not for `jj file annotate` (jjblame.go), which takes a literal path and rejects this.
-func (j *Jj) filesetPath(path string) string {
+// cwd-file: rather than root-file: because jj runs with cmd.Dir = workDir and emits paths
+// relative to it, so absolute and "../" paths resolve too (see .claude/rules/gotchas.md).
+// Not for `jj file annotate` (jjblame.go), which takes a literal path and rejects a pattern.
+func (j *Jj) pathArg(path string) string {
 	esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(path)
 	return `cwd-file:"` + esc + `"`
 }
