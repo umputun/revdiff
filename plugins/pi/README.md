@@ -38,7 +38,7 @@ Useful args:
 
 ```text
 /revdiff                         -- detect uncommitted, staged, or branch changes, then open revdiff
-/revdiff HEAD~1                  -- review last commit
+/revdiff HEAD~1 HEAD             -- review last commit
 /revdiff main                    -- review against main
 /revdiff --staged                -- review staged changes
 /revdiff --untracked             -- include untracked files in working-tree review

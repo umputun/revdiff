@@ -410,16 +410,16 @@
         <div class="plugin-examples">
             <h3>Slash commands</h3>
             <div class="code-block"><code>/revdiff                  <span class="code-comment">-- smart detection: uncommitted, last commit, or branch diff</span>
-/revdiff HEAD~1           <span class="code-comment">-- review last commit</span>
+/revdiff HEAD~1 HEAD      <span class="code-comment">-- review last commit</span>
 /revdiff main             <span class="code-comment">-- review current branch against main</span>
-/revdiff HEAD~3           <span class="code-comment">-- review last 3 commits</span>
+/revdiff HEAD~3 HEAD      <span class="code-comment">-- review last 3 commits</span>
 /revdiff --staged         <span class="code-comment">-- review staged changes only</span>
 /revdiff all files        <span class="code-comment">-- browse all tracked files in the project</span></code></div>
         </div>
         <div class="plugin-examples">
             <h3>Natural language</h3>
             <div class="code-block"><code>"review diff"                       <span class="code-comment">-- same as /revdiff, smart detection</span>
-"review diff HEAD~1"                <span class="code-comment">-- last commit</span>
+"review diff HEAD~1 HEAD"           <span class="code-comment">-- last commit</span>
 "review diff against main"          <span class="code-comment">-- branch diff</span>
 "review changes from last 2 days"   <span class="code-comment">-- Claude resolves the ref</span>
 "revdiff for staged changes"        <span class="code-comment">-- staged only</span>

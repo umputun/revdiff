@@ -11,7 +11,7 @@ revdiff              # review uncommitted changes
 revdiff main         # review changes against a branch
 revdiff --staged     # review staged changes
 revdiff --untracked  # show untracked files in the tree
-revdiff HEAD~1       # review last commit
+revdiff HEAD~1 HEAD  # review last commit
 revdiff main feature # diff between two refs
 revdiff main..feature  # same as above, git dot-dot syntax
 revdiff main...feature # changes since feature diverged from main
