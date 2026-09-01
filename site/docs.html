@@ -135,7 +135,7 @@
         <div class="code-block"><code>/revdiff [args]</code></div>
         <h3>Useful args</h3>
         <div class="code-block"><code>/revdiff                         <span class="code-comment">-- detect uncommitted, staged, or branch changes, then open revdiff</span>
-/revdiff HEAD~1                  <span class="code-comment">-- review last commit</span>
+/revdiff HEAD~1 HEAD             <span class="code-comment">-- review last commit</span>
 /revdiff main                    <span class="code-comment">-- review against main</span>
 /revdiff --staged                <span class="code-comment">-- review staged changes</span>
 /revdiff --untracked             <span class="code-comment">-- include untracked files in working-tree review</span>
@@ -180,6 +180,7 @@
         <ul>
             <li><code>revdiff</code> &mdash; uncommitted changes</li>
             <li><code>revdiff HEAD~3</code> &mdash; diff a single ref against the working tree</li>
+            <li><code>revdiff HEAD~1 HEAD</code> &mdash; review exactly the last commit</li>
             <li><code>revdiff main feature</code> &mdash; diff between two refs</li>
             <li><code>revdiff main..feature</code> &mdash; same as above, git dot-dot syntax</li>
             <li><code>revdiff main...feature</code> &mdash; changes since feature diverged from main</li>
@@ -197,7 +198,7 @@ revdiff main
 revdiff --staged
 
 <span class="code-comment"># review last commit</span>
-revdiff HEAD~1
+revdiff HEAD~1 HEAD
 
 <span class="code-comment"># diff between two refs</span>
 revdiff main feature
@@ -722,14 +723,14 @@ map alt+t&gt;n theme_select</code></div>
         <h2 id="plugin-usage">Plugin usage</h2>
         <h3>Slash commands</h3>
         <div class="code-block"><code>/revdiff                  <span class="code-comment">-- smart detection: uncommitted, last commit, or branch diff</span>
-/revdiff HEAD~1           <span class="code-comment">-- review last commit</span>
+/revdiff HEAD~1 HEAD      <span class="code-comment">-- review last commit</span>
 /revdiff main             <span class="code-comment">-- review current branch against main</span>
-/revdiff HEAD~3           <span class="code-comment">-- review last 3 commits</span>
+/revdiff HEAD~3 HEAD      <span class="code-comment">-- review last 3 commits</span>
 /revdiff --staged         <span class="code-comment">-- review staged changes only</span>
 /revdiff all files        <span class="code-comment">-- browse all tracked files</span></code></div>
         <h3>Natural language</h3>
         <div class="code-block"><code>"review diff"                       <span class="code-comment">-- same as /revdiff, smart detection</span>
-"review diff HEAD~1"                <span class="code-comment">-- last commit</span>
+"review diff HEAD~1 HEAD"           <span class="code-comment">-- last commit</span>
 "review diff against main"          <span class="code-comment">-- branch diff</span>
 "review changes from last 2 days"   <span class="code-comment">-- Claude resolves the ref</span>
 "revdiff for staged changes"        <span class="code-comment">-- staged only</span>
@@ -801,7 +802,7 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div
         </ul>
         <p>Codex treats exit code <code>10</code> as success-with-annotations and keeps captured output.</p>
         <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
-/revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
+/revdiff HEAD~3 HEAD  <span class="code-comment"># review last 3 commits</span>
 /revdiff-plan         <span class="code-comment"># review last Codex response</span></code></div>
 
         <h2 id="codex-differences">Differences from Claude Code plugin</h2>
@@ -825,7 +826,7 @@ cd plugins/opencode && bash setup.sh</code></div>
             <li>Plan-review plugin &mdash; automatically launches revdiff when the assistant exits plan mode, injecting annotations back as user messages</li>
         </ul>
         <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
-/revdiff HEAD~3       <span class="code-comment"># review last 3 commits</span>
+/revdiff HEAD~3 HEAD  <span class="code-comment"># review last 3 commits</span>
 /revdiff --staged     <span class="code-comment"># review staged changes</span></code></div>
 
         <!-- output -->

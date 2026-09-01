@@ -56,7 +56,7 @@ Interactive diff review with inline annotations.
 
 ```text
 /revdiff              — auto-detect ref (uncommitted, staged, branch vs master, or last commit)
-/revdiff HEAD~3       — review last 3 commits
+/revdiff HEAD~3 HEAD  — review last 3 commits
 /revdiff main feature — two-ref diff
 /revdiff all files    — browse all tracked files
 /revdiff path/to/file — review a single file

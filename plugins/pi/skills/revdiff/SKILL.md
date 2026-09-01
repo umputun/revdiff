@@ -18,7 +18,7 @@ Reference resolution rules:
 
 - Accept natural language. Resolve the user's requested target to concrete revdiff args before launching.
 - If the request identifies another working directory (for example `in ~/source/repo`), use that directory for any git/ref/path resolution, omit that directory phrase from the revdiff args, and pass the directory as the `revdiff_review` tool's `cwd` parameter.
-- For commit-count requests, use the matching git rev: `prev commit`, `previous commit`, `last commit` → `HEAD~1`; `head-3`, `head 3`, `HEAD~3`, `previous 3 commits`, `last 3 commits` → `HEAD~3`.
+- For natural-language commit-count requests, use two refs: `prev commit`, `previous commit`, `last commit` → `HEAD~1 HEAD`; `head-3`, `head 3`, `previous 3 commits`, `last 3 commits` → `HEAD~3 HEAD`.
 - For tag requests, resolve the actual tag first. `last tag` or `latest tag` → run `git describe --tags --abbrev=0`, then pass that tag as `args`.
 - For date requests, resolve the commit first. Examples: `2 weeks ago`, `yesterday`, `last Friday` → run `git rev-list -1 --before=<phrase> HEAD`, then pass the resulting commit hash as `args`.
 - For file targets, use `args: "--only <path>"`.

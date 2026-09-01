@@ -129,17 +129,17 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 
 ```
 /revdiff                  -- smart detection: uncommitted, last commit, or branch diff
-/revdiff HEAD~1           -- review last commit
+/revdiff HEAD~1 HEAD      -- review last commit
 /revdiff main             -- review current branch against main
 /revdiff --staged         -- review staged changes only
-/revdiff HEAD~3           -- review last 3 commits
+/revdiff HEAD~3 HEAD      -- review last 3 commits
 ```
 
 **Use with free text** (no slash command needed):
 
 ```
 "review diff"                     -- smart detection, same as /revdiff
-"review diff HEAD~1"              -- last commit
+"review diff HEAD~1 HEAD"         -- last commit
 "review diff against main"        -- branch diff
 "review changes from last 2 days" -- Claude resolves the ref automatically
 "revdiff for staged changes"      -- staged only
@@ -219,7 +219,7 @@ Useful args:
 
 ```text
 /revdiff                         -- detect uncommitted, staged, or branch changes, then open revdiff
-/revdiff HEAD~1                  -- review last commit
+/revdiff HEAD~1 HEAD             -- review last commit
 /revdiff main                    -- review against main
 /revdiff --staged                -- review staged changes
 /revdiff --untracked             -- include untracked files in working-tree review
@@ -327,7 +327,7 @@ The setup script copies files to `~/.config/opencode/` and registers the plan-re
 
 ```text
 /revdiff                         -- review git diff with revdiff TUI
-/revdiff HEAD~3                  -- review last 3 commits
+/revdiff HEAD~3 HEAD             -- review last 3 commits
 ```
 
 The plan-review plugin automatically launches revdiff when the assistant exits plan mode, letting you annotate before approval.
@@ -358,6 +358,7 @@ revdiff [OPTIONS] [base] [against]
 Positional arguments support several forms:
 - `revdiff` — uncommitted changes
 - `revdiff HEAD~3` — diff a single ref against the working tree
+- `revdiff HEAD~1 HEAD` — review exactly the last commit
 - `revdiff main feature` — diff between two refs
 - `revdiff main..feature` — same as above, using git's dot-dot syntax
 - `revdiff main...feature` — changes since `feature` diverged from `main`
@@ -554,7 +555,7 @@ revdiff main
 revdiff --staged
 
 # review last commit
-revdiff HEAD~1
+revdiff HEAD~1 HEAD
 
 # diff between two refs
 revdiff main feature
