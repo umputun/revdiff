@@ -58,7 +58,7 @@ The plugin supports a full review loop: annotate -> Claude plans fixes -> Claude
 
 ## Codex Plugin
 
-Install with `codex plugin marketplace add umputun/revdiff` and `codex plugin add revdiff@revdiff`. The plugin provides the same /revdiff workflow as Claude Code, plus /revdiff-plan which extracts the last Codex assistant message for annotation.
+Install with `codex plugin marketplace add umputun/revdiff` and `codex plugin add revdiff@revdiff`. The plugin provides the same /revdiff workflow as Claude Code, plus /revdiff-plan which extracts the last Codex assistant message for annotation. If you previously copied the skills manually, remove `~/.codex/skills/revdiff` and `~/.codex/skills/revdiff-plan` after installing the plugin so the plugin copy is the only one in use.
 
 ## OpenCode Integration
 

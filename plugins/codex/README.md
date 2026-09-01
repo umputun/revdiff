@@ -26,6 +26,8 @@ codex plugin add revdiff@revdiff
 codex plugin add revdiff-planning@revdiff
 ```
 
+If you previously copied the skills manually, remove `~/.codex/skills/revdiff` and `~/.codex/skills/revdiff-plan` after installing the plugin so the plugin copy is the only one in use.
+
 The `revdiff` plugin installs the manual `/revdiff` and `/revdiff-plan` skills. The separate `revdiff-planning` plugin adds automatic Plan-mode review. Start a new session and trust its hook through `/hooks`. It runs only in Plan mode and first checks the current Stop payload's `last_assistant_message`. If that field has no complete `<proposed_plan>`, the hook reads the exact event transcript and selects the last assistant message for the matching session and turn, regardless of provider-specific phase fields. Annotated revisions use rolling snapshot comparisons; `/revdiff-plan` remains the manual fallback.
 
 ## Skills

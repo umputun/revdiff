@@ -1,7 +1,6 @@
 ---
 name: revdiff-plan
 description: Review the last Codex assistant message (plan, analysis, or proposal) with inline annotations in a TUI overlay. Extracts the most recent response from Codex rollout files and opens it in revdiff for review and annotation. Activates on "revdiff-plan", "review plan with revdiff", "annotate plan", "review last response", "annotate codex output".
-allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
 
 # revdiff-plan - Review Codex Output
