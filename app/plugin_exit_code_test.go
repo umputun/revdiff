@@ -789,9 +789,12 @@ func TestPiCallerPreservesAnnotationExitCode(t *testing.T) {
 	assert.NotContains(t, src, "withRevdiffOnPath")
 	assert.NotContains(t, src, "spawnSync(launcher")
 	assert.Contains(t, src, "return exitCode === 0 || exitCode === EXIT_CODE_ANNOTATIONS;")
-	assert.Contains(t, src, "if (!outputExists && exitCode === EXIT_CODE_ANNOTATIONS)")
-	assert.Contains(t, src, "if (result.signal)")
-	assert.Contains(t, src, "done(result.status ?? 1)")
+	assert.Contains(t, src, "if (!outputExists && processResult.status === EXIT_CODE_ANNOTATIONS)")
+	assert.Contains(t, src, `spawn(command, args, {`)
+	assert.Contains(t, src, `stdio: "inherit"`)
+	assert.Contains(t, src, `child.once("error"`)
+	assert.Contains(t, src, `child.once("close"`)
+	assert.Contains(t, src, `pi.events.emit("herdr:blocked"`)
 	assert.Contains(t, src, "revdiff terminated by signal")
 	assert.Contains(t, src, "return buildResult(launch, rawOutput, cwd);")
 }
@@ -856,6 +859,10 @@ function fakeCtx(choice?: "uncommitted" | "branch") {
 		isIdle: () => true,
 		ui: {
 			notifications: [] as string[],
+			stops: 0,
+			starts: 0,
+			renders: 0,
+			completions: 0,
 			notify(message: string) {
 				this.notifications.push(message);
 			},
@@ -863,16 +870,21 @@ function fakeCtx(choice?: "uncommitted" | "branch") {
 				return choice === "branch" ? choices[1] : choices[0];
 			},
 			custom(factory: any) {
-				let value: unknown;
-				factory(
-					{ stop() {}, start() {}, requestRender(_full?: boolean) {} },
-					{},
-					{},
-					(next: unknown) => {
-						value = next;
-					},
-				);
-				return value;
+				return new Promise((resolve) => {
+					factory(
+						{
+							stop: () => this.stops++,
+							start: () => this.starts++,
+							requestRender: (_full?: boolean) => this.renders++,
+						},
+						{},
+						{},
+						(next: unknown) => {
+							this.completions++;
+							resolve(next);
+						},
+					);
+				});
 			},
 		},
 	} as any;
@@ -882,10 +894,17 @@ function fakePi() {
 	const commands = new Map<string, any>();
 	const tools = new Map<string, any>();
 	const sentMessages: string[] = [];
+	const emittedEvents: Array<{ name: string; data: any }> = [];
 	return {
 		commands,
 		tools,
 		sentMessages,
+		emittedEvents,
+		events: {
+			emit(name: string, data: any) {
+				emittedEvents.push({ name, data });
+			},
+		},
 		registerCommand(name: string, command: any) {
 			commands.set(name, command);
 		},
@@ -896,6 +915,25 @@ function fakePi() {
 			sentMessages.push(message);
 		},
 	} as any;
+}
+
+function assertBlockedEventPair(pi: any, message: string): void {
+	testAssert(pi.emittedEvents.length === 2, message + ": expected one blocked event pair");
+	testAssert(pi.emittedEvents[0].name === "herdr:blocked", message + ": active event should use herdr:blocked");
+	testAssert(pi.emittedEvents[0].data.active === true, message + ": first event should activate blocked state");
+	testAssert(
+		pi.emittedEvents[0].data.label === "Waiting for revdiff review",
+		message + ": active event should describe the review wait",
+	);
+	testAssert(pi.emittedEvents[1].name === "herdr:blocked", message + ": inactive event should use herdr:blocked");
+	testAssert(pi.emittedEvents[1].data.active === false, message + ": second event should clear blocked state");
+}
+
+function assertTuiRestoredOnce(ctx: any, message: string): void {
+	testAssert(ctx.ui.stops === 1, message + ": TUI should stop once");
+	testAssert(ctx.ui.starts === 1, message + ": TUI should start once");
+	testAssert(ctx.ui.renders === 1, message + ": TUI should force one render");
+	testAssert(ctx.ui.completions === 1, message + ": custom UI should complete once");
 }
 
 function writeExecutable(pathname: string, content: string): void {
@@ -950,12 +988,15 @@ async function testToolReturnsAnnotations(): Promise<void> {
 	process.env.FAKE_ARG_FILE = argFile;
 	try {
 		const pi = fakePi();
+		const ctx = fakeCtx();
 		revdiffExtension(pi);
-		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, fakeCtx());
+		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
 		const text = result.content[0].text;
 		testAssert(text.includes("Captured 1 annotation for README.md."), "tool result should summarize captured annotations");
 		testAssert(text.includes("Annotations:\n## src/app.go:12-14 (+)\nfix it"), "tool result should include raw annotation text");
 		testAssert(result.details.rawOutput.includes("## src/app.go:12-14 (+)"), "tool details should preserve raw output");
+		assertTuiRestoredOnce(ctx, "annotation review");
+		assertBlockedEventPair(pi, "annotation review");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -1065,6 +1106,68 @@ async function testToolCwdParameter(): Promise<void> {
 	}
 }
 
+async function testReviewKeepsEventLoopActive(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-async-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	writeExecutable(fakeBin, ["#!/bin/sh", "sleep 0.1", "exit 0", ""].join("\n"));
+
+	const oldBin = process.env.REVDIFF_BIN;
+	process.env.REVDIFF_BIN = fakeBin;
+	try {
+		const pi = fakePi();
+		const ctx = fakeCtx();
+		revdiffExtension(pi);
+		const review = pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+		testAssert(ctx.ui.starts === 0, "TUI should remain stopped while revdiff is running");
+		testAssert(pi.emittedEvents.length === 1, "blocked state should remain active while revdiff is running");
+		testAssert(pi.emittedEvents[0].data.active === true, "review should be blocked during the terminal handoff");
+		const result = await review;
+		testAssert(result.content[0].text.includes("Review complete — no annotations"), "normal exit should complete the review");
+		assertTuiRestoredOnce(ctx, "asynchronous review");
+		assertBlockedEventPair(pi, "asynchronous review");
+	} finally {
+		if (oldBin === undefined) {
+			delete process.env.REVDIFF_BIN;
+		} else {
+			process.env.REVDIFF_BIN = oldBin;
+		}
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testLaunchErrorRestoresTui(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-launch-error-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	testWriteFileSync(fakeBin, "not executable\n");
+	testChmodSync(fakeBin, 0o600);
+
+	const oldBin = process.env.REVDIFF_BIN;
+	process.env.REVDIFF_BIN = fakeBin;
+	try {
+		const pi = fakePi();
+		const ctx = fakeCtx();
+		revdiffExtension(pi);
+		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
+		await new Promise((resolve) => setTimeout(resolve, 20));
+
+		testAssert(result.content[0].text === "revdiff review did not complete.", "launch failure should return incomplete result");
+		testAssert(
+			ctx.ui.notifications.some((message: string) => message.includes("Failed to launch revdiff")),
+			"launch failure should notify an error",
+		);
+		assertTuiRestoredOnce(ctx, "launch failure");
+		assertBlockedEventPair(pi, "launch failure");
+	} finally {
+		if (oldBin === undefined) {
+			delete process.env.REVDIFF_BIN;
+		} else {
+			process.env.REVDIFF_BIN = oldBin;
+		}
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
 async function testSignalTerminatedReviewFails(): Promise<void> {
 	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-signal-"));
 	const fakeBin = path.join(tempDir, "revdiff");
@@ -1083,6 +1186,8 @@ async function testSignalTerminatedReviewFails(): Promise<void> {
 			ctx.ui.notifications.some((message: string) => message.includes("terminated by signal")),
 			"signal-terminated revdiff should notify failure",
 		);
+		assertTuiRestoredOnce(ctx, "signal termination");
+		assertBlockedEventPair(pi, "signal termination");
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -1215,6 +1320,8 @@ await testToolReturnsAnnotations();
 testReviewCwdResolution();
 await testToolRejectsInvalidCwd();
 await testToolCwdParameter();
+await testReviewKeepsEventLoopActive();
+await testLaunchErrorRestoresTui();
 await testSignalTerminatedReviewFails();
 await testArgumentResolution();
 await testRefLikePathArgKeepsRef();

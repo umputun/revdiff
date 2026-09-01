@@ -214,6 +214,7 @@ revdiff enables mouse tracking by default so the scroll wheel and left-click wor
 
 - **Scroll wheel** — scrolls whichever pane the cursor is over. In the tree/TOC pane the wheel moves the cursor one entry per notch (matches `j`/`k`). In the diff pane the wheel scrolls the viewport by three lines per notch — the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen.
 - **Shift+scroll** — half-page scroll in the diff pane. In the tree/TOC pane Shift+wheel behaves the same as plain wheel (one entry per notch — no page step).
+- **Horizontal scroll** — scrolls the diff pane under the cursor left or right by four columns per event (matches the arrow keys). Horizontal scroll has no effect in word wrap mode.
 - **Left-click in the tree** — focuses the tree and selects/loads the clicked entry. Clicking a directory row moves the cursor but does not load a file.
 - **Left-click in the diff** — focuses the diff and moves the cursor to the clicked line. Enables a "click, then `a`" annotation flow.
 - **Left-click in the TOC pane** (single-file markdown) — focuses the TOC and selects the clicked header.
@@ -223,7 +224,7 @@ revdiff enables mouse tracking by default so the scroll wheel and left-click wor
 - **Left-click in the file picker** — jumps to the clicked file (same as pressing `Enter`). Clicks on the filter row or blank separator are ignored.
 - **Scroll wheel in the file picker** — moves the picker cursor. Shift+wheel uses a half-page step.
 
-Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed — dismiss an overlay with `Esc` or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.
+Right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed — dismiss an overlay with `Esc` or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.
 
 **Text selection trade-off** — once mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection:
 

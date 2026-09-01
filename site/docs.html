@@ -620,6 +620,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
         <ul>
             <li><strong>Scroll wheel</strong> &mdash; scrolls whichever pane the cursor is over. In the tree/TOC pane the wheel moves the cursor one entry per notch (matches <code>j</code>/<code>k</code>). In the diff pane the wheel scrolls the viewport by three lines per notch &mdash; the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen.</li>
             <li><strong>Shift+scroll</strong> &mdash; half-page scroll in the diff pane. In the tree/TOC pane Shift+wheel behaves the same as plain wheel (one entry per notch &mdash; no page step).</li>
+            <li><strong>Horizontal scroll</strong> &mdash; scrolls the diff pane under the cursor left or right by four columns per event (matches the arrow keys). Horizontal scroll has no effect in word wrap mode.</li>
             <li><strong>Left-click in the tree</strong> &mdash; focuses the tree and selects/loads the clicked entry (same as pressing <code>j</code>/<code>k</code> to land there). Clicking a directory row moves the cursor but does not load a file.</li>
             <li><strong>Left-click in the diff</strong> &mdash; focuses the diff and moves the cursor to the clicked line. Enables a &ldquo;click, then <code>a</code>&rdquo; annotation flow.</li>
             <li><strong>Left-click in the TOC pane</strong> (single-file markdown) &mdash; focuses the TOC and selects the clicked header.</li>
@@ -629,7 +630,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
             <li><strong>Left-click in the file picker</strong> &mdash; jumps to the clicked file (same as pressing <code>Enter</code>). Clicks on the filter row or blank separator are ignored.</li>
             <li><strong>Scroll wheel in the file picker</strong> &mdash; moves the picker cursor. Shift+wheel uses a half-page step.</li>
         </ul>
-        <p>Horizontal wheel, right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed &mdash; dismiss an overlay with <code>Esc</code> or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.</p>
+        <p>Right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed &mdash; dismiss an overlay with <code>Esc</code> or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.</p>
         <p><strong>Text selection trade-off</strong> &mdash; once mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection:</p>
         <ul>
             <li><strong>kitty</strong>: hold <code>Ctrl+Shift</code> while dragging</li>
