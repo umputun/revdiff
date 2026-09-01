@@ -37,6 +37,7 @@ Then uncomment and edit the values you want to change.
 | `--annotation-marker` | `REVDIFF_ANNOTATION_MARKER` | Prefix shown before annotation lines | `💬` |
 | `--exit-code-on-annotations` | `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` | Exit 10 when annotations are produced | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
+| `--no-confirm-reload` | `REVDIFF_NO_CONFIRM_RELOAD` | Skip confirmation when dropping annotations on reload with R | `false` |
 | `--no-mouse` | `REVDIFF_NO_MOUSE` | Disable mouse support (scroll wheel, click) | `false` |
 | `--no-tree` | `REVDIFF_NO_TREE` | Hide the file tree pane | `false` |
 | `--vim-motion` | `REVDIFF_VIM_MOTION` | Enable vim-style motion preset (counts, `gg`, `G`, `H`/`M`/`L`, `zz`/`zt`/`zb`, `ZZ`/`ZQ`) | `false` |
@@ -73,6 +74,10 @@ When launched via the Claude Code plugin skill, revdiff opens in a terminal over
 |---------|-------------|---------|
 | `REVDIFF_POPUP_WIDTH` | Tmux/Zellij popup width (e.g., `100%`, `80%`) | `90%` |
 | `REVDIFF_POPUP_HEIGHT` | Tmux/Zellij popup height / wezterm split percent | `90%` |
+
+## Disconnect-Resilient Window Mode (tmux)
+
+Set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
 
 ## Pane-Scoped Overlay (agterm)
 
