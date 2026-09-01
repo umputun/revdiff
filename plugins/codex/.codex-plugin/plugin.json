@@ -1,0 +1,37 @@
+{
+  "name": "revdiff",
+  "version": "0.8.23",
+  "description": "Review diffs, files, and documents with inline annotations in a TUI overlay",
+  "author": {
+    "name": "Umputun",
+    "url": "https://github.com/umputun"
+  },
+  "homepage": "https://revdiff.com",
+  "repository": "https://github.com/umputun/revdiff",
+  "license": "MIT",
+  "keywords": [
+    "code-review",
+    "diff",
+    "annotations",
+    "tui"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "RevDiff",
+    "shortDescription": "Review diffs and plans with inline annotations",
+    "longDescription": "Review diffs, files, documents, and Codex responses in RevDiff, return line-level annotations to Codex, and repeat until the review is complete.",
+    "developerName": "Umputun",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://revdiff.com",
+    "defaultPrompt": [
+      "Review my current changes in RevDiff",
+      "Open this file in RevDiff",
+      "Review the last Codex response"
+    ]
+  }
+}
