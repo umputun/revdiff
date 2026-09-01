@@ -43,7 +43,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 ## Requirements
 
 - `git`, `hg`, or `jj` (used to generate diffs; optional when using `--only` or `--stdin`)
-- Jujutsu must be 0.27 or newer. Versions 0.23 through 0.26 have no `jj file annotate -T`, so the blame gutter does not work. Earlier versions also reject the commit-log template behind the commit-info popup.
+- Jujutsu must be 0.27 or newer. Versions 0.23 through 0.26 have no `jj file annotate -T`, so the blame gutter does not work. Versions before 0.23 also reject the commit-log template behind the commit-info popup.
 
 ## Installation
 
