@@ -146,7 +146,7 @@ func (j *Jj) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
 	args := make([]string, 0, 5+len(rangeArgs))
 	args = append(args, "diff", "--git", jjContextArg(req.ContextLines))
 	args = append(args, rangeArgs...)
-	args = append(args, "--", req.Path)
+	args = append(args, "--", j.pathArg(req.Path))
 
 	out, err := j.runJj(args...)
 	if err != nil {
@@ -190,11 +190,25 @@ func (j *Jj) totalOldLines(ref, file string) int {
 	if oldRef == "" {
 		oldRef = "@-"
 	}
-	out, err := j.runJj("file", "show", "-r", oldRef, "--", file)
+	out, err := j.runJj("file", "show", "-r", oldRef, "--", j.pathArg(file))
 	if err != nil {
 		return 0
 	}
 	return countLines(out)
+}
+
+// pathArg quotes a path as a jj fileset pattern. jj parses post-`--` arguments as fileset
+// expressions rather than names, so a bare path is a query: `$ ( ) :` fail to parse and
+// `* ? & | ~` resolve to a different set of files. Unconditional because revdiff needs jj
+// 0.27+ anyway (see README), and 0.27 is where the ui.allow-filesets opt-out was removed —
+// every jj that can run revdiff parses filesets.
+//
+// cwd-file: rather than root-file: because jj runs with cmd.Dir = workDir and emits paths
+// relative to it, so absolute and "../" paths resolve too (see .claude/rules/gotchas.md).
+// Not for `jj file annotate` (jjblame.go), which takes a literal path and rejects a pattern.
+func (j *Jj) pathArg(path string) string {
+	esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(path)
+	return `cwd-file:"` + esc + `"`
 }
 
 // jjContextArg returns the --context argument for jj diff given the caller's
