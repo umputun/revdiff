@@ -80,7 +80,7 @@ cat /tmp/feature.patch | $SCRIPT_DIR/launch-revdiff.sh --stdin
 3. On quit, annotations are captured from stdout
 4. Codex reads annotations and addresses each one
 5. Loop: re-launch revdiff to verify fixes, user can add more annotations
-6. Done when user quits without annotations
+6. If the user quits without annotations, report that no annotations were captured and stop the review workflow
 
 ## Workflow
 
@@ -261,11 +261,11 @@ After user approves the plan, fix the actual source code. Each annotation is a d
 
 After fixing (or after "Continue review" from Step 3.5), run the launcher script again with the same ref. The user can:
 - Add more annotations → go back to Step 3
-- Quit without annotations → review complete (no output)
+- Quit without annotations → no annotations captured (no output); go to Step 7
 
 ### Step 7: Done
 
-When the script produces no output, the review is complete. Inform the user.
+When the script produces no output, no annotations were captured. Inform the user and stop the review workflow. This result alone does not authorize further mutations. Prior explicit user instructions still apply.
 
 ## Example Sessions
 
@@ -280,7 +280,7 @@ User: "revdiff HEAD~1"
 → fix applied
 → re-launch revdiff HEAD~1
 → user sees fix, quits without annotations
-→ "review complete"
+→ "No annotations were captured."
 ```
 
 ```
@@ -299,7 +299,7 @@ User: "revdiff HEAD~3"
 → explanation accepted, clean up temp file
 → re-launch revdiff HEAD~3 (back to diff review)
 → user quits without annotations
-→ "review complete"
+→ "No annotations were captured."
 ```
 
 ```
