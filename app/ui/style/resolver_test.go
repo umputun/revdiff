@@ -3,6 +3,7 @@ package style
 import (
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/umputun/revdiff/app/diff"
@@ -162,6 +163,47 @@ func TestResolver_Style(t *testing.T) {
 			_ = got.Render("test") // verify style is functional
 		})
 	}
+}
+
+func TestResolver_AnnotationInputStyles(t *testing.T) {
+	// pins issue #343: input text resolved to Normal, making it byte-identical to a context line
+	r := NewResolver(fullColorsForTesting)
+
+	tests := []struct {
+		name string
+		key  StyleKey
+		fg   string
+	}{
+		{"text uses annotation fg", StyleKeyAnnotInputText, fullColorsForTesting.Annotation},
+		{"cursor follows text", StyleKeyAnnotInputCursor, fullColorsForTesting.Annotation},
+		{"placeholder stays muted", StyleKeyAnnotInputPlaceholder, fullColorsForTesting.Muted},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := r.Style(tt.key)
+			assert.Equal(t, lipgloss.Color(tt.fg), got.GetForeground())
+			assert.Equal(t, lipgloss.Color(fullColorsForTesting.DiffBg), got.GetBackground())
+		})
+	}
+
+	t.Run("text is not the context line color", func(t *testing.T) {
+		input := r.Style(StyleKeyAnnotInputText)
+		context := r.Style(StyleKeyLineContext)
+		assert.NotEqual(t, context.GetForeground(), input.GetForeground())
+	})
+
+	t.Run("text carries no italic", func(t *testing.T) {
+		assert.False(t, r.Style(StyleKeyAnnotInputText).GetItalic(),
+			"italic is what distinguishes a saved annotation from the live input")
+	})
+
+	t.Run("no background without diff bg", func(t *testing.T) {
+		sparse := NewResolver(sparseColorsForTesting)
+		got := sparse.Style(StyleKeyAnnotInputText)
+		assert.Equal(t, lipgloss.Color(sparseColorsForTesting.Annotation), got.GetForeground())
+		assert.Empty(t, got.GetBackground())
+	})
 }
 
 func TestResolver_Style_coversAllKeys(t *testing.T) {

@@ -54,8 +54,6 @@ func (m *Model) newAnnotationInput(placeholder string, prefixWidth int) (textinp
 
 	// set DiffBg on all textinput sub-styles so View() output inherits the pane background.
 	// wrapping View() externally doesn't work because lipgloss Render emits \033[0m resets.
-	// text uses Normal fg (context line color) so active input is readable on any theme
-	// and visually distinct from saved annotations (which use Annotation color + italic).
 	inputStyle := m.resolver.Style(style.StyleKeyAnnotInputText)
 	ti.PromptStyle = inputStyle
 	ti.TextStyle = inputStyle

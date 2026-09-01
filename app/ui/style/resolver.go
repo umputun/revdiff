@@ -256,9 +256,12 @@ func buildStyles(c Colors) map[StyleKey]lipgloss.Style {
 		Background(lipgloss.Color(c.SearchBg))
 
 	// annotation input styles (D14 — all inline lipgloss construction from annotate.go)
+	// text uses Annotation fg: Normal makes this style byte-identical to contextStyle below,
+	// so typed text would render exactly like the diff lines around it. italic stays off, which
+	// is what still separates the live input from a saved annotation.
 	inputStyle := lipgloss.NewStyle()
-	if c.Normal != "" {
-		inputStyle = inputStyle.Foreground(lipgloss.Color(c.Normal))
+	if c.Annotation != "" {
+		inputStyle = inputStyle.Foreground(lipgloss.Color(c.Annotation))
 	}
 	if c.DiffBg != "" {
 		inputStyle = inputStyle.Background(lipgloss.Color(c.DiffBg))
