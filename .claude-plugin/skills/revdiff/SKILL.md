@@ -65,7 +65,7 @@ cat /tmp/feature.patch | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" la
 
 ## How It Works
 
-1. Launch revdiff in a terminal overlay (tmux popup, Zellij floating pane, herdr tab, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
+1. Launch revdiff in a terminal overlay (agterm full-pane overlay, tmux popup, Zellij floating pane, herdr tab, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
 2. User navigates the diff, adds annotations on specific lines
 3. On quit, annotations are captured from stdout
 4. Claude reads annotations and addresses each one
@@ -141,7 +141,7 @@ The resolver and launcher MUST run in the same bash invocation — the resolver 
 **Pane-scoped overlay (agterm)**: when running in an agterm split, `REVDIFF_AGTERM_PANE=1` opens revdiff in the agent's own pane instead of over the whole session, leaving the sibling pane live and visible. The user sets it in the environment; it is ignored outside a split. This is a launcher environment variable, not a revdiff flag.
 
 The script:
-- Detects available terminal (tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
+- Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
