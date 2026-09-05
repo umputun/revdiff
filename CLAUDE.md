@@ -85,6 +85,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Scripts are copies from `.claude-plugin/skills/revdiff/scripts/`, not symlinks — each has a source comment at top
 - `detect-ref.sh` dispatches by VCS (`detect_git` / `detect_hg` / `detect_jj`) via `command -v` probes (jj → git → hg, matching `DetectVCS` precedence); git path stays byte-identical to the pre-refactor output. `read-latest-history.sh` uses the same VCS probe order for repo-root resolution.
 - Codex automatic plan review runs only for `permission_mode=plan`, prefers a complete plan in `last_assistant_message`, and falls back whenever that field has no complete block to the last assistant message for the exact transcript/session/turn; manual `/revdiff-plan` remains the best-effort rollout fallback
+- **Testing locally**: installs are copies from a marketplace, so point Codex at this checkout: `codex plugin marketplace remove revdiff` (Codex refuses a second source under the same name, so the GitHub-added marketplace must go first), `codex plugin marketplace add /absolute/path/to/checkout`, then `codex plugin add revdiff@revdiff`. After editing a skill or script, `codex plugin remove revdiff@revdiff`, `codex plugin add revdiff@revdiff` again, and start a new session.
 
 ## Pi Plugin
 - Pi package defined in root `package.json`, extensions and skills in `plugins/pi/`
