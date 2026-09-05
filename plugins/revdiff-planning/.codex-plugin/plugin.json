@@ -1,6 +1,6 @@
 {
   "name": "revdiff-planning",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Automatic plan review with revdiff",
   "author": {
     "name": "umputun"

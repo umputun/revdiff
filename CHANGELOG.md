@@ -1,5 +1,40 @@
 # Changelog
 
+## v1.13.0 - 2026-09-04
+
+### New Features
+
+- herdr pane-scoped overlay via `REVDIFF_HERDR_PANE` #344 @rayslava
+- Codex marketplace packaging for the revdiff skills #349 @paskal
+- run the post-flush command without an output file #339 @umputun
+- `--start-at-change` to open files on the first changed line #329 @umputun
+- `--page-overlap` to keep N lines across a page scroll #313 @umputun
+- `--no-tree` to start with the file tree pane hidden #308 @umputun
+
+### Improvements
+
+- name the iTerm2 overlay pane so the tab keeps its label #309 @chris-peterson
+- use exact ranges for last-commit reviews in the review skills #347 @umputun
+- list agterm alongside the other supported terminals #342 @paskal
+- add marketplace install instructions for Claude #322 @nicdumz
+- document the `??` explain mode for annotations 2b10cb7
+- update go modules #327 @paskal
+- bump github.com/stretchr/testify from 1.11.1 to 1.12.0 #321 @app/dependabot
+- bump github.com/charmbracelet/x/ansi from 0.11.7 to 0.11.8 #320 @app/dependabot
+
+### Bug Fixes
+
+- quote jj file paths so punctuated filenames diff correctly #346 @umputun
+- run git in literal-pathspec mode #326 @paskal
+- paint the annotation input with the annotation color #345 @umputun
+- render the TUI on the tty when stdout is piped #338 @umputun
+- bound horizontal scroll to the widest rendered line #337 @umputun
+- keep long tokens colored after the regexp2 2.7.1 bump #330 @umputun
+- guard intra-line diff cost by LCS table size, not line length #328 @umputun
+- keep the nested AppleScript heredocs parsable under bash 3.2 #315 @umputun
+- bound page scroll so paging cannot skip unrendered rows #312 @umputun
+- clamp and scroll the help overlay so it fits the terminal #306 @umputun
+
 ## v1.12.0 - 2026-08-04
 
 ### New Features
