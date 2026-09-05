@@ -5,7 +5,7 @@ This directory contains the **Codex CLI** skills for revdiff.
 ## Contents
 
 - `skills/revdiff/SKILL.md` — diff review skill (same workflow as Claude Code plugin)
-- `skills/revdiff/scripts/` — detect-ref.sh, launch-revdiff.sh
+- `skills/revdiff/scripts/` — detect-ref.sh, launch-revdiff.sh, read-latest-history.sh, agentdeck-window.sh
 - `skills/revdiff/references/` — config.md, install.md, usage.md
 - `skills/revdiff-plan/SKILL.md` — plan/response review skill (extracts last Codex assistant message)
 - `skills/revdiff-plan/scripts/` — extract-last-message.sh
