@@ -1,8 +1,6 @@
 ---
 name: revdiff-plan
 description: Review the last Codex assistant message (plan, analysis, or proposal) with inline annotations in a TUI overlay. Extracts the most recent response from Codex rollout files and opens it in revdiff for review and annotation. Activates on "revdiff-plan", "review plan with revdiff", "annotate plan", "review last response", "annotate codex output".
-argument-hint: 'none'
-allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
 
 # revdiff-plan - Review Codex Output
@@ -11,25 +9,19 @@ Review the last Codex assistant message with inline annotations using revdiff TU
 
 ## Script Path Resolution
 
-Resolve the script directory using repo root first, then fall back to Codex home:
+Resolve `<plugin-root>` from this skill's absolute path in the available-skills catalogue. It is the directory containing this plugin's `.codex-plugin/plugin.json`. Then set:
 
 ```bash
-SCRIPT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)/plugins/codex/skills/revdiff-plan/scripts"
-if [ ! -d "$SCRIPT_DIR" ]; then
-    SCRIPT_DIR="${CODEX_HOME:-$HOME/.codex}/skills/revdiff-plan/scripts"
-fi
+SCRIPT_DIR="<plugin-root>/skills/revdiff-plan/scripts"
 ```
 
 Also resolve the launcher script from the revdiff skill:
 
 ```bash
-LAUNCHER_DIR="$(git rev-parse --show-toplevel 2>/dev/null)/plugins/codex/skills/revdiff/scripts"
-if [ ! -d "$LAUNCHER_DIR" ]; then
-    LAUNCHER_DIR="${CODEX_HOME:-$HOME/.codex}/skills/revdiff/scripts"
-fi
+LAUNCHER_DIR="<plugin-root>/skills/revdiff/scripts"
 ```
 
-Use `$SCRIPT_DIR` and `$LAUNCHER_DIR` in place of script paths throughout this skill.
+Replace `<plugin-root>` with the resolved absolute path before running either command. Use `$SCRIPT_DIR` and `$LAUNCHER_DIR` in place of script paths throughout this skill.
 
 ## Activation Triggers
 

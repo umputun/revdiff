@@ -1,0 +1,32 @@
+{
+  "name": "revdiff",
+  "interface": {
+    "displayName": "RevDiff"
+  },
+  "plugins": [
+    {
+      "name": "revdiff",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "revdiff-planning",
+      "source": {
+        "source": "local",
+        "path": "./plugins/revdiff-planning"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

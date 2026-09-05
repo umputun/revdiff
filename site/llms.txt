@@ -8,7 +8,7 @@ revdiff is a terminal-based UI for code review and document annotation. It displ
 
 - Code review for AI agents: revdiff is the human review layer in AI coding sessions
 - Code review for Claude Code: ships as a Claude Code plugin with terminal overlay support
-- Code review for Codex: ships as a Codex CLI skill with the same workflow
+- Code review for Codex: ships as a Codex CLI plugin with the same workflow
 - Code review for OpenCode: integration via /revdiff command and tool call
 - Plan review: separate plugins for annotating implementation plans before approval
 - General file annotation: browse and annotate any file, not just version-controlled diffs
@@ -58,7 +58,7 @@ The plugin supports a full review loop: annotate -> Claude plans fixes -> Claude
 
 ## Codex Plugin
 
-Skills installed under ~/.codex/skills/revdiff and ~/.codex/skills/revdiff-plan. Same /revdiff workflow as Claude Code, plus /revdiff-plan which extracts the last Codex assistant message for annotation.
+Install with `codex plugin marketplace add umputun/revdiff` and `codex plugin add revdiff@revdiff`. The plugin provides the same /revdiff workflow as Claude Code, plus /revdiff-plan which extracts the last Codex assistant message for annotation. If you previously copied the skills manually, remove `~/.codex/skills/revdiff` and `~/.codex/skills/revdiff-plan` after installing the plugin so the plugin copy is the only one in use.
 
 ## OpenCode Integration
 

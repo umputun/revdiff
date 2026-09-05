@@ -65,6 +65,9 @@ jobs:
           pip install pyyaml
           python3 .github/scripts/validate-frontmatter.py
 
+      - name: validate Codex marketplace manifests
+        run: python3 .github/scripts/validate-codex-marketplace.py
+
       - name: shellcheck
         run: |
           find . -name '*.sh' -not -path './.git/*' -not -path './vendor/*' -print0 | xargs -0 shellcheck

@@ -273,28 +273,21 @@ revdiff ships with a [Codex CLI](https://github.com/openai/codex) plugin for int
 
 The plugin uses the same terminal overlay mechanism (tmux, Zellij, herdr, kitty, wezterm, etc.) as the Claude Code plugin.
 
-**Install the automatic plan-review plugin:**
+**Install the diff-review skills and automatic plan-review plugin:**
 
 ```bash
 codex plugin marketplace add umputun/revdiff
+codex plugin add revdiff@revdiff
 codex plugin add revdiff-planning@revdiff
 ```
+
+If you previously copied the skills manually, remove `~/.codex/skills/revdiff` and `~/.codex/skills/revdiff-plan` after installing the plugin so the plugin copy is the only one in use.
 
 Start a new session and trust the plugin hook through `/hooks`. The `Stop` hook runs only in Plan mode and first checks `last_assistant_message`; whenever that field has no complete `<proposed_plan>`, it reads the exact event transcript and selects the last assistant message for the matching `session_id` and `turn_id`, without depending on a provider-specific phase. A readable clarification turn is ignored. Missing or mismatched event data, dependencies, and launcher failures warn and fail open.
 
 When annotations are present, the hook asks Codex to return the complete revised plan with a snapshot marker on the first line inside `<proposed_plan>`. The next round opens a rolling compare (`<new> <old>`); reviewed snapshots are replaced, and a clean review removes the final snapshot.
 
-**Install the manual skills:**
-
-```bash
-# clone the repo first
-git clone https://github.com/umputun/revdiff.git
-cd revdiff
-
-# copy skills to Codex skills directory
-cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
-cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
-```
+The `revdiff` plugin installs both interactive skills. The separate `revdiff-planning` plugin adds automatic Plan-mode review.
 
 **Requirements:**
 
@@ -307,7 +300,7 @@ cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan
 - Codex treats exit code `10` as success-with-annotations and keeps captured output
 - Automatic review uses the opt-in `revdiff-planning` plugin; `/revdiff-plan` remains a manual fallback
 - Scripts are portable copies from the Claude Code plugin, not symlinks
-- Plugin source lives under `plugins/codex/` in the repository
+- Codex plugin source lives under `plugins/codex/` in the repository
 
 ### Integration with Other Tools
 

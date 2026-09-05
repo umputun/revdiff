@@ -9,7 +9,16 @@ brew install umputun/apps/revdiff
 
 ## Codex Plugin
 
-Install the revdiff Codex plugin from the marketplace or manually copy the `plugins/codex/` directory to your Codex plugins location.
+Install the revdiff Codex plugin from the marketplace:
+
+```bash
+codex plugin marketplace add umputun/revdiff
+codex plugin add revdiff@revdiff
+```
+
+If you previously copied the skills manually, remove `~/.codex/skills/revdiff` and `~/.codex/skills/revdiff-plan` after installing the plugin so the plugin copy is the only one in use.
+
+The plugin provides both `/revdiff` and `/revdiff-plan`. Install `revdiff-planning@revdiff` separately for automatic Plan-mode review.
 
 Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, Zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm). The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` is success-with-annotations, not launcher failure.
 

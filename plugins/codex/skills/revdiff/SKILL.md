@@ -1,8 +1,6 @@
 ---
 name: revdiff
-description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff <file>", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
-argument-hint: 'optional: ref(s), "all files", or file path'
-allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
+description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff FILE", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 ---
 
 # revdiff - TUI Diff Review
@@ -11,18 +9,15 @@ Review diffs with inline annotations using revdiff TUI in a terminal overlay. Wo
 
 ## Script Path Resolution
 
-Resolve the script directory using repo root first, then fall back to Codex home:
+Resolve `<plugin-root>` from this skill's absolute path in the available-skills catalogue. It is the directory containing this plugin's `.codex-plugin/plugin.json`. Then set:
 
 ```bash
-SCRIPT_DIR="$(git rev-parse --show-toplevel 2>/dev/null)/plugins/codex/skills/revdiff/scripts"
-if [ ! -d "$SCRIPT_DIR" ]; then
-    SCRIPT_DIR="${CODEX_HOME:-$HOME/.codex}/skills/revdiff/scripts"
-fi
+SCRIPT_DIR="<plugin-root>/skills/revdiff/scripts"
 ```
 
-Use `$SCRIPT_DIR` in place of script paths throughout this skill.
+Replace `<plugin-root>` with the resolved absolute path before running the command. Use `$SCRIPT_DIR` in place of script paths throughout this skill.
 
-**Note**: the launcher override chain (user via `${CLAUDE_PLUGIN_DATA}` → bundled) is Claude-only — codex users customize the launcher by editing `~/.codex/skills/revdiff/scripts/launch-revdiff.sh` directly.
+**Note**: the launcher override chain (user via `${CLAUDE_PLUGIN_DATA}` → bundled) is Claude-only. Codex users can customize the launcher in a local marketplace checkout and reinstall the plugin.
 
 ## Activation Triggers
 

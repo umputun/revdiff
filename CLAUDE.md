@@ -62,7 +62,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Plugin lives at `.claude-plugin/` with `plugin.json`, `marketplace.json`, and `skills/`
 - Skills path in `plugin.json` is relative to repo root, not to `.claude-plugin/`
 - **CRITICAL: Version bumps happen at release only — never per-PR or per-change.** Do NOT prompt to bump `plugin.json` / `marketplace.json` after a plugin file change; the bump is done as part of the release process.
-- When bumping at release, keep each marketplace entry synchronized with its plugin manifest. For `revdiff-planning`, update both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` plus its version in `.claude-plugin/marketplace.json`.
+- When bumping at release, keep every marketplace entry synchronized with its plugin manifests. For `revdiff`, update `.claude-plugin/plugin.json`, `plugins/codex/.codex-plugin/plugin.json`, and its version in `.claude-plugin/marketplace.json`. For `revdiff-planning`, update `plugins/revdiff-planning/.claude-plugin/plugin.json`, `plugins/revdiff-planning/.codex-plugin/plugin.json`, and its version in `.claude-plugin/marketplace.json`.
 - **CRITICAL: Defer plugin version bumps when the change depends on a new binary feature.** If a plugin/launcher change relies on a `revdiff` binary feature, flag, env var, or exit code that is not yet in a tagged release, do NOT bump `plugin.json` / `marketplace.json` / `package.json` on the feature branch. The plugin (marketplace) and the binary (brew / `go install`) version independently — bumping the plugin early ships an updated launcher to users still running an old binary, causing a hard mismatch (e.g. the launcher passes an unknown flag, the old binary exits 1, every plugin-triggered review fails). Bump plugin/package versions as part of the binary version release, after the binary is tagged.
 - Reference docs at `.claude-plugin/skills/revdiff/references/` — keep in sync with README.md:
   - `install.md` — installation methods and plugin setup
@@ -78,9 +78,10 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Codex Plugin and Skills
 - Codex skills live at `plugins/codex/skills/` — two skills: `revdiff` (diff review) and `revdiff-plan` (plan review via last Codex assistant message)
-- Manual skill install copies to `~/.codex/skills/<name>/`; automatic plan review is distributed separately through the `revdiff-planning` Codex plugin
+- The `revdiff` Codex plugin packages both skills; automatic plan review is distributed separately through the `revdiff-planning` Codex plugin
+- Codex marketplace metadata lives at `.agents/plugins/marketplace.json`; keep its local sources aligned with each `.codex-plugin/plugin.json`
 - Keep Claude's default-discovered `PreToolUse/ExitPlanMode` config in `hooks/hooks.json`; the Codex manifest explicitly points its opt-in `Stop` hook at `hooks/codex-hooks.json`
-- Script path resolution in SKILL.md falls back to `${CODEX_HOME:-$HOME/.codex}/skills/<skill>/scripts` when not running inside the revdiff repo
+- Script path resolution in SKILL.md derives the installed plugin root from the skill's absolute catalogue path; marketplace installs live under Codex's plugin cache, not `~/.codex/skills/`
 - Scripts are copies from `.claude-plugin/skills/revdiff/scripts/`, not symlinks — each has a source comment at top
 - `detect-ref.sh` dispatches by VCS (`detect_git` / `detect_hg` / `detect_jj`) via `command -v` probes (jj → git → hg, matching `DetectVCS` precedence); git path stays byte-identical to the pre-refactor output. `read-latest-history.sh` uses the same VCS probe order for repo-root resolution.
 - Codex automatic plan review runs only for `permission_mode=plan`, prefers a complete plan in `last_assistant_message`, and falls back whenever that field has no complete block to the last assistant message for the exact transcript/session/turn; manual `/revdiff-plan` remains the best-effort rollout fallback

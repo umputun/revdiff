@@ -779,19 +779,14 @@ explain what this lock protects</code></div>
         <!-- codex plugin -->
         <h2 id="codex-install">Codex plugin</h2>
         <p>revdiff ships with a <a href="https://github.com/openai/codex">Codex CLI</a> plugin for interactive diff review and plan annotation directly from a Codex session.</p>
-        <p>Install automatic Plan-mode review:</p>
+        <p>Add the marketplace and install the diff-review skills and automatic Plan-mode review:</p>
         <div class="code-block"><code>codex plugin marketplace add umputun/revdiff
+codex plugin add revdiff@revdiff
 codex plugin add revdiff-planning@revdiff</code></div>
+        <p>If you previously copied the skills manually, remove <code>~/.codex/skills/revdiff</code> and <code>~/.codex/skills/revdiff-plan</code> after installing the plugin so the plugin copy is the only one in use.</p>
         <p>Start a new session and trust the hook through <code>/hooks</code>. The hook runs only in Plan mode and first checks that session's <code>last_assistant_message</code>. Whenever no complete <code>&lt;proposed_plan&gt;</code> is present, it reads the exact event transcript and selects the last assistant message for the matching session and turn without requiring a provider-specific phase. Clarifications are ignored; missing or mismatched event data, dependencies, and launcher failures warn and fail open.</p>
         <p>Annotated revisions include a guarded snapshot marker on the first line inside <code>&lt;proposed_plan&gt;</code>, so later rounds open a rolling compare. Reviewed snapshots are replaced and a clean review removes the final snapshot.</p>
-        <p>Install the manual skills:</p>
-        <div class="code-block"><code><span class="code-comment"># clone the repo first</span>
-git clone https://github.com/umputun/revdiff.git
-cd revdiff
-
-<span class="code-comment"># copy skills to Codex skills directory</span>
-cp -r plugins/codex/skills/revdiff ~/.codex/skills/revdiff
-cp -r plugins/codex/skills/revdiff-plan ~/.codex/skills/revdiff-plan</code></div>
+        <p>The <code>revdiff</code> plugin installs both interactive skills. The separate <code>revdiff-planning</code> plugin adds automatic Plan-mode review.</p>
         <p>Requirements: <code>revdiff</code> binary on PATH, <code>jq</code> (only for manual <code>/revdiff-plan</code>), and a supported terminal multiplexer.</p>
 
         <h2 id="codex-skills">Skills</h2>
