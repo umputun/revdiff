@@ -882,10 +882,12 @@ function fakePi() {
 	const commands = new Map<string, any>();
 	const tools = new Map<string, any>();
 	const sentMessages: string[] = [];
+	const emittedEvents: Array<{ type: string; data: unknown }> = [];
 	return {
 		commands,
 		tools,
 		sentMessages,
+		emittedEvents,
 		registerCommand(name: string, command: any) {
 			commands.set(name, command);
 		},
@@ -894,6 +896,14 @@ function fakePi() {
 		},
 		sendUserMessage(message: string) {
 			sentMessages.push(message);
+		},
+		events: {
+			emit(type: string, data: unknown) {
+				emittedEvents.push({ type, data });
+			},
+			on(_type: string, _handler: (data: unknown) => void) {
+				return () => {};
+			},
 		},
 	} as any;
 }
@@ -1116,6 +1126,123 @@ async function testArgumentResolution(): Promise<void> {
 	assertArray(shellSplit(shellJoin(roundTrip)), roundTrip, "shellJoin output should shellSplit back to original args");
 }
 
+async function withHerdrEnv<T>(fn: () => Promise<T>): Promise<T> {
+	const old = process.env.HERDR_ENV;
+	process.env.HERDR_ENV = "1";
+	try {
+		return await fn();
+	} finally {
+		if (old === undefined) {
+			delete process.env.HERDR_ENV;
+		} else {
+			process.env.HERDR_ENV = old;
+		}
+	}
+}
+
+async function testHerdrBlockedSignalBracketsReview(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-blocked-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	const argFile = path.join(tempDir, "args.txt");
+	writeExecutable(fakeBin, fakeRevdiffScript());
+
+	const oldBin = process.env.REVDIFF_BIN;
+	const oldArgFile = process.env.FAKE_ARG_FILE;
+	process.env.REVDIFF_BIN = fakeBin;
+	process.env.FAKE_ARG_FILE = argFile;
+	try {
+		await withHerdrEnv(async () => {
+			const pi = fakePi();
+			revdiffExtension(pi);
+			await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, fakeCtx());
+
+			testAssert(pi.emittedEvents.length === 2, "expected exactly one blocked/unblocked pair for a completed review");
+			testAssert(pi.emittedEvents[0].type === "herdr:blocked", "first event should be herdr:blocked");
+			testAssert((pi.emittedEvents[0].data as any).active === true, "review start should signal active: true");
+			testAssert(pi.emittedEvents[1].type === "herdr:blocked", "second event should be herdr:blocked");
+			testAssert((pi.emittedEvents[1].data as any).active === false, "review end should signal active: false");
+		});
+	} finally {
+		if (oldBin === undefined) {
+			delete process.env.REVDIFF_BIN;
+		} else {
+			process.env.REVDIFF_BIN = oldBin;
+		}
+		if (oldArgFile === undefined) {
+			delete process.env.FAKE_ARG_FILE;
+		} else {
+			process.env.FAKE_ARG_FILE = oldArgFile;
+		}
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testHerdrBlockedSignalSkippedWithoutHerdrEnv(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-blocked-off-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	const argFile = path.join(tempDir, "args.txt");
+	writeExecutable(fakeBin, fakeRevdiffScript());
+
+	const oldBin = process.env.REVDIFF_BIN;
+	const oldArgFile = process.env.FAKE_ARG_FILE;
+	const oldHerdrEnv = process.env.HERDR_ENV;
+	process.env.REVDIFF_BIN = fakeBin;
+	process.env.FAKE_ARG_FILE = argFile;
+	delete process.env.HERDR_ENV;
+	try {
+		const pi = fakePi();
+		revdiffExtension(pi);
+		await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, fakeCtx());
+		testAssert(pi.emittedEvents.length === 0, "a completed review should emit nothing when HERDR_ENV is unset");
+	} finally {
+		if (oldBin === undefined) {
+			delete process.env.REVDIFF_BIN;
+		} else {
+			process.env.REVDIFF_BIN = oldBin;
+		}
+		if (oldArgFile === undefined) {
+			delete process.env.FAKE_ARG_FILE;
+		} else {
+			process.env.FAKE_ARG_FILE = oldArgFile;
+		}
+		if (oldHerdrEnv === undefined) {
+			delete process.env.HERDR_ENV;
+		} else {
+			process.env.HERDR_ENV = oldHerdrEnv;
+		}
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testHerdrBlockedSignalFiresOnceWhenLaunchUnresolved(): Promise<void> {
+	await withHerdrEnv(async () => {
+		const pi = fakePi();
+		revdiffExtension(pi);
+		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--output" }, undefined, undefined, fakeCtx());
+
+		testAssert(result.content[0].text === "Could not resolve a revdiff launch target.", "expected the early launch-resolution exit");
+		testAssert(pi.emittedEvents.length === 2, "expected exactly one blocked/unblocked pair even when launch resolution fails");
+		testAssert((pi.emittedEvents[0].data as any).active === true, "unresolved launch should still have signaled active: true first");
+		testAssert((pi.emittedEvents[1].data as any).active === false, "unresolved launch should still signal active: false exactly once");
+	});
+}
+
+async function testHerdrBlockedSignalSkippedForInvalidCwd(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-blocked-cwd-"));
+	const file = path.join(tempDir, "not-a-dir.txt");
+	testWriteFileSync(file, "not a directory\n");
+	try {
+		await withHerdrEnv(async () => {
+			const pi = fakePi();
+			revdiffExtension(pi);
+			await pi.tools.get("revdiff_review").execute("call-1", { cwd: file }, undefined, undefined, fakeCtx());
+			testAssert(pi.emittedEvents.length === 0, "an unresolved cwd should exit before any blocked signal is emitted");
+		});
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
 async function testRefLikePathArgKeepsRef(): Promise<void> {
 	const oldCwd = process.cwd();
 	const repo = initGitRepo();
@@ -1214,6 +1341,10 @@ await testCommandRoutesToSkill();
 await testToolReturnsAnnotations();
 testReviewCwdResolution();
 await testToolRejectsInvalidCwd();
+await testHerdrBlockedSignalBracketsReview();
+await testHerdrBlockedSignalSkippedWithoutHerdrEnv();
+await testHerdrBlockedSignalFiresOnceWhenLaunchUnresolved();
+await testHerdrBlockedSignalSkippedForInvalidCwd();
 await testToolCwdParameter();
 await testSignalTerminatedReviewFails();
 await testArgumentResolution();
