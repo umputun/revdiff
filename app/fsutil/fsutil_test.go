@@ -8,8 +8,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/umputun/revdiff/app/fsutil/mocks"
 )
 
 func TestAtomicWriteFile(t *testing.T) {
@@ -83,7 +81,7 @@ func TestAtomicWriteFile(t *testing.T) {
 		dir := t.TempDir()
 		tmp := filepath.Join(dir, "target.txt.tmp-1")
 		require.NoError(t, os.WriteFile(tmp, nil, 0o600))
-		f := &mocks.TempFileMock{
+		f := &tempFileMock{
 			WriteFunc: func([]byte) (int, error) { return 0, errors.New("disk full") },
 			CloseFunc: func() error { return nil },
 		}
@@ -99,7 +97,7 @@ func TestAtomicWriteFile(t *testing.T) {
 		dir := t.TempDir()
 		tmp := filepath.Join(dir, "target.txt.tmp-1")
 		require.NoError(t, os.WriteFile(tmp, nil, 0o600))
-		f := &mocks.TempFileMock{
+		f := &tempFileMock{
 			WriteFunc: func(p []byte) (int, error) { return len(p), nil },
 			CloseFunc: func() error { return errors.New("io error") },
 		}

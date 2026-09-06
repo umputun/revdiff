@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 )
 
-//go:generate moq -out mocks/temp_file.go -pkg mocks -skip-ensure -fmt goimports . TempFile
+//go:generate moq -out temp_file_moq_test.go -pkg fsutil -skip-ensure -fmt goimports . tempFile
 
-// TempFile is the open temp file AtomicWriteFile fills before renaming it into place.
+// tempFile is the open temp file AtomicWriteFile fills before renaming it into place.
 // *os.File satisfies it.
-type TempFile interface {
+type tempFile interface {
 	io.Writer
 	io.Closer
 }
@@ -31,7 +31,7 @@ func AtomicWriteFile(path string, data []byte) error {
 
 // commitTemp writes data through w, closes it and renames tmp over path. The temp file is
 // removed on every failure so a partial write never survives next to the target.
-func commitTemp(w TempFile, tmp, path string, data []byte) error {
+func commitTemp(w tempFile, tmp, path string, data []byte) error {
 	if _, err := w.Write(data); err != nil {
 		_ = w.Close()
 		_ = os.Remove(tmp)
