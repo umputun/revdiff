@@ -190,7 +190,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 
 ## Status Bar Icons
 
-The status bar shows a fixed row of mode indicators on the right side. All slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on. The help overlay (`?`) shows each icon beside the key that toggles it.
+The status bar shows a fixed row of mode indicators on the right side. All slots are always rendered — active modes use the status bar foreground color, inactive modes use muted gray, so the row occupies the same width regardless of what's toggled on. The help overlay (`?`) shows each icon beside the key that controls it.
 
 | Icon | Toggle | Meaning |
 |------|--------|---------|
