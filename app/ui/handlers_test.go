@@ -1051,6 +1051,52 @@ func TestBuildHelpSpec_SearchPromptHistoryEntries(t *testing.T) {
 	assert.Contains(t, downEntry.Description, "next", "Down entry description must mention next query")
 }
 
+func TestBuildHelpSpec_StatusIconsOnToggleRows(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	spec := m.buildHelpSpec()
+
+	sections := map[string]overlay.HelpSection{}
+	for _, sec := range spec.Sections {
+		sections[sec.Title] = sec
+	}
+	byDesc := func(sec overlay.HelpSection, suffix string) string {
+		for _, e := range sec.Entries {
+			if strings.HasSuffix(e.Description, suffix) {
+				return e.Description
+			}
+		}
+		return ""
+	}
+
+	tests := []struct {
+		section, suffix, want string
+	}{
+		{"View", "toggle collapsed view", "▼ toggle collapsed view"},
+		{"View", "toggle compact diff view", "⊂ toggle compact diff view"},
+		{"View", "filter files", "◉ filter files"},
+		{"View", "toggle word wrap", "↩ toggle word wrap"},
+		{"View", "toggle tree pane", "⊟ toggle tree pane"},
+		{"View", "toggle line numbers", "# toggle line numbers"},
+		{"View", "toggle blame gutter", "b toggle blame gutter"},
+		{"View", "toggle word-diff highlighting", "± toggle word-diff highlighting"},
+		{"View", "mark file as reviewed", "✓ mark file as reviewed"},
+		{"View", "show unreviewed files", "○ show unreviewed files"},
+		{"View", "show/hide untracked files", "∅ show/hide untracked files"},
+		{"View", "toggle hunk in collapsed", "  toggle hunk in collapsed"},
+		{"View", "show review info popup", "  show review info popup"},
+		{"Search", "search in diff", "≋ search in diff"},
+		{"Search", "recall previous search query (in search prompt)", "  recall previous search query (in search prompt)"},
+		{"Navigation", "move cursor down", "move cursor down"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.want, func(t *testing.T) {
+			sec, ok := sections[tc.section]
+			require.True(t, ok, "section %q missing", tc.section)
+			assert.Equal(t, tc.want, byDesc(sec, tc.suffix))
+		})
+	}
+}
+
 func TestBuildHelpSpec_VimMotionSectionOff(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
 	m.modes.vimMotion = false

@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 	"github.com/umputun/revdiff/app/ui/style"
@@ -370,6 +371,24 @@ func (m Model) padContentBg(content string, targetWidth int, bg style.Color) str
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// statusIconForAction maps each view toggle to the glyph statusModeIcons renders for it,
+// so the help overlay can show the icon beside the key that drives it. The reviewed slot
+// is one glyph position with two actions behind it: ✓ for marking, ○ for the unreviewed filter.
+var statusIconForAction = map[keymap.Action]string{
+	keymap.ActionToggleCollapsed:  "▼",
+	keymap.ActionToggleCompact:    "⊂",
+	keymap.ActionFilter:           "◉",
+	keymap.ActionToggleWrap:       "↩",
+	keymap.ActionSearch:           "≋",
+	keymap.ActionToggleTree:       "⊟",
+	keymap.ActionToggleLineNums:   "#",
+	keymap.ActionToggleBlame:      "b",
+	keymap.ActionToggleWordDiff:   "±",
+	keymap.ActionMarkReviewed:     "✓",
+	keymap.ActionFilterUnreviewed: "○",
+	keymap.ActionToggleUntracked:  "∅",
 }
 
 // statusModeIcons returns combined mode indicator icons (one per view toggle).

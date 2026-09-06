@@ -61,17 +61,18 @@ func (m Model) buildHelpSpec() overlay.HelpSpec {
 	sections := m.keymap.HelpSections()
 	var result []overlay.HelpSection
 	for _, sec := range sections {
+		pad := m.helpIconPad(sec)
 		var entries []overlay.HelpEntry
 		for _, e := range sec.Entries {
 			entries = append(entries, overlay.HelpEntry{
 				Keys:        m.formatKeysForHelp(e.Action),
-				Description: e.Description,
+				Description: m.helpDescriptionWithIcon(e, pad),
 			})
 		}
 		if sec.Name == "Search" {
 			entries = append(entries,
-				overlay.HelpEntry{Keys: "↑ / Ctrl+P", Description: "recall previous search query (in search prompt)"},
-				overlay.HelpEntry{Keys: "↓ / Ctrl+N", Description: "recall next search query / clear (in search prompt)"},
+				overlay.HelpEntry{Keys: "↑ / Ctrl+P", Description: pad + "recall previous search query (in search prompt)"},
+				overlay.HelpEntry{Keys: "↓ / Ctrl+N", Description: pad + "recall next search query / clear (in search prompt)"},
 			)
 		}
 		result = append(result, overlay.HelpSection{Title: sec.Name, Entries: entries})
@@ -84,6 +85,24 @@ func (m Model) buildHelpSpec() overlay.HelpSpec {
 		result = append(result, m.buildVimMotionHelpSection())
 	}
 	return overlay.HelpSpec{Sections: result}
+}
+
+// helpIconPad returns the indent that keeps a section's description column straight
+// once some of its rows carry a glyph; a section with no glyph rows gets none.
+func (m Model) helpIconPad(sec keymap.HelpSection) string {
+	for _, e := range sec.Entries {
+		if _, ok := statusIconForAction[e.Action]; ok {
+			return "  "
+		}
+	}
+	return ""
+}
+
+func (m Model) helpDescriptionWithIcon(e keymap.HelpEntryWithKeys, pad string) string {
+	if icon, ok := statusIconForAction[e.Action]; ok {
+		return icon + " " + e.Description
+	}
+	return pad + e.Description
 }
 
 // buildVimMotionHelpSection returns the synthetic help section for the
