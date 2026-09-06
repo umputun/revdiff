@@ -1,12 +1,15 @@
 package fsutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/umputun/revdiff/app/fsutil/mocks"
 )
 
 func TestAtomicWriteFile(t *testing.T) {
@@ -74,6 +77,37 @@ func TestAtomicWriteFile(t *testing.T) {
 		entries, err := os.ReadDir(dir)
 		require.NoError(t, err)
 		assert.Len(t, entries, 1, "only the original directory should remain")
+	})
+
+	t.Run("removes temp file when write fails", func(t *testing.T) {
+		dir := t.TempDir()
+		tmp := filepath.Join(dir, "target.txt.tmp-1")
+		require.NoError(t, os.WriteFile(tmp, nil, 0o600))
+		f := &mocks.TempFileMock{
+			WriteFunc: func([]byte) (int, error) { return 0, errors.New("disk full") },
+			CloseFunc: func() error { return nil },
+		}
+		err := commitTemp(f, tmp, filepath.Join(dir, "target.txt"), []byte("data"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "writing temp file")
+		assert.Len(t, f.CloseCalls(), 1)
+		assert.NoFileExists(t, tmp)
+		assert.NoFileExists(t, filepath.Join(dir, "target.txt"))
+	})
+
+	t.Run("removes temp file when close fails", func(t *testing.T) {
+		dir := t.TempDir()
+		tmp := filepath.Join(dir, "target.txt.tmp-1")
+		require.NoError(t, os.WriteFile(tmp, nil, 0o600))
+		f := &mocks.TempFileMock{
+			WriteFunc: func(p []byte) (int, error) { return len(p), nil },
+			CloseFunc: func() error { return errors.New("io error") },
+		}
+		err := commitTemp(f, tmp, filepath.Join(dir, "target.txt"), []byte("data"))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "closing temp file")
+		assert.NoFileExists(t, tmp)
+		assert.NoFileExists(t, filepath.Join(dir, "target.txt"))
 	})
 
 	t.Run("fails when directory becomes read-only before write", func(t *testing.T) {

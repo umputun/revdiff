@@ -3,9 +3,19 @@ package fsutil
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
+
+//go:generate moq -out mocks/temp_file.go -pkg mocks -skip-ensure -fmt goimports . TempFile
+
+// TempFile is the open temp file AtomicWriteFile fills before renaming it into place.
+// *os.File satisfies it.
+type TempFile interface {
+	io.Writer
+	io.Closer
+}
 
 // AtomicWriteFile writes data to a temp file and renames it into place,
 // ensuring the write is atomic on POSIX filesystems.
@@ -16,13 +26,18 @@ func AtomicWriteFile(path string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
-	tmp := f.Name()
-	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
+	return commitTemp(f, f.Name(), path, data)
+}
+
+// commitTemp writes data through w, closes it and renames tmp over path. The temp file is
+// removed on every failure so a partial write never survives next to the target.
+func commitTemp(w TempFile, tmp, path string, data []byte) error {
+	if _, err := w.Write(data); err != nil {
+		_ = w.Close()
 		_ = os.Remove(tmp)
 		return fmt.Errorf("writing temp file: %w", err)
 	}
-	if err := f.Close(); err != nil {
+	if err := w.Close(); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("closing temp file: %w", err)
 	}
