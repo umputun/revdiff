@@ -191,8 +191,7 @@ func mouseTestModel(t *testing.T, files []string, diffs map[string][]diff.DiffLi
 	return m
 }
 
-// wheelMsg builds a wheel-up or wheel-down MouseMsg at (x, y) with an
-// optional shift modifier.
+// wheelMsg builds a wheel MouseMsg at (x, y) with an optional shift modifier.
 func wheelMsg(button tea.MouseButton, x, y int, shift bool) tea.MouseMsg {
 	return tea.MouseMsg(tea.MouseEvent{
 		X: x, Y: y, Shift: shift, Button: button, Action: tea.MouseActionPress,
@@ -526,18 +525,60 @@ func TestModel_HandleMouse_ShiftWheelInDiffUsesHalfPage(t *testing.T) {
 		"plain wheel must step by the wheelStep constant")
 }
 
-func TestModel_HandleMouse_HorizontalWheelNoop(t *testing.T) {
-	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
-		"a.go": {{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext}},
-	})
-	m.nav.diffCursor = 0
+func TestModel_HandleMouse_HorizontalWheelScrollsDiff(t *testing.T) {
+	newModel := func() Model {
+		return mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
+			"a.go": {{NewNum: 1, Content: strings.Repeat("x", 200), ChangeType: diff.ChangeContext}},
+		})
+	}
 
-	for _, btn := range []tea.MouseButton{tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight} {
-		result, cmd := m.Update(wheelMsg(btn, 60, 10, false))
+	t.Run("right", func(t *testing.T) {
+		m := newModel()
+		result, cmd := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
 		model := result.(Model)
 		assert.Nil(t, cmd)
-		assert.Equal(t, 0, model.nav.diffCursor, "horizontal wheel must not move cursor")
-	}
+		assert.Equal(t, scrollStep, model.layout.scrollX)
+	})
+
+	t.Run("left", func(t *testing.T) {
+		m := newModel()
+		m.layout.scrollX = scrollStep * 2
+		result, cmd := m.Update(wheelMsg(tea.MouseButtonWheelLeft, 60, 10, false))
+		model := result.(Model)
+		assert.Nil(t, cmd)
+		assert.Equal(t, scrollStep, model.layout.scrollX)
+	})
+
+	t.Run("left clamps at zero", func(t *testing.T) {
+		m := newModel()
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelLeft, 60, 10, false))
+		model := result.(Model)
+		assert.Zero(t, model.layout.scrollX)
+	})
+
+	t.Run("outside diff", func(t *testing.T) {
+		m := newModel()
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 5, 10, false))
+		model := result.(Model)
+		assert.Zero(t, model.layout.scrollX)
+	})
+
+	t.Run("wrap mode", func(t *testing.T) {
+		m := newModel()
+		m.modes.wrap = true
+		result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+		model := result.(Model)
+		assert.Zero(t, model.layout.scrollX)
+	})
+
+	t.Run("non-press action", func(t *testing.T) {
+		m := newModel()
+		msg := wheelMsg(tea.MouseButtonWheelRight, 60, 10, false)
+		msg.Action = tea.MouseActionRelease
+		result, _ := m.Update(msg)
+		model := result.(Model)
+		assert.Zero(t, model.layout.scrollX)
+	})
 }
 
 func TestModel_HandleMouse_LeftClickInDiff(t *testing.T) {

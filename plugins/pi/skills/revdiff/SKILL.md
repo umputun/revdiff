@@ -20,6 +20,7 @@ Reference resolution rules:
 - If the request identifies another working directory (for example `in ~/source/repo`), use that directory for any git/ref/path resolution, omit that directory phrase from the revdiff args, and pass the directory as the `revdiff_review` tool's `cwd` parameter.
 - For natural-language commit-count requests, use two refs: `prev commit`, `previous commit`, `last commit` → `HEAD~1 HEAD`; `head-3`, `head 3`, `previous 3 commits`, `last 3 commits` → `HEAD~3 HEAD`.
 - For tag requests, resolve the actual tag first. `last tag` or `latest tag` → run `git describe --tags --abbrev=0`, then pass that tag as `args`.
+- For upstream requests, resolve the current branch's tracking branch first. `upstream`, `tracking branch`, `tracked branch`, or `current upstream` → run `git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}'`, then pass the resulting ref as `args`.
 - For date requests, resolve the commit first. Examples: `2 weeks ago`, `yesterday`, `last Friday` → run `git rev-list -1 --before=<phrase> HEAD`, then pass the resulting commit hash as `args`.
 - For file targets, use `args: "--only <path>"`.
 - For all-files requests, map excludes explicitly. Example: `all files exclude vendor and dist` → `args: "--all-files --exclude=vendor --exclude=dist"`.
@@ -94,6 +95,7 @@ git format-patch -1 --stdout | revdiff --stdin
 ```text
 /revdiff prev commit
 /revdiff last tag
+/revdiff upstream
 /revdiff 2 weeks ago
 /revdiff all files exclude vendor and dist
 /revdiff README.md

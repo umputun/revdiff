@@ -172,8 +172,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleWheel(zone, m.wheelStepFor(msg.Shift))
 	case tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
-		// horizontal wheel is intentionally swallowed — horizontal scroll
-		// stays keyboard-driven so users keep a single mental model.
+		if msg.Action != tea.MouseActionPress || zone != hitDiff {
+			return m, nil
+		}
+		direction := 1
+		if msg.Button == tea.MouseButtonWheelLeft {
+			direction = -1
+		}
+		m.handleHorizontalScroll(direction)
 		return m, nil
 	case tea.MouseButtonLeft:
 		if msg.Action != tea.MouseActionPress {

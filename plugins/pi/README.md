@@ -32,6 +32,8 @@ The pi package exposes one user command:
 
 `/revdiff` routes requests through `/skill:revdiff`. The skill resolves refs, files, and natural-language targets before calling the `revdiff_review` tool. The tool launches the external `revdiff` binary through direct terminal handoff. pi temporarily suspends, revdiff takes over the terminal, and pi resumes when revdiff exits. If no annotations were captured, the agent stops the review loop unless you explicitly ask for another review.
 
+Interactive reviews emit pi's `herdr:blocked` extension event while revdiff is waiting for review input. Herdr users with its optional pi integration installed see the agent as blocked until revdiff exits. The event has no effect when Herdr is absent. Internally, revdiff runs asynchronously while the pi TUI is suspended so lifecycle integrations can continue reporting.
+
 The agent uses the `revdiff_review` tool for the review loop after handling annotations. The loop is: classify annotations, answer explanation requests first in normal chat, ask whether to continue or finish after explanation-only annotations, stop after any no-annotation result, list planned code changes for code-change directives, edit files, and rerun `revdiff_review` with the same args only after repository files changed or when the user asks to continue reviewing.
 
 Useful args:
@@ -55,6 +57,7 @@ Natural-language targets are supported because `/revdiff` routes through the ski
 ```text
 /revdiff prev commit
 /revdiff last tag
+/revdiff upstream
 /revdiff 2 weeks ago
 ```
 
