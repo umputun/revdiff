@@ -115,6 +115,7 @@ func assistantTranscriptLine(t *testing.T, phase, text string) string {
 }
 
 func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launchers are not used on windows")
 	}
@@ -151,6 +152,7 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	for _, launcher := range launchers {
 		for _, backend := range launcherBackends() {
 			t.Run(launcher.name+"/"+backend.name, func(t *testing.T) {
+				t.Parallel()
 				for _, tc := range cases {
 					t.Run(tc.name, func(t *testing.T) {
 						run := launcherRun{backend: backend, code: tc.code, output: tc.output}
@@ -422,6 +424,7 @@ func TestAgtermPaneOverlayOptIn(t *testing.T) {
 // that reach the trap's close; the tab fallthrough closes nothing, and every case from the
 // dispatch onward is the preserve half.
 func TestHerdrSignalPaneOwnership(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launchers are not used on windows")
 	}
@@ -518,6 +521,7 @@ func TestHerdrSignalPaneOwnership(t *testing.T) {
 	for lname, lpath := range launchers {
 		for _, tc := range tests {
 			t.Run(lname+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
 				backend := launcherBackend{name: "herdr", command: "herdr", env: map[string]string{"HERDR_ENV": "1"}}
 				env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: "x\n"})
 				argsFile := filepath.Join(env["TMPDIR"], "herdr-args")
@@ -603,6 +607,7 @@ func countHerdrCalls(calls []string, prefix string) int {
 // with the synchronous fake the sentinel exists before the wait loop starts, so the
 // liveness probe is only observable in the deferred-sentinel cases.
 func TestHerdrPaneOverlayOptIn(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launchers are not used on windows")
 	}
@@ -791,6 +796,7 @@ func TestHerdrPaneOverlayOptIn(t *testing.T) {
 	for _, launcher := range launchers {
 		for _, tc := range cases {
 			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
 				backend := launcherBackend{name: "herdr", command: "herdr", env: map[string]string{
 					"HERDR_ENV": "1",
 				}}
