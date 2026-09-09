@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/dlclark/regexp2/v2 v2.7.1
+	github.com/dlclark/regexp2/v2 v2.7.2
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/mattn/go-runewidth v0.0.29
 	github.com/muesli/termenv v0.16.0
