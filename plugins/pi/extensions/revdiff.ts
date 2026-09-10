@@ -89,28 +89,56 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 				return toolTextResult("Could not resolve revdiff working directory.");
 			}
 
-			const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx, cwd);
-			if (!launch) {
-				return toolTextResult("Could not resolve a revdiff launch target.");
+			// This call may wait on the user (the ui.select prompt below, or
+			// spawnSync stdio:inherit in runDirectReview) while pi's agent loop is
+			// parked inside this tool call, so terminal multiplexers watching the
+			// agent see "working" even though the session is waiting on the user.
+			// Signal blocked on pi's shared event bus for the whole window;
+			// herdr's omp/pi integration listens for `herdr:blocked` and drives
+			// its sidebar/notifications from it. active:false fires exactly once,
+			// on every exit path.
+			const herdrActive = process.env.HERDR_ENV === "1";
+			if (herdrActive) {
+				pi.events.emit("herdr:blocked", { active: true, label: `revdiff review in ${cwd}` });
 			}
+			try {
+				const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx, cwd);
+				if (!launch) {
+					return toolTextResult("Could not resolve a revdiff launch target.");
+				}
 
-			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
-			const result = await runDirectReview(ctx, launch, cwd);
-			if (!result) {
-				return toolTextResult("revdiff review did not complete.");
+				onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
+				if (herdrActive) {
+					// Give the socket write queued by the emit above a couple of
+					// macrotask ticks to run before spawnSync freezes the loop.
+					await flushPendingIOBestEffort();
+				}
+				const result = await runDirectReview(ctx, launch, cwd);
+				if (!result) {
+					return toolTextResult("revdiff review did not complete.");
+				}
+
+				if (result.annotations.length === 0) {
+					return toolTextResult(`Review complete — no annotations for ${result.label}.`, result);
+				}
+
+				const noun = result.annotations.length === 1 ? "annotation" : "annotations";
+				return toolTextResult(
+					[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, "", "Annotations:", result.rawOutput.trim()].join("\n"),
+					result,
+				);
+			} finally {
+				if (herdrActive) {
+					pi.events.emit("herdr:blocked", { active: false });
+				}
 			}
-
-			if (result.annotations.length === 0) {
-				return toolTextResult(`Review complete — no annotations for ${result.label}.`, result);
-			}
-
-			const noun = result.annotations.length === 1 ? "annotation" : "annotations";
-			return toolTextResult(
-				[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, "", "Annotations:", result.rawOutput.trim()].join("\n"),
-				result,
-			);
 		},
 	});
+}
+
+async function flushPendingIOBestEffort(): Promise<void> {
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 function toolTextResult(content: string, details?: ReviewResult) {
