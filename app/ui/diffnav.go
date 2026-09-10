@@ -139,22 +139,29 @@ func (m *Model) moveDiffCursorPageUp() {
 // directions: the walk stops on cursor positions and one position can span several rendered
 // rows (a wrapped line, an annotation block), so a tall line at the page edge carries over
 // more than requested when the walk rolls back off it, and less than requested - down to
-// rows skipped unseen - when worthRollingBack accepts it whole.
+// rows skipped unseen - when worthRollingBack accepts it whole. the scroll_diff_page_*
+// actions reuse this distance on a pure viewport scroll, where it is exact.
 // half-page motions do not subtract it - they already retain half a screen.
 func (m Model) pageRows() int {
 	return max(1, m.layout.viewport.Height-m.modes.pageOverlap)
 }
 
+// halfPageRows returns how far a half-page motion advances. the page overlap is not
+// subtracted: a half page already retains half a screen.
+func (m Model) halfPageRows() int {
+	return max(1, m.layout.viewport.Height/2)
+}
+
 // moveDiffCursorHalfPageDown moves the diff cursor down by half a visual page.
 // scrolls viewport by half page explicitly, matching vim/less ctrl+d behavior.
 func (m *Model) moveDiffCursorHalfPageDown() {
-	m.moveDiffCursorDownBy(max(1, m.layout.viewport.Height/2))
+	m.moveDiffCursorDownBy(m.halfPageRows())
 }
 
 // moveDiffCursorHalfPageUp moves the diff cursor up by half a visual page.
 // scrolls viewport by half page explicitly, matching vim/less ctrl+u behavior.
 func (m *Model) moveDiffCursorHalfPageUp() {
-	m.moveDiffCursorUpBy(max(1, m.layout.viewport.Height/2))
+	m.moveDiffCursorUpBy(m.halfPageRows())
 }
 
 // moveDiffCursorDownBy advances the cursor down by up to rows visual rows
@@ -806,6 +813,14 @@ func (m *Model) handleDiffMovement(action keymap.Action) bool {
 		m.scrollDiffViewportLine(wheelStep)
 	case keymap.ActionScrollDiffUp:
 		m.scrollDiffViewportLine(-wheelStep)
+	case keymap.ActionScrollDiffPageDown:
+		m.scrollDiffViewportLine(m.pageRows())
+	case keymap.ActionScrollDiffPageUp:
+		m.scrollDiffViewportLine(-m.pageRows())
+	case keymap.ActionScrollDiffHalfPageDown:
+		m.scrollDiffViewportLine(m.halfPageRows())
+	case keymap.ActionScrollDiffHalfPageUp:
+		m.scrollDiffViewportLine(-m.halfPageRows())
 	case keymap.ActionHome:
 		m.moveDiffCursorToStart()
 	case keymap.ActionEnd:
@@ -820,7 +835,7 @@ func (m *Model) handleDiffMovement(action keymap.Action) bool {
 // When markdown TOC is active, routes to TOC navigation so chord-resolved and
 // keymap-resolved actions reach the TOC without re-resolving from the raw key.
 func (m Model) handleTreeAction(action keymap.Action) (tea.Model, tea.Cmd) {
-	// Shift+J / Shift+K scroll the diff pane while the tree (or TOC) keeps
+	// the scroll_diff_* actions scroll the diff pane while the tree (or TOC) keeps
 	// focus. Handled before the mdTOC dispatch and returned early so the
 	// tree-navigation tail (EnsureVisible, loadSelectedIfChanged) does not run —
 	// the tree selection is unchanged.
@@ -830,6 +845,18 @@ func (m Model) handleTreeAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m, nil
 	case keymap.ActionScrollDiffUp:
 		m.scrollDiffViewportLine(-wheelStep)
+		return m, nil
+	case keymap.ActionScrollDiffPageDown:
+		m.scrollDiffViewportLine(m.pageRows())
+		return m, nil
+	case keymap.ActionScrollDiffPageUp:
+		m.scrollDiffViewportLine(-m.pageRows())
+		return m, nil
+	case keymap.ActionScrollDiffHalfPageDown:
+		m.scrollDiffViewportLine(m.halfPageRows())
+		return m, nil
+	case keymap.ActionScrollDiffHalfPageUp:
+		m.scrollDiffViewportLine(-m.halfPageRows())
 		return m, nil
 	default: // all other actions fall through to tree/TOC navigation below
 	}

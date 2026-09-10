@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -3415,6 +3417,171 @@ func TestModel_JKScrollDiffNoOpWhenContentFits(t *testing.T) {
 			assert.Equal(t, "a.go", model.tree.SelectedFile())
 		})
 	}
+}
+
+func TestModel_ScrollDiffPageActionsScrollViewport(t *testing.T) {
+	lines := make([]diff.DiffLine, 400)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	cases := []struct {
+		name    string
+		mapping string
+		key     tea.KeyMsg
+		step    func(m Model) int
+	}{
+		{"page down", "map pgdown scroll_diff_page_down", tea.KeyMsg{Type: tea.KeyPgDown}, func(m Model) int { return m.pageRows() }},
+		{"half page down", "map ctrl+d scroll_diff_half_page_down", tea.KeyMsg{Type: tea.KeyCtrlD}, func(m Model) int { return m.halfPageRows() }},
+	}
+	focusCases := []struct {
+		name  string
+		focus pane
+	}{
+		{"tree focused", paneTree},
+		{"diff focused", paneDiff},
+	}
+
+	for _, tc := range cases {
+		for _, fc := range focusCases {
+			t.Run(tc.name+"/"+fc.name, func(t *testing.T) {
+				model := scrollDiffPageModel(t, lines, fc.focus, tc.mapping)
+				step := tc.step(model)
+				require.Positive(t, step)
+
+				result, _ := model.Update(tc.key)
+				model = result.(Model)
+				assert.Equal(t, step, model.layout.viewport.YOffset)
+				assert.Equal(t, step, model.nav.diffCursor)
+				assert.Equal(t, fc.focus, model.layout.focus)
+				assert.Equal(t, "a.go", model.tree.SelectedFile())
+			})
+		}
+	}
+}
+
+func TestModel_ScrollDiffPageActionsScrollBack(t *testing.T) {
+	lines := make([]diff.DiffLine, 400)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+
+	cases := []struct {
+		name     string
+		mappings string
+		down     tea.KeyMsg
+		up       tea.KeyMsg
+		step     func(m Model) int
+	}{
+		{
+			"page", "map pgdown scroll_diff_page_down\nmap pgup scroll_diff_page_up",
+			tea.KeyMsg{Type: tea.KeyPgDown}, tea.KeyMsg{Type: tea.KeyPgUp},
+			func(m Model) int { return m.pageRows() },
+		},
+		{
+			"half page", "map ctrl+d scroll_diff_half_page_down\nmap ctrl+u scroll_diff_half_page_up",
+			tea.KeyMsg{Type: tea.KeyCtrlD}, tea.KeyMsg{Type: tea.KeyCtrlU},
+			func(m Model) int { return m.halfPageRows() },
+		},
+	}
+	focusCases := []struct {
+		name  string
+		focus pane
+	}{
+		{"tree focused", paneTree},
+		{"diff focused", paneDiff},
+	}
+	for _, tc := range cases {
+		for _, fc := range focusCases {
+			t.Run(tc.name+"/"+fc.name, func(t *testing.T) {
+				model := scrollDiffPageModel(t, lines, fc.focus, tc.mappings)
+
+				result, _ := model.Update(tc.down)
+				model = result.(Model)
+				require.Equal(t, tc.step(model), model.layout.viewport.YOffset)
+
+				result, _ = model.Update(tc.up)
+				model = result.(Model)
+				assert.Zero(t, model.layout.viewport.YOffset)
+				assert.Equal(t, fc.focus, model.layout.focus)
+				assert.Equal(t, "a.go", model.tree.SelectedFile())
+			})
+		}
+	}
+}
+
+func TestModel_ScrollDiffPageActionsHonorPageOverlap(t *testing.T) {
+	lines := make([]diff.DiffLine, 400)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "line", ChangeType: diff.ChangeContext}
+	}
+	const overlap = 5
+
+	t.Run("full page subtracts overlap", func(t *testing.T) {
+		model := scrollDiffPageModel(t, lines, paneTree, "map pgdown scroll_diff_page_down")
+		model.modes.pageOverlap = overlap
+		height := model.layout.viewport.Height
+		require.Greater(t, height, overlap)
+
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+		model = result.(Model)
+		assert.Equal(t, height-overlap, model.layout.viewport.YOffset)
+	})
+
+	t.Run("half page ignores overlap", func(t *testing.T) {
+		model := scrollDiffPageModel(t, lines, paneTree, "map ctrl+d scroll_diff_half_page_down")
+		model.modes.pageOverlap = overlap
+		height := model.layout.viewport.Height
+
+		result, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+		model = result.(Model)
+		assert.Equal(t, max(1, height/2), model.layout.viewport.YOffset)
+	})
+}
+
+func TestModel_ScrollDiffPageActionsLeaveTOCSelection(t *testing.T) {
+	lines := make([]diff.DiffLine, 400)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "text", ChangeType: diff.ChangeContext}
+	}
+	lines[0] = diff.DiffLine{NewNum: 1, Content: "# one", ChangeType: diff.ChangeContext}
+	lines[200] = diff.DiffLine{NewNum: 201, Content: "## two", ChangeType: diff.ChangeContext}
+
+	model := scrollDiffPageModel(t, lines, paneTree, "map pgdown scroll_diff_page_down")
+	model.file.mdTOC = testParseTOCFactory()(lines, "notes.md")
+	require.NotNil(t, model.file.mdTOC)
+	require.Greater(t, model.file.mdTOC.NumEntries(), 1)
+	before, ok := model.file.mdTOC.CurrentLineIdx()
+	require.True(t, ok)
+
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	model = result.(Model)
+	assert.Positive(t, model.layout.viewport.YOffset)
+	after, ok := model.file.mdTOC.CurrentLineIdx()
+	require.True(t, ok)
+	assert.Equal(t, before, after)
+}
+
+// scrollDiffPageModel loads a two-file model with the given pane focused and the given
+// keybindings file content parsed through keymap.Load.
+func scrollDiffPageModel(t *testing.T, lines []diff.DiffLine, focus pane, mappings string) Model {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "keybindings")
+	require.NoError(t, os.WriteFile(path, []byte(mappings+"\n"), 0o600))
+	km, err := keymap.Load(path)
+	require.NoError(t, err)
+
+	m := testModel([]string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	result, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	model := result.(Model)
+	result, _ = model.Update(fileLoadedMsg{file: "a.go", lines: lines})
+	model = result.(Model)
+	model.tree = testNewFileTree([]string{"a.go", "b.go"})
+	model.layout.focus = focus
+	model.keymap = km
+	require.Zero(t, model.layout.viewport.YOffset)
+	require.Equal(t, "a.go", model.tree.SelectedFile())
+	return model
 }
 
 func BenchmarkModel_PageNavigation(b *testing.B) {

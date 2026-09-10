@@ -1237,3 +1237,61 @@ func TestKeysFor_IncludesChordKeys(t *testing.T) {
 	}
 	assert.Equal(t, "ctrl+w>x / q", joined)
 }
+
+func TestScrollDiffPageActions_AreValid(t *testing.T) {
+	for _, a := range []Action{
+		ActionScrollDiffPageDown, ActionScrollDiffPageUp,
+		ActionScrollDiffHalfPageDown, ActionScrollDiffHalfPageUp,
+	} {
+		assert.True(t, IsValidAction(a), "action %q must validate", a)
+	}
+}
+
+func TestScrollDiffPageActions_NoDefaultBindings(t *testing.T) {
+	km := Default()
+	for _, a := range []Action{
+		ActionScrollDiffPageDown, ActionScrollDiffPageUp,
+		ActionScrollDiffHalfPageDown, ActionScrollDiffHalfPageUp,
+	} {
+		assert.Empty(t, km.KeysFor(a), "action %q must have no default bindings", a)
+	}
+	assert.Equal(t, ActionPageDown, km.Resolve("pgdown"), "pgdown must keep its pane-relative paging")
+	assert.Equal(t, ActionPageUp, km.Resolve("pgup"))
+	assert.Equal(t, ActionHalfPageDown, km.Resolve("ctrl+d"))
+	assert.Equal(t, ActionHalfPageUp, km.Resolve("ctrl+u"))
+}
+
+func TestScrollDiffPageActions_HelpEntries(t *testing.T) {
+	want := map[Action]string{
+		ActionScrollDiffPageDown:     "scroll diff one page down",
+		ActionScrollDiffPageUp:       "scroll diff one page up",
+		ActionScrollDiffHalfPageDown: "scroll diff half a page down",
+		ActionScrollDiffHalfPageUp:   "scroll diff half a page up",
+	}
+	found := map[Action]bool{}
+	for _, e := range defaultDescriptions() {
+		if desc, ok := want[e.Action]; ok {
+			assert.Equal(t, desc, e.Description)
+			assert.Equal(t, "Navigation", e.Section)
+			found[e.Action] = true
+		}
+	}
+	assert.Len(t, found, len(want), "every scroll_diff page action needs a help entry")
+}
+
+func TestScrollDiffPageActions_OmittedFromHelpUntilBound(t *testing.T) {
+	km := Default()
+	listed := func() bool {
+		for _, sec := range km.HelpSections() {
+			for _, entry := range sec.Entries {
+				if entry.Action == ActionScrollDiffPageDown {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	assert.False(t, listed(), "unbound action must not appear in help")
+	km.Bind("pgdown", ActionScrollDiffPageDown)
+	assert.True(t, listed(), "once bound the action must appear in help")
+}

@@ -19,58 +19,62 @@ type Action string
 
 // action constants for all mappable actions.
 const (
-	ActionDown             Action = "down"
-	ActionUp               Action = "up"
-	ActionPageDown         Action = "page_down"
-	ActionPageUp           Action = "page_up"
-	ActionHalfPageDown     Action = "half_page_down"
-	ActionHalfPageUp       Action = "half_page_up"
-	ActionHome             Action = "home"
-	ActionEnd              Action = "end"
-	ActionScrollLeft       Action = "scroll_left"
-	ActionScrollRight      Action = "scroll_right"
-	ActionScrollCenter     Action = "scroll_center"
-	ActionScrollTop        Action = "scroll_top"
-	ActionScrollBottom     Action = "scroll_bottom"
-	ActionScrollDiffDown   Action = "scroll_diff_down"
-	ActionScrollDiffUp     Action = "scroll_diff_up"
-	ActionNextItem         Action = "next_item"
-	ActionPrevItem         Action = "prev_item"
-	ActionJumpFile         Action = "jump_file"
-	ActionNextHunk         Action = "next_hunk"
-	ActionPrevHunk         Action = "prev_hunk"
-	ActionTogglePane       Action = "toggle_pane"
-	ActionFocusTree        Action = "focus_tree"
-	ActionFocusDiff        Action = "focus_diff"
-	ActionSearch           Action = "search"
-	ActionConfirm          Action = "confirm"
-	ActionAnnotateFile     Action = "annotate_file"
-	ActionDeleteAnnotation Action = "delete_annotation"
-	ActionAnnotList        Action = "annot_list"
-	ActionNextAnnotation   Action = "next_annotation"
-	ActionPrevAnnotation   Action = "prev_annotation"
-	ActionToggleCollapsed  Action = "toggle_collapsed"
-	ActionToggleCompact    Action = "toggle_compact"
-	ActionToggleWrap       Action = "toggle_wrap"
-	ActionToggleTree       Action = "toggle_tree"
-	ActionToggleLineNums   Action = "toggle_line_numbers"
-	ActionToggleBlame      Action = "toggle_blame"
-	ActionToggleWordDiff   Action = "toggle_word_diff"
-	ActionToggleHunk       Action = "toggle_hunk"
-	ActionToggleUntracked  Action = "toggle_untracked"
-	ActionMarkReviewed     Action = "mark_reviewed"
-	ActionFilterUnreviewed Action = "filter_unreviewed"
-	ActionFilter           Action = "filter"
-	ActionQuit             Action = "quit"
-	ActionDiscardQuit      Action = "discard_quit"
-	ActionHelp             Action = "help"
-	ActionDismiss          Action = "dismiss"
-	ActionThemeSelect      Action = "theme_select"
-	ActionInfo             Action = "info"
-	ActionReload           Action = "reload"
-	ActionOpenEditor       Action = "open_editor"
-	ActionOpenFileInEditor Action = "open_file_in_editor"
-	ActionFlushOutput      Action = "flush_output"
+	ActionDown                   Action = "down"
+	ActionUp                     Action = "up"
+	ActionPageDown               Action = "page_down"
+	ActionPageUp                 Action = "page_up"
+	ActionHalfPageDown           Action = "half_page_down"
+	ActionHalfPageUp             Action = "half_page_up"
+	ActionHome                   Action = "home"
+	ActionEnd                    Action = "end"
+	ActionScrollLeft             Action = "scroll_left"
+	ActionScrollRight            Action = "scroll_right"
+	ActionScrollCenter           Action = "scroll_center"
+	ActionScrollTop              Action = "scroll_top"
+	ActionScrollBottom           Action = "scroll_bottom"
+	ActionScrollDiffDown         Action = "scroll_diff_down"
+	ActionScrollDiffUp           Action = "scroll_diff_up"
+	ActionScrollDiffPageDown     Action = "scroll_diff_page_down"
+	ActionScrollDiffPageUp       Action = "scroll_diff_page_up"
+	ActionScrollDiffHalfPageDown Action = "scroll_diff_half_page_down"
+	ActionScrollDiffHalfPageUp   Action = "scroll_diff_half_page_up"
+	ActionNextItem               Action = "next_item"
+	ActionPrevItem               Action = "prev_item"
+	ActionJumpFile               Action = "jump_file"
+	ActionNextHunk               Action = "next_hunk"
+	ActionPrevHunk               Action = "prev_hunk"
+	ActionTogglePane             Action = "toggle_pane"
+	ActionFocusTree              Action = "focus_tree"
+	ActionFocusDiff              Action = "focus_diff"
+	ActionSearch                 Action = "search"
+	ActionConfirm                Action = "confirm"
+	ActionAnnotateFile           Action = "annotate_file"
+	ActionDeleteAnnotation       Action = "delete_annotation"
+	ActionAnnotList              Action = "annot_list"
+	ActionNextAnnotation         Action = "next_annotation"
+	ActionPrevAnnotation         Action = "prev_annotation"
+	ActionToggleCollapsed        Action = "toggle_collapsed"
+	ActionToggleCompact          Action = "toggle_compact"
+	ActionToggleWrap             Action = "toggle_wrap"
+	ActionToggleTree             Action = "toggle_tree"
+	ActionToggleLineNums         Action = "toggle_line_numbers"
+	ActionToggleBlame            Action = "toggle_blame"
+	ActionToggleWordDiff         Action = "toggle_word_diff"
+	ActionToggleHunk             Action = "toggle_hunk"
+	ActionToggleUntracked        Action = "toggle_untracked"
+	ActionMarkReviewed           Action = "mark_reviewed"
+	ActionFilterUnreviewed       Action = "filter_unreviewed"
+	ActionFilter                 Action = "filter"
+	ActionQuit                   Action = "quit"
+	ActionDiscardQuit            Action = "discard_quit"
+	ActionHelp                   Action = "help"
+	ActionDismiss                Action = "dismiss"
+	ActionThemeSelect            Action = "theme_select"
+	ActionInfo                   Action = "info"
+	ActionReload                 Action = "reload"
+	ActionOpenEditor             Action = "open_editor"
+	ActionOpenFileInEditor       Action = "open_file_in_editor"
+	ActionFlushOutput            Action = "flush_output"
 )
 
 // SectionPane is the help section name for pane-related keybindings.
@@ -83,6 +87,8 @@ var validActions = map[Action]bool{
 	ActionScrollLeft: true, ActionScrollRight: true,
 	ActionScrollCenter: true, ActionScrollTop: true, ActionScrollBottom: true,
 	ActionScrollDiffDown: true, ActionScrollDiffUp: true,
+	ActionScrollDiffPageDown: true, ActionScrollDiffPageUp: true,
+	ActionScrollDiffHalfPageDown: true, ActionScrollDiffHalfPageUp: true,
 	ActionNextItem: true, ActionPrevItem: true, ActionJumpFile: true,
 	ActionNextHunk: true, ActionPrevHunk: true,
 	ActionTogglePane: true, ActionFocusTree: true, ActionFocusDiff: true,
@@ -201,6 +207,10 @@ func defaultDescriptions() []HelpEntry {
 		{ActionScrollBottom, "align viewport bottom", "Navigation"},
 		{ActionScrollDiffDown, "scroll diff down", "Navigation"},
 		{ActionScrollDiffUp, "scroll diff up", "Navigation"},
+		{ActionScrollDiffPageDown, "scroll diff one page down", "Navigation"},
+		{ActionScrollDiffPageUp, "scroll diff one page up", "Navigation"},
+		{ActionScrollDiffHalfPageDown, "scroll diff half a page down", "Navigation"},
+		{ActionScrollDiffHalfPageUp, "scroll diff half a page up", "Navigation"},
 
 		// file/hunk
 		{ActionNextItem, "next file / search match", "File/Hunk"},

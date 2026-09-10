@@ -894,6 +894,17 @@ revdiff --dump-keys > ~/.config/revdiff/keybindings
 
 Then edit to taste. Fixed modal keys (Enter, Esc in annotation/search input, confirm discard) are not remappable. Keymap-resolved actions like `open_editor` work during annotation input and can be rebound.
 
+**Paging the diff from the file tree:** `J`/`K` scroll the diff viewport from either pane, but only by a few lines, while `PgDown`/`PgUp` and `Ctrl+d`/`Ctrl+u` stay pane-relative and page whichever pane has focus. The `scroll_diff_page_*` and `scroll_diff_half_page_*` actions are the page-sized versions of `J`/`K` — they ship with no default key, so bind them to get lazygit-style paging that always targets the diff:
+
+```
+map pgdown scroll_diff_page_down
+map pgup scroll_diff_page_up
+map ctrl+d scroll_diff_half_page_down
+map ctrl+u scroll_diff_half_page_up
+```
+
+Three consequences worth knowing. This also replaces cursor paging while the diff pane has focus: the keys scroll the viewport and pin the cursor back into view instead of walking the cursor a page at a time. The file tree and markdown TOC lose their own page-sized traversal on those keys. And because `page_down`, `page_up`, `half_page_down` and `half_page_up` have no other default key, rebinding all four lines leaves them unbound everywhere, including the `?` help and `i` info overlays, which page through the same actions. Omit one pair of mapping lines to keep its default paging. Because they have no default binding, these actions appear in neither the `?` help overlay nor `--dump-keys` until you bind them.
+
 **Chord bindings (ctrl/alt leader):** bind a two-stage chord by joining the leader and second key with `>`. The leader must be a `ctrl+*` or `alt+*` combo; the second stage is any single key. Only two stages are supported.
 
 ```
@@ -908,7 +919,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 <details>
 <summary>Available actions (click to expand)</summary>
 
-**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `scroll_diff_down`, `scroll_diff_up`
+**Navigation:** `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `scroll_diff_down`, `scroll_diff_up`, `scroll_diff_page_down`, `scroll_diff_page_up`, `scroll_diff_half_page_down`, `scroll_diff_half_page_up`
 
 **File/Hunk:** `next_item`, `prev_item`, `jump_file`, `next_hunk`, `prev_hunk`, `open_file_in_editor`
 
