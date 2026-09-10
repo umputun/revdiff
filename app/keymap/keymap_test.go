@@ -33,7 +33,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"n", ActionNextItem}, {"N", ActionPrevItem}, {"p", ActionPrevItem},
 		{"P", ActionJumpFile},
 		{"]", ActionNextHunk}, {"[", ActionPrevHunk}, {"e", ActionOpenFileInEditor},
-		{"tab", ActionTogglePane}, {"h", ActionFocusTree}, {"l", ActionFocusDiff},
+		{"tab", ActionTogglePane}, {"h", ActionFocusLeft}, {"l", ActionFocusRight},
 		{"/", ActionSearch},
 		{"a", ActionConfirm}, {"enter", ActionConfirm},
 		{"A", ActionAnnotateFile}, {"d", ActionDeleteAnnotation}, {"@", ActionAnnotList}, {"ctrl+e", ActionOpenEditor},
@@ -409,6 +409,8 @@ func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))
+	assert.True(t, IsValidAction(ActionFocusLeft))
+	assert.True(t, IsValidAction(ActionFocusRight))
 	assert.True(t, IsValidAction(ActionInfo))
 	assert.True(t, IsValidAction(Action("commit_info")), "deprecated alias must validate")
 	assert.False(t, IsValidAction(Action("nonexistent")))
