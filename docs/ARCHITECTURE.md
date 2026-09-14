@@ -6,7 +6,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  app/ — composition root (package main)             │
+│  app/revdiff/ — composition root (package main)     │
 │    main.go          — main(), early-exit flow       │
 │    config.go        — options, parseArgs, config IO │
 │    stdin.go         — stdin validation, /dev/tty    │
@@ -35,7 +35,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 
 ## Package Responsibilities
 
-### app/ (composition root)
+### app/revdiff/ (composition root)
 
 `package main` is the composition root, split across files by concern:
 
@@ -169,7 +169,7 @@ across files by concern to keep files under ~500 lines:
   `flushWheelPending()` is called from `handleWheelDebounce`, `handleKey`, `handleResize`, and
   `handleBlameLoaded` (any path that runs `syncViewportToCursor` or reads `m.nav.diffCursor` must
   flush first). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in
-  `app/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set
+  `app/revdiff/main.go` unless `--no-mouse` / `REVDIFF_NO_MOUSE` is set
 
 Each source file has a matching `_test.go`.
 
@@ -196,7 +196,7 @@ mini-models.
 
 **Theme boundary** — `app/ui` does not import `app/theme` or `app/fsutil`. Theme discovery and
 persistence are accessed through the `ThemeCatalog` interface (defined in `model.go`), with a
-concrete adapter wired in `app/themes.go`.
+concrete adapter wired in `app/revdiff/themes.go`.
 
 ### app/ui/style/ — color, style resolution, and display helpers
 
@@ -342,7 +342,7 @@ File layout:
 Bundled themes: revdiff, catppuccin-mocha, catppuccin-latte, dracula, gruvbox, nord, solarized-dark.
 Community themes live in `themes/gallery/`.
 
-23 color keys mapped via `colorFieldPtrs()` in `app/themes.go` — single source of truth for color
+23 color keys mapped via `colorFieldPtrs()` in `app/revdiff/themes.go` — single source of truth for color
 key to struct field mapping.
 
 ### app/annotation/ — annotation store
@@ -398,7 +398,7 @@ On a signal-delivered exit (a SIGHUP from a dropped SSH/tmux client, or a SIGTER
 `main.go` invokes this save as a crash-recovery net and stops there — history only, never the `-o`
 output. This is a deliberate semantic change: a signal-delivered SIGTERM no longer writes `-o`,
 because a signal is not the deliberate handoff that `q`/`O` perform. The wiring lives at the
-composition root — `shutdownGuard` in `app/signal.go` plus `tea.WithoutSignalHandler()` so revdiff
+composition root — `shutdownGuard` in `app/revdiff/signal.go` plus `tea.WithoutSignalHandler()` so revdiff
 owns SIGHUP/SIGTERM instead of bubbletea. SIGINT is caught and drained so a Ctrl-C during an
 external `$EDITOR` does not quit revdiff. The guard is stopped (default signal disposition restored
 for all three) before `finalize()` runs, so a slow or hung finalize (`saveHistory` shells out to
@@ -434,7 +434,7 @@ belong to the consumer.
   `OpenFilePicker()`, `OpenInfo()`, `UpdateInfo()`, `Close()`, `HandleKey()`, `HandleMouse()`,
   `Compose()`; implemented by `overlay.Manager`
 - **`ThemeCatalog`** — `Entries()`, `Resolve()`, `Persist()`; implemented by `themeCatalog` adapter
-  in `app/themes.go` (composes `theme.Catalog` + config persistence)
+  in `app/revdiff/themes.go` (composes `theme.Catalog` + config persistence)
 - **`ExternalEditor`** — `Command(content)` for annotation temp-file editing,
   `SourceCommand(path string, line int)` for opening source files; implemented by `editor.Editor`
   (default wiring via `ModelConfig.Editor`; stubbed in tests)
@@ -601,14 +601,14 @@ User presses '?' / '@' / 'T' / 'P' / 'i'
 - **History**: `~/.config/revdiff/history/` (auto-save dir)
 
 Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*`
-flags or env vars. Applied via `applyTheme()` in `app/themes.go` which directly overwrites
+flags or env vars. Applied via `applyTheme()` in `app/revdiff/themes.go` which directly overwrites
 `opts.Colors.*` fields after `parseArgs()`.
 
 Adding a new color requires changes in three places: `theme.go` colorKeys + options struct +
-`colorFieldPtrs()` in `app/themes.go`.
+`colorFieldPtrs()` in `app/revdiff/themes.go`.
 
 Theme ownership is split by concern: `app/theme` owns discovery/loading/installation via `Catalog`,
-`app/ui` consumes a `ThemeCatalog` interface for selector/preview/apply, and `app/themes.go` wires a
+`app/ui` consumes a `ThemeCatalog` interface for selector/preview/apply, and `app/revdiff/themes.go` wires a
 thin adapter composing `theme.Catalog` + config file persistence.
 
 ## Input Modes

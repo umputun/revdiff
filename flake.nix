@@ -28,7 +28,7 @@
           # so build straight from the vendored tree with no network fetch.
           vendorHash = null;
 
-          subPackages = [ "app" ];
+          subPackages = [ "app/revdiff" ];
 
           # Tests need the git working tree, which is absent in the Nix sandbox.
           doCheck = false;
@@ -43,12 +43,6 @@
             "-w"
             "-X main.revision=${version}"
           ];
-
-          # The main package lives in ./app, so the produced binary is named
-          # `app`; rename it to `revdiff`.
-          postInstall = ''
-            mv $out/bin/app $out/bin/revdiff
-          '';
 
           meta = {
             description = "TUI for reviewing diffs, files, and documents with inline annotations";

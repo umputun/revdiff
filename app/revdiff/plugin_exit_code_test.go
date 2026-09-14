@@ -992,6 +992,7 @@ func TestCodexPlanReviewHook(t *testing.T) {
 	liveTranscript := filepath.Join(
 		root,
 		"app",
+		"revdiff",
 		"testdata",
 		"plugin-exit-code",
 		"rollout-2026-07-16T10-54-26-session-current.jsonl",
@@ -1709,7 +1710,7 @@ func testRepoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()
 	require.NoError(t, err)
-	return filepath.Dir(wd)
+	return filepath.Dir(filepath.Dir(wd))
 }
 
 func runTestCmd(t *testing.T, r cmdReq) cmdResult {

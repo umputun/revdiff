@@ -887,7 +887,7 @@ func parsePatchedConfig(t *testing.T, path string) (options, error) {
 func TestPatchConfigTheme_testdataRoundTrip(t *testing.T) {
 	tests := []struct {
 		name    string
-		fixture string // path under app/testdata/themes/
+		fixture string
 	}{
 		{name: "good config (theme already in [Application Options])", fixture: "good.ini"},
 		{name: "no theme line, trailing [color options]", fixture: "no_theme.ini"},

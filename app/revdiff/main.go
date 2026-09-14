@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -46,7 +47,8 @@ func main() {
 
 	// early-exit commands that don't need theme resolution
 	if opts.Version {
-		fmt.Printf("version: %s\n", revision)
+		info, _ := debug.ReadBuildInfo()
+		fmt.Printf("version: %s\n", buildVersion(revision, info))
 		os.Exit(0)
 	}
 
@@ -93,6 +95,16 @@ func main() {
 	if code != 0 {
 		os.Exit(code)
 	}
+}
+
+func buildVersion(rev string, info *debug.BuildInfo) string {
+	if rev != "" && rev != "unknown" {
+		return rev
+	}
+	if info != nil && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return "unknown"
 }
 
 func run(opts options) (int, error) {

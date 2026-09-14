@@ -9,12 +9,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestBuildVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		revision string
+		info     *debug.BuildInfo
+		want     string
+	}{
+		{name: "ldflags revision wins", revision: "v1.14.0-custom", info: &debug.BuildInfo{Main: debug.Module{Version: "v1.14.0"}}, want: "v1.14.0-custom"},
+		{name: "ldflags without build info", revision: "v1.14.0-custom", want: "v1.14.0-custom"},
+		{name: "installed module version", revision: "unknown", info: &debug.BuildInfo{Main: debug.Module{Version: "v1.14.0"}}, want: "v1.14.0"},
+		{name: "empty revision", info: &debug.BuildInfo{Main: debug.Module{Version: "v1.14.0"}}, want: "v1.14.0"},
+		{name: "development build", revision: "unknown", info: &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}, want: "unknown"},
+		{name: "empty module version", revision: "unknown", info: &debug.BuildInfo{}, want: "unknown"},
+		{name: "missing build info", revision: "unknown", want: "unknown"},
+		{name: "missing revision and build info", want: "unknown"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, buildVersion(tt.revision, tt.info))
+		})
+	}
+}
 
 type errWriter struct{}
 

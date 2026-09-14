@@ -44,14 +44,14 @@
 //
 // Theme discovery and persistence are accessed through the [ThemeCatalog] interface defined
 // in model.go. This package does not import app/theme or app/fsutil — the concrete adapter
-// is wired in app/themes.go, composing theme.Catalog with config file persistence.
+// is wired in app/revdiff/themes.go, composing theme.Catalog with config file persistence.
 //
 // Intra-line word-diff algorithms and the shared highlight marker insertion engine live
 // in the [worddiff] sub-package (app/ui/worddiff/). It owns the tokenizer, LCS algorithm,
 // line pairing, similarity gate, and ANSI-aware highlight marker insertion used by both
 // word-diff and search highlighting. Model holds the worddiff type through a consumer-side
 // interface (wordDiffer) defined in model.go; concrete *worddiff.Differ is injected via
-// ModelConfig.WordDiffer wired in app/main.go.
+// ModelConfig.WordDiffer wired in app/revdiff/main.go.
 //
 // Color and style management lives in the [style] sub-package (app/ui/style/).
 // It owns all hex-to-ANSI conversion, lipgloss style construction, SGR state tracking,
@@ -64,7 +64,7 @@
 // including cursor/offset management, entry parsing, and rendering logic.
 // Model holds sidepane types through consumer-side interfaces (FileTreeComponent,
 // TOCComponent) defined in model.go; concrete construction is injected via
-// ModelConfig.NewFileTree and ModelConfig.ParseTOC factory closures wired in app/main.go.
+// ModelConfig.NewFileTree and ModelConfig.ParseTOC factory closures wired in app/revdiff/main.go.
 //
 // Layered popup UI lives in the [overlay] sub-package (app/ui/overlay/).
 // It owns help, annotation list, theme selector, and file picker overlays — all popup state
@@ -74,7 +74,7 @@
 // coordinator enforces mutual exclusivity (one overlay at a time) and routes
 // key events and compose calls to the active overlay. Model holds the Manager
 // through a consumer-side interface (overlayManager) defined in model.go;
-// concrete *overlay.Manager is injected via ModelConfig.Overlay wired in app/main.go.
+// concrete *overlay.Manager is injected via ModelConfig.Overlay wired in app/revdiff/main.go.
 //
 // The key interfaces consumed by Model are [Renderer] (provides changed files and diffs),
 // [SyntaxHighlighter] (provides ANSI-highlighted lines), [Blamer] (provides blame data),

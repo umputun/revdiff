@@ -5,6 +5,14 @@
 brew install umputun/apps/revdiff
 ```
 
+**Go:**
+
+```bash
+go install github.com/umputun/revdiff/app/revdiff@latest
+```
+
+Installs the `revdiff` binary into `GOBIN` (defaults to `$(go env GOPATH)/bin`). Add that directory to your `PATH`.
+
 **Binary releases:** download from [GitHub Releases](https://github.com/umputun/revdiff/releases) (deb, rpm, archives for linux/darwin amd64/arm64).
 
 ## Claude Code Plugin

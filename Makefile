@@ -9,7 +9,7 @@ REV=$(if $(filter --,$(GIT_REV)),latest,$(GIT_REV))
 all: test build
 
 build:
-	go build -ldflags "-X main.revision=$(REV) -s -w" -o .bin/revdiff.$(BRANCH) ./app
+	go build -ldflags "-X main.revision=$(REV) -s -w" -o .bin/revdiff.$(BRANCH) ./app/revdiff
 	cp .bin/revdiff.$(BRANCH) .bin/revdiff
 
 test:
