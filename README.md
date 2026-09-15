@@ -207,7 +207,7 @@ codex plugin add revdiff-planning@revdiff
 
 Start a new Codex session and trust the hook through `/hooks`. Codex automatic review is opt-in and only fires for complete `<proposed_plan>` blocks in Plan mode; `/revdiff-plan` remains the manual fallback.
 
-This plugin is independent from the main `revdiff` plugin and does not conflict with other planning plugins (e.g., `planning` from `cc-thingz`).
+This plugin is independent from the main `revdiff` plugin. In Claude Code it hooks `ExitPlanMode`, and so does `planning` from `cc-thingz`; Claude Code runs both hooks, so enabling both can review the same plan twice.
 
 ## Pi Package
 
