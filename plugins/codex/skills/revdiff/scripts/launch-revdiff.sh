@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # launch revdiff in a terminal overlay (agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
 # source: .claude-plugin/skills/revdiff/scripts/launch-revdiff.sh (keep in sync)
-# usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--only=file1 ...]
+# usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--filter-unreviewed] [--only=file1 ...]
 # output: annotation text from revdiff stdout (empty if no annotations)
 # exit: 0 clean, 10 annotations captured, other nonzero failure
 
