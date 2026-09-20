@@ -166,6 +166,9 @@ case "$cmd_name" in
                 exit 0
                 ;;
             "pane run")
+                # a real overlay server's env predates the caller's shell rc, so the
+                # launcher's own EDITOR/VISUAL must not stand in for what it forwards
+                [ "${FAKE_STRIP_EDITOR_ENV:-}" = "1" ] && unset EDITOR VISUAL
                 # herdr pane run <pane_id> <command>; run the launch command and
                 # report success, mimicking herdr's fire-and-forget (the real rc
                 # still arrives via the sentinel the launch script writes)

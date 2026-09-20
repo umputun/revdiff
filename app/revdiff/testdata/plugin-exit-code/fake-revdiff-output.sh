@@ -5,6 +5,10 @@ if [ "${REVDIFF_EXIT_CODE_ON_ANNOTATIONS:-}" != "true" ]; then
     echo "fake-revdiff: REVDIFF_EXIT_CODE_ON_ANNOTATIONS not set by launcher" >&2
     exit 3
 fi
+# records what the launcher forwarded, so a test can see editor env reaching revdiff
+if [ -n "${FAKE_ENV_FILE:-}" ]; then
+    printf '%s|%s' "${EDITOR:-missing}" "${VISUAL:-missing}" > "$FAKE_ENV_FILE"
+fi
 if [ -n "${FAKE_STDERR:-}" ]; then
     printf "%s" "$FAKE_STDERR" >&2
 fi

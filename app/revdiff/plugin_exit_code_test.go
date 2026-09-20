@@ -185,6 +185,89 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	}
 }
 
+// herdr builds its own command string, so the EDITOR/VISUAL prefix every other backend
+// gets has to reach it too: an overlay server's environment predates the caller's shell
+// rc, and without the prefix revdiff's annotation flow spawns the wrong editor.
+func TestHerdrDispatchForwardsEditorEnv(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	launchers := []struct {
+		name string
+		path string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+	}
+	modes := map[string]map[string]string{
+		"pane": {"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1"},
+		"tab":  {},
+	}
+	for _, launcher := range launchers {
+		for mode, modeEnv := range modes {
+			t.Run(launcher.name+"/"+mode, func(t *testing.T) {
+				t.Parallel()
+				backend := launcherBackend{name: "herdr", command: "herdr", env: map[string]string{"HERDR_ENV": "1"}}
+				env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: "## f.go:1 (+)\nc\n"})
+				env["FAKE_HERDR_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "herdr-args")
+				env["HERDR_PANE_ID"] = fakeHerdrCallerPaneID
+				env["FAKE_STRIP_EDITOR_ENV"] = "1"
+				envFile := filepath.Join(env["TMPDIR"], "editor-env")
+				env["FAKE_ENV_FILE"] = envFile
+				env["EDITOR"] = "review-editor --wait"
+				env["VISUAL"] = "review-visual --wait"
+				maps.Copy(env, modeEnv)
+
+				res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: []string{filepath.Join(root, launcher.path)}, env: env})
+				require.Equal(t, exitCodeAnnotations, res.code)
+				assertFileContent(t, envFile, "review-editor --wait|review-visual --wait")
+			})
+		}
+	}
+}
+
+// a review the launcher abandons keeps writing stderr, and until the dispatched script
+// took its own hard link that write reopened the launcher's capture path after the EXIT
+// trap had removed it, leaving a file nobody owned.
+func TestHerdrAbandonedReviewLeavesNoStderrCapture(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	launchers := []struct {
+		name string
+		path string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+	}
+	for _, launcher := range launchers {
+		name, path := launcher.name, launcher.path
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			backend := launcherBackend{name: "herdr", command: "herdr", env: map[string]string{"HERDR_ENV": "1"}}
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: "## f.go:1 (+)\nc\n"})
+			env["FAKE_HERDR_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "herdr-args")
+			env["HERDR_PANE_ID"] = fakeHerdrCallerPaneID
+			env["REVDIFF_HERDR_PANE"] = "1"
+			env["FAKE_HERDR_PANE"] = "1"
+			env["FAKE_HERDR_RUN_FAIL_AFTER_START"] = "1"
+			barrier := filepath.Join(env["TMPDIR"], "release")
+			env["FAKE_TOUCH_BARRIER"] = barrier
+
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: []string{filepath.Join(root, path)}, env: env})
+			require.Equal(t, 1, res.code, "a lost pane run response exits 1 and preserves the pane")
+
+			writeTestFile(t, barrier, "")
+			require.Eventually(t, func() bool {
+				left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "revdiff-launch-*"))
+				require.NoError(t, err)
+				return len(left) == 0
+			}, 10*time.Second, 50*time.Millisecond, "the dispatched review never finished")
+
+			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]),
+				"a review outliving the launcher must not leave a stderr capture behind")
+		})
+	}
+}
+
 // pins #314: an apostrophe in a heredoc nested inside a command substitution
 // breaks the whole launcher under bash 3.2, the stock macOS /bin/bash. the
 // launchers cannot be parse-checked for it here — CI and most dev machines run
@@ -876,14 +959,23 @@ func TestHerdrPaneOverlayOptIn(t *testing.T) {
 				// never-guess: the launcher must not enumerate panes to find one
 				assert.Zero(t, countHerdrCalls(calls, "pane list"), "must not enumerate panes; calls=%v", calls)
 
-				assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
 				// a launcher that ran to completion owns no temp files: the dispatched script
 				// removes itself, and the completion path removes it for a pane that died
 				if !tc.keepsScript {
 					left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "revdiff-launch-*"))
 					require.NoError(t, err)
 					assert.Empty(t, left, "leaked launch script; calls=%v", calls)
+					assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+					return
 				}
+				// the review outlives this launcher and owns its own stderr alias while it
+				// runs, so cleanup is only owed once it finishes
+				require.Eventually(t, func() bool {
+					left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "revdiff-launch-*"))
+					require.NoError(t, err)
+					return len(left) == 0
+				}, 10*time.Second, 50*time.Millisecond, "the dispatched review never finished; calls=%v", calls)
+				assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
 			})
 		}
 	}
@@ -1846,6 +1938,18 @@ if [ -n "${FAKE_SLEEP_KILL:-}" ] &&
     esac
 fi
 exec /bin/sleep "$@"
+`)
+	// a `touch` that blocks after creating the file until FAKE_TOUCH_BARRIER appears. the
+	// herdr script touches the .started marker and then opens the review's stderr, so holding
+	// it between the two puts the launcher's exit in that gap on demand
+	writeExecutable(t, filepath.Join(binDir, "touch"), `#!/bin/sh
+/usr/bin/touch "$@"
+[ -n "${FAKE_TOUCH_BARRIER:-}" ] || exit 0
+i=0
+while [ ! -f "$FAKE_TOUCH_BARRIER" ] && [ "$i" -lt 200 ]; do
+    /bin/sleep 0.05
+    i=$((i + 1))
+done
 `)
 
 	env := cleanOverlayEnv()

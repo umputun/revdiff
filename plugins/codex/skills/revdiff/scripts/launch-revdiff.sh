@@ -34,10 +34,6 @@ REVDIFF_CMD="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $REVDIFF_CMD $(sq "--output=$
 for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
 done
-# the overlay closes the moment a fast-failing revdiff exits, taking the error
-# text with it. every backend runs this command string, so one redirect here
-# captures stderr for all of them; print_output_and_exit replays it on failure
-REVDIFF_CMD="$REVDIFF_CMD 2>$(sq "$ERR_FILE")"
 
 write_rc_cmd() {
     local sentinel="$1"
@@ -52,6 +48,23 @@ write_fifo_rc_cmd() {
     # single-quoted format keeps $?/$rc literal for the generated inner script
     # shellcheck disable=SC2016
     printf '%s; rc=$?; echo "$rc" > %s; exit' "$REVDIFF_CMD" "$(sq "$sentinel")"
+}
+
+# herdr dispatches the review into a pane or tab that can outlive this launcher, so
+# the review must not redirect through $ERR_FILE's NAME: an open landing after the
+# EXIT trap's rm recreates the file and nobody is left to delete it. The dispatched
+# shell takes its own hard link to the same inode instead. ln is atomic, so it either
+# wins -- same inode, so a launcher still waiting replays every byte -- or loses to
+# the rm, in which case the reader is already gone and stderr belongs in /dev/null.
+# The alias is the child's to remove, which it does before publishing rc, so an
+# abandoned review cleans up after itself.
+write_herdr_rc_cmd() {
+    local sentinel="$1"
+    # single-quoted format keeps $?/$rc/$sink literal for the generated inner script
+    # shellcheck disable=SC2016
+    printf 'trap %s EXIT; sink=/dev/null; if ln %s %s 2>/dev/null; then sink=%s; fi; %s 2>"$sink"; rc=$?; rm -f %s; printf "%%s" "$rc" > %s.tmp && mv -f %s.tmp %s' \
+        "$(sq "rm -f $(sq "$ERR_WRITER")")" "$(sq "$ERR_FILE")" "$(sq "$ERR_WRITER")" "$(sq "$ERR_WRITER")" \
+        "$REVDIFF_BARE_CMD" "$(sq "$ERR_WRITER")" "$(sq "$sentinel")" "$(sq "$sentinel")" "$(sq "$sentinel")"
 }
 
 read_rc() {
@@ -98,6 +111,15 @@ unset _name
 if [ -n "$ENV_PREFIX" ]; then
     REVDIFF_CMD="/usr/bin/env$ENV_PREFIX $REVDIFF_CMD"
 fi
+
+# both forms must carry the editor prefix above, so they are derived only now.
+# the overlay closes the moment a fast-failing revdiff exits, taking the error text
+# with it; every backend runs this command string, so one redirect here captures
+# stderr for all of them and print_output_and_exit replays it on failure. the bare
+# form is for herdr, whose dispatched review redirects to its own alias instead
+REVDIFF_BARE_CMD="$REVDIFF_CMD"
+REVDIFF_CMD="$REVDIFF_CMD 2>$(sq "$ERR_FILE")"
+ERR_WRITER="$ERR_FILE.writer"
 
 CWD="$(pwd)"
 
@@ -368,7 +390,7 @@ if [ "${HERDR_ENV:-}" = "1" ] && command -v herdr >/dev/null 2>&1; then
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 touch $(sq "$HERDR_STARTED") 2>/dev/null || true
-$(write_rc_cmd "$SENTINEL")
+$(write_herdr_rc_cmd "$SENTINEL")
 rm -f "\$0"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
