@@ -754,6 +754,7 @@ type ModelConfig struct {
 	ShowBlame        bool     // show blame gutter; requires Blamer
 	ShowUntracked    bool     // show untracked files in the tree; requires LoadUntracked
 	WordDiff         bool     // enable intra-line word-diff highlighting
+	FilterUnreviewed bool     // start with the tree filtered to files not marked reviewed
 	Only             []string // show only these files (match by exact path or path suffix)
 	WorkDir          string   // working directory for resolving absolute --only paths
 	SourceEditor     SourceEditorPolicy
@@ -878,6 +879,13 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		startFocus = paneDiff
 	}
 
+	// the filter bit survives Rebuild, so switching it on here is what makes the first
+	// file list arrive filtered; the tree itself is still empty at this point.
+	tree := cfg.NewFileTree(nil) // empty tree for nil-safety before first filesLoadedMsg
+	if cfg.FilterUnreviewed {
+		tree.ToggleUnreviewedFilter()
+	}
+
 	return Model{
 		resolver:      cfg.StyleResolver,
 		renderer:      cfg.StyleRenderer,
@@ -889,7 +897,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		diffRenderer:  cfg.Renderer,
 		highlighter:   cfg.Highlighter,
 		blamer:        cfg.Blamer,
-		tree:          cfg.NewFileTree(nil), // empty tree for nil-safety before first filesLoadedMsg
+		tree:          tree,
 		parseTOC:      cfg.ParseTOC,
 		themes:        cfg.Themes,
 		editor:        ed,

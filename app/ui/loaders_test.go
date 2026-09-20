@@ -30,6 +30,56 @@ func TestModel_FilesLoaded(t *testing.T) {
 	assert.NotNil(t, cmd) // should auto-select first file
 }
 
+func TestModel_FilesLoadedNormalizesUnreviewedFilter(t *testing.T) {
+	newModel := func(filter bool) Model {
+		renderer := &mocks.RendererMock{
+			ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+			FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+		}
+		return testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{FilterUnreviewed: filter, TreeWidthRatio: 3})
+	}
+	load := func(m Model, paths ...string) Model {
+		entries := make([]diff.FileEntry, len(paths))
+		for i, p := range paths {
+			entries[i] = diff.FileEntry{Path: p}
+		}
+		result, _ := m.Update(filesLoadedMsg{entries: entries})
+		return result.(Model)
+	}
+
+	t.Run("several files keep the startup filter", func(t *testing.T) {
+		m := load(newModel(true), "a.go", "b.go")
+		assert.True(t, m.tree.UnreviewedFilterActive())
+	})
+
+	t.Run("one file drops the startup filter", func(t *testing.T) {
+		m := load(newModel(true), "a.go")
+		assert.False(t, m.tree.UnreviewedFilterActive(), "F cannot turn it off again in single-file mode")
+	})
+
+	t.Run("reload down to one file drops the filter", func(t *testing.T) {
+		m := load(newModel(true), "a.go", "b.go")
+		require.True(t, m.tree.UnreviewedFilterActive())
+		m = load(m, "a.go")
+		assert.False(t, m.tree.UnreviewedFilterActive())
+	})
+
+	t.Run("one unreviewed file out of several keeps the filter", func(t *testing.T) {
+		m := load(newModel(true), "a.go", "b.go")
+		m.tree.SetReviewed("a.go", "fingerprint-a")
+		m = load(m, "a.go", "b.go")
+		assert.True(t, m.tree.UnreviewedFilterActive(), "underlying file count decides, not the visible one")
+	})
+
+	t.Run("filter turned off by hand stays off across a reload", func(t *testing.T) {
+		m := load(newModel(true), "a.go", "b.go")
+		m.tree.ToggleUnreviewedFilter()
+		m = load(m, "a.go", "b.go")
+		assert.False(t, m.tree.UnreviewedFilterActive(), "the startup option must not be reapplied on reload")
+	})
+}
+
 func TestModel_FilesLoadedError(t *testing.T) {
 	m := testModel(nil, nil)
 	m.ready = true

@@ -458,6 +458,12 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.tree.Rebuild(entries)
+	// F is a no-op with one underlying file, so a filter left on there could never be switched
+	// off again; a reload can drop a multi-file review to one file, hence every load. Underlying
+	// files, never visible ones: two files with one still unreviewed must stay filtered.
+	if m.tree.TotalFiles() == 1 && m.tree.UnreviewedFilterActive() {
+		m.tree.ToggleUnreviewedFilter()
+	}
 	m.tree.ReconcileReviewed(msg.reviewedBefore, msg.reviewedFingerprints)
 	m.reviewed.cache = make(map[string]string, len(msg.reviewedFingerprints))
 	maps.Copy(m.reviewed.cache, msg.reviewedFingerprints)

@@ -1761,6 +1761,25 @@ func TestNewModel_PageOverlap(t *testing.T) {
 	})
 }
 
+func TestNewModel_FilterUnreviewed(t *testing.T) {
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc:     func(diff.FileDiffRequest) ([]diff.DiffLine, error) { return nil, nil },
+	}
+	newModel := func(filter bool) Model {
+		return testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(),
+			ModelConfig{FilterUnreviewed: filter, TreeWidthRatio: 3})
+	}
+
+	t.Run("default leaves the filter off", func(t *testing.T) {
+		assert.False(t, newModel(false).tree.UnreviewedFilterActive())
+	})
+
+	t.Run("flag switches the filter on before any file is loaded", func(t *testing.T) {
+		assert.True(t, newModel(true).tree.UnreviewedFilterActive())
+	})
+}
+
 func TestNewModel_NoTree(t *testing.T) {
 	renderer := &mocks.RendererMock{
 		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },

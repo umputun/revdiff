@@ -253,6 +253,7 @@ func run(opts options) (int, error) {
 		ShowBlame:            opts.Blame,
 		ShowUntracked:        opts.startupUntracked(),
 		WordDiff:             opts.WordDiff,
+		FilterUnreviewed:     opts.FilterUnreviewed,
 		VimMotion:            opts.VimMotion,
 		ReviewInfo: reviewInfoFromOptions(opts, reviewInfoInputs{
 			workDir:     workDir,

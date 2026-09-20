@@ -39,6 +39,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.StartAtChange)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
+	assert.False(t, opts.FilterUnreviewed)
 	assert.False(t, opts.ExitCodeOnAnnotations)
 	assert.False(t, opts.Stdin)
 	assert.Empty(t, opts.Output)
@@ -147,6 +148,31 @@ func TestParseArgs_NoTree(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.NoTree)
+	})
+}
+
+func TestParseArgs_FilterUnreviewed(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--filter-unreviewed"))
+		require.NoError(t, err)
+		assert.True(t, opts.FilterUnreviewed)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_FILTER_UNREVIEWED", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.FilterUnreviewed)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nfilter-unreviewed = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.FilterUnreviewed)
 	})
 }
 

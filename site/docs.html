@@ -414,6 +414,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--start-at-change</code></td><td>Position the cursor on the first changed line</td><td><code>false</code></td></tr>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
                 <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
+                <tr><td><code>--filter-unreviewed</code></td><td>Show only files not marked reviewed</td><td><code>false</code></td></tr>
                 <tr><td><code>--annotation-marker</code></td><td>Prefix shown before annotation lines</td><td><code>💬</code></td></tr>
                 <tr><td><code>--exit-code-on-annotations</code></td><td>Exit 10 when annotations are produced</td><td><code>false</code></td></tr>
                 <tr><td><code>--no-confirm-discard</code></td><td>Skip discard confirmation</td><td><code>false</code></td></tr>
@@ -673,7 +674,7 @@ map alt+t&gt;n theme_select</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code>, <code>open_editor</code>, <code>next_annotation</code>, <code>prev_annotation</code>, <code>flush_output</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>filter_unreviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <h2 id="vim-motion">Vim-motion preset</h2>

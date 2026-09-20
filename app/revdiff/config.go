@@ -38,6 +38,7 @@ type options struct {
 	LineNumbers           bool     `long:"line-numbers" ini-name:"line-numbers" env:"REVDIFF_LINE_NUMBERS" description:"show line numbers in diff gutter"`
 	Blame                 bool     `long:"blame" ini-name:"blame" env:"REVDIFF_BLAME" description:"show blame gutter"`
 	WordDiff              bool     `long:"word-diff" ini-name:"word-diff" env:"REVDIFF_WORD_DIFF" description:"highlight intra-line word-level changes in paired add/remove lines"`
+	FilterUnreviewed      bool     `long:"filter-unreviewed" ini-name:"filter-unreviewed" env:"REVDIFF_FILTER_UNREVIEWED" description:"show only files not marked reviewed"`
 	AnnotationMarker      string   `long:"annotation-marker" ini-name:"annotation-marker" env:"REVDIFF_ANNOTATION_MARKER" default:"💬" description:"prefix shown before annotation lines"`
 	ExitCodeOnAnnotations bool     `long:"exit-code-on-annotations" ini-name:"exit-code-on-annotations" env:"REVDIFF_EXIT_CODE_ON_ANNOTATIONS" description:"exit 10 when annotations are produced"`
 	VimMotion             bool     `long:"vim-motion" ini-name:"vim-motion" env:"REVDIFF_VIM_MOTION" description:"enable vim-style motion preset (counts, gg, G, zz/zt/zb, ZZ/ZQ)"`

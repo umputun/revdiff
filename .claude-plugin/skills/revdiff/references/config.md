@@ -34,6 +34,7 @@ Then uncomment and edit the values you want to change.
 | `--line-numbers` | `REVDIFF_LINE_NUMBERS` | Show line numbers in diff gutter | `false` |
 | `--blame` | `REVDIFF_BLAME` | Show blame gutter | `false` |
 | `--word-diff` | `REVDIFF_WORD_DIFF` | Highlight intra-line word-level changes in paired add/remove lines | `false` |
+| `--filter-unreviewed` | `REVDIFF_FILTER_UNREVIEWED` | Show only files not marked reviewed | `false` |
 | `--annotation-marker` | `REVDIFF_ANNOTATION_MARKER` | Prefix shown before annotation lines | `💬` |
 | `--exit-code-on-annotations` | `REVDIFF_EXIT_CODE_ON_ANNOTATIONS` | Exit 10 when annotations are produced | `false` |
 | `--no-confirm-discard` | `REVDIFF_NO_CONFIRM_DISCARD` | Skip confirmation when discarding annotations with Q | `false` |
@@ -164,7 +165,7 @@ unmap q
 map ctrl+d half_page_down
 ```
 
-Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `scroll_diff_down`, `scroll_diff_up`, `scroll_diff_page_down`, `scroll_diff_page_up`, `scroll_diff_half_page_down`, `scroll_diff_half_page_up`, `next_item`, `prev_item`, `jump_file`, `next_hunk`, `prev_hunk`, `open_file_in_editor`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `open_editor`, `next_annotation`, `prev_annotation`, `flush_output`, `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `theme_select`, `filter`, `info`, `reload`, `quit`, `discard_quit`, `help`, `dismiss`
+Available actions: `down`, `up`, `page_down`, `page_up`, `half_page_down`, `half_page_up`, `home`, `end`, `scroll_left`, `scroll_right`, `scroll_center`, `scroll_top`, `scroll_bottom`, `scroll_diff_down`, `scroll_diff_up`, `scroll_diff_page_down`, `scroll_diff_page_up`, `scroll_diff_half_page_down`, `scroll_diff_half_page_up`, `next_item`, `prev_item`, `jump_file`, `next_hunk`, `prev_hunk`, `open_file_in_editor`, `toggle_pane`, `focus_tree`, `focus_diff`, `search`, `confirm`, `annotate_file`, `delete_annotation`, `annot_list`, `open_editor`, `next_annotation`, `prev_annotation`, `flush_output`, `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `filter_unreviewed`, `theme_select`, `filter`, `info`, `reload`, `quit`, `discard_quit`, `help`, `dismiss`
 
 The `scroll_diff_page_*` and `scroll_diff_half_page_*` actions are the page-sized versions of `J`/`K`: they scroll the diff viewport from either pane. They ship with no default key, so they appear in neither the help overlay nor `--dump-keys` until bound. Binding them to `pgdown`/`pgup`/`ctrl+d`/`ctrl+u` gives lazygit-style paging that always targets the diff. Doing so takes those keys away from tree and markdown TOC paging, replaces cursor paging in the diff pane, and — since `page_down`, `page_up`, `half_page_down` and `half_page_up` have no other default key — leaves them unbound everywhere, including the help and info overlays.
 
