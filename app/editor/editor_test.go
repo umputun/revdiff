@@ -185,6 +185,8 @@ func TestEditor_SourceCommand_LineSyntax(t *testing.T) {
 		{"vim with args", "vim -f", 42, []string{"vim", "-f", "+42", file}},
 		{"nvim", "nvim", 42, []string{"nvim", "+42", file}},
 		{"nano", "nano", 42, []string{"nano", "+42", file}},
+		{"hx", "hx", 42, []string{"hx", "+42", file}},
+		{"helix", "/usr/bin/helix", 42, []string{"/usr/bin/helix", "+42", file}},
 		{"code", "code --wait", 42, []string{"code", "--wait", "--goto", file + ":42"}},
 		{"code insiders", "code-insiders", 42, []string{"code-insiders", "--goto", file + ":42"}},
 		{"codium", "codium", 42, []string{"codium", "--goto", file + ":42"}},

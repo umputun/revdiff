@@ -373,8 +373,8 @@ Single stateless type `Editor` bundling all behavior as methods (no standalone f
 - `SourceCommand(path string, line int)` — checks that the source path exists and is a regular file
   as part of preparing an editor command, resolves the same editor chain, and returns an editor
   command for the existing source file. Known editors receive line-navigation arguments: `vi`,
-  `vim`, `nvim`, and `nano` use `+N`, while `code`, `code-insiders`, `codium`, and `cursor` use
-  `--goto path:N`. Unknown editors receive only the file path.
+  `vim`, `nvim`, `nano`, `hx`, and `helix` use `+N`, while `code`, `code-insiders`, `codium`, and
+  `cursor` use `--goto path:N`. Unknown editors receive only the file path.
 
 Consumed by `app/ui` via the `ExternalEditor` interface (defined in `app/ui/editor.go`, consumer
 side). The default wiring is `editor.Editor{}` injected through `ModelConfig.Editor`.

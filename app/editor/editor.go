@@ -108,7 +108,7 @@ const (
 
 func editorLineSyntax(program string) editorLineMode {
 	switch filepath.Base(program) {
-	case "vi", "vim", "nvim", "nano":
+	case "vi", "vim", "nvim", "nano", "hx", "helix":
 		return editorPlusLine
 	case "code", "code-insiders", "codium", "cursor":
 		return editorGotoLine
