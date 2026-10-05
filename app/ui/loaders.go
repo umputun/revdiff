@@ -400,6 +400,7 @@ func (m Model) loadSelectedIfChanged() (tea.Model, tea.Cmd) {
 func (m *Model) triggerReload() tea.Cmd {
 	m.filesLoadSeq++
 	m.file.loadSeq++ // invalidate in-flight fileLoadedMsg from pre-reload selection
+	m.file.requestedPath = ""
 	m.commits.loadSeq++
 	m.commits.loaded = false
 	m.commits.list = nil
@@ -413,6 +414,7 @@ func (m *Model) triggerReload() tea.Cmd {
 	m.reviewed.loadSeq++
 	m.reviewed.cache = make(map[string]string)
 	m.reviewed.pending = make(map[string]uint64)
+	m.clearPendingJumps() // the reset-to-top contract above: no queued landing survives a reload
 	return tea.Batch(m.loadFiles(), m.loadCommits())
 }
 
@@ -535,6 +537,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	}
 	m.file.requestedPath = ""
 	if msg.err != nil {
+		m.nav.pendingBoundaryJump = nil
 		m.layout.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
 		return m, nil
 	}
@@ -585,20 +588,40 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		blameCmd = m.loadBlame(msg.file)
 	}
 
+	m.placeCursorAfterLoad(msg)
+	return m, blameCmd
+}
+
+// placeCursorAfterLoad positions the cursor in a freshly loaded file. The first queued intent
+// that applies wins, in order: annotation jump, hunk jump, cross-file landing, compact anchor,
+// start-at-change; with none the file opens at the top.
+func (m *Model) placeCursorAfterLoad(msg fileLoadedMsg) {
 	// handle pending annotation list jump
 	if m.pendingAnnotJump != nil && m.pendingAnnotJump.File == msg.file {
 		a := *m.pendingAnnotJump
-		m.pendingAnnotJump = nil
-		m.nav.pendingHunkJump = nil
+		m.clearPendingJumps()
 		m.positionOnAnnotation(a)
-		return m, blameCmd
+		return
 	}
 
 	// handle pending hunk jump after cross-file hunk navigation
 	if m.nav.pendingHunkJump != nil {
 		m.applyPendingHunkJump()
 		m.centerViewportOnCursor()
-		return m, blameCmd
+		return
+	}
+
+	// handle the landing of a cross-file cursor motion; above the compact anchor and
+	// start-at-change so an explicit motion wins over the default startup position, and
+	// must return early because both would move the cursor again below it. a landing
+	// queued for another load is dropped so those two still run.
+	if j := m.nav.pendingBoundaryJump; j != nil {
+		m.nav.pendingBoundaryJump = nil
+		if j.seq == msg.seq {
+			m.landAtBoundary(j.forward)
+			m.syncTOCActiveSection()
+			return
+		}
 	}
 
 	// handle pending compact-toggle anchor: restore the cursor to where it was
@@ -609,7 +632,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 		m.compact.pendingAnchor = nil
 		if a.seq == msg.seq {
 			m.applyCompactAnchor(a)
-			return m, blameCmd
+			return
 		}
 	}
 
@@ -618,12 +641,11 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	if m.cfg.startAtChange {
 		m.positionOnFirstChange()
 		m.centerViewportOnCursor()
-		return m, blameCmd
+		return
 	}
 
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.layout.viewport.GotoTop()
-	return m, blameCmd
 }
 
 func (m Model) handleReviewFingerprintLoaded(msg reviewFingerprintLoadedMsg) (tea.Model, tea.Cmd) {

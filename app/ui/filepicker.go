@@ -20,8 +20,7 @@ func (m *Model) openFilePicker() {
 // normal guarded loader. Picker choices originate from VisibleFiles, but keep
 // the SelectByPath guard in case the tree changes before an outcome is handled.
 func (m Model) jumpToFile(path string) (tea.Model, tea.Cmd) {
-	m.pendingAnnotJump = nil
-	m.nav.pendingHunkJump = nil
+	m.clearPendingJumps()
 	if !m.tree.SelectByPath(path) {
 		return m, nil
 	}

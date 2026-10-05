@@ -36,6 +36,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.False(t, opts.Compact)
 	assert.Equal(t, 5, opts.CompactContext)
 	assert.False(t, opts.CrossFileHunks)
+	assert.False(t, opts.CrossFileMotion)
 	assert.False(t, opts.StartAtChange)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
@@ -395,6 +396,31 @@ func TestParseArgs_CrossFileHunks(t *testing.T) {
 		opts, err := parseArgs([]string{"--config", cfgPath})
 		require.NoError(t, err)
 		assert.True(t, opts.CrossFileHunks)
+	})
+}
+
+func TestParseArgs_CrossFileMotion(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--cross-file-motion"))
+		require.NoError(t, err)
+		assert.True(t, opts.CrossFileMotion)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_CROSS_FILE_MOTION", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.CrossFileMotion)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgDir := t.TempDir()
+		cfgPath := filepath.Join(cfgDir, "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\ncross-file-motion = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.CrossFileMotion)
 	})
 }
 

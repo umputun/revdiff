@@ -136,7 +136,14 @@ across files by concern to keep files under ~500 lines:
 - **`loaders.go`** — async file/blame loading, reviewed-fingerprint reconciliation, loaded-message
   handlers, data helpers
 - **`diffview.go`** — diff line rendering, gutters, line styling, search highlights
-- **`diffnav.go`** — cursor movement, hunk navigation, viewport sync, horizontal scroll
+- **`diffnav.go`** — cursor movement, hunk navigation, viewport sync, horizontal scroll. Cross-file
+  motion: a cursor motion (`down`/`up`/page/half-page) that cannot move the cursor has reached a file
+  boundary, so with `--cross-file-motion` it steps the tree one file, requests that file's load and
+  queues the landing (`nav.pendingBoundaryJump`) tagged with that load's sequence, so no other load
+  consumes it. A boundary press while a load is outstanding is ignored. `clearPendingJumps()` drops
+  every queued
+  landing intent and is called on manual navigation, before any `RefreshFilter` that can trigger a
+  load, and by `triggerReload`, so a stale intent never hijacks an unrelated load
 - **`scrollbar.go`** — vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes
   (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion)
 - **`collapsed.go`** — collapsed diff mode: hide removes, show modified markers
@@ -183,7 +190,8 @@ Each source file has a matching `_test.go`.
   `intraRanges`, `blameData`, `mdTOC`, `singleFile`
 - **`modeState` (`m.modes`)** — user-togglable view modes: `wrap`, `collapsed`, `compact`,
   `compactContext`, `lineNumbers`, `wordDiff`, `showBlame`
-- **`navigationState` (`m.nav`)** — cursor position: `diffCursor`, `pendingHunkJump`
+- **`navigationState` (`m.nav`)** — cursor position: `diffCursor`, `pendingHunkJump` (cross-file hunk
+  landing), `pendingBoundaryJump` (cross-file cursor-motion landing)
 - **`searchState` (`m.search`)** — search lifecycle: `active`, `term`, `matches`, `cursor`, `input`,
   `matchSet`, `history`, `historyIdx`
 - **`annotationState` (`m.annot`)** — annotation input lifecycle and visual-row cache: `annotating`,

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -3859,4 +3860,674 @@ func TestModel_HorizontalScrollHealsMissingWidthCache(t *testing.T) {
 
 	assert.Len(t, m.file.lineWidths, 1, "the cache is rebuilt rather than left empty")
 	assert.Equal(t, scrollStep, m.layout.scrollX, "a missing cache must not disable horizontal scroll")
+}
+
+func crossFileALines() []diff.DiffLine {
+	return []diff.DiffLine{
+		{ChangeType: diff.ChangeContext, Content: "a-ctx1", OldNum: 1, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "a-add", OldNum: 2, NewNum: 2},
+		{ChangeType: diff.ChangeContext, Content: "a-ctx2", OldNum: 3, NewNum: 3},
+	}
+}
+
+func crossFileBLines() []diff.DiffLine {
+	return []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{ChangeType: diff.ChangeContext, Content: "b-ctx1", OldNum: 1, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "b-add", OldNum: 2, NewNum: 2},
+	}
+}
+
+func crossFileCLines() []diff.DiffLine {
+	return []diff.DiffLine{
+		{ChangeType: diff.ChangeDivider},
+		{ChangeType: diff.ChangeContext, Content: "c-ctx1", OldNum: 1, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "c-add", OldNum: 2, NewNum: 2},
+	}
+}
+
+func crossFileDiffs() map[string][]diff.DiffLine {
+	return map[string][]diff.DiffLine{
+		"a.go": crossFileALines(),
+		"b.go": crossFileBLines(),
+		"c.go": crossFileCLines(),
+	}
+}
+
+func crossFileMotionModel(t *testing.T, files ...string) Model {
+	t.Helper()
+	if len(files) == 0 {
+		files = []string{"a.go", "b.go"}
+	}
+	m := loadFileIntoModel(t, files, crossFileDiffs())
+	m.cfg.crossFileMotion = true
+	m.layout.focus = paneDiff
+	return m
+}
+
+func crossFileSelectAndLoad(t *testing.T, m Model, path string) Model {
+	t.Helper()
+	require.True(t, m.tree.SelectByPath(path), "tree must contain %s", path)
+	m.file.loadSeq++
+	result, _ := m.Update(m.loadFileDiff(path)())
+	m = result.(Model)
+	m.layout.viewport.Height = 20
+	m.layout.focus = paneDiff
+	return m
+}
+
+func crossFileParkAtBoundary(m Model, forward bool) Model {
+	if forward {
+		m.nav.diffCursor = len(m.file.lines) - 1
+		return m
+	}
+	m.nav.diffCursor = 1
+	return m
+}
+
+func TestModel_MotionCrossFile_DownForward(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+
+	require.NotNil(t, model.nav.pendingBoundaryJump, "down at the last line must queue a landing")
+	assert.True(t, model.nav.pendingBoundaryJump.forward, "forward motion lands at the top of the next file")
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "the tree must advance to the next file")
+	require.NotNil(t, cmd, "the next file's load must be requested")
+	assert.Equal(t, paneDiff, model.layout.focus, "the diff pane keeps focus")
+}
+
+func TestModel_MotionCrossFile_UpBackward(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileSelectAndLoad(t, crossFileMotionModel(t), "b.go"), false)
+
+	result, cmd := m.handleDiffAction(keymap.ActionUp)
+	model := result.(Model)
+
+	require.NotNil(t, model.nav.pendingBoundaryJump, "up at the first line must queue a landing")
+	assert.False(t, model.nav.pendingBoundaryJump.forward, "backward motion lands at the bottom of the previous file")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "the tree must move to the previous file")
+	require.NotNil(t, cmd, "the previous file's load must be requested")
+}
+
+func assertMotionCrosses(t *testing.T, action keymap.Action, forward bool) {
+	t.Helper()
+
+	m := crossFileMotionModel(t)
+	if !forward {
+		m = crossFileSelectAndLoad(t, m, "b.go")
+	}
+	m = crossFileParkAtBoundary(m, forward)
+
+	result, cmd := m.handleDiffAction(action)
+	model := result.(Model)
+
+	require.NotNil(t, model.nav.pendingBoundaryJump, string(action)+" at the boundary must queue a landing")
+	assert.Equal(t, forward, model.nav.pendingBoundaryJump.forward, string(action)+" must land in the direction of the motion")
+	assert.NotNil(t, cmd, string(action)+" must request the adjacent file's load")
+	want := "b.go"
+	if !forward {
+		want = "a.go"
+	}
+	assert.Equal(t, want, model.tree.SelectedFile(), string(action)+" must step exactly one file")
+}
+
+func TestModel_MotionCrossFile_PageDown(t *testing.T) {
+	assertMotionCrosses(t, keymap.ActionPageDown, true)
+}
+
+func TestModel_MotionCrossFile_PageUp(t *testing.T) {
+	assertMotionCrosses(t, keymap.ActionPageUp, false)
+}
+
+func TestModel_MotionCrossFile_HalfPageDown(t *testing.T) {
+	assertMotionCrosses(t, keymap.ActionHalfPageDown, true)
+}
+
+func TestModel_MotionCrossFile_HalfPageUp(t *testing.T) {
+	assertMotionCrosses(t, keymap.ActionHalfPageUp, false)
+}
+
+func TestModel_MotionCrossFile_LandsAtTop(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	model := result.(Model)
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the accepted load must consume the landing")
+	assert.Equal(t, "b.go", model.file.name, "the next file must be displayed")
+	assert.Equal(t, 1, model.nav.diffCursor, "the cursor lands on the first selectable line, past the divider")
+	assert.Zero(t, model.layout.viewport.YOffset, "the new file is shown from the top")
+	assert.Equal(t, "b.go", model.tree.SelectedFile(), "the tree selection must follow")
+	assert.Equal(t, paneDiff, model.layout.focus)
+}
+
+func TestModel_MotionCrossFile_LandsAtBottom(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileSelectAndLoad(t, crossFileMotionModel(t), "b.go"), false)
+
+	result, cmd := m.handleDiffAction(keymap.ActionUp)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	model := result.(Model)
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the accepted load must consume the landing")
+	assert.Equal(t, "a.go", model.file.name, "the previous file must be displayed")
+	assert.Equal(t, len(crossFileALines())-1, model.nav.diffCursor, "the cursor lands on the last selectable line")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "the tree selection must follow")
+}
+
+func TestModel_MotionCrossFile_AtEndsNoOp(t *testing.T) {
+	t.Run("down on the last file", func(t *testing.T) {
+		m := crossFileParkAtBoundary(crossFileSelectAndLoad(t, crossFileMotionModel(t), "b.go"), true)
+
+		result, cmd := m.handleDiffAction(keymap.ActionDown)
+		model := result.(Model)
+
+		assert.Nil(t, model.nav.pendingBoundaryJump, "no wrap-around past the last file")
+		assert.Equal(t, "b.go", model.tree.SelectedFile(), "the tree selection must not move")
+		assert.Nil(t, cmd, "no load may be requested")
+		assert.Equal(t, len(crossFileBLines())-1, model.nav.diffCursor, "the cursor stays on the last line")
+	})
+
+	t.Run("up on the first file", func(t *testing.T) {
+		m := crossFileParkAtBoundary(crossFileMotionModel(t), false)
+		m.nav.diffCursor = 0
+
+		result, cmd := m.handleDiffAction(keymap.ActionUp)
+		model := result.(Model)
+
+		assert.Nil(t, model.nav.pendingBoundaryJump, "no wrap-around before the first file")
+		assert.Equal(t, "a.go", model.tree.SelectedFile(), "the tree selection must not move")
+		assert.Nil(t, cmd, "no load may be requested")
+		assert.Zero(t, model.nav.diffCursor, "the cursor stays on the first line")
+	})
+}
+
+func TestModel_MotionCrossFile_SingleFileNoCross(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+	m.file.singleFile = true
+	m.layout.treeWidth = 0
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "single-file mode (stdin, compare, one-file diff) never crosses")
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
+	assert.Nil(t, cmd)
+}
+
+func TestModel_MotionCrossFile_DefaultDoesNotCross(t *testing.T) {
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, crossFileDiffs())
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = len(crossFileALines()) - 1
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the flag is off by default")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "the tree must not move without the flag")
+	assert.Nil(t, cmd)
+	assert.Equal(t, len(crossFileALines())-1, model.nav.diffCursor)
+}
+
+func TestModel_MotionCrossFile_TreeFocusNotAffected(t *testing.T) {
+	m := crossFileMotionModel(t)
+	m.layout.focus = paneTree
+	m.nav.diffCursor = 0
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	model := result.(Model)
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "tree-pane motion must not queue a diff landing")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "the tree keeps its own cursor semantics")
+	assert.Nil(t, cmd)
+	assert.Zero(t, model.nav.diffCursor, "the diff cursor must not move from the tree pane")
+	assert.Equal(t, paneTree, model.layout.focus)
+}
+
+func TestModel_MotionCrossFile_ScrollActionsDoNotCross(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(m.layout.viewport.TotalLineCount())
+
+	for _, action := range []keymap.Action{
+		keymap.ActionScrollDiffDown,
+		keymap.ActionScrollDiffPageDown,
+		keymap.ActionScrollDiffHalfPageDown,
+	} {
+		result, cmd := m.handleDiffAction(action)
+		model := result.(Model)
+
+		assert.Nil(t, model.nav.pendingBoundaryJump, string(action)+" must not cross files")
+		assert.Equal(t, "a.go", model.tree.SelectedFile(), string(action)+" must not move the tree")
+		assert.Nil(t, cmd, string(action)+" must not request a load")
+		m = model
+	}
+}
+
+func TestModel_MotionCrossFile_HomeEndDoNotCross(t *testing.T) {
+	tests := []struct {
+		action  keymap.Action
+		forward bool
+	}{
+		{action: keymap.ActionHome, forward: false},
+		{action: keymap.ActionEnd, forward: true},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.action), func(t *testing.T) {
+			m := crossFileSelectAndLoad(t, crossFileMotionModel(t, "a.go", "b.go", "c.go"), "b.go")
+			m = crossFileParkAtBoundary(m, tt.forward)
+			cursor := m.nav.diffCursor
+
+			result, cmd := m.handleDiffAction(tt.action)
+			model := result.(Model)
+
+			require.Equal(t, cursor, model.nav.diffCursor, "the cursor must already sit where the action sends it")
+			assert.Nil(t, model.nav.pendingBoundaryJump)
+			assert.Equal(t, "b.go", model.tree.SelectedFile())
+			assert.Nil(t, cmd)
+		})
+	}
+}
+
+func TestModel_MotionCrossFile_VimCountRepeatDoesNotCross(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+	m.modes.vimMotion = true
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'5'}})
+	m = result.(Model)
+	require.Nil(t, cmd, "a digit accumulates the count without moving")
+
+	result, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	model := result.(Model)
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "a count-prefixed motion must not cross files")
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
+	assert.Nil(t, cmd)
+	assert.Equal(t, len(crossFileALines())-1, model.nav.diffCursor, "the cursor clamps at the last line")
+}
+
+func TestModel_MotionCrossFile_MouseWheelDoesNotCross(t *testing.T) {
+	m := mouseTestModel(t, []string{"a.go", "b.go"}, crossFileDiffs())
+	m.cfg.crossFileMotion = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = len(crossFileALines()) - 1
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(m.layout.viewport.TotalLineCount())
+
+	model := updateWheelAndFlush(t, m, wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the wheel scrolls the viewport, it does not cross files")
+	assert.Equal(t, "a.go", model.tree.SelectedFile(), "the tree must not move on wheel events")
+}
+
+func TestModel_MotionCrossFile_AnnotationSubRow(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: " ", Comment: "note on the last line"})
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+
+	require.True(t, model.annot.cursorOnAnnotation, "the press lands on the annotation sub-row")
+	assert.Nil(t, model.nav.pendingBoundaryJump, "a press that moved must not cross")
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
+	assert.Nil(t, cmd)
+
+	result, cmd = model.handleDiffAction(keymap.ActionDown)
+	model = result.(Model)
+
+	require.NotNil(t, model.nav.pendingBoundaryJump, "the next press has nowhere to go, so it crosses")
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
+	require.NotNil(t, cmd)
+}
+
+func TestModel_MotionCrossFile_FileAnnotationRowBackward(t *testing.T) {
+	m := crossFileSelectAndLoad(t, crossFileMotionModel(t), "b.go")
+	m.store.Add(annotation.Annotation{File: "b.go", Line: 0, Type: "", Comment: "file note"})
+	m.nav.diffCursor = -1
+
+	result, cmd := m.handleDiffAction(keymap.ActionUp)
+	model := result.(Model)
+
+	require.NotNil(t, model.nav.pendingBoundaryJump, "up from the file annotation row crosses to the previous file")
+	assert.False(t, model.nav.pendingBoundaryJump.forward)
+	assert.Equal(t, "a.go", model.tree.SelectedFile())
+	require.NotNil(t, cmd)
+}
+
+func TestModel_MotionCrossFile_CollapsedLandsOnVisibleLine(t *testing.T) {
+	aLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeContext, Content: "a-ctx", OldNum: 1, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "a-add", NewNum: 2},
+		{ChangeType: diff.ChangeRemove, Content: "a-del1", OldNum: 2},
+		{ChangeType: diff.ChangeRemove, Content: "a-del2", OldNum: 3},
+	}
+	diffs := crossFileDiffs()
+	diffs["a.go"] = aLines
+
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.cfg.crossFileMotion = true
+	m.modes.collapsed.enabled = true
+	m = crossFileSelectAndLoad(t, m, "b.go")
+	m.nav.diffCursor = 1
+
+	result, cmd := m.handleDiffAction(keymap.ActionUp)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	model := result.(Model)
+
+	require.Equal(t, "a.go", model.file.name)
+	require.NotEmpty(t, model.file.lines)
+	assert.False(t, model.isCollapsedHidden(model.nav.diffCursor, model.findHunks()),
+		"the landing must not park on a collapsed-hidden line")
+}
+
+func TestModel_MotionCrossFile_BoundaryBeatsStartAtChange(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+	m.cfg.startAtChange = true
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	model := result.(Model)
+
+	assert.Equal(t, 1, model.nav.diffCursor, "the boundary landing wins over start-at-change")
+	assert.Nil(t, model.nav.pendingBoundaryJump)
+}
+
+func TestModel_MotionCrossFile_SecondPressWaitsForRequestedFile(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t, "a.go", "b.go", "c.go"), true)
+
+	result, firstCmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, firstCmd, "the first press must request b.go")
+
+	result, secondCmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	assert.Nil(t, secondCmd, "a press while b.go is loading must not request another file")
+	assert.Equal(t, "b.go", m.tree.SelectedFile(), "the tree must not step past a file that was never shown")
+
+	result, _ = m.Update(firstCmd())
+	model := result.(Model)
+	assert.Equal(t, "b.go", model.file.name)
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the accepted load consumes the landing")
+	assert.Equal(t, 1, model.nav.diffCursor, "the landing is at the top of b.go")
+}
+
+func TestModel_MotionCrossFile_ReverseWhileLoadingKeepsTreeAndPaneTogether(t *testing.T) {
+	diffs := crossFileDiffs()
+	diffs["a.go"] = []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "only", NewNum: 1}}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.cfg.crossFileMotion = true
+	m.layout.focus = paneDiff
+
+	result, downCmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, downCmd)
+
+	result, upCmd := m.handleDiffAction(keymap.ActionUp)
+	m = result.(Model)
+	assert.Nil(t, upCmd)
+	assert.Equal(t, "b.go", m.tree.SelectedFile(), "the tree must stay on the file being loaded")
+
+	result, _ = m.Update(downCmd())
+	model := result.(Model)
+	assert.Equal(t, "b.go", model.file.name)
+	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
+}
+
+func TestModel_MotionCrossFile_CompactToggleWhileLoadingKeepsCursor(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
+	m.compact.applicable = true
+	cursor := m.nav.diffCursor
+
+	result, downCmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, downCmd)
+	compactCmd := m.toggleCompactMode()
+	require.NotNil(t, compactCmd)
+
+	result, _ = m.Update(downCmd())
+	m = result.(Model)
+	assert.Equal(t, "a.go", m.file.name, "the superseded b.go load must be dropped")
+	require.NotNil(t, m.compact.pendingAnchor, "a dropped load must not consume the compact anchor")
+
+	result, _ = m.Update(compactCmd())
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.file.name)
+	assert.Equal(t, cursor, model.nav.diffCursor, "the compact reload must restore the cursor, not land at the top")
+	assert.Nil(t, model.compact.pendingAnchor)
+	assert.Nil(t, model.nav.pendingBoundaryJump, "a landing queued for another load must not survive")
+}
+
+func TestModel_MotionCrossFile_FailedLoadLeavesNoLanding(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t, "a.go", "b.go", "c.go"), true)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+
+	result, _ = m.Update(fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, err: errors.New("boom")})
+	m = result.(Model)
+	assert.Nil(t, m.nav.pendingBoundaryJump, "a failed load must not leave a landing armed")
+
+	result, cmd = m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+	require.NotNil(t, cmd, "crossing must work again after a failed load")
+	assert.Equal(t, "c.go", model.tree.SelectedFile())
+}
+
+func TestModel_MotionCrossFile_CrossesAgainAfterCanceledLoad(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t, "a.go", "b.go", "c.go"), true)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+
+	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}})
+	m = result.(Model)
+	require.Equal(t, "a.go", m.tree.SelectedFile())
+
+	result, cmd = m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+	require.NotNil(t, cmd, "crossing must work again once the pending load was canceled")
+	assert.Equal(t, "b.go", model.tree.SelectedFile())
+}
+
+func TestModel_MotionCrossFile_CrossesAgainAfterFailedReload(t *testing.T) {
+	m := crossFileParkAtBoundary(crossFileMotionModel(t, "a.go", "b.go", "c.go"), true)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+
+	m.triggerReload()
+	result, _ = m.Update(filesLoadedMsg{seq: m.filesLoadSeq, err: errors.New("boom")})
+	m = result.(Model)
+
+	result, cmd = m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+	require.NotNil(t, cmd, "a failed reload must not leave crossing blocked")
+	assert.Equal(t, "c.go", model.tree.SelectedFile())
+}
+
+func TestModel_MotionCrossFile_FilteredTreeCrossesToVisibleFile(t *testing.T) {
+	m := crossFileMotionModel(t, "a.go", "b.go", "c.go")
+	m.tree.ToggleFilter(map[string]bool{"b.go": true, "c.go": true})
+	m = crossFileSelectAndLoad(t, m, "b.go")
+	m = crossFileParkAtBoundary(m, true)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+
+	require.NotNil(t, model.nav.pendingBoundaryJump)
+	assert.Equal(t, "c.go", model.tree.SelectedFile(), "crossing follows the filtered tree order")
+	require.NotNil(t, cmd)
+}
+
+func TestModel_MotionCrossFile_DividerOnlyFileCrossesOncePerPress(t *testing.T) {
+	diffs := crossFileDiffs()
+	diffs["b.go"] = []diff.DiffLine{{ChangeType: diff.ChangeDivider}}
+
+	m := loadFileIntoModel(t, []string{"a.go", "b.go", "c.go"}, diffs)
+	m.cfg.crossFileMotion = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = len(crossFileALines()) - 1
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	m = result.(Model)
+
+	assert.Equal(t, "b.go", m.file.name)
+	assert.Nil(t, m.nav.pendingBoundaryJump, "a divider-only file still consumes the landing")
+
+	result, cmd = m.handleDiffAction(keymap.ActionDown)
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, "c.go", m.tree.SelectedFile(), "one press crosses exactly one file")
+
+	result, _ = m.Update(cmd())
+	model := result.(Model)
+
+	assert.Equal(t, "c.go", model.file.name)
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the intent must never stick on a file with no selectable line")
+}
+
+func TestModel_ClearPendingJumps(t *testing.T) {
+	m := crossFileMotionModel(t)
+	backward := false
+	m.nav.pendingHunkJump = &backward
+	m.nav.pendingBoundaryJump = &boundaryJump{}
+	m.pendingAnnotJump = &annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"}
+
+	m.clearPendingJumps()
+
+	assert.Nil(t, m.nav.pendingHunkJump)
+	assert.Nil(t, m.nav.pendingBoundaryJump)
+	assert.Nil(t, m.pendingAnnotJump)
+}
+
+func TestModel_ClearPendingJumps_OnManualNavigation(t *testing.T) {
+	tests := []struct {
+		name   string
+		launch func(t *testing.T, m Model) (tea.Model, tea.Cmd)
+	}{
+		{
+			name: "next file",
+			launch: func(_ *testing.T, m Model) (tea.Model, tea.Cmd) {
+				return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+			},
+		},
+		{
+			name: "reload",
+			launch: func(t *testing.T, m Model) (tea.Model, tea.Cmd) {
+				m.reload.applicable = true
+				return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+			},
+		},
+		{
+			name: "filter toggle",
+			launch: func(_ *testing.T, m Model) (tea.Model, tea.Cmd) {
+				m.store.Add(annotation.Annotation{File: "b.go", Line: 2, Type: "+", Comment: "note"})
+				return m.handleFilterToggle()
+			},
+		},
+		{
+			name: "file picker jump",
+			launch: func(_ *testing.T, m Model) (tea.Model, tea.Cmd) {
+				return m.jumpToFile("b.go")
+			},
+		},
+		{
+			name: "tree navigation",
+			launch: func(_ *testing.T, m Model) (tea.Model, tea.Cmd) {
+				m.layout.focus = paneTree
+				return m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+			},
+		},
+		{
+			name: "annotation delete",
+			launch: func(t *testing.T, m Model) (tea.Model, tea.Cmd) {
+				m.store.Add(annotation.Annotation{File: "a.go", Line: 3, Type: " ", Comment: "note"})
+				m.nav.diffCursor = 2
+				m.annot.cursorOnAnnotation = true
+				return m.handleDiffAction(keymap.ActionDeleteAnnotation)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := crossFileMotionModel(t, "a.go", "b.go", "c.go")
+			backward := false
+			m.nav.pendingHunkJump = &backward
+			m.nav.pendingBoundaryJump = &boundaryJump{}
+			m.pendingAnnotJump = &annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"}
+
+			result, _ := tt.launch(t, m)
+			model := result.(Model)
+
+			assert.Nil(t, model.nav.pendingHunkJump, "a stale hunk landing must not survive")
+			assert.Nil(t, model.nav.pendingBoundaryJump, "a stale boundary landing must not survive")
+			assert.Nil(t, model.pendingAnnotJump, "a stale annotation jump must not survive")
+		})
+	}
+}
+
+func TestModel_MotionCrossFile_DirectoryRowInTreeDoesNotSkipFile(t *testing.T) {
+	lines := func(name string) []diff.DiffLine {
+		return []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: name, NewNum: 1}}
+	}
+	files := []string{"a/1.go", "b/2.go", "c/3.go"}
+	m := loadFileIntoModel(t, files, map[string][]diff.DiffLine{
+		"a/1.go": lines("a"), "b/2.go": lines("b"), "c/3.go": lines("c"),
+	})
+	m.cfg.crossFileMotion = true
+	m.layout.focus = paneDiff
+	require.True(t, m.tree.SelectByVisibleRow(4))
+	require.Empty(t, m.tree.SelectedFile(), "row 4 must be the c/ directory")
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, "b/2.go", model.tree.SelectedFile(), "crossing steps from the displayed file, not the tree cursor")
+
+	m = crossFileSelectAndLoad(t, m, "b/2.go")
+	require.True(t, m.tree.SelectByVisibleRow(0))
+	require.Empty(t, m.tree.SelectedFile(), "row 0 must be the a/ directory")
+
+	result, cmd = m.handleDiffAction(keymap.ActionUp)
+	model = result.(Model)
+	require.NotNil(t, cmd)
+	assert.Equal(t, "a/1.go", model.tree.SelectedFile())
+}
+
+func TestModel_MotionCrossFile_DirectoryRowWithDisplayedFileFilteredOut(t *testing.T) {
+	lines := func(name string) []diff.DiffLine {
+		return []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: name, NewNum: 1}}
+	}
+	m := loadFileIntoModel(t, []string{"a/1.go", "b/2.go", "c/3.go"}, map[string][]diff.DiffLine{
+		"a/1.go": lines("a"), "b/2.go": lines("b"), "c/3.go": lines("c"),
+	})
+	m.cfg.crossFileMotion = true
+	m.layout.focus = paneDiff
+	m.tree.ToggleFilter(map[string]bool{"b/2.go": true, "c/3.go": true})
+	require.True(t, m.tree.SelectByVisibleRow(2))
+	require.Empty(t, m.tree.SelectedFile(), "row 2 must be the c/ directory")
+	require.Equal(t, "a/1.go", m.file.name)
+
+	result, cmd := m.handleDiffAction(keymap.ActionDown)
+	model := result.(Model)
+
+	assert.Nil(t, cmd, "with no row for the displayed file there is no adjacent file to step to")
+	assert.Empty(t, model.tree.SelectedFile(), "the tree cursor must not move")
+	assert.Nil(t, model.nav.pendingBoundaryJump)
 }

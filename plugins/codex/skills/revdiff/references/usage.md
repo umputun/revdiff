@@ -111,12 +111,12 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 
 | Key | Action |
 |-----|--------|
-| `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
+| `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane); with `--cross-file-motion`, continues to the previous/next file at the boundary |
 | `h/l` | Switch between file tree and diff pane |
 | left/right | Horizontal scroll in diff pane (truncated lines show `«` / `»` overflow indicators at the edges) |
 | `Tab` | Switch between file tree and diff pane |
-| `PgDown/PgUp` | Page scroll in file tree and diff pane |
-| `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |
+| `PgDown/PgUp` | Page scroll in file tree and diff pane; with `--cross-file-motion`, continues to the previous/next file at the boundary |
+| `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane; with `--cross-file-motion`, continues to the previous/next file at the boundary |
 | `J/K` | Scroll diff viewport (works from either pane) |
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |

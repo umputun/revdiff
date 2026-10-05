@@ -126,10 +126,12 @@ Pass `--start-at-change` only when the user explicitly asks for that cursor pref
 
 Pass `--filter-unreviewed` only when the user asks for the tree limited to files not marked reviewed; never infer it automatically. The `F` key toggles the same filter during the review.
 
+Pass `--cross-file-motion` only when the user explicitly asks for cursor motion to continue into adjacent files; never infer it automatically.
+
 Run the launcher through the override-chain resolver:
 
 ```bash
-"$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" [base] [against] [--staged] [--untracked] [--filter-unreviewed] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
+"$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" [base] [against] [--staged] [--untracked] [--filter-unreviewed] [--cross-file-motion] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
 ```
 
 The resolver and launcher MUST run in the same bash invocation — the resolver runs as a sub-shell substitution so the resolved path is consumed immediately as the executable. The resolver checks `user → bundled` (see `references/install.md` for override paths) and prints the first-found absolute path. Fall-through to the bundled launcher is the default when no overrides exist.

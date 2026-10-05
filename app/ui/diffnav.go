@@ -651,6 +651,7 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	if forward {
 		if m.tree.HasFile(sidepane.DirectionNext) {
 			fwd := true
+			m.clearPendingJumps() // one landing intent in flight at a time, the latest motion wins
 			m.nav.pendingHunkJump = &fwd
 			m.tree.StepFile(sidepane.DirectionNext)
 			return m.loadSelectedIfChanged()
@@ -658,6 +659,7 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	} else {
 		if m.tree.HasFile(sidepane.DirectionPrev) {
 			bwd := false
+			m.clearPendingJumps() // one landing intent in flight at a time, the latest motion wins
 			m.nav.pendingHunkJump = &bwd
 			m.tree.StepFile(sidepane.DirectionPrev)
 			return m.loadSelectedIfChanged()
@@ -752,9 +754,9 @@ func (m *Model) scrollDiffViewportLine(delta int) {
 
 // handleDiffAction dispatches a resolved action when the diff pane is focused.
 func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
-	if m.handleDiffMovement(action) {
+	if moved, cmd := m.handleDiffMovement(action); moved {
 		m.syncTOCActiveSection()
-		return m, nil
+		return m, cmd
 	}
 
 	switch action {
@@ -793,7 +795,72 @@ func (m Model) handleDiffAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleDiffMovement(action keymap.Action) bool {
+// crossFileMotionAction reports whether action is a cursor motion that can continue into
+// the adjacent file once it hits the file boundary, and the direction it moves.
+// scroll_diff_* is absent — it moves the viewport, not the cursor, so it has no boundary to
+// reach — and so are Home/End and the vim screen-position motions, which are absolute jumps.
+func (m Model) crossFileMotionAction(action keymap.Action) (forward, ok bool) {
+	switch action {
+	case keymap.ActionDown, keymap.ActionPageDown, keymap.ActionHalfPageDown:
+		return true, true
+	case keymap.ActionUp, keymap.ActionPageUp, keymap.ActionHalfPageUp:
+		return false, true
+	default:
+		return false, false
+	}
+}
+
+// handleDiffMovement applies a cursor or viewport motion, reporting whether the action was a
+// diff movement at all. A cross-file motion (see crossFileMotionAction) that fails to move
+// the cursor has reached the file boundary, so with the flag on it steps the tree to the
+// adjacent file and queues a landing at its top or bottom for that file's load to apply. One
+// press crosses at most one file. A press while a load is outstanding is ignored: stepping
+// again would skip a file that was never shown, and stepping back would leave the tree on one
+// file and the outstanding load on another.
+func (m *Model) handleDiffMovement(action keymap.Action) (bool, tea.Cmd) {
+	prevCursor, prevAnnotation := m.nav.diffCursor, m.annot.cursorOnAnnotation
+	if !m.applyDiffMovement(action) {
+		return false, nil
+	}
+
+	forward, crossable := m.crossFileMotionAction(action)
+	if !crossable || m.nav.diffCursor != prevCursor || m.annot.cursorOnAnnotation != prevAnnotation {
+		return true, nil // real movement, nothing to cross
+	}
+	if !m.cfg.crossFileMotion || m.file.singleFile || m.file.name == "" || m.file.requestedPath != "" {
+		return true, nil
+	}
+
+	// a mouse click can leave the tree cursor on a directory row; stepping from there would
+	// skip or repeat files, so step from the displayed file instead. a displayed file with no
+	// row in a filtered tree has no adjacent file to step to.
+	if m.tree.SelectedFile() == "" && !m.tree.SelectByPath(m.file.name) {
+		return true, nil
+	}
+	dir := sidepane.DirectionNext
+	if !forward {
+		dir = sidepane.DirectionPrev
+	}
+	if !m.tree.HasFile(dir) {
+		return true, nil // at the first/last file: no wrap-around, stay put
+	}
+	m.tree.StepFile(dir)
+	m.tree.EnsureVisible(m.treePageSize())
+	selected := m.tree.SelectedFile()
+	if selected == "" || selected == m.file.name {
+		return true, nil // no load to request, so no landing to queue either
+	}
+	m.layout.focus = paneDiff
+	m.clearPendingJumps() // one landing intent in flight at a time, the latest motion wins
+	cmd := m.requestFileDiff(selected)
+	m.nav.pendingBoundaryJump = &boundaryJump{forward: forward, seq: m.file.loadSeq}
+	return true, cmd
+}
+
+// applyDiffMovement performs a single diff-pane motion, returning false for actions it does
+// not own. Kept free of any cross-file concern so handleDiffMovement can probe exactly one
+// motion for the boundary crossing.
+func (m *Model) applyDiffMovement(action keymap.Action) bool {
 	switch action {
 	case keymap.ActionDown:
 		m.moveDiffCursorDown()
@@ -889,8 +956,7 @@ func (m Model) handleTreeAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		}
 	default: // actions handled by handleKey (quit, toggle_pane, filter, etc.) — not repeated here
 	}
-	m.pendingAnnotJump = nil    // clear pending annotation jump on manual navigation
-	m.nav.pendingHunkJump = nil // clear pending hunk jump on manual navigation
+	m.clearPendingJumps()
 	m.tree.EnsureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
 }
@@ -1012,6 +1078,26 @@ func (m *Model) positionOnFirstChange() {
 	if m.nav.diffCursor == -1 {
 		m.skipInitialDividers()
 	}
+}
+
+// clearPendingJumps drops every queued post-load landing intent. Manual navigation, filter
+// changes, annotation edits and reloads all decide where the next load should land, so a
+// stale intent from an abandoned motion must never hijack it. Called on manual navigation and
+// before any refreshFilter that can trigger a file load.
+func (m *Model) clearPendingJumps() {
+	m.pendingAnnotJump = nil
+	m.nav.pendingHunkJump = nil
+	m.nav.pendingBoundaryJump = nil
+}
+
+// landAtBoundary puts the cursor at the top (forward) or the bottom (backward) of the file
+// loaded after a cross-file motion. Both helpers re-render and align the viewport to the cursor.
+func (m *Model) landAtBoundary(forward bool) {
+	if forward {
+		m.moveDiffCursorToStart()
+		return
+	}
+	m.moveDiffCursorToEnd()
 }
 
 // applyPendingHunkJump moves the cursor to the first or last hunk after a cross-file navigation.

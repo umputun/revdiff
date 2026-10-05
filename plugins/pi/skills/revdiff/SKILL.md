@@ -38,6 +38,7 @@ Tool examples:
 - `args: "--filter-unreviewed"`: show only files not marked reviewed
 - `args: "--page-overlap=2"`: keep 2 lines from the previous screen when paging
 - `args: "--start-at-change"`: position the cursor on the first changed line
+- `args: "--cross-file-motion"`: let cursor motion continue into adjacent files
 - `args: "--description='why this refactor matters' main"`: include review context in the info popup
 - `args: "--description-file=/tmp/revdiff-desc.md main"`: include longer markdown review context
 - `args: "--annotations=/tmp/revdiff-review.md main"`: preload in-session review notes
@@ -83,6 +84,7 @@ When annotations arrive from `/revdiff` or `revdiff_review`:
 /revdiff --no-tree
 /revdiff --page-overlap=2
 /revdiff --start-at-change
+/revdiff --cross-file-motion
 /revdiff HEAD~3 --description="why this refactor matters"
 /revdiff HEAD~3 --description-file=/tmp/revdiff-desc.md
 /revdiff main --annotations=/tmp/revdiff-review.md
@@ -112,6 +114,7 @@ Behavior:
 - If revdiff exits without captured annotations, report that no annotations were captured and stop.
 - When recent agent work created new untracked files, include `--untracked` so those files appear in the review tree.
 - Include `--filter-unreviewed` only when the user asks for the tree limited to files not marked reviewed; `F` toggles the same filter during the review.
+- Include `--cross-file-motion` only when the user asks for cursor motion to continue into adjacent files.
 - When launching after analysis or refactor work, include `--description` or `--description-file` so the info popup explains the review context.
 
 ## Existing review history

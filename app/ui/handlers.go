@@ -238,8 +238,7 @@ func (m Model) handleFilterToggle() (tea.Model, tea.Cmd) {
 	}
 	annotated := m.annotatedFiles()
 	if len(annotated) > 0 || m.tree.FilterActive() {
-		m.pendingAnnotJump = nil    // clear pending annotation jump on manual navigation
-		m.nav.pendingHunkJump = nil // clear pending hunk jump on manual navigation
+		m.clearPendingJumps()
 		m.tree.ToggleFilter(annotated)
 		m.tree.EnsureVisible(m.treePageSize())
 		return m.loadSelectedIfChanged()
@@ -253,8 +252,7 @@ func (m Model) handleUnreviewedFilterToggle() (tea.Model, tea.Cmd) {
 	if m.file.singleFile {
 		return m, nil
 	}
-	m.pendingAnnotJump = nil
-	m.nav.pendingHunkJump = nil
+	m.clearPendingJumps()
 	m.tree.ToggleUnreviewedFilter()
 	m.tree.EnsureVisible(m.treePageSize())
 	return m.loadSelectedIfChanged()
@@ -322,8 +320,7 @@ func (m Model) handleFileOrSearchNav(forward bool) (tea.Model, tea.Cmd) {
 		return m.jumpTOCEntry(dir)
 	}
 	if !m.file.singleFile {
-		m.pendingAnnotJump = nil    // clear pending annotation jump on manual navigation
-		m.nav.pendingHunkJump = nil // clear pending hunk jump on manual navigation
+		m.clearPendingJumps()
 		if forward {
 			m.tree.StepFile(sidepane.DirectionNext)
 		} else {

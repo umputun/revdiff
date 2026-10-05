@@ -385,6 +385,7 @@ Positional arguments support several forms:
 | `--compact` | Start in compact diff mode (small context around changes), env: `REVDIFF_COMPACT` | `false` |
 | `--compact-context` | Number of context lines around changes when in compact mode, env: `REVDIFF_COMPACT_CONTEXT` | `5` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
+| `--cross-file-motion` | Allow cursor motion (`j`/`k`, `PgDown`/`PgUp`, `Ctrl+d`/`Ctrl+u`) to continue into adjacent files at a boundary, env: `REVDIFF_CROSS_FILE_MOTION` | `false` |
 | `--start-at-change` | Position the cursor on the first changed line, env: `REVDIFF_START_AT_CHANGE` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
 | `--blame` | Show blame gutter, env: `REVDIFF_BLAME` | `false` |
@@ -738,12 +739,12 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 
 | Key | Action |
 |-----|--------|
-| `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane) |
+| `j/k` or up/down | Navigate files (tree) / scroll diff (diff pane); with `--cross-file-motion`, continues to the previous/next file at the boundary |
 | `h/l` | Switch between file tree and diff pane |
 | left/right | Horizontal scroll in diff pane (truncated lines show `«` / `»` overflow indicators at the edges) |
 | `Tab` | Switch between file tree and diff pane |
-| `PgDown/PgUp` | Page scroll in file tree and diff pane |
-| `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane |
+| `PgDown/PgUp` | Page scroll in file tree and diff pane; with `--cross-file-motion`, continues to the previous/next file at the boundary |
+| `Ctrl+d/Ctrl+u` | Half-page scroll in file tree and diff pane; with `--cross-file-motion`, continues to the previous/next file at the boundary |
 | `J/K` | Scroll diff viewport (works from either pane) |
 | `Home/End` | Jump to first/last item |
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |

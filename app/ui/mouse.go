@@ -290,8 +290,7 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.tree.Move(motion)
-		m.pendingAnnotJump = nil
-		m.nav.pendingHunkJump = nil
+		m.clearPendingJumps()
 		return m.loadSelectedIfChanged()
 	case hitNone, hitStatus, hitHeader:
 		// no-op zones — wheel outside the interactive panes is ignored.
@@ -353,8 +352,7 @@ func (m Model) clickTree(y int) (tea.Model, tea.Cmd) {
 	if !m.tree.SelectByVisibleRow(row) {
 		return m, nil
 	}
-	m.pendingAnnotJump = nil
-	m.nav.pendingHunkJump = nil
+	m.clearPendingJumps()
 	return m.loadSelectedIfChanged()
 }
 

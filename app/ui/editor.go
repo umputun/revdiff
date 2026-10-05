@@ -357,7 +357,7 @@ func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Mode
 	// selected file load finishes. In that window, the editor returned for a
 	// stale displayed file, so leave the queued load in control.
 	if msg.fileName != m.tree.SelectedFile() {
-		m.nav.pendingHunkJump = nil
+		m.clearPendingJumps() // the editor session cancels the queued landing, not the load
 		return m, restoreMouseCmd
 	}
 	if msg.fileName != m.file.name {

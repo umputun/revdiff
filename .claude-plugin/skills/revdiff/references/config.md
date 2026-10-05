@@ -31,6 +31,8 @@ Then uncomment and edit the values you want to change.
 | `--collapsed` | `REVDIFF_COLLAPSED` | Start in collapsed diff mode | `false` |
 | `--compact` | `REVDIFF_COMPACT` | Start in compact diff mode (small context around changes) | `false` |
 | `--compact-context` | `REVDIFF_COMPACT_CONTEXT` | Number of context lines around changes when in compact mode | `5` |
+| `--cross-file-hunks` | `REVDIFF_CROSS_FILE_HUNKS` | Allow `[` and `]` to continue into adjacent files | `false` |
+| `--cross-file-motion` | `REVDIFF_CROSS_FILE_MOTION` | Allow cursor motion (`j`/`k`, `PgDown`/`PgUp`, `Ctrl+d`/`Ctrl+u`) to continue into adjacent files at a boundary | `false` |
 | `--line-numbers` | `REVDIFF_LINE_NUMBERS` | Show line numbers in diff gutter | `false` |
 | `--blame` | `REVDIFF_BLAME` | Show blame gutter | `false` |
 | `--word-diff` | `REVDIFF_WORD_DIFF` | Highlight intra-line word-level changes in paired add/remove lines | `false` |
