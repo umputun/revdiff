@@ -30,6 +30,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 │  app/theme/       — Catalog-centric theme system    │
 │  app/history/     — review session auto-save        │
 │  app/fsutil/      — filesystem utilities            │
+│  app/ptybridge/   — test-only PTY bridge (opencode) │
 └─────────────────────────────────────────────────────┘
 ```
 

@@ -27,7 +27,7 @@ Restart OpenCode after installation. Existing installations of the same major ca
 ### Switching major versions
 
 - **v1 → v2:** cleanup is automatic. The installer removes `plugins/revdiff-plan-review.ts`, the obsolete `commands/revdiff.md`, and the exact string `./plugins/revdiff-plan-review.ts` from the `plugin`/`plugins` arrays in `opencode.json`. Other entries, options, files and the v1 tool are preserved.
-- **JSONC:** V2 leaves `opencode.jsonc`, and `opencode.json` containing comments or trailing commas, byte-identical and prints a manual-cleanup notice. V1 installs normally and creates its registration in `opencode.json` alongside an existing JSONC file.
+- **JSONC:** V2 leaves `opencode.jsonc`, and `opencode.json` containing comments or trailing commas, byte-identical and prints a manual-cleanup notice. V1 installs normally and creates its registration in `opencode.json` alongside an existing JSONC file. When `opencode.json` itself contains comments or trailing commas, V1 copies the files, leaves it byte-identical and prints a notice to add the registration manually if it is missing.
 - **v2 → v1:** the installer restores the v1 files and registration. The nested `plugins/revdiff/` directory is inert to v1 and remains in place.
 
 If `plugins/revdiff/` contains `index.*` or `server.*`, move that directory aside before installation: OpenCode would load it as a server plugin.
