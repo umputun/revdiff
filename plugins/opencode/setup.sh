@@ -19,9 +19,15 @@ usage() {
 install_v1() {
     local config_file="$CONFIG_DIR/opencode.json"
     local plugin_entry="./plugins/revdiff-plan-review.ts"
+    # opencode reads opencode.json as JSONC, so a file jq cannot parse may still be a valid config
+    local parseable=1
     if [[ -f "$config_file" ]]; then
         command -v jq >/dev/null 2>&1 || fail "jq is required to update opencode.json."
-        jq -e 'type == "object" and (.plugin == null or (.plugin | type == "array"))' "$config_file" >/dev/null || fail "Invalid opencode.json or plugin array."
+        if ! jq empty "$config_file" >/dev/null 2>&1; then
+            parseable=0
+        else
+            jq -e 'type == "object" and (.plugin == null or (.plugin | type == "array"))' "$config_file" >/dev/null || fail "Invalid opencode.json or plugin array."
+        fi
     fi
 
     mkdir -p "$CONFIG_DIR/commands" "$CONFIG_DIR/tools" "$CONFIG_DIR/plugins"
@@ -34,6 +40,8 @@ install_v1() {
 
     if [[ ! -f "$config_file" ]]; then
         printf '{"plugin": ["%s"]}\n' "$plugin_entry" > "$config_file"
+    elif [[ "$parseable" -eq 0 ]]; then
+        echo "Notice: opencode.json is unchanged. Make sure the plugin array contains the exact $plugin_entry registration."
     elif ! jq -e --arg entry "$plugin_entry" '.plugin // [] | index($entry) != null' "$config_file" >/dev/null; then
         local temporary
         temporary=$(mktemp "$CONFIG_DIR/.revdiff-config-XXXXXX")

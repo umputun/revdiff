@@ -230,6 +230,39 @@ for (const [name, content] of [
   });
 }
 
+for (const [name, content] of [
+  [
+    "comment",
+    '{\n // keep this comment\n "plugin": ["./plugins/revdiff-plan-review.ts"],\n "model": "provider/model"\n}\n',
+  ],
+  [
+    "trailing comma",
+    '{"plugin": ["./plugins/revdiff-plan-review.ts",], "model": "provider/model",}\n',
+  ],
+] as const) {
+  test(`v1 installs with a ${name} in opencode.json and requests manual registration`, async () => {
+    const sandbox = await fixture("1.18.32");
+    try {
+      const file = path.join(sandbox.config, "opencode.json");
+      await writeFile(file, content);
+      const output = sandbox.run();
+      assert.match(output, /Notice: opencode\.json is unchanged/);
+      assert.match(output, /registration/);
+      assert.equal(await readFile(file, "utf8"), content);
+      assert.ok(
+        await stat(
+          path.join(sandbox.config, "plugins", "revdiff-plan-review.ts"),
+        ),
+      );
+      assert.ok(
+        await stat(path.join(sandbox.config, "tools", "launch-revdiff.sh")),
+      );
+    } finally {
+      await sandbox.close();
+    }
+  });
+}
+
 test("v1 rejects a custom config directory before modifying its contents", async () => {
   const sandbox = await fixture("1.18.32");
   try {

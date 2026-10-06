@@ -1,5 +1,7 @@
 //go:build darwin || linux
 
+// Package main is a PTY bridge that runs a command in a pseudo-terminal. It is built on demand by
+// plugins/opencode/v2/runtime-check.ts and is not part of the revdiff release build.
 package main
 
 import (

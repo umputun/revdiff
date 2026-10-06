@@ -29,6 +29,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/handoff/` - prepares user-configured post-flush shell commands. Annotation snapshots are provided on stdin; stdout is suppressed so helpers cannot overwrite the TUI. Consumed by `app/ui` via the `PostFlushHook` interface and `tea.ExecProcess`
 - `app/history/` - review session auto-save to `~/.config/revdiff/history/`
 - `app/fsutil/` - filesystem utilities
+- `app/ptybridge/` - macOS/Linux PTY bridge (`package main`) built on demand by `plugins/opencode/v2/runtime-check.ts` to run a real OpenCode CLI in a terminal. Test helper only: `make build` and goreleaser build `./app/revdiff` alone, so it never ships
 - `app/ui/mocks/` - moq-generated mocks (never edit manually)
 
 ## Architecture Principles
@@ -89,6 +90,14 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `detect-ref.sh` dispatches by VCS (`detect_git` / `detect_hg` / `detect_jj`) via `command -v` probes (jj → git → hg, matching `DetectVCS` precedence); git path stays byte-identical to the pre-refactor output. `read-latest-history.sh` uses the same VCS probe order for repo-root resolution.
 - Codex automatic plan review runs only for `permission_mode=plan`, prefers a complete plan in `last_assistant_message`, and falls back whenever that field has no complete block to the last assistant message for the exact transcript/session/turn; manual `/revdiff-plan` remains the best-effort rollout fallback
 - **Testing locally**: installs are copies from a marketplace, so point Codex at this checkout: `codex plugin marketplace remove revdiff` (Codex refuses a second source under the same name, so the GitHub-added marketplace must go first), `codex plugin marketplace add /absolute/path/to/checkout`, then `codex plugin add revdiff@revdiff`. After editing a skill or script, `codex plugin remove revdiff@revdiff`, `codex plugin add revdiff@revdiff` again, and start a new session.
+
+## OpenCode Plugin
+- Lives at `plugins/opencode/`. `setup.sh` runs `opencode --version` and dispatches on the major version: `install_v1` for 1.x, `install_v2` for 2.x, anything else is refused
+- v1 files (`commands/`, `tools/`, `plugins/`) are the OpenCode 1.x integration and stay as they are; v2 is a CLI plugin in `v2/` (`tui.ts`, `launcher.ts`, `claims.ts`) providing `/revdiff` and automatic plan review. There is no agent-callable tool on v2
+- **The v2 file list in `install_v2` is hardcoded** (`tui.ts claims.ts launcher.ts package.json`). A new module imported from `tui.ts` must be added there and asserted in `v2/setup.test.ts`, or the installed plugin breaks with green tests
+- `install_v2` refuses a `plugins/revdiff/` that holds `index.*` or `server.*`: OpenCode resolves those before `tui` and would load the directory as a server plugin
+- OpenCode reads `opencode.json` as JSONC in both majors, so a file jq cannot parse may be a valid config. Both install paths leave such a file byte-identical, print a notice and still copy the files; a parseable file of the wrong shape fails before any copy
+- Tests: `npm test` and `npm run typecheck` in `plugins/opencode/v2` (CI job `opencode-v2`, `npm ci --ignore-scripts`). `npm run test:runtime -- /path/to/opencode-v2` runs a real OpenCode CLI through `app/ptybridge` and is not part of CI
 
 ## Pi Plugin
 - Pi package defined in root `package.json`, extensions and skills in `plugins/pi/`
