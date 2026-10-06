@@ -822,19 +822,21 @@ codex plugin add revdiff-planning@revdiff</code></div>
 
         <!-- opencode integration -->
         <h2 id="opencode-install">OpenCode integration</h2>
-        <p>revdiff integrates with <a href="https://opencode.ai">OpenCode</a> via a tool, slash command, and plan-review plugin. The tool wraps the existing <code>launch-revdiff.sh</code> launcher, so terminal detection stays in sync automatically.</p>
-        <div class="code-block"><code><span class="code-comment"># from the revdiff repo</span>
-cd plugins/opencode && bash setup.sh</code></div>
-        <p>The setup script copies files to <code>~/.config/opencode/</code> (commands, tools, plugins) and registers the plan-review plugin in <code>opencode.json</code>. The tool and plan-review plugin treat exit code <code>10</code> as success-with-annotations and keep captured output. Restart OpenCode after installing. See <a href="https://github.com/umputun/revdiff/tree/master/plugins/opencode">plugins/opencode/README.md</a> for manual installation.</p>
+        <p>revdiff integrates with <a href="https://opencode.ai">OpenCode</a>. V1 provides a tool, slash command, and plan-review plugin. V2 provides a CLI plugin for <code>/revdiff</code> and automatic plan review, using the shared launcher in the client's terminal environment.</p>
+        <div class="code-block"><code><span class="code-comment"># automatically detects OpenCode v1 or v2, from the revdiff repo</span>
+cd plugins/opencode &amp;&amp; bash setup.sh</code></div>
+        <p>The v2 CLI plugin is discovered automatically under <code>plugins/revdiff/</code>. It runs reviews locally and returns annotations to the session captured at launch. Automatic plan review handles live completion events only, deduplicated between local clients using an atomic marker per event ID. Markers older than one day are removed on the next claim. Clients must share the same state directory and local checkout; the winner may be in a window the user is not looking at. Restart OpenCode after installing.</p>
+        <p>The installer uses <code>opencode --version</code> from <code>PATH</code>; use <code>bash setup.sh --opencode /path/to/opencode /path/to/config</code> to select another v2 installation. The v2 integration supports OpenCode v2.0.0+ and has no runtime npm dependencies. Its config directory follows <code>OPENCODE_CONFIG_DIR</code>, then XDG defaults. V1 installs only to <code>~/.config/opencode</code>. Upgrade removes the obsolete v1 plan plugin, Markdown command and exact JSON registration; JSONC is left untouched with a notice. V1 code remains unchanged, and rollback leaves the inert v2 directory in place. See <a href="https://github.com/umputun/revdiff/tree/master/plugins/opencode">plugins/opencode/README.md</a> for prerequisites, ownership rules and migration details.</p>
 
         <h2 id="opencode-usage">Usage</h2>
+        <p>V2 also supports <code>/revdiff</code> from the home screen. A clean review leaves it unchanged; annotations create a feedback session using the configured default agent and selected model, falling back to the configured model on older v2 clients.</p>
         <p>The integration provides two components:</p>
         <ul>
             <li><code>/revdiff</code> slash command &mdash; launches the diff review TUI with optional ref argument</li>
-            <li>Plan-review plugin &mdash; automatically launches revdiff when the assistant exits plan mode, injecting annotations back as user messages</li>
+            <li>Plan-review plugin &mdash; v2 automatically reviews completed plan-agent responses in the displayed root session and returns annotations with a line-numbered snapshot of the reviewed plan, so the agent does not need the deleted temporary file; v1 uses the plan-mode idle hook</li>
         </ul>
-        <div class="code-block"><code>/revdiff              <span class="code-comment"># auto-detect ref</span>
-/revdiff HEAD~3 HEAD  <span class="code-comment"># review last 3 commits</span>
+        <div class="code-block"><code>/revdiff              <span class="code-comment"># review working-tree changes</span>
+/revdiff HEAD~3..HEAD <span class="code-comment"># review last 3 commits</span>
 /revdiff --staged     <span class="code-comment"># review staged changes</span></code></div>
 
         <!-- output -->

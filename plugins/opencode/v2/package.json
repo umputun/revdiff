@@ -1,0 +1,20 @@
+{
+  "name": "revdiff-opencode",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tui": "./tui.ts"
+  },
+  "scripts": {
+    "test": "node --test *.test.ts",
+    "test:runtime": "node runtime-check.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "2.0.18",
+    "@opencode/client": "2.0.18",
+    "@types/node": "^22.0.0",
+    "solid-js": "1.9.15",
+    "typescript": "^5.9.0"
+  }
+}

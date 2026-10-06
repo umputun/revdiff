@@ -52,6 +52,31 @@ jobs:
         env:
           COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  opencode-v2:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/opencode/v2
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: set up node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: plugins/opencode/v2/package-lock.json
+      - name: install jq
+        run: |
+          command -v jq >/dev/null || { sudo apt-get update && sudo apt-get install -y jq; }
+          jq --version
+      - name: install dependencies
+        run: npm ci --ignore-scripts
+      - name: typecheck and test
+        run: npm run typecheck && npm test
+
   lint-scripts:
     runs-on: ubuntu-latest
     steps:

@@ -239,7 +239,7 @@
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent" aria-label="OpenCode integration">O</span></div>
                 <h3>OpenCode integration</h3>
-                <p>Launch revdiff from <a href="https://opencode.ai">OpenCode</a> via <code>/revdiff</code> command or tool call. Plan-review plugin auto-launches on plan mode idle.</p>
+                <p>Launch revdiff from <a href="https://opencode.ai">OpenCode</a> via <code>/revdiff</code>. Automatically opens completed plans for review.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><span class="glyph accent">&para;</span></div>
@@ -464,7 +464,8 @@
                 <div class="flow-num">1</div>
                 <div class="flow-text">
                     <h3>Install</h3>
-                    <div class="code-block"><code>cd plugins/opencode && bash setup.sh</code></div>
+                    <div class="code-block"><code>cd plugins/opencode &amp;&amp; bash setup.sh</code></div>
+                    <p>Detects OpenCode v1 or v2 and installs the matching integration. See the <a href="/docs#opencode-install">installation guide</a> for requirements and migration details.</p>
                 </div>
             </div>
             <div class="flow-step">
@@ -472,7 +473,7 @@
                 <div class="flow-text">
                     <h3>Review</h3>
                     <div class="code-block"><code>/revdiff<br>/revdiff HEAD~3</code></div>
-                    <p>Plan-review plugin auto-launches revdiff when the assistant exits plan mode.</p>
+                    <p>Automatically opens completed plans for review.</p>
                 </div>
             </div>
         </div>
