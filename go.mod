@@ -1,6 +1,6 @@
 module github.com/umputun/revdiff
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
@@ -14,7 +14,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.30
 	github.com/muesli/termenv v0.16.0
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
