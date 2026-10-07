@@ -18,8 +18,8 @@
     "plugins/pi/"
   ],
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0",
-    "typebox": "^1.1.24"
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
   },
   "pi": {
     "extensions": [
