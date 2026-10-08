@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@opencode/plugin": "2.0.18",
+    "@opencode/plugin": "2.0.23",
     "@opencode/client": "2.0.22",
     "@types/node": "^22.0.0",
     "solid-js": "1.9.16",
