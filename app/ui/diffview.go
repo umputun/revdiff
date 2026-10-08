@@ -841,10 +841,9 @@ type globalRenderKey struct {
 	// (applyHorizontalScroll, plainHorizontalCut, extendLineBg, wrapWidth,
 	// annotationVisualRows) goes through diffContentWidth, and that branches on
 	// treePaneHidden() = treeHidden || (singleFile && mdTOC == nil). Keying the raw
-	// inputs missed those three: with treeWidth already 0 while the pane is shown —
-	// reachable after a single-file diff becomes multi-file without treeWidth being
-	// recomputed — pressing `t` moves no key field yet changes the width every line is
-	// cut and padded to. Keying the resolved value cannot drift from what is consumed,
+	// inputs missed those three: a change to any of them that leaves width and treeWidth
+	// untouched moves no key field yet changes the width every line is cut and padded
+	// to. Keying the resolved value cannot drift from what is consumed,
 	// and matches how annotCacheKey already keys on the resolved wrapW.
 	contentWidth int
 	scrollX      int

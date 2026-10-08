@@ -1073,6 +1073,39 @@ func TestModel_FilesLoadedSingleFileViewportWidth(t *testing.T) {
 	assert.Equal(t, 98, model.layout.viewport.Width, "viewport width should be width - 2 (borders only)")
 }
 
+func TestModel_FilesLoadedGrowsPastSingleFile(t *testing.T) {
+	// the tree pane stayed collapsed when a one-file review grew to several files
+	tests := []struct {
+		name          string
+		treeHidden    bool
+		wantTreeWidth int
+		wantViewportW int
+	}{
+		{name: "tree pane restored", treeHidden: false, wantTreeWidth: 30, wantViewportW: 66},
+		{name: "tree hidden by user stays hidden", treeHidden: true, wantTreeWidth: 0, wantViewportW: 98},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testModel(nil, nil)
+			m.cfg.treeWidthRatio = 3
+			resized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+			m = resized.(Model)
+
+			result, _ := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}}})
+			m = result.(Model)
+			require.True(t, m.file.singleFile)
+			require.Equal(t, 0, m.layout.treeWidth)
+			m.layout.treeHidden = tt.treeHidden
+
+			result, _ = m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "main.go"}, {Path: "new.go"}}})
+			m = result.(Model)
+			assert.False(t, m.file.singleFile)
+			assert.Equal(t, tt.wantTreeWidth, m.layout.treeWidth)
+			assert.Equal(t, tt.wantViewportW, m.layout.viewport.Width)
+		})
+	}
+}
+
 func TestModel_FileLoadedMarkdownTOCDetection(t *testing.T) {
 	mdLines := []diff.DiffLine{
 		{NewNum: 1, Content: "# Title", ChangeType: diff.ChangeContext},
