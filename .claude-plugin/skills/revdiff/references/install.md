@@ -30,7 +30,7 @@ cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdent
 
 ```json
 {
-  "permissions": {
+  "sandbox": {
     "excludedCommands": ["*/launch-revdiff.sh*"]
   }
 }

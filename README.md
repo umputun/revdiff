@@ -113,7 +113,7 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 >
 > ```json
 > {
->   "permissions": {
+>   "sandbox": {
 >     "excludedCommands": ["*/launch-revdiff.sh*"]
 >   }
 > }
