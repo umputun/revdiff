@@ -2,6 +2,11 @@
 set -euo pipefail
 cmd_name=$(basename "$0")
 
+# a real backend starts the review from a terminal or server process, so the review
+# never inherits the launcher's stdin; dropping it here keeps the fakes from passing
+# a piped diff through by accident
+exec </dev/null
+
 run_after_double_dash() {
     while [ "$#" -gt 0 ]; do
         if [ "$1" = "--" ]; then

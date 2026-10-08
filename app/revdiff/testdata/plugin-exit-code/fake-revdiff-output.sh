@@ -9,6 +9,10 @@ fi
 if [ -n "${FAKE_ENV_FILE:-}" ]; then
     printf '%s|%s' "${EDITOR:-missing}" "${VISUAL:-missing}" > "$FAKE_ENV_FILE"
 fi
+# records what reached revdiff's stdin, so a test can see a piped diff arriving
+if [ -n "${FAKE_STDIN_FILE:-}" ]; then
+    cat > "$FAKE_STDIN_FILE"
+fi
 if [ -n "${FAKE_STDERR:-}" ]; then
     printf "%s" "$FAKE_STDERR" >&2
 fi

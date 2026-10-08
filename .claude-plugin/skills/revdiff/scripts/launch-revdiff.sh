@@ -18,7 +18,8 @@ fi
 TMPBASE="${TMPDIR:-/tmp}"
 OUTPUT_FILE=$(mktemp "$TMPBASE/revdiff-output-XXXXXX")
 ERR_FILE=$(mktemp "$TMPBASE/revdiff-err-XXXXXX")
-trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE"' EXIT
+STDIN_FILE="$ERR_FILE.stdin"
+trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE"' EXIT
 
 # shell-quote a single argument for safe embedding in sh -c strings.
 sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -32,6 +33,18 @@ fi
 REVDIFF_CMD="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $REVDIFF_CMD $(sq "--output=$OUTPUT_FILE")"
 for arg in "$@"; do
     REVDIFF_CMD="$REVDIFF_CMD $(sq "$arg")"
+done
+
+# every backend starts the review from a terminal or server process, so the review
+# never inherits this script's stdin. a piped diff is spooled to a file and fed back
+# in by redirect; with a terminal on stdin there is nothing to spool and revdiff
+# reports the missing input itself
+for arg in "$@"; do
+    if [ "$arg" = "--stdin" ] && [ ! -t 0 ]; then
+        cat > "$STDIN_FILE"
+        REVDIFF_CMD="$REVDIFF_CMD <$(sq "$STDIN_FILE")"
+        break
+    fi
 done
 
 write_rc_cmd() {
@@ -192,7 +205,7 @@ if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
     # the temp output file on every exit path, and INT/TERM exit through it, so an interrupt never
     # leaves the indicator stuck or the file behind (this trap supersedes the earlier output-file one).
     agtermctl "${AGTERM_STATUS[@]}" "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true
-    trap 'agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true; rm -f "$OUTPUT_FILE" "$ERR_FILE"' EXIT
+    trap 'agtermctl session status active "${AGTERM_TARGET[@]}" >/dev/null 2>&1 || true; rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE"' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
 
@@ -274,7 +287,7 @@ if [ -n "${ZELLIJ:-}" ] && command -v zellij >/dev/null 2>&1; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -381,7 +394,7 @@ if [ "${HERDR_ENV:-}" = "1" ] && command -v herdr >/dev/null 2>&1; then
     HERDR_STARTED="$SENTINEL.started"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'herdr_cleanup_unlaunched || true; rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$HERDR_STARTED"' EXIT
+    trap 'herdr_cleanup_unlaunched || true; rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp" "$HERDR_STARTED"' EXIT
     # same shape as the agterm branch above: INT/TERM exit through the EXIT trap so a
     # signal never skips cleanup or leaves an unnormalised status
     trap 'exit 130' INT
@@ -596,7 +609,7 @@ KITTY_SOCK="${KITTY_LISTEN_ON:-}"
 if [ -n "$KITTY_SOCK" ] && command -v kitty >/dev/null 2>&1; then
     SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
     rm -f "$SENTINEL"
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
 
     KITTY_ARGS=(kitty @ --to "$KITTY_SOCK" launch --type=overlay --title="$OVERLAY_TITLE" --cwd=current)
     if [ -n "${KITTY_WINDOW_ID:-}" ]; then
@@ -629,7 +642,7 @@ if [ -n "${WEZTERM_PANE:-}" ]; then
 
         WEZTERM_PCT="${REVDIFF_POPUP_HEIGHT:-90%}"
         WEZTERM_PCT="${WEZTERM_PCT%%%}"
-        trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+        trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
         "${WEZTERM_CLI[@]}" split-pane --bottom --percent "$WEZTERM_PCT" \
             --pane-id "$WEZTERM_PANE" --cwd "$CWD" -- sh -c "$(write_rc_cmd "$SENTINEL")" >/dev/null 2>&1
 
@@ -652,7 +665,7 @@ if is_cmux_session; then
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -693,7 +706,7 @@ if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; 
     rm -f "$SENTINEL"
 
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $(write_rc_cmd "$SENTINEL")
@@ -742,7 +755,7 @@ if [ -n "${ITERM_SESSION_ID:-}" ] && command -v osascript >/dev/null 2>&1; then
 
     # use launcher script to avoid single-quote injection in paths
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 cd "\$1" && $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > "\$2.tmp" && mv -f "\$2.tmp" "\$2"
@@ -834,7 +847,7 @@ if [ "${INSIDE_EMACS:-}" = "vterm" ] && command -v emacsclient >/dev/null 2>&1; 
     # use launcher script to avoid shell interpolation issues in elisp strings;
     # embed all paths directly so vterm-shell needs no arguments
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$LAUNCH_SCRIPT"' EXIT
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 cd $(sq "$CWD") && $(write_fifo_rc_cmd "$SENTINEL")
