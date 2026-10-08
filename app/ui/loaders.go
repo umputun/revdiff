@@ -488,13 +488,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		m.layout.viewport.SetContent("")
 		return m, statsCmd
 	}
-	if m.file.singleFile {
-		m.layout.focus = paneDiff
-		m.layout.treeWidth = 0
-		if m.ready {
-			m.layout.viewport.Width = m.layout.width - 2
-		}
-	}
+	m.fitPanesToFileCount()
 
 	// auto-select first file
 	if f := m.tree.SelectedFile(); f != "" {
@@ -522,6 +516,22 @@ func (m Model) handleCommitsLoaded(msg commitsLoadedMsg) (tea.Model, tea.Cmd) {
 	m.commits.loaded = true
 	m.refreshInfoOverlay()
 	return m, nil
+}
+
+// fitPanesToFileCount collapses the tree pane for a one-file review and brings it back
+// once the list holds more than one file, unless the user hid the pane.
+func (m *Model) fitPanesToFileCount() {
+	switch {
+	case m.file.singleFile:
+		m.layout.focus = paneDiff
+		m.layout.treeWidth = 0
+		if m.ready {
+			m.layout.viewport.Width = m.layout.width - 2
+		}
+	case m.ready && !m.layout.treeHidden && m.layout.treeWidth == 0:
+		m.layout.treeWidth = max(minTreeWidth, m.layout.width*m.cfg.treeWidthRatio/10)
+		m.layout.viewport.Width = m.layout.width - m.layout.treeWidth - 4
+	}
 }
 
 func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
