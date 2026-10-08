@@ -39,10 +39,12 @@ done
 # every backend starts the review from a terminal or server process, so the review
 # never inherits this script's stdin. a piped diff is spooled to a file and fed back
 # in by redirect; with a terminal on stdin there is nothing to spool and revdiff
-# reports the missing input itself
+# reports the missing input itself. the spool holds a whole diff in a possibly shared
+# temp dir, so it is created private. it stops one byte past revdiff's 64 MiB stdin
+# cap: an endless producer cannot fill the disk, and revdiff reports the overflow
 for arg in "$@"; do
     if [ "$arg" = "--stdin" ] && [ ! -t 0 ]; then
-        cat > "$STDIN_FILE"
+        (umask 077; head -c 67108865 > "$STDIN_FILE")
         REVDIFF_CMD="$REVDIFF_CMD <$(sq "$STDIN_FILE")"
         break
     fi

@@ -185,6 +185,9 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 						assert.Equal(t, tc.output, res.stdout)
 						if tc.stdin != "" {
 							assertFileContent(t, seenStdin, tc.stdin)
+							mode, err := os.ReadFile(seenStdin + ".mode") //nolint:gosec // path is a test-owned temp file
+							require.NoError(t, err)
+							assert.True(t, strings.HasPrefix(string(mode), "-rw-------"), "spool mode: %s", mode)
 						}
 						if launcher.relaysStderr && tc.wantStderr {
 							assert.Contains(t, res.stderr, unknownFlagError)
@@ -198,6 +201,39 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestShellLaunchersCapSpooledStdin(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	backend := launcherBackends()[0]
+	oversized := strings.Repeat("x", maxStdinSize+4096)
+	for _, path := range []string{
+		".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+		"plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			env := fakeLauncherEnv(t, launcherRun{backend: backend})
+			seenStdin := filepath.Join(t.TempDir(), "stdin-seen")
+			env["FAKE_STDIN_FILE"] = seenStdin
+			res := runTestCmd(t, cmdReq{
+				dir:   root,
+				name:  "bash",
+				args:  []string{filepath.Join(root, path), "--stdin"},
+				env:   env,
+				stdin: oversized,
+			})
+			assert.Equal(t, 0, res.code)
+			info, err := os.Stat(seenStdin)
+			require.NoError(t, err)
+			assert.Equal(t, int64(maxStdinSize+1), info.Size())
+		})
 	}
 }
 
