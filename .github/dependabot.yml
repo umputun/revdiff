@@ -17,3 +17,8 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      # these release in lockstep and pin each other exactly; separate bumps leave two copies in the lockfile
+      opencode:
+        patterns:
+          - "@opencode/*"
