@@ -61,6 +61,8 @@ git format-patch -1 --stdout | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.
 cat /tmp/feature.patch | "$("${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}")" --stdin
 ```
 
+If the launch fails with an `osascript` error, re-run the whole pipeline using the two-call form from "Ghostty / iTerm2 (osascript backends)" below (`gh pr diff 123 | /abs/path/to/launch-revdiff.sh --stdin`) — the failed attempt already consumed the piped input.
+
 `--stdin` is mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`, so do not combine with the Step 1 ref detection — go directly to Step 3 once the launcher returns. Annotations come back keyed by the real file paths from the diff (not by `--stdin-name`).
 
 ## How It Works
@@ -137,6 +139,20 @@ Run the launcher through the override-chain resolver:
 The resolver and launcher MUST run in the same bash invocation — the resolver runs as a sub-shell substitution so the resolved path is consumed immediately as the executable. The resolver checks `user → bundled` (see `references/install.md` for override paths) and prints the first-found absolute path. Fall-through to the bundled launcher is the default when no overrides exist.
 
 **Failure mode**: if the resolver fails (no launcher in any layer), the command substitution produces an empty string and bash reports `: command not found` with exit 127. The resolver's stderr (`error: launcher not found in override chain: launch-revdiff.sh`) is preserved on the same output stream — check it to confirm the override path is correct (executable bit set, file present in one of the two layers).
+
+**Ghostty / iTerm2 (osascript backends)**: these backends drive the terminal through `osascript`, which Claude Code's sandbox blocks. Adding the launcher to `excludedCommands` doesn't fix this on its own, because the sandbox blocks all commands with `$( )` substitutions. If the launcher exits nonzero with an `osascript` error, the sandbox blocked it. Switch to two separate Bash calls instead, and keep using them for the rest of the session:
+
+1. Resolve the launcher on its own:
+   ```bash
+   "${CLAUDE_SKILL_DIR}/scripts/resolve-launcher.sh" launch-revdiff.sh "${CLAUDE_PLUGIN_DATA}"
+   ```
+   If it exits nonzero, stop and report its stderr — do not run anything else.
+2. Run the absolute path it printed, literally, with the same arguments:
+   ```bash
+   /abs/path/printed/by/resolver/launch-revdiff.sh [base] [against] [--staged] ...
+   ```
+
+The long-running-command guidance below applies to the second call only. If the second call also fails with an `osascript` error, do not retry again — tell the user to add `"excludedCommands": ["*/launch-revdiff.sh*"]` to their Claude Code `settings.json` (see `references/install.md`).
 
 **IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on many harnesses. Set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher on OpenCode). The resolver itself returns in milliseconds — the timeout cap applies to the launcher only. Do NOT use `run_in_background` for this — background-task handling is unreliable for interactive TUI launchers (processes may be killed unprompted, and polling loops can leave the session idle after the review finishes). If the review outlasts the timeout cap, the fallback in Step 3 handles it.
 
