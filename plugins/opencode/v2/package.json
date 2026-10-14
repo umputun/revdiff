@@ -14,7 +14,7 @@
     "@opencode/plugin": "2.0.24",
     "@opencode/client": "2.0.24",
     "@types/node": "^26.6.4",
-    "solid-js": "1.9.16",
+    "solid-js": "1.9.17",
     "typescript": "^7.0.2"
   }
 }
