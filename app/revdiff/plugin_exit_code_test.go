@@ -1193,6 +1193,7 @@ func TestCodexPlanReviewHook(t *testing.T) {
 		{name: "transcript without mode kind skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: taskStartedTranscriptLine(t, "turn-current", "") + planTranscript, withBinary: true},
 		{name: "transcript plan mode of another turn skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: taskStartedTranscriptLine(t, "turn-other", "plan") + planTranscript, withBinary: true},
 		{name: "default mode transcript from another session skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default", "session_id": "session-other"})), transcript: taskStartedTranscriptLine(t, "turn-current", "plan") + planTranscript, withBinary: true},
+		{name: "transcript plan mode with undecodable bytes warns", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: taskStartedTranscriptLine(t, "turn-current", "plan") + strings.Repeat("{\"type\":\"filler\"}\n", 10000) + "\xff\xfe\n", withBinary: true, wantWarning: true},
 		{name: "default mode missing transcript skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default", "transcript_path": "$MISSING_TRANSCRIPT"})), withBinary: true},
 		{name: "missing fallback identifiers", payload: payload(map[string]any{"last_assistant_message": "No plan block"}), withBinary: true, wantWarning: true},
 		{name: "missing revdiff", payload: payload(nil), wantWarning: true},

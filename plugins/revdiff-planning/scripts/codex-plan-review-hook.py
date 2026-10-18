@@ -151,7 +151,7 @@ def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | No
                     message = "\n".join(parts)
                     if extract_plan(message) is not None:
                         plan_message = message
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None, "transcript file could not be read"
     if message is None:
         return None, "transcript has no assistant message for the current turn"

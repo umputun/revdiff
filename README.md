@@ -293,7 +293,7 @@ codex plugin add revdiff-planning@revdiff
 
 If you previously copied the skills manually, remove `~/.codex/skills/revdiff` and `~/.codex/skills/revdiff-plan` after installing the plugin so the plugin copy is the only one in use.
 
-Start a new session and trust the plugin hook through `/hooks`. The `Stop` hook runs only in Plan mode and first checks `last_assistant_message`; whenever that field has no complete `<proposed_plan>`, it reads the exact event transcript and selects the last assistant message for the matching `session_id` and `turn_id`, without depending on a provider-specific phase. A readable clarification turn is ignored. Missing or mismatched event data, dependencies, and launcher failures warn and fail open.
+Start a new session and trust the plugin hook through `/hooks`. The `Stop` hook runs only in Plan mode and first checks `last_assistant_message`; whenever that field has no complete `<proposed_plan>`, it reads the exact event transcript and selects the last assistant message for the matching `session_id` and `turn_id`, without depending on a provider-specific phase. A readable clarification turn is ignored. Codex reports Plan mode only in the transcript, so a turn whose transcript is missing or belongs to another session is skipped silently; missing dependencies and launcher failures warn and fail open.
 
 When annotations are present, the hook asks Codex to return the complete revised plan with a snapshot marker on the first line inside `<proposed_plan>`. The next round opens a rolling compare (`<new> <old>`); reviewed snapshots are replaced, and a clean review removes the final snapshot.
 
