@@ -114,6 +114,17 @@ func assistantTranscriptLine(t *testing.T, phase, text string) string {
 	return string(data) + "\n"
 }
 
+func taskStartedTranscriptLine(t *testing.T, turnID, mode string) string {
+	t.Helper()
+	payload := map[string]any{"type": "task_started", "turn_id": turnID}
+	if mode != "" {
+		payload["collaboration_mode_kind"] = mode
+	}
+	data, err := json.Marshal(map[string]any{"type": "event_msg", "payload": payload})
+	require.NoError(t, err)
+	return string(data) + "\n"
+}
+
 func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
@@ -1175,6 +1186,14 @@ func TestCodexPlanReviewHook(t *testing.T) {
 		{name: "transcript from another session", payload: payload(fallbackEvent(map[string]any{"session_id": "session-other"})), transcript: planTranscript, withBinary: true, wantWarning: true},
 		{name: "missing transcript", payload: payload(fallbackEvent(map[string]any{"transcript_path": "$MISSING_TRANSCRIPT"})), withBinary: true, wantWarning: true},
 		{name: "malformed transcript", payload: payload(fallbackEvent(nil)), transcript: "{not-json\n", withBinary: true, wantWarning: true},
+		{name: "transcript plan mode reviews null message", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: taskStartedTranscriptLine(t, "turn-current", "plan") + planTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "transcript plan mode survives non-object lines", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: "[\"task_started\"]\n\"task_started\"\n" + taskStartedTranscriptLine(t, "turn-current", "plan") + planTranscript, withBinary: true, wantLaunch: true, wantPlan: "# Plan from transcript\n- item"},
+		{name: "transcript plan mode reviews message plan", payload: payload(fallbackEvent(map[string]any{"permission_mode": "bypassPermissions", "last_assistant_message": "<proposed_plan>\n# Plan\n- item\n</proposed_plan>"})), transcript: taskStartedTranscriptLine(t, "turn-current", "plan"), withBinary: true, wantLaunch: true, wantPlan: "# Plan\n- item"},
+		{name: "transcript default mode skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default", "last_assistant_message": "<proposed_plan>\n# Plan\n- item\n</proposed_plan>"})), transcript: taskStartedTranscriptLine(t, "turn-current", "default") + planTranscript, withBinary: true},
+		{name: "transcript without mode kind skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: taskStartedTranscriptLine(t, "turn-current", "") + planTranscript, withBinary: true},
+		{name: "transcript plan mode of another turn skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default"})), transcript: taskStartedTranscriptLine(t, "turn-other", "plan") + planTranscript, withBinary: true},
+		{name: "default mode transcript from another session skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default", "session_id": "session-other"})), transcript: taskStartedTranscriptLine(t, "turn-current", "plan") + planTranscript, withBinary: true},
+		{name: "default mode missing transcript skips", payload: payload(fallbackEvent(map[string]any{"permission_mode": "default", "transcript_path": "$MISSING_TRANSCRIPT"})), withBinary: true},
 		{name: "missing fallback identifiers", payload: payload(map[string]any{"last_assistant_message": "No plan block"}), withBinary: true, wantWarning: true},
 		{name: "missing revdiff", payload: payload(nil), wantWarning: true},
 		{name: "launcher failure", payload: payload(nil), code: 1, withBinary: true, wantWarning: true, wantLaunch: true, wantPlan: "# Plan\n- item"},

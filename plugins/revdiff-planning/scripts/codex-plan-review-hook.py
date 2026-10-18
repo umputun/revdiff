@@ -62,8 +62,8 @@ def trusted_snapshot(path: Path) -> Path | None:
     return resolved
 
 
-def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | None]:
-    """Return this turn's last plan message, or its last assistant message."""
+def transcript_file(event: dict[str, Any]) -> tuple[Path | None, str | None]:
+    """Return the event's transcript when it belongs to the event's session."""
     transcript = event.get("transcript_path")
     session_id = event.get("session_id")
     turn_id = event.get("turn_id")
@@ -75,6 +75,46 @@ def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | No
         return None, "transcript path does not match the current session"
     if not path.is_file():
         return None, "transcript file is unavailable"
+    return path, None
+
+
+def transcript_plan_mode(event: dict[str, Any]) -> bool:
+    """Report whether this turn's task_started event records Plan mode.
+
+    Codex fills permission_mode from the approval policy, so it never reports Plan mode.
+    """
+    path, error = transcript_file(event)
+    if error is not None or path is None:
+        return False
+    turn_id = event.get("turn_id")
+    try:
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                if "task_started" not in line:
+                    continue
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                payload = item.get("payload") if isinstance(item, dict) else None
+                if (
+                    isinstance(payload, dict)
+                    and item.get("type") == "event_msg"
+                    and payload.get("type") == "task_started"
+                    and payload.get("turn_id") == turn_id
+                ):
+                    return payload.get("collaboration_mode_kind") == "plan"
+    except (OSError, UnicodeDecodeError):
+        return False
+    return False
+
+
+def message_from_transcript(event: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Return this turn's last plan message, or its last assistant message."""
+    path, error = transcript_file(event)
+    if error is not None or path is None:
+        return None, error
+    turn_id = event.get("turn_id")
 
     message: str | None = None
     plan_message: str | None = None
@@ -147,7 +187,7 @@ def main() -> None:
     if event.get("hook_event_name") != "Stop":
         respond()
         return
-    if event.get("permission_mode") != "plan":
+    if event.get("permission_mode") != "plan" and not transcript_plan_mode(event):
         respond()
         return
 
