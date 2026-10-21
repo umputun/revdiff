@@ -1499,6 +1499,20 @@ func TestReadLatestHistoryMatchesPathHeader(t *testing.T) {
 				assert.NotContains(t, out, "foreign note")
 			})
 
+			t.Run("newest of several matching entries wins", func(t *testing.T) {
+				tmp := t.TempDir()
+				own := filepath.Join(tmp, "a", "proj")
+				initHistoryRepo(t, own)
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "1.md"), own, "middle note", base.Add(time.Minute))
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "2.md"), own, "newest note", base.Add(2*time.Minute))
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "3.md"), own, "oldest note", base)
+				out := read(t, own, hist)
+				assert.Contains(t, out, "newest note")
+				assert.NotContains(t, out, "middle note")
+				assert.NotContains(t, out, "oldest note")
+			})
+
 			t.Run("nothing written for this checkout prints nothing", func(t *testing.T) {
 				tmp := t.TempDir()
 				own, other := filepath.Join(tmp, "a", "proj"), filepath.Join(tmp, "b", "proj")

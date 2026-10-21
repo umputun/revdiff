@@ -94,6 +94,7 @@ If the bash tool reports a timeout, use the same fallback as the revdiff skill:
      cat "$output_file"
    fi
    ```
+   The lookup only considers your own files and excludes files older than two hours, but a recent leftover or another review of yours live under one `$TMPDIR` (a diff review included, since it uses the same file prefix) can still be the newest match.
 
 ### Step 3: Process Annotations
 
