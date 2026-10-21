@@ -552,6 +552,7 @@ func TestAgtermPaneOverlayOptIn(t *testing.T) {
 		env       map[string]string
 		wantPane  bool
 		wantOpens int
+		wantSize  string
 	}{
 		{
 			name:      "opt-in in a split scopes the overlay to the pane",
@@ -580,6 +581,34 @@ func TestAgtermPaneOverlayOptIn(t *testing.T) {
 				"FAKE_AGTERM_PANE_REFUSE": "1"},
 			wantPane:  true,
 			wantOpens: 2,
+		},
+		{
+			name:      "size opt-in floats the session-wide overlay",
+			env:       map[string]string{"REVDIFF_AGTERM_SIZE_PERCENT": "70"},
+			wantOpens: 1,
+			wantSize:  "70",
+		},
+		{
+			name:      "size opt-in drops a trailing percent sign",
+			env:       map[string]string{"REVDIFF_AGTERM_SIZE_PERCENT": "70%"},
+			wantOpens: 1,
+			wantSize:  "70",
+		},
+		{
+			name: "pane overlay ignores the size opt-in",
+			env: map[string]string{"REVDIFF_AGTERM_PANE": "1", "FAKE_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "true",
+				"REVDIFF_AGTERM_SIZE_PERCENT": "70"},
+			wantPane:  true,
+			wantOpens: 1,
+			wantSize:  "70",
+		},
+		{
+			name: "a refused pane overlay retries as a floating panel",
+			env: map[string]string{"REVDIFF_AGTERM_PANE": "1", "FAKE_AGTERM_PANE": "1", "FAKE_AGTERM_SPLIT": "true",
+				"FAKE_AGTERM_PANE_REFUSE": "1", "REVDIFF_AGTERM_SIZE_PERCENT": "70"},
+			wantPane:  true,
+			wantOpens: 2,
+			wantSize:  "70",
 		},
 	}
 
@@ -618,6 +647,16 @@ func TestAgtermPaneOverlayOptIn(t *testing.T) {
 				if len(opens) > 1 {
 					// the retry drops the pane scoping, otherwise agterm refuses it again
 					assert.NotContains(t, opens[len(opens)-1], "--pane")
+				}
+				for _, open := range opens {
+					switch {
+					case strings.Contains(open, "--pane"):
+						assert.NotContains(t, open, "--size-percent")
+					case tc.wantSize != "":
+						assert.Contains(t, open, "--size-percent "+tc.wantSize+" --block")
+					default:
+						assert.NotContains(t, open, "--size-percent")
+					}
 				}
 			})
 		}
@@ -2278,32 +2317,33 @@ done
 
 func cleanOverlayEnv() map[string]string {
 	return map[string]string{
-		"TMUX":                  "",
-		"ZELLIJ":                "",
-		"HERDR_ENV":             "",
-		"HERDR_SOCKET_PATH":     "",
-		"HERDR_PANE_ID":         "",
-		"HERDR_WORKSPACE_ID":    "",
-		"REVDIFF_HERDR_PANE":    "",
-		"KITTY_LISTEN_ON":       "",
-		"KITTY_WINDOW_ID":       "",
-		"WEZTERM_PANE":          "",
-		"CMUX_SURFACE_ID":       "",
-		"TERM_PROGRAM":          "",
-		"GHOSTTY_SURFACE_ID":    "",
-		"GHOSTTY_RESOURCES_DIR": "",
-		"GHOSTTY_BIN_DIR":       "",
-		"__CFBundleIdentifier":  "",
-		"ITERM_SESSION_ID":      "",
-		"INSIDE_EMACS":          "",
-		"AGTERM_SESSION_ID":     "",
-		"AGTERM_SOCKET":         "",
-		"AGTERM_PANE":           "",
-		"AGTERM_WINDOW_ID":      "",
-		"REVDIFF_AGTERM_PANE":   "",
-		"REVDIFF_TMUX_WINDOW":   "",
-		"AGENTDECK_INSTANCE_ID": "",
-		"REVDIFF_CONFIG":        "",
+		"TMUX":                        "",
+		"ZELLIJ":                      "",
+		"HERDR_ENV":                   "",
+		"HERDR_SOCKET_PATH":           "",
+		"HERDR_PANE_ID":               "",
+		"HERDR_WORKSPACE_ID":          "",
+		"REVDIFF_HERDR_PANE":          "",
+		"KITTY_LISTEN_ON":             "",
+		"KITTY_WINDOW_ID":             "",
+		"WEZTERM_PANE":                "",
+		"CMUX_SURFACE_ID":             "",
+		"TERM_PROGRAM":                "",
+		"GHOSTTY_SURFACE_ID":          "",
+		"GHOSTTY_RESOURCES_DIR":       "",
+		"GHOSTTY_BIN_DIR":             "",
+		"__CFBundleIdentifier":        "",
+		"ITERM_SESSION_ID":            "",
+		"INSIDE_EMACS":                "",
+		"AGTERM_SESSION_ID":           "",
+		"AGTERM_SOCKET":               "",
+		"AGTERM_PANE":                 "",
+		"AGTERM_WINDOW_ID":            "",
+		"REVDIFF_AGTERM_PANE":         "",
+		"REVDIFF_AGTERM_SIZE_PERCENT": "",
+		"REVDIFF_TMUX_WINDOW":         "",
+		"AGENTDECK_INSTANCE_ID":       "",
+		"REVDIFF_CONFIG":              "",
 	}
 }
 

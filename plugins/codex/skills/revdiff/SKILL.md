@@ -153,6 +153,8 @@ $SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--filte
 
 **Pane-scoped overlay (agterm)**: when running in an agterm split, `REVDIFF_AGTERM_PANE=1` opens revdiff in the agent's own pane instead of over the whole session, leaving the sibling pane live and visible. The user sets it in the environment; it is ignored outside a split. This is a launcher environment variable, not a revdiff flag.
 
+**Floating panel (agterm)**: `REVDIFF_AGTERM_SIZE_PERCENT=N` (1-100) opens the session-wide agterm overlay as a floating panel at N percent of the session, keeping the agent's chat visible around the review. The user sets it in the environment; a pane-scoped overlay ignores it. This is a launcher environment variable, not a revdiff flag.
+
 The script:
 - Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay

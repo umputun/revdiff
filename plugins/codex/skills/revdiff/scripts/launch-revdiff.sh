@@ -209,9 +209,10 @@ agterm_session_split() {
     ' 2>/dev/null || printf '0'
 }
 
-# agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a FULL-pane overlay (no
-# --size-percent) over the agent's own session and blocks until it exits, returning revdiff's exit
-# code directly — so, unlike the sentinel-polling backends below, no sentinel is needed. Checked
+# agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a FULL-pane overlay (a
+# floating panel only with REVDIFF_AGTERM_SIZE_PERCENT) over the agent's own session and blocks
+# until it exits, returning revdiff's exit code directly — so, unlike the sentinel-polling backends
+# below, no sentinel is needed. Checked
 # first so an agterm session always uses its native overlay even when a multiplexer is also present.
 # Needs $AGTERM_SESSION_ID (set in every agterm session) and agtermctl on PATH; passes the bound
 # $AGTERM_SOCKET so it reaches the agterm instance hosting this session. Passes --cwd "$CWD" so the
@@ -251,13 +252,21 @@ if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
     # open` does not yet, and the control tree exposes nothing to resolve one against, so there is no
     # launcher-side fix. Failing closed to the session-wide overlay is deliberately NOT the answer: that
     # drops the feature for everyone to avoid a rare misplaced surface the user can see and close.
-    AGTERM_OPEN=(session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD")
+    AGTERM_BASE_OPEN=(session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD")
+    # optional floating panel (REVDIFF_AGTERM_SIZE_PERCENT=N), session-wide opens only: agtermctl
+    # rejects --size-percent beside --pane with a message the refusal fallback below does not match.
+    # A trailing % is dropped, as the wezterm branch does.
+    AGTERM_SESSION_OPEN=("${AGTERM_BASE_OPEN[@]}")
+    AGTERM_SIZE="${REVDIFF_AGTERM_SIZE_PERCENT:-}"
+    AGTERM_SIZE="${AGTERM_SIZE%\%}"
+    [ -n "$AGTERM_SIZE" ] && AGTERM_SESSION_OPEN+=(--size-percent "$AGTERM_SIZE")
+    AGTERM_OPEN=("${AGTERM_SESSION_OPEN[@]}")
     AGTERM_PANE_SCOPED=0
     if [ "${REVDIFF_AGTERM_PANE:-}" = 1 ]; then
         case "${AGTERM_PANE:-}" in
             left|right)
                 if agterm_supports_pane_overlay && [ "$(agterm_session_split)" = 1 ]; then
-                    AGTERM_OPEN+=(--pane "$AGTERM_PANE")
+                    AGTERM_OPEN=("${AGTERM_BASE_OPEN[@]}" --pane "$AGTERM_PANE")
                     AGTERM_PANE_SCOPED=1
                 fi
                 ;;
@@ -280,8 +289,7 @@ if [ -n "${AGTERM_SESSION_ID:-}" ] && command -v agtermctl >/dev/null 2>&1; then
     if [ "$rc" -ne 0 ] && [ "$AGTERM_PANE_SCOPED" -eq 1 ] &&
         printf '%s' "$AGTERM_ERR" | grep -qE 'pane overlay already open|pane not visible'; then
         rc=0
-        agtermctl session overlay open "$REVDIFF_CMD" "${AGTERM_TARGET[@]}" --cwd "$CWD" --block \
-            >/dev/null || rc=$?
+        agtermctl "${AGTERM_SESSION_OPEN[@]}" --block >/dev/null || rc=$?
     fi
     print_output_and_exit "$rc"
 fi

@@ -358,3 +358,7 @@ Set `REVDIFF_HERDR_PANE=1` in the launcher's environment to open revdiff in a zo
 ## Pane-Scoped Overlay (agterm)
 
 Set `REVDIFF_AGTERM_PANE=1` in the launcher's environment to open revdiff in the agent's own split pane instead of over the whole session, leaving the sibling pane live and visible. It applies only when that session is split — the session-wide overlay stands otherwise, and the launcher retries session-wide if agterm refuses the pane. The review gets pane width rather than session width, which is why it is opt-in. This is a launcher environment variable, not a revdiff flag.
+
+## Floating Panel (agterm)
+
+Set `REVDIFF_AGTERM_SIZE_PERCENT=N` (1-100) in the launcher's environment to open the session-wide overlay as a floating panel at N percent of the session instead of full-size, so the agent's chat stays visible around the review; a trailing `%` is accepted. A pane-scoped overlay is always full-pane, so with `REVDIFF_AGTERM_PANE=1` in a split the size applies only when the launcher falls back to the session-wide overlay. This is a launcher environment variable, not a revdiff flag.
