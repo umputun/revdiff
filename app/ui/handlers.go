@@ -281,6 +281,10 @@ func (m Model) handleMarkReviewed() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if file == m.file.name {
+		if !diff.Reviewable(m.file.lines) {
+			m.reviewed.hint = submoduleReviewHint
+			return m, nil
+		}
 		entry := diff.FileEntry{Path: file, OldPath: m.tree.OldPath(file), Status: m.tree.FileStatus(file)}
 		fingerprint := diff.FileFingerprint(entry, m.file.lines)
 		m.reviewed.cache[file] = fingerprint

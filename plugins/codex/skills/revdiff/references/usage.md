@@ -159,7 +159,7 @@ Press `O` to export the current annotations without exiting (`flush_output`, reb
 
 For clipboard-only flushes on macOS, set `post-flush-command = pbcopy` in `~/.config/revdiff/config`; no `--output` flag is required. On Linux, use `xclip -selection clipboard` for X11 or `wl-copy` for Wayland. For remote terminal clipboards, configure an OSC 52 helper as the post-flush command.
 
-Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged.
+Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar between all files and unreviewed files; while filtered, marking a file reviewed removes it from the list and advances to the next unfinished file. On `R` reload, revdiff keeps the mark only when the file's effective text diff is unchanged; rebases that only shift line numbers or surrounding context keep it, while changed or removed files lose it. Binary files and opaque placeholders are conservatively unmarked on reload because their rendered diff does not expose enough content to prove they are unchanged. In git, a submodule shows as one submodule summary row, adds nothing to the `+`/`-` counts, and cannot be marked reviewed, since its pointer says nothing about the code inside it.
 
 **View:**
 

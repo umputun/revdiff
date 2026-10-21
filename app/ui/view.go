@@ -138,7 +138,7 @@ func (m Model) truncateHeaderTitle(title string, paneW int) string {
 
 // transientHint returns the first non-empty transient status-bar hint. hints
 // are cleared on the next key press (see handleKey). priority matches the
-// display order: reload > output > compact > editor > keys > vim. returns ""
+// display order: reload > output > compact > editor > reviewed > keys > vim. returns ""
 // when no hint is set. chord (keys) hints and vim-motion hints are lowest
 // priority — an in-flight reload or a mode/action hint wins, since those hints
 // are user-driven and recoverable. vim hints sit below keys since vim-motion
@@ -153,6 +153,8 @@ func (m Model) transientHint() string {
 		return m.compact.hint
 	case m.editorState.hint != "":
 		return m.editorState.hint
+	case m.reviewed.hint != "":
+		return m.reviewed.hint
 	case m.keys.hint != "":
 		return m.keys.hint
 	case m.vim.hint != "":

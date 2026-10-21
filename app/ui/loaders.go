@@ -284,7 +284,11 @@ func (m Model) loadReviewFingerprint(entry diff.FileEntry, seq uint64) tea.Cmd {
 	return func() tea.Msg {
 		lines, err := m.fetchEffectiveFileDiff(entry, 0, true)
 		msg := reviewFingerprintLoadedMsg{path: entry.Path, seq: seq, filesSeq: filesSeq, err: err}
-		if err == nil {
+		switch {
+		case err != nil:
+		case !diff.Reviewable(lines):
+			msg.submodule = true
+		default:
 			msg.fingerprint = diff.FileFingerprint(entry, lines)
 		}
 		return msg
@@ -554,8 +558,12 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.file.name = msg.file
 	m.file.oldName = msg.oldName
 	m.file.lines = msg.lines
-	entry := diff.FileEntry{Path: msg.file, OldPath: m.tree.OldPath(msg.file), Status: m.tree.FileStatus(msg.file)}
-	fingerprint := diff.FileFingerprint(entry, m.file.lines)
+	// an empty fingerprint keeps a submodule out of the mark cache and drops any mark it holds
+	var fingerprint string
+	if diff.Reviewable(m.file.lines) {
+		entry := diff.FileEntry{Path: msg.file, OldPath: m.tree.OldPath(msg.file), Status: m.tree.FileStatus(msg.file)}
+		fingerprint = diff.FileFingerprint(entry, m.file.lines)
+	}
 	m.reviewed.cache[msg.file] = fingerprint
 	m.tree.ReconcileReviewedPath(msg.file, fingerprint)
 	m.invalidateRenderCaches()
@@ -669,6 +677,10 @@ func (m Model) handleReviewFingerprintLoaded(msg reviewFingerprintLoadedMsg) (te
 	}
 	if msg.err != nil {
 		log.Printf("[WARN] fingerprint reviewed file %s: %v", msg.path, msg.err)
+		return m, nil
+	}
+	if msg.submodule {
+		m.reviewed.hint = submoduleReviewHint
 		return m, nil
 	}
 	m.reviewed.cache[msg.path] = msg.fingerprint

@@ -175,6 +175,80 @@ func TestModel_MarkReviewedKeepsAsyncResultForPathSurvivingReload(t *testing.T) 
 	assert.True(t, model.tree.IsReviewed("b.go"))
 }
 
+func TestModel_MarkReviewedRefusesSubmodule(t *testing.T) {
+	submodule := []diff.DiffLine{{OldNum: 1, NewNum: 1, Content: "(submodule a → b)", ChangeType: diff.ChangeContext,
+		IsPlaceholder: true, IsSubmodule: true}}
+	regular := []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}
+	newModel := func() Model {
+		m := testModel([]string{"a.go", "sm"}, map[string][]diff.DiffLine{"a.go": regular, "sm": submodule})
+		m.tree = testNewFileTree([]string{"a.go", "sm"})
+		return m
+	}
+	space := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}}
+	settle := func(m Model, cmd tea.Cmd) Model {
+		if cmd == nil {
+			return m
+		}
+		if _, ok := cmd().(reviewFingerprintLoadedMsg); !ok {
+			return m
+		}
+		result, _ := m.Update(cmd())
+		return result.(Model)
+	}
+
+	t.Run("displayed file", func(t *testing.T) {
+		m := newModel()
+		m.file.name = "sm"
+		m.file.lines = submodule
+		m.layout.focus = paneDiff
+		result, cmd := m.Update(space)
+		model := settle(result.(Model), cmd)
+		assert.False(t, model.tree.IsReviewed("sm"))
+		assert.Equal(t, submoduleReviewHint, model.transientHint())
+	})
+
+	t.Run("file not loaded yet", func(t *testing.T) {
+		m := newModel()
+		m.file.name = "a.go"
+		m.file.lines = regular
+		m.layout.focus = paneTree
+		m.tree.Move(sidepane.MotionDown)
+		require.Equal(t, "sm", m.tree.SelectedFile())
+		result, cmd := m.Update(space)
+		require.NotNil(t, cmd)
+		model := settle(result.(Model), cmd)
+		assert.False(t, model.tree.IsReviewed("sm"))
+		assert.Equal(t, submoduleReviewHint, model.transientHint())
+	})
+
+	t.Run("file loaded earlier, cached", func(t *testing.T) {
+		m := newModel()
+		m.file.loadSeq = 1
+		result, _ := m.Update(fileLoadedMsg{file: "sm", seq: 1, lines: submodule})
+		m = result.(Model)
+		m.file.loadSeq = 2
+		result, _ = m.Update(fileLoadedMsg{file: "a.go", seq: 2, lines: regular})
+		m = result.(Model)
+		require.Equal(t, "a.go", m.file.name)
+		m.layout.focus = paneTree
+		m.tree.Move(sidepane.MotionDown)
+		require.Equal(t, "sm", m.tree.SelectedFile())
+		result, cmd := m.Update(space)
+		model := settle(result.(Model), cmd)
+		assert.False(t, model.tree.IsReviewed("sm"))
+		assert.Equal(t, submoduleReviewHint, model.transientHint())
+	})
+
+	t.Run("regular file still marks", func(t *testing.T) {
+		m := newModel()
+		m.file.name = "a.go"
+		m.file.lines = regular
+		m.layout.focus = paneDiff
+		result, _ := m.Update(space)
+		assert.True(t, result.(Model).tree.IsReviewed("a.go"))
+	})
+}
+
 func TestModel_HandleReviewFingerprintLoadedGuards(t *testing.T) {
 	t.Run("stale per-path sequence is ignored", func(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
@@ -821,6 +895,15 @@ func TestModel_TransientHint_Priority(t *testing.T) {
 		m := testModel([]string{"a.go"}, nil)
 		m.compact.hint = "compact msg"
 		assert.Equal(t, "compact msg", m.transientHint())
+	})
+
+	t.Run("reviewed sits between editor and keys", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.reviewed.hint = "reviewed msg"
+		m.keys.hint = "keys msg"
+		assert.Equal(t, "reviewed msg", m.transientHint())
+		m.editorState.hint = "editor msg"
+		assert.Equal(t, "editor msg", m.transientHint())
 	})
 
 	t.Run("empty when none set", func(t *testing.T) {

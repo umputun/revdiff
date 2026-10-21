@@ -53,6 +53,13 @@ func TestFileFingerprintContextOnlySource(t *testing.T) {
 	assert.Equal(t, FileFingerprint(entry, first), FileFingerprint(entry, append(first, DiffLine{ChangeType: ChangeDivider, Content: "ignored"})))
 }
 
+func TestReviewable(t *testing.T) {
+	assert.True(t, Reviewable([]DiffLine{{Content: "text", ChangeType: ChangeAdd}}))
+	assert.True(t, Reviewable(nil))
+	assert.True(t, Reviewable([]DiffLine{{Content: BinaryPlaceholder, IsBinary: true}}))
+	assert.False(t, Reviewable([]DiffLine{{Content: "(submodule a → b)", IsPlaceholder: true, IsSubmodule: true}}))
+}
+
 func TestReviewFingerprintStable(t *testing.T) {
 	assert.True(t, ReviewFingerprintStable([]DiffLine{{Content: "text", ChangeType: ChangeAdd}}))
 	assert.False(t, ReviewFingerprintStable([]DiffLine{{Content: BinaryPlaceholder, IsBinary: true}}))

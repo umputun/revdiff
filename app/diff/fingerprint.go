@@ -65,6 +65,17 @@ func ReviewFingerprintStable(lines []DiffLine) bool {
 	return true
 }
 
+// Reviewable reports whether a reviewed mark may be set on a file with this diff. A submodule
+// pointer change is not source content, so marking it would claim the submodule was reviewed.
+func Reviewable(lines []DiffLine) bool {
+	for _, line := range lines {
+		if line.IsSubmodule {
+			return false
+		}
+	}
+	return true
+}
+
 // writeFingerprintField uses length-prefix framing so distinct field sequences
 // cannot collide through delimiter-like file content.
 func writeFingerprintField(h hash.Hash, value string) {

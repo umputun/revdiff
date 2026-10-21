@@ -1002,12 +1002,14 @@ func TestModel_HandleMouse_ClearsTransientHints(t *testing.T) {
 	m.reload.hint = "press y to reload"
 	m.output.hint = "Wrote 1 annotation to output file"
 	m.compact.hint = "not applicable"
+	m.reviewed.hint = submoduleReviewHint
 
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
 	model := result.(Model)
 	assert.Empty(t, model.reload.hint)
 	assert.Empty(t, model.output.hint)
 	assert.Empty(t, model.compact.hint)
+	assert.Empty(t, model.reviewed.hint)
 }
 
 func TestModel_HandleMouse_StdinModeTreeHiddenClickLandsOnDiff(t *testing.T) {

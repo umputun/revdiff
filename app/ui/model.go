@@ -474,7 +474,11 @@ type reviewedState struct {
 	cache   map[string]string
 	pending map[string]uint64
 	loadSeq uint64
+	hint    string // transient status-bar message for a refused mark
 }
+
+// submoduleReviewHint is shown when mark_reviewed targets a submodule pointer change.
+const submoduleReviewHint = "Submodule pointers cannot be marked reviewed"
 
 // reloadState holds the pending-confirmation state for the R reload feature.
 // hint is a transient status-bar message cleared on the next key press.
@@ -645,6 +649,7 @@ type reviewFingerprintLoadedMsg struct {
 	seq         uint64
 	filesSeq    uint64 // file-list generation in which the mark request was started
 	fingerprint string
+	submodule   bool // the file is a submodule pointer change and cannot be marked
 	err         error
 }
 
@@ -1050,6 +1055,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.output.hint = ""
 	m.compact.hint = ""
 	m.editorState.hint = ""
+	m.reviewed.hint = ""
 	m.keys.hint = ""
 	m.vim.hint = ""
 

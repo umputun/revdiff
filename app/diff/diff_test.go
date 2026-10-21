@@ -984,6 +984,104 @@ func TestGit_RenameAware_AcceptanceIssue222(t *testing.T) {
 	})
 }
 
+func TestGit_FileDiff_Submodule(t *testing.T) {
+	submoduleRow := func(t *testing.T, lines []DiffLine) DiffLine {
+		t.Helper()
+		require.Len(t, lines, 1)
+		row := lines[0]
+		assert.True(t, row.IsSubmodule)
+		assert.True(t, row.IsPlaceholder)
+		assert.Equal(t, ChangeContext, row.ChangeType)
+		adds, removes := CountChanges(lines)
+		assert.Zero(t, adds)
+		assert.Zero(t, removes)
+		assert.False(t, ReviewFingerprintStable(lines))
+		return row
+	}
+
+	t.Run("moved pointer", func(t *testing.T) {
+		meta := setupSubmoduleRepo(t)
+		oldSHA := commitInSubmodule(t, meta)
+		newSHA := commitInSubmodule(t, meta)
+		require.NotEqual(t, oldSHA, newSHA)
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm"})
+		require.NoError(t, err)
+		row := submoduleRow(t, lines)
+		assert.Contains(t, row.Content, newSHA[:7])
+	})
+
+	t.Run("dirty submodule with unmoved pointer", func(t *testing.T) {
+		meta := setupSubmoduleRepo(t)
+		writeFile(t, filepath.Join(meta, "sm"), "f.txt", "changed\n")
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm"})
+		require.NoError(t, err)
+		assert.Contains(t, submoduleRow(t, lines).Content, "dirty")
+	})
+
+	t.Run("added submodule", func(t *testing.T) {
+		meta := setupTestRepo(t)
+		writeFile(t, meta, "top.txt", "top\n")
+		gitCmd(t, meta, "add", "top.txt")
+		gitCmd(t, meta, "commit", "-m", "init")
+		sub := setupSubmoduleSource(t)
+		gitCmd(t, meta, "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "sm")
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm", Staged: true})
+		require.NoError(t, err)
+		assert.Contains(t, submoduleRow(t, lines).Content, "new submodule")
+	})
+
+	t.Run("deleted submodule", func(t *testing.T) {
+		meta := setupSubmoduleRepo(t)
+		gitCmd(t, meta, "rm", "-q", "sm")
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm", Staged: true})
+		require.NoError(t, err)
+		assert.Contains(t, submoduleRow(t, lines).Content, "deleted submodule")
+	})
+
+	t.Run("pure rename", func(t *testing.T) {
+		meta := setupSubmoduleRepo(t)
+		gitCmd(t, meta, "mv", "sm", "sm2")
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm2", OldPath: "sm", Staged: true})
+		require.NoError(t, err)
+		submoduleRow(t, lines)
+	})
+
+	t.Run("committed pointer move against a ref", func(t *testing.T) {
+		meta := setupSubmoduleRepo(t)
+		commitInSubmodule(t, meta)
+		gitCmd(t, meta, "commit", "-q", "-am", "bump sm")
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm", Ref: "HEAD~1"})
+		require.NoError(t, err)
+		submoduleRow(t, lines)
+	})
+
+	t.Run("diff.submodule=log config does not change the result", func(t *testing.T) {
+		meta := setupSubmoduleRepo(t)
+		gitCmd(t, meta, "config", "diff.submodule", "log")
+		commitInSubmodule(t, meta)
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm"})
+		require.NoError(t, err)
+		submoduleRow(t, lines)
+	})
+}
+
+func TestGit_FileDiff_RegularFileWithPointerText(t *testing.T) {
+	dir := setupTestRepo(t)
+	writeFile(t, dir, "pin.txt", "Subproject commit "+strings.Repeat("a", 40)+"\n")
+	gitCmd(t, dir, "add", "pin.txt")
+	gitCmd(t, dir, "commit", "-m", "init")
+	writeFile(t, dir, "pin.txt", "Subproject commit "+strings.Repeat("b", 40)+"\n")
+
+	lines, err := NewGit(dir).FileDiff(FileDiffRequest{Path: "pin.txt"})
+	require.NoError(t, err)
+	for _, l := range lines {
+		assert.False(t, l.IsSubmodule)
+	}
+	adds, removes := CountChanges(lines)
+	assert.Equal(t, 1, adds)
+	assert.Equal(t, 1, removes)
+}
+
 func TestGit_FileDiff_BinaryFile(t *testing.T) {
 	dir := setupTestRepo(t)
 	g := NewGit(dir)
@@ -1533,6 +1631,40 @@ func setupTestRepo(t *testing.T) string {
 	gitCmd(t, dir, "config", "user.email", "test@test.com")
 	gitCmd(t, dir, "config", "user.name", "Test")
 	return dir
+}
+
+func setupSubmoduleSource(t *testing.T) string {
+	t.Helper()
+	sub := setupTestRepo(t)
+	writeFile(t, sub, "f.txt", "base\n")
+	gitCmd(t, sub, "add", "f.txt")
+	gitCmd(t, sub, "commit", "-m", "base")
+	return sub
+}
+
+func setupSubmoduleRepo(t *testing.T) string {
+	t.Helper()
+	sub := setupSubmoduleSource(t)
+	meta := setupTestRepo(t)
+	writeFile(t, meta, "top.txt", "top\n")
+	gitCmd(t, meta, "-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "sm")
+	gitCmd(t, meta, "add", "top.txt")
+	gitCmd(t, meta, "commit", "-q", "-m", "init")
+	return meta
+}
+
+func commitInSubmodule(t *testing.T, meta string) string {
+	t.Helper()
+	sm := filepath.Join(meta, "sm")
+	gitCmd(t, sm, "config", "user.email", "test@test.com")
+	gitCmd(t, sm, "config", "user.name", "Test")
+	writeFile(t, sm, "f.txt", fmt.Sprintf("change %d\n", time.Now().UnixNano()))
+	gitCmd(t, sm, "commit", "-q", "-am", "change")
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = sm
+	out, err := cmd.Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(out))
 }
 
 func writeFile(t *testing.T, dir, name, content string) {

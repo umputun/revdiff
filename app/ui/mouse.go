@@ -150,13 +150,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m.handleOverlayMouse(msg)
 	}
 
-	// reload, output, compact-mode, and editor hints persist for exactly one
-	// render cycle; any mouse event that reaches this point dismisses them,
+	// reload, output, compact-mode, editor and reviewed hints persist for exactly
+	// one render cycle; any mouse event that reaches this point dismisses them,
 	// mirroring handleKey.
 	m.reload.hint = ""
 	m.output.hint = ""
 	m.compact.hint = ""
 	m.editorState.hint = ""
+	m.reviewed.hint = ""
 
 	zone := m.hitTest(msg.X, msg.Y)
 
