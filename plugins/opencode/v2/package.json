@@ -13,7 +13,7 @@
   "devDependencies": {
     "@opencode/plugin": "2.0.26",
     "@opencode/client": "2.0.26",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "solid-js": "1.9.17",
     "typescript": "^7.0.2"
   }
