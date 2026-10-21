@@ -1,11 +1,13 @@
 package history
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -416,8 +418,24 @@ func TestSave_FilenameHasMilliseconds(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 1)
 	name := files[0].Name()
-	// filename format: 2006-01-02T15-04-05.000.md — the dot before milliseconds
-	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}\.md$`, name)
+	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d{3}-[0-9a-f]{8}\.md$`, name)
+}
+
+func TestSave_ConcurrentSavesKeepEveryEntry(t *testing.T) {
+	// regression: saves landing in the same millisecond renamed onto one name and replaced each other
+	histDir := t.TempDir()
+	const saves = 50
+	var wg sync.WaitGroup
+	for i := range saves {
+		wg.Go(func() {
+			New(histDir).Save(Params{Annotations: fmt.Sprintf("## f.go:1 (+)\nsave %d\n", i), Path: "/proj"})
+		})
+	}
+	wg.Wait()
+
+	files, err := os.ReadDir(filepath.Join(histDir, "proj"))
+	require.NoError(t, err)
+	assert.Len(t, files, saves)
 }
 
 func TestSave_FileModeAndCompleteContent(t *testing.T) {

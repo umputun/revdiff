@@ -2,6 +2,8 @@ package history
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
@@ -56,7 +58,11 @@ func (s *Service) Save(p Params) {
 	}
 
 	now := time.Now()
-	fname := filepath.Join(dir, now.Format("2006-01-02T15-04-05.000")+".md")
+	// the rename onto the final name replaces any entry already there, so concurrent saves that
+	// pick the same millisecond need the random suffix to stay apart.
+	suffix := make([]byte, 4)
+	_, _ = rand.Read(suffix)
+	fname := filepath.Join(dir, now.Format("2006-01-02T15-04-05.000")+"-"+hex.EncodeToString(suffix)+".md")
 
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "# Review: %s\n", now.Format("2006-01-02 15:04:05"))

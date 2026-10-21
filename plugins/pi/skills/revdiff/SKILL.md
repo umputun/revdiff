@@ -119,12 +119,13 @@ Behavior:
 
 ## Existing review history
 
-If the user says "use my latest revdiff annotations", "pull up my last revdiff review", or similar, do not launch revdiff again. Read the newest markdown file from the revdiff history directory and process its annotations through the same annotation handling loop. Also use history as a fallback only when a revdiff launch reports annotations but the tool did not return annotation text, or when the review did not complete and recent history may contain the saved annotations.
+If the user says "use my latest revdiff annotations", "pull up my last revdiff review", or similar, do not launch revdiff again. Read the newest markdown file from the revdiff history directory that belongs to the current checkout (see the header rule below) and process its annotations through the same annotation handling loop. Also use history as a fallback only when a revdiff launch reports annotations but the tool did not return annotation text, or when the review did not complete and recent history may contain the saved annotations.
 
 revdiff also writes to history when the process is terminated by a signal (a SIGHUP from a lost connection, or a SIGTERM), saving the current annotations there — never the `-o` output — so a review cut short mid-session is still recoverable from history.
 
 - Use `$REVDIFF_HISTORY_DIR` when set; otherwise use `~/.config/revdiff/history/`.
-- Prefer the history subdirectory matching the current repository root name when present.
+- Look in the history subdirectory matching the current repository root name.
+- Every checkout whose root has that name shares the subdirectory, so check the `path:` line in each file's header block (above the first blank line) and skip files written for another checkout. A directory path must be the current repository root, compared after resolving symlinks. A file path (a single-file `--only` review without git) belongs when the file sits directly in the root. Never match an existing directory through its parent: a nested checkout with the same name would pass.
 - History files contain annotation blocks in `## file:line (type)` format, usually followed by captured diff context.
 
 ## In-session review preload

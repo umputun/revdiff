@@ -46,7 +46,7 @@ If the user says things like "locate my review", "use my latest revdiff annotati
 $SCRIPT_DIR/read-latest-history.sh
 ```
 
-The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file found. Each history file contains a header (path, refs, and — when available — a git commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. The `commit:` line and diff block are captured from git only; in hg/jj repos the diff block will be empty and no commit hash is recorded. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
+The script resolves the history dir from `$REVDIFF_HISTORY_DIR` (default `~/.config/revdiff/history`), finds the repo subdir via VCS root basename (jj/git/hg), and prints the newest `.md` file whose `path:` header names the current checkout (a directory header must equal the repo root; a single-file `--only` header without git matches when the file sits directly in the root). Each history file contains a header (path, refs, and — when available — a git commit hash), the annotations in `## file:line (type)` format, and the raw git diff for annotated files. The `commit:` line and diff block are captured from git only; in hg/jj repos the diff block will be empty and no commit hash is recorded. See `references/usage.md` "Review History" section for directory layout, stdin/only handling, and override options.
 
 The history file is also the recovery path when a review is cut short by a lost connection: on signal termination (a SIGHUP from a dropped SSH/tmux client, or a SIGTERM) revdiff saves the current annotations to history — never the `-o` output — so `read-latest-history.sh` still recovers them.
 
@@ -186,14 +186,14 @@ $SCRIPT_DIR/launch-revdiff.sh --only=<file>
 2. Wait for the user to reply. They cannot respond while the overlay has focus, so their reply means they are back at the session (they quit, or flushed with `O` and switched back).
 3. On their reply you MUST act; do not stop at step 1. If they chose to stop, acknowledge and end. Otherwise read the persisted annotations, most recent output file first (the launcher writes to `$TMPDIR` when set, falling back to `/tmp`):
    ```bash
-   output_file="$(ls -t "${TMPDIR:-/tmp}"/revdiff-output-* 2>/dev/null | head -1)"
+   output_file="$(find -H "${TMPDIR:-/tmp}" -maxdepth 1 -type f -name 'revdiff-output-*' -user "$(id -u)" -mmin -120 -exec ls -t {} + 2>/dev/null | head -1)"
    if [ -n "$output_file" ] && [ -f "$output_file" ]; then
      cat "$output_file"
    fi
    ```
 4. If the output file has content, process it as annotations below. If it is empty or missing, fall back to the durable review history, which survives even when the launcher's cleanup removed the temp file: run `$SCRIPT_DIR/read-latest-history.sh` and process the annotations from its `## Annotations` section (see "Using Existing Review History"). Only if both are empty did the user quit without annotating.
 
-Both reads return complete content: revdiff writes the output file atomically on exit, and the history entry is complete before the process exits. That guarantees no partial read, not that the file belongs to this review: with two reviews live under one `$TMPDIR`, the newest match may belong to the other one.
+Both reads return complete content: revdiff writes the output file atomically on exit, and the history entry is complete before the process exits. That guarantees no partial read, not that the file belongs to this review. The lookup only considers your own files and excludes files older than two hours, but a recent leftover or a second review of yours live under one `$TMPDIR` can still be the newest match.
 
 A reviewer may also keep revdiff open on purpose and press `O` to flush the current annotations to the same output file mid-session, without quitting. The flush uses the same atomic write, so the fallback read above still returns a complete file. When the user says something like "I flushed my notes, go ahead" while the overlay is still open, read the most recent output file exactly as in the timeout fallback and process the annotations; do NOT relaunch revdiff. After you finish the code changes, the reviewer reloads with `R` and continues in the same session. No launcher flags change for this — the launcher already passes an output file, and `O` reuses it.
 

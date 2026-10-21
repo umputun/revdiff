@@ -273,7 +273,7 @@ You can also call the skill explicitly with `/skill:revdiff <request>`.
 - Use `--description` or `--description-file` after analysis/refactor work so the info popup carries review context
 - Use `--annotations=<tempfile>` to preload in-session review notes
 - Successful `revdiff_review` results include captured annotation text; history is only for explicit latest-history requests or missing-output fallback
-- For "use my latest revdiff annotations", the agent should read the newest file under `$REVDIFF_HISTORY_DIR` or `~/.config/revdiff/history/` instead of relaunching revdiff
+- For "use my latest revdiff annotations", the agent should read the newest file for the current checkout (matched on its `path:` header) under `$REVDIFF_HISTORY_DIR` or `~/.config/revdiff/history/` instead of relaunching revdiff
 - In the repo, the pi-specific resources live under `plugins/pi/` to keep harness integrations clearly separated
 
 ## Codex Plugin
@@ -724,7 +724,7 @@ See the [Zed integration guide](https://revdiff.com/docs.html#zed-integration) f
 
 ### Review History
 
-When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
+When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>-<random>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
 
 Each history file contains:
 - Header with path, refs, and (git only) a short commit hash
@@ -737,7 +737,7 @@ The history file is also a crash-recovery save when the process is terminated by
 
 Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env var, or `history-dir` in the config file.
 
-In the Claude Code and Codex plugins, you can also tell the agent to use a past review by saying things like "locate my latest revdiff review" or "use the annotations from the review I just did in another terminal". The plugin reads the newest history file for the current repo via the helper script `read-latest-history.sh` and processes the annotations as if they had come from a fresh launcher call. This is useful for standalone revdiff runs outside the plugin, or when the live launcher output is unavailable (e.g., a broken custom launcher or a crashed agent).
+In the Claude Code and Codex plugins, you can also tell the agent to use a past review by saying things like "locate my latest revdiff review" or "use the annotations from the review I just did in another terminal". The plugin reads the newest history file whose `path:` header names the current checkout (another checkout with the same directory name is skipped) via the helper script `read-latest-history.sh` and processes the annotations as if they had come from a fresh launcher call. This is useful for standalone revdiff runs outside the plugin, or when the live launcher output is unavailable (e.g., a broken custom launcher or a crashed agent).
 
 ### Key Bindings
 

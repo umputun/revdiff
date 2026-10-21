@@ -328,7 +328,7 @@ Use `--annotations=PATH` to preload the annotation store from a markdown file in
 
 ## Review History
 
-When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
+When you quit with annotations (`q`), revdiff automatically saves a copy of the review session to `~/.config/revdiff/history/<repo-name>/<timestamp>-<random>.md`. This is a safety net — if annotations are lost (process crash, agent fails to capture stdout), the history file preserves them.
 
 Each history file contains:
 - Header with path, refs, and (git only) a short commit hash

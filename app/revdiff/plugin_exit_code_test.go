@@ -1469,6 +1469,171 @@ func TestPlanningPluginHookWiring(t *testing.T) {
 	assert.NoFileExists(t, filepath.Join(root, "plugins", "revdiff-planning", "hooks", "claude-hooks.json"))
 }
 
+func TestReadLatestHistoryMatchesPathHeader(t *testing.T) {
+	root := testRepoRoot(t)
+	readers := map[string]string{
+		"claude": filepath.Join(root, ".claude-plugin", "skills", "revdiff", "scripts", "read-latest-history.sh"),
+		"codex":  filepath.Join(root, "plugins", "codex", "skills", "revdiff", "scripts", "read-latest-history.sh"),
+	}
+	base := time.Now().Add(-time.Hour)
+
+	for name, reader := range readers {
+		t.Run(name, func(t *testing.T) {
+			read := func(t *testing.T, cwd, histDir string) string {
+				t.Helper()
+				res := runTestCmd(t, cmdReq{dir: cwd, name: reader, env: map[string]string{"REVDIFF_HISTORY_DIR": histDir}})
+				require.Equal(t, 0, res.code, res.stderr)
+				return res.stdout
+			}
+
+			t.Run("same-basename checkout elsewhere is skipped even when newer", func(t *testing.T) {
+				tmp := t.TempDir()
+				own, other := filepath.Join(tmp, "a", "proj"), filepath.Join(tmp, "b", "proj")
+				initHistoryRepo(t, own)
+				initHistoryRepo(t, other)
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "1.md"), own, "own note", base)
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "2.md"), other, "foreign note", base.Add(time.Minute))
+				out := read(t, own, hist)
+				assert.Contains(t, out, "own note")
+				assert.NotContains(t, out, "foreign note")
+			})
+
+			t.Run("nothing written for this checkout prints nothing", func(t *testing.T) {
+				tmp := t.TempDir()
+				own, other := filepath.Join(tmp, "a", "proj"), filepath.Join(tmp, "b", "proj")
+				initHistoryRepo(t, own)
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "1.md"), other, "foreign note", base)
+				assert.Empty(t, read(t, own, hist))
+			})
+
+			t.Run("header recorded through a symlinked parent matches", func(t *testing.T) {
+				tmp := t.TempDir()
+				own := filepath.Join(tmp, "real", "proj")
+				initHistoryRepo(t, own)
+				require.NoError(t, os.Symlink(filepath.Join(tmp, "real"), filepath.Join(tmp, "link")))
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "1.md"), filepath.Join(tmp, "link", "proj"), "linked note", base)
+				assert.Contains(t, read(t, own, hist), "linked note")
+			})
+
+			t.Run("nested same-basename checkout does not match through its parent", func(t *testing.T) {
+				tmp := t.TempDir()
+				own := filepath.Join(tmp, "foo")
+				nested := filepath.Join(own, "foo")
+				initHistoryRepo(t, own)
+				initHistoryRepo(t, nested)
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "foo", "1.md"), own, "own note", base)
+				writeHistoryEntry(t, filepath.Join(hist, "foo", "2.md"), nested, "nested note", base.Add(time.Minute))
+				out := read(t, own, hist)
+				assert.Contains(t, out, "own note")
+				assert.NotContains(t, out, "nested note")
+			})
+
+			t.Run("single-file header matches the directory holding the file", func(t *testing.T) {
+				tmp := t.TempDir()
+				docs := filepath.Join(tmp, "docs")
+				writeTestFile(t, filepath.Join(docs, "note.md"), "text\n")
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "docs", "1.md"), filepath.Join(docs, "note.md"), "file note", base)
+				assert.Contains(t, read(t, docs, hist), "file note")
+			})
+
+			t.Run("path line only in the body is ignored", func(t *testing.T) {
+				tmp := t.TempDir()
+				own := filepath.Join(tmp, "a", "proj")
+				initHistoryRepo(t, own)
+				entry := filepath.Join(tmp, "hist", "proj", "1.md")
+				writeTestFile(t, entry, "# Review: 2026-10-21 10:00:00\nrefs: HEAD~1\n\n## Annotations\n\n## f.go:1 (+)\npath: "+own+"\n")
+				assert.Empty(t, read(t, own, filepath.Join(tmp, "hist")))
+			})
+
+			t.Run("path line below the header block is ignored", func(t *testing.T) {
+				tmp := t.TempDir()
+				own, other := filepath.Join(tmp, "a", "proj"), filepath.Join(tmp, "b", "proj")
+				initHistoryRepo(t, own)
+				hist := filepath.Join(tmp, "hist")
+				writeHistoryEntry(t, filepath.Join(hist, "proj", "1.md"), other, "path: "+own, base)
+				assert.Empty(t, read(t, own, hist))
+			})
+		})
+	}
+}
+
+func TestSkillOutputFallbackSelectsOwnRecentFile(t *testing.T) {
+	root := testRepoRoot(t)
+	var commands []string
+	for _, rel := range [][]string{
+		{".claude-plugin", "skills", "revdiff", "SKILL.md"},
+		{"plugins", "codex", "skills", "revdiff", "SKILL.md"},
+		{"plugins", "codex", "skills", "revdiff-plan", "SKILL.md"},
+	} {
+		for line := range strings.SplitSeq(readRepoFile(t, root, rel...), "\n") {
+			if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, `output_file="$(`) {
+				commands = append(commands, trimmed)
+			}
+		}
+	}
+	require.Len(t, commands, 3)
+	assert.Equal(t, commands[0], commands[1])
+	assert.Equal(t, commands[0], commands[2])
+
+	pick := func(t *testing.T, tmpDir string) string {
+		t.Helper()
+		res := runTestCmd(t, cmdReq{name: "bash", args: []string{"-c", commands[0] + `; printf '%s' "$output_file"`},
+			env: map[string]string{"TMPDIR": tmpDir}})
+		require.Equal(t, 0, res.code, res.stderr)
+		return res.stdout
+	}
+
+	t.Run("newest recent file wins", func(t *testing.T) {
+		dir := t.TempDir()
+		now := time.Now()
+		for name, age := range map[string]time.Duration{"revdiff-output-stale": 3 * time.Hour, "revdiff-output-older": 2 * time.Minute,
+			"revdiff-output-newest": time.Minute} {
+			p := filepath.Join(dir, name)
+			writeTestFile(t, p, name)
+			require.NoError(t, os.Chtimes(p, now.Add(-age), now.Add(-age)))
+		}
+		require.NoError(t, os.Mkdir(filepath.Join(dir, "revdiff-output-dir"), 0o700))
+		assert.Equal(t, "revdiff-output-newest", filepath.Base(pick(t, dir)))
+	})
+
+	t.Run("symlinked temp dir is followed", func(t *testing.T) {
+		// regression: find without -H did not descend into a symlinked TMPDIR such as macOS /tmp
+		dir := t.TempDir()
+		target := filepath.Join(dir, "target")
+		writeTestFile(t, filepath.Join(target, "revdiff-output-x"), "x")
+		link := filepath.Join(dir, "link")
+		require.NoError(t, os.Symlink(target, link))
+		assert.Equal(t, "revdiff-output-x", filepath.Base(pick(t, link)))
+	})
+
+	t.Run("leftover older than two hours is not picked", func(t *testing.T) {
+		dir := t.TempDir()
+		p := filepath.Join(dir, "revdiff-output-stale")
+		writeTestFile(t, p, "stale")
+		old := time.Now().Add(-3 * time.Hour)
+		require.NoError(t, os.Chtimes(p, old, old))
+		assert.Empty(t, pick(t, dir))
+	})
+}
+
+func initHistoryRepo(t *testing.T, dir string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	res := runTestCmd(t, cmdReq{dir: dir, name: "git", args: []string{"init", "-q"}})
+	require.Equal(t, 0, res.code, res.stderr)
+}
+
+func writeHistoryEntry(t *testing.T, file, path, note string, mtime time.Time) {
+	t.Helper()
+	writeTestFile(t, file, "# Review: 2026-10-21 10:00:00\npath: "+path+"\n\n## Annotations\n\n## f.go:1 (+)\n"+note+"\n")
+	require.NoError(t, os.Chtimes(file, mtime, mtime))
+}
+
 func TestOpenCodeCallersPreserveAnnotationExitCode(t *testing.T) {
 	root := testRepoRoot(t)
 	tool := readRepoFile(t, root, "plugins", "opencode", "tools", "revdiff.ts")

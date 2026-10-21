@@ -34,13 +34,41 @@ fi
 repo="$(basename "$repo_root")"
 repo_dir="$hist_dir/$repo"
 
-# find newest .md via -nt comparison instead of `ls -t` (shellcheck SC2012,
+# the basename directory is shared by every checkout with the same root name, so each entry is
+# matched on its path: header. revdiff records the logical path and git reports the physical
+# one, so both sides are resolved before comparing.
+canonical() {
+    (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "$1"
+}
+
+# header_path reads path: from the metadata block only, never from annotation or diff text.
+header_path() {
+    awk 'NR > 1 && $0 == "" {exit} /^path: / {sub(/^path: /, ""); print; exit}' "$1" 2>/dev/null
+}
+
+root="$(canonical "$repo_root")"
+
+# a file-style header (single --only file without git) matches through its parent directory,
+# but an existing directory never does, or a nested same-basename checkout would match.
+belongs() {
+    local p
+    p="$(header_path "$1")"
+    case "$p" in
+        /*) ;;
+        *) return 1 ;;
+    esac
+    [ "$(canonical "$p")" = "$root" ] && return 0
+    [ -d "$p" ] && return 1
+    [ "$(canonical "$(dirname "$p")")" = "$root" ]
+}
+
+# find newest matching .md via -nt comparison instead of `ls -t` (shellcheck SC2012,
 # and -nt is portable across macos/linux without find -printf tricks).
 latest=""
 for f in "$repo_dir"/*.md; do
     [ -e "$f" ] || continue
     if [ -z "$latest" ] || [ "$f" -nt "$latest" ]; then
-        latest="$f"
+        belongs "$f" && latest="$f"
     fi
 done
 
