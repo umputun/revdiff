@@ -1043,7 +1043,16 @@ func TestGit_FileDiff_Submodule(t *testing.T) {
 		gitCmd(t, meta, "mv", "sm", "sm2")
 		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm2", OldPath: "sm", Staged: true})
 		require.NoError(t, err)
-		submoduleRow(t, lines)
+		assert.Contains(t, submoduleRow(t, lines).Content, "renamed")
+	})
+
+	t.Run("unresolved merge conflict", func(t *testing.T) {
+		meta := setupSubmoduleConflict(t)
+		lines, err := NewGit(meta).FileDiff(FileDiffRequest{Path: "sm"})
+		require.NoError(t, err)
+		row := submoduleRow(t, lines)
+		assert.Contains(t, row.Content, "merge conflict")
+		assert.NotContains(t, row.Content, "unchanged")
 	})
 
 	t.Run("committed pointer move against a ref", func(t *testing.T) {
@@ -1063,6 +1072,31 @@ func TestGit_FileDiff_Submodule(t *testing.T) {
 		require.NoError(t, err)
 		submoduleRow(t, lines)
 	})
+}
+
+func TestGit_GitlinkCandidate(t *testing.T) {
+	g := NewGit(t.TempDir())
+	pointer := []DiffLine{{Content: "Subproject commit " + strings.Repeat("a", 40), ChangeType: ChangeRemove},
+		{Content: "Subproject commit " + strings.Repeat("b", 40) + "-dirty", ChangeType: ChangeAdd}}
+	tests := []struct {
+		name     string
+		req      FileDiffRequest
+		lines    []DiffLine
+		combined bool
+		want     bool
+	}{
+		{name: "pointer rows", req: FileDiffRequest{Path: "sm"}, lines: pointer, want: true},
+		{name: "ordinary text row", req: FileDiffRequest{Path: "a.go"}, lines: []DiffLine{{Content: "x", ChangeType: ChangeAdd}}},
+		{name: "context row", req: FileDiffRequest{Path: "a.go"}, lines: []DiffLine{{Content: "x", ChangeType: ChangeContext}}},
+		{name: "empty ordinary diff skips the raw check", req: FileDiffRequest{Path: "new.txt"}},
+		{name: "empty rename", req: FileDiffRequest{Path: "sm2", OldPath: "sm"}, want: true},
+		{name: "empty combined diff", req: FileDiffRequest{Path: "sm"}, combined: true, want: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, g.gitlinkCandidate(tc.req, tc.lines, tc.combined))
+		})
+	}
 }
 
 func TestGit_FileDiff_RegularFileWithPointerText(t *testing.T) {
@@ -1653,6 +1687,33 @@ func setupSubmoduleRepo(t *testing.T) string {
 	return meta
 }
 
+func setupSubmoduleConflict(t *testing.T) string {
+	t.Helper()
+	meta := setupSubmoduleRepo(t)
+	sm := filepath.Join(meta, "sm")
+	base := strings.TrimSpace(gitOutput(t, sm, "rev-parse", "HEAD"))
+	gitCmd(t, meta, "checkout", "-q", "-b", "side")
+	commitInSubmodule(t, meta)
+	gitCmd(t, meta, "commit", "-q", "-am", "side moves sm")
+	gitCmd(t, meta, "checkout", "-q", "-")
+	gitCmd(t, sm, "checkout", "-q", base)
+	commitInSubmodule(t, meta)
+	gitCmd(t, meta, "commit", "-q", "-am", "main moves sm")
+	cmd := exec.Command("git", "merge", "side")
+	cmd.Dir = meta
+	_ = cmd.Run()
+	return meta
+}
+
+func gitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...) //nolint:gosec // args constructed internally, not user input
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %v", args)
+	return string(out)
+}
+
 func commitInSubmodule(t *testing.T, meta string) string {
 	t.Helper()
 	sm := filepath.Join(meta, "sm")
@@ -1660,11 +1721,7 @@ func commitInSubmodule(t *testing.T, meta string) string {
 	gitCmd(t, sm, "config", "user.name", "Test")
 	writeFile(t, sm, "f.txt", fmt.Sprintf("change %d\n", time.Now().UnixNano()))
 	gitCmd(t, sm, "commit", "-q", "-am", "change")
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = sm
-	out, err := cmd.Output()
-	require.NoError(t, err)
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(gitOutput(t, sm, "rev-parse", "HEAD"))
 }
 
 func writeFile(t *testing.T, dir, name, content string) {

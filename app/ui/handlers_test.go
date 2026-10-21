@@ -205,6 +205,9 @@ func TestModel_MarkReviewedRefusesSubmodule(t *testing.T) {
 		model := settle(result.(Model), cmd)
 		assert.False(t, model.tree.IsReviewed("sm"))
 		assert.Equal(t, submoduleReviewHint, model.transientHint())
+
+		result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		assert.Empty(t, result.(Model).reviewed.hint)
 	})
 
 	t.Run("file not loaded yet", func(t *testing.T) {
