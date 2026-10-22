@@ -368,8 +368,8 @@ func (m *Model) centerHunkInViewport() {
 		hunkMidY := cursorY + hunkVisualHeight/2
 		offset = max(0, hunkMidY-m.layout.viewport.Height/2)
 	}
-	m.layout.viewport.SetYOffset(offset)
 	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(offset)
 }
 
 // topAlignViewportOnCursor scrolls the viewport to place the cursor at the top of the page.
@@ -1069,9 +1069,7 @@ func (m *Model) syncTOCActiveSection() {
 // the delete-only placeholder rather than skipping the hunk, since that head line stays visible.
 //
 // this only positions the cursor: a caller loading a new file MUST follow it with
-// centerViewportOnCursor and must not drop that call as a duplicate render. moveToNextHunk scrolls
-// via centerHunkInViewport, which sets the offset before rendering, so the offset clamps against the
-// previously loaded file's length; on the no-hunk path nothing renders at all.
+// centerViewportOnCursor, since on the no-hunk path nothing renders at all.
 func (m *Model) positionOnFirstChange() {
 	m.nav.diffCursor = -1
 	m.moveToNextHunk()
@@ -1100,18 +1098,22 @@ func (m *Model) landAtBoundary(forward bool) {
 	m.moveDiffCursorToEnd()
 }
 
-// applyPendingHunkJump moves the cursor to the first or last hunk after a cross-file navigation.
+// applyPendingHunkJump moves the cursor to the first or last hunk after a cross-file navigation and
+// scrolls to it. A landed hunk keeps the framing moveToNextHunk/moveToPrevHunk give it, the same as
+// an in-file ] or [; recentering on the cursor would push the tail of a tall hunk off screen. A file
+// with no hunks lands on its first visible line, centered.
 func (m *Model) applyPendingHunkJump() {
 	forward := *m.nav.pendingHunkJump
 	m.nav.pendingHunkJump = nil
 	if forward {
-		m.positionOnFirstChange()
-		return
+		m.nav.diffCursor = -1
+		m.moveToNextHunk()
+	} else {
+		m.nav.diffCursor = len(m.file.lines)
+		m.moveToPrevHunk()
 	}
-
-	m.nav.diffCursor = len(m.file.lines)
-	m.moveToPrevHunk()
-	if m.nav.diffCursor == len(m.file.lines) {
+	if m.nav.diffCursor == -1 || m.nav.diffCursor == len(m.file.lines) {
 		m.skipInitialDividers()
+		m.centerViewportOnCursor()
 	}
 }

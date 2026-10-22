@@ -2735,6 +2735,109 @@ func TestModel_HunkNav_CrossFile_LandsOnLastHunk(t *testing.T) {
 	assert.Equal(t, "a.go", model.file.name, "should have navigated to a.go")
 	assert.Equal(t, 2, model.nav.diffCursor, "should land on last hunk of a.go (index 2)")
 }
+
+func TestModel_HunkNav_CrossFile_FramesHunkLikeInFile(t *testing.T) {
+	// regression: the post-load recentre on the cursor overrode the hunk framing, hiding a tall hunk's tail
+	long := func(hunkLen int) []diff.DiffLine {
+		lines := make([]diff.DiffLine, 0, 60+hunkLen+60)
+		for i := range 60 {
+			lines = append(lines, diff.DiffLine{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: i + 1})
+		}
+		for i := range hunkLen {
+			lines = append(lines, diff.DiffLine{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 61 + i})
+		}
+		for i := range 60 {
+			lines = append(lines, diff.DiffLine{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: 61 + hunkLen + i})
+		}
+		return lines
+	}
+	short := []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}}
+
+	tests := []struct {
+		name       string
+		forward    bool
+		hunkLen    int
+		wantOffset int
+	}{
+		{name: "forward, hunk taller than viewport", forward: true, hunkLen: 30, wantOffset: 58},
+		{name: "forward, hunk taller than half viewport", forward: true, hunkLen: 14, wantOffset: 57},
+		{name: "backward, hunk taller than viewport", forward: false, hunkLen: 30, wantOffset: 58},
+		{name: "backward, hunk taller than half viewport", forward: false, hunkLen: 14, wantOffset: 57},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			diffs := map[string][]diff.DiffLine{"a.go": short, "b.go": long(tc.hunkLen)}
+			from, to, key := "a.go", "b.go", ']'
+			if !tc.forward {
+				diffs = map[string][]diff.DiffLine{"a.go": long(tc.hunkLen), "b.go": short}
+				from, to, key = "b.go", "a.go", '['
+			}
+			m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+			if from != m.file.name {
+				m.tree.SelectByPath(from)
+				m.file.loadSeq++
+				result, _ := m.Update(m.loadFileDiff(from)())
+				m = result.(Model)
+			}
+			m.cfg.crossFileHunks = true
+			m.layout.focus = paneDiff
+			m.nav.diffCursor = 0
+
+			result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+			m = result.(Model)
+			require.NotNil(t, cmd)
+			result, _ = m.Update(cmd())
+			m = result.(Model)
+
+			assert.Equal(t, to, m.file.name)
+			assert.Equal(t, 60, m.nav.diffCursor)
+			assert.Equal(t, tc.wantOffset, m.layout.viewport.YOffset)
+		})
+	}
+}
+
+func TestModel_HunkNav_CrossFile_NoHunkFileRendersAtTop(t *testing.T) {
+	ctxOnly := make([]diff.DiffLine, 0, 50)
+	ctxOnly = append(ctxOnly, diff.DiffLine{ChangeType: diff.ChangeDivider})
+	for i := range 49 {
+		ctxOnly = append(ctxOnly, diff.DiffLine{ChangeType: diff.ChangeContext, Content: "ctx", NewNum: i + 1})
+	}
+	short := []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}}
+
+	for _, forward := range []bool{true, false} {
+		t.Run(fmt.Sprintf("forward=%v", forward), func(t *testing.T) {
+			diffs := map[string][]diff.DiffLine{"a.go": short, "b.go": ctxOnly}
+			from, to, key := "a.go", "b.go", ']'
+			if !forward {
+				diffs = map[string][]diff.DiffLine{"a.go": ctxOnly, "b.go": short}
+				from, to, key = "b.go", "a.go", '['
+			}
+			m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+			if from != m.file.name {
+				m.tree.SelectByPath(from)
+				m.file.loadSeq++
+				result, _ := m.Update(m.loadFileDiff(from)())
+				m = result.(Model)
+			}
+			m.cfg.crossFileHunks = true
+			m.layout.focus = paneDiff
+			m.nav.diffCursor = 0
+
+			result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key}})
+			m = result.(Model)
+			require.NotNil(t, cmd)
+			result, _ = m.Update(cmd())
+			m = result.(Model)
+
+			assert.Equal(t, to, m.file.name)
+			assert.Equal(t, 1, m.nav.diffCursor)
+			assert.Equal(t, 0, m.layout.viewport.YOffset)
+			assert.Contains(t, m.layout.viewport.View(), "ctx")
+			assert.NotContains(t, m.layout.viewport.View(), "add")
+		})
+	}
+}
+
 func TestModel_HunkNav_DefaultDoesNotCrossFiles(t *testing.T) {
 	diffs := map[string][]diff.DiffLine{
 		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},

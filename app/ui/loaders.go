@@ -625,7 +625,6 @@ func (m *Model) placeCursorAfterLoad(msg fileLoadedMsg) {
 	// handle pending hunk jump after cross-file hunk navigation
 	if m.nav.pendingHunkJump != nil {
 		m.applyPendingHunkJump()
-		m.centerViewportOnCursor()
 		return
 	}
 
