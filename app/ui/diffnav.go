@@ -696,11 +696,15 @@ func (m Model) buildHunkLayout() hunkLayout {
 		hunks = m.findHunks()
 	}
 	annotationSet := m.buildAnnotationSet()
-	heights := make([]int, len(m.file.lines))
-	for i := range m.file.lines {
-		heights[i] = m.hunkLineHeight(i, hunks, annotationSet)
+	offsets := m.cursorVisualOffsets(hunks, annotationSet)
+	heights := make([]int, len(offsets))
+	for i := range len(offsets) - 1 {
+		heights[i] = offsets[i+1] - offsets[i]
 	}
-	return hunkLayout{offsets: m.cursorVisualOffsets(hunks, annotationSet), heights: heights}
+	if last := len(offsets) - 1; last >= 0 {
+		heights[last] = m.hunkLineHeight(last, hunks, annotationSet)
+	}
+	return hunkLayout{offsets: offsets, heights: heights}
 }
 
 // span returns the first and last visual row of diff lines start..end. A hidden line has the
@@ -727,9 +731,11 @@ func (l hunkLayout) lineAtRow(start, end, y, height int) int {
 	return covering
 }
 
-// pageThroughHunk scrolls a page through the hunk under the cursor when the direction still
-// has rows of it off screen, keeping two rows of overlap. It reports whether it scrolled; the
-// cursor index may stay the same when one line or annotation spans the page.
+// pageThroughHunk scrolls a page through the hunk under the cursor when it is at least as tall
+// as the viewport and the direction still has rows of it off screen, keeping two rows of
+// overlap. A shorter hunk is left to the stop walk: a ] landing always shows it whole. It reports
+// whether it scrolled; the cursor index may stay the same when one line or annotation spans the
+// page.
 func (m *Model) pageThroughHunk(forward bool) bool {
 	start, end, ok := m.hunkBounds(m.nav.diffCursor)
 	height := m.layout.viewport.Height
@@ -738,6 +744,9 @@ func (m *Model) pageThroughHunk(forward bool) bool {
 	}
 	lay := m.buildHunkLayout()
 	top, bottom := lay.span(start, end)
+	if bottom-top+1 < height {
+		return false
+	}
 	y, step := m.layout.viewport.YOffset, max(1, height-2)
 	floor := max(0, top-2) // the row centerHunkInViewport puts a tall hunk's start on
 	switch {

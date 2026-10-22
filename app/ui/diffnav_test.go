@@ -4694,6 +4694,62 @@ func TestModel_HunkNav_PrevInsideTallHunkLandsOnItsStart(t *testing.T) {
 	assert.Equal(t, 8, m.layout.viewport.YOffset, "and frames it from the top rather than its last page")
 }
 
+func TestModel_HunkNav_ShortHunkPartlyOffScreenDoesNotPage(t *testing.T) {
+	t.Run("forward from a hunk at the bottom edge", func(t *testing.T) {
+		m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": hunkNavFixture(30, 3, 30, 1, 5)})
+		m.layout.focus = paneDiff
+		m.nav.diffCursor = 30
+		m.layout.viewport.SetContent(m.renderDiff())
+		m.layout.viewport.SetYOffset(11)
+
+		result, _ := m.Update(keyMsg(']'))
+		m = result.(Model)
+		assert.Equal(t, 63, m.nav.diffCursor, "] moves on to the next hunk")
+	})
+
+	t.Run("backward from a hunk centered by ]", func(t *testing.T) {
+		m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": hunkNavFixture(5, 3, 32, 18, 30)})
+		m.layout.focus = paneDiff
+		m.nav.diffCursor = 5
+		result, _ := m.Update(keyMsg(']'))
+		m = result.(Model)
+		require.Equal(t, 40, m.nav.diffCursor)
+		require.Equal(t, 39, m.layout.viewport.YOffset, "an 18-line hunk is centered one row above its start")
+
+		result, _ = m.Update(keyMsg('['))
+		m = result.(Model)
+		assert.Equal(t, 5, m.nav.diffCursor, "[ moves on to the previous hunk")
+	})
+}
+
+func TestModel_HunkNav_PageStepKeepingCursorDoesNotCross(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": hunkNavFixture(10, 5, 10, 0, 0),
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.store.Add(annotation.Annotation{File: "a.go", Line: m.file.lines[12].NewNum, Type: string(diff.ChangeAdd),
+		Comment: strings.TrimSuffix(strings.Repeat("note\n", 60), "\n")})
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+
+	for range 2 {
+		result, cmd := m.Update(keyMsg(']'))
+		m = result.(Model)
+		require.Nil(t, cmd)
+	}
+	require.Equal(t, 12, m.nav.diffCursor, "the second press pages onto the annotated line")
+	cursor, offset := m.nav.diffCursor, m.layout.viewport.YOffset
+
+	result, cmd := m.Update(keyMsg(']'))
+	m = result.(Model)
+	assert.Nil(t, cmd, "a page step inside the annotation must not cross to b.go")
+	assert.Equal(t, "a.go", m.file.name)
+	assert.Equal(t, cursor, m.nav.diffCursor, "the annotation still covers the page, so the cursor keeps its line")
+	assert.Greater(t, m.layout.viewport.YOffset, offset)
+}
+
 func TestModel_HunkNav_TallHunkShowsEveryRow(t *testing.T) {
 	multi := func(rows int) string { return strings.TrimSuffix(strings.Repeat("note\n", rows), "\n") }
 	collapsedLines := hunkNavFixture(10, 0, 0, 0, 0)
