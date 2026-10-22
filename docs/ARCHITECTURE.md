@@ -144,7 +144,13 @@ across files by concern to keep files under ~500 lines:
   consumes it. A boundary press while a load is outstanding is ignored. `clearPendingJumps()` drops
   every queued
   landing intent and is called on manual navigation, before any `RefreshFilter` that can trigger a
-  load, and by `triggerReload`, so a stale intent never hijacks an unrelated load
+  load, and by `triggerReload`, so a stale intent never hijacks an unrelated load. `[`/`]` go
+  through `stepHunk`: it first pages through a hunk taller than the viewport (`pageThroughHunk`,
+  two rows of overlap), then lands on the next stop from `hunkStops` - a hunk's first visible
+  line, plus file-level and context-line annotations with `--stop-at-annotations`. Backward onto
+  an earlier tall hunk lands on its last page; the start of the cursor's own hunk does not, or the
+  walk would cycle back to its tail. `stepHunk` reports whether it moved because a page step can
+  leave the cursor index unchanged, and only a step that did not move may cross files
 - **`scrollbar.go`** — vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes
   (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion)
 - **`collapsed.go`** — collapsed diff mode: hide removes, show modified markers

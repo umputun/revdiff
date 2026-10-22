@@ -37,6 +37,7 @@ func TestParseArgs_Defaults(t *testing.T) {
 	assert.Equal(t, 5, opts.CompactContext)
 	assert.False(t, opts.CrossFileHunks)
 	assert.False(t, opts.CrossFileMotion)
+	assert.False(t, opts.StopAtAnnotations)
 	assert.False(t, opts.StartAtChange)
 	assert.False(t, opts.LineNumbers)
 	assert.False(t, opts.Blame)
@@ -372,6 +373,30 @@ func TestParseArgs_CompactContextRejectsZero(t *testing.T) {
 			assert.Contains(t, err.Error(), "--compact-context must be >= 1")
 		})
 	}
+}
+
+func TestParseArgs_StopAtAnnotations(t *testing.T) {
+	t.Run("flag", func(t *testing.T) {
+		opts, err := parseArgs(append(noConfigArgs(t), "--stop-at-annotations"))
+		require.NoError(t, err)
+		assert.True(t, opts.StopAtAnnotations)
+	})
+
+	t.Run("env", func(t *testing.T) {
+		t.Setenv("REVDIFF_STOP_AT_ANNOTATIONS", "true")
+		opts, err := parseArgs(noConfigArgs(t))
+		require.NoError(t, err)
+		assert.True(t, opts.StopAtAnnotations)
+	})
+
+	t.Run("config file", func(t *testing.T) {
+		cfgPath := filepath.Join(t.TempDir(), "config")
+		err := os.WriteFile(cfgPath, []byte("[Application Options]\nstop-at-annotations = true\n"), 0o600)
+		require.NoError(t, err)
+		opts, err := parseArgs([]string{"--config", cfgPath})
+		require.NoError(t, err)
+		assert.True(t, opts.StopAtAnnotations)
+	})
 }
 
 func TestParseArgs_CrossFileHunks(t *testing.T) {
@@ -1001,6 +1026,7 @@ func TestDumpConfig(t *testing.T) {
 	assert.Contains(t, output, "[Application Options]")
 	assert.Contains(t, output, "chroma-style = catppuccin-macchiato")
 	assert.Contains(t, output, "cross-file-hunks = false")
+	assert.Contains(t, output, "stop-at-annotations = false")
 	assert.Contains(t, output, "exit-code-on-annotations = false")
 	assert.Contains(t, output, "no-mouse = false")
 	assert.Contains(t, output, "wrap-indent = 0")

@@ -122,7 +122,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
 | `P` | Open the file picker |
-| `[` / `]` | Jump to previous/next change hunk in diff |
+| `[` / `]` | Jump to previous/next change hunk in diff, scrolling a page at a time through a hunk taller than the screen first; `--stop-at-annotations` also stops at annotations outside hunks |
 | `e` | Open focused file in `$EDITOR` |
 
 The file picker lists paths currently visible in the sidebar, preserving annotated-only and unreviewed-only filters. Printable keys always filter full relative paths; use the arrow keys or mouse wheel to move, and press `Enter` or left-click to jump. `Backspace` edits the filter. The first `Esc` clears a non-empty filter and keeps the picker open; the second closes it. Because printable keys always filter, `P` typed inside the picker adds to the filter rather than closing it; a `jump_file` binding with a modifier (e.g. `map alt+f jump_file`) closes the picker when pressed again.

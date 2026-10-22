@@ -655,7 +655,7 @@ func TestModel_CollapsedHunkNavigationSkipsRemovedLines(t *testing.T) {
 	assert.Equal(t, 6, m.nav.diffCursor, "should land on first visible line in hunk 2")
 
 	// prev hunk back
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 3, m.nav.diffCursor, "should land on first visible line in hunk 1")
 }
 
@@ -706,7 +706,7 @@ func TestModel_CollapsedHunkNavigationDeleteOnly(t *testing.T) {
 	assert.Equal(t, 5, m.nav.diffCursor, "should land on mixed hunk's add line")
 
 	// prev hunk from hunk 2 goes back to delete-only hunk 1's placeholder
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 1, m.nav.diffCursor, "should go back to delete-only hunk placeholder")
 }
 

@@ -1311,14 +1311,14 @@ func TestModel_MoveToPrevHunk(t *testing.T) {
 	m.file.name = "a.go"
 	m.layout.viewport.Height = 20
 
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 3, m.nav.diffCursor, "should jump to hunk 2")
 
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 1, m.nav.diffCursor, "should jump to hunk 1")
 
 	// at first chunk, should not move
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 1, m.nav.diffCursor, "should stay at first chunk")
 }
 func TestModel_CenterHunkInViewport_SmallHunk(t *testing.T) {
@@ -1401,13 +1401,13 @@ func TestModel_CenterHunkInViewport_HunkAtStart(t *testing.T) {
 	m.layout.focus = paneDiff
 
 	m.nav.diffCursor = 10
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 0, m.nav.diffCursor, "cursor should land on first line")
 	assert.Equal(t, 0, m.layout.viewport.YOffset, "offset should be clamped to 0 when hunk is near top")
 }
 
 func TestModel_CenterHunkInViewport_PrevHunkCenters(t *testing.T) {
-	// verify moveToPrevHunk also centers the hunk
+	// verify stepHunk(false) also centers the hunk
 	var lines []diff.DiffLine
 	for i := 1; i <= 25; i++ {
 		lines = append(lines, diff.DiffLine{NewNum: i, Content: "ctx", ChangeType: diff.ChangeContext})
@@ -1430,7 +1430,7 @@ func TestModel_CenterHunkInViewport_PrevHunkCenters(t *testing.T) {
 
 	m.nav.diffCursor = 40
 	m.syncViewportToCursor()
-	m.moveToPrevHunk()
+	m.stepHunk(false)
 	assert.Equal(t, 25, m.nav.diffCursor, "cursor should land on first line of hunk")
 
 	// hunk midpoint: 25 + 2/2 = 26, offset: 26 - vpHeight/2
@@ -2757,12 +2757,13 @@ func TestModel_HunkNav_CrossFile_FramesHunkLikeInFile(t *testing.T) {
 		name       string
 		forward    bool
 		hunkLen    int
+		wantCursor int
 		wantOffset int
 	}{
-		{name: "forward, hunk taller than viewport", forward: true, hunkLen: 30, wantOffset: 58},
-		{name: "forward, hunk taller than half viewport", forward: true, hunkLen: 14, wantOffset: 57},
-		{name: "backward, hunk taller than viewport", forward: false, hunkLen: 30, wantOffset: 58},
-		{name: "backward, hunk taller than half viewport", forward: false, hunkLen: 14, wantOffset: 57},
+		{name: "forward, hunk taller than viewport", forward: true, hunkLen: 30, wantCursor: 60, wantOffset: 58},
+		{name: "forward, hunk taller than half viewport", forward: true, hunkLen: 14, wantCursor: 60, wantOffset: 57},
+		{name: "backward, hunk taller than viewport lands on its last page", forward: false, hunkLen: 30, wantCursor: 70, wantOffset: 70},
+		{name: "backward, hunk taller than half viewport", forward: false, hunkLen: 14, wantCursor: 60, wantOffset: 57},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2790,7 +2791,7 @@ func TestModel_HunkNav_CrossFile_FramesHunkLikeInFile(t *testing.T) {
 			m = result.(Model)
 
 			assert.Equal(t, to, m.file.name)
-			assert.Equal(t, 60, m.nav.diffCursor)
+			assert.Equal(t, tc.wantCursor, m.nav.diffCursor)
 			assert.Equal(t, tc.wantOffset, m.layout.viewport.YOffset)
 		})
 	}
@@ -4633,4 +4634,313 @@ func TestModel_MotionCrossFile_DirectoryRowWithDisplayedFileFilteredOut(t *testi
 	assert.Nil(t, cmd, "with no row for the displayed file there is no adjacent file to step to")
 	assert.Empty(t, model.tree.SelectedFile(), "the tree cursor must not move")
 	assert.Nil(t, model.nav.pendingBoundaryJump)
+}
+
+func hunkNavFixture(before, tall, between, short, after int) []diff.DiffLine {
+	var lines []diff.DiffLine
+	n := 0
+	add := func(count int, ct diff.ChangeType) {
+		for range count {
+			n++
+			lines = append(lines, diff.DiffLine{OldNum: n, NewNum: n, Content: "line", ChangeType: ct})
+		}
+	}
+	add(before, diff.ChangeContext)
+	add(tall, diff.ChangeAdd)
+	add(between, diff.ChangeContext)
+	add(short, diff.ChangeAdd)
+	add(after, diff.ChangeContext)
+	return lines
+}
+
+func TestModel_HunkNav_TallHunkSequence(t *testing.T) {
+	m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": hunkNavFixture(10, 50, 10, 3, 5)})
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+
+	type pos struct{ cursor, offset int }
+	press := func(key rune) pos {
+		result, _ := m.Update(keyMsg(key))
+		m = result.(Model)
+		return pos{m.nav.diffCursor, m.layout.viewport.YOffset}
+	}
+
+	assert.Equal(t, pos{10, 8}, press(']'), "lands on the tall hunk start")
+	assert.Equal(t, pos{26, 26}, press(']'), "pages down keeping two rows of overlap")
+	assert.Equal(t, pos{40, 40}, press(']'), "last page puts the hunk end on the bottom row")
+	assert.Equal(t, pos{70, 59}, press(']'), "moves on to the next hunk once the tall one is shown")
+	assert.Equal(t, pos{40, 40}, press('['), "previous tall hunk lands on its last page")
+	assert.Equal(t, pos{22, 22}, press('['), "pages up keeping two rows of overlap")
+	assert.Equal(t, pos{10, 8}, press('['), "last page up shows the hunk start")
+	assert.Equal(t, pos{10, 8}, press('['), "no earlier stop, nothing moves")
+}
+
+func TestModel_HunkNav_PrevInsideTallHunkLandsOnItsStart(t *testing.T) {
+	m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": hunkNavFixture(10, 50, 10, 3, 5)})
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+	result, _ := m.Update(keyMsg(']'))
+	m = result.(Model)
+	for range 3 {
+		result, _ = m.Update(keyMsg('j'))
+		m = result.(Model)
+	}
+	require.Equal(t, 13, m.nav.diffCursor)
+	require.Equal(t, 8, m.layout.viewport.YOffset)
+
+	result, _ = m.Update(keyMsg('['))
+	m = result.(Model)
+	assert.Equal(t, 10, m.nav.diffCursor, "[ goes to the start of the hunk under the cursor")
+	assert.Equal(t, 8, m.layout.viewport.YOffset, "and frames it from the top rather than its last page")
+}
+
+func TestModel_HunkNav_TallHunkShowsEveryRow(t *testing.T) {
+	multi := func(rows int) string { return strings.TrimSuffix(strings.Repeat("note\n", rows), "\n") }
+	collapsedLines := hunkNavFixture(10, 0, 0, 0, 0)
+	for i := range 30 {
+		collapsedLines = append(collapsedLines, diff.DiffLine{OldNum: 11 + i, Content: "old", ChangeType: diff.ChangeRemove})
+	}
+	for i := range 30 {
+		collapsedLines = append(collapsedLines, diff.DiffLine{NewNum: 11 + i, Content: "new", ChangeType: diff.ChangeAdd})
+	}
+	for i := range 10 {
+		collapsedLines = append(collapsedLines, diff.DiffLine{OldNum: 41 + i, NewNum: 41 + i, Content: "ctx", ChangeType: diff.ChangeContext})
+	}
+	collapsedLines = append(collapsedLines, diff.DiffLine{NewNum: 51, Content: "new", ChangeType: diff.ChangeAdd})
+
+	tests := []struct {
+		name      string
+		lines     []diff.DiffLine
+		collapsed bool
+		annots    map[int]string
+	}{
+		{name: "plain", lines: hunkNavFixture(10, 50, 10, 3, 5)},
+		{name: "annotation straddles the page edge", lines: hunkNavFixture(10, 30, 10, 3, 5), annots: map[int]string{7: multi(8)}},
+		{name: "annotation taller than the page", lines: hunkNavFixture(10, 5, 10, 3, 5), annots: map[int]string{2: multi(30)}},
+		{name: "annotation on the last hunk line", lines: hunkNavFixture(10, 15, 10, 3, 5), annots: map[int]string{14: multi(12)}},
+		{name: "collapsed mixed hunk", lines: collapsedLines, collapsed: true},
+	}
+	for _, tc := range tests {
+		for _, forward := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/forward=%v", tc.name, forward), func(t *testing.T) {
+				m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": tc.lines})
+				m.layout.focus = paneDiff
+				if tc.collapsed {
+					m.modes.collapsed.enabled = true
+					m.modes.collapsed.expandedHunks = make(map[int]bool)
+				}
+				hunks := m.findHunks()
+				require.GreaterOrEqual(t, len(hunks), 2)
+				s, e := hunks[0], hunks[0]
+				for e+1 < len(m.file.lines) && m.file.lines[e+1].ChangeType != diff.ChangeContext {
+					e++
+				}
+				for rel, comment := range tc.annots {
+					dl := m.file.lines[s+rel]
+					m.store.Add(annotation.Annotation{File: "a.go", Line: m.diffLineNum(dl), Type: string(dl.ChangeType), Comment: comment})
+				}
+				var collapsedHunks []int
+				if tc.collapsed {
+					collapsedHunks = hunks
+				}
+				annSet := m.buildAnnotationSet()
+				offsets := m.cursorVisualOffsets(collapsedHunks, annSet)
+				top := offsets[s]
+				bottom := offsets[e] + m.hunkLineHeight(e, collapsedHunks, annSet) - 1
+
+				key := ']'
+				m.nav.diffCursor = 0
+				if !forward {
+					key = '['
+					m.nav.diffCursor = hunks[1]
+				}
+				seen := walkHunkRows(t, m, key, s, e)
+				for row := top; row <= bottom; row++ {
+					assert.True(t, seen[row], "row %d of the hunk (%d..%d) never reached the screen", row, top, bottom)
+				}
+			})
+		}
+	}
+}
+
+func walkHunkRows(t *testing.T, m Model, key rune, start, end int) map[int]bool {
+	t.Helper()
+	seen := map[int]bool{}
+	entered := false
+	for range 40 {
+		prevCursor, prevOffset := m.nav.diffCursor, m.layout.viewport.YOffset
+		result, _ := m.Update(keyMsg(key))
+		m = result.(Model)
+		inHunk := m.nav.diffCursor >= start && m.nav.diffCursor <= end
+		if !inHunk && entered {
+			return seen
+		}
+		if inHunk {
+			entered = true
+			for row := m.layout.viewport.YOffset; row < m.layout.viewport.YOffset+m.layout.viewport.Height; row++ {
+				seen[row] = true
+			}
+		}
+		if m.nav.diffCursor == prevCursor && m.layout.viewport.YOffset == prevOffset {
+			require.True(t, entered, "the walk must reach the tall hunk")
+			return seen
+		}
+	}
+	require.Fail(t, "the walk must not cycle")
+	return nil
+}
+
+func TestModel_HunkNav_TallHunkAtTopCrossesBackward(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+		"b.go": hunkNavFixture(0, 30, 5, 0, 0),
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.tree.SelectByPath("b.go")
+	m.file.loadSeq++
+	result, _ := m.Update(m.loadFileDiff("b.go")())
+	m = result.(Model)
+	m.layout.viewport.Height = 20
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+	m.layout.viewport.SetYOffset(0)
+
+	result, cmd := m.Update(keyMsg('['))
+	m = result.(Model)
+	require.NotNil(t, cmd, "[ at the top of the first hunk must cross to the previous file")
+	require.NotNil(t, m.nav.pendingHunkJump)
+	assert.False(t, *m.nav.pendingHunkJump)
+}
+
+func TestModel_HunkNav_TallHunkLastPageCrossesForward(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": hunkNavFixture(5, 40, 0, 0, 0),
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+
+	var cmd tea.Cmd
+	presses := 0
+	for cmd == nil && presses < 10 {
+		var result tea.Model
+		result, cmd = m.Update(keyMsg(']'))
+		m = result.(Model)
+		presses++
+	}
+	require.NotNil(t, cmd, "] must cross once the tall hunk is fully shown")
+	assert.Equal(t, 4, presses, "land, two pages, then cross")
+	assert.Equal(t, 45-m.layout.viewport.Height, m.layout.viewport.YOffset, "the hunk end was on screen before crossing")
+}
+
+func stopsFixture() []diff.DiffLine {
+	return []diff.DiffLine{
+		{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 2, NewNum: 2, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 3, NewNum: 3, Content: "ctx", ChangeType: diff.ChangeContext},
+		{NewNum: 4, Content: "add", ChangeType: diff.ChangeAdd},
+		{OldNum: 4, NewNum: 5, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 5, NewNum: 6, Content: "ctx", ChangeType: diff.ChangeContext},
+		{OldNum: 6, NewNum: 7, Content: "ctx", ChangeType: diff.ChangeContext},
+	}
+}
+
+func addStopsAnnotations(m *Model, file string) {
+	m.store.Add(annotation.Annotation{File: file, Line: 0, Comment: "file note"})
+	m.store.Add(annotation.Annotation{File: file, Line: 2, Type: string(diff.ChangeContext), Comment: "above"})
+	m.store.Add(annotation.Annotation{File: file, Line: 6, Type: string(diff.ChangeContext), Comment: "below"})
+}
+
+func TestModel_HunkNav_StopAtAnnotations(t *testing.T) {
+	tests := []struct {
+		name    string
+		enabled bool
+		key     rune
+		start   int
+		want    []int
+	}{
+		{name: "forward with stops", enabled: true, key: ']', start: -1, want: []int{1, 3, 5, 5}},
+		{name: "backward with stops", enabled: true, key: '[', start: 5, want: []int{3, 1, -1, -1}},
+		{name: "forward without stops", key: ']', start: -1, want: []int{3, 3}},
+		{name: "backward without stops", key: '[', start: 5, want: []int{3, 3}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": stopsFixture()})
+			addStopsAnnotations(&m, "a.go")
+			m.cfg.stopAtAnnotations = tc.enabled
+			m.layout.focus = paneDiff
+			m.nav.diffCursor = tc.start
+			var got []int
+			for range tc.want {
+				result, _ := m.Update(keyMsg(tc.key))
+				m = result.(Model)
+				got = append(got, m.nav.diffCursor)
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestModel_HunkNav_StopAtAnnotationsLandsOnCommentRow(t *testing.T) {
+	m := loadFileIntoModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": stopsFixture()})
+	addStopsAnnotations(&m, "a.go")
+	m.cfg.stopAtAnnotations = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 3
+
+	result, _ := m.Update(keyMsg(']'))
+	m = result.(Model)
+	assert.Equal(t, 5, m.nav.diffCursor)
+	assert.True(t, m.annot.cursorOnAnnotation, "a context-line stop selects its comment row, as } does")
+	cur, total := m.currentHunk()
+	assert.Equal(t, 0, cur, "an annotation stop is not inside a hunk")
+	assert.Equal(t, 1, total)
+}
+
+func TestModel_HunkNav_StopAtAnnotationsCrossFile(t *testing.T) {
+	short := []diff.DiffLine{{ChangeType: diff.ChangeAdd, Content: "add", NewNum: 1}}
+	tests := []struct {
+		name       string
+		forward    bool
+		wantCursor int
+	}{
+		{name: "forward lands on the file-level annotation", forward: true, wantCursor: -1},
+		{name: "backward lands on the last context annotation", forward: false, wantCursor: 5},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			diffs := map[string][]diff.DiffLine{"a.go": short, "b.go": stopsFixture()}
+			from, to, key := "a.go", "b.go", ']'
+			if !tc.forward {
+				diffs = map[string][]diff.DiffLine{"a.go": stopsFixture(), "b.go": short}
+				from, to, key = "b.go", "a.go", '['
+			}
+			m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+			addStopsAnnotations(&m, to)
+			if from != m.file.name {
+				m.tree.SelectByPath(from)
+				m.file.loadSeq++
+				result, _ := m.Update(m.loadFileDiff(from)())
+				m = result.(Model)
+			}
+			m.cfg.crossFileHunks = true
+			m.cfg.stopAtAnnotations = true
+			m.layout.focus = paneDiff
+			m.nav.diffCursor = 0
+
+			result, cmd := m.Update(keyMsg(key))
+			m = result.(Model)
+			require.NotNil(t, cmd)
+			result, _ = m.Update(cmd())
+			m = result.(Model)
+
+			assert.Equal(t, to, m.file.name)
+			assert.Equal(t, tc.wantCursor, m.nav.diffCursor)
+			assert.Nil(t, m.nav.pendingHunkJump)
+		})
+	}
 }

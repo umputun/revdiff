@@ -328,6 +328,7 @@ type modelConfigState struct {
 	noConfirmReload    bool               // skip confirmation prompt on reload (R)
 	crossFileHunks     bool               // allow [ and ] to jump across file boundaries
 	crossFileMotion    bool               // allow cursor motion to continue across file boundaries
+	stopAtAnnotations  bool               // [ and ] also stop at file-level and context-line annotations
 	startAtChange      bool               // put the cursor on the first changed line when a file loads
 	treeWidthRatio     int                // 1-10 units for file tree panel
 	tabSpaces          string             // spaces to replace tabs with
@@ -748,32 +749,33 @@ type ModelConfig struct {
 	CommitLog commitLogSource
 
 	// --- Configuration values ---
-	Ref              string
-	Staged           bool
-	TreeWidthRatio   int
-	TabWidth         int      // number of spaces per tab character
-	NoColors         bool     // disable all colors including syntax highlighting
-	MouseTracking    bool     // enable mouse tracking for clicks and wheel events
-	NoStatusBar      bool     // hide the status bar
-	NoTree           bool     // hide the file tree pane
-	NoConfirmDiscard bool     // skip confirmation prompt when discarding annotations
-	NoConfirmReload  bool     // skip confirmation prompt when dropping annotations on reload
-	Wrap             bool     // enable line wrapping
-	WrapIndent       int      // extra indent (cols) for wrap continuation rows; 0 disables
-	PageOverlap      int      // rows carried over from the previous screen on page up/down; 0 disables
-	Collapsed        bool     // start in collapsed diff mode
-	CrossFileHunks   bool     // allow [ and ] to jump across file boundaries
-	CrossFileMotion  bool     // allow cursor motion to continue across file boundaries
-	StartAtChange    bool     // put the cursor on the first changed line when a file loads
-	LineNumbers      bool     // show line numbers in diff gutter
-	ShowBlame        bool     // show blame gutter; requires Blamer
-	ShowUntracked    bool     // show untracked files in the tree; requires LoadUntracked
-	WordDiff         bool     // enable intra-line word-diff highlighting
-	FilterUnreviewed bool     // start with the tree filtered to files not marked reviewed
-	Only             []string // show only these files (match by exact path or path suffix)
-	WorkDir          string   // working directory for resolving absolute --only paths
-	SourceEditor     SourceEditorPolicy
-	ActiveThemeName  string // name of theme currently applied (for theme selector cursor positioning)
+	Ref               string
+	Staged            bool
+	TreeWidthRatio    int
+	TabWidth          int      // number of spaces per tab character
+	NoColors          bool     // disable all colors including syntax highlighting
+	MouseTracking     bool     // enable mouse tracking for clicks and wheel events
+	NoStatusBar       bool     // hide the status bar
+	NoTree            bool     // hide the file tree pane
+	NoConfirmDiscard  bool     // skip confirmation prompt when discarding annotations
+	NoConfirmReload   bool     // skip confirmation prompt when dropping annotations on reload
+	Wrap              bool     // enable line wrapping
+	WrapIndent        int      // extra indent (cols) for wrap continuation rows; 0 disables
+	PageOverlap       int      // rows carried over from the previous screen on page up/down; 0 disables
+	Collapsed         bool     // start in collapsed diff mode
+	CrossFileHunks    bool     // allow [ and ] to jump across file boundaries
+	CrossFileMotion   bool     // allow cursor motion to continue across file boundaries
+	StopAtAnnotations bool     // [ and ] also stop at file-level and context-line annotations
+	StartAtChange     bool     // put the cursor on the first changed line when a file loads
+	LineNumbers       bool     // show line numbers in diff gutter
+	ShowBlame         bool     // show blame gutter; requires Blamer
+	ShowUntracked     bool     // show untracked files in the tree; requires LoadUntracked
+	WordDiff          bool     // enable intra-line word-diff highlighting
+	FilterUnreviewed  bool     // start with the tree filtered to files not marked reviewed
+	Only              []string // show only these files (match by exact path or path suffix)
+	WorkDir           string   // working directory for resolving absolute --only paths
+	SourceEditor      SourceEditorPolicy
+	ActiveThemeName   string // name of theme currently applied (for theme selector cursor positioning)
 	// CommitsApplicable is the composition-root verdict on whether the current
 	// invocation supports the info popup's commit-log section. Computed once in main.go from the
 	// full option set (stdin, staged, only, all-files, ref) and copied into Model
@@ -930,6 +932,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			noConfirmReload:    cfg.NoConfirmReload,
 			crossFileHunks:     cfg.CrossFileHunks,
 			crossFileMotion:    cfg.CrossFileMotion,
+			stopAtAnnotations:  cfg.StopAtAnnotations,
 			startAtChange:      cfg.StartAtChange,
 			treeWidthRatio:     cfg.TreeWidthRatio,
 			tabSpaces:          strings.Repeat(" ", cfg.TabWidth),

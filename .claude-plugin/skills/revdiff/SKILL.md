@@ -133,6 +133,8 @@ Pass `--filter-unreviewed` only when the user asks for the tree limited to files
 
 Pass `--cross-file-motion` only when the user explicitly asks for cursor motion to continue into adjacent files; never infer it automatically.
 
+Pass `--stop-at-annotations` only when the user explicitly asks for `[` and `]` to also stop at annotations outside hunks; never infer it automatically.
+
 Run the launcher through the override-chain resolver, in two separate Bash calls:
 
 1. Resolve the launcher on its own:
@@ -142,7 +144,7 @@ Run the launcher through the override-chain resolver, in two separate Bash calls
    It checks `user → bundled` (see `references/install.md` for override paths) and prints the first-found absolute path. If it exits nonzero (`error: launcher not found in override chain: launch-revdiff.sh`), stop and report its stderr; the override file is missing or not executable.
 2. Run the printed path literally, shell-quoted, with the arguments:
    ```bash
-   /abs/path/printed/by/resolver/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--filter-unreviewed] [--cross-file-motion] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
+   /abs/path/printed/by/resolver/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--filter-unreviewed] [--cross-file-motion] [--stop-at-annotations] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
    ```
 
 Resolve again for every launch. Keep the second call a plain command, with no `$VAR` expansion, command substitution, pipe, redirect or cleanup in it: Ghostty and iTerm2 drive the terminal through `osascript`, which Claude Code's sandbox blocks, and Claude Code exempts a command from the sandbox only when every part of it matches the user's `*/launch-revdiff.sh*` exclusion (see `references/install.md`).

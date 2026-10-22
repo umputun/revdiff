@@ -249,6 +249,7 @@ func run(opts options) (int, error) {
 		CompactContext:       opts.CompactContext,
 		CrossFileHunks:       opts.CrossFileHunks,
 		CrossFileMotion:      opts.CrossFileMotion,
+		StopAtAnnotations:    opts.StopAtAnnotations,
 		StartAtChange:        opts.StartAtChange,
 		LineNumbers:          opts.LineNumbers,
 		ShowBlame:            opts.Blame,

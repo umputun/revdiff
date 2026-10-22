@@ -412,6 +412,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--compact-context</code></td><td>Number of context lines around changes when in compact mode</td><td><code>5</code></td></tr>
                 <tr><td><code>--cross-file-hunks</code></td><td>Allow <code>[</code> and <code>]</code> to continue into adjacent files</td><td><code>false</code></td></tr>
                 <tr><td><code>--cross-file-motion</code></td><td>Allow cursor motion (<code>j</code>/<code>k</code>, <code>PgDown</code>/<code>PgUp</code>, <code>Ctrl+d</code>/<code>Ctrl+u</code>) to continue into adjacent files at a boundary</td><td><code>false</code></td></tr>
+                <tr><td><code>--stop-at-annotations</code></td><td>Stop <code>[</code> and <code>]</code> at annotations outside hunks, including file-level ones</td><td><code>false</code></td></tr>
                 <tr><td><code>--start-at-change</code></td><td>Position the cursor on the first changed line</td><td><code>false</code></td></tr>
                 <tr><td><code>--line-numbers</code></td><td>Show line numbers in diff gutter</td><td><code>false</code></td></tr>
                 <tr><td><code>--word-diff</code></td><td>Highlight intra-line word-level changes in paired add/remove lines</td><td><code>false</code></td></tr>
@@ -534,7 +535,7 @@ color-border = #6272a4
                 <tr><td><code>Enter</code></td><td>Switch to diff (tree) / annotate (diff)</td></tr>
                 <tr><td><code>n/p</code></td><td>Next/prev changed file or TOC header</td></tr>
                 <tr><td><code>P</code></td><td>Open the file picker</td></tr>
-                <tr><td><code>[</code> / <code>]</code></td><td>Jump to prev/next change hunk; with <code>--cross-file-hunks</code>, continues to prev/next file at the boundary</td></tr>
+                <tr><td><code>[</code> / <code>]</code></td><td>Jump to prev/next change hunk, scrolling a page at a time through a hunk taller than the screen first; with <code>--cross-file-hunks</code>, continues to prev/next file at the boundary; with <code>--stop-at-annotations</code>, also stops at annotations outside hunks</td></tr>
                 <tr><td><code>e</code></td><td>Open focused file in <code>$EDITOR</code></td></tr>
             </tbody>
         </table>

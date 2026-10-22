@@ -394,6 +394,7 @@ Positional arguments support several forms:
 | `--compact-context` | Number of context lines around changes when in compact mode, env: `REVDIFF_COMPACT_CONTEXT` | `5` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
 | `--cross-file-motion` | Allow cursor motion (`j`/`k`, `PgDown`/`PgUp`, `Ctrl+d`/`Ctrl+u`) to continue into adjacent files at a boundary, env: `REVDIFF_CROSS_FILE_MOTION` | `false` |
+| `--stop-at-annotations` | Stop `[` and `]` at annotations outside hunks, including file-level ones, env: `REVDIFF_STOP_AT_ANNOTATIONS` | `false` |
 | `--start-at-change` | Position the cursor on the first changed line, env: `REVDIFF_START_AT_CHANGE` | `false` |
 | `--line-numbers` | Show line numbers in diff gutter, env: `REVDIFF_LINE_NUMBERS` | `false` |
 | `--blame` | Show blame gutter, env: `REVDIFF_BLAME` | `false` |
@@ -758,7 +759,7 @@ In the Claude Code and Codex plugins, you can also tell the agent to use a past 
 | `Enter` | Switch to diff pane (tree) / start annotation (diff pane) |
 | `n/p` | Next/previous changed file; next/prev header in markdown TOC mode (n = next match when search active) |
 | `P` | Open the file picker |
-| `[` / `]` | Jump to previous/next change hunk in diff; add `--cross-file-hunks` to continue into the previous/next file at the boundary |
+| `[` / `]` | Jump to previous/next change hunk in diff, scrolling a page at a time through a hunk taller than the screen first; add `--cross-file-hunks` to continue into the previous/next file at the boundary, and `--stop-at-annotations` to also stop at annotations outside hunks |
 | `e` | Open focused file in `$EDITOR` |
 
 The file picker lists paths currently visible in the sidebar, so annotated-only and unreviewed-only filters remain active. Printable keys always filter full relative paths; use the arrow keys or mouse wheel to move, and press `Enter` or left-click to jump. `Backspace` edits the filter. The first `Esc` clears a non-empty filter and keeps the picker open; the second closes it. Because printable keys always filter, `P` typed inside the picker adds to the filter rather than closing it; a `jump_file` binding with a modifier (e.g. `map alt+f jump_file`) closes the picker when pressed again.

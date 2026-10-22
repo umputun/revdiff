@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # launch revdiff in a terminal overlay (agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
-# usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--filter-unreviewed] [--only=file1 ...] [--stdin | --stdin-file=PATH]
+# usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--filter-unreviewed] [--stop-at-annotations] [--only=file1 ...] [--stdin | --stdin-file=PATH]
 # --stdin-file=PATH is a launcher option: it reaches revdiff as --stdin fed from PATH. a sandboxed
 # agent shell runs a command with a pipe or redirect in the sandbox, a plain argument escapes it
 # output: annotation text from revdiff stdout (empty if no annotations)

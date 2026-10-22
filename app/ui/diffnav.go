@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -609,41 +610,219 @@ func (m *Model) moveToNextHunk() {
 	}
 }
 
-// moveToPrevHunk moves the diff cursor to the start of the previous change hunk.
-// in collapsed mode, advances past hidden removed lines to the first visible line in the hunk.
-func (m *Model) moveToPrevHunk() {
-	m.annot.cursorOnAnnotation = false
+// hunkStop is a place [ and ] land on: the first visible line of a hunk, or, with
+// stop-at-annotations, an annotation outside hunks. idx -1 is the file-level annotation row.
+type hunkStop struct {
+	idx   int
+	annot bool
+}
+
+// hunkStops returns the current file's stops in ascending idx order. Context-line annotations
+// sit outside every hunk and a hunk's first visible line sits inside it, so a single pass
+// keeps the order.
+func (m Model) hunkStops() []hunkStop {
+	var stops []hunkStop
+	withAnnots := m.cfg.stopAtAnnotations
+	if withAnnots && m.hasFileAnnotation() {
+		stops = append(stops, hunkStop{idx: -1, annot: true})
+	}
 	hunks := m.findHunks()
-	for _, h := range slices.Backward(hunks) {
-		target := m.firstVisibleInHunk(h, hunks)
-		if target < 0 {
-			continue // skip delete-only hunks in collapsed mode
+	next := 0
+	for i, dl := range m.file.lines {
+		if next < len(hunks) && hunks[next] == i {
+			next++
+			if target := m.firstVisibleInHunk(i, hunks); target >= 0 {
+				stops = append(stops, hunkStop{idx: target})
+			}
+			continue
 		}
-		if target < m.nav.diffCursor {
-			m.nav.diffCursor = target
-			m.centerHunkInViewport()
+		if withAnnots && dl.ChangeType == diff.ChangeContext && m.store.Has(m.file.name, m.diffLineNum(dl), string(dl.ChangeType)) {
+			stops = append(stops, hunkStop{idx: i, annot: true})
+		}
+	}
+	return stops
+}
+
+// nextStop returns the first stop after diff index from.
+func (m Model) nextStop(from int) (hunkStop, bool) {
+	for _, s := range m.hunkStops() {
+		if s.idx > from {
+			return s, true
+		}
+	}
+	return hunkStop{}, false
+}
+
+// prevStop returns the last stop before diff index from.
+func (m Model) prevStop(from int) (hunkStop, bool) {
+	stops := m.hunkStops()
+	for _, s := range slices.Backward(stops) {
+		if s.idx < from {
+			return s, true
+		}
+	}
+	return hunkStop{}, false
+}
+
+// hunkBounds returns the first and last diff index of the change hunk holding idx.
+func (m Model) hunkBounds(idx int) (start, end int, ok bool) {
+	isChange := func(i int) bool {
+		ct := m.file.lines[i].ChangeType
+		return ct == diff.ChangeAdd || ct == diff.ChangeRemove
+	}
+	if idx < 0 || idx >= len(m.file.lines) || !isChange(idx) {
+		return 0, 0, false
+	}
+	start, end = idx, idx
+	for start > 0 && isChange(start-1) {
+		start--
+	}
+	for end+1 < len(m.file.lines) && isChange(end+1) {
+		end++
+	}
+	return start, end, true
+}
+
+// hunkLayout is the visual geometry hunk paging works in: the top row and the row count of
+// every diff line, with collapsed-hidden lines at zero height.
+type hunkLayout struct {
+	offsets []int
+	heights []int
+}
+
+func (m Model) buildHunkLayout() hunkLayout {
+	var hunks []int
+	if m.modes.collapsed.enabled {
+		hunks = m.findHunks()
+	}
+	annotationSet := m.buildAnnotationSet()
+	heights := make([]int, len(m.file.lines))
+	for i := range m.file.lines {
+		heights[i] = m.hunkLineHeight(i, hunks, annotationSet)
+	}
+	return hunkLayout{offsets: m.cursorVisualOffsets(hunks, annotationSet), heights: heights}
+}
+
+// span returns the first and last visual row of diff lines start..end. A hidden line has the
+// offset of the line after it, so both ends stay correct when start or end is hidden.
+func (l hunkLayout) span(start, end int) (top, bottom int) {
+	return l.offsets[start], l.offsets[end] + l.heights[end] - 1
+}
+
+// lineAtRow picks the cursor line for a page of a hunk starting at row y: the first visible
+// line of start..end whose top is on the page, else the line whose rows cover y.
+func (l hunkLayout) lineAtRow(start, end, y, height int) int {
+	covering := start
+	for i := start; i <= end; i++ {
+		if l.heights[i] == 0 {
+			continue
+		}
+		if l.offsets[i] >= y && l.offsets[i] < y+height {
+			return i
+		}
+		if l.offsets[i] <= y {
+			covering = i
+		}
+	}
+	return covering
+}
+
+// pageThroughHunk scrolls a page through the hunk under the cursor when the direction still
+// has rows of it off screen, keeping two rows of overlap. It reports whether it scrolled; the
+// cursor index may stay the same when one line or annotation spans the page.
+func (m *Model) pageThroughHunk(forward bool) bool {
+	start, end, ok := m.hunkBounds(m.nav.diffCursor)
+	height := m.layout.viewport.Height
+	if !ok || height <= 0 {
+		return false
+	}
+	lay := m.buildHunkLayout()
+	top, bottom := lay.span(start, end)
+	y, step := m.layout.viewport.YOffset, max(1, height-2)
+	floor := max(0, top-2) // the row centerHunkInViewport puts a tall hunk's start on
+	switch {
+	case forward && bottom >= y+height:
+		y = min(y+step, bottom-height+1)
+	case !forward && y > floor:
+		y = max(y-step, floor)
+	default:
+		return false
+	}
+	m.showHunkPage(start, end, y, lay)
+	return true
+}
+
+// showHunkPage scrolls to row y and puts the cursor on the hunk line shown there. It sets the
+// offset directly because syncViewportToCursor would pull the page back to a covering
+// line's top row.
+func (m *Model) showHunkPage(start, end, y int, lay hunkLayout) {
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = lay.lineAtRow(start, end, y, m.layout.viewport.Height)
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.layout.viewport.SetYOffset(y)
+}
+
+// landOnStop moves the cursor to a stop. With tail set, a hunk taller than the viewport shows
+// its last page, so stepping backward reaches every row of it; otherwise a hunk is framed by
+// centerHunkInViewport and an annotation is centered with its comment row selected.
+func (m *Model) landOnStop(s hunkStop, tail bool) {
+	if s.annot {
+		a := annotation.Annotation{File: m.file.name}
+		if s.idx >= 0 {
+			dl := m.file.lines[s.idx]
+			a.Line, a.Type = m.diffLineNum(dl), string(dl.ChangeType)
+		}
+		m.positionOnAnnotation(a)
+		return
+	}
+	m.annot.cursorOnAnnotation = false
+	m.nav.diffCursor = s.idx
+	if start, end, ok := m.hunkBounds(s.idx); ok && tail && m.layout.viewport.Height > 0 {
+		lay := m.buildHunkLayout()
+		top, bottom := lay.span(start, end)
+		if bottom-top+1 >= m.layout.viewport.Height {
+			m.showHunkPage(start, end, bottom-m.layout.viewport.Height+1, lay)
 			return
 		}
 	}
+	m.centerHunkInViewport()
 }
 
-// handleHunkNav moves to the next or previous hunk, crossing file boundaries when needed.
-// when cross-file hunk navigation is enabled, forward at the last hunk navigates to the next file
-// and lands on its first hunk, and backward at the first hunk navigates to the previous file and
-// lands on its last hunk.
+// stepHunk performs one [ or ] within the current file and reports whether it moved. Paging
+// through a tall hunk comes first. Backward, a hunk before the one under the cursor lands on
+// its last page; the start of the cursor's own hunk is framed normally, or the walk would
+// return to that hunk's tail.
+func (m *Model) stepHunk(forward bool) bool {
+	if m.pageThroughHunk(forward) {
+		return true
+	}
+	if forward {
+		s, ok := m.nextStop(m.nav.diffCursor)
+		if ok {
+			m.landOnStop(s, false)
+		}
+		return ok
+	}
+	s, ok := m.prevStop(m.nav.diffCursor)
+	if !ok {
+		return false
+	}
+	start, _, inHunk := m.hunkBounds(m.nav.diffCursor)
+	m.landOnStop(s, s.annot || !inHunk || s.idx < start)
+	return true
+}
+
+// handleHunkNav moves to the next or previous stop, crossing file boundaries when needed.
+// when cross-file hunk navigation is enabled, forward at the last stop navigates to the next file
+// and lands on its first stop, and backward at the first stop navigates to the previous file and
+// lands on its last stop.
 // always shifts focus to the diff pane. no-op when no file is loaded.
 func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 	if m.file.name == "" {
 		return m, nil
 	}
 	m.layout.focus = paneDiff
-	prevCursor := m.nav.diffCursor
-	if forward {
-		m.moveToNextHunk()
-	} else {
-		m.moveToPrevHunk()
-	}
-	if m.nav.diffCursor != prevCursor || m.file.singleFile || !m.cfg.crossFileHunks {
+	if m.stepHunk(forward) || m.file.singleFile || !m.cfg.crossFileHunks {
 		m.syncTOCActiveSection()
 		return m, nil
 	}
@@ -1098,22 +1277,23 @@ func (m *Model) landAtBoundary(forward bool) {
 	m.moveDiffCursorToEnd()
 }
 
-// applyPendingHunkJump moves the cursor to the first or last hunk after a cross-file navigation and
-// scrolls to it. A landed hunk keeps the framing moveToNextHunk/moveToPrevHunk give it, the same as
-// an in-file ] or [; recentering on the cursor would push the tail of a tall hunk off screen. A file
-// with no hunks lands on its first visible line, centered.
+// applyPendingHunkJump moves the cursor to the first or last stop after a cross-file navigation
+// and scrolls to it, framed the same as an in-file ] or [. A file with no stops lands on its
+// first visible line, centered.
 func (m *Model) applyPendingHunkJump() {
 	forward := *m.nav.pendingHunkJump
 	m.nav.pendingHunkJump = nil
+	var s hunkStop
+	var ok bool
 	if forward {
-		m.nav.diffCursor = -1
-		m.moveToNextHunk()
+		s, ok = m.nextStop(-2) // -1 is the file-level annotation row, itself a stop
 	} else {
-		m.nav.diffCursor = len(m.file.lines)
-		m.moveToPrevHunk()
+		s, ok = m.prevStop(len(m.file.lines))
 	}
-	if m.nav.diffCursor == -1 || m.nav.diffCursor == len(m.file.lines) {
+	if !ok {
 		m.skipInitialDividers()
 		m.centerViewportOnCursor()
+		return
 	}
+	m.landOnStop(s, !forward)
 }
