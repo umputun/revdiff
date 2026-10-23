@@ -187,7 +187,7 @@ why a pointer here??
 explain what this lock protects
 ```
 
-The answer comes back as a markdown document reopened in revdiff, with a TOC sidebar, so you can annotate the explanation itself to ask follow-ups. That loop repeats until you quit without annotating. Any code-change annotations from the same batch are held and applied afterwards. The Codex plugin behaves the same way; the Pi package classifies questions too but answers them in chat.
+The answer comes back as a markdown document reopened in revdiff, with a TOC sidebar, so you can annotate the explanation itself to ask follow-ups. That loop repeats until you quit without annotating. Any code-change annotations from the same batch are held and applied afterwards. The Codex plugin behaves the same way; the Pi package and the OpenCode plugin classify questions too but answer them in chat.
 
 **Custom launchers:** the Claude diff-review skill and the cross-runtime planning plugin resolve launchers through a two-layer chain (user → bundled). Claude uses `${CLAUDE_PLUGIN_DATA}/scripts/<launcher>`; the Codex planning hook uses `${PLUGIN_DATA}/scripts/launch-plan-review.sh`. There is no project-level executable override by design because these hooks auto-fire in any opened repository. See `.claude-plugin/skills/revdiff/references/install.md` for diff review and [plugins/revdiff-planning/README.md](plugins/revdiff-planning/README.md) for plan review.
 

@@ -25,7 +25,10 @@ export default tool({
   description:
     "Launch revdiff in a terminal overlay to review git diffs and capture annotations. " +
     "Opens an interactive diff viewer in a split pane (tmux/kitty/wezterm/ghostty/iTerm2/emacs vterm) " +
-    "and returns any annotations the user wrote.",
+    "and returns any annotations the user wrote. " +
+    "An annotation whose comment contains `??` anywhere, or starts with explain, remind, describe, " +
+    "what is, what are, how does, how do or clarify (case-insensitive), is a question: " +
+    "answer it in chat and change no code for it.",
   args: {
     ref: tool.schema
       .string()

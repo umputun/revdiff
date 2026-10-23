@@ -326,7 +326,7 @@ why a pointer here??
 explain what this lock protects
 ```
 
-The agent answers as a markdown document and reopens it in revdiff via `--only`, with a TOC sidebar. Annotate that document to ask follow-ups and it is refined and reopened; the loop ends when you quit without annotating. Code-change annotations from the same batch are held and applied after the explanation loop finishes. Applies to the Claude and Codex plugins; the Pi package classifies questions the same way but answers them in chat.
+The agent answers as a markdown document and reopens it in revdiff via `--only`, with a TOC sidebar. Annotate that document to ask follow-ups and it is refined and reopened; the loop ends when you quit without annotating. Code-change annotations from the same batch are held and applied after the explanation loop finishes. Applies to the Claude and Codex plugins; the Pi package and the OpenCode plugin classify questions the same way but answer them in chat.
 
 ## Preloading Annotations
 

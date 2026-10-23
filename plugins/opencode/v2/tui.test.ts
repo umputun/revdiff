@@ -196,6 +196,10 @@ test("CLI /revdiff opens locally and returns annotations to its captured session
     assert.equal(launches[0]?.arguments, 'HEAD~1 --staged --only="a b.go"');
     assert.equal(terminal.prompts[0]?.sessionID, terminal.session.id);
     assert.match(terminal.prompts[0]?.text, /Fix the race/);
+    assert.match(
+      terminal.prompts[0]?.text,
+      /comment contains `\?\?`.*is a question: answer it in chat and change no code for it/s,
+    );
   } finally {
     await dispose?.();
   }

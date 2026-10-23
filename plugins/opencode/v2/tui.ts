@@ -320,7 +320,13 @@ export default {
                       {
                         sessionID: targetID,
                         delivery: "queue",
-                        text: `I reviewed the changes and added annotations. Please address each one:\n\n${op.annotations}`,
+                        text: [
+                          "I reviewed the changes and added annotations.",
+                          "An annotation whose comment contains `??` anywhere, or starts with explain, remind, describe, what is, what are, how does, how do or clarify (case-insensitive), is a question: answer it in chat and change no code for it.",
+                          "Please address each of the other annotations:",
+                          "",
+                          op.annotations,
+                        ].join("\n"),
                       },
                       { signal },
                     );
