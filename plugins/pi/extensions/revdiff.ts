@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
@@ -303,11 +303,19 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: s
 // blocked report needs that loop to reach its socket
 function spawnReview(bin: string, args: string[], cwd: string): Promise<SpawnOutcome> {
 	return new Promise((resolve) => {
-		const child = spawn(bin, args, {
-			cwd,
-			env: withAnnotationExitCode(process.env),
-			stdio: "inherit",
-		});
+		let child: ChildProcess;
+		try {
+			child = spawn(bin, args, {
+				cwd,
+				env: withAnnotationExitCode(process.env),
+				stdio: "inherit",
+			});
+		} catch (error) {
+			// spawn reports only a few errnos as an error event and throws the rest (ENOEXEC, a
+			// wrong-architecture binary); a rejection here would leave pi's TUI stopped
+			resolve({ status: null, signal: null, error: error instanceof Error ? error : new Error(String(error)) });
+			return;
+		}
 		// pi's SIGTERM/SIGHUP shutdown can exit mid-review; without this revdiff would outlive pi on
 		// a terminal pi has already handed back
 		const stopChild = () => child.kill("SIGTERM");

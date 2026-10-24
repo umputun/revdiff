@@ -2033,22 +2033,27 @@ async function testHerdrBlockedPairOnEarlyExits(): Promise<void> {
 
 async function testFailedLaunchRestoresTUI(): Promise<void> {
 	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-noexec-"));
-	const fakeBin = path.join(tempDir, "revdiff");
-	testWriteFileSync(fakeBin, "not executable\n");
+	const notExecutable = path.join(tempDir, "revdiff");
+	const notAProgram = path.join(tempDir, "revdiff-garbage");
+	testWriteFileSync(notExecutable, "not executable\n");
+	writeExecutable(notAProgram, "\u0000\u0001\u0002 not a program");
 	try {
-		await withEnv({ REVDIFF_BIN: fakeBin, HERDR_ENV: "1" }, async () => {
-			const pi = fakePi();
-			const ctx = fakeCtx();
-			revdiffExtension(pi);
-			const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
-			testAssert(result.content[0].text === "revdiff review did not complete.", "spawn failure should return incomplete result");
-			testAssert(
-				ctx.ui.notifications.some((message: string) => message.includes("Failed to launch revdiff")),
-				"spawn failure should notify the launch error",
-			);
-			testAssert(ctx.tui.stops === 1 && ctx.tui.starts === 1, "spawn failure should restore the TUI exactly once");
-			assertArray(blockedStates(pi).map(String), ["true", "false"], "spawn failure should clear blocked exactly once");
-		});
+		// regression: spawn throws ENOEXEC synchronously, which left the TUI stopped
+		for (const fakeBin of [notExecutable, notAProgram]) {
+			await withEnv({ REVDIFF_BIN: fakeBin, HERDR_ENV: "1" }, async () => {
+				const pi = fakePi();
+				const ctx = fakeCtx();
+				revdiffExtension(pi);
+				const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
+				testAssert(result.content[0].text === "revdiff review did not complete.", "spawn failure should return incomplete result: " + fakeBin);
+				testAssert(
+					ctx.ui.notifications.some((message: string) => message.includes("Failed to launch revdiff")),
+					"spawn failure should notify the launch error: " + fakeBin,
+				);
+				testAssert(ctx.tui.stops === 1 && ctx.tui.starts === 1, "spawn failure should restore the TUI exactly once: " + fakeBin);
+				assertArray(blockedStates(pi).map(String), ["true", "false"], "spawn failure should clear blocked exactly once: " + fakeBin);
+			});
+		}
 	} finally {
 		rmSync(tempDir, { recursive: true, force: true });
 	}
