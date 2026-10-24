@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import * as path from "node:path";
@@ -36,6 +36,12 @@ interface LaunchSpec {
 	label: string;
 }
 
+interface SpawnOutcome {
+	status: number | null;
+	signal: NodeJS.Signals | null;
+	error?: Error;
+}
+
 interface SmartDetectResult {
 	branch: string;
 	mainBranch: string;
@@ -57,6 +63,8 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "revdiff_review",
 		label: "revdiff review",
+		// the review owns the terminal, so no other tool call may run beside it
+		executionMode: "sequential",
 		description: "Launch revdiff in pi, capture interactive review annotations, and return them to the agent.",
 		promptSnippet: "Launch an interactive revdiff review and return captured annotations.",
 		promptGuidelines: [
@@ -89,26 +97,38 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 				return toolTextResult("Could not resolve revdiff working directory.");
 			}
 
-			const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx, cwd);
-			if (!launch) {
-				return toolTextResult("Could not resolve a revdiff launch target.");
+			// herdr's pi integration reports the pane as blocked while this channel is active. It can
+			// only send that report because the review below keeps pi's event loop running.
+			const herdrBlocked = process.env.HERDR_ENV === "1";
+			if (herdrBlocked) {
+				pi.events.emit("herdr:blocked", { active: true, label: "revdiff review" });
 			}
+			try {
+				const launch = await resolveLaunchSpec(params.args?.trim() ?? "", ctx, cwd);
+				if (!launch) {
+					return toolTextResult("Could not resolve a revdiff launch target.");
+				}
 
-			onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
-			const result = await runDirectReview(ctx, launch, cwd);
-			if (!result) {
-				return toolTextResult("revdiff review did not complete.");
+				onUpdate?.({ content: [{ type: "text", text: `Launching revdiff for ${launch.label} in ${cwd}...` }], details: null });
+				const result = await runDirectReview(ctx, launch, cwd);
+				if (!result) {
+					return toolTextResult("revdiff review did not complete.");
+				}
+
+				if (result.annotations.length === 0) {
+					return toolTextResult(`Review complete — no annotations for ${result.label}.`, result);
+				}
+
+				const noun = result.annotations.length === 1 ? "annotation" : "annotations";
+				return toolTextResult(
+					[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, "", "Annotations:", result.rawOutput.trim()].join("\n"),
+					result,
+				);
+			} finally {
+				if (herdrBlocked) {
+					pi.events.emit("herdr:blocked", { active: false });
+				}
 			}
-
-			if (result.annotations.length === 0) {
-				return toolTextResult(`Review complete — no annotations for ${result.label}.`, result);
-			}
-
-			const noun = result.annotations.length === 1 ? "annotation" : "annotations";
-			return toolTextResult(
-				[`Captured ${result.annotations.length} ${noun} for ${result.label}.`, "", "Annotations:", result.rawOutput.trim()].join("\n"),
-				result,
-			);
 		},
 	});
 }
@@ -231,14 +251,10 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: s
 	let launchError = "";
 	let launchSignal = "";
 
-	const exitCode = await ctx.ui.custom<number | null>((tui, _theme, _kb, done) => {
+	const exitCode = await ctx.ui.custom<number | null>(async (tui, _theme, _kb, done) => {
 		tui.stop();
 		process.stdout.write("\x1b[2J\x1b[H");
-		const result = spawnSync(revdiffBin, commandArgs, {
-			cwd,
-			env: withAnnotationExitCode(process.env),
-			stdio: "inherit",
-		});
+		const result = await spawnReview(revdiffBin, commandArgs, cwd);
 		if (result.error) {
 			launchError = result.error.message;
 		}
@@ -281,6 +297,28 @@ async function runDirectReview(ctx: ExtensionContext, launch: LaunchSpec, cwd: s
 	}
 
 	return buildResult(launch, rawOutput, cwd);
+}
+
+// async on purpose: a synchronous spawn freezes pi's event loop for the whole review, and herdr's
+// blocked report needs that loop to reach its socket
+function spawnReview(bin: string, args: string[], cwd: string): Promise<SpawnOutcome> {
+	return new Promise((resolve) => {
+		const child = spawn(bin, args, {
+			cwd,
+			env: withAnnotationExitCode(process.env),
+			stdio: "inherit",
+		});
+		// pi's SIGTERM/SIGHUP shutdown can exit mid-review; without this revdiff would outlive pi on
+		// a terminal pi has already handed back
+		const stopChild = () => child.kill("SIGTERM");
+		process.once("exit", stopChild);
+		const finish = (outcome: SpawnOutcome) => {
+			process.off("exit", stopChild);
+			resolve(outcome);
+		};
+		child.once("error", (error) => finish({ status: null, signal: null, error }));
+		child.once("close", (status, signal) => finish({ status, signal }));
+	});
 }
 
 function buildResult(launch: LaunchSpec, rawOutput: string, cwd: string): ReviewResult {

@@ -1763,6 +1763,7 @@ func piTypeboxStub() string {
 func piExtensionHarness() string {
 	return `
 import { chmodSync as testChmodSync, mkdirSync as testMkdirSync, realpathSync as testRealpathSync, writeFileSync as testWriteFileSync } from "node:fs";
+import { createConnection as testCreateConnection, createServer as testCreateServer } from "node:net";
 
 function testAssert(condition: unknown, message: string): asserts condition {
 	if (!condition) {
@@ -1777,10 +1778,22 @@ function assertArray(actual: string[], expected: string[], message: string): voi
 }
 
 function fakeCtx(choice?: "uncommitted" | "branch") {
+	const tui = {
+		stops: 0,
+		starts: 0,
+		stop() {
+			this.stops++;
+		},
+		start() {
+			this.starts++;
+		},
+		requestRender(_full?: boolean) {},
+	};
 	return {
 		hasUI: true,
 		cwd: process.cwd(),
 		isIdle: () => true,
+		tui,
 		ui: {
 			notifications: [] as string[],
 			notify(message: string) {
@@ -1789,16 +1802,11 @@ function fakeCtx(choice?: "uncommitted" | "branch") {
 			select(_title: string, choices: string[]) {
 				return choice === "branch" ? choices[1] : choices[0];
 			},
-			custom(factory: any) {
+			async custom(factory: any) {
 				let value: unknown;
-				factory(
-					{ stop() {}, start() {}, requestRender(_full?: boolean) {} },
-					{},
-					{},
-					(next: unknown) => {
-						value = next;
-					},
-				);
+				await factory(tui, {}, {}, (next: unknown) => {
+					value = next;
+				});
 				return value;
 			},
 		},
@@ -1809,10 +1817,13 @@ function fakePi() {
 	const commands = new Map<string, any>();
 	const tools = new Map<string, any>();
 	const sentMessages: string[] = [];
+	const listeners = new Map<string, Array<(data: any) => void>>();
+	const emittedEvents: Array<{ channel: string; data: any }> = [];
 	return {
 		commands,
 		tools,
 		sentMessages,
+		emittedEvents,
 		registerCommand(name: string, command: any) {
 			commands.set(name, command);
 		},
@@ -1822,7 +1833,56 @@ function fakePi() {
 		sendUserMessage(message: string) {
 			sentMessages.push(message);
 		},
+		events: {
+			emit(channel: string, data: any) {
+				emittedEvents.push({ channel, data });
+				for (const handler of listeners.get(channel) ?? []) {
+					handler(data);
+				}
+			},
+			on(channel: string, handler: (data: any) => void) {
+				listeners.set(channel, [...(listeners.get(channel) ?? []), handler]);
+				return () => listeners.set(channel, (listeners.get(channel) ?? []).filter((h) => h !== handler));
+			},
+		},
 	} as any;
+}
+
+async function withEnv<T>(vars: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+	const saved = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+	for (const [key, value] of Object.entries(vars)) {
+		if (value === undefined) {
+			delete process.env[key];
+		} else {
+			process.env[key] = value;
+		}
+	}
+	try {
+		return await fn();
+	} finally {
+		for (const [key, value] of Object.entries(saved)) {
+			if (value === undefined) {
+				delete process.env[key];
+			} else {
+				process.env[key] = value;
+			}
+		}
+	}
+}
+
+function blockedStates(pi: any): boolean[] {
+	return pi.emittedEvents.filter((e: any) => e.channel === "herdr:blocked").map((e: any) => e.data.active);
+}
+
+async function waitForFile(pathname: string, timeoutMs: number): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (existsSync(pathname)) {
+			return true;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 20));
+	}
+	return existsSync(pathname);
 }
 
 function writeExecutable(pathname: string, content: string): void {
@@ -1850,6 +1910,176 @@ function fakeRevdiffScript(): string {
 
 function fakeSignalRevdiffScript(): string {
 	return ["#!/bin/sh", "kill -TERM $$", ""].join("\n");
+}
+
+function fakeMarkerWaitingRevdiffScript(): string {
+	return [
+		"#!/bin/sh",
+		"i=0",
+		"while [ ! -f \"$FAKE_MARKER_FILE\" ]; do",
+		"  i=$((i+1))",
+		"  [ \"$i\" -gt 50 ] && exit 23",
+		"  sleep 0.1",
+		"done",
+		"out=",
+		"for arg in \"$@\"; do",
+		"  case \"$arg\" in --output=*) out=${arg#--output=};; esac",
+		"done",
+		"printf '## src/app.go:12-14 (+)\\nfix it\\n' > \"$out\"",
+		"exit 10",
+		"",
+	].join("\n");
+}
+
+function fakeLongRunningRevdiffScript(): string {
+	return [
+		"#!/bin/sh",
+		"trap 'echo term > \"$FAKE_TERM_FILE\"; exit 143' TERM",
+		"touch \"$FAKE_STARTED_FILE\"",
+		"i=0",
+		"while [ \"$i\" -lt 100 ]; do",
+		"  sleep 0.1",
+		"  i=$((i+1))",
+		"done",
+		"exit 24",
+		"",
+	].join("\n");
+}
+
+function testToolRunsSequentially(): void {
+	const pi = fakePi();
+	revdiffExtension(pi);
+	testAssert(pi.tools.get("revdiff_review").executionMode === "sequential", "revdiff_review must not share the terminal with parallel tool calls");
+}
+
+async function testHerdrBlockedDeliveredDuringReview(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-herdr-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	const marker = path.join(tempDir, "received");
+	const socketPath = path.join(tempDir, "herdr.sock");
+	writeExecutable(fakeBin, fakeMarkerWaitingRevdiffScript());
+
+	const server = testCreateServer((conn) => {
+		let payload = "";
+		conn.on("data", (chunk) => {
+			payload += chunk.toString();
+			if (payload.includes('"active":true')) {
+				testWriteFileSync(marker, payload);
+			}
+		});
+	});
+	await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+	try {
+		await withEnv({ REVDIFF_BIN: fakeBin, FAKE_MARKER_FILE: marker, HERDR_ENV: "1" }, async () => {
+			const pi = fakePi();
+			pi.events.on("herdr:blocked", (data: any) => {
+				const conn = testCreateConnection(socketPath);
+				conn.on("error", () => {});
+				conn.on("connect", () => conn.end(JSON.stringify(data) + "\n"));
+			});
+			revdiffExtension(pi);
+			const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, fakeCtx());
+			testAssert(
+				result.content[0].text.includes("Captured 1 annotation for README.md."),
+				"blocked state must reach the socket while revdiff runs: " + result.content[0].text,
+			);
+			assertArray(blockedStates(pi).map(String), ["true", "false"], "review should be bracketed by one blocked/unblocked pair");
+		});
+	} finally {
+		await new Promise<void>((resolve) => server.close(() => resolve()));
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testHerdrBlockedSkippedWithoutHerdrEnv(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-herdr-off-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	writeExecutable(fakeBin, fakeRevdiffScript());
+	try {
+		await withEnv({ REVDIFF_BIN: fakeBin, FAKE_ARG_FILE: path.join(tempDir, "args.txt"), HERDR_ENV: undefined }, async () => {
+			const pi = fakePi();
+			revdiffExtension(pi);
+			const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, fakeCtx());
+			testAssert(result.content[0].text.includes("Captured 1 annotation for README.md."), "review should complete without herdr");
+			testAssert(pi.emittedEvents.length === 0, "nothing should be emitted when HERDR_ENV is unset");
+		});
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testHerdrBlockedPairOnEarlyExits(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-herdr-early-"));
+	const file = path.join(tempDir, "not-a-dir.txt");
+	testWriteFileSync(file, "not a directory\n");
+	try {
+		await withEnv({ HERDR_ENV: "1" }, async () => {
+			let pi = fakePi();
+			revdiffExtension(pi);
+			let result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--output" }, undefined, undefined, fakeCtx());
+			testAssert(result.content[0].text === "Could not resolve a revdiff launch target.", "expected the unresolved-launch exit: " + result.content[0].text);
+			assertArray(blockedStates(pi).map(String), ["true", "false"], "unresolved launch should still clear blocked exactly once");
+
+			pi = fakePi();
+			revdiffExtension(pi);
+			result = await pi.tools.get("revdiff_review").execute("call-2", { cwd: file }, undefined, undefined, fakeCtx());
+			testAssert(result.content[0].text === "Could not resolve revdiff working directory.", "expected the invalid-cwd exit");
+			testAssert(pi.emittedEvents.length === 0, "an invalid cwd exits before anything is reported as blocked");
+		});
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testFailedLaunchRestoresTUI(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-noexec-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	testWriteFileSync(fakeBin, "not executable\n");
+	try {
+		await withEnv({ REVDIFF_BIN: fakeBin, HERDR_ENV: "1" }, async () => {
+			const pi = fakePi();
+			const ctx = fakeCtx();
+			revdiffExtension(pi);
+			const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
+			testAssert(result.content[0].text === "revdiff review did not complete.", "spawn failure should return incomplete result");
+			testAssert(
+				ctx.ui.notifications.some((message: string) => message.includes("Failed to launch revdiff")),
+				"spawn failure should notify the launch error",
+			);
+			testAssert(ctx.tui.stops === 1 && ctx.tui.starts === 1, "spawn failure should restore the TUI exactly once");
+			assertArray(blockedStates(pi).map(String), ["true", "false"], "spawn failure should clear blocked exactly once");
+		});
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+}
+
+async function testPiExitStopsRunningReview(): Promise<void> {
+	const tempDir = mkdtempSync(path.join(tmpdir(), "pi-revdiff-exit-"));
+	const fakeBin = path.join(tempDir, "revdiff");
+	const started = path.join(tempDir, "started");
+	const termFile = path.join(tempDir, "term");
+	writeExecutable(fakeBin, fakeLongRunningRevdiffScript());
+	try {
+		await withEnv({ REVDIFF_BIN: fakeBin, FAKE_STARTED_FILE: started, FAKE_TERM_FILE: termFile }, async () => {
+			const pi = fakePi();
+			const ctx = fakeCtx();
+			revdiffExtension(pi);
+			const before = process.listeners("exit");
+			const pending = pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
+			testAssert(await waitForFile(started, 5000), "fake revdiff should start");
+			const added = process.listeners("exit").filter((listener) => !before.includes(listener));
+			testAssert(added.length === 1, "a running review should register one process exit hook, got " + added.length);
+			(added[0] as () => void)();
+
+			const result = await pending;
+			testAssert(existsSync(termFile), "pi exiting should send SIGTERM to the running revdiff");
+			testAssert(result.content[0].text === "revdiff review did not complete.", "a review stopped by pi exit should be incomplete");
+			testAssert(process.listeners("exit").length === before.length, "the exit hook should be removed once revdiff exits");
+		});
+	} finally {
+		rmSync(tempDir, { recursive: true, force: true });
+	}
 }
 
 async function testCommandRoutesToSkill(): Promise<void> {
@@ -2000,16 +2230,20 @@ async function testSignalTerminatedReviewFails(): Promise<void> {
 	const oldBin = process.env.REVDIFF_BIN;
 	process.env.REVDIFF_BIN = fakeBin;
 	try {
-		const pi = fakePi();
-		const ctx = fakeCtx();
-		revdiffExtension(pi);
-		const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
+		await withEnv({ HERDR_ENV: "1" }, async () => {
+			const pi = fakePi();
+			const ctx = fakeCtx();
+			revdiffExtension(pi);
+			const result = await pi.tools.get("revdiff_review").execute("call-1", { args: "--only README.md" }, undefined, undefined, ctx);
 
-		testAssert(result.content[0].text === "revdiff review did not complete.", "signal-terminated revdiff should return incomplete result");
-		testAssert(
-			ctx.ui.notifications.some((message: string) => message.includes("terminated by signal")),
-			"signal-terminated revdiff should notify failure",
-		);
+			testAssert(result.content[0].text === "revdiff review did not complete.", "signal-terminated revdiff should return incomplete result");
+			testAssert(
+				ctx.ui.notifications.some((message: string) => message.includes("terminated by signal")),
+				"signal-terminated revdiff should notify failure",
+			);
+			testAssert(ctx.tui.stops === 1 && ctx.tui.starts === 1, "signal-terminated revdiff should restore the TUI exactly once");
+			assertArray(blockedStates(pi).map(String), ["true", "false"], "signal-terminated revdiff should clear blocked exactly once");
+		});
 	} finally {
 		if (oldBin === undefined) {
 			delete process.env.REVDIFF_BIN;
@@ -2143,6 +2377,12 @@ testReviewCwdResolution();
 await testToolRejectsInvalidCwd();
 await testToolCwdParameter();
 await testSignalTerminatedReviewFails();
+testToolRunsSequentially();
+await testHerdrBlockedDeliveredDuringReview();
+await testHerdrBlockedSkippedWithoutHerdrEnv();
+await testHerdrBlockedPairOnEarlyExits();
+await testFailedLaunchRestoresTUI();
+await testPiExitStopsRunningReview();
 await testArgumentResolution();
 await testRefLikePathArgKeepsRef();
 await testNeedsAskWithoutMainStops();

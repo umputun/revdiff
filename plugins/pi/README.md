@@ -65,6 +65,7 @@ You can also call the skill explicitly with `/skill:revdiff <request>`.
 - Requires the `revdiff` binary on `PATH`
 - Set `REVDIFF_BIN=/absolute/path/to/revdiff` if pi cannot find the binary
 - Direct terminal handoff is the only Pi launch mode
+- Inside herdr (`HERDR_ENV=1`), the agent shows as blocked while the review is open
 - Exit code `10` means annotations were captured, not failure
 - Use `--untracked` when agent-created files should be reviewed before they are staged
 - Use `--description` or `--description-file` after analysis/refactor work so the info popup carries review context
