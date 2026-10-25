@@ -206,8 +206,9 @@ Each source file has a matching `_test.go`.
   `matchSet`, `history`, `historyIdx`
 - **`annotationState` (`m.annot`)** — annotation input lifecycle and visual-row cache: `annotating`,
   `fileAnnotating`, `cursorOnAnnotation`, `input`, `rowCache`
-- **`wheelState` (`m.wheel`)** — diff-pane wheel coalescing (issues #179, #334): `gen`,
-  `renderPending`, `xPending`, `tickInFlight`
+- **`wheelState` (`m.wheel`)** — diff-pane wheel coalescing (issues #179, #334): `gen`, `epoch`,
+  `renderPending`, `xPending`, `tickInFlight`. `epoch` is bumped by `flushWheelPending` so a tick
+  scheduled before a flush is dropped when it fires
 
 Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create
 mini-models.

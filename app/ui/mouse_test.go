@@ -669,6 +669,58 @@ func TestModel_HandleKey_FlushesPendingHorizontalWheel(t *testing.T) {
 	assert.NotContains(t, model.layout.viewport.View(), "5678")
 }
 
+func TestModel_HandleMouse_WheelTickFromBeforeFlushIsDropped(t *testing.T) {
+	// a tick scheduled before an external flush must not clear or duplicate a newer tick chain
+	for _, oldTickFirst := range []bool{true, false} {
+		t.Run(fmt.Sprintf("old tick before second swipe event=%v", oldTickFirst), func(t *testing.T) {
+			m := wideLinesModel(t, 60)
+			result, cmd := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+			require.NotNil(t, cmd)
+			oldTick := cmd()
+
+			result, _ = result.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+			result, cmd = result.(Model).Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+			require.NotNil(t, cmd)
+			newTick := cmd()
+			model := result.(Model)
+
+			if oldTickFirst {
+				result, cmd = model.Update(oldTick)
+				model = result.(Model)
+				assert.Nil(t, cmd)
+				assert.True(t, model.wheel.tickInFlight)
+			}
+
+			result, cmd = model.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+			model = result.(Model)
+			assert.Nil(t, cmd)
+			require.True(t, model.wheel.xPending)
+			beforeTick := model.layout.viewport.View()
+
+			if !oldTickFirst {
+				result, cmd = model.Update(oldTick)
+				model = result.(Model)
+				assert.Nil(t, cmd)
+				assert.True(t, model.wheel.xPending)
+				assert.True(t, model.wheel.tickInFlight)
+				assert.Equal(t, beforeTick, model.layout.viewport.View())
+			}
+
+			result, cmd = model.Update(newTick)
+			model = result.(Model)
+			assert.False(t, model.wheel.xPending)
+			assert.NotEqual(t, beforeTick, model.layout.viewport.View())
+			require.NotNil(t, cmd)
+
+			result, cmd = model.Update(cmd())
+			model = result.(Model)
+			assert.Nil(t, cmd)
+			assert.False(t, model.wheel.tickInFlight)
+			assert.Equal(t, 2*scrollStep, model.layout.scrollX)
+		})
+	}
+}
+
 func TestModel_HandleMouse_WheelVerticalThenHorizontal(t *testing.T) {
 	m := wideLinesModel(t, 60)
 	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))

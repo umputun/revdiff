@@ -25,10 +25,16 @@ const wheelRenderDelay = 30 * time.Millisecond
 
 // wheelState tracks the coalescing state for diff-pane wheel events.
 //
-// gen is bumped on every wheel event that actually shifts YOffset (i.e.
-// scrollDiffViewportBy returned true — at-edge no-ops do NOT bump). The
-// in-flight tea.Tick captures the gen at scheduling time so the resulting
-// debounce msg can tell whether the burst has advanced past it.
+// gen is bumped on every wheel event that actually moves the view: a YOffset
+// shift or a scrollX change (at-edge no-ops do NOT bump). The in-flight
+// tea.Tick captures the gen at scheduling time so the resulting debounce msg
+// can tell whether the burst has advanced past it.
+//
+// epoch is bumped whenever flushWheelPending takes tick ownership away. a
+// flush cannot cancel a tick already scheduled, so ticks carry the epoch they
+// were scheduled in and handleWheelDebounce drops any from an older one;
+// otherwise a leftover tick could clear a newer tick's ownership or run a
+// second repaint chain beside it.
 //
 // renderPending stays true while a vertical pin + render is owed (set by
 // vertical wheel events, cleared by flushWheelPending).
@@ -49,6 +55,7 @@ const wheelRenderDelay = 30 * time.Millisecond
 // trackpad/free-spin bursts and stops the wheel-up from queueing behind them.
 type wheelState struct {
 	gen           int
+	epoch         int
 	renderPending bool
 	xPending      bool
 	tickInFlight  bool
@@ -57,9 +64,17 @@ type wheelState struct {
 // wheelDebounceMsg is the deferred flush trigger for diff-pane wheel events.
 // gen captures the wheel generation at scheduling time so handleWheelDebounce
 // can distinguish a settled burst (gen matches → flush) from an in-progress
-// burst (gen advanced → reschedule a fresh tick for the current gen).
+// burst (gen advanced → reschedule a fresh tick for the current gen). epoch
+// lets handleWheelDebounce drop a tick scheduled before the last flush.
 type wheelDebounceMsg struct {
-	gen int
+	gen   int
+	epoch int
+}
+
+// wheelTick schedules the next debounce tick for the current gen and epoch.
+func (m Model) wheelTick() tea.Cmd {
+	msg := wheelDebounceMsg{gen: m.wheel.gen, epoch: m.wheel.epoch}
+	return tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg { return msg })
 }
 
 // hitZone identifies which interactive area a mouse event targets.
@@ -271,7 +286,6 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 		}
 		m.wheel.renderPending = true
 		m.wheel.gen++
-		gen := m.wheel.gen
 
 		// schedule a tick only when none is in flight; subsequent wheels in the
 		// same burst just bump gen. an in-flight tick fires at its own
@@ -284,9 +298,7 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.wheel.tickInFlight = true
-		return m, tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
-			return wheelDebounceMsg{gen: gen}
-		})
+		return m, m.wheelTick()
 	case hitTree:
 		// tree/TOC wheel = direct cursor navigation, one entry per notch.
 		// no debounce, no shift-half-page tricks (those are diff-pane things);
@@ -329,16 +341,15 @@ func (m Model) handleHorizontalWheel(delta int) (tea.Model, tea.Cmd) {
 	}
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.wheel.tickInFlight = true
-	gen := m.wheel.gen
-	return m, tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
-		return wheelDebounceMsg{gen: gen}
-	})
+	return m, m.wheelTick()
 }
 
 // handleWheelDebounce processes a deferred tick for a wheel burst. branches:
-//   - neither renderPending nor xPending: an external path (handleKey,
-//     handleResize, handleBlameLoaded) already flushed, or the burst was a
-//     single horizontal event that repainted at once; clear tickInFlight, no-op.
+//   - msg.epoch differs from m.wheel.epoch: the tick was scheduled before a
+//     flush took ownership away; drop it so it cannot touch the current chain.
+//   - neither renderPending nor xPending: the burst was a single horizontal
+//     event that repainted at once, or nothing is left to do; clear
+//     tickInFlight, no-op.
 //   - msg.gen lags m.wheel.gen: the burst is still going (new wheels bumped
 //     gen since this tick was scheduled). repaint once if a horizontal scroll
 //     is owed, so the pane follows a sideways swipe, then reschedule a fresh
@@ -348,8 +359,9 @@ func (m Model) handleHorizontalWheel(delta int) (tea.Model, tea.Cmd) {
 //     wheelRenderDelay. flush the deferred work (pin + diff render) and
 //     clear tickInFlight so the next burst's first wheel schedules fresh.
 func (m Model) handleWheelDebounce(msg wheelDebounceMsg) (tea.Model, tea.Cmd) {
-	// renderPending cleared by some other path (handleKey flushed, resize
-	// flushed, etc.): the in-flight tick is done, no more rescheduling.
+	if msg.epoch != m.wheel.epoch {
+		return m, nil
+	}
 	if !m.wheel.renderPending && !m.wheel.xPending {
 		m.wheel.tickInFlight = false
 		return m, nil
@@ -363,10 +375,7 @@ func (m Model) handleWheelDebounce(msg wheelDebounceMsg) (tea.Model, tea.Cmd) {
 			m.layout.viewport.SetContent(m.renderDiff())
 			m.wheel.xPending = false
 		}
-		curGen := m.wheel.gen
-		return m, tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
-			return wheelDebounceMsg{gen: curGen}
-		})
+		return m, m.wheelTick()
 	}
 	// gen matches: burst has been idle for wheelRenderDelay. flushWheelPending
 	// clears both renderPending and tickInFlight, so the next burst's first
@@ -445,11 +454,10 @@ func (m *Model) scrollDiffViewportBy(delta int) bool {
 // own. Only the state flags are always cleared.
 //
 // clearing tickInFlight here means a new wheel event arriving after an
-// external flush can schedule a fresh tick immediately (rather than waiting
-// for the previously-scheduled tick to drain through the !renderPending
-// branch of handleWheelDebounce); any already-scheduled tick that fires
-// after the flush hits the !renderPending or stale-gen branches and is
-// harmless.
+// external flush can schedule a fresh tick immediately. the tick already
+// scheduled cannot be canceled, so the flush also bumps epoch and
+// handleWheelDebounce drops that tick when it fires; left alive it could clear
+// the new tick's ownership or repaint beside it.
 func (m *Model) flushWheelPending() {
 	if !m.wheel.renderPending && !m.wheel.xPending {
 		return
@@ -464,6 +472,7 @@ func (m *Model) flushWheelPending() {
 	m.wheel.renderPending = false
 	m.wheel.xPending = false
 	m.wheel.tickInFlight = false
+	m.wheel.epoch++
 }
 
 // pinDiffCursorTo moves the diff cursor onto the visible viewport range when it
