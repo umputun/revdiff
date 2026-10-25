@@ -526,18 +526,198 @@ func TestModel_HandleMouse_ShiftWheelInDiffUsesHalfPage(t *testing.T) {
 		"plain wheel must step by the wheelStep constant")
 }
 
-func TestModel_HandleMouse_HorizontalWheelNoop(t *testing.T) {
-	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{
-		"a.go": {{NewNum: 1, Content: "hello", ChangeType: diff.ChangeContext}},
-	})
-	m.nav.diffCursor = 0
-
-	for _, btn := range []tea.MouseButton{tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight} {
-		result, cmd := m.Update(wheelMsg(btn, 60, 10, false))
-		model := result.(Model)
-		assert.Nil(t, cmd)
-		assert.Equal(t, 0, model.nav.diffCursor, "horizontal wheel must not move cursor")
+func wideLinesModel(t *testing.T, n int) Model {
+	t.Helper()
+	lines := make([]diff.DiffLine, n)
+	for i := range lines {
+		lines[i] = diff.DiffLine{NewNum: i + 1, Content: "0123456789" + strings.Repeat("-", 300), ChangeType: diff.ChangeContext}
 	}
+	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
+	m.layout.viewport.SetContent(m.renderDiff())
+	return m
+}
+
+func TestModel_HandleMouse_HorizontalWheelLeadingEdgeRendersAtOnce(t *testing.T) {
+	m := wideLinesModel(t, 5)
+	require.Contains(t, m.layout.viewport.View(), "0123")
+
+	result, cmd := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+
+	assert.Equal(t, scrollStep, model.layout.scrollX)
+	assert.Equal(t, 1, model.wheel.gen)
+	assert.True(t, model.wheel.tickInFlight)
+	assert.False(t, model.wheel.xPending)
+	assert.False(t, model.wheel.renderPending)
+	assert.NotContains(t, model.layout.viewport.View(), "0123")
+	assert.Contains(t, model.layout.viewport.View(), "5678")
+	require.NotNil(t, cmd)
+	debounce, ok := cmd().(wheelDebounceMsg)
+	require.True(t, ok)
+	assert.Equal(t, 1, debounce.gen)
+}
+
+func TestModel_HandleMouse_HorizontalWheelInBurstDefersRender(t *testing.T) {
+	m := wideLinesModel(t, 5)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+	afterFirst := model.layout.viewport.View()
+
+	result, cmd := model.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model = result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.Equal(t, 2*scrollStep, model.layout.scrollX)
+	assert.Equal(t, 2, model.wheel.gen)
+	assert.True(t, model.wheel.xPending)
+	assert.True(t, model.wheel.tickInFlight)
+	assert.Equal(t, afterFirst, model.layout.viewport.View())
+}
+
+func TestModel_HandleMouse_HorizontalWheelStaleTickRepaintsAndKeepsTick(t *testing.T) {
+	m := wideLinesModel(t, 5)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	result, _ = result.(Model).Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+	require.True(t, model.wheel.xPending)
+
+	result, cmd := model.Update(wheelDebounceMsg{gen: 1})
+	model = result.(Model)
+
+	assert.False(t, model.wheel.xPending)
+	assert.True(t, model.wheel.tickInFlight)
+	assert.NotContains(t, model.layout.viewport.View(), "5678")
+	require.NotNil(t, cmd)
+	rescheduled, ok := cmd().(wheelDebounceMsg)
+	require.True(t, ok)
+	assert.Equal(t, 2, rescheduled.gen)
+}
+
+func TestModel_HandleMouse_HorizontalWheelMatchingTickFlushes(t *testing.T) {
+	m := wideLinesModel(t, 5)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	result, _ = result.(Model).Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+
+	result, cmd := model.Update(wheelDebounceMsg{gen: 2})
+	model = result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.False(t, model.wheel.xPending)
+	assert.False(t, model.wheel.tickInFlight)
+	assert.NotContains(t, model.layout.viewport.View(), "5678")
+}
+
+func TestModel_HandleMouse_HorizontalWheelSingleEventTickDrains(t *testing.T) {
+	m := wideLinesModel(t, 5)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+	afterFirst := model.layout.viewport.View()
+
+	result, cmd := model.Update(wheelDebounceMsg{gen: 1})
+	model = result.(Model)
+
+	assert.Nil(t, cmd)
+	assert.False(t, model.wheel.tickInFlight)
+	assert.Equal(t, afterFirst, model.layout.viewport.View())
+}
+
+func TestModel_HandleMouse_HorizontalWheelNoops(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(m *Model)
+		msg   tea.MouseMsg
+	}{
+		{name: "left at zero offset", msg: wheelMsg(tea.MouseButtonWheelLeft, 60, 10, false)},
+		{name: "wrap mode", setup: func(m *Model) { m.modes.wrap = true }, msg: wheelMsg(tea.MouseButtonWheelRight, 60, 10, false)},
+		{name: "over tree pane", msg: wheelMsg(tea.MouseButtonWheelRight, 5, 10, false)},
+		{name: "release action", msg: tea.MouseMsg(tea.MouseEvent{X: 60, Y: 10, Button: tea.MouseButtonWheelRight, Action: tea.MouseActionRelease})},
+		{name: "content fits", setup: func(m *Model) {
+			m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "short", ChangeType: diff.ChangeContext}}
+			m.file.lineWidths = nil
+		}, msg: wheelMsg(tea.MouseButtonWheelRight, 60, 10, false)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := wideLinesModel(t, 5)
+			if tc.setup != nil {
+				tc.setup(&m)
+			}
+			result, cmd := m.Update(tc.msg)
+			model := result.(Model)
+			assert.Nil(t, cmd)
+			assert.Equal(t, 0, model.layout.scrollX)
+			assert.Equal(t, 0, model.wheel.gen)
+			assert.False(t, model.wheel.tickInFlight)
+			assert.False(t, model.wheel.xPending)
+		})
+	}
+}
+
+func TestModel_HandleKey_FlushesPendingHorizontalWheel(t *testing.T) {
+	m := wideLinesModel(t, 5)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	result, _ = result.(Model).Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+	require.True(t, model.wheel.xPending)
+
+	result, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	model = result.(Model)
+
+	assert.False(t, model.wheel.xPending)
+	assert.False(t, model.wheel.tickInFlight)
+	assert.NotContains(t, model.layout.viewport.View(), "5678")
+}
+
+func TestModel_HandleMouse_WheelVerticalThenHorizontal(t *testing.T) {
+	m := wideLinesModel(t, 60)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	result, cmd := result.(Model).Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	model := result.(Model)
+	assert.Nil(t, cmd)
+	require.True(t, model.wheel.renderPending)
+	require.True(t, model.wheel.xPending)
+	assert.Contains(t, model.layout.viewport.View(), "0123")
+
+	result, cmd = model.Update(wheelDebounceMsg{gen: 1})
+	model = result.(Model)
+	require.NotNil(t, cmd)
+	assert.False(t, model.wheel.xPending)
+	assert.True(t, model.wheel.renderPending)
+	assert.Equal(t, 0, model.nav.diffCursor)
+	assert.NotContains(t, model.layout.viewport.View(), "0123")
+
+	result, cmd = model.Update(wheelDebounceMsg{gen: 2})
+	model = result.(Model)
+	assert.Nil(t, cmd)
+	assert.False(t, model.wheel.renderPending)
+	assert.False(t, model.wheel.tickInFlight)
+	assert.Equal(t, wheelStep, model.nav.diffCursor)
+	assert.Equal(t, scrollStep, model.layout.scrollX)
+}
+
+func TestModel_HandleMouse_WheelHorizontalThenVertical(t *testing.T) {
+	m := wideLinesModel(t, 60)
+	result, _ := m.Update(wheelMsg(tea.MouseButtonWheelRight, 60, 10, false))
+	result, cmd := result.(Model).Update(wheelMsg(tea.MouseButtonWheelDown, 60, 10, false))
+	model := result.(Model)
+	assert.Nil(t, cmd)
+	require.True(t, model.wheel.renderPending)
+	require.False(t, model.wheel.xPending)
+
+	result, cmd = model.Update(wheelDebounceMsg{gen: 1})
+	model = result.(Model)
+	require.NotNil(t, cmd)
+	assert.True(t, model.wheel.renderPending)
+	assert.Equal(t, 0, model.nav.diffCursor)
+
+	result, cmd = model.Update(wheelDebounceMsg{gen: 2})
+	model = result.(Model)
+	assert.Nil(t, cmd)
+	assert.False(t, model.wheel.renderPending)
+	assert.False(t, model.wheel.tickInFlight)
+	assert.Equal(t, wheelStep, model.nav.diffCursor)
+	assert.NotContains(t, model.layout.viewport.View(), "0123")
 }
 
 func TestModel_HandleMouse_LeftClickInDiff(t *testing.T) {

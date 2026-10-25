@@ -30,8 +30,14 @@ const wheelRenderDelay = 30 * time.Millisecond
 // in-flight tea.Tick captures the gen at scheduling time so the resulting
 // debounce msg can tell whether the burst has advanced past it.
 //
-// renderPending stays true while a render is owed (set by wheel events,
-// cleared by flushWheelPending).
+// renderPending stays true while a vertical pin + render is owed (set by
+// vertical wheel events, cleared by flushWheelPending).
+//
+// xPending stays true while a horizontal wheel event changed scrollX without
+// repainting. a scrollX change invalidates the whole render cache, so each
+// repaint is a full render; xPending lets a horizontal burst repaint at most
+// once per tick instead of once per event. kept apart from renderPending
+// because a horizontal repaint mid-burst must not discharge a vertical pin.
 //
 // tickInFlight gates tea.Tick scheduling: only ONE tick is alive at a time,
 // regardless of how many wheel events arrive. The first wheel of a burst
@@ -44,6 +50,7 @@ const wheelRenderDelay = 30 * time.Millisecond
 type wheelState struct {
 	gen           int
 	renderPending bool
+	xPending      bool
 	tickInFlight  bool
 }
 
@@ -173,9 +180,13 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleWheel(zone, m.wheelStepFor(msg.Shift))
 	case tea.MouseButtonWheelLeft, tea.MouseButtonWheelRight:
-		// horizontal wheel is intentionally swallowed — horizontal scroll
-		// stays keyboard-driven so users keep a single mental model.
-		return m, nil
+		if msg.Action != tea.MouseActionPress || zone != hitDiff {
+			return m, nil
+		}
+		if msg.Button == tea.MouseButtonWheelLeft {
+			return m.handleHorizontalWheel(-scrollStep)
+		}
+		return m.handleHorizontalWheel(scrollStep)
 	case tea.MouseButtonLeft:
 		if msg.Action != tea.MouseActionPress {
 			return m, nil // ignore release and motion while holding
@@ -299,20 +310,47 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleHorizontalWheel scrolls the diff pane sideways by delta columns. an event with no wheel
+// tick in flight repaints at once; later events in the burst only mark xPending, so a trackpad
+// swipe costs one full render per tick instead of one per event (issue #334).
+func (m Model) handleHorizontalWheel(delta int) (tea.Model, tea.Cmd) {
+	if m.modes.wrap {
+		return m, nil
+	}
+	prev := m.layout.scrollX
+	m.setScrollX(prev + delta)
+	if m.layout.scrollX == prev {
+		return m, nil
+	}
+	m.wheel.gen++
+	if m.wheel.tickInFlight {
+		m.wheel.xPending = true
+		return m, nil
+	}
+	m.layout.viewport.SetContent(m.renderDiff())
+	m.wheel.tickInFlight = true
+	gen := m.wheel.gen
+	return m, tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
+		return wheelDebounceMsg{gen: gen}
+	})
+}
+
 // handleWheelDebounce processes a deferred tick for a wheel burst. branches:
-//   - renderPending is false: an external path (handleKey, handleResize,
-//     handleBlameLoaded) already flushed; clear tickInFlight, no-op.
+//   - neither renderPending nor xPending: an external path (handleKey,
+//     handleResize, handleBlameLoaded) already flushed, or the burst was a
+//     single horizontal event that repainted at once; clear tickInFlight, no-op.
 //   - msg.gen lags m.wheel.gen: the burst is still going (new wheels bumped
-//     gen since this tick was scheduled). reschedule a fresh tick for the
-//     current gen and keep tickInFlight=true so the next wheel doesn't double-
-//     schedule.
+//     gen since this tick was scheduled). repaint once if a horizontal scroll
+//     is owed, so the pane follows a sideways swipe, then reschedule a fresh
+//     tick for the current gen and keep tickInFlight=true so the next wheel
+//     doesn't double-schedule. the vertical pin stays deferred to burst end.
 //   - msg.gen matches m.wheel.gen: the burst has been idle for at least
 //     wheelRenderDelay. flush the deferred work (pin + diff render) and
 //     clear tickInFlight so the next burst's first wheel schedules fresh.
 func (m Model) handleWheelDebounce(msg wheelDebounceMsg) (tea.Model, tea.Cmd) {
 	// renderPending cleared by some other path (handleKey flushed, resize
 	// flushed, etc.): the in-flight tick is done, no more rescheduling.
-	if !m.wheel.renderPending {
+	if !m.wheel.renderPending && !m.wheel.xPending {
 		m.wheel.tickInFlight = false
 		return m, nil
 	}
@@ -321,6 +359,10 @@ func (m Model) handleWheelDebounce(msg wheelDebounceMsg) (tea.Model, tea.Cmd) {
 	// reschedule the burst would never flush after the original tick fires
 	// stale.
 	if msg.gen != m.wheel.gen {
+		if m.wheel.xPending {
+			m.layout.viewport.SetContent(m.renderDiff())
+			m.wheel.xPending = false
+		}
 		curGen := m.wheel.gen
 		return m, tea.Tick(wheelRenderDelay, func(time.Time) tea.Msg {
 			return wheelDebounceMsg{gen: curGen}
@@ -394,12 +436,13 @@ func (m *Model) scrollDiffViewportBy(delta int) bool {
 //   - handleBlameLoaded (loaders.go) — same syncViewportToCursor rationale
 //   - handleWheelDebounce (mouse.go) — the matching-gen tick path
 //
-// no-op when no render is pending. when pinDiffCursorTo returns false (the
-// cursor stayed in view through the burst, no pin needed), syncTOCActiveSection
-// and SetContent are skipped — the existing rendered string already has the
-// correct cursor highlight and the TOC active section is keyed off the
-// (unchanged) cursor index, so a re-render would be redundant. Only the
-// state flags are always cleared.
+// no-op when nothing is pending. when pinDiffCursorTo returns false (the
+// cursor stayed in view through the burst, no pin needed) and no horizontal
+// scroll is owed, syncTOCActiveSection and SetContent are skipped — the
+// existing rendered string already has the correct cursor highlight and the
+// TOC active section is keyed off the (unchanged) cursor index, so a re-render
+// would be redundant. a pending horizontal scroll forces the render on its
+// own. Only the state flags are always cleared.
 //
 // clearing tickInFlight here means a new wheel event arriving after an
 // external flush can schedule a fresh tick immediately (rather than waiting
@@ -408,14 +451,18 @@ func (m *Model) scrollDiffViewportBy(delta int) bool {
 // after the flush hits the !renderPending or stale-gen branches and is
 // harmless.
 func (m *Model) flushWheelPending() {
-	if !m.wheel.renderPending {
+	if !m.wheel.renderPending && !m.wheel.xPending {
 		return
 	}
-	if m.pinDiffCursorTo(m.layout.viewport.YOffset) {
+	pinned := m.wheel.renderPending && m.pinDiffCursorTo(m.layout.viewport.YOffset)
+	if pinned {
 		m.syncTOCActiveSection()
+	}
+	if pinned || m.wheel.xPending {
 		m.layout.viewport.SetContent(m.renderDiff())
 	}
 	m.wheel.renderPending = false
+	m.wheel.xPending = false
 	m.wheel.tickInFlight = false
 }
 

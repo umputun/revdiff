@@ -180,6 +180,9 @@ across files by concern to keep files under ~500 lines:
   and the `SetContent(renderDiff())` call via a single in-flight `tea.Tick(wheelRenderDelay)`
   debounce (issue #179) — `wheelState.tickInFlight` ensures one tick at a time across an entire
   burst (subsequent wheels just bump `gen`); stale ticks reschedule, matching ticks flush.
+  Horizontal wheel (`handleHorizontalWheel`, issue #334) shares that tick: an event with no tick
+  in flight repaints at once, later ones set `xPending`, and each stale tick repaints once, since a
+  `scrollX` change invalidates the whole render cache.
   `flushWheelPending()` is called from `handleWheelDebounce`, `handleKey`, `handleResize`, and
   `handleBlameLoaded` (any path that runs `syncViewportToCursor` or reads `m.nav.diffCursor` must
   flush first). Mouse tracking is enabled program-wide via `tea.WithMouseCellMotion()` in
@@ -203,8 +206,8 @@ Each source file has a matching `_test.go`.
   `matchSet`, `history`, `historyIdx`
 - **`annotationState` (`m.annot`)** — annotation input lifecycle and visual-row cache: `annotating`,
   `fileAnnotating`, `cursorOnAnnotation`, `input`, `rowCache`
-- **`wheelState` (`m.wheel`)** — diff-pane wheel coalescing (issue #179): `gen`, `renderPending`,
-  `tickInFlight`
+- **`wheelState` (`m.wheel`)** — diff-pane wheel coalescing (issues #179, #334): `gen`,
+  `renderPending`, `xPending`, `tickInFlight`
 
 Methods remain on `Model` — the sub-structs group mutable state for clarity, not to create
 mini-models.
