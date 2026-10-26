@@ -56,6 +56,7 @@ type options struct {
 	Exclude               []string `long:"exclude" short:"X" ini-name:"exclude" env:"REVDIFF_EXCLUDE" env-delim:"," description:"exclude files matching prefix (may be repeated)"`
 	Include               []string `long:"include" short:"I" ini-name:"include" env:"REVDIFF_INCLUDE" env-delim:"," description:"include only files matching prefix (may be repeated)"`
 	Only                  []string `long:"only" short:"F" no-ini:"true" description:"show only these files (may be repeated)"`
+	Dir                   string   `long:"dir" short:"C" no-ini:"true" description:"run as if started in this directory"`
 	HistoryDir            string   `long:"history-dir" ini-name:"history-dir" env:"REVDIFF_HISTORY_DIR" description:"directory for review history auto-saves"`
 	Output                string   `long:"output" short:"o" env:"REVDIFF_OUTPUT" no-ini:"true" description:"write annotations to file instead of stdout"`
 	PostFlushCommand      string   `long:"post-flush-command" ini-name:"post-flush-command" env:"REVDIFF_POST_FLUSH_COMMAND" description:"run command after a successful O flush"`

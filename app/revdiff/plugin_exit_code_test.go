@@ -311,6 +311,80 @@ func TestShellLaunchersRejectUnreadableStdinFile(t *testing.T) {
 	}
 }
 
+// --dir is consumed by the launcher, not forwarded: the overlay has to open in the target
+// directory, and forwarding a relative path would make revdiff resolve it a second time
+// from inside the target. kitty is the backend whose fake honors the overlay cwd.
+func TestShellLaunchersApplyDir(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	var kitty launcherBackend
+	for _, b := range launcherBackends() {
+		if b.name == "kitty" {
+			kitty = b
+		}
+	}
+	require.Equal(t, "kitty", kitty.name)
+
+	tests := []struct {
+		name    string
+		args    func(parent string) []string
+		wantErr string
+	}{
+		{name: "long form", args: func(p string) []string { return []string{"--dir=" + filepath.Join(p, "repo"), "HEAD~1"} }},
+		{name: "separate value", args: func(p string) []string { return []string{"--dir", filepath.Join(p, "repo"), "HEAD~1"} }},
+		{name: "short form", args: func(p string) []string { return []string{"-C", filepath.Join(p, "repo"), "HEAD~1"} }},
+		{name: "short attached", args: func(p string) []string { return []string{"-C" + filepath.Join(p, "repo"), "HEAD~1"} }},
+		{name: "relative", args: func(string) []string { return []string{"HEAD~1", "--dir=repo"} }},
+		{name: "missing dir", args: func(p string) []string { return []string{"--dir=" + filepath.Join(p, "absent")} }, wantErr: "--dir: cannot change to directory"},
+		{name: "no value", args: func(string) []string { return []string{"HEAD~1", "-C"} }, wantErr: "-C requires a directory"},
+	}
+	for _, path := range []string{
+		".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+		"plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+	} {
+		for _, tc := range tests {
+			t.Run(path+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				parent, err := filepath.EvalSymlinks(t.TempDir())
+				require.NoError(t, err)
+				target := filepath.Join(parent, "repo")
+				require.NoError(t, os.Mkdir(target, 0o700))
+				env := fakeLauncherEnv(t, launcherRun{backend: kitty})
+				seenCwd := filepath.Join(t.TempDir(), "cwd-seen")
+				seenArgs := filepath.Join(t.TempDir(), "args-seen")
+				env["FAKE_CWD_FILE"] = seenCwd
+				env["FAKE_ARGS_FILE"] = seenArgs
+				res := runTestCmd(t, cmdReq{
+					dir:  parent,
+					name: "bash",
+					args: append([]string{filepath.Join(root, path)}, tc.args(parent)...),
+					env:  env,
+				})
+				if tc.wantErr != "" {
+					assert.Equal(t, 1, res.code)
+					assert.Contains(t, res.stderr, tc.wantErr)
+					assert.NoFileExists(t, seenCwd)
+					return
+				}
+				require.Equal(t, 0, res.code, res.stderr)
+				assertFileContent(t, seenCwd, target+"\n")
+				args, err := os.ReadFile(seenArgs) //nolint:gosec // path is a test-owned temp file
+				require.NoError(t, err)
+				forwarded := strings.Split(strings.TrimSpace(string(args)), "\n")
+				assert.Equal(t, "HEAD~1", forwarded[len(forwarded)-1])
+				for _, arg := range forwarded {
+					leaked := strings.HasPrefix(arg, "--dir") || strings.HasPrefix(arg, "-C") || arg == "repo" || strings.Contains(arg, target)
+					assert.False(t, leaked, "launcher forwarded the directory: %q", forwarded)
+				}
+			})
+		}
+	}
+}
+
 // herdr builds its own command string, so the EDITOR/VISUAL prefix every other backend
 // gets has to reach it too: an overlay server's environment predates the caller's shell
 // rc, and without the prefix revdiff's annotation flow spawns the wrong editor.

@@ -1174,6 +1174,7 @@ func TestParseArgs_StdinConflicts(t *testing.T) {
 		{name: "all files", args: []string{"--stdin", "--all-files"}, want: "--stdin cannot be used with --all-files"},
 		{name: "exclude", args: []string{"--stdin", "--exclude", "vendor"}, want: "--stdin cannot be used with --exclude"},
 		{name: "include", args: []string{"--stdin", "--include", "src"}, want: "--stdin cannot be used with --include"},
+		{name: "dir", args: []string{"--stdin", "--dir", "/tmp"}, want: "--stdin cannot be used with --dir"},
 	}
 
 	for _, tt := range tests {

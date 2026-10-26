@@ -60,6 +60,7 @@ Then uncomment and edit the values you want to change.
 | `-I`, `--include` | `REVDIFF_INCLUDE` | Include only files matching prefix (may be repeated; comma-separated in env) | |
 | `-X`, `--exclude` | `REVDIFF_EXCLUDE` | Exclude files matching prefix (may be repeated; comma-separated in env) | |
 | `-F`, `--only` | | Show only matching files (may be repeated, matches by path or suffix) | |
+| `-C`, `--dir` | | Run as if started in this directory; relative paths in other options except `--config` resolve from it (CLI-only, not saved in config) | |
 | `-o`, `--output` | `REVDIFF_OUTPUT` | Write annotations to file instead of stdout | |
 | `--post-flush-command` | `REVDIFF_POST_FLUSH_COMMAND` | Run command after a successful `O` flush | |
 | `--history-dir` | `REVDIFF_HISTORY_DIR` | Directory for review history auto-saves | `~/.config/revdiff/history/` |

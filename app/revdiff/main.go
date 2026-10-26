@@ -45,6 +45,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// like git -C: everything after this point, VCS detection and relative path
+	// flags alike, sees the target directory as the working directory
+	if opts.Dir != "" {
+		if err := os.Chdir(opts.Dir); err != nil {
+			fmt.Fprintf(os.Stderr, "error: --dir: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
 	// early-exit commands that don't need theme resolution
 	if opts.Version {
 		info, _ := debug.ReadBuildInfo()

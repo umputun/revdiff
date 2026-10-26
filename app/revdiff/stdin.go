@@ -55,6 +55,9 @@ func validateStdinFlags(opts options) error {
 	if opts.Annotations != "" {
 		return errors.New("--stdin cannot be used with --annotations")
 	}
+	if opts.Dir != "" {
+		return errors.New("--stdin cannot be used with --dir")
+	}
 	return nil
 }
 

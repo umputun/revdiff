@@ -127,6 +127,8 @@ When you are launching revdiff for the user (e.g., right after a refactor or ana
 
 **When the recent change likely created new untracked files** (new packages, new test files, new docs, new scripts that haven't been `git add`-ed yet), pass `--untracked` so those files appear in the tree. Use this in working-tree mode (no ref, no `--staged`); skip it for ref-to-ref reviews where untracked files are not part of the historical diff.
 
+**When the review target is a repository other than the current working directory** (the change spans several repos, or the user names a repo path), launch once per repository and pass `--dir=<path>` to the launcher. Run the Step 1 ref detection from inside that directory: `(cd <path> && ${CLAUDE_SKILL_DIR}/scripts/detect-ref.sh)`. Relative paths in the other arguments (e.g. `--only`) resolve from `<path>`, and the returned annotation paths are relative to that repository.
+
 Pass `--start-at-change` only when the user explicitly asks for that cursor preference; never infer it automatically.
 
 Pass `--filter-unreviewed` only when the user asks for the tree limited to files not marked reviewed; never infer it automatically. The `F` key toggles the same filter during the review.
@@ -144,7 +146,7 @@ Run the launcher through the override-chain resolver, in two separate Bash calls
    It checks `user → bundled` (see `references/install.md` for override paths) and prints the first-found absolute path. If it exits nonzero (`error: launcher not found in override chain: launch-revdiff.sh`), stop and report its stderr; the override file is missing or not executable.
 2. Run the printed path literally, shell-quoted, with the arguments:
    ```bash
-   /abs/path/printed/by/resolver/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--filter-unreviewed] [--cross-file-motion] [--stop-at-annotations] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
+   /abs/path/printed/by/resolver/launch-revdiff.sh [base] [against] [--dir=path] [--staged] [--untracked] [--filter-unreviewed] [--cross-file-motion] [--stop-at-annotations] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
    ```
 
 Resolve again for every launch. Keep the second call a plain command, with no `$VAR` expansion, command substitution, pipe, redirect or cleanup in it: Ghostty and iTerm2 drive the terminal through `osascript`, which Claude Code's sandbox blocks, and Claude Code exempts a command from the sandbox only when every part of it matches the user's `*/launch-revdiff.sh*` exclusion (see `references/install.md`).
