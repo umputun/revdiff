@@ -32,6 +32,7 @@ func validateCompareFlag(opts options) (oldPath, newPath string, err error) {
 		{len(opts.Include) > 0, "--include"},
 		{len(opts.Exclude) > 0, "--exclude"},
 		{opts.Annotations != "", "--annotations"},
+		{opts.Dir != "", "--dir"},
 	}
 	for _, c := range conflicts {
 		if c.bad {

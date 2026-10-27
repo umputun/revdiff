@@ -12,6 +12,10 @@ fi
 if [ -n "${FAKE_ARGS_FILE:-}" ]; then
     printf '%s\n' "$@" > "$FAKE_ARGS_FILE"
 fi
+# records the directory the review runs in, so a test can see --dir reach the overlay
+if [ -n "${FAKE_CWD_FILE:-}" ]; then
+    pwd -P > "$FAKE_CWD_FILE"
+fi
 # records what reached revdiff's stdin, so a test can see a piped diff arriving
 if [ -n "${FAKE_STDIN_FILE:-}" ]; then
     cat > "$FAKE_STDIN_FILE"

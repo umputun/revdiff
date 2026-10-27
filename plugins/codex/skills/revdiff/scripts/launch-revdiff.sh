@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # launch revdiff in a terminal overlay (agterm/tmux/zellij/herdr/kitty/wezterm/cmux/ghostty/iterm2) and capture annotations.
 # source: .claude-plugin/skills/revdiff/scripts/launch-revdiff.sh (keep in sync)
-# usage: launch-revdiff.sh [ref] [--staged] [--untracked] [--filter-unreviewed] [--stop-at-annotations] [--only=file1 ...] [--stdin | --stdin-file=PATH]
+# usage: launch-revdiff.sh [ref] [--dir=DIR] [--staged] [--untracked] [--filter-unreviewed] [--stop-at-annotations] [--only=file1 ...] [--stdin | --stdin-file=PATH]
 # --stdin-file=PATH is a launcher option: it reaches revdiff as --stdin fed from PATH. a sandboxed
 # agent shell runs a command with a pipe or redirect in the sandbox, a plain argument escapes it
 # output: annotation text from revdiff stdout (empty if no annotations)
@@ -15,6 +15,34 @@ REVDIFF_BIN=$(command -v revdiff 2>/dev/null || true)
 if [ -z "$REVDIFF_BIN" ]; then
     echo "error: revdiff not found in PATH" >&2
     echo "install: brew install umputun/apps/revdiff (or download from https://github.com/umputun/revdiff/releases)" >&2
+    exit 1
+fi
+
+# --dir/-C is applied here rather than forwarded: every backend opens the overlay in the
+# launcher's working directory and titles it after that directory, and a relative path
+# forwarded to revdiff would be resolved a second time from inside the target. it runs
+# before the other options are read so their relative paths resolve from DIR, as in revdiff
+DIR_ARG=""
+ARGS=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -C|--dir)
+            if [ "$#" -lt 2 ]; then
+                echo "error: $1 requires a directory" >&2
+                exit 1
+            fi
+            DIR_ARG="$2"
+            shift
+            ;;
+        --dir=*) DIR_ARG="${1#--dir=}" ;;
+        -C?*) DIR_ARG="${1#-C}" ;;
+        *) ARGS+=("$1") ;;
+    esac
+    shift
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+if [ -n "$DIR_ARG" ] && ! cd "$DIR_ARG" 2>/dev/null; then
+    echo "error: --dir: cannot change to directory: $DIR_ARG" >&2
     exit 1
 fi
 

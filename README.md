@@ -427,6 +427,7 @@ Positional arguments support several forms:
 | `-I`, `--include` | Include only files matching prefix, may be repeated, env: `REVDIFF_INCLUDE` (comma-separated) | |
 | `-X`, `--exclude` | Exclude files matching prefix, may be repeated, env: `REVDIFF_EXCLUDE` (comma-separated) | |
 | `-F`, `--only` | Show only matching files by exact path or suffix, may be repeated (e.g. `--only=model.go`) | |
+| `-C`, `--dir` | Run as if started in this directory; relative paths in other options except `--config` resolve from it (like `git -C`) | |
 | `-o`, `--output` | Write annotations to file instead of stdout, env: `REVDIFF_OUTPUT` | |
 | `--post-flush-command` | Run command after a successful `O` flush, env: `REVDIFF_POST_FLUSH_COMMAND`, config: `post-flush-command` | |
 | `--annotations` | Preload annotations from a markdown file in `-o` format | |
@@ -596,6 +597,9 @@ revdiff --include src --exclude src/vendor
 # exclude paths in normal diff mode
 revdiff main --exclude vendor
 
+# review another repository without leaving the current directory
+revdiff --dir ~/src/other-repo main
+
 # review a file outside a VCS repo (context-only, no diff markers)
 revdiff --only=/tmp/plan.md
 
@@ -663,13 +667,13 @@ revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md
 revdiff --compare-old=a.txt --compare-new=b.txt
 ```
 
-`--compare-old` and `--compare-new` must be used together and are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, `--exclude`, and `--annotations`. All standard diff features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.
+`--compare-old` and `--compare-new` must be used together and are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, `--exclude`, `--annotations`, and `--dir`. All standard diff features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations.
 
 ### Scratch-Buffer Review
 
 Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, compact mode, and per-file annotations); otherwise the input is shown as a single context-only buffer with all lines as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.
 
-`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
+`--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, `--annotations`, and `--dir`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
 
 Use `--stdin-name` to control the synthetic filename for the context-only case (it is ignored in multi-file diff mode, where the tree shows the real paths). This gives annotation output a stable key and enables filename-based syntax highlighting or markdown TOC activation:
 

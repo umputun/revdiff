@@ -22,6 +22,7 @@ revdiff --all-files --exclude vendor # browse all files, excluding vendor direct
 revdiff --include src                # include only src/ files
 revdiff --include src --exclude src/vendor  # include src/ but exclude src/vendor/
 revdiff main --exclude vendor        # diff against main, excluding vendor
+revdiff --dir ~/src/other-repo main  # review another repo without leaving the current directory
 revdiff --only=/tmp/plan.md          # review a file outside a repo (context-only)
 revdiff --only=docs/notes.txt        # review a file with no VCS changes (context-only)
 revdiff --compare-old=/tmp/plan-old.md --compare-new=docs/plans/plan.md  # diff two arbitrary files (no VCS needed)
@@ -89,7 +90,7 @@ revdiff HEAD~3 --description-file=/tmp/review-notes.md
 
 Use `--compare-old=<path>` together with `--compare-new=<path>` to diff two arbitrary files on disk using `git diff --no-index`. No VCS repo needed — works anywhere `git` is installed.
 
-- `--compare-old` and `--compare-new` must be used together; both are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, `--exclude`, and `--annotations`
+- `--compare-old` and `--compare-new` must be used together; both are mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--stdin`, `--include`, `--exclude`, `--annotations`, and `--dir`
 - All standard features work: word-diff, compact mode, syntax highlighting, scrollbar, and inline annotations
 
 ```bash
@@ -103,7 +104,7 @@ Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the i
 
 - `--stdin` is explicit and requires piped or redirected input
 - `--stdin-name` sets the synthetic filename used by the context-only buffer (ignored in multi-file diff mode, where real paths are shown)
-- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--dir`
 - Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files
 - Input is capped at 64 MiB
 
