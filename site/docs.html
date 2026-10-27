@@ -207,6 +207,9 @@ revdiff HEAD~1 HEAD
 <span class="code-comment"># diff between two refs</span>
 revdiff main feature
 
+<span class="code-comment"># same with git dot-dot syntax</span>
+revdiff main..feature
+
 <span class="code-comment"># review only specific files</span>
 revdiff --only=model.go --only=README.md
 
@@ -224,9 +227,6 @@ revdiff --include src --exclude src/vendor
 
 <span class="code-comment"># exclude paths in normal diff mode</span>
 revdiff main --exclude vendor
-
-<span class="code-comment"># same as above, git dot-dot syntax</span>
-revdiff main..feature
 
 <span class="code-comment"># review a standalone file (no git needed)</span>
 revdiff --only=/tmp/plan.md

@@ -103,7 +103,7 @@ Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the i
 
 - `--stdin` is explicit and requires piped or redirected input
 - `--stdin-name` sets the synthetic filename used by the context-only buffer (ignored in multi-file diff mode, where real paths are shown)
-- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`
 - Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files
 - Input is capped at 64 MiB
 

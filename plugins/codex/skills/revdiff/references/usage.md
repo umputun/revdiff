@@ -103,7 +103,7 @@ Use `--stdin` to review arbitrary piped or redirected text as one synthetic file
 
 - `--stdin` is explicit and requires piped or redirected input
 - `--stdin-name` sets the synthetic filename used in annotations and syntax highlighting
-- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, and `--exclude`
+- `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`
 
 ## Key Bindings
 
