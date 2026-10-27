@@ -116,7 +116,7 @@ export default function revdiffExtension(pi: ExtensionAPI): void {
 				}
 
 				if (result.annotations.length === 0) {
-					return toolTextResult(`Review complete — no annotations for ${result.label}.`, result);
+					return toolTextResult(`No annotations were captured for ${result.label}.`, result);
 				}
 
 				const noun = result.annotations.length === 1 ? "annotation" : "annotations";

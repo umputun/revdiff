@@ -37,7 +37,7 @@ Replace `<plugin-root>` with the resolved absolute path before running either co
 5. On quit, annotations are captured from stdout
 6. Codex reads annotations and addresses each one (refine plan, answer questions, fix issues)
 7. Loop: re-launch revdiff to verify changes, user can add more annotations
-8. Done when user quits without annotations; clean up temp file
+8. If the user quits without annotations, report that no annotations were captured, clean up the temp file, and stop the plan review workflow
 
 ## Workflow
 
@@ -153,11 +153,11 @@ $LAUNCHER_DIR/launch-revdiff.sh --only="$PLAN_FILE"
 
 The user can:
 - Add more annotations -- go back to Step 3
-- Quit without annotations -- review complete
+- Quit without annotations -- no annotations captured (no output); go to Step 6
 
 ### Step 6: Done
 
-When the launcher produces no output, the review is complete.
+When the launcher produces no output, no annotations were captured.
 
 Clean up the temp file:
 
@@ -165,4 +165,4 @@ Clean up the temp file:
 rm -f "$PLAN_FILE"
 ```
 
-Inform the user that the plan review is complete. If the plan was modified during the review, present the final version.
+Inform the user that no annotations were captured and stop the plan review workflow. This result alone does not approve the plan or authorize implementation. Prior explicit user instructions still apply. If the plan was modified during the review, present the final version.
