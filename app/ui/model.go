@@ -613,6 +613,7 @@ type Model struct {
 	ready        bool   // true after first WindowSizeMsg
 	filesLoaded  bool   // true after the first filesLoadedMsg is handled (keeps the loading view pinned until real data arrives)
 	filesLoadSeq uint64 // bumped before each new file-list load; stale filesLoadedMsg (seq mismatch) is dropped
+	filesErr     error  // error of the latest accepted file-list load, nil once one succeeds
 
 	blamer               Blamer                                   // optional blame provider (nil when git unavailable)
 	loadUntracked        func() ([]string, error)                 // fetches untracked files; nil when unavailable
@@ -984,6 +985,11 @@ func (m Model) Store() *annotation.Store {
 // Discarded returns true when the user chose to discard annotations and quit.
 func (m Model) Discarded() bool {
 	return m.discarded
+}
+
+// LoadError returns the error of the latest file-list load, nil when it succeeded.
+func (m Model) LoadError() error {
+	return m.filesErr
 }
 
 // Init initializes the model by loading changed files and the commit log

@@ -315,6 +315,7 @@ func run(opts options) (int, error) {
 			gitRoot:     gitRoot,
 			workDir:     workDir,
 			signaled:    signaled,
+			loadErr:     m.LoadError(),
 			stdout:      os.Stdout,
 		})
 	}
@@ -351,6 +352,7 @@ type finalizeReq struct {
 	gitRoot     string
 	workDir     string
 	signaled    bool
+	loadErr     error
 	stdout      io.Writer
 }
 
@@ -358,7 +360,12 @@ type finalizeReq struct {
 // with no annotations writes nothing. Otherwise the history safety-net save
 // always runs; a signal-driven exit (r.signaled) stops there — history only,
 // never the -o handoff — while a graceful exit also writes the annotation output.
+// A failed file-list load with no annotations returns the load error, so callers
+// never read an exit 0 with empty output as a clean review.
 func finalize(r finalizeReq) (int, error) {
+	if r.loadErr != nil && r.annotations == "" {
+		return 0, fmt.Errorf("load changed files: %w", r.loadErr)
+	}
 	if r.discarded || r.annotations == "" {
 		return 0, nil
 	}

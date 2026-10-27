@@ -144,6 +144,49 @@ func TestFinalize(t *testing.T) {
 	}
 }
 
+func TestFinalize_LoadError(t *testing.T) {
+	output := "## file.go:1 (+)\ncomment\n"
+	tests := []struct {
+		name        string
+		output      string
+		discarded   bool
+		signaled    bool
+		wantErr     bool
+		wantHistory bool
+		wantStdout  string
+	}{
+		{name: "no annotations reports the load error", output: "", wantErr: true},
+		{name: "discarded without annotations reports the load error", output: "", discarded: true, wantErr: true},
+		{name: "signaled without annotations reports the load error", output: "", signaled: true, wantErr: true},
+		{name: "annotations are written despite the load error", output: output, wantHistory: true, wantStdout: output},
+		{name: "signaled with annotations saves history only", output: output, signaled: true, wantHistory: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			histDir := t.TempDir()
+			var buf bytes.Buffer
+			code, err := finalize(finalizeReq{
+				opts:        options{HistoryDir: histDir},
+				annotations: tt.output,
+				files:       []string{"file.go"},
+				discarded:   tt.discarded,
+				workDir:     "repo",
+				signaled:    tt.signaled,
+				loadErr:     errors.New("bad revision"),
+				stdout:      &buf,
+			})
+			assert.Equal(t, 0, code)
+			assert.Equal(t, tt.wantHistory, historyFileCount(t, histDir) > 0)
+			assert.Equal(t, tt.wantStdout, buf.String())
+			if tt.wantErr {
+				require.EqualError(t, err, "load changed files: bad revision")
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 func historyFileCount(t *testing.T, dir string) int {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(dir, "*", "*.md"))

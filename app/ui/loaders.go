@@ -432,6 +432,7 @@ func (m Model) handleFilesLoaded(msg filesLoadedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.filesLoaded = true
+	m.filesErr = msg.err
 	if msg.err != nil {
 		m.layout.viewport.SetContent(fmt.Sprintf("error loading files: %v", msg.err))
 		return m, nil

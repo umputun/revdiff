@@ -92,6 +92,29 @@ func TestModel_FilesLoadedError(t *testing.T) {
 	assert.Equal(t, 0, model.tree.TotalFiles())
 	// filesLoaded must flip even on error, otherwise View() stays on "loading files..." forever
 	assert.True(t, model.filesLoaded, "filesLoaded must be set before the error early-return so the loading screen exits")
+	assert.ErrorIs(t, model.LoadError(), assert.AnError)
+}
+
+func TestModel_LoadError_ClearedBySuccessfulLoad(t *testing.T) {
+	m := testModel(nil, nil)
+	m.ready = true
+	m.filesLoadSeq = 1
+
+	result, _ := m.Update(filesLoadedMsg{seq: 0, err: assert.AnError})
+	m = result.(Model)
+	require.NoError(t, m.LoadError(), "a stale failed load must not set the error")
+
+	result, _ = m.Update(filesLoadedMsg{seq: 1, err: assert.AnError})
+	m = result.(Model)
+	require.Error(t, m.LoadError())
+
+	result, _ = m.Update(filesLoadedMsg{seq: 0, entries: []diff.FileEntry{{Path: "stale.go"}}})
+	m = result.(Model)
+	require.Error(t, m.LoadError(), "a stale successful load must not clear the error")
+
+	result, _ = m.Update(filesLoadedMsg{seq: 1, entries: []diff.FileEntry{{Path: "a.go"}}})
+	m = result.(Model)
+	assert.NoError(t, m.LoadError())
 }
 
 func TestModel_FilesLoaded_DropsStaleResponses(t *testing.T) {
