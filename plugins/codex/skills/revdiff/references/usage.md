@@ -325,7 +325,7 @@ The agent answers as a markdown document and reopens it in revdiff via `--only`,
 
 ## Preloading Annotations
 
-Use `--annotations=PATH` to preload the annotation store from a markdown file in the same `-o` format. The format is bidirectional: any file written by `-o` can be read back via `--annotations` for round-trip workflows — review, quit, edit the file externally, relaunch, and continue from the preloaded state.
+Use `--annotations=PATH` to preload the annotation store from a markdown file in the same `-o` format. The format is bidirectional: any file written by `-o` can be read back via `--annotations` for round-trip workflows — review, quit, edit the file externally, relaunch, and continue from the preloaded state. Deleting every preloaded annotation and quitting with `q` writes an empty `-o` file; `Q` leaves it untouched.
 
 ## Review History
 

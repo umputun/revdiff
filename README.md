@@ -617,7 +617,7 @@ $EDITOR review.md
 revdiff --annotations=review.md HEAD~1
 ```
 
-`--annotations` reads the same markdown format that `-o` writes (see [Output Format](#output-format) below), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source — each record is `## path/to/file.go:LINE (+)` followed by the comment body — then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with `q` to write the final set to stdout (or to `-o`).
+`--annotations` reads the same markdown format that `-o` writes (see [Output Format](#output-format) below), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source — each record is `## path/to/file.go:LINE (+)` followed by the comment body — then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with `q` to write the final set to stdout (or to `-o`). Deleting every preloaded comment and quitting with `q` writes an empty `-o` file, so the deleted comments do not come back on the next load; `Q` leaves the file untouched.
 
 ### All-Files Mode
 
