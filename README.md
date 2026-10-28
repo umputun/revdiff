@@ -667,7 +667,7 @@ revdiff --compare-old=a.txt --compare-new=b.txt
 
 ### Scratch-Buffer Review
 
-Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, compact mode, and per-file annotations); otherwise the input is shown as a single context-only buffer with all lines as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.
+Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, and per-file annotations); otherwise the input is shown as a single context-only buffer with all lines as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.
 
 `--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
 
