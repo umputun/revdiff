@@ -531,6 +531,60 @@ func TestIterm2OverlayNamesSession(t *testing.T) {
 	}
 }
 
+// regression: tmux runs #() inside popup titles and window names, so a '#' must reach it as '##'
+func TestTmuxTitlesEscapeFormatChars(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "p#(touch pwned).md")
+	writeTestFile(t, planFile, "# Plan\n")
+	popupTitle := " rd: " + filepath.Base(root) + " [HEAD##(touch pwned)] "
+
+	tests := []struct {
+		name string
+		path string
+		args []string
+		env  map[string]string
+		want string
+	}{
+		{name: "claude popup", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+			args: []string{"HEAD#(touch pwned)"}, want: popupTitle},
+		{name: "codex popup", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+			args: []string{"HEAD#(touch pwned)"}, want: popupTitle},
+		{name: "plan review popup", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh",
+			args: []string{planFile}, want: " plan: p##(touch pwned).md "},
+		{name: "claude window", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+			args: []string{"--only=sub/f#{session_name}.go"}, env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"},
+			want: "review: f##{session_name}.go"},
+		{name: "codex window", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+			args: []string{"--only=sub/f#{session_name}.go"}, env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"},
+			want: "review: f##{session_name}.go"},
+	}
+
+	backend := launcherBackend{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}}
+	output := "## file.go:1 (+)\ncomment\n"
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: output})
+			titleFile := filepath.Join(env["TMPDIR"], "tmux-titles")
+			env["FAKE_TMUX_TITLE_FILE"] = titleFile
+			maps.Copy(env, tc.env)
+
+			res := runTestCmd(t, cmdReq{
+				dir:  root,
+				name: "bash",
+				args: append([]string{filepath.Join(root, tc.path)}, tc.args...),
+				env:  env,
+			})
+			require.Equal(t, exitCodeAnnotations, res.code, res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assertFileContent(t, titleFile, tc.want+"\n")
+		})
+	}
+}
+
 func TestAgtermPaneOverlayOptIn(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launchers are not used on windows")
