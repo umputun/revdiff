@@ -71,9 +71,10 @@ fi
 # Open the review in a background window (-d: don't steal the active window; -c: start dir).
 # -P -F prints the new window id so we can watch it; mirror the popup path's `sh -c "$REVDIFF_CMD"`
 # invocation (every backend runs the command through sh, and REVDIFF_CMD is built sh-compatible).
+# tmux expands -n as a format, so every "#" in the window name is doubled to stay literal.
 # If tmux can't create the window, fail loudly instead of busy-waiting on a sentinel that will
 # never appear.
-if ! _rd_winid=$(tmux new-window -d -P -F '#{window_id}' -c "$CWD" -n "$_rd_winname" \
+if ! _rd_winid=$(tmux new-window -d -P -F '#{window_id}' -c "$CWD" -n "${_rd_winname//\#/##}" \
         -- sh -c "$(write_rc_cmd "$_rd_sentinel")"); then
     rm -f "$_rd_sentinel" "$_rd_sentinel".tmp
     echo "revdiff: failed to open tmux review window" >&2

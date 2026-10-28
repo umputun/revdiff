@@ -309,7 +309,8 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
     TMUX_ARGS=(tmux display-popup -E -w "$POPUP_W" -h "$POPUP_H")
     if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then
         if [ "${BASH_REMATCH[1]}" -gt 3 ] || { [ "${BASH_REMATCH[1]}" -eq 3 ] && [ "${BASH_REMATCH[2]}" -ge 3 ]; }; then
-            TMUX_ARGS+=(-T " $OVERLAY_TITLE ")
+            # tmux expands -T as a format: ## keeps a "#" in the title from starting #() or #{}
+            TMUX_ARGS+=(-T " ${OVERLAY_TITLE//\#/##} ")
         fi
     fi
     TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")

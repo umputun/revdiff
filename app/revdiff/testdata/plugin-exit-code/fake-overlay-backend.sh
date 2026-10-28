@@ -46,6 +46,16 @@ case "$cmd_name" in
             echo "tmux 3.4"
             exit 0
         fi
+        # records each popup title (-T) and window name (-n) exactly as tmux would receive it
+        if [ -n "${FAKE_TMUX_TITLE_FILE:-}" ]; then
+            prev=""
+            for arg in "$@"; do
+                case "$prev" in
+                    -T|-n) printf '%s\n' "$arg" >> "$FAKE_TMUX_TITLE_FILE" ;;
+                esac
+                prev="$arg"
+            done
+        fi
         run_after_double_dash "$@"
         ;;
     zellij)
