@@ -116,6 +116,41 @@ fi
 
 # tmux: display-popup -E blocks until command exits
 if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
+    # REVDIFF_TMUX_WINDOW=1: run the review in a server-owned tmux window instead of a popup, so it
+    # survives a client disconnect (SSH drop / VPN expiry). mirrors the diff-review launcher's
+    # agentdeck-window.sh opt-in: the window opens focused and the prior active window is restored
+    # on exit.
+    if [ "${REVDIFF_TMUX_WINDOW:-}" = 1 ]; then
+        SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
+        rm -f "$SENTINEL"
+        trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+
+        TMUX_PREV_WIN=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
+        # -d then select-window (rather than a focused new-window) matches the diff-review backend
+        # and keeps -P printing the id of the window we created
+        if ! TMUX_WIN_ID=$(tmux new-window -d -P -F '#{window_id}' -c "$CWD" -n "$OVERLAY_TITLE" \
+                -- sh -c "$REVDIFF_CMD; rc=\$?; printf '%s' \"\$rc\" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")"); then
+            echo "error: failed to open tmux review window" >&2
+            exit 1
+        fi
+        tmux select-window -t "$TMUX_WIN_ID" 2>/dev/null || true
+
+        # bound the wait on the window still existing: a window killed without writing the
+        # sentinel ends the wait instead of hanging the hook
+        while [ ! -f "$SENTINEL" ]; do
+            tmux list-windows -F '#{window_id}' 2>/dev/null | grep -qxF "$TMUX_WIN_ID" || break
+            sleep 0.3
+        done
+        if [ -n "$TMUX_PREV_WIN" ]; then
+            tmux select-window -t "$TMUX_PREV_WIN" 2>/dev/null || true
+        fi
+
+        rc=1
+        [ -f "$SENTINEL" ] && rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
+        cat "$OUTPUT_FILE"
+        exit "${rc:-1}"
+    fi
+
     # -T (title) requires tmux 3.3+; skip on older versions
     TMUX_ARGS=(tmux display-popup -E -w 90% -h 90%)
     if [[ "$(tmux -V 2>/dev/null)" =~ ([0-9]+)\.([0-9]+) ]]; then

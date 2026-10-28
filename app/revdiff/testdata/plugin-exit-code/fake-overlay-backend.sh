@@ -46,7 +46,28 @@ case "$cmd_name" in
             echo "tmux 3.4"
             exit 0
         fi
-        run_after_double_dash "$@"
+        if [ -n "${FAKE_TMUX_ARGS_FILE:-}" ]; then
+            printf '%s\n' "$*" >> "$FAKE_TMUX_ARGS_FILE"
+        fi
+        case "${1:-}" in
+            display-message)
+                # the active window id, saved by window mode for restore
+                echo "@1"
+                ;;
+            new-window)
+                # window mode: run the review to completion, then print the -P window id.
+                # the review has finished by the time the launcher polls, so list-windows
+                # below reports no windows and the sentinel decides the exit code
+                ( run_after_double_dash "$@" ) >/dev/null 2>&1 || true
+                echo "@7"
+                ;;
+            select-window|list-windows)
+                exit 0
+                ;;
+            *)
+                run_after_double_dash "$@"
+                ;;
+        esac
         ;;
     zellij)
         run_after_double_dash "$@"
