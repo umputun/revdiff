@@ -22,6 +22,8 @@ Requires the `revdiff` binary in `PATH` and one of: agterm, tmux, Zellij, herdr,
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
 
+Under tmux, set `REVDIFF_TMUX_WINDOW=1` in the agent's environment to open the plan review in a server-owned tmux window instead of a `display-popup`. The window opens focused, the previously active window is restored when the review ends. Unlike `display-popup`, the review survives a client disconnect.
+
 ## How It Works
 
 The plugin registers a `PreToolUse` hook on `ExitPlanMode` that:

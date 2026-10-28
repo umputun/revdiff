@@ -234,6 +234,70 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	}
 }
 
+func TestPlanLauncherTmuxWindowOptIn(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	tmux := launcherBackends()[0]
+	require.Equal(t, "tmux", tmux.name)
+
+	tests := []struct {
+		name       string
+		window     string
+		code       int
+		output     string
+		wantCalls  []string
+		wantNoCall string
+	}{
+		{name: "window annotations", window: "1", code: exitCodeAnnotations, output: "## plan.md:1 (+)\ncomment\n",
+			wantCalls: []string{"display-message", "new-window", "select-window -t @7", "select-window -t @1"}, wantNoCall: "display-popup"},
+		{name: "window clean", window: "1", code: 0,
+			wantCalls: []string{"display-message", "new-window", "select-window -t @7", "select-window -t @1"}, wantNoCall: "display-popup"},
+		{name: "window failure", window: "1", code: 1, output: "partial output\n",
+			wantCalls: []string{"new-window"}, wantNoCall: "display-popup"},
+		{name: "forced off uses popup", window: "0", code: exitCodeAnnotations, output: "## plan.md:1 (+)\ncomment\n",
+			wantCalls: []string{"display-popup"}, wantNoCall: "new-window"},
+		{name: "unset uses popup", window: "", code: 0,
+			wantCalls: []string{"display-popup"}, wantNoCall: "new-window"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			env := fakeLauncherEnv(t, launcherRun{backend: tmux, code: tc.code, output: tc.output})
+			env["REVDIFF_TMUX_WINDOW"] = tc.window
+			argsFile := filepath.Join(t.TempDir(), "tmux-args")
+			env["FAKE_TMUX_ARGS_FILE"] = argsFile
+			res := runTestCmd(t, cmdReq{
+				dir:  root,
+				name: "bash",
+				args: []string{filepath.Join(root, "plugins", "revdiff-planning", "scripts", "launch-plan-review.sh"), planFile},
+				env:  env,
+			})
+			assert.Equal(t, tc.code, res.code)
+			assert.Equal(t, tc.output, res.stdout)
+			assert.Empty(t, res.stderr)
+
+			calls, err := os.ReadFile(argsFile) //nolint:gosec // path is a test-owned temp file
+			require.NoError(t, err)
+			pos := 0
+			for _, want := range tc.wantCalls {
+				idx := strings.Index(string(calls)[pos:], want)
+				require.GreaterOrEqual(t, idx, 0, "want %q after offset %d in:\n%s", want, pos, calls)
+				pos += idx + len(want)
+			}
+			assert.NotContains(t, string(calls), tc.wantNoCall)
+			sentinels, err := filepath.Glob(filepath.Join(env["TMPDIR"], "plan-review-done-*"))
+			require.NoError(t, err)
+			assert.Empty(t, sentinels, "sentinel leaked")
+		})
+	}
+}
+
 func TestShellLaunchersCapSpooledStdin(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
