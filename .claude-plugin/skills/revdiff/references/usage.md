@@ -99,7 +99,7 @@ revdiff --compare-old=a.txt --compare-new=b.txt
 
 ## Scratch-Buffer Review
 
-Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, compact mode, per-file annotations). Otherwise the input is shown as a single context-only buffer — single-file mode, inline annotations, file-level notes, search, wrap, collapsed mode, and structured output all work unchanged.
+Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, per-file annotations). Otherwise the input is shown as a single context-only buffer — single-file mode, inline annotations, file-level notes, search, wrap, collapsed mode, and structured output all work unchanged.
 
 - `--stdin` is explicit and requires piped or redirected input
 - `--stdin-name` sets the synthetic filename used by the context-only buffer (ignored in multi-file diff mode, where real paths are shown)
@@ -331,7 +331,7 @@ The agent answers as a markdown document and reopens it in revdiff via `--only`,
 
 ## Preloading Annotations
 
-Use `--annotations=PATH` to preload the annotation store from a markdown file in the same `-o` format. The format is bidirectional: any file written by `-o` can be read back via `--annotations` for round-trip workflows — review, quit, edit the file externally, relaunch, and continue from the preloaded state.
+Use `--annotations=PATH` to preload the annotation store from a markdown file in the same `-o` format. The format is bidirectional: any file written by `-o` can be read back via `--annotations` for round-trip workflows — review, quit, edit the file externally, relaunch, and continue from the preloaded state. Deleting every preloaded annotation and quitting with `q` writes an empty `-o` file; `Q` leaves it untouched.
 
 ## Review History
 

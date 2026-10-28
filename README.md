@@ -617,7 +617,7 @@ $EDITOR review.md
 revdiff --annotations=review.md HEAD~1
 ```
 
-`--annotations` reads the same markdown format that `-o` writes (see [Output Format](#output-format) below), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source — each record is `## path/to/file.go:LINE (+)` followed by the comment body — then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with `q` to write the final set to stdout (or to `-o`).
+`--annotations` reads the same markdown format that `-o` writes (see [Output Format](#output-format) below), so any file revdiff produces can be loaded back. You can also hand-author or generate that file from any other source — each record is `## path/to/file.go:LINE (+)` followed by the comment body — then step through the comments inline against the actual diff, edit or delete them in the TUI, and quit with `q` to write the final set to stdout (or to `-o`). Deleting every preloaded comment and quitting with `q` writes an empty `-o` file, so the deleted comments do not come back on the next load; `Q` leaves the file untouched.
 
 ### All-Files Mode
 
@@ -667,7 +667,7 @@ revdiff --compare-old=a.txt --compare-new=b.txt
 
 ### Scratch-Buffer Review
 
-Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, compact mode, and per-file annotations); otherwise the input is shown as a single context-only buffer with all lines as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.
+Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, and per-file annotations); otherwise the input is shown as a single context-only buffer with all lines as context, supporting annotations, file-level notes, search, wrap, collapsed mode, and structured output. Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files. Input is capped at 64 MiB.
 
 `--stdin` is explicit and mutually exclusive with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`. stdin mode requires piped or redirected input; plain terminal stdin is rejected to avoid accidentally launching an empty scratch buffer.
 

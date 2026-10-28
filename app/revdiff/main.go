@@ -193,6 +193,7 @@ func run(opts options) (int, error) {
 			return 0, perr
 		}
 	}
+	preloaded := store.Count() > 0
 
 	// construct the three style types per D15: Resolver first, Renderer from Resolver, SGR is zero-value
 	styleColors := optsToStyleColors(opts)
@@ -312,6 +313,7 @@ func run(opts options) (int, error) {
 			annotations: m.Store().FormatOutput(),
 			files:       m.Store().Files(),
 			discarded:   m.Discarded(),
+			preloaded:   preloaded,
 			gitRoot:     gitRoot,
 			workDir:     workDir,
 			signaled:    signaled,
@@ -349,6 +351,7 @@ type finalizeReq struct {
 	annotations string
 	files       []string
 	discarded   bool
+	preloaded   bool
 	gitRoot     string
 	workDir     string
 	signaled    bool
@@ -356,18 +359,27 @@ type finalizeReq struct {
 	stdout      io.Writer
 }
 
-// finalize persists the review after p.Run() joins. A discarded review or one
-// with no annotations writes nothing. Otherwise the history safety-net save
-// always runs; a signal-driven exit (r.signaled) stops there — history only,
-// never the -o handoff — while a graceful exit also writes the annotation output.
+// finalize persists the review after p.Run() joins. A discarded review writes
+// nothing, and so does one with no annotations unless --annotations preloaded
+// some: a graceful exit that deleted all of them writes the empty output, so a
+// stale -o file cannot bring them back on the next load. Otherwise the history
+// safety-net save always runs; a signal-driven exit (r.signaled) stops there —
+// history only, never the -o handoff — while a graceful exit also writes the
+// annotation output.
 // A failed file-list load with no annotations returns the load error, so callers
 // never read an exit 0 with empty output as a clean review.
 func finalize(r finalizeReq) (int, error) {
 	if r.loadErr != nil && r.annotations == "" {
 		return 0, fmt.Errorf("load changed files: %w", r.loadErr)
 	}
-	if r.discarded || r.annotations == "" {
+	if r.discarded {
 		return 0, nil
+	}
+	if r.annotations == "" {
+		if !r.preloaded || r.signaled {
+			return 0, nil
+		}
+		return writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: "", stdout: r.stdout})
 	}
 	saveHistory(histReq{opts: r.opts, annotations: r.annotations, gitRoot: r.gitRoot, workDir: r.workDir, files: r.files})
 	if r.signaled {

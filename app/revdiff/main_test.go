@@ -189,6 +189,47 @@ func TestFinalize_LoadError(t *testing.T) {
 	}
 }
 
+func TestFinalize_AllPreloadedNotesDeleted(t *testing.T) {
+	stale := "## file.go:1 (+)\nold note\n"
+	tests := []struct {
+		name      string
+		preloaded bool
+		discarded bool
+		signaled  bool
+		wantFile  string
+	}{
+		{name: "quit clears the output file", preloaded: true, wantFile: ""},
+		{name: "discard keeps the output file", preloaded: true, discarded: true, wantFile: stale},
+		{name: "signal keeps the output file", preloaded: true, signaled: true, wantFile: stale},
+		{name: "nothing preloaded keeps the output file", wantFile: stale},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			histDir := t.TempDir()
+			outFile := filepath.Join(t.TempDir(), "annotations.md")
+			require.NoError(t, os.WriteFile(outFile, []byte(stale), 0o600))
+
+			var buf bytes.Buffer
+			code, err := finalize(finalizeReq{
+				opts:        options{HistoryDir: histDir, Output: outFile, ExitCodeOnAnnotations: true},
+				annotations: "",
+				preloaded:   tt.preloaded,
+				discarded:   tt.discarded,
+				workDir:     "repo",
+				signaled:    tt.signaled,
+				stdout:      &buf,
+			})
+			require.NoError(t, err)
+			assert.Equal(t, 0, code)
+			assert.Zero(t, historyFileCount(t, histDir))
+			assert.Empty(t, buf.String())
+			got, rerr := os.ReadFile(outFile) //nolint:gosec // test reads a file under t.TempDir
+			require.NoError(t, rerr)
+			assert.Equal(t, tt.wantFile, string(got))
+		})
+	}
+}
+
 func historyFileCount(t *testing.T, dir string) int {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(dir, "*", "*.md"))
@@ -321,19 +362,7 @@ func TestTUIOutput_Open(t *testing.T) {
 
 func TestRun_RedirectedStdoutUsesTTY(t *testing.T) {
 	if os.Getenv("REVDIFF_TUI_TEST_HELPER") == "1" {
-		args := []string{
-			"--config=" + os.Getenv("REVDIFF_TUI_TEST_CONFIG"),
-			"--history-dir=" + os.Getenv("REVDIFF_TUI_TEST_HISTORY"),
-			"--no-colors",
-			"--no-mouse",
-		}
-		if notes := os.Getenv("REVDIFF_TUI_TEST_ANNOTATIONS"); notes != "" {
-			args = append(args, "--annotations="+notes)
-		}
-		if ref := os.Getenv("REVDIFF_TUI_TEST_REF"); ref != "" {
-			args = append(args, ref)
-		}
-		opts, err := parseArgs(args)
+		opts, err := parseArgs(tuiTestHelperArgs())
 		if err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "parse helper args: %v\n", err)
 			os.Exit(1)
@@ -350,17 +379,49 @@ func TestRun_RedirectedStdoutUsesTTY(t *testing.T) {
 	notesPath := filepath.Join(t.TempDir(), "annotations.md")
 	require.NoError(t, os.WriteFile(notesPath, []byte(annotations), 0o600))
 
-	res := runPTYReview(t, map[string]string{"REVDIFF_TUI_TEST_ANNOTATIONS": notesPath}, "\x1b[?1049h")
+	res := runPTYReview(t, map[string]string{"REVDIFF_TUI_TEST_ANNOTATIONS": notesPath}, "\x1b[?1049h", "q")
 	assert.Equal(t, "0", res.status, "terminal: %q", res.terminal)
 	assert.Equal(t, annotations, res.stdout)
 	assert.NotContains(t, res.stdout, "\x1b[")
 }
 
+func tuiTestHelperArgs() []string {
+	args := []string{
+		"--config=" + os.Getenv("REVDIFF_TUI_TEST_CONFIG"),
+		"--history-dir=" + os.Getenv("REVDIFF_TUI_TEST_HISTORY"),
+		"--no-colors",
+		"--no-mouse",
+	}
+	if notes := os.Getenv("REVDIFF_TUI_TEST_ANNOTATIONS"); notes != "" {
+		args = append(args, "--annotations="+notes)
+	}
+	if out := os.Getenv("REVDIFF_TUI_TEST_OUTPUT"); out != "" {
+		args = append(args, "--output="+out)
+	}
+	if ref := os.Getenv("REVDIFF_TUI_TEST_REF"); ref != "" {
+		args = append(args, ref)
+	}
+	return args
+}
+
 func TestRun_FailedFileLoadExitsWithError(t *testing.T) {
-	res := runPTYReview(t, map[string]string{"REVDIFF_TUI_TEST_REF": "no-such-ref"}, "no changed files")
+	res := runPTYReview(t, map[string]string{"REVDIFF_TUI_TEST_REF": "no-such-ref"}, "no changed files", "q")
 	assert.Equal(t, "1", res.status, "terminal: %q", res.terminal)
 	assert.Empty(t, res.stdout)
 	assert.Contains(t, res.terminal, "run helper: load changed files:")
+}
+
+func TestRun_DeletingEveryPreloadedNoteClearsOutput(t *testing.T) {
+	notesPath := filepath.Join(t.TempDir(), "annotations.md")
+	require.NoError(t, os.WriteFile(notesPath, []byte("## a.txt:2 (+)\nstale note\n"), 0o600))
+
+	res := runPTYReview(t, map[string]string{"REVDIFF_TUI_TEST_ANNOTATIONS": notesPath, "REVDIFF_TUI_TEST_OUTPUT": notesPath},
+		"+1/-1", "}dq")
+	assert.Equal(t, "0", res.status, "terminal: %q", res.terminal)
+	assert.Empty(t, res.stdout)
+	got, err := os.ReadFile(notesPath) //nolint:gosec // test-owned path
+	require.NoError(t, err)
+	assert.Empty(t, string(got))
 }
 
 type ptyReviewResult struct {
@@ -369,7 +430,7 @@ type ptyReviewResult struct {
 	terminal string
 }
 
-func runPTYReview(t *testing.T, env map[string]string, marker string) ptyReviewResult {
+func runPTYReview(t *testing.T, env map[string]string, marker, keys string) ptyReviewResult {
 	t.Helper()
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		t.Skip("PTY integration is supported on darwin and linux")
@@ -468,8 +529,14 @@ func runPTYReview(t *testing.T, env map[string]string, marker string) ptyReviewR
 		t.Fatalf("TUI never rendered on the terminal\nstdout: %q\nstderr: %s\nwait: %v\nread: %v",
 			terminal.String(), stderr.String(), waitErr, readErr)
 	}
-	_, err = io.WriteString(stdin, "q")
-	require.NoError(t, err)
+	// keys written in one burst arrive as a single multi-rune key, so each is sent alone
+	for i, key := range []rune(keys) {
+		if i > 0 {
+			time.Sleep(50 * time.Millisecond)
+		}
+		_, err = io.WriteString(stdin, string(key))
+		require.NoError(t, err)
+	}
 	require.NoError(t, stdin.Close())
 	waitErr := <-waitDone
 	readErr := <-readDone
