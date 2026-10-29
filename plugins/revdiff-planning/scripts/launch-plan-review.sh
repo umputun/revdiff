@@ -126,14 +126,13 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
         trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
 
         TMUX_PREV_WIN=$(tmux display-message -p '#{window_id}' 2>/dev/null || true)
-        # -d then select-window (rather than a focused new-window) matches the diff-review backend
-        # and keeps -P printing the id of the window we created
-        if ! TMUX_WIN_ID=$(tmux new-window -d -P -F '#{window_id}' -c "$CWD" -n "$OVERLAY_TITLE" \
+        # no -d: the new window becomes the active one. tmux expands -c and -n as formats, so every
+        # "#" in the start dir and window name is doubled.
+        if ! TMUX_WIN_ID=$(tmux new-window -P -F '#{window_id}' -c "${CWD//\#/##}" -n "${OVERLAY_TITLE//\#/##}" \
                 -- sh -c "$REVDIFF_CMD; rc=\$?; printf '%s' \"\$rc\" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")"); then
             echo "error: failed to open tmux review window" >&2
             exit 1
         fi
-        tmux select-window -t "$TMUX_WIN_ID" 2>/dev/null || true
 
         # bound the wait on the window still existing: a window killed without writing the
         # sentinel ends the wait instead of hanging the hook

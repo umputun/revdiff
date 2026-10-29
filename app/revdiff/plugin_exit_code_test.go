@@ -243,27 +243,28 @@ func TestPlanLauncherTmuxWindowOptIn(t *testing.T) {
 	root := testRepoRoot(t)
 	planFile := filepath.Join(t.TempDir(), "plan.md")
 	writeTestFile(t, planFile, "# Plan\n")
+	windowNoCalls := []string{"display-popup", "new-window -d", "select-window -t @7"}
 	tmux := launcherBackends()[0]
 	require.Equal(t, "tmux", tmux.name)
 
 	tests := []struct {
-		name       string
-		window     string
-		code       int
-		output     string
-		wantCalls  []string
-		wantNoCall string
+		name        string
+		window      string
+		code        int
+		output      string
+		wantCalls   []string
+		wantNoCalls []string
 	}{
 		{name: "window annotations", window: "1", code: exitCodeAnnotations, output: "## plan.md:1 (+)\ncomment\n",
-			wantCalls: []string{"display-message", "new-window", "select-window -t @7", "select-window -t @1"}, wantNoCall: "display-popup"},
+			wantCalls: []string{"display-message", "new-window", "select-window -t @1"}, wantNoCalls: windowNoCalls},
 		{name: "window clean", window: "1", code: 0,
-			wantCalls: []string{"display-message", "new-window", "select-window -t @7", "select-window -t @1"}, wantNoCall: "display-popup"},
+			wantCalls: []string{"display-message", "new-window", "select-window -t @1"}, wantNoCalls: windowNoCalls},
 		{name: "window failure", window: "1", code: 1, output: "partial output\n",
-			wantCalls: []string{"new-window"}, wantNoCall: "display-popup"},
+			wantCalls: []string{"new-window"}, wantNoCalls: windowNoCalls},
 		{name: "forced off uses popup", window: "0", code: exitCodeAnnotations, output: "## plan.md:1 (+)\ncomment\n",
-			wantCalls: []string{"display-popup"}, wantNoCall: "new-window"},
+			wantCalls: []string{"display-popup"}, wantNoCalls: []string{"new-window"}},
 		{name: "unset uses popup", window: "", code: 0,
-			wantCalls: []string{"display-popup"}, wantNoCall: "new-window"},
+			wantCalls: []string{"display-popup"}, wantNoCalls: []string{"new-window"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -290,7 +291,9 @@ func TestPlanLauncherTmuxWindowOptIn(t *testing.T) {
 				require.GreaterOrEqual(t, idx, 0, "want %q after offset %d in:\n%s", want, pos, calls)
 				pos += idx + len(want)
 			}
-			assert.NotContains(t, string(calls), tc.wantNoCall)
+			for _, notWant := range tc.wantNoCalls {
+				assert.NotContains(t, string(calls), notWant)
+			}
 			sentinels, err := filepath.Glob(filepath.Join(env["TMPDIR"], "plan-review-done-*"))
 			require.NoError(t, err)
 			assert.Empty(t, sentinels, "sentinel leaked")
@@ -625,6 +628,9 @@ func TestTmuxTitlesEscapeFormatChars(t *testing.T) {
 		{name: "codex window", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
 			args: []string{"--only=sub/f#{session_name}.go"}, env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"},
 			want: "review: f##{session_name}.go"},
+		{name: "plan review window", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh",
+			args: []string{planFile}, env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"},
+			want: "plan: p##(touch pwned).md"},
 	}
 
 	backend := launcherBackend{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}}
@@ -656,9 +662,12 @@ func TestTmuxStartDirEscapesFormatChars(t *testing.T) {
 	}
 
 	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
 	tests := []struct {
 		name string
 		path string
+		args []string
 		env  map[string]string
 	}{
 		{name: "claude popup", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
@@ -667,6 +676,8 @@ func TestTmuxStartDirEscapesFormatChars(t *testing.T) {
 			env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"}},
 		{name: "codex window", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
 			env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"}},
+		{name: "plan review window", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh",
+			args: []string{planFile}, env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"}},
 	}
 
 	backend := launcherBackend{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}}
@@ -682,10 +693,14 @@ func TestTmuxStartDirEscapesFormatChars(t *testing.T) {
 			env["FAKE_TMUX_CWD_FILE"] = cwdFile
 			maps.Copy(env, tc.env)
 
+			args := tc.args
+			if args == nil {
+				args = []string{"HEAD"}
+			}
 			res := runTestCmd(t, cmdReq{
 				dir:  dir,
 				name: "bash",
-				args: []string{filepath.Join(root, tc.path), "HEAD"},
+				args: append([]string{filepath.Join(root, tc.path)}, args...),
 				env:  env,
 			})
 			require.Equal(t, exitCodeAnnotations, res.code, res.stderr)
