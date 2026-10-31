@@ -878,6 +878,9 @@ func (m Model) computeLineWidths() []int {
 // widest rendered row minus the columns the pane can display. 0 when everything fits.
 func (m Model) maxHorizontalScroll() int {
 	visible := m.diffContentWidth() - m.gutterExtra()
+	if m.sideBySideActive() {
+		visible = m.sbsVisibleWidth()
+	}
 	if visible <= 0 {
 		return 0
 	}
@@ -917,7 +920,7 @@ func (m *Model) clampHorizontalScroll() {
 // direction < 0 scrolls left, direction > 0 scrolls right.
 // no-op when wrap mode is active (content is already fully visible).
 func (m *Model) handleHorizontalScroll(direction int) {
-	if m.modes.wrap {
+	if m.modes.wrap && !m.sideBySideActive() {
 		return
 	}
 	if direction < 0 {

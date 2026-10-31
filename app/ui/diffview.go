@@ -294,14 +294,22 @@ func (m Model) renderDiff() string {
 	if n := m.renderCache.lastLen; n > 0 {
 		b.Grow(n)
 	}
+	sbs := m.sideBySideActive()
 	for i, dl := range m.file.lines {
+		if sbs && m.isSBSHidden(i) {
+			continue // painted on the left half of its paired add's row
+		}
 		flags := m.lineRenderFlags(i, annotationMap)
 		if block, ok := m.renderCache.get(i, flags); ok {
 			b.WriteString(block)
 			continue
 		}
 		var lb strings.Builder
-		m.renderDiffLine(&lb, i, dl)
+		if sbs {
+			m.renderSideBySideLine(&lb, i, dl)
+		} else {
+			m.renderDiffLine(&lb, i, dl)
+		}
 		m.renderAnnotationOrInput(&lb, i, annotationMap)
 		block := lb.String()
 		m.renderCache.put(i, flags, block)
@@ -331,7 +339,7 @@ func (m Model) renderDiff() string {
 func (m Model) globalRenderKey() globalRenderKey {
 	k := globalRenderKey{
 		contentWidth: m.diffContentWidth(), scrollX: m.layout.scrollX,
-		wrap: m.modes.wrap, lineNumbers: m.modes.lineNumbers,
+		wrap: m.modes.wrap, sideBySide: m.sideBySideActive(), lineNumbers: m.modes.lineNumbers,
 		showBlame: m.modes.showBlame, wordDiff: m.modes.wordDiff,
 		noColors: m.cfg.noColors, tabSpaces: m.cfg.tabSpaces, searchTerm: m.search.term,
 		annotPrefix: m.cfg.annotPrefix, annotFilePrefix: m.cfg.annotFilePrefix,
@@ -492,8 +500,8 @@ func (m Model) renderWrappedDiffLine(b *strings.Builder, dl diff.DiffLine, textC
 // returns 1 when wrap mode is off or for divider lines.
 // stays in sync with renderWrappedDiffLine by using the same wrapContent method and width calculation.
 func (m Model) wrappedLineCount(idx int) int {
-	if !m.modes.wrap || idx < 0 || idx >= len(m.file.lines) {
-		return 1
+	if !m.modes.wrap || m.sideBySideActive() || idx < 0 || idx >= len(m.file.lines) {
+		return 1 // side-by-side cuts lines instead of wrapping them
 	}
 	dl := m.file.lines[idx]
 	if dl.ChangeType == diff.ChangeDivider {
@@ -855,6 +863,7 @@ type globalRenderKey struct {
 	// renderFileAnnotationHeader, is outside the loop and never cached.
 	// layout.viewport.Width is likewise absent: nothing in the render path reads it at all.
 	wrap        bool
+	sideBySide  bool
 	lineNumbers bool
 	showBlame   bool
 	wordDiff    bool

@@ -381,6 +381,7 @@ func (m Model) padContentBg(content string, targetWidth int, bg style.Color) str
 // filter.
 var statusIconForAction = map[keymap.Action]string{
 	keymap.ActionToggleCollapsed:  "▼",
+	keymap.ActionToggleSideBySide: "║",
 	keymap.ActionToggleCompact:    "⊂",
 	keymap.ActionFilter:           "◉",
 	keymap.ActionToggleWrap:       "↩",
@@ -408,6 +409,7 @@ func (m Model) statusModeIcons() string {
 	}
 	indicators := []indicator{
 		{icon(keymap.ActionToggleCollapsed), m.modes.collapsed.enabled},
+		{icon(keymap.ActionToggleSideBySide), m.sideBySideActive()},
 		{icon(keymap.ActionToggleCompact), m.modes.compact},
 		{icon(keymap.ActionFilter), m.tree.FilterActive()},
 		{icon(keymap.ActionToggleWrap), m.modes.wrap},

@@ -246,6 +246,7 @@ func run(opts options) (int, error) {
 		WrapIndent:           opts.WrapIndent,
 		PageOverlap:          opts.PageOverlap,
 		Collapsed:            opts.Collapsed,
+		SideBySide:           opts.SideBySide,
 		Compact:              opts.Compact,
 		CompactContext:       opts.CompactContext,
 		CrossFileHunks:       opts.CrossFileHunks,

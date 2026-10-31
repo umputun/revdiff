@@ -299,6 +299,7 @@ type loadedFileState struct {
 	highlighted      []string               // pre-computed highlighted content, parallel to lines
 	intraRanges      [][]worddiff.Range     // per-line intra-line word-diff ranges, parallel to lines
 	lineWidths       []int                  // per-line rendered display width, parallel to lines
+	sbsPartners      []int                  // side-by-side partner index per line (paired remove/add), -1 when unpaired
 	adds             int                    // cached count of added lines
 	removes          int                    // cached count of removed lines
 	blameData        map[int]diff.BlameLine // blame info keyed by 1-based new line number
@@ -353,6 +354,7 @@ type layoutState struct {
 // these are display modes that the user can switch at runtime via keybindings.
 type modeState struct {
 	wrap           bool           // true when line wrapping is enabled
+	sideBySide     bool           // true when old and new text are shown in two columns
 	collapsed      collapsedState // collapsed diff view state
 	lineNumbers    bool           // true when line numbers are shown in gutter
 	wordDiff       bool           // true when intra-line word-diff highlighting is enabled
@@ -764,6 +766,7 @@ type ModelConfig struct {
 	WrapIndent        int      // extra indent (cols) for wrap continuation rows; 0 disables
 	PageOverlap       int      // rows carried over from the previous screen on page up/down; 0 disables
 	Collapsed         bool     // start in collapsed diff mode
+	SideBySide        bool     // start in side-by-side diff mode
 	CrossFileHunks    bool     // allow [ and ] to jump across file boundaries
 	CrossFileMotion   bool     // allow cursor motion to continue across file boundaries
 	StopAtAnnotations bool     // [ and ] also stop at file-level and context-line annotations
@@ -950,6 +953,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			wrap:           cfg.Wrap,
 			lineNumbers:    cfg.LineNumbers,
 			collapsed:      collapsedState{enabled: cfg.Collapsed},
+			sideBySide:     cfg.SideBySide,
 			wordDiff:       cfg.WordDiff,
 			showBlame:      cfg.ShowBlame && cfg.Blamer != nil,
 			showUntracked:  cfg.ShowUntracked && cfg.LoadUntracked != nil,
@@ -1153,7 +1157,7 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleCompact, keymap.ActionToggleWrap, keymap.ActionToggleTree,
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleSideBySide, keymap.ActionToggleCompact, keymap.ActionToggleWrap, keymap.ActionToggleTree,
 		keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
@@ -1478,6 +1482,8 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action {
 	case keymap.ActionToggleCollapsed:
 		m.toggleCollapsedMode()
+	case keymap.ActionToggleSideBySide:
+		m.toggleSideBySide()
 	case keymap.ActionToggleWrap:
 		m.toggleWrapMode()
 	case keymap.ActionToggleTree:

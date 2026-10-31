@@ -92,8 +92,11 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 		if idx >= 0 {
 			m.nav.diffCursor = idx
 			m.ensureHunkExpanded(idx)
-			hunks := m.findHunks()
-			if !m.isCollapsedHidden(idx, hunks) && !m.isDeleteOnlyPlaceholder(idx, hunks) {
+			if m.isSBSHidden(idx) {
+				// the annotated remove is painted inside its paired add's row and is not painted itself,
+				// so land on the add (without entering an annotation it does not have)
+				m.nav.diffCursor = m.sbsPartner(idx)
+			} else if hunks := m.findHunks(); !m.isCollapsedHidden(idx, hunks) && !m.isDeleteOnlyPlaceholder(idx, hunks) {
 				m.annot.cursorOnAnnotation = true
 			}
 		}
