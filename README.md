@@ -10,6 +10,7 @@ Built for a specific use case: reviewing code changes, plans, and documents with
 - Full-file diff view with syntax highlighting
 - Intra-line word-diff: highlights the specific changed words within paired add/remove lines using a brighter background overlay, off by default — enable with `--word-diff` or toggle with `W`
 - Collapsed diff mode: shows final text with change markers, toggle with `v`
+- Side-by-side diff mode: old text on the left, new text on the right (like Gerrit), toggle with `S`
 - Word wrap mode: wraps long lines at viewport boundary with `↪` continuation markers, toggle with `w`; optional `--wrap-indent N` for hanging-indent continuations (handy for markdown lists)
 - Page scroll overlap: `--page-overlap N` carries the bottom N lines of the screen to the top of the next one on PgUp/PgDn, so the seam between screens keeps context; the carryover is approximate on wrapped or annotated lines, which occupy several rows but are a single cursor stop
 - Horizontal scroll overflow indicators: truncated diff lines show `«` / `»` markers at the edges to signal hidden content off-screen
@@ -391,6 +392,7 @@ Positional arguments support several forms:
 | `--wrap-indent` | Indent wrap continuation rows by N columns so they hang under the first row's content (helps when reviewing markdown lists where unindented continuation can be misread as a new bullet), env: `REVDIFF_WRAP_INDENT` | `0` |
 | `--page-overlap` | Keep N lines from the previous screen when paging the diff, env: `REVDIFF_PAGE_OVERLAP` | `0` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
+| `--side-by-side` | Show side-by-side diff, env: `REVDIFF_SIDE_BY_SIDE` | `false` |
 | `--compact` | Start in compact diff mode (small context around changes), env: `REVDIFF_COMPACT` | `false` |
 | `--compact-context` | Number of context lines around changes when in compact mode, env: `REVDIFF_COMPACT_CONTEXT` | `5` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
@@ -824,6 +826,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 | Key | Action |
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
+| `S` | Toggle side-by-side diff mode (old on the left, new on the right; replaces collapsed mode) |
 | `C` | Toggle compact diff view (small context around changes, re-fetches current file) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
@@ -847,6 +850,7 @@ The status bar shows a fixed row of mode indicators on the right side. All slots
 | Icon | Toggle | Meaning |
 |------|--------|---------|
 | `▼` | `v` | Collapsed diff mode |
+| `║` | `S` | Side-by-side diff mode |
 | `⊂` | `C` | Compact diff mode (small context around changes) |
 | `◉` | `f` | Filter: annotated files only |
 | `↩` | `w` | Word wrap mode |
@@ -950,7 +954,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`, `open_editor`, `next_annotation`, `prev_annotation`, `flush_output`
 
-**View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `filter_unreviewed`, `theme_select`, `filter`, `info`, `reload`
+**View:** `toggle_collapsed`, `toggle_side_by_side`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `filter_unreviewed`, `theme_select`, `filter`, `info`, `reload`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 

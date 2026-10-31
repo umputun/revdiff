@@ -154,6 +154,7 @@ across files by concern to keep files under ~500 lines:
 - **`scrollbar.go`** — vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes
   (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion)
 - **`collapsed.go`** — collapsed diff mode: hide removes, show modified markers
+- **`sidebyside.go`** — side-by-side diff mode: pairs removes with adds (`file.sbsPartners`, computed on file load), folds each paired remove into its add's row via `isCollapsedHidden` so cursor/search/hunk navigation skip it, renders two aligned halves per row. Mutually exclusive with collapsed; lines are cut, never wrapped; no blame gutter
 - **`annotate.go`** — annotation input lifecycle (start, save, cancel, delete) and the visual-row
   chokepoint: `annotationVisualRows` is the single source of truth for "how many rows + what content
   does this annotation paint as." Memoized on `annot.rowCache`, invalidated by `handleFileLoaded`,
@@ -198,7 +199,7 @@ Each source file has a matching `_test.go`.
   `width`, `height`, `scrollX`
 - **`loadedFileState` (`m.file`)** — current file's loaded state: `lines`, `highlighted`,
   `intraRanges`, `blameData`, `mdTOC`, `singleFile`
-- **`modeState` (`m.modes`)** — user-togglable view modes: `wrap`, `collapsed`, `compact`,
+- **`modeState` (`m.modes`)** — user-togglable view modes: `wrap`, `collapsed`, `sideBySide`, `compact`,
   `compactContext`, `lineNumbers`, `wordDiff`, `showBlame`
 - **`navigationState` (`m.nav`)** — cursor position: `diffCursor`, `pendingHunkJump` (cross-file hunk
   landing), `pendingBoundaryJump` (cross-file cursor-motion landing)

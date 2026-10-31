@@ -409,6 +409,9 @@ func (m *Model) toggleCollapsedMode() {
 		return
 	}
 	m.modes.collapsed.enabled = !m.modes.collapsed.enabled
+	if m.modes.collapsed.enabled {
+		m.modes.sideBySide = false // collapsed and side-by-side cannot be shown together
+	}
 	m.modes.collapsed.expandedHunks = make(map[int]bool)
 	m.annot.cursorOnAnnotation = false // visible lines change, reset annotation cursor state
 	m.adjustCursorIfHidden()
@@ -439,12 +442,19 @@ func (m *Model) toggleHunkExpansion() {
 	m.layout.viewport.SetContent(m.renderDiff())
 }
 
-// isCollapsedHidden returns true if the line at idx is hidden in collapsed mode.
+// isCollapsedHidden returns true if the line at idx is hidden in collapsed mode, or is a removed
+// line folded into its paired add's row in side-by-side mode (see isSBSHidden).
 // a line is hidden when collapsed mode is active, the line is a remove line,
 // and its hunk is not expanded. the first line of a delete-only hunk is kept
 // visible as a placeholder so users can navigate to it and expand with '.'.
 func (m Model) isCollapsedHidden(idx int, hunks []int) bool {
-	if !m.modes.collapsed.enabled || idx < 0 || idx >= len(m.file.lines) {
+	if idx < 0 || idx >= len(m.file.lines) {
+		return false
+	}
+	if m.isSBSHidden(idx) {
+		return true // removed line shown inside its add's row in side-by-side mode
+	}
+	if !m.modes.collapsed.enabled {
 		return false
 	}
 	if m.file.lines[idx].ChangeType != diff.ChangeRemove {
@@ -514,7 +524,7 @@ func (m Model) firstVisibleInHunk(hunkStart int, hunks []int) int {
 // on a hidden removed line in collapsed mode. searches forward first, then backward.
 // falls back to nearest divider if no content line is visible (delete-only file).
 func (m *Model) adjustCursorIfHidden() {
-	if !m.modes.collapsed.enabled || m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
+	if (!m.modes.collapsed.enabled && !m.sideBySideActive()) || m.nav.diffCursor < 0 || m.nav.diffCursor >= len(m.file.lines) {
 		return
 	}
 	hunks := m.findHunks()

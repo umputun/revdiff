@@ -409,6 +409,7 @@ revdiff --dump-config > ~/.config/revdiff/config</code></div>
                 <tr><td><code>--wrap-indent</code></td><td>Indent wrap continuation rows by N columns so they hang under the first row's content</td><td><code>0</code></td></tr>
                 <tr><td><code>--page-overlap</code></td><td>Keep N lines from the previous screen when paging the diff</td><td><code>0</code></td></tr>
                 <tr><td><code>--collapsed</code></td><td>Start in collapsed diff mode</td><td><code>false</code></td></tr>
+                <tr><td><code>--side-by-side</code></td><td>Show side-by-side diff</td><td><code>false</code></td></tr>
                 <tr><td><code>--compact</code></td><td>Start in compact diff mode (small context around changes)</td><td><code>false</code></td></tr>
                 <tr><td><code>--compact-context</code></td><td>Number of context lines around changes when in compact mode</td><td><code>5</code></td></tr>
                 <tr><td><code>--cross-file-hunks</code></td><td>Allow <code>[</code> and <code>]</code> to continue into adjacent files</td><td><code>false</code></td></tr>
@@ -587,6 +588,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
             <thead><tr><th>Key</th><th>Action</th></tr></thead>
             <tbody>
                 <tr><td><code>v</code></td><td>Toggle collapsed diff mode</td></tr>
+                <tr><td><code>S</code></td><td>Toggle side-by-side diff mode</td></tr>
                 <tr><td><code>C</code></td><td>Toggle compact diff view (small context around changes)</td></tr>
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
@@ -610,6 +612,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
             <thead><tr><th>Icon</th><th>Toggle</th><th>Meaning</th></tr></thead>
             <tbody>
                 <tr><td><code>▼</code></td><td><code>v</code></td><td>Collapsed diff mode</td></tr>
+                <tr><td><code>║</code></td><td><code>S</code></td><td>Side-by-side diff mode</td></tr>
                 <tr><td><code>⊂</code></td><td><code>C</code></td><td>Compact diff mode (small context around changes)</td></tr>
                 <tr><td><code>◉</code></td><td><code>f</code></td><td>Filter: annotated files only</td></tr>
                 <tr><td><code>↩</code></td><td><code>w</code></td><td>Word wrap mode</td></tr>
@@ -678,7 +681,7 @@ map alt+t&gt;n theme_select</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code>, <code>open_editor</code>, <code>next_annotation</code>, <code>prev_annotation</code>, <code>flush_output</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>filter_unreviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_side_by_side</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>filter_unreviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <h2 id="vim-motion">Vim-motion preset</h2>

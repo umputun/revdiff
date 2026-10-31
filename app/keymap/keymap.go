@@ -54,6 +54,7 @@ const (
 	ActionNextAnnotation         Action = "next_annotation"
 	ActionPrevAnnotation         Action = "prev_annotation"
 	ActionToggleCollapsed        Action = "toggle_collapsed"
+	ActionToggleSideBySide       Action = "toggle_side_by_side"
 	ActionToggleCompact          Action = "toggle_compact"
 	ActionToggleWrap             Action = "toggle_wrap"
 	ActionToggleTree             Action = "toggle_tree"
@@ -95,7 +96,7 @@ var validActions = map[Action]bool{
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionNextAnnotation: true, ActionPrevAnnotation: true,
-	ActionToggleCollapsed: true, ActionToggleCompact: true, ActionToggleWrap: true, ActionToggleTree: true,
+	ActionToggleCollapsed: true, ActionToggleSideBySide: true, ActionToggleCompact: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
 	ActionMarkReviewed: true, ActionFilterUnreviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
@@ -240,6 +241,7 @@ func defaultDescriptions() []HelpEntry {
 
 		// view toggles
 		{ActionToggleCollapsed, "toggle collapsed view", "View"},
+		{ActionToggleSideBySide, "toggle side-by-side view", "View"},
 		{ActionToggleCompact, "toggle compact diff view", "View"},
 		{ActionToggleWrap, "toggle word wrap", "View"},
 		{ActionToggleTree, "toggle tree pane", "View"},
@@ -301,6 +303,7 @@ func defaultBindings() map[string]Action {
 		"{":      ActionPrevAnnotation,
 		"O":      ActionFlushOutput,
 		"v":      ActionToggleCollapsed,
+		"S":      ActionToggleSideBySide,
 		"C":      ActionToggleCompact,
 		"w":      ActionToggleWrap,
 		"t":      ActionToggleTree,

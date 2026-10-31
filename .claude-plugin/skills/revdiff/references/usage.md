@@ -172,6 +172,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 | Key | Action |
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
+| `S` | Toggle side-by-side diff mode (old on the left, new on the right; replaces collapsed mode) |
 | `C` | Toggle compact diff view (small context around changes, re-fetches current file) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
@@ -195,6 +196,7 @@ The status bar shows a fixed row of mode indicators on the right side. All slots
 | Icon | Toggle | Meaning |
 |------|--------|---------|
 | `▼` | `v` | Collapsed diff mode |
+| `║` | `S` | Side-by-side diff mode |
 | `⊂` | `C` | Compact diff mode (small context around changes) |
 | `◉` | `f` | Filter: annotated files only |
 | `↩` | `w` | Word wrap mode |
