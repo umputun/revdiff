@@ -100,23 +100,22 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 func (m *Model) positionOnAnnotatedLine(idx int) {
 	m.nav.diffCursor = idx
 	m.ensureHunkExpanded(idx)
-	if m.isSBSHidden(idx) {
-		// the annotated remove is painted inside its paired add's row and is not painted itself,
-		// so land on the add (without entering an annotation it does not have)
-		m.nav.diffCursor = m.sbsPartner(idx)
-		return
-	}
 	hunks := m.findHunks()
 	if !m.isCollapsedHidden(idx, hunks) && !m.isDeleteOnlyPlaceholder(idx, hunks) {
 		m.annot.cursorOnAnnotation = true
 	}
 }
 
-// ensureHunkExpanded expands the hunk containing diffLines[idx] when collapsed mode is active.
+// ensureHunkExpanded expands the hunk containing diffLines[idx] when collapsed mode is active, or the
+// change region when idx is a removed line folded into its add's row in side-by-side mode.
 // this ensures the target line is visible after a jump (e.g., annotation on a removed line).
 // also expands delete-only placeholder hunks where the first line is "visible" as a synthetic
 // placeholder but annotations are not rendered (renderCollapsedDiff skips them).
 func (m *Model) ensureHunkExpanded(idx int) {
+	if m.isSBSHidden(idx) {
+		m.expandSBSRegion(idx)
+		return
+	}
 	if !m.modes.collapsed.enabled {
 		return
 	}

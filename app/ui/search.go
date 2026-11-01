@@ -59,6 +59,7 @@ func (m *Model) submitSearch() {
 	}
 	m.search.cursor = idx
 	m.nav.diffCursor = m.search.matches[idx]
+	m.ensureHunkExpanded(m.nav.diffCursor)
 	m.annot.cursorOnAnnotation = false
 	m.syncTOCActiveSection()
 	m.centerViewportOnCursor()
@@ -74,7 +75,7 @@ func (m *Model) nextSearchMatch() {
 	start := m.search.cursor
 	for {
 		m.search.cursor = (m.search.cursor + 1) % len(m.search.matches)
-		if !m.isCollapsedHidden(m.search.matches[m.search.cursor], hunks) {
+		if !m.hiddenInCollapsed(m.search.matches[m.search.cursor], hunks) {
 			break
 		}
 		if m.search.cursor == start {
@@ -82,6 +83,7 @@ func (m *Model) nextSearchMatch() {
 		}
 	}
 	m.nav.diffCursor = m.search.matches[m.search.cursor]
+	m.ensureHunkExpanded(m.nav.diffCursor)
 	m.annot.cursorOnAnnotation = false
 	m.centerViewportOnCursor()
 }
@@ -99,7 +101,7 @@ func (m *Model) prevSearchMatch() {
 		if m.search.cursor < 0 {
 			m.search.cursor = len(m.search.matches) - 1
 		}
-		if !m.isCollapsedHidden(m.search.matches[m.search.cursor], hunks) {
+		if !m.hiddenInCollapsed(m.search.matches[m.search.cursor], hunks) {
 			break
 		}
 		if m.search.cursor == start {
@@ -107,6 +109,7 @@ func (m *Model) prevSearchMatch() {
 		}
 	}
 	m.nav.diffCursor = m.search.matches[m.search.cursor]
+	m.ensureHunkExpanded(m.nav.diffCursor)
 	m.annot.cursorOnAnnotation = false
 	m.centerViewportOnCursor()
 }
@@ -167,13 +170,13 @@ func (m *Model) findFirstVisibleMatch(startIdx int) int {
 	hunks := m.findHunks()
 	// scan forward from startIdx
 	for i, idx := range m.search.matches {
-		if idx >= startIdx && !m.isCollapsedHidden(idx, hunks) {
+		if idx >= startIdx && !m.hiddenInCollapsed(idx, hunks) {
 			return i
 		}
 	}
 	// wrap: scan from beginning
 	for i, idx := range m.search.matches {
-		if !m.isCollapsedHidden(idx, hunks) {
+		if !m.hiddenInCollapsed(idx, hunks) {
 			return i
 		}
 	}

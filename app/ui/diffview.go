@@ -155,7 +155,13 @@ func (m Model) gutterBlanks() (numBlank, blameBlank string) {
 // prevent long lines from overflowing the right padding. when cutWidth ≤ 0 (pathologically narrow
 // terminal with wide gutters), returns the content unchanged.
 func (m Model) applyHorizontalScroll(content string, indicatorBg style.Color) string {
-	cutWidth := m.diffContentWidth() - m.gutterExtra()
+	return m.scrollHorizontally(content, indicatorBg, m.diffContentWidth()-m.gutterExtra())
+}
+
+// scrollHorizontally is applyHorizontalScroll for an explicit visible width: the diff pane passes
+// its content width, each half of a side-by-side row passes its own. the right marker reaches one
+// column past cutWidth, so a caller with a hard column limit passes one less.
+func (m Model) scrollHorizontally(content string, indicatorBg style.Color, cutWidth int) string {
 	if cutWidth <= 0 {
 		return content
 	}
@@ -316,6 +322,9 @@ func (m Model) renderDiff() string {
 		b.WriteString(block)
 	}
 	m.renderCache.lastLen = b.Len()
+	if sbs {
+		m.padSideBySideRows(&b)
+	}
 	return b.String()
 }
 
@@ -339,7 +348,7 @@ func (m Model) renderDiff() string {
 func (m Model) globalRenderKey() globalRenderKey {
 	k := globalRenderKey{
 		contentWidth: m.diffContentWidth(), scrollX: m.layout.scrollX,
-		wrap: m.modes.wrap, sideBySide: m.sideBySideActive(), lineNumbers: m.modes.lineNumbers,
+		wrap: m.modes.wrap, sideBySide: m.sideBySideActive(), sbsEpoch: m.modes.sbsEpoch, lineNumbers: m.modes.lineNumbers,
 		showBlame: m.modes.showBlame, wordDiff: m.modes.wordDiff,
 		noColors: m.cfg.noColors, tabSpaces: m.cfg.tabSpaces, searchTerm: m.search.term,
 		annotPrefix: m.cfg.annotPrefix, annotFilePrefix: m.cfg.annotFilePrefix,
@@ -362,6 +371,11 @@ func (m Model) lineRenderFlags(idx int, annotationMap map[annotLineKey]string) l
 	f := lineRenderFlags{
 		cursor:      m.isCursorLine(idx),
 		searchMatch: m.search.matchSet[idx],
+	}
+	if m.sideBySideActive() {
+		if p := m.sbsPair(idx); p >= 0 && m.file.lines[idx].ChangeType == diff.ChangeAdd {
+			f.pairMatch = m.search.matchSet[p]
+		}
 	}
 	// the live input row carries textinput's own state (value, cursor position), which is
 	// not reducible to a comparable key — mark it uncacheable rather than key on it.
@@ -864,6 +878,7 @@ type globalRenderKey struct {
 	// layout.viewport.Width is likewise absent: nothing in the render path reads it at all.
 	wrap        bool
 	sideBySide  bool
+	sbsEpoch    int // stands in for the non-comparable set of expanded side-by-side regions
 	lineNumbers bool
 	showBlame   bool
 	wordDiff    bool
@@ -891,6 +906,8 @@ type globalRenderKey struct {
 type lineRenderFlags struct {
 	cursor      bool
 	searchMatch bool
+	// pairMatch is the search state of the removed line painted on the left of this row in side-by-side mode
+	pairMatch   bool
 	annotCursor bool
 	hasComment  bool
 	liveInput   bool

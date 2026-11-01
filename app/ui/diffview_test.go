@@ -1564,6 +1564,25 @@ func goldenStates() []struct {
 			m.annot.input.SetValue("file note in progress")
 		}},
 		{"collapsed", func(t *testing.T, m *Model) { m.modes.collapsed.enabled = true }},
+		{"side-by-side", func(t *testing.T, m *Model) { m.modes.sideBySide = true }},
+		{"side-by-side-line-numbers", func(t *testing.T, m *Model) {
+			m.modes.sideBySide = true
+			m.modes.lineNumbers = true
+		}},
+		{"side-by-side-scrolled", func(t *testing.T, m *Model) {
+			m.modes.sideBySide = true
+			m.layout.scrollX = 24
+		}},
+		{"side-by-side-expanded", func(t *testing.T, m *Model) {
+			m.modes.sideBySide = true
+			m.expandSBSRegion(3)
+		}},
+		{"side-by-side-search-old-side", func(t *testing.T, m *Model) {
+			// matches only the folded remove, so only the pair row's left half changes
+			m.modes.sideBySide = true
+			m.search.term = "return value{}, errmissing"
+			m.search.matches = []int{8}
+		}},
 		{"no-colors", func(t *testing.T, m *Model) { m.cfg.noColors = true }},
 	}
 }

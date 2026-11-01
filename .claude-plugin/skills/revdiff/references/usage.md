@@ -172,14 +172,14 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 | Key | Action |
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
-| `S` | Toggle side-by-side diff mode (old on the left, new on the right; replaces collapsed mode) |
+| `S` | Toggle side-by-side diff mode (old on the left, new on the right; replaces collapsed mode, wrap and blame are ignored while it is on) |
 | `C` | Toggle compact diff view (small context around changes, re-fetches current file) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
 | `B` | Toggle blame gutter (author name + commit age per line) |
 | `W` | Toggle intra-line word-diff highlighting for paired add/remove lines |
-| `.` | Expand/collapse individual hunk under cursor (collapsed mode only) |
+| `.` | Expand/collapse individual hunk under cursor (collapsed and side-by-side modes) |
 | `T` | Open theme selector with live preview |
 | `f` | Toggle filter: all files / annotated only |
 | `F` | Toggle filter: all files / unreviewed only |

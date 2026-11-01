@@ -32,6 +32,7 @@ Tool examples:
 - `args: "main"`: review the current branch against `main`
 - `args: "--staged"`: review staged changes
 - `args: "--untracked"`: review untracked files with working-tree changes
+- `args: "--side-by-side"`: start in the two-column side-by-side layout
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
 - `args: "--no-tree"`: review with the file tree pane hidden

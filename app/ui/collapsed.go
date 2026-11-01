@@ -421,8 +421,12 @@ func (m *Model) toggleCollapsedMode() {
 }
 
 // toggleHunkExpansion toggles the expansion state of the hunk under the cursor.
-// only operates in collapsed mode; no-op in expanded mode or when cursor is not on a hunk.
+// only operates in collapsed or side-by-side mode; no-op in expanded mode or when cursor is not on a hunk.
 func (m *Model) toggleHunkExpansion() {
+	if m.sideBySideActive() {
+		m.toggleSBSRegion()
+		return
+	}
 	if !m.modes.collapsed.enabled {
 		return
 	}
@@ -448,11 +452,15 @@ func (m *Model) toggleHunkExpansion() {
 // and its hunk is not expanded. the first line of a delete-only hunk is kept
 // visible as a placeholder so users can navigate to it and expand with '.'.
 func (m Model) isCollapsedHidden(idx int, hunks []int) bool {
+	return m.isSBSHidden(idx) || m.hiddenInCollapsed(idx, hunks)
+}
+
+// hiddenInCollapsed is the collapsed-mode half of isCollapsedHidden. search uses it alone: a match
+// on a removed line folded into a side-by-side row is reachable (it expands the region), a match
+// hidden by collapsed mode is not.
+func (m Model) hiddenInCollapsed(idx int, hunks []int) bool {
 	if idx < 0 || idx >= len(m.file.lines) {
 		return false
-	}
-	if m.isSBSHidden(idx) {
-		return true // removed line shown inside its add's row in side-by-side mode
 	}
 	if !m.modes.collapsed.enabled {
 		return false

@@ -300,6 +300,7 @@ type loadedFileState struct {
 	intraRanges      [][]worddiff.Range     // per-line intra-line word-diff ranges, parallel to lines
 	lineWidths       []int                  // per-line rendered display width, parallel to lines
 	sbsPartners      []int                  // side-by-side partner index per line (paired remove/add), -1 when unpaired
+	sbsRegions       []int                  // first line of the contiguous run of changes holding each added/removed line, -1 otherwise
 	adds             int                    // cached count of added lines
 	removes          int                    // cached count of removed lines
 	blameData        map[int]diff.BlameLine // blame info keyed by 1-based new line number
@@ -355,6 +356,8 @@ type layoutState struct {
 type modeState struct {
 	wrap           bool           // true when line wrapping is enabled
 	sideBySide     bool           // true when old and new text are shown in two columns
+	sbsExpanded    map[int]bool   // change regions shown unpaired in side-by-side mode, key = first line index of the region
+	sbsEpoch       int            // bumped whenever sbsExpanded changes; stands in for the map in globalRenderKey
 	collapsed      collapsedState // collapsed diff view state
 	lineNumbers    bool           // true when line numbers are shown in gutter
 	wordDiff       bool           // true when intra-line word-diff highlighting is enabled

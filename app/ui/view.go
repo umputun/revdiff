@@ -221,16 +221,30 @@ func (m Model) statusBarText() string {
 		}
 		rightParts = append(rightParts, fmt.Sprintf("%d %s", cnt, suffix))
 	}
-	rightParts = append(rightParts, m.statusModeIcons(), "? help")
 
 	// build separator with muted foreground using raw ANSI (not lipgloss.Render)
 	// to avoid full reset that would break the status bar background
 	sep := m.renderer.StatusBarSeparator()
+
+	// every icon is shown so the row is a legend, but on a narrow terminal it would leave the
+	// filename no room: then only the active modes stay
+	icons := m.statusModeIcons()
+	if cleanName != "" {
+		fullRight := strings.Join(append(append([]string{}, rightParts...), icons, "? help"), sep)
+		minLeft := statusMinNameWidth + lipgloss.Width(sep) + lipgloss.Width(m.fileStatsText())
+		if minLeft+lipgloss.Width(fullRight)+statusBarPadding > m.layout.width {
+			icons = m.activeStatusModeIcons()
+		}
+	}
+	if icons != "" {
+		rightParts = append(rightParts, icons)
+	}
+	rightParts = append(rightParts, "? help")
 	left := strings.Join(segments, sep)
 	right := strings.Join(rightParts, sep)
 
 	// truncate filename from left with … if status line is too wide
-	minRight := lipgloss.Width(right) + 5 // 2 for status bar padding + 3 for separator
+	minRight := lipgloss.Width(right) + statusBarPadding
 	available := max(m.layout.width-minRight, 0)
 
 	// graceful degradation: drop left segments when too narrow
@@ -248,7 +262,7 @@ func (m Model) statusBarText() string {
 		// truncate filename from left, keeping end of path. uses display-width
 		// measurement to handle wide characters (CJK, emoji)
 		statsStr := m.fileStatsText()
-		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), 4) // reserve separator between name and stats
+		nameMax := max(available-lipgloss.Width(statsStr)-lipgloss.Width(sep), statusMinNameWidth) // reserve separator between name and stats
 		left = style.TruncateLeftToWidth(cleanName, nameMax) + sep + statsStr
 	}
 
@@ -343,7 +357,7 @@ func (m Model) searchSegment() string {
 	pos := m.search.cursor + 1
 	if m.modes.collapsed.enabled && m.search.cursor < len(m.search.matches) {
 		hunks := m.findHunks()
-		if m.isCollapsedHidden(m.search.matches[m.search.cursor], hunks) {
+		if m.hiddenInCollapsed(m.search.matches[m.search.cursor], hunks) {
 			pos = 0
 		}
 	}
@@ -398,6 +412,20 @@ var statusIconForAction = map[keymap.Action]string{
 // statusModeIcons returns combined mode indicator icons (one per view toggle).
 // all icons are always shown; active modes use status foreground, inactive use muted color.
 func (m Model) statusModeIcons() string {
+	return m.modeIcons(false)
+}
+
+// activeStatusModeIcons returns only the icons of the active modes, for terminals too narrow for all of them.
+func (m Model) activeStatusModeIcons() string {
+	return m.modeIcons(true)
+}
+
+const (
+	statusBarPadding   = 5 // 2 for status bar padding + 3 for separator
+	statusMinNameWidth = 4 // columns the filename keeps when the status bar truncates it
+)
+
+func (m Model) modeIcons(activeOnly bool) string {
 	type indicator struct {
 		icon   string
 		active bool
@@ -427,11 +455,15 @@ func (m Model) statusModeIcons() string {
 
 	icons := make([]string, 0, len(indicators))
 	for _, ind := range indicators {
-		if ind.active {
+		switch {
+		case ind.active:
 			icons = append(icons, activeSeq+ind.icon)
-		} else {
+		case !activeOnly:
 			icons = append(icons, mutedSeq+ind.icon)
 		}
+	}
+	if len(icons) == 0 {
+		return ""
 	}
 	return strings.Join(icons, " ") + activeSeq
 }

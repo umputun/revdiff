@@ -326,7 +326,7 @@ func (m Model) handleWheel(zone hitZone, delta int) (tea.Model, tea.Cmd) {
 // tick in flight repaints at once; later events in the burst only mark xPending, so a trackpad
 // swipe costs one full render per tick instead of one per event (issue #334).
 func (m Model) handleHorizontalWheel(delta int) (tea.Model, tea.Cmd) {
-	if m.modes.wrap {
+	if m.modes.wrap && !m.sideBySideActive() {
 		return m, nil
 	}
 	prev := m.layout.scrollX

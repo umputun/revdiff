@@ -137,6 +137,8 @@ Pass `--start-at-change` only when the user explicitly asks for that cursor pref
 
 Pass `--filter-unreviewed` only when the user asks for the tree limited to files not marked reviewed; never infer it automatically. The `F` key toggles the same filter during the review.
 
+Pass `--side-by-side` only when the user asks for a two-column (old left, new right) view; never infer it automatically. The `S` key toggles the same mode during the review.
+
 Pass `--cross-file-motion` only when the user explicitly asks for cursor motion to continue into adjacent files; never infer it automatically.
 
 Pass `--stop-at-annotations` only when the user explicitly asks for `[` and `]` to also stop at annotations outside hunks; never infer it automatically.

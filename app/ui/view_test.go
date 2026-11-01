@@ -162,7 +162,7 @@ func TestModel_StatusBarFilenameTruncationWideChars(t *testing.T) {
 	m.file.adds = 1
 	m.file.removes = 0
 	m.layout.focus = paneDiff
-	m.layout.width = 50 // the right-hand mode icons take ~30 cells, leaving room for a truncated name
+	m.layout.width = 45
 
 	status := m.statusBarText()
 	assert.Contains(t, status, "…", "should truncate wide-char filename with ellipsis")

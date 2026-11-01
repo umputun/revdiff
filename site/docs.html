@@ -588,14 +588,14 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
             <thead><tr><th>Key</th><th>Action</th></tr></thead>
             <tbody>
                 <tr><td><code>v</code></td><td>Toggle collapsed diff mode</td></tr>
-                <tr><td><code>S</code></td><td>Toggle side-by-side diff mode</td></tr>
+                <tr><td><code>S</code></td><td>Toggle side-by-side diff mode (replaces collapsed mode; wrap and blame are ignored while it is on)</td></tr>
                 <tr><td><code>C</code></td><td>Toggle compact diff view (small context around changes)</td></tr>
                 <tr><td><code>w</code></td><td>Toggle word wrap</td></tr>
                 <tr><td><code>t</code></td><td>Toggle tree/TOC pane visibility</td></tr>
                 <tr><td><code>L</code></td><td>Toggle line numbers</td></tr>
                 <tr><td><code>B</code></td><td>Toggle blame gutter (author + commit age)</td></tr>
                 <tr><td><code>W</code></td><td>Toggle intra-line word-diff highlighting</td></tr>
-                <tr><td><code>.</code></td><td>Expand/collapse hunk (collapsed mode)</td></tr>
+                <tr><td><code>.</code></td><td>Expand/collapse hunk (collapsed and side-by-side modes)</td></tr>
                 <tr><td><code>T</code></td><td>Theme selector with live preview</td></tr>
                 <tr><td><code>f</code></td><td>Filter: all files / annotated only</td></tr>
                 <tr><td><code>?</code></td><td>Help overlay</td></tr>

@@ -1158,6 +1158,7 @@ func TestBuildHelpSpec_StatusIconsOnToggleRows(t *testing.T) {
 		section, suffix, want string
 	}{
 		{"View", "toggle collapsed view", "▼ toggle collapsed view"},
+		{"View", "toggle side-by-side view", "║ toggle side-by-side view"},
 		{"View", "toggle compact diff view", "⊂ toggle compact diff view"},
 		{"View", "filter files", "◉ filter files"},
 		{"View", "toggle word wrap", "↩ toggle word wrap"},
@@ -1168,7 +1169,7 @@ func TestBuildHelpSpec_StatusIconsOnToggleRows(t *testing.T) {
 		{"View", "mark file as reviewed", "✓ mark file as reviewed"},
 		{"View", "show unreviewed files", "○ show unreviewed files"},
 		{"View", "show/hide untracked files", "∅ show/hide untracked files"},
-		{"View", "toggle hunk in collapsed", "  toggle hunk in collapsed"},
+		{"View", "toggle hunk in collapsed / side-by-side", "  toggle hunk in collapsed / side-by-side"},
 		{"View", "show review info popup", "  show review info popup"},
 		{"Search", "search in diff", "≋ search in diff"},
 		{"Search", "recall previous search query (in search prompt)", "  recall previous search query (in search prompt)"},

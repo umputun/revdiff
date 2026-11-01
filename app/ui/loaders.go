@@ -571,9 +571,12 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.clearSearch()
 	m.computeFileStats()
 	m.file.highlighted = m.highlighter.HighlightLines(msg.file, m.file.lines)
+	m.file.sbsPartners, m.file.sbsRegions = m.computeSBSPairing()
+	m.modes.sbsExpanded = make(map[int]bool)
+	m.modes.sbsEpoch++
+	m.expandAnnotatedSBSRegions()
 	m.recomputeIntraRanges()
 	m.file.lineWidths = m.computeLineWidths()
-	m.file.sbsPartners = m.computeSBSPartners()
 	if m.modes.lineNumbers {
 		m.file.lineNumWidth = m.computeLineNumWidth()
 	}
@@ -866,11 +869,30 @@ func (m *Model) recomputeIntraRanges() {
 			}
 		}
 
-		pairs := m.differ.PairLines(block)
-		for _, p := range pairs {
+		for _, p := range m.intraPairs(blockStart, block) {
 			minusRanges, plusRanges := m.differ.ComputeIntraRanges(block[p.RemoveIdx].Content, block[p.AddIdx].Content)
 			m.file.intraRanges[blockStart+p.RemoveIdx] = minusRanges
 			m.file.intraRanges[blockStart+p.AddIdx] = plusRanges
 		}
 	}
+}
+
+// intraPairs returns the remove/add pairs whose words are compared for the change block that starts
+// at blockStart. side-by-side mode compares the lines it shows beside each other, which can differ
+// from the content-matched pairing the unified view uses, so the highlight always describes the
+// row the user is looking at.
+func (m Model) intraPairs(blockStart int, block []worddiff.LinePair) []worddiff.Pair {
+	if !m.sideBySideActive() || m.sbsExpanded(blockStart) {
+		return m.differ.PairLines(block)
+	}
+	var pairs []worddiff.Pair
+	for j := range block {
+		if block[j].IsRemove {
+			continue
+		}
+		if p := m.sbsPair(blockStart + j); p >= 0 {
+			pairs = append(pairs, worddiff.Pair{RemoveIdx: p - blockStart, AddIdx: j})
+		}
+	}
+	return pairs
 }
