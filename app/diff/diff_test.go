@@ -2091,3 +2091,44 @@ func TestGit_ChangedFileWithMagicNameRoundTrips(t *testing.T) {
 	added, _ := changeContents(lines)
 	assert.Equal(t, []string{"real"}, added)
 }
+
+func TestGit_FileDiff_IgnoreWhitespace(t *testing.T) {
+	dir := setupTestRepo(t)
+	g := NewGit(dir)
+	writeFile(t, dir, "f.go", "func a() {\n\treturn 1\n}\n\nfunc b() {\n\treturn 2\n}\n")
+	gitCmd(t, dir, "add", "f.go")
+	gitCmd(t, dir, "commit", "-m", "initial")
+	// a() is only re-indented, b() has a real change
+	writeFile(t, dir, "f.go", "func a() {\n        return 1\n}\n\nfunc b() {\n\treturn 3\n}\n")
+
+	count := CountChanges
+
+	lines, err := g.FileDiff(FileDiffRequest{Path: "f.go"})
+	require.NoError(t, err)
+	adds, removes := count(lines)
+	assert.Equal(t, 2, adds, "indent change and real change both show")
+	assert.Equal(t, 2, removes)
+
+	lines, err = g.FileDiff(FileDiffRequest{Path: "f.go", IgnoreWhitespace: true})
+	require.NoError(t, err)
+	adds, removes = count(lines)
+	assert.Equal(t, 1, adds, "whitespace-only change is hidden")
+	assert.Equal(t, 1, removes)
+	for _, l := range lines {
+		if l.ChangeType == ChangeAdd {
+			assert.Equal(t, "\treturn 3", l.Content)
+		}
+	}
+
+	t.Run("whitespace-only file diff is empty", func(t *testing.T) {
+		writeFile(t, dir, "f.go", "func a() {\n        return 1\n}\n\nfunc b() {\n\treturn 2\n}\n")
+		lines, err := g.FileDiff(FileDiffRequest{Path: "f.go", IgnoreWhitespace: true})
+		require.NoError(t, err)
+		assert.Empty(t, lines)
+	})
+}
+
+func TestWhitespaceArgs(t *testing.T) {
+	assert.Nil(t, whitespaceArgs(FileDiffRequest{}))
+	assert.Equal(t, []string{"-w"}, whitespaceArgs(FileDiffRequest{IgnoreWhitespace: true}))
+}

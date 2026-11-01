@@ -167,6 +167,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `C` | Toggle compact diff view (small context around changes, re-fetches current file) |
+| `I` | Toggle ignore-whitespace (hide whitespace-only changes, re-fetches current file; git and hg only) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
@@ -190,6 +191,7 @@ The status bar shows a fixed row of mode indicators on the right side. All slots
 |------|--------|---------|
 | `▼` | `v` | Collapsed diff mode |
 | `⊂` | `C` | Compact diff mode (small context around changes) |
+| `␣` | `I` | Whitespace-only changes hidden |
 | `◉` | `f` | Filter: annotated files only |
 | `↩` | `w` | Word wrap mode |
 | `≋` | `/` | Search active |

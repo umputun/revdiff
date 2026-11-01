@@ -359,6 +359,7 @@ type modeState struct {
 	showBlame      bool           // true when blame gutter is shown
 	showUntracked  bool           // true when untracked files are shown in tree
 	compact        bool           // true when diffs are fetched with small context around changes
+	ignoreWS       bool           // true when diffs are fetched with whitespace-only changes hidden
 	compactContext int            // number of context lines around changes when compact is enabled
 	pageOverlap    int            // rows carried over from the previous screen on page up/down; 0 disables
 	vimMotion      bool           // true when the --vim-motion preset is active (gates the vim-motion interceptor in handleKey)
@@ -500,9 +501,12 @@ type reloadState struct {
 // the reload.hint lifecycle. The user-controlled toggle state (on/off,
 // context size) lives on modeState alongside the other view toggles.
 type compactState struct {
-	applicable    bool           // true when current mode supports compact diffs
-	hint          string         // transient status-bar message; cleared on next key press
-	pendingAnchor *compactAnchor // cursor position captured before a toggle, restored after the re-fetch
+	applicable bool // true when current mode supports compact diffs
+	// whitespaceApplicable is the same verdict for hiding whitespace-only changes. it lives here
+	// because the toggle shares compact's re-fetch, anchor and transient hint.
+	whitespaceApplicable bool
+	hint                 string         // transient status-bar message; cleared on next key press
+	pendingAnchor        *compactAnchor // cursor position captured before a toggle, restored after the re-fetch
 }
 
 // compactAnchor captures the cursor's semantic position before a compact-mode
@@ -802,6 +806,11 @@ type ModelConfig struct {
 	// contextualize). Computed once in main.go and copied into Model state.
 	// Follows the same pattern as CommitsApplicable.
 	CompactApplicable bool
+	// IgnoreWhitespace starts with whitespace-only changes hidden. ignored unless IgnoreWhitespaceApplicable.
+	IgnoreWhitespace bool
+	// IgnoreWhitespaceApplicable is the composition-root verdict on whether the source can hide
+	// whitespace-only changes (git/hg/compare yes; jj, stdin, file-only no).
+	IgnoreWhitespaceApplicable bool
 	// VimMotion enables the vim-style motion preset (counts, gg, G, zz/zt/zb,
 	// ZZ/ZQ). When true, the vim-motion interceptor in handleKey runs between
 	// the modal-key handler and keymap.Resolve. Copied into modes.vimMotion at
@@ -954,6 +963,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			showBlame:      cfg.ShowBlame && cfg.Blamer != nil,
 			showUntracked:  cfg.ShowUntracked && cfg.LoadUntracked != nil,
 			compact:        cfg.Compact && cfg.CompactApplicable,
+			ignoreWS:       cfg.IgnoreWhitespace && cfg.IgnoreWhitespaceApplicable,
 			compactContext: cfg.CompactContext,
 			pageOverlap:    max(0, cfg.PageOverlap),
 			vimMotion:      cfg.VimMotion,
@@ -968,7 +978,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		},
 		reviewed:             reviewedState{cache: make(map[string]string), pending: make(map[string]uint64)},
 		reload:               reloadState{applicable: cfg.ReloadApplicable},
-		compact:              compactState{applicable: cfg.CompactApplicable},
+		compact:              compactState{applicable: cfg.CompactApplicable, whitespaceApplicable: cfg.IgnoreWhitespaceApplicable},
 		annot:                annotationState{rowCache: make(map[annotCacheKey][]string)},
 		renderCache:          &diffRenderCache{},
 		loadUntracked:        cfg.LoadUntracked,
@@ -1153,7 +1163,7 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m.handleFileAnnotateKey()
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
-	case keymap.ActionToggleCollapsed, keymap.ActionToggleCompact, keymap.ActionToggleWrap, keymap.ActionToggleTree,
+	case keymap.ActionToggleCollapsed, keymap.ActionToggleCompact, keymap.ActionToggleIgnoreWhitespace, keymap.ActionToggleWrap, keymap.ActionToggleTree,
 		keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
@@ -1494,6 +1504,9 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case keymap.ActionToggleCompact:
 		cmd := m.toggleCompactMode()
+		return m, cmd
+	case keymap.ActionToggleIgnoreWhitespace:
+		cmd := m.toggleIgnoreWhitespace()
 		return m, cmd
 	default:
 		return m, nil

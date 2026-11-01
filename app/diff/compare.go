@@ -30,9 +30,12 @@ func (r *CompareReader) ChangedFiles(_ string, _ bool) ([]FileEntry, error) {
 
 // FileDiff runs `git diff --no-index` between the two paths and returns parsed diff lines.
 // Exit code 1 is treated as success (files differ — the normal case for git diff).
-// req fields other than ContextLines are unused; paths come from the constructor.
+// req fields other than ContextLines and IgnoreWhitespace are unused; paths come from the constructor.
 func (r *CompareReader) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
-	args := []string{"diff", "--no-index", "--no-color", "--no-ext-diff", unifiedContextArg(req.ContextLines), "--", r.oldPath, r.newPath}
+	args := make([]string, 0, 9)
+	args = append(args, "diff", "--no-index", "--no-color", "--no-ext-diff", unifiedContextArg(req.ContextLines))
+	args = append(args, whitespaceArgs(req)...)
+	args = append(args, "--", r.oldPath, r.newPath)
 
 	totalOldLines := 0
 	if req.ContextLines > 0 && req.ContextLines < fullContextSentinel {

@@ -112,7 +112,7 @@ func (m Model) loadReviewedFingerprints(entries []diff.FileEntry, reviewed map[s
 	for range workers {
 		go func() {
 			for entry := range jobCh {
-				lines, err := m.fetchEffectiveFileDiff(entry, 0, true)
+				lines, err := m.fetchEffectiveFileDiff(entry, 0, false, true)
 				result := fingerprintResult{path: entry.Path, err: err}
 				if err == nil {
 					result.fingerprint = diff.FileFingerprint(entry, lines)
@@ -219,9 +219,10 @@ func (m Model) loadCommits() tea.Cmd {
 func (m Model) loadFileDiff(file string) tea.Cmd {
 	seq := m.file.loadSeq
 	contextLines := m.currentContextLines()
+	ignoreWS := m.currentIgnoreWhitespace()
 	entry := diff.FileEntry{Path: file, OldPath: m.tree.OldPath(file), Status: m.tree.FileStatus(file)}
 	return func() tea.Msg {
-		lines, err := m.fetchEffectiveFileDiff(entry, contextLines, false)
+		lines, err := m.fetchEffectiveFileDiff(entry, contextLines, ignoreWS, false)
 		return fileLoadedMsg{file: file, oldName: entry.OldPath, seq: seq, lines: lines, err: err}
 	}
 }
@@ -237,13 +238,18 @@ func (m *Model) requestFileDiff(file string) tea.Cmd {
 // fetchEffectiveFileDiff applies the same staged-only and untracked fallbacks
 // used by the visible diff. Fingerprints call this helper too, so review state
 // is always based on the content revdiff would actually display.
-func (m Model) fetchEffectiveFileDiff(entry diff.FileEntry, contextLines int, strict bool) ([]diff.DiffLine, error) {
+//
+// ignoreWS hides whitespace-only changes and is passed only by the visible load: fingerprints and
+// reload reconciliation pass false so a review mark never depends on a display toggle.
+func (m Model) fetchEffectiveFileDiff(entry diff.FileEntry, contextLines int, ignoreWS, strict bool) ([]diff.DiffLine, error) {
 	req := diff.FileDiffRequest{
 		Ref:          m.cfg.ref,
 		Path:         entry.Path,
 		OldPath:      entry.OldPath,
 		Staged:       m.cfg.staged,
 		ContextLines: contextLines,
+
+		IgnoreWhitespace: ignoreWS,
 	}
 	lines, err := m.diffRenderer.FileDiff(req)
 	if err != nil {
@@ -282,7 +288,7 @@ func (m Model) fetchEffectiveFileDiff(entry diff.FileEntry, contextLines int, st
 func (m Model) loadReviewFingerprint(entry diff.FileEntry, seq uint64) tea.Cmd {
 	filesSeq := m.filesLoadSeq
 	return func() tea.Msg {
-		lines, err := m.fetchEffectiveFileDiff(entry, 0, true)
+		lines, err := m.fetchEffectiveFileDiff(entry, 0, false, true)
 		msg := reviewFingerprintLoadedMsg{path: entry.Path, seq: seq, filesSeq: filesSeq, err: err}
 		switch {
 		case err != nil:
@@ -304,6 +310,29 @@ func (m Model) currentContextLines() int {
 		return m.modes.compactContext
 	}
 	return 0
+}
+
+// currentIgnoreWhitespace reports whether the visible diff is fetched with whitespace-only
+// changes hidden: the toggle is on and the source supports it.
+func (m Model) currentIgnoreWhitespace() bool {
+	return m.modes.ignoreWS && m.compact.whitespaceApplicable
+}
+
+// toggleIgnoreWhitespace flips whitespace hiding and re-fetches the current file, keeping the
+// cursor on the same source line where it still exists (same anchor as the compact toggle).
+func (m *Model) toggleIgnoreWhitespace() tea.Cmd {
+	if !m.compact.whitespaceApplicable {
+		m.compact.hint = "ignore whitespace not applicable in this mode"
+		return nil
+	}
+	anchor := m.captureCompactAnchor()
+	m.modes.ignoreWS = !m.modes.ignoreWS
+	cmd := m.reloadCurrentFile()
+	if cmd != nil && anchor != nil {
+		anchor.seq = m.file.loadSeq
+		m.compact.pendingAnchor = anchor
+	}
+	return cmd
 }
 
 // reloadCurrentFile re-fetches the diff for the currently displayed file and

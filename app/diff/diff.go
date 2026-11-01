@@ -122,6 +122,17 @@ type FileDiffRequest struct {
 	OldPath      string // rename origin; empty when not a rename
 	Staged       bool
 	ContextLines int
+	// IgnoreWhitespace hides whitespace-only changes (git/hg/compare `-w`). Jujutsu ignores it.
+	IgnoreWhitespace bool
+}
+
+// whitespaceArgs returns the diff flag that hides whitespace-only changes, or nil.
+// Adjacent to unifiedContextArg: both are per-request switches on how the VCS generates the patch.
+func whitespaceArgs(req FileDiffRequest) []string {
+	if req.IgnoreWhitespace {
+		return []string{"-w"}
+	}
+	return nil
 }
 
 // CountChanges tallies ChangeAdd and ChangeRemove lines in a DiffLine slice.
@@ -576,6 +587,7 @@ func (g *Git) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
 	args := g.diffArgs(req.Ref, req.Staged)
 	// a diff.submodule=log setting would replace the pointer rows the gitlink check reads
 	args = append(args, unifiedContextArg(req.ContextLines), "--submodule=short")
+	args = append(args, whitespaceArgs(req)...)
 	args = append(args, g.pathArgs(req)...)
 
 	out, err := g.runGit(args...)
@@ -724,7 +736,9 @@ func (g *Git) untrackedRenameDiff(req FileDiffRequest) ([]DiffLine, error) {
 	defer cleanup()
 
 	args := g.diffArgs(req.Ref, req.Staged)
-	args = append(args, unifiedContextArg(req.ContextLines), "-M", "--", req.OldPath, req.Path)
+	args = append(args, unifiedContextArg(req.ContextLines), "-M")
+	args = append(args, whitespaceArgs(req)...)
+	args = append(args, "--", req.OldPath, req.Path)
 	out, err := g.runGitEnv(g.renameIndexEnv(indexPath), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get file diff for %s: %w", req.Path, err)

@@ -55,6 +55,7 @@ const (
 	ActionPrevAnnotation         Action = "prev_annotation"
 	ActionToggleCollapsed        Action = "toggle_collapsed"
 	ActionToggleCompact          Action = "toggle_compact"
+	ActionToggleIgnoreWhitespace Action = "toggle_ignore_whitespace"
 	ActionToggleWrap             Action = "toggle_wrap"
 	ActionToggleTree             Action = "toggle_tree"
 	ActionToggleLineNums         Action = "toggle_line_numbers"
@@ -95,7 +96,7 @@ var validActions = map[Action]bool{
 	ActionSearch:  true,
 	ActionConfirm: true, ActionAnnotateFile: true, ActionDeleteAnnotation: true, ActionAnnotList: true,
 	ActionNextAnnotation: true, ActionPrevAnnotation: true,
-	ActionToggleCollapsed: true, ActionToggleCompact: true, ActionToggleWrap: true, ActionToggleTree: true,
+	ActionToggleCollapsed: true, ActionToggleCompact: true, ActionToggleIgnoreWhitespace: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
 	ActionMarkReviewed: true, ActionFilterUnreviewed: true, ActionFilter: true, ActionToggleUntracked: true,
 	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
@@ -241,6 +242,7 @@ func defaultDescriptions() []HelpEntry {
 		// view toggles
 		{ActionToggleCollapsed, "toggle collapsed view", "View"},
 		{ActionToggleCompact, "toggle compact diff view", "View"},
+		{ActionToggleIgnoreWhitespace, "toggle ignore whitespace changes", "View"},
 		{ActionToggleWrap, "toggle word wrap", "View"},
 		{ActionToggleTree, "toggle tree pane", "View"},
 		{ActionToggleLineNums, "toggle line numbers", "View"},
@@ -302,6 +304,7 @@ func defaultBindings() map[string]Action {
 		"O":      ActionFlushOutput,
 		"v":      ActionToggleCollapsed,
 		"C":      ActionToggleCompact,
+		"I":      ActionToggleIgnoreWhitespace,
 		"w":      ActionToggleWrap,
 		"t":      ActionToggleTree,
 		"L":      ActionToggleLineNums,

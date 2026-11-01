@@ -2084,7 +2084,7 @@ func TestModel_FetchEffectiveFileDiffStrictUntrackedError(t *testing.T) {
 	}
 	m := testNewModel(t, renderer, annotation.NewStore(), noopHighlighter(), ModelConfig{WorkDir: t.TempDir()})
 
-	_, err := m.fetchEffectiveFileDiff(diff.FileEntry{Path: "missing.bin", Status: diff.FileUntracked}, 0, true)
+	_, err := m.fetchEffectiveFileDiff(diff.FileEntry{Path: "missing.bin", Status: diff.FileUntracked}, 0, false, true)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read untracked file missing.bin")

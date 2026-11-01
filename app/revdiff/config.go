@@ -32,6 +32,7 @@ type options struct {
 	PageOverlap           int      `long:"page-overlap" ini-name:"page-overlap" env:"REVDIFF_PAGE_OVERLAP" default:"0" description:"keep N lines from the previous screen when paging the diff"`
 	Collapsed             bool     `long:"collapsed" ini-name:"collapsed" env:"REVDIFF_COLLAPSED" description:"start in collapsed diff mode"`
 	Compact               bool     `long:"compact" ini-name:"compact" env:"REVDIFF_COMPACT" description:"start in compact diff mode (small context around changes)"`
+	IgnoreWhitespace      bool     `long:"ignore-whitespace" ini-name:"ignore-whitespace" env:"REVDIFF_IGNORE_WHITESPACE" description:"hide whitespace-only changes"`
 	CompactContext        int      `long:"compact-context" ini-name:"compact-context" env:"REVDIFF_COMPACT_CONTEXT" default:"5" description:"number of context lines around changes when in compact mode"`
 	CrossFileHunks        bool     `long:"cross-file-hunks" ini-name:"cross-file-hunks" env:"REVDIFF_CROSS_FILE_HUNKS" description:"allow [ and ] to jump across file boundaries"`
 	CrossFileMotion       bool     `long:"cross-file-motion" ini-name:"cross-file-motion" env:"REVDIFF_CROSS_FILE_MOTION" description:"allow cursor motion to continue across file boundaries"`

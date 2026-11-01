@@ -152,7 +152,9 @@ func (h *Hg) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
 	args := make([]string, 0, 5+len(rArgs))
 	args = append(args, "diff", "--git", "--color=never")
 	args = append(args, rArgs...)
-	args = append(args, unifiedContextArg(req.ContextLines), "--", req.Path)
+	args = append(args, unifiedContextArg(req.ContextLines))
+	args = append(args, whitespaceArgs(req)...)
+	args = append(args, "--", req.Path)
 
 	out, err := h.runHg(args...)
 	if err != nil {

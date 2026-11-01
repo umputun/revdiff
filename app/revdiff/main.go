@@ -273,6 +273,10 @@ func run(opts options) (int, error) {
 		ActiveThemeName:  themes.catalog.ActiveName(opts.Theme),
 		AnnotationMarker: opts.AnnotationMarker,
 		OutputPath:       opts.Output,
+
+		IgnoreWhitespace:           opts.IgnoreWhitespace,
+		IgnoreWhitespaceApplicable: ignoreWhitespaceApplicable(opts, vcsType, renderer),
+
 		NewFileTree: func(entries []diff.FileEntry) ui.FileTreeComponent {
 			return sidepane.NewFileTree(entries)
 		},
@@ -490,4 +494,11 @@ func compactApplicable(opts options, r ui.Renderer) bool {
 		return false
 	}
 	return true
+}
+
+// ignoreWhitespaceApplicable returns true when the source can hide whitespace-only changes: wherever
+// compact applies (it needs a patch to generate) except Jujutsu, whose diff takes no equivalent flag
+// that revdiff has verified. vcsType is needed because a fallback renderer wraps whichever VCS is in use.
+func ignoreWhitespaceApplicable(opts options, vcsType diff.VCSType, r ui.Renderer) bool {
+	return compactApplicable(opts, r) && vcsType != diff.VCSJJ
 }

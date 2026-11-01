@@ -422,3 +422,34 @@ func TestFilterUntracked(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestIgnoreWhitespaceApplicable(t *testing.T) {
+	dir := t.TempDir()
+	g := diff.NewGit(dir)
+	j := diff.NewJj(dir)
+	fr := diff.NewFileReader([]string{"file.md"}, dir)
+	// a fallback renderer wraps whichever VCS renderer is in use, so only the VCS type tells jj apart
+	jjFallback := diff.NewFallbackRenderer(j, []string{"file.md"}, dir)
+
+	tests := []struct {
+		name     string
+		opts     options
+		vcs      diff.VCSType
+		renderer ui.Renderer
+		want     bool
+	}{
+		{name: "git", vcs: diff.VCSGit, renderer: g, want: true},
+		{name: "hg", vcs: diff.VCSHg, renderer: diff.NewHg(dir), want: true},
+		{name: "compare mode has no VCS", vcs: diff.VCSNone, renderer: diff.NewCompareReader(dir+"/a", dir+"/b"), want: true},
+		{name: "jj has no verified flag", vcs: diff.VCSJJ, renderer: j, want: false},
+		{name: "jj behind a fallback renderer", opts: options{Only: []string{"file.md"}}, vcs: diff.VCSJJ, renderer: jjFallback, want: false},
+		{name: "stdin", opts: options{Stdin: true}, vcs: diff.VCSGit, renderer: g, want: false},
+		{name: "all-files", opts: options{AllFiles: true}, vcs: diff.VCSGit, renderer: g, want: false},
+		{name: "file reader", opts: options{Only: []string{"file.md"}}, vcs: diff.VCSNone, renderer: fr, want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, ignoreWhitespaceApplicable(tc.opts, tc.vcs, tc.renderer))
+		})
+	}
+}

@@ -1272,3 +1272,67 @@ func TestModel_HelpOverlayNeverExceedsTerminal(t *testing.T) {
 		})
 	}
 }
+
+func TestModel_ToggleIgnoreWhitespace(t *testing.T) {
+	var reqs []diff.FileDiffRequest
+	renderer := &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			reqs = append(reqs, req)
+			return nil, nil
+		},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.diffRenderer = renderer
+	m.compact.whitespaceApplicable = true
+	m.file.name = "a.go"
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
+	model := result.(Model)
+	assert.True(t, model.modes.ignoreWS)
+	require.NotNil(t, cmd, "toggle must re-fetch the current file")
+	cmd()
+	require.Len(t, reqs, 1)
+	assert.True(t, reqs[0].IgnoreWhitespace, "visible load passes the flag to the renderer")
+
+	result, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
+	model = result.(Model)
+	assert.False(t, model.modes.ignoreWS)
+	cmd()
+	require.Len(t, reqs, 2)
+	assert.False(t, reqs[1].IgnoreWhitespace)
+}
+
+func TestModel_ToggleIgnoreWhitespace_NoOpWhenNotApplicable(t *testing.T) {
+	m := testModel([]string{"a.go"}, nil)
+	m.compact.whitespaceApplicable = false
+	m.file.name = "a.go"
+	seq := m.file.loadSeq
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'I'}})
+	model := result.(Model)
+	assert.False(t, model.modes.ignoreWS)
+	assert.Nil(t, cmd)
+	assert.Equal(t, seq, model.file.loadSeq)
+	assert.Contains(t, model.compact.hint, "not applicable")
+	assert.False(t, model.currentIgnoreWhitespace())
+}
+
+func TestModel_FingerprintIgnoresWhitespaceToggle(t *testing.T) {
+	var reqs []diff.FileDiffRequest
+	renderer := &mocks.RendererMock{
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			reqs = append(reqs, req)
+			return []diff.DiffLine{{NewNum: 1, Content: "x", ChangeType: diff.ChangeAdd}}, nil
+		},
+	}
+	m := testModel([]string{"a.go"}, nil)
+	m.diffRenderer = renderer
+	m.modes.ignoreWS = true
+	m.compact.whitespaceApplicable = true
+
+	_, err := m.fetchEffectiveFileDiff(diff.FileEntry{Path: "a.go"}, 0, false, true)
+	require.NoError(t, err)
+	require.Len(t, reqs, 1)
+	assert.False(t, reqs[0].IgnoreWhitespace, "review fingerprints must not depend on the display toggle")
+}

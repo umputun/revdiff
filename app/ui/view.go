@@ -380,18 +380,19 @@ func (m Model) padContentBg(content string, targetWidth int, bg style.Color) str
 // slot is one glyph position with two actions behind it: ✓ for marking, ○ for the unreviewed
 // filter.
 var statusIconForAction = map[keymap.Action]string{
-	keymap.ActionToggleCollapsed:  "▼",
-	keymap.ActionToggleCompact:    "⊂",
-	keymap.ActionFilter:           "◉",
-	keymap.ActionToggleWrap:       "↩",
-	keymap.ActionSearch:           "≋",
-	keymap.ActionToggleTree:       "⊟",
-	keymap.ActionToggleLineNums:   "#",
-	keymap.ActionToggleBlame:      "b",
-	keymap.ActionToggleWordDiff:   "±",
-	keymap.ActionMarkReviewed:     "✓",
-	keymap.ActionFilterUnreviewed: "○",
-	keymap.ActionToggleUntracked:  "∅",
+	keymap.ActionToggleCollapsed:        "▼",
+	keymap.ActionToggleCompact:          "⊂",
+	keymap.ActionToggleIgnoreWhitespace: "␣",
+	keymap.ActionFilter:                 "◉",
+	keymap.ActionToggleWrap:             "↩",
+	keymap.ActionSearch:                 "≋",
+	keymap.ActionToggleTree:             "⊟",
+	keymap.ActionToggleLineNums:         "#",
+	keymap.ActionToggleBlame:            "b",
+	keymap.ActionToggleWordDiff:         "±",
+	keymap.ActionMarkReviewed:           "✓",
+	keymap.ActionFilterUnreviewed:       "○",
+	keymap.ActionToggleUntracked:        "∅",
 }
 
 // statusModeIcons returns combined mode indicator icons (one per view toggle).
@@ -409,6 +410,7 @@ func (m Model) statusModeIcons() string {
 	indicators := []indicator{
 		{icon(keymap.ActionToggleCollapsed), m.modes.collapsed.enabled},
 		{icon(keymap.ActionToggleCompact), m.modes.compact},
+		{icon(keymap.ActionToggleIgnoreWhitespace), m.currentIgnoreWhitespace()},
 		{icon(keymap.ActionFilter), m.tree.FilterActive()},
 		{icon(keymap.ActionToggleWrap), m.modes.wrap},
 		{icon(keymap.ActionSearch), len(m.search.matches) > 0},

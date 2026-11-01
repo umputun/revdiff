@@ -392,6 +392,7 @@ Positional arguments support several forms:
 | `--page-overlap` | Keep N lines from the previous screen when paging the diff, env: `REVDIFF_PAGE_OVERLAP` | `0` |
 | `--collapsed` | Start in collapsed diff mode, env: `REVDIFF_COLLAPSED` | `false` |
 | `--compact` | Start in compact diff mode (small context around changes), env: `REVDIFF_COMPACT` | `false` |
+| `--ignore-whitespace` | Hide whitespace-only changes, env: `REVDIFF_IGNORE_WHITESPACE` | `false` |
 | `--compact-context` | Number of context lines around changes when in compact mode, env: `REVDIFF_COMPACT_CONTEXT` | `5` |
 | `--cross-file-hunks` | Allow `[` and `]` to continue into adjacent files, env: `REVDIFF_CROSS_FILE_HUNKS` | `false` |
 | `--cross-file-motion` | Allow cursor motion (`j`/`k`, `PgDown`/`PgUp`, `Ctrl+d`/`Ctrl+u`) to continue into adjacent files at a boundary, env: `REVDIFF_CROSS_FILE_MOTION` | `false` |
@@ -825,6 +826,7 @@ Press `Space` to mark the focused file reviewed. Press `F` to toggle the sidebar
 |-----|--------|
 | `v` | Toggle collapsed diff mode (shows final text with change markers) |
 | `C` | Toggle compact diff view (small context around changes, re-fetches current file) |
+| `I` | Toggle ignore-whitespace (hide whitespace-only changes, re-fetches current file; git and hg only) |
 | `w` | Toggle word wrap (long lines wrap with `↪` continuation markers) |
 | `t` | Toggle tree/TOC pane visibility (gives diff full terminal width) |
 | `L` | Toggle line numbers (side-by-side old/new for diffs, single column for full-context files) |
@@ -848,6 +850,7 @@ The status bar shows a fixed row of mode indicators on the right side. All slots
 |------|--------|---------|
 | `▼` | `v` | Collapsed diff mode |
 | `⊂` | `C` | Compact diff mode (small context around changes) |
+| `␣` | `I` | Whitespace-only changes hidden |
 | `◉` | `f` | Filter: annotated files only |
 | `↩` | `w` | Word wrap mode |
 | `≋` | `/` | Search active |
@@ -950,7 +953,7 @@ When the leader is pressed, the status bar shows `Pending: ctrl+w, esc to cancel
 
 **Annotations:** `confirm` (annotate line / select file), `annotate_file`, `delete_annotation`, `annot_list`, `open_editor`, `next_annotation`, `prev_annotation`, `flush_output`
 
-**View:** `toggle_collapsed`, `toggle_compact`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `filter_unreviewed`, `theme_select`, `filter`, `info`, `reload`
+**View:** `toggle_collapsed`, `toggle_compact`, `toggle_ignore_whitespace`, `toggle_wrap`, `toggle_tree`, `toggle_line_numbers`, `toggle_blame`, `toggle_word_diff`, `toggle_hunk`, `toggle_untracked`, `mark_reviewed`, `filter_unreviewed`, `theme_select`, `filter`, `info`, `reload`
 
 **Quit:** `quit`, `discard_quit`, `help`, `dismiss`
 
