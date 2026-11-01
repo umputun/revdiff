@@ -87,24 +87,29 @@ func (m *Model) positionOnAnnotation(a annotation.Annotation) {
 	m.annot.cursorOnAnnotation = false
 	if a.Line == 0 {
 		m.nav.diffCursor = -1
-	} else {
-		idx := m.findDiffLineIndex(a.Line, a.Type)
-		if idx >= 0 {
-			m.nav.diffCursor = idx
-			m.ensureHunkExpanded(idx)
-			if m.isSBSHidden(idx) {
-				// the annotated remove is painted inside its paired add's row and is not painted itself,
-				// so land on the add (without entering an annotation it does not have)
-				m.nav.diffCursor = m.sbsPartner(idx)
-			} else if hunks := m.findHunks(); !m.isCollapsedHidden(idx, hunks) && !m.isDeleteOnlyPlaceholder(idx, hunks) {
-				m.annot.cursorOnAnnotation = true
-			}
-		}
+	} else if idx := m.findDiffLineIndex(a.Line, a.Type); idx >= 0 {
+		m.positionOnAnnotatedLine(idx)
 	}
 	m.layout.focus = paneDiff
 	m.syncTOCActiveSection()
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.centerViewportOnCursor()
+}
+
+// positionOnAnnotatedLine puts the cursor on diffLines[idx], on its annotation row when that row is painted.
+func (m *Model) positionOnAnnotatedLine(idx int) {
+	m.nav.diffCursor = idx
+	m.ensureHunkExpanded(idx)
+	if m.isSBSHidden(idx) {
+		// the annotated remove is painted inside its paired add's row and is not painted itself,
+		// so land on the add (without entering an annotation it does not have)
+		m.nav.diffCursor = m.sbsPartner(idx)
+		return
+	}
+	hunks := m.findHunks()
+	if !m.isCollapsedHidden(idx, hunks) && !m.isDeleteOnlyPlaceholder(idx, hunks) {
+		m.annot.cursorOnAnnotation = true
+	}
 }
 
 // ensureHunkExpanded expands the hunk containing diffLines[idx] when collapsed mode is active.

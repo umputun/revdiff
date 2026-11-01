@@ -58,7 +58,7 @@ func (m Model) computeSBSPartners() []int {
 		// block are its unpaired removes, then the pairs, then its unpaired adds.
 		nRemoves, nAdds := addStart-removeStart, i-addStart
 		offset := max(0, nRemoves-nAdds)
-		for k := 0; k < min(nRemoves, nAdds); k++ {
+		for k := range min(nRemoves, nAdds) {
 			partners[removeStart+offset+k] = addStart + k
 			partners[addStart+k] = removeStart + offset + k
 		}
@@ -118,7 +118,7 @@ func (m Model) renderSideBySideLine(b *strings.Builder, idx int, dl diff.DiffLin
 	match := m.search.matchSet[idx]
 
 	var left, right string
-	switch dl.ChangeType { //nolint:exhaustive // dividers returned above
+	switch dl.ChangeType {
 	case diff.ChangeRemove:
 		left = m.sbsHalf(idx, dl, leftW, true, match)
 		right = m.sbsBlank(rightW)
