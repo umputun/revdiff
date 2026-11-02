@@ -585,6 +585,52 @@ func TestTmuxTitlesEscapeFormatChars(t *testing.T) {
 	}
 }
 
+// regression: tmux expands the popup -d and window -c start directory as a format, so #() in it ran
+func TestTmuxStartDirEscapesFormatChars(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	tests := []struct {
+		name string
+		path string
+		env  map[string]string
+	}{
+		{name: "claude popup", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex popup", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "claude window", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh",
+			env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"}},
+		{name: "codex window", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh",
+			env: map[string]string{"REVDIFF_TMUX_WINDOW": "1"}},
+	}
+
+	backend := launcherBackend{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}}
+	output := "## file.go:1 (+)\ncomment\n"
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			parent, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			dir := filepath.Join(parent, "r#(touch pwned)")
+			require.NoError(t, os.Mkdir(dir, 0o700))
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: output})
+			cwdFile := filepath.Join(env["TMPDIR"], "tmux-cwd")
+			env["FAKE_TMUX_CWD_FILE"] = cwdFile
+			maps.Copy(env, tc.env)
+
+			res := runTestCmd(t, cmdReq{
+				dir:  dir,
+				name: "bash",
+				args: []string{filepath.Join(root, tc.path), "HEAD"},
+				env:  env,
+			})
+			require.Equal(t, exitCodeAnnotations, res.code, res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assertFileContent(t, cwdFile, strings.ReplaceAll(dir, "#", "##")+"\n")
+		})
+	}
+}
+
 func TestAgtermPaneOverlayOptIn(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell launchers are not used on windows")

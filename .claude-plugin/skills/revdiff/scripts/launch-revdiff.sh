@@ -313,7 +313,8 @@ if [ -n "${TMUX:-}" ] && command -v tmux >/dev/null 2>&1; then
             TMUX_ARGS+=(-T " ${OVERLAY_TITLE//\#/##} ")
         fi
     fi
-    TMUX_ARGS+=(-d "$CWD" -- sh -c "$REVDIFF_CMD")
+    # -d is a format too, so a "#" in the review directory is doubled the same way
+    TMUX_ARGS+=(-d "${CWD//\#/##}" -- sh -c "$REVDIFF_CMD")
     rc=0
     "${TMUX_ARGS[@]}" || rc=$?
     print_output_and_exit "$rc"

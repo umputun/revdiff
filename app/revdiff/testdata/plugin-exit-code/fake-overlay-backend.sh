@@ -56,6 +56,18 @@ case "$cmd_name" in
                 prev="$arg"
             done
         fi
+        # records the start directory (popup -d, window -c) exactly as tmux would receive it;
+        # new-window's own -d is a flag, so the option is picked by subcommand
+        if [ -n "${FAKE_TMUX_CWD_FILE:-}" ]; then
+            dir_opt="-c"
+            [ "${1:-}" = "display-popup" ] && dir_opt="-d"
+            prev=""
+            for arg in "$@"; do
+                [ "$arg" = "--" ] && break
+                [ "$prev" = "$dir_opt" ] && printf '%s\n' "$arg" >> "$FAKE_TMUX_CWD_FILE"
+                prev="$arg"
+            done
+        fi
         run_after_double_dash "$@"
         ;;
     zellij)
