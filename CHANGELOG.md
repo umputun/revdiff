@@ -12,6 +12,7 @@
 - add CLI-only OpenCode v2 integration #370 @LerikP
 - add page-sized scroll_diff actions #358 @umputun
 - show status bar icons beside their toggle keys in help #352 @umputun
+- honor `REVDIFF_TMUX_WINDOW` in the plan-review launcher #421 @omarkhan
 
 ### Improvements
 
