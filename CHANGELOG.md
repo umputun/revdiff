@@ -1,5 +1,52 @@
 # Changelog
 
+## v1.14.0 - 2026-11-03
+
+### New Features
+
+- `--cross-file-motion` to continue cursor motion into adjacent files #371 @noguespi
+- `--filter-unreviewed` to start with the unreviewed file filter on #366 @umputun
+- scroll the diff pane with the horizontal wheel #411 @umputun
+- page through tall hunks and add optional annotation stops #407 @umputun
+- allow opt-in floating agterm overlays #404 @umputun
+- add CLI-only OpenCode v2 integration #370 @LerikP
+- add page-sized scroll_diff actions #358 @umputun
+- show status bar icons beside their toggle keys in help #352 @umputun
+
+### Improvements
+
+- move main package to app/revdiff so `go install` yields revdiff #360 @umputun
+- correct the clean-exit contract in the agent skills #415 @umputun
+- correct the coexistence claim for revdiff-planning and cc-thingz planning #362 @umputun
+- run launcher matrix tests in parallel #356 @umputun
+- list --annotations as a --stdin conflict, fix dot-dot example placement 76870a1
+- point OpenCode links at opencode.ai b873a9f
+- bump github.com/dlclark/regexp2/v2 to 2.10.0 #419 @app/dependabot
+- bump github.com/charmbracelet/x/ansi to 0.11.9 #391 @app/dependabot
+- bump github.com/mattn/go-runewidth to 0.0.31 #390 @app/dependabot
+- bump golang.org/x/sys to 0.49.0 #387 @app/dependabot
+- update OpenCode v2 plugin dependencies #420 @app/dependabot
+- bump actions/setup-node from 6 to 7 #376 @app/dependabot
+
+### Bug Fixes
+
+- empty the -o file when every preloaded annotation is deleted #422 @umputun
+- exit with an error when the changed-file list fails to load #416 @umputun
+- report blocked to herdr while a revdiff review is open #410 @umputun
+- answer question annotations instead of editing code #409 @umputun
+- keep hunk framing when ] or [ crosses into another file #406 @umputun
+- show submodules as a summary row and never mark them reviewed #403 @umputun
+- keep review artifacts from crossing checkouts #402 @umputun
+- detect Codex Plan mode from the transcript #399 @umputun
+- restore tree pane when a one-file review grows #386 @umputun
+- deliver piped --stdin to revdiff; correct the sandbox settings key in docs #378 @umputun
+- fall back to substitution-free launch when sandbox blocks osascript #373 @omarkhan
+- install v1 when opencode.json has comments #372 @umputun
+- open hx and helix at the cursor line #368 @umputun
+- escape # in the tmux popup and window start directory fe90d0f
+- escape # in tmux popup titles and window names 6bdab2b
+- mark pi-bundled peer dependencies optional c796dcb
+
 ## v1.13.0 - 2026-09-04
 
 ### New Features
