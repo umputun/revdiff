@@ -6,7 +6,8 @@
  * annotations are injected back as a user message so the AI can revise.
  *
  * Requires launch-plan-review.sh in ~/.config/opencode/plugins/ and revdiff
- * on $PATH. Supports tmux, herdr, kitty, wezterm, cmux, ghostty, iTerm2, emacs.
+ * on $PATH. supports agterm, tmux, zellij, herdr, kitty, wezterm, kaku, cmux,
+ * ghostty, iTerm2, emacs vterm.
  */
 import type { Plugin } from "@opencode-ai/plugin";
 import path from "path";
@@ -117,14 +118,15 @@ export const server: Plugin = async ({ client }) => ({
     }
     if (!planContent?.trim()) return;
 
-    const planFile = `/tmp/revdiff-plan-${sessionID}.md`;
-    await Bun.write(planFile, planContent);
+    const planDir = await fs.mkdtemp(path.join(os.tmpdir(), "revdiff-plan-"));
+    const planFile = path.join(planDir, "plan.md");
 
     let annotations: string;
     try {
+      await Bun.write(planFile, planContent);
       annotations = await launchReview(planFile);
     } finally {
-      await fs.unlink(planFile).catch(() => {});
+      await fs.rm(planDir, { recursive: true, force: true }).catch(() => {});
     }
 
     if (!annotations) return;

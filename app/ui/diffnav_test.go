@@ -18,6 +18,7 @@ import (
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
 	"github.com/umputun/revdiff/app/keymap"
+	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
 
@@ -2456,8 +2457,7 @@ func TestModel_PendingHunkJump_FirstHunk(t *testing.T) {
 	m = result.(Model)
 
 	// set pendingHunkJump = true (first hunk)
-	fwd := true
-	m.nav.pendingHunkJump = &fwd
+	m.nav.pendingHunkJump = &hunkJump{forward: true, seq: m.file.loadSeq + 1}
 	m.file.loadSeq++
 	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: bLines}
 	result, _ = m.Update(loadMsg)
@@ -2487,8 +2487,7 @@ func TestModel_PendingHunkJump_LastHunk(t *testing.T) {
 	m = result.(Model)
 
 	// set pendingHunkJump = false (last hunk)
-	bwd := false
-	m.nav.pendingHunkJump = &bwd
+	m.nav.pendingHunkJump = &hunkJump{forward: false, seq: m.file.loadSeq + 1}
 	m.file.loadSeq++
 	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: bLines}
 	result, _ = m.Update(loadMsg)
@@ -2510,8 +2509,7 @@ func TestModel_PendingHunkJump_ClearedOnManualNav(t *testing.T) {
 	m = result.(Model)
 
 	// set pendingHunkJump then trigger manual tree navigation (j key from tree pane)
-	fwd := true
-	m.nav.pendingHunkJump = &fwd
+	m.nav.pendingHunkJump = &hunkJump{forward: true}
 	m.layout.focus = paneTree
 	result, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	model := result.(Model)
@@ -2586,7 +2584,7 @@ func TestModel_HunkNav_NextCrossesFileForward(t *testing.T) {
 	model := result.(Model)
 
 	require.NotNil(t, model.nav.pendingHunkJump, "pendingHunkJump should be set for cross-file forward jump")
-	assert.True(t, *model.nav.pendingHunkJump, "pendingHunkJump should be true (land on first hunk)")
+	assert.True(t, model.nav.pendingHunkJump.forward, "pendingHunkJump should be true (land on first hunk)")
 	assert.Equal(t, "b.go", model.tree.SelectedFile(), "tree should have advanced to b.go")
 	assert.NotNil(t, cmd, "a load command should be returned")
 }
@@ -2612,10 +2610,126 @@ func TestModel_HunkNav_PrevCrossesFileBackward(t *testing.T) {
 	model := result.(Model)
 
 	require.NotNil(t, model.nav.pendingHunkJump, "pendingHunkJump should be set for cross-file backward jump")
-	assert.False(t, *model.nav.pendingHunkJump, "pendingHunkJump should be false (land on last hunk)")
+	assert.False(t, model.nav.pendingHunkJump.forward, "pendingHunkJump should be false (land on last hunk)")
 	assert.Equal(t, "a.go", model.tree.SelectedFile(), "tree should have moved back to a.go")
 	assert.NotNil(t, cmd, "a load command should be returned")
 }
+
+// regression: a cross-file landing armed by ] survived a failed load and hijacked the next load of another file
+func TestModel_HunkNav_CrossFileLandingClearedByFailedLoad(t *testing.T) {
+	aLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeContext, Content: "c1", OldNum: 1, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "a1", NewNum: 2},
+		{ChangeType: diff.ChangeContext, Content: "c2", OldNum: 2, NewNum: 3},
+		{ChangeType: diff.ChangeAdd, Content: "a2", NewNum: 4},
+		{ChangeType: diff.ChangeContext, Content: "c3", OldNum: 3, NewNum: 5},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, map[string][]diff.DiffLine{"a.go": aLines})
+	m.diffRenderer = &mocks.RendererMock{
+		ChangedFilesFunc: func(string, bool) ([]diff.FileEntry, error) { return nil, nil },
+		FileDiffFunc: func(req diff.FileDiffRequest) ([]diff.DiffLine, error) {
+			if req.Path == "b.go" {
+				return nil, errors.New("boom")
+			}
+			return aLines, nil
+		},
+	}
+	m.cfg.crossFileHunks = true
+	m.compact.applicable = true
+	m.modes.compactContext = 5
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 3
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = result.(Model)
+	require.NotNil(t, m.nav.pendingHunkJump)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	m = result.(Model)
+	assert.Nil(t, m.nav.pendingHunkJump, "a failed load must clear the landing it was meant for")
+
+	m.tree.SelectByPath("a.go")
+	m.nav.diffCursor = 3
+	result, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	m = result.(Model)
+	require.NotNil(t, cmd)
+	result, _ = m.Update(cmd())
+	m = result.(Model)
+	assert.Equal(t, "a.go", m.file.name)
+	assert.Equal(t, 3, m.nav.diffCursor, "the compact reload must restore the anchor, not land on the first hunk")
+	assert.Nil(t, m.compact.pendingAnchor)
+}
+
+func TestModel_HunkNav_CrossFileLandingDroppedWhenFileListReloadSupersedesIt(t *testing.T) {
+	aLines := []diff.DiffLine{
+		{ChangeType: diff.ChangeContext, Content: "c1", OldNum: 1, NewNum: 1},
+		{ChangeType: diff.ChangeAdd, Content: "a1", NewNum: 2},
+		{ChangeType: diff.ChangeContext, Content: "c2", OldNum: 2, NewNum: 3},
+		{ChangeType: diff.ChangeAdd, Content: "a2", NewNum: 4},
+	}
+	diffs := map[string][]diff.DiffLine{"a.go": aLines, "b.go": {{ChangeType: diff.ChangeAdd, Content: "b", NewNum: 1}}}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 3
+
+	result, loadB := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = result.(Model)
+	require.NotNil(t, loadB)
+	require.NotNil(t, m.nav.pendingHunkJump)
+
+	m.filesLoadSeq++
+	result, loadA := m.Update(filesLoadedMsg{seq: m.filesLoadSeq, entries: []diff.FileEntry{{Path: "a.go"}, {Path: "b.go"}}})
+	m = result.(Model)
+	require.NotNil(t, loadA, "the file-list reload re-requests the displayed file")
+	result, _ = m.Update(loadB())
+	m = result.(Model)
+	cmds := []tea.Cmd{loadA}
+	if batch, ok := loadA().(tea.BatchMsg); ok {
+		cmds = batch
+	}
+	for _, c := range cmds {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(fileLoadedMsg); ok {
+			result, _ = m.Update(msg)
+			m = result.(Model)
+		}
+	}
+
+	assert.Equal(t, "a.go", m.file.name)
+	assert.Nil(t, m.nav.pendingHunkJump)
+	assert.Equal(t, 0, m.nav.diffCursor, "the landing queued for b.go must not move the cursor in a.go")
+}
+
+func TestModel_HunkNav_StepBackToDisplayedFileWhileLoadingCancelsTheLoad(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "a", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "b", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+
+	result, loadB := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = result.(Model)
+	require.NotNil(t, loadB)
+	require.Equal(t, "b.go", m.tree.SelectedFile())
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	m = result.(Model)
+	assert.Nil(t, cmd, "stepping back onto the displayed file requests nothing")
+	assert.Nil(t, m.nav.pendingHunkJump, "no landing is queued for a load that never happens")
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
+
+	result, _ = m.Update(loadB())
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.file.name, "the canceled b.go load must not land")
+	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
+}
+
 func TestModel_HunkNav_NextAtLastFileNoOp(t *testing.T) {
 	// pressing ] at the last hunk of the last file: no-op
 	diffs := map[string][]diff.DiffLine{
@@ -2874,8 +2988,7 @@ func TestModel_PendingHunkJump_FallsBackToFirstVisibleLineWithoutHunks(t *testin
 	result, _ = m.Update(msg)
 	m = result.(Model)
 
-	fwd := true
-	m.nav.pendingHunkJump = &fwd
+	m.nav.pendingHunkJump = &hunkJump{forward: true, seq: m.file.loadSeq + 1}
 	m.file.loadSeq++
 	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: lines}
 	result, _ = m.Update(loadMsg)
@@ -2896,8 +3009,7 @@ func TestModel_PendingHunkJump_ClearedWhenPendingAnnotJumpLands(t *testing.T) {
 	result, _ = m.Update(msg)
 	m = result.(Model)
 
-	fwd := true
-	m.nav.pendingHunkJump = &fwd
+	m.nav.pendingHunkJump = &hunkJump{forward: true, seq: m.file.loadSeq + 1}
 	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1, Type: "+", Comment: "note"}
 	m.file.loadSeq++
 	loadMsg := fileLoadedMsg{file: "b.go", seq: m.file.loadSeq, lines: diffs["b.go"]}
@@ -4386,28 +4498,25 @@ func TestModel_MotionCrossFile_ReverseWhileLoadingKeepsTreeAndPaneTogether(t *te
 	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
 }
 
-func TestModel_MotionCrossFile_CompactToggleWhileLoadingKeepsCursor(t *testing.T) {
+func TestModel_MotionCrossFile_CompactToggleWhileLoadingIsIgnored(t *testing.T) {
 	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
 	m.compact.applicable = true
-	cursor := m.nav.diffCursor
+	m.cfg.startAtChange = true
 
 	result, downCmd := m.handleDiffAction(keymap.ActionDown)
 	m = result.(Model)
 	require.NotNil(t, downCmd)
-	compactCmd := m.toggleCompactMode()
-	require.NotNil(t, compactCmd)
+	assert.Nil(t, m.toggleCompactMode(), "the toggle must not supersede the b.go load")
+	assert.Nil(t, m.compact.pendingAnchor, "no anchor from a.go may be armed")
+	require.NotNil(t, m.nav.pendingBoundaryJump, "the ignored toggle must keep the queued landing")
 
 	result, _ = m.Update(downCmd())
-	m = result.(Model)
-	assert.Equal(t, "a.go", m.file.name, "the superseded b.go load must be dropped")
-	require.NotNil(t, m.compact.pendingAnchor, "a dropped load must not consume the compact anchor")
-
-	result, _ = m.Update(compactCmd())
 	model := result.(Model)
-	assert.Equal(t, "a.go", model.file.name)
-	assert.Equal(t, cursor, model.nav.diffCursor, "the compact reload must restore the cursor, not land at the top")
-	assert.Nil(t, model.compact.pendingAnchor)
-	assert.Nil(t, model.nav.pendingBoundaryJump, "a landing queued for another load must not survive")
+	assert.Equal(t, "b.go", model.file.name, "the b.go load must land")
+	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
+	assert.False(t, model.modes.compact)
+	assert.Equal(t, 1, model.nav.diffCursor, "the boundary landing wins over start-at-change (index 2)")
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the landing is consumed by its own load")
 }
 
 func TestModel_MotionCrossFile_FailedLoadLeavesNoLanding(t *testing.T) {
@@ -4507,8 +4616,7 @@ func TestModel_MotionCrossFile_DividerOnlyFileCrossesOncePerPress(t *testing.T) 
 
 func TestModel_ClearPendingJumps(t *testing.T) {
 	m := crossFileMotionModel(t)
-	backward := false
-	m.nav.pendingHunkJump = &backward
+	m.nav.pendingHunkJump = &hunkJump{}
 	m.nav.pendingBoundaryJump = &boundaryJump{}
 	m.pendingAnnotJump = &annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"}
 
@@ -4571,8 +4679,7 @@ func TestModel_ClearPendingJumps_OnManualNavigation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := crossFileMotionModel(t, "a.go", "b.go", "c.go")
-			backward := false
-			m.nav.pendingHunkJump = &backward
+			m.nav.pendingHunkJump = &hunkJump{}
 			m.nav.pendingBoundaryJump = &boundaryJump{}
 			m.pendingAnnotJump = &annotation.Annotation{File: "a.go", Line: 1, Type: " ", Comment: "note"}
 
@@ -4866,7 +4973,7 @@ func TestModel_HunkNav_TallHunkAtTopCrossesBackward(t *testing.T) {
 	m = result.(Model)
 	require.NotNil(t, cmd, "[ at the top of the first hunk must cross to the previous file")
 	require.NotNil(t, m.nav.pendingHunkJump)
-	assert.False(t, *m.nav.pendingHunkJump)
+	assert.False(t, m.nav.pendingHunkJump.forward)
 }
 
 func TestModel_HunkNav_TallHunkLastPageCrossesForward(t *testing.T) {

@@ -22,7 +22,7 @@ Installs the `revdiff` binary into `GOBIN` (defaults to `$(go env GOPATH)/bin`).
 /plugin install revdiff@revdiff
 ```
 
-Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (tmux, Zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm).
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, ghostty, iTerm2, or Emacs vterm).
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
 
@@ -38,7 +38,7 @@ cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdent
 
 Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` instead of piping it in.
 
-Terminals using CLI tools (tmux, Zellij, herdr, kitty, wezterm, cmux) are not affected.
+Terminals using CLI tools (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.
 
 ### Plan Review Plugin
 

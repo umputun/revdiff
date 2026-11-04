@@ -553,6 +553,7 @@ func (m Model) handleFileLoaded(msg fileLoadedMsg) (tea.Model, tea.Cmd) {
 	m.file.requestedPath = ""
 	if msg.err != nil {
 		m.nav.pendingBoundaryJump = nil
+		m.nav.pendingHunkJump = nil
 		m.layout.viewport.SetContent(fmt.Sprintf("error loading diff: %v", msg.err))
 		return m, nil
 	}
@@ -623,10 +624,14 @@ func (m *Model) placeCursorAfterLoad(msg fileLoadedMsg) {
 		return
 	}
 
-	// handle pending hunk jump after cross-file hunk navigation
-	if m.nav.pendingHunkJump != nil {
-		m.applyPendingHunkJump()
-		return
+	// handle pending hunk jump after cross-file hunk navigation; a landing queued for another
+	// load is dropped so the branches below still run
+	if j := m.nav.pendingHunkJump; j != nil {
+		m.nav.pendingHunkJump = nil
+		if j.seq == msg.seq {
+			m.applyPendingHunkJump(j.forward)
+			return
+		}
 	}
 
 	// handle the landing of a cross-file cursor motion; above the compact anchor and

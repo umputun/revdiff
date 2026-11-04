@@ -847,6 +847,54 @@ func TestModel_ToggleCompactMode_FlipsModeAndRefetches(t *testing.T) {
 	assert.Equal(t, 2, calls)
 }
 
+// regression: C during a file switch reloaded the displayed file, so the tree and the pane showed different files
+func TestModel_ToggleCompactMode_IgnoredWhileAnotherFileLoads(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "a", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "b", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.compact.applicable = true
+	m.modes.compactContext = 5
+	m.layout.focus = paneTree
+
+	result, loadB := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = result.(Model)
+	require.NotNil(t, loadB)
+	require.Equal(t, "b.go", m.file.requestedPath)
+	seq := m.file.loadSeq
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	m = result.(Model)
+	assert.Nil(t, cmd, "the toggle must not issue a reload while another file loads")
+	assert.False(t, m.modes.compact, "the toggle must leave the mode unchanged")
+	assert.Equal(t, seq, m.file.loadSeq, "the pending load must stay current")
+	assert.NotEmpty(t, m.compact.hint)
+
+	result, _ = m.Update(loadB())
+	m = result.(Model)
+	assert.Equal(t, "b.go", m.file.name, "the pending file lands in the pane")
+	assert.Equal(t, "b.go", m.tree.SelectedFile())
+
+	result, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	m = result.(Model)
+	assert.True(t, m.modes.compact, "the toggle works once the load has landed")
+	assert.NotNil(t, cmd)
+}
+
+func TestModel_ToggleCompactMode_IgnoredDuringFirstLoad(t *testing.T) {
+	m := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": {{ChangeType: diff.ChangeAdd, Content: "a", NewNum: 1}}})
+	m.compact.applicable = true
+	m.modes.compactContext = 5
+	m.requestFileDiff("a.go")
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'C'}})
+	model := result.(Model)
+	assert.Nil(t, cmd)
+	assert.False(t, model.modes.compact, "the mode must match the diff the first load will show")
+	assert.NotEmpty(t, model.compact.hint)
+}
+
 func TestModel_ToggleCompactMode_NoOpWhenNotApplicable(t *testing.T) {
 	var calls int
 	renderer := &mocks.RendererMock{

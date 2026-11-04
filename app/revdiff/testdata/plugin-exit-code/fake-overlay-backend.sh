@@ -77,13 +77,30 @@ case "$cmd_name" in
                 echo "@1"
                 ;;
             new-window)
+                if [ "${FAKE_TMUX_WINDOW_KILLED:-}" = "1" ]; then
+                    echo "@7"
+                    exit 0
+                fi
+                if [ -n "${FAKE_TMUX_WINDOW_LIVE:-}" ]; then
+                    # redirect the child so the window-id capture does not wait for it
+                    : > "$FAKE_TMUX_WINDOW_LIVE"
+                    ( ( run_after_double_dash "$@" ) || true; rm -f "$FAKE_TMUX_WINDOW_LIVE" ) >/dev/null 2>&1 &
+                    echo "@7"
+                    exit 0
+                fi
                 # window mode: run the review to completion, then print the -P window id.
                 # the review has finished by the time the launcher polls, so list-windows
                 # below reports no windows and the sentinel decides the exit code
                 ( run_after_double_dash "$@" ) >/dev/null 2>&1 || true
                 echo "@7"
                 ;;
-            select-window|list-windows)
+            list-windows)
+                if [ -n "${FAKE_TMUX_WINDOW_LIVE:-}" ] && [ -f "$FAKE_TMUX_WINDOW_LIVE" ]; then
+                    echo "@7"
+                fi
+                exit 0
+                ;;
+            select-window)
                 exit 0
                 ;;
             *)

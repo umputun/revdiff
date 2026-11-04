@@ -494,7 +494,9 @@ func (m Model) isDeleteOnlyHunk(hunkStart int) bool {
 
 // firstVisibleInHunk returns the first visible line index starting from hunkStart.
 // in collapsed mode, this skips hidden removed lines. in expanded mode, returns hunkStart unchanged.
-// returns -1 if the hunk has no visible lines (delete-only hunk in collapsed mode).
+// a findHunks start always has a visible line: a delete-only hunk keeps its first removed line as
+// the placeholder, and a mixed hunk has a visible add. returns -1 when no visible line is found
+// before the hunk boundary.
 func (m Model) firstVisibleInHunk(hunkStart int, hunks []int) int {
 	if !m.isCollapsedHidden(hunkStart, hunks) {
 		return hunkStart
@@ -507,7 +509,7 @@ func (m Model) firstVisibleInHunk(hunkStart int, hunks []int) int {
 			return i
 		}
 	}
-	return -1 // no visible lines in this hunk (delete-only, not expanded)
+	return -1
 }
 
 // adjustCursorIfHidden moves the cursor to the nearest visible line if it is currently
