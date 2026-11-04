@@ -804,7 +804,7 @@ func TestHandleSourceEditorFinished_SkipsReloadWhenTreeSelectionChanged(t *testi
 
 	// Cross-file hunk navigation advances the tree selection before the
 	// selected file load completes, so the displayed file can lag behind it.
-	m.nav.pendingHunkJump = new(true)
+	m.nav.pendingHunkJump = &hunkJump{forward: true}
 	beforeSeq := m.file.loadSeq
 
 	result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{

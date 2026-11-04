@@ -2259,8 +2259,7 @@ func TestModel_HandleFileLoaded_StartAtChange(t *testing.T) {
 	})
 
 	t.Run("pending hunk jump wins", func(t *testing.T) {
-		back := false
-		m := load(t, true, withChange, func(m *Model) { m.nav.pendingHunkJump = &back })
+		m := load(t, true, withChange, func(m *Model) { m.nav.pendingHunkJump = &hunkJump{seq: m.file.loadSeq} })
 		assert.Equal(t, 3, m.nav.diffCursor)
 		assert.Nil(t, m.nav.pendingHunkJump)
 	})

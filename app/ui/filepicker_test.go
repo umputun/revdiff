@@ -31,8 +31,7 @@ func TestModel_JumpFileOpensPickerAndLoadsSelection(t *testing.T) {
 	m := filePickerModel([]string{"a.go", "b.go", "c.go"})
 	m.layout.focus = paneTree
 	m.pendingAnnotJump = &annotation.Annotation{File: "c.go", Line: 1}
-	pendingHunk := true
-	m.nav.pendingHunkJump = &pendingHunk
+	m.nav.pendingHunkJump = &hunkJump{forward: true}
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'P'}})
 	require.Nil(t, cmd)
@@ -76,8 +75,7 @@ func TestModel_JumpFileCurrentSelectionFocusesDiffWithoutReload(t *testing.T) {
 	m := filePickerModel([]string{"a.go", "b.go"})
 	m.layout.focus = paneTree
 	m.pendingAnnotJump = &annotation.Annotation{File: "b.go", Line: 1}
-	pendingHunk := false
-	m.nav.pendingHunkJump = &pendingHunk
+	m.nav.pendingHunkJump = &hunkJump{forward: false}
 	m.openFilePicker()
 
 	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

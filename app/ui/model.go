@@ -367,7 +367,7 @@ type modeState struct {
 // navigationState holds cursor and navigation-adjacent state.
 type navigationState struct {
 	diffCursor          int           // index into file.lines for current cursor line
-	pendingHunkJump     *bool         // pending hunk jump after cross-file hunk navigation (true=first, false=last)
+	pendingHunkJump     *hunkJump     // pending landing after cross-file hunk navigation
 	pendingBoundaryJump *boundaryJump // pending landing after cross-file motion
 }
 
@@ -375,6 +375,12 @@ type navigationState struct {
 // requested for that motion, so any other load drops it instead of consuming it.
 type boundaryJump struct {
 	forward bool // true lands at the top of the file, false at the bottom
+	seq     uint64
+}
+
+// hunkJump is the landing queued by a cross-file [ or ], tied to the load request it was queued for.
+type hunkJump struct {
+	forward bool // true lands on the first stop, false on the last
 	seq     uint64
 }
 

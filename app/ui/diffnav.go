@@ -836,25 +836,29 @@ func (m Model) handleHunkNav(forward bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	// cursor did not move — we are at the boundary; try to cross to adjacent file
-	if forward {
-		if m.tree.HasFile(sidepane.DirectionNext) {
-			fwd := true
-			m.clearPendingJumps() // one landing intent in flight at a time, the latest motion wins
-			m.nav.pendingHunkJump = &fwd
-			m.tree.StepFile(sidepane.DirectionNext)
-			return m.loadSelectedIfChanged()
-		}
-	} else {
-		if m.tree.HasFile(sidepane.DirectionPrev) {
-			bwd := false
-			m.clearPendingJumps() // one landing intent in flight at a time, the latest motion wins
-			m.nav.pendingHunkJump = &bwd
-			m.tree.StepFile(sidepane.DirectionPrev)
-			return m.loadSelectedIfChanged()
-		}
+	return m.crossFileForHunk(forward)
+}
+
+// crossFileForHunk steps the tree to the adjacent file and requests it, queueing the landing
+// on its first (forward) or last stop for that exact request. stays put at the first/last file.
+func (m Model) crossFileForHunk(forward bool) (tea.Model, tea.Cmd) {
+	dir := sidepane.DirectionNext
+	if !forward {
+		dir = sidepane.DirectionPrev
 	}
-	m.syncTOCActiveSection()
-	return m, nil
+	if !m.tree.HasFile(dir) {
+		m.syncTOCActiveSection()
+		return m, nil
+	}
+	m.clearPendingJumps() // one landing intent in flight at a time, the latest motion wins
+	m.tree.StepFile(dir)
+	if m.tree.SelectedFile() == m.file.name {
+		return m.loadSelectedIfChanged() // back on the displayed file: no load, so no landing
+	}
+	m.tree.EnsureVisible(m.treePageSize())
+	cmd := m.requestFileDiff(m.tree.SelectedFile())
+	m.nav.pendingHunkJump = &hunkJump{forward: forward, seq: m.file.loadSeq}
+	return m, cmd
 }
 
 // computeLineWidths returns the rendered display width of every diff line, parallel to
@@ -1289,9 +1293,7 @@ func (m *Model) landAtBoundary(forward bool) {
 // applyPendingHunkJump moves the cursor to the first or last stop after a cross-file navigation
 // and scrolls to it, framed the same as an in-file ] or [. A file with no stops lands on its
 // first visible line, centered.
-func (m *Model) applyPendingHunkJump() {
-	forward := *m.nav.pendingHunkJump
-	m.nav.pendingHunkJump = nil
+func (m *Model) applyPendingHunkJump(forward bool) {
 	var s hunkStop
 	var ok bool
 	if forward {
