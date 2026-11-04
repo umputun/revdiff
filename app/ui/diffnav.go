@@ -600,11 +600,7 @@ func (m *Model) moveToNextHunk() {
 		if start <= m.nav.diffCursor {
 			continue
 		}
-		target := m.firstVisibleInHunk(start, hunks)
-		if target < 0 {
-			continue // skip delete-only hunks in collapsed mode
-		}
-		m.nav.diffCursor = target
+		m.nav.diffCursor = m.firstVisibleInHunk(start, hunks)
 		m.centerHunkInViewport()
 		return
 	}
@@ -631,9 +627,7 @@ func (m Model) hunkStops() []hunkStop {
 	for i, dl := range m.file.lines {
 		if next < len(hunks) && hunks[next] == i {
 			next++
-			if target := m.firstVisibleInHunk(i, hunks); target >= 0 {
-				stops = append(stops, hunkStop{idx: target})
-			}
+			stops = append(stops, hunkStop{idx: m.firstVisibleInHunk(i, hunks)})
 			continue
 		}
 		if withAnnots && dl.ChangeType == diff.ChangeContext && m.store.Has(m.file.name, m.diffLineNum(dl), string(dl.ChangeType)) {
