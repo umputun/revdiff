@@ -99,11 +99,17 @@ revdiff --compare-old=a.txt --compare-new=b.txt
 
 ## Scratch-Buffer Review
 
-Use `--stdin` to review arbitrary piped or redirected text as one synthetic file. All lines are treated as context, so single-file mode, inline annotations, file-level notes, search, wrap, collapsed mode, and structured output all work unchanged.
+Use `--stdin` to review arbitrary piped or redirected text. revdiff sniffs the input for a git unified-diff signature: when a line beginning with `diff --git a/` is found near the start, the input is parsed as a real multi-file diff (one tree entry per file, with `+`/`-` markers, hunk navigation, word-diff, per-file annotations). Otherwise the input is shown as a single context-only buffer — single-file mode, inline annotations, file-level notes, search, wrap, collapsed mode, and structured output all work unchanged.
 
 - `--stdin` is explicit and requires piped or redirected input
-- `--stdin-name` sets the synthetic filename used in annotations and syntax highlighting
+- `--stdin-name` sets the synthetic filename used by the context-only buffer (ignored in multi-file diff mode, where real paths are shown)
 - `--stdin` conflicts with refs, `--staged`, `--only`, `--all-files`, `--include`, `--exclude`, and `--annotations`
+- Any per-section parse failure falls the whole input back to raw-text mode so a malformed patch never silently drops files
+- Input is capped at 64 MiB
+
+Examples piping a real diff:
+- `gh pr diff 123 | revdiff --stdin` — review a GitHub PR end-to-end
+- `git format-patch -1 --stdout | revdiff --stdin` — review the latest commit as a multi-file diff
 
 ## Key Bindings
 
@@ -338,4 +344,22 @@ Each history file contains:
 
 History auto-save is always on and silent — errors are logged to stderr, never fail the process. No history is saved on discard quit (`Q`) or when there are no annotations. For `--stdin` mode, files are saved under `stdin/` subdirectory; for `--only` without git, the parent directory name is used instead of a repo name.
 
+The history file is also a crash-recovery save when the process is terminated by a signal — a SIGHUP from a dropped SSH or tmux client, or a SIGTERM. On a signal exit only the history file is written, never the `-o` output, because a signal is not the deliberate handoff that `q` and `O` perform. Recover the annotations the usual way — load the newest history file. A signal-delivered SIGTERM previously wrote the `-o` output; it no longer does.
+
 Override the history directory with `--history-dir`, `REVDIFF_HISTORY_DIR` env var, or `history-dir` in the config file.
+
+## Disconnect-Resilient Window Mode (tmux)
+
+Set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
+
+## Pane-Scoped Overlay (herdr)
+
+Set `REVDIFF_HERDR_PANE=1` in the launcher's environment to open revdiff in a zoomed split of the agent's own herdr pane instead of a new fullscreen tab, so the agent pane stays one keypress away. It needs a herdr whose CLI carries `pane split`, `pane get` and `pane close`; an unsupported CLI or a refused split falls back to the tab overlay; a split that succeeds but returns no usable pane id fails closed with a warning rather than opening a second surface, and may leave a stray pane to close by hand. This is a launcher environment variable, not a revdiff flag.
+
+## Pane-Scoped Overlay (agterm)
+
+Set `REVDIFF_AGTERM_PANE=1` in the launcher's environment to open revdiff in the agent's own split pane instead of over the whole session, leaving the sibling pane live and visible. It applies only when that session is split — the session-wide overlay stands otherwise, and the launcher retries session-wide if agterm refuses the pane. The review gets pane width rather than session width, which is why it is opt-in. This is a launcher environment variable, not a revdiff flag.
+
+## Floating Panel (agterm)
+
+Set `REVDIFF_AGTERM_SIZE_PERCENT=N` (1-100) in the launcher's environment to open the session-wide overlay as a floating panel at N percent of the session instead of full-size, so the agent's chat stays visible around the review; a trailing `%` is accepted. A pane-scoped overlay is always full-pane, so with `REVDIFF_AGTERM_PANE=1` in a split the size applies only when the launcher falls back to the session-wide overlay. This is a launcher environment variable, not a revdiff flag.
