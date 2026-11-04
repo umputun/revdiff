@@ -2259,8 +2259,16 @@ func TestModel_HandleFileLoaded_StartAtChange(t *testing.T) {
 	})
 
 	t.Run("pending hunk jump wins", func(t *testing.T) {
-		m := load(t, true, withChange, func(m *Model) { m.nav.pendingHunkJump = &hunkJump{seq: m.file.loadSeq} })
-		assert.Equal(t, 3, m.nav.diffCursor)
+		twoHunks := []diff.DiffLine{
+			{ChangeType: diff.ChangeDivider},
+			{OldNum: 1, NewNum: 1, Content: "ctx", ChangeType: diff.ChangeContext},
+			{NewNum: 2, Content: "first", ChangeType: diff.ChangeAdd},
+			{OldNum: 2, NewNum: 3, Content: "ctx", ChangeType: diff.ChangeContext},
+			{OldNum: 3, NewNum: 4, Content: "ctx", ChangeType: diff.ChangeContext},
+			{NewNum: 5, Content: "last", ChangeType: diff.ChangeAdd},
+		}
+		m := load(t, true, twoHunks, func(m *Model) { m.nav.pendingHunkJump = &hunkJump{seq: m.file.loadSeq} })
+		assert.Equal(t, 5, m.nav.diffCursor, "the backward landing puts the cursor on the last hunk, not the first change (index 2)")
 		assert.Nil(t, m.nav.pendingHunkJump)
 	})
 
