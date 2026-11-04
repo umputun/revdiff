@@ -193,19 +193,14 @@ func nodeWithCaseConversion(n *RegexNode) *RegexNode {
 
 	if n.Ch > 0 {
 		ch := n.Ch
-		if isLow, isUp := unicode.IsLower(ch), unicode.IsUpper(ch); isLow || isUp {
-			/*var upper, lower rune
-			// it's a capitalizable char
-			if isUp {
-				upper = ch
-				lower = unicode.ToLower(ch)
-			} else {
-				lower = ch
-				upper = unicode.ToUpper(ch)
-			}*/
+		folds := unicode.IsLower(ch) || unicode.IsUpper(ch)
+		if n.Options&ECMAScript != 0 {
+			folds = unicode.SimpleFold(ch) != ch
+		}
+		if folds {
 			set := &CharSet{}
 			set.addChar(ch)
-			set.addCaseEquivalences()
+			set.addCaseEquivalences(n.Options)
 			t := NtSet
 
 			switch n.T {
@@ -226,7 +221,7 @@ func nodeWithCaseConversion(n *RegexNode) *RegexNode {
 		// just to be safe we don't modify the original set pointer
 		// just in case it's used in a case-sensitive area
 		s := n.Set.Copy()
-		s.addCaseEquivalences()
+		s.addCaseEquivalences(n.Options)
 		n.Set = &s
 		n.Options &= ^IgnoreCase
 	}
@@ -477,8 +472,9 @@ func (node *RegexNode) processNode(subsequent *RegexNode) {
 }
 
 func (n *RegexNode) reduce() *RegexNode {
-	// Remove IgnoreCase option from everything except a Backreference
-	if n.T != NtRef {
+	// Remove IgnoreCase option from everything except a Backreference and an
+	// ECMAScript \b or \B whose word characters depend on it
+	if n.T != NtRef && !((n.T == NtECMABoundary || n.T == NtNonECMABoundary) && hasECMAWordCharExtras(n.Options)) {
 		n.Options &= ^IgnoreCase
 	}
 	switch n.T {
@@ -1006,7 +1002,13 @@ func (n *RegexNode) canBeMadeAtomic(subsequent *RegexNode, iterateNullableSubseq
 
 		// If the current node's options don't match the subsequent node, then we cannot make it atomic.
 		// This applies to RightToLeft for lookbehinds, as well as patterns that enable/disable global flags in the middle of the pattern.
-		if n.Options != subsequent.Options {
+		// reduce keeps IgnoreCase only on an ECMAScript \b or \B that also has Unicode, to choose its word characters; the
+		// boundary checks below hold for either set of word characters, so leave it out of the comparison.
+		subsequentOptions := subsequent.Options
+		if subsequent.T == NtECMABoundary || subsequent.T == NtNonECMABoundary {
+			subsequentOptions &^= IgnoreCase
+		}
+		if n.Options != subsequentOptions {
 			return false
 		}
 
@@ -1051,13 +1053,13 @@ func (n *RegexNode) canBeMadeAtomic(subsequent *RegexNode, iterateNullableSubseq
 			}
 
 			// The loop can be made atomic based on this subsequent node, but we'll need to evaluate the next one as well.
+			// A \b after a loop of word characters fails at every position backtracking would give back. There is no such
+			// rule for \B: it holds at each of those positions, between two of the loop's characters.
 			if (subsequent.IsOneloopFamily() && subsequent.M == 0 && n.Ch != subsequent.Ch) ||
 				(subsequent.IsNotoneloopFamily() && subsequent.M == 0 && n.Ch == subsequent.Ch) ||
 				(subsequent.IsSetloopFamily() && subsequent.M == 0 && !subsequent.Set.CharIn(n.Ch)) ||
 				(subsequent.T == NtBoundary && n.M > 0 && IsWordChar(n.Ch)) ||
-				(subsequent.T == NtNonboundary && n.M > 0 && !IsWordChar(n.Ch)) ||
-				(subsequent.T == NtECMABoundary && n.M > 0 && IsECMAWordChar(n.Ch)) ||
-				(subsequent.T == NtNonECMABoundary && n.M > 0 && !IsECMAWordChar(n.Ch)) {
+				(subsequent.T == NtECMABoundary && n.M > 0 && IsECMAWordCharWithOptions(subsequent.Options, n.Ch)) {
 				goto end
 			}
 
@@ -1092,9 +1094,7 @@ func (n *RegexNode) canBeMadeAtomic(subsequent *RegexNode, iterateNullableSubseq
 			if (subsequent.IsOneloopFamily() && subsequent.M == 0 && !n.Set.CharIn(subsequent.Ch)) ||
 				(subsequent.IsSetloopFamily() && subsequent.M == 0 && !subsequent.Set.MayOverlap(n.Set)) ||
 				(subsequent.T == NtBoundary && n.M > 0 && (n.Set.Equals(WordClass()) || n.Set.Equals(DigitClass()))) ||
-				(subsequent.T == NtNonboundary && n.M > 0 && (n.Set.Equals(NotWordClass()) || n.Set.Equals(NotDigitClass()))) ||
-				(subsequent.T == NtECMABoundary && n.M > 0 && (n.Set.Equals(ECMAWordClass()) || n.Set.Equals(ECMADigitClass()))) ||
-				(subsequent.T == NtNonECMABoundary && n.M > 0 && (n.Set.Equals(NotECMAWordClass()) || n.Set.Equals(NotDigitClass()))) {
+				(subsequent.T == NtECMABoundary && n.M > 0 && (n.Set.Equals(ECMAWordClass()) || n.Set.Equals(ECMADigitClass()))) {
 				// The loop can be made atomic based on this subsequent node, but we'll need to evaluate the next one as well.
 				goto end
 			}
@@ -1931,6 +1931,9 @@ func (n *RegexNode) reduceGroup() *RegexNode {
 // or empty, it's transformed accordingly.
 func (n *RegexNode) reduceSet() *RegexNode {
 	// Extract empty-set, one and not-one case as special
+	if n.Set != nil {
+		n.Set.simplify()
+	}
 
 	if n.Set == nil {
 		n.T = NtNothing
