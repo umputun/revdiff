@@ -2703,6 +2703,33 @@ func TestModel_HunkNav_CrossFileLandingDroppedWhenFileListReloadSupersedesIt(t *
 	assert.Equal(t, 0, m.nav.diffCursor, "the landing queued for b.go must not move the cursor in a.go")
 }
 
+func TestModel_HunkNav_StepBackToDisplayedFileWhileLoadingCancelsTheLoad(t *testing.T) {
+	diffs := map[string][]diff.DiffLine{
+		"a.go": {{ChangeType: diff.ChangeAdd, Content: "a", NewNum: 1}},
+		"b.go": {{ChangeType: diff.ChangeAdd, Content: "b", NewNum: 1}},
+	}
+	m := loadFileIntoModel(t, []string{"a.go", "b.go"}, diffs)
+	m.cfg.crossFileHunks = true
+	m.layout.focus = paneDiff
+	m.nav.diffCursor = 0
+
+	result, loadB := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	m = result.(Model)
+	require.NotNil(t, loadB)
+	require.Equal(t, "b.go", m.tree.SelectedFile())
+
+	result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	m = result.(Model)
+	assert.Nil(t, cmd, "stepping back onto the displayed file requests nothing")
+	assert.Nil(t, m.nav.pendingHunkJump, "no landing is queued for a load that never happens")
+	assert.Equal(t, "a.go", m.tree.SelectedFile())
+
+	result, _ = m.Update(loadB())
+	model := result.(Model)
+	assert.Equal(t, "a.go", model.file.name, "the canceled b.go load must not land")
+	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
+}
+
 func TestModel_HunkNav_NextAtLastFileNoOp(t *testing.T) {
 	// pressing ] at the last hunk of the last file: no-op
 	diffs := map[string][]diff.DiffLine{
