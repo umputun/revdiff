@@ -4386,28 +4386,25 @@ func TestModel_MotionCrossFile_ReverseWhileLoadingKeepsTreeAndPaneTogether(t *te
 	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
 }
 
-func TestModel_MotionCrossFile_CompactToggleWhileLoadingKeepsCursor(t *testing.T) {
+func TestModel_MotionCrossFile_CompactToggleWhileLoadingIsIgnored(t *testing.T) {
 	m := crossFileParkAtBoundary(crossFileMotionModel(t), true)
 	m.compact.applicable = true
-	cursor := m.nav.diffCursor
+	m.cfg.startAtChange = true
 
 	result, downCmd := m.handleDiffAction(keymap.ActionDown)
 	m = result.(Model)
 	require.NotNil(t, downCmd)
-	compactCmd := m.toggleCompactMode()
-	require.NotNil(t, compactCmd)
+	assert.Nil(t, m.toggleCompactMode(), "the toggle must not supersede the b.go load")
+	assert.Nil(t, m.compact.pendingAnchor, "no anchor from a.go may be armed")
+	require.NotNil(t, m.nav.pendingBoundaryJump, "the ignored toggle must keep the queued landing")
 
 	result, _ = m.Update(downCmd())
-	m = result.(Model)
-	assert.Equal(t, "a.go", m.file.name, "the superseded b.go load must be dropped")
-	require.NotNil(t, m.compact.pendingAnchor, "a dropped load must not consume the compact anchor")
-
-	result, _ = m.Update(compactCmd())
 	model := result.(Model)
-	assert.Equal(t, "a.go", model.file.name)
-	assert.Equal(t, cursor, model.nav.diffCursor, "the compact reload must restore the cursor, not land at the top")
-	assert.Nil(t, model.compact.pendingAnchor)
-	assert.Nil(t, model.nav.pendingBoundaryJump, "a landing queued for another load must not survive")
+	assert.Equal(t, "b.go", model.file.name, "the b.go load must land")
+	assert.Equal(t, model.file.name, model.tree.SelectedFile(), "the tree and the pane must name the same file")
+	assert.False(t, model.modes.compact)
+	assert.Equal(t, 1, model.nav.diffCursor, "the boundary landing wins over start-at-change (index 2)")
+	assert.Nil(t, model.nav.pendingBoundaryJump, "the landing is consumed by its own load")
 }
 
 func TestModel_MotionCrossFile_FailedLoadLeavesNoLanding(t *testing.T) {

@@ -1463,6 +1463,12 @@ func (m *Model) toggleCompactMode() tea.Cmd {
 		m.compact.hint = "compact not applicable in this mode"
 		return nil
 	}
+	// the reload would request the displayed file and supersede the one still loading,
+	// leaving the tree on one file and the pane on another
+	if m.file.requestedPath != "" && m.file.requestedPath != m.file.name {
+		m.compact.hint = "compact not toggled: a file is still loading"
+		return nil
+	}
 	anchor := m.captureCompactAnchor()
 	m.modes.compact = !m.modes.compact
 	cmd := m.reloadCurrentFile()
