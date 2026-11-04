@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -30,6 +31,7 @@ type cmdReq struct {
 	// own process group: required whenever the command may signal its own group, or the
 	// kill lands on `go test` itself and takes the whole run down
 	setpgid bool
+	timeout time.Duration
 }
 
 type cmdResult struct {
@@ -651,6 +653,58 @@ func TestTmuxTitlesEscapeFormatChars(t *testing.T) {
 			require.Equal(t, exitCodeAnnotations, res.code, res.stderr)
 			assert.Equal(t, output, res.stdout)
 			assertFileContent(t, titleFile, tc.want+"\n")
+		})
+	}
+}
+
+func TestTmuxWindowWaitLoop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+
+	backend := launcherBackend{name: "tmux", command: "tmux", env: map[string]string{"TMUX": "1"}}
+	output := "## file.go:1 (+)\ncomment\n"
+	run := func(t *testing.T, path string, args []string, extra map[string]string) (cmdResult, string) {
+		t.Helper()
+		env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: output})
+		argsFile := filepath.Join(env["TMPDIR"], "tmux-args")
+		env["FAKE_TMUX_ARGS_FILE"] = argsFile
+		env["REVDIFF_TMUX_WINDOW"] = "1"
+		for k, v := range extra {
+			env[k] = strings.ReplaceAll(v, "$TMPDIR", env["TMPDIR"])
+		}
+		res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: append([]string{filepath.Join(root, path)}, args...),
+			env: env, timeout: 30 * time.Second})
+		data, err := os.ReadFile(argsFile) //nolint:gosec // test temp file
+		require.NoError(t, err)
+		return res, string(data)
+	}
+
+	for _, l := range launchers {
+		t.Run(l.name+" live window", func(t *testing.T) {
+			res, tmuxArgs := run(t, l.path, l.args,
+				map[string]string{"FAKE_TMUX_WINDOW_LIVE": "$TMPDIR/tmux-window-live", "FAKE_REVDIFF_DELAY": "0.5"})
+			require.Equal(t, exitCodeAnnotations, res.code, res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assert.Contains(t, tmuxArgs, "list-windows", "the wait loop must poll the live window")
+		})
+		t.Run(l.name+" killed window", func(t *testing.T) {
+			res, tmuxArgs := run(t, l.path, l.args, map[string]string{"FAKE_TMUX_WINDOW_KILLED": "1"})
+			assert.Equal(t, 1, res.code, "a window gone without a sentinel must end the wait with a failure: %s", res.stderr)
+			assert.Contains(t, tmuxArgs, "list-windows")
 		})
 	}
 }
@@ -2584,7 +2638,14 @@ func testRepoRoot(t *testing.T) string {
 
 func runTestCmd(t *testing.T, r cmdReq) cmdResult {
 	t.Helper()
-	cmd := exec.Command(r.name, r.args...) //nolint:gosec // tests execute fixed repo scripts and temp fixtures
+	ctx := context.Background()
+	if r.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.timeout)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, r.name, r.args...) //nolint:gosec // tests execute fixed repo scripts and temp fixtures
+	cmd.WaitDelay = time.Second
 	cmd.Dir = r.dir
 	cmd.Env = mergeEnv(r.env)
 	if r.setpgid {
