@@ -32,6 +32,7 @@ Tool examples:
 - `args: "main"`: review the current branch against `main`
 - `args: "--staged"`: review staged changes
 - `args: "--untracked"`: review untracked files with working-tree changes
+- `args: "--word-diff"`: highlight changed words inside paired add/remove lines
 - `args: "--only README.md"`: review one standalone file
 - `args: "--all-files --exclude vendor"`: review all tracked files except vendor
 - `args: "--no-tree"`: review with the file tree pane hidden
@@ -115,6 +116,7 @@ Behavior:
 - After revdiff exits with annotations, `revdiff_review` returns them in the tool result; the agent processes that result directly.
 - If revdiff exits without captured annotations, report that no annotations were captured and stop.
 - When recent agent work created new untracked files, include `--untracked` so those files appear in the review tree.
+- When the change is mostly small edits inside existing lines (renames, signature changes, partial-line refactors), include `--word-diff` so the changed words are highlighted; skip it for changes that mostly add or remove whole blocks.
 - Include `--filter-unreviewed` only when the user asks for the tree limited to files not marked reviewed; `F` toggles the same filter during the review.
 - Include `--cross-file-motion` only when the user asks for cursor motion to continue into adjacent files.
 - Include `--stop-at-annotations` only when the user asks for `[` and `]` to also stop at annotations outside hunks.
