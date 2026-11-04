@@ -28,7 +28,7 @@ If you previously copied the skills manually, remove `~/.codex/skills/revdiff` a
 
 The plugin provides both `/revdiff` and `/revdiff-plan`. Install `revdiff-planning@revdiff` separately for automatic Plan-mode review.
 
-Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or Emacs vterm). The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` is success-with-annotations, not launcher failure.
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, ghostty, iTerm2, or Emacs vterm). The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` is success-with-annotations, not launcher failure.
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
 
