@@ -23,7 +23,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - `app/ui/overlay/` - layered popups: help, annotation list, theme selector, file picker. Manager enforces one-at-a-time
 - `app/highlight/` - chroma syntax highlighting, foreground-only ANSI
 - `app/keymap/` - configurable keybindings (`Action` constants, parser, defaults, dump)
-- `app/theme/` - Catalog-centric theme system: `Theme` (data + serialization) and `Catalog` (discovery, loading, installation, gallery). Zero standalone functions — all logic as methods. Files: `theme.go` (Theme struct), `catalog.go` (Catalog struct + all operations). 7 bundled + community gallery
+- `app/theme/` - Catalog-centric theme system: `Theme` (data + serialization) and `Catalog` (discovery, loading, installation, gallery). Zero standalone functions — all logic as methods. Files: `theme.go` (Theme struct), `catalog.go` (Catalog struct + all operations). 8 bundled + community gallery
 - `app/annotation/` - in-memory annotation store and structured output
 - `app/editor/` - external `$EDITOR` invocation for multi-line annotations: temp-file lifecycle, editor resolution ($EDITOR → $VISUAL → vi), and `Command()` API returning `*exec.Cmd` + completion func for `tea.ExecProcess`. Consumed by `app/ui` via the `ExternalEditor` interface
 - `app/handoff/` - prepares user-configured post-flush shell commands. Annotation snapshots are provided on stdin; stdout is suppressed so helpers cannot overwrite the TUI. Consumed by `app/ui` via the `PostFlushHook` interface and `tea.ExecProcess`
@@ -42,7 +42,7 @@ TUI for reviewing diffs, files, and documents with inline annotations, built wit
 - Precedence: CLI flags > env vars > config file > built-in defaults
 - `--dump-config` outputs current defaults, `--config` overrides path
 - `no-ini:"true"` tag excludes fields from config file (used for --config, --dump-config, --dump-theme, --list-themes, --init-themes, --version)
-- Themes dir: `~/.config/revdiff/themes/` with 7 bundled themes, auto-created on first run
+- Themes dir: `~/.config/revdiff/themes/` with 8 bundled themes, auto-created on first run
 - `--theme NAME` loads theme; `--dump-theme` exports resolved colors; `--list-themes` lists available; `--init-themes` re-creates bundled
 - Theme precedence: `--theme` overwrites all 23 color fields + chroma-style, ignoring `--color-*` flags or env vars
 - Theme values applied via `applyTheme()` in `themes.go` which overwrites `opts.Colors.*` after `parseArgs()`. `colorFieldPtrs(opts)` is the single source of truth for color key → struct field mapping — adding a new color requires changes in `theme.go` colorKeys + options struct + `colorFieldPtrs()` in `themes.go`
