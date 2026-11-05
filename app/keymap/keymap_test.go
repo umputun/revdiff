@@ -41,7 +41,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"v", ActionToggleCollapsed}, {"C", ActionToggleCompact}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
 		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
 		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter}, {"F", ActionFilterUnreviewed},
-		{"u", ActionToggleUntracked},
+		{"u", ActionToggleUntracked}, {"m", ActionToggleMouse},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
 		{"i", ActionInfo},
 		{"R", ActionReload},

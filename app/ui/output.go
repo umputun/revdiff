@@ -74,7 +74,7 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 			err:          runErr,
 			successHint:  successHint,
 			failureHint:  failureHint,
-			restoreMouse: m.cfg.mouseTracking,
+			restoreMouse: m.mouseTracking,
 		}
 	})
 }

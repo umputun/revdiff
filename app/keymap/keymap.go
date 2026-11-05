@@ -62,6 +62,7 @@ const (
 	ActionToggleWordDiff         Action = "toggle_word_diff"
 	ActionToggleHunk             Action = "toggle_hunk"
 	ActionToggleUntracked        Action = "toggle_untracked"
+	ActionToggleMouse            Action = "toggle_mouse"
 	ActionMarkReviewed           Action = "mark_reviewed"
 	ActionFilterUnreviewed       Action = "filter_unreviewed"
 	ActionFilter                 Action = "filter"
@@ -98,7 +99,8 @@ var validActions = map[Action]bool{
 	ActionToggleCollapsed: true, ActionToggleCompact: true, ActionToggleWrap: true, ActionToggleTree: true,
 	ActionToggleLineNums: true, ActionToggleBlame: true, ActionToggleWordDiff: true, ActionToggleHunk: true,
 	ActionMarkReviewed: true, ActionFilterUnreviewed: true, ActionFilter: true, ActionToggleUntracked: true,
-	ActionQuit: true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
+	ActionToggleMouse: true,
+	ActionQuit:        true, ActionDiscardQuit: true, ActionHelp: true, ActionDismiss: true, ActionThemeSelect: true,
 	ActionInfo:             true,
 	ActionReload:           true,
 	ActionOpenEditor:       true,
@@ -248,6 +250,7 @@ func defaultDescriptions() []HelpEntry {
 		{ActionToggleWordDiff, "toggle word-diff highlighting", "View"},
 		{ActionToggleHunk, "toggle hunk in collapsed", "View"},
 		{ActionToggleUntracked, "show/hide untracked files", "View"},
+		{ActionToggleMouse, "toggle mouse tracking", "View"},
 		{ActionMarkReviewed, "mark file as reviewed", "View"},
 		{ActionFilterUnreviewed, "show unreviewed files", "View"},
 		{ActionFilter, "filter files", "View"},
@@ -311,6 +314,7 @@ func defaultBindings() map[string]Action {
 		" ":      ActionMarkReviewed,
 		"F":      ActionFilterUnreviewed,
 		"u":      ActionToggleUntracked,
+		"m":      ActionToggleMouse,
 		"f":      ActionFilter,
 		"q":      ActionQuit,
 		"Q":      ActionDiscardQuit,

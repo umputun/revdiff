@@ -601,6 +601,8 @@ type Model struct {
 	modes  modeState        // user-togglable view modes
 	nav    navigationState  // cursor and navigation
 
+	mouseTracking bool // terminal mouse tracking; flipped at runtime by toggle_mouse
+
 	highlighter SyntaxHighlighter // syntax highlighter
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
 	search      searchState       // search lifecycle state
@@ -948,6 +950,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
 			outputPath:         cfg.OutputPath,
 		},
+		mouseTracking: cfg.MouseTracking,
 		layout: layoutState{
 			focus:      startFocus,
 			treeHidden: cfg.NoTree,
@@ -1160,7 +1163,8 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
 	case keymap.ActionToggleCollapsed, keymap.ActionToggleCompact, keymap.ActionToggleWrap, keymap.ActionToggleTree,
-		keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
+		keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked,
+		keymap.ActionToggleMouse:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -1485,7 +1489,7 @@ func (m *Model) toggleCompactMode() tea.Cmd {
 	return cmd
 }
 
-// handleViewToggle dispatches view mode toggle actions.
+// handleViewToggle dispatches view toggle actions.
 func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action {
 	case keymap.ActionToggleCollapsed:
@@ -1507,10 +1511,23 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleCompact:
 		cmd := m.toggleCompactMode()
 		return m, cmd
+	case keymap.ActionToggleMouse:
+		return m.handleMouseToggle()
 	default:
 		return m, nil
 	}
 	return m, nil
+}
+
+// handleMouseToggle flips terminal mouse tracking at runtime. the returned
+// command emits the DECSET/DECRST sequences; suspend paths (editor, output
+// flush) read the same flag to restore the current mode afterwards.
+func (m Model) handleMouseToggle() (tea.Model, tea.Cmd) {
+	m.mouseTracking = !m.mouseTracking
+	if m.mouseTracking {
+		return m, tea.EnableMouseCellMotion
+	}
+	return m, tea.DisableMouse
 }
 
 // toggleWrapMode toggles line wrapping on/off.

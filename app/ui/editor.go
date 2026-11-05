@@ -98,7 +98,7 @@ func (m *Model) openEditor() tea.Cmd {
 			content:      text,
 			seed:         seed,
 			err:          finalErr,
-			restoreMouse: m.cfg.mouseTracking,
+			restoreMouse: m.mouseTracking,
 			fileName:     fileName,
 			fileLevel:    fileLevel,
 			line:         line,
@@ -158,7 +158,7 @@ func (m *Model) openSourceEditor() tea.Cmd {
 			err:                  runErr,
 			fileName:             result.fileName,
 			reloadAfterCleanExit: result.reloadAfterCleanExit,
-			restoreMouse:         m.cfg.mouseTracking,
+			restoreMouse:         m.mouseTracking,
 		}
 	})
 }
