@@ -314,7 +314,6 @@ func defaultBindings() map[string]Action {
 		" ":      ActionMarkReviewed,
 		"F":      ActionFilterUnreviewed,
 		"u":      ActionToggleUntracked,
-		"m":      ActionToggleMouse,
 		"f":      ActionFilter,
 		"q":      ActionQuit,
 		"Q":      ActionDiscardQuit,

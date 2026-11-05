@@ -15,10 +15,9 @@ type outputState struct {
 }
 
 type postFlushFinishedMsg struct {
-	err          error
-	successHint  string
-	failureHint  string
-	restoreMouse bool
+	err         error
+	successHint string
+	failureHint string
 }
 
 // handleFlushOutput exports the current annotations through the configured
@@ -71,17 +70,17 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 	m.output.hint = runningHint
 	return m, tea.ExecProcess(cmd, func(runErr error) tea.Msg {
 		return postFlushFinishedMsg{
-			err:          runErr,
-			successHint:  successHint,
-			failureHint:  failureHint,
-			restoreMouse: m.mouseTracking,
+			err:         runErr,
+			successHint: successHint,
+			failureHint: failureHint,
 		}
 	})
 }
 
 func (m Model) handlePostFlushFinished(msg postFlushFinishedMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	if msg.restoreMouse {
+	// restore the current tracking state, not the startup flag (see handleEditorFinished)
+	if m.mouseTracking {
 		cmd = tea.EnableMouseCellMotion
 	}
 	if msg.err != nil {

@@ -88,6 +88,29 @@ func TestModel_StatusModeIcons(t *testing.T) {
 		// inactive filter icon should have muted fg sequence
 		assert.Contains(t, icons, "\033[38;2;108;108;108m◉")
 	})
+
+	t.Run("mouse indicator hidden while toggle_mouse is unbound", func(t *testing.T) {
+		m := testModel(nil, nil)
+		assert.NotContains(t, m.statusModeIcons(), "m", "toggle_mouse has no default binding")
+	})
+
+	t.Run("mouse indicator lit while tracking is suspended", func(t *testing.T) {
+		sc := style.Colors{Muted: "#6c6c6c", StatusFg: "#202020"}
+		m := testModel(nil, nil)
+		res := style.NewResolver(sc)
+		m.resolver = res
+		m.renderer = style.NewRenderer(res)
+		m.keymap.Bind("m", keymap.ActionToggleMouse)
+		m.mouseTracking = true
+		// tracking on: muted
+		assert.Contains(t, m.statusModeIcons(), "\033[38;2;108;108;108mm")
+		toggled, cmd := m.handleMouseToggle()
+		require.NotNil(t, cmd)
+		_ = cmd()
+		m = toggled.(Model)
+		// tracking suspended: lit with status fg
+		assert.Contains(t, m.statusModeIcons(), "\033[38;2;32;32;32mm")
+	})
 }
 
 func TestModel_StatusBarWrapIndicator(t *testing.T) {

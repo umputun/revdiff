@@ -322,7 +322,6 @@ type modelConfigState struct {
 	workDir            string             // working directory for resolving absolute --only paths
 	sourceEditorPolicy SourceEditorPolicy // source-file editor availability and target behavior
 	noColors           bool               // keep monochrome output when previewing or applying themes
-	mouseTracking      bool               // true when the session enabled mouse tracking
 	noStatusBar        bool               // hide the status bar
 	noConfirmDiscard   bool               // skip confirmation prompt on discard quit
 	noConfirmReload    bool               // skip confirmation prompt on reload (R)
@@ -935,7 +934,6 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			workDir:            cfg.WorkDir,
 			sourceEditorPolicy: cfg.SourceEditor,
 			noColors:           cfg.NoColors,
-			mouseTracking:      cfg.MouseTracking,
 			noStatusBar:        cfg.NoStatusBar,
 			noConfirmDiscard:   cfg.NoConfirmDiscard,
 			noConfirmReload:    cfg.NoConfirmReload,
@@ -1519,9 +1517,7 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleMouseToggle flips terminal mouse tracking at runtime. the returned
-// command emits the DECSET/DECRST sequences; suspend paths (editor, output
-// flush) read the same flag to restore the current mode afterwards.
+// handleMouseToggle toggles mouse tracking.
 func (m Model) handleMouseToggle() (tea.Model, tea.Cmd) {
 	m.mouseTracking = !m.mouseTracking
 	if m.mouseTracking {

@@ -41,7 +41,7 @@ func TestDefault_allExpectedBindings(t *testing.T) {
 		{"v", ActionToggleCollapsed}, {"C", ActionToggleCompact}, {"w", ActionToggleWrap}, {"t", ActionToggleTree},
 		{"L", ActionToggleLineNums}, {"B", ActionToggleBlame}, {"W", ActionToggleWordDiff},
 		{".", ActionToggleHunk}, {" ", ActionMarkReviewed}, {"f", ActionFilter}, {"F", ActionFilterUnreviewed},
-		{"u", ActionToggleUntracked}, {"m", ActionToggleMouse},
+		{"u", ActionToggleUntracked},
 		{"q", ActionQuit}, {"Q", ActionDiscardQuit}, {"?", ActionHelp}, {"T", ActionThemeSelect}, {"esc", ActionDismiss},
 		{"i", ActionInfo},
 		{"R", ActionReload},
@@ -404,6 +404,12 @@ func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
 	for _, a := range []Action{ActionScrollCenter, ActionScrollTop, ActionScrollBottom} {
 		assert.Empty(t, km.KeysFor(a), "action %q must have no default bindings", a)
 	}
+}
+
+func TestActionToggleMouse_NoDefaultBinding(t *testing.T) {
+	// toggle_mouse is opt-in: plain terminals select through their own modifiers,
+	// so users map it explicitly (e.g. "map m toggle_mouse") when they need it.
+	assert.Empty(t, Default().KeysFor(ActionToggleMouse), "toggle_mouse must have no default binding")
 }
 
 func TestIsValidAction(t *testing.T) {

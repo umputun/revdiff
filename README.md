@@ -862,7 +862,7 @@ On narrow terminals, the left-hand segments are dropped before the icons: search
 
 ### Mouse Support
 
-revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals. Press `m` (`toggle_mouse`) to suspend tracking at runtime: the terminal regains the mouse and plain drag selects text natively; press `m` again to restore wheel and click handling.
+revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals. The optional `toggle_mouse` action (no default key; map it, e.g. `map m toggle_mouse`, in the keybindings file) suspends tracking at runtime: the terminal regains the mouse and plain drag selects text natively, and triggering it again restores wheel and click handling. While suspended, the status bar lights a mouse indicator — shown only when the action is bound.
 
 - **Scroll wheel**: scrolls whichever pane the cursor is over. In the tree/TOC pane the wheel moves the cursor one entry per notch (matches `j`/`k`). In the diff pane the wheel scrolls the viewport by three lines per notch — the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen. During fast scrolls (a trackpad flick) the cursor highlight catches up after a brief pause once the burst settles, matching less/vim behavior.
 - **Shift+scroll**: half-page scroll in the diff pane. In the tree/TOC pane Shift+wheel behaves the same as plain wheel (one entry per notch — no page step).
@@ -878,7 +878,7 @@ revdiff enables mouse tracking by default so the scroll wheel and left-click wor
 
 Right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed — dismiss an overlay with `Esc` or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.
 
-**Text selection trade-off** — while mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection, suspend it with `toggle_mouse` (default `m`), or hold a bypass modifier for a one-off selection:
+**Text selection trade-off** — while mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection, map and trigger `toggle_mouse` to suspend it, or hold a bypass modifier for a one-off selection:
 
 - **kitty**: hold `Ctrl+Shift` while dragging
 - **iTerm2**: hold `Option` while dragging

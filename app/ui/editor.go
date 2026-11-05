@@ -47,11 +47,6 @@ type editorFinishedMsg struct {
 	fileLevel  bool
 	line       int
 	changeType string
-
-	// restoreMouse requests mouse tracking after the editor returns.
-	// Bubble Tea disables mouse modes while the child process owns the terminal;
-	// editor setup failures never release the terminal, so they do not need this.
-	restoreMouse bool
 }
 
 // openEditor returns a tea.Cmd that suspends the program, launches the user's
@@ -91,18 +86,14 @@ func (m *Model) openEditor() tea.Cmd {
 	seed := content
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
 		text, finalErr := complete(runErr)
-		// Earlier setup failures return before tea.ExecProcess releases the
-		// terminal, so restoreMouse is set only on this completion path and only
-		// when the session originally enabled mouse tracking.
 		return editorFinishedMsg{
-			content:      text,
-			seed:         seed,
-			err:          finalErr,
-			restoreMouse: m.mouseTracking,
-			fileName:     fileName,
-			fileLevel:    fileLevel,
-			line:         line,
-			changeType:   changeType,
+			content:    text,
+			seed:       seed,
+			err:        finalErr,
+			fileName:   fileName,
+			fileLevel:  fileLevel,
+			line:       line,
+			changeType: changeType,
 		}
 	})
 }
@@ -113,7 +104,6 @@ type sourceEditorFinishedMsg struct {
 	err                  error
 	fileName             string
 	reloadAfterCleanExit bool
-	restoreMouse         bool
 }
 
 // sourceEditorTargetResult is the UI-side decision for one source-editor
@@ -158,7 +148,6 @@ func (m *Model) openSourceEditor() tea.Cmd {
 			err:                  runErr,
 			fileName:             result.fileName,
 			reloadAfterCleanExit: result.reloadAfterCleanExit,
-			restoreMouse:         m.mouseTracking,
 		}
 	})
 }
@@ -311,7 +300,11 @@ func (m Model) nearestCurrentLine() int {
 // content is saved and the error logged — preserving user work.
 func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	if msg.restoreMouse {
+	// Bubble Tea disables mouse modes while the child process owns the terminal;
+	// editor setup failures never release the terminal, so only this completion
+	// path restores. follow the current tracking state so a session suspended via
+	// toggle_mouse stays suspended across editor runs.
+	if m.mouseTracking {
 		cmd = tea.EnableMouseCellMotion
 	}
 	if msg.err != nil {
@@ -340,8 +333,9 @@ func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Model, tea.Cmd) {
+	// restore the current tracking state, not the startup flag (see handleEditorFinished)
 	var restoreMouseCmd tea.Cmd
-	if msg.restoreMouse {
+	if m.mouseTracking {
 		restoreMouseCmd = tea.EnableMouseCellMotion
 	}
 	if msg.err != nil {
