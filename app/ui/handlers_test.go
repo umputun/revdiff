@@ -13,6 +13,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/mocks"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
@@ -1229,6 +1230,25 @@ func TestBuildHelpSpec_StatusIconsOnToggleRows(t *testing.T) {
 			assert.Equal(t, tc.want, byDesc(sec, tc.suffix))
 		})
 	}
+
+	t.Run("toggle_mouse shows its key once bound", func(t *testing.T) {
+		m := testModel([]string{"a.go"}, nil)
+		m.keymap.Bind("m", keymap.ActionToggleMouse)
+		spec := m.buildHelpSpec()
+		for _, sec := range spec.Sections {
+			if sec.Title != "View" {
+				continue
+			}
+			for _, e := range sec.Entries {
+				if e.Description != "m toggle mouse tracking" {
+					continue
+				}
+				assert.Equal(t, "m", e.Keys)
+				return
+			}
+		}
+		t.Fatal("toggle mouse tracking help entry missing")
+	})
 }
 
 func TestBuildHelpSpec_VimMotionSectionOff(t *testing.T) {

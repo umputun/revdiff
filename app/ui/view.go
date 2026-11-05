@@ -392,10 +392,13 @@ var statusIconForAction = map[keymap.Action]string{
 	keymap.ActionMarkReviewed:     "✓",
 	keymap.ActionFilterUnreviewed: "○",
 	keymap.ActionToggleUntracked:  "∅",
+	keymap.ActionToggleMouse:      "m",
 }
 
 // statusModeIcons returns combined mode indicator icons (one per view toggle).
 // all icons are always shown; active modes use status foreground, inactive use muted color.
+// the mouse indicator is the exception: shown only when toggle_mouse is bound
+// (it has no default binding) and lit while tracking is suspended.
 func (m Model) statusModeIcons() string {
 	type indicator struct {
 		icon   string
@@ -418,6 +421,10 @@ func (m Model) statusModeIcons() string {
 		{icon(keymap.ActionToggleWordDiff), m.modes.wordDiff},
 		{reviewIcon, m.tree.ReviewedCount() > 0 || m.tree.UnreviewedFilterActive()},
 		{icon(keymap.ActionToggleUntracked), m.modes.showUntracked},
+	}
+	// toggle_mouse is unbound by default, so only users who mapped it get the icon
+	if len(m.keymap.KeysFor(keymap.ActionToggleMouse)) > 0 {
+		indicators = append(indicators, indicator{icon(keymap.ActionToggleMouse), !m.mouseTracking})
 	}
 
 	mutedSeq := string(m.resolver.Color(style.ColorKeyMutedFg))

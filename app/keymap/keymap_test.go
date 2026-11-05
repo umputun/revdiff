@@ -406,6 +406,12 @@ func TestActionScrollConstants_NoDefaultBindings(t *testing.T) {
 	}
 }
 
+func TestActionToggleMouse_NoDefaultBinding(t *testing.T) {
+	// toggle_mouse is opt-in: plain terminals select through their own modifiers,
+	// so users map it explicitly (e.g. "map m toggle_mouse") when they need it.
+	assert.Empty(t, Default().KeysFor(ActionToggleMouse), "toggle_mouse must have no default binding")
+}
+
 func TestIsValidAction(t *testing.T) {
 	assert.True(t, IsValidAction(ActionQuit))
 	assert.True(t, IsValidAction(ActionDown))

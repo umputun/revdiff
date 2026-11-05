@@ -322,7 +322,6 @@ type modelConfigState struct {
 	workDir            string             // working directory for resolving absolute --only paths
 	sourceEditorPolicy SourceEditorPolicy // source-file editor availability and target behavior
 	noColors           bool               // keep monochrome output when previewing or applying themes
-	mouseTracking      bool               // true when the session enabled mouse tracking
 	noStatusBar        bool               // hide the status bar
 	noConfirmDiscard   bool               // skip confirmation prompt on discard quit
 	noConfirmReload    bool               // skip confirmation prompt on reload (R)
@@ -600,6 +599,8 @@ type Model struct {
 	layout layoutState      // viewport and layout
 	modes  modeState        // user-togglable view modes
 	nav    navigationState  // cursor and navigation
+
+	mouseTracking bool // terminal mouse tracking; flipped at runtime by toggle_mouse
 
 	highlighter SyntaxHighlighter // syntax highlighter
 	file        loadedFileState   // current file's loaded state (lines, highlights, blame, etc.)
@@ -933,7 +934,6 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			workDir:            cfg.WorkDir,
 			sourceEditorPolicy: cfg.SourceEditor,
 			noColors:           cfg.NoColors,
-			mouseTracking:      cfg.MouseTracking,
 			noStatusBar:        cfg.NoStatusBar,
 			noConfirmDiscard:   cfg.NoConfirmDiscard,
 			noConfirmReload:    cfg.NoConfirmReload,
@@ -948,6 +948,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
 			outputPath:         cfg.OutputPath,
 		},
+		mouseTracking: cfg.MouseTracking,
 		layout: layoutState{
 			focus:      startFocus,
 			treeHidden: cfg.NoTree,
@@ -1160,7 +1161,8 @@ func (m Model) dispatchAction(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionMarkReviewed:
 		return m.handleMarkReviewed()
 	case keymap.ActionToggleCollapsed, keymap.ActionToggleCompact, keymap.ActionToggleWrap, keymap.ActionToggleTree,
-		keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked:
+		keymap.ActionToggleLineNums, keymap.ActionToggleBlame, keymap.ActionToggleWordDiff, keymap.ActionToggleUntracked,
+		keymap.ActionToggleMouse:
 		return m.handleViewToggle(action)
 	case keymap.ActionNextHunk, keymap.ActionPrevHunk:
 		return m.handleHunkNav(action == keymap.ActionNextHunk)
@@ -1485,7 +1487,7 @@ func (m *Model) toggleCompactMode() tea.Cmd {
 	return cmd
 }
 
-// handleViewToggle dispatches view mode toggle actions.
+// handleViewToggle dispatches view toggle actions.
 func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	switch action {
 	case keymap.ActionToggleCollapsed:
@@ -1507,10 +1509,21 @@ func (m Model) handleViewToggle(action keymap.Action) (tea.Model, tea.Cmd) {
 	case keymap.ActionToggleCompact:
 		cmd := m.toggleCompactMode()
 		return m, cmd
+	case keymap.ActionToggleMouse:
+		return m.handleMouseToggle()
 	default:
 		return m, nil
 	}
 	return m, nil
+}
+
+// handleMouseToggle toggles mouse tracking.
+func (m Model) handleMouseToggle() (tea.Model, tea.Cmd) {
+	m.mouseTracking = !m.mouseTracking
+	if m.mouseTracking {
+		return m, tea.EnableMouseCellMotion
+	}
+	return m, tea.DisableMouse
 }
 
 // toggleWrapMode toggles line wrapping on/off.

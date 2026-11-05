@@ -153,11 +153,10 @@ func (m Model) hitTest(x, y int) hitZone {
 }
 
 // handleMouse routes a tea.MouseMsg through the modal-state checks and into
-// per-button dispatch. mouse events are only generated when
-// tea.WithMouseCellMotion is enabled (i.e. --no-mouse is off), so this
-// handler never runs in the opted-out path. wheel routing is by pointer
-// position, not by current focus — this matches terminal conventions where
-// scrolling follows the cursor.
+// per-button dispatch. mouse events arrive only while terminal mouse tracking
+// is enabled — a session started with --no-mouse can still turn tracking on
+// via toggle_mouse. wheel routing is by pointer position, not by current
+// focus — this matches terminal conventions where scrolling follows the cursor.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// swallow during modal states — input belongs to the modal, not the
 	// viewport beneath. hints are preserved here so the modal prompt (e.g.
