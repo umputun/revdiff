@@ -723,43 +723,46 @@ func TestHandleSourceEditorFinished_ReloadAfterCleanExit(t *testing.T) {
 	}
 }
 
-func TestHandleSourceEditorFinished_RestoresMouseTracking(t *testing.T) {
+func TestHandleSourceEditorFinished_MouseRestoreFollowsToggledState(t *testing.T) {
 	tests := []struct {
-		name     string
-		err      error
-		wantHint string
+		name        string
+		trackingOn  bool
+		toggle      bool
+		wantRestore bool
 	}{
-		{name: "clean exit", wantHint: "Returned from editor"},
-		{name: "editor error", err: errors.New("editor failed"), wantHint: "Editor failed"},
+		{name: "tracking on, untouched", trackingOn: true, wantRestore: true},
+		{name: "tracking on, toggled off", trackingOn: true, toggle: true, wantRestore: false},
+		{name: "no-mouse start, toggled on", toggle: true, wantRestore: true},
+		{name: "no-mouse start, untouched", wantRestore: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := testModel([]string{"a.go"}, nil)
+			m.mouseTracking = tt.trackingOn
+			if tt.toggle {
+				toggled, cmd := m.handleMouseToggle()
+				require.NotNil(t, cmd)
+				_ = cmd()
+				m = toggled.(Model)
+			}
 
-			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
-				err:          tt.err,
-				fileName:     "a.go",
-				restoreMouse: true,
-			})
+			result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{fileName: "a.go"})
 			model := result.(Model)
 
-			require.NotNil(t, cmd)
-			assert.IsType(t, tea.EnableMouseCellMotion(), cmd())
-			assert.Equal(t, tt.wantHint, model.editorState.hint)
+			assert.Equal(t, "Returned from editor", model.editorState.hint)
+			if tt.wantRestore {
+				require.NotNil(t, cmd, "completion must restore mouse tracking per the toggled state")
+				assert.IsType(t, tea.EnableMouseCellMotion(), cmd())
+			} else {
+				assert.Nil(t, cmd, "a session suspended via toggle_mouse must stay suspended")
+			}
 		})
 	}
 }
 
-func TestHandleSourceEditorFinished_DoesNotRestoreDisabledMouseTracking(t *testing.T) {
-	m := testModel([]string{"a.go"}, nil)
-
-	_, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{fileName: "a.go"})
-
-	assert.Nil(t, cmd)
-}
-
 func TestHandleSourceEditorFinished_CombinesMouseRestoreAndReload(t *testing.T) {
 	m := testModel([]string{"a.go"}, nil)
+	m.mouseTracking = true
 	m.tree = testNewFileTree([]string{"a.go"})
 	m.file.name = "a.go"
 	beforeSeq := m.file.loadSeq
@@ -767,7 +770,6 @@ func TestHandleSourceEditorFinished_CombinesMouseRestoreAndReload(t *testing.T) 
 	result, cmd := m.handleSourceEditorFinished(sourceEditorFinishedMsg{
 		fileName:             "a.go",
 		reloadAfterCleanExit: true,
-		restoreMouse:         true,
 	})
 	model := result.(Model)
 
@@ -877,8 +879,9 @@ func TestModel_EditorFinishedReenablesMouseTracking(t *testing.T) {
 	m.file.lines = lines
 	m.nav.diffCursor = 1
 	m.startAnnotation()
+	m.mouseTracking = true
 
-	result, cmd := m.Update(editorFinishedMsg{content: "review note", restoreMouse: true, fileName: "a.go", line: 2, changeType: "+"})
+	result, cmd := m.Update(editorFinishedMsg{content: "review note", fileName: "a.go", line: 2, changeType: "+"})
 	model := result.(Model)
 
 	require.NotNil(t, cmd, "editor completion must re-enable mouse tracking after Bubble Tea restores the terminal")
@@ -904,7 +907,7 @@ func TestModel_EditorFinishedDoesNotEnableMouseWhenTrackingDisabled(t *testing.T
 	m.nav.diffCursor = 1
 	m.startAnnotation()
 
-	result, cmd := m.Update(editorFinishedMsg{content: "review note", restoreMouse: false, fileName: "a.go", line: 2, changeType: "+"})
+	result, cmd := m.Update(editorFinishedMsg{content: "review note", fileName: "a.go", line: 2, changeType: "+"})
 	model := result.(Model)
 
 	assert.Nil(t, cmd, "editor completion must not enable mouse tracking when the session did not enable it")
@@ -913,7 +916,7 @@ func TestModel_EditorFinishedDoesNotEnableMouseWhenTrackingDisabled(t *testing.T
 	assert.Equal(t, "review note", model.store.Get("a.go")[0].Comment)
 }
 
-func TestEditorFinishedMsg_MouseRestoreFollowsToggle(t *testing.T) {
+func TestModel_EditorFinished_MouseRestoreFollowsToggledState(t *testing.T) {
 	lines := []diff.DiffLine{
 		{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext},
 		{NewNum: 2, Content: "added", ChangeType: diff.ChangeAdd},
@@ -921,11 +924,12 @@ func TestEditorFinishedMsg_MouseRestoreFollowsToggle(t *testing.T) {
 	tests := []struct {
 		name        string
 		trackingOn  bool
+		toggle      bool
 		wantRestore bool
 	}{
-		// the message must snapshot the toggled state, not the startup one
-		{name: "tracking on, toggled off", trackingOn: true, wantRestore: false},
-		{name: "no-mouse start, toggled on", wantRestore: true},
+		{name: "tracking on, untouched", trackingOn: true, wantRestore: true},
+		{name: "tracking on, toggled off", trackingOn: true, toggle: true, wantRestore: false},
+		{name: "no-mouse start, toggled on", toggle: true, wantRestore: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -937,54 +941,23 @@ func TestEditorFinishedMsg_MouseRestoreFollowsToggle(t *testing.T) {
 			m.nav.diffCursor = 1
 			m.startAnnotation()
 			m.mouseTracking = tt.trackingOn
-			toggled, cmd := m.handleMouseToggle()
-			require.NotNil(t, cmd)
-			_ = cmd()
-			m = toggled.(Model)
-
-			msg := m.newEditorFinishedMsg("review note", "seed", nil, "a.go", false, 2, "+")
-			assert.Equal(t, tt.wantRestore, msg.restoreMouse)
-
-			_, outCmd := m.handleEditorFinished(msg)
-			if tt.wantRestore {
-				require.NotNil(t, outCmd)
-				assert.IsType(t, tea.EnableMouseCellMotion(), outCmd())
-			} else {
-				assert.Nil(t, outCmd)
+			if tt.toggle {
+				toggled, cmd := m.handleMouseToggle()
+				require.NotNil(t, cmd)
+				_ = cmd()
+				m = toggled.(Model)
 			}
-		})
-	}
-}
 
-func TestSourceEditorFinishedMsg_MouseRestoreFollowsToggle(t *testing.T) {
-	tests := []struct {
-		name        string
-		trackingOn  bool
-		wantRestore bool
-	}{
-		// the message must snapshot the toggled state, not the startup one
-		{name: "tracking on, toggled off", trackingOn: true, wantRestore: false},
-		{name: "no-mouse start, toggled on", wantRestore: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := testModel([]string{"a.go"}, nil)
-			m.mouseTracking = tt.trackingOn
-			toggled, cmd := m.handleMouseToggle()
-			require.NotNil(t, cmd)
-			_ = cmd()
-			m = toggled.(Model)
+			result, cmd := m.Update(editorFinishedMsg{content: "review note", fileName: "a.go", line: 2, changeType: "+"})
+			model := result.(Model)
 
-			msg := m.newSourceEditorFinishedMsg(nil, sourceEditorTargetResult{fileName: "a.go"})
-			assert.Equal(t, tt.wantRestore, msg.restoreMouse)
-
-			_, outCmd := m.handleSourceEditorFinished(msg)
 			if tt.wantRestore {
-				require.NotNil(t, outCmd)
-				assert.IsType(t, tea.EnableMouseCellMotion(), outCmd())
+				require.NotNil(t, cmd, "completion must restore mouse tracking per the toggled state")
+				assert.IsType(t, tea.EnableMouseCellMotion(), cmd())
 			} else {
-				assert.Nil(t, outCmd)
+				assert.Nil(t, cmd, "a session suspended via toggle_mouse must stay suspended")
 			}
+			assert.False(t, model.annot.annotating)
 		})
 	}
 }

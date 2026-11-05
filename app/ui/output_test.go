@@ -177,50 +177,44 @@ func TestModel_HandleFlushOutput_PostFlushHook(t *testing.T) {
 	assert.FileExists(t, path)
 }
 
-func TestPostFlushFinishedMsg_MouseRestoreFollowsToggle(t *testing.T) {
-	tests := []struct {
-		name        string
-		trackingOn  bool
-		wantRestore bool
-	}{
-		// the message must snapshot the toggled state, not the startup one
-		{name: "tracking on, toggled off", trackingOn: true, wantRestore: false},
-		{name: "no-mouse start, toggled on", wantRestore: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := testModel([]string{"a.go"}, nil)
-			m.mouseTracking = tt.trackingOn
-			toggled, cmd := m.handleMouseToggle()
-			require.NotNil(t, cmd)
-			_ = cmd()
-			m = toggled.(Model)
-
-			msg := m.newPostFlushFinishedMsg(nil, "done", "failed")
-			assert.Equal(t, tt.wantRestore, msg.restoreMouse)
-
-			_, outCmd := m.handlePostFlushFinished(msg)
-			if tt.wantRestore {
-				require.NotNil(t, outCmd)
-				assert.IsType(t, tea.EnableMouseCellMotion(), outCmd())
-			} else {
-				assert.Nil(t, outCmd)
-			}
-		})
-	}
-}
-
 func TestModel_HandlePostFlushFinished(t *testing.T) {
+	// the callback must follow the toggled tracking state, not the startup one
 	t.Run("success", func(t *testing.T) {
-		m := testModel([]string{"a.go"}, nil)
-		result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
-			successHint:  "Wrote 2 annotations to output file and ran post-flush command",
-			failureHint:  "Wrote 2 annotations to output file; post-flush command failed",
-			restoreMouse: true,
-		})
-		model := result.(Model)
-		assert.Equal(t, "Wrote 2 annotations to output file and ran post-flush command", model.output.hint)
-		assert.NotNil(t, cmd)
+		tests := []struct {
+			name        string
+			trackingOn  bool
+			toggle      bool
+			wantRestore bool
+		}{
+			{name: "tracking on, untouched", trackingOn: true, wantRestore: true},
+			{name: "tracking on, toggled off", trackingOn: true, toggle: true, wantRestore: false},
+			{name: "no-mouse start, toggled on", toggle: true, wantRestore: true},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				m := testModel([]string{"a.go"}, nil)
+				m.mouseTracking = tt.trackingOn
+				if tt.toggle {
+					toggled, cmd := m.handleMouseToggle()
+					require.NotNil(t, cmd)
+					_ = cmd()
+					m = toggled.(Model)
+				}
+
+				result, cmd := m.handlePostFlushFinished(postFlushFinishedMsg{
+					successHint: "Wrote 2 annotations to output file and ran post-flush command",
+					failureHint: "Wrote 2 annotations to output file; post-flush command failed",
+				})
+				model := result.(Model)
+				assert.Equal(t, "Wrote 2 annotations to output file and ran post-flush command", model.output.hint)
+				if tt.wantRestore {
+					require.NotNil(t, cmd)
+					assert.IsType(t, tea.EnableMouseCellMotion(), cmd())
+				} else {
+					assert.Nil(t, cmd)
+				}
+			})
+		}
 	})
 
 	t.Run("failure", func(t *testing.T) {
