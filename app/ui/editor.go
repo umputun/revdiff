@@ -47,6 +47,11 @@ type editorFinishedMsg struct {
 	fileLevel  bool
 	line       int
 	changeType string
+
+	// restoreMouse requests mouse tracking after the editor returns.
+	// Bubble Tea disables mouse modes while the child process owns the terminal;
+	// editor setup failures never release the terminal, so they do not need this.
+	restoreMouse bool
 }
 
 // openEditor returns a tea.Cmd that suspends the program, launches the user's
@@ -86,16 +91,26 @@ func (m *Model) openEditor() tea.Cmd {
 	seed := content
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
 		text, finalErr := complete(runErr)
-		return editorFinishedMsg{
-			content:    text,
-			seed:       seed,
-			err:        finalErr,
-			fileName:   fileName,
-			fileLevel:  fileLevel,
-			line:       line,
-			changeType: changeType,
-		}
+		return m.newEditorFinishedMsg(text, seed, finalErr, fileName, fileLevel, line, changeType)
 	})
+}
+
+// newEditorFinishedMsg builds the annotation editor's completion message.
+// restoreMouse snapshots the current tracking state: Bubble Tea disables mouse
+// modes while the child process owns the terminal, and setup failures return
+// before tea.ExecProcess releases the terminal, so only the exec completion
+// path restores.
+func (m Model) newEditorFinishedMsg(content, seed string, err error, fileName string, fileLevel bool, line int, changeType string) editorFinishedMsg {
+	return editorFinishedMsg{
+		content:      content,
+		seed:         seed,
+		err:          err,
+		restoreMouse: m.mouseTracking,
+		fileName:     fileName,
+		fileLevel:    fileLevel,
+		line:         line,
+		changeType:   changeType,
+	}
 }
 
 // sourceEditorFinishedMsg is dispatched after opening a worktree source file
@@ -104,6 +119,7 @@ type sourceEditorFinishedMsg struct {
 	err                  error
 	fileName             string
 	reloadAfterCleanExit bool
+	restoreMouse         bool
 }
 
 // sourceEditorTargetResult is the UI-side decision for one source-editor
@@ -144,12 +160,19 @@ func (m *Model) openSourceEditor() tea.Cmd {
 		}
 	}
 	return tea.ExecProcess(cmd, func(runErr error) tea.Msg {
-		return sourceEditorFinishedMsg{
-			err:                  runErr,
-			fileName:             result.fileName,
-			reloadAfterCleanExit: result.reloadAfterCleanExit,
-		}
+		return m.newSourceEditorFinishedMsg(runErr, result)
 	})
+}
+
+// newSourceEditorFinishedMsg builds the source editor's completion message;
+// restoreMouse snapshots the current tracking state (see newEditorFinishedMsg).
+func (m Model) newSourceEditorFinishedMsg(err error, target sourceEditorTargetResult) sourceEditorFinishedMsg {
+	return sourceEditorFinishedMsg{
+		err:                  err,
+		fileName:             target.fileName,
+		reloadAfterCleanExit: target.reloadAfterCleanExit,
+		restoreMouse:         m.mouseTracking,
+	}
 }
 
 // sourceEditorTarget resolves the current UI selection to the worktree source
@@ -300,11 +323,7 @@ func (m Model) nearestCurrentLine() int {
 // content is saved and the error logged — preserving user work.
 func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	// Bubble Tea disables mouse modes while the child process owns the terminal;
-	// editor setup failures never release the terminal, so only this completion
-	// path restores. follow the current tracking state so a session suspended via
-	// toggle_mouse stays suspended across editor runs.
-	if m.mouseTracking {
+	if msg.restoreMouse {
 		cmd = tea.EnableMouseCellMotion
 	}
 	if msg.err != nil {
@@ -333,9 +352,8 @@ func (m Model) handleEditorFinished(msg editorFinishedMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleSourceEditorFinished(msg sourceEditorFinishedMsg) (tea.Model, tea.Cmd) {
-	// restore the current tracking state, not the startup flag (see handleEditorFinished)
 	var restoreMouseCmd tea.Cmd
-	if m.mouseTracking {
+	if msg.restoreMouse {
 		restoreMouseCmd = tea.EnableMouseCellMotion
 	}
 	if msg.err != nil {
