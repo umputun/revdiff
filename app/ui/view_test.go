@@ -102,13 +102,11 @@ func TestModel_StatusModeIcons(t *testing.T) {
 		m.renderer = style.NewRenderer(res)
 		m.keymap.Bind("m", keymap.ActionToggleMouse)
 		m.mouseTracking = true
-		// tracking on: muted
 		assert.Contains(t, m.statusModeIcons(), "\033[38;2;108;108;108mm")
 		toggled, cmd := m.handleMouseToggle()
 		require.NotNil(t, cmd)
 		_ = cmd()
 		m = toggled.(Model)
-		// tracking suspended: lit with status fg
 		assert.Contains(t, m.statusModeIcons(), "\033[38;2;32;32;32mm")
 	})
 }

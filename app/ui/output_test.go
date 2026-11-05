@@ -178,7 +178,6 @@ func TestModel_HandleFlushOutput_PostFlushHook(t *testing.T) {
 }
 
 func TestModel_HandlePostFlushFinished(t *testing.T) {
-	// the callback must follow the toggled tracking state, not the startup one
 	t.Run("success", func(t *testing.T) {
 		tests := []struct {
 			name        string

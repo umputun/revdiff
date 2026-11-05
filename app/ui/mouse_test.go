@@ -1817,8 +1817,6 @@ func TestToggleMouse_KeyThroughUpdate(t *testing.T) {
 			m.keymap.Bind("m", keymap.ActionToggleMouse)
 			key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
 
-			// the bound key must reach handleMouseToggle through the real dispatch
-			// path and carry the exact opposite command per state
 			result, cmd := m.Update(key)
 			m = result.(Model)
 			require.NotNil(t, cmd, "bound toggle_mouse key must emit a tracking command")

@@ -625,7 +625,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
         <p>On narrow terminals, the left-hand segments are dropped before the icons: search position first, then line and hunk info, then the filename truncates. The icon row on the right stays put.</p>
 
         <h2 id="mouse-support">Mouse support</h2>
-        <p>revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals.</p>
+        <p>revdiff enables mouse tracking by default so the scroll wheel and left-click work consistently across terminals. The optional <code>toggle_mouse</code> action (no default key; map it, e.g. <code>map m toggle_mouse</code>, in the keybindings file) suspends tracking at runtime: the terminal regains the mouse and plain drag selects text natively, and triggering it again restores wheel and click handling. While suspended, the status bar lights a mouse indicator &mdash; shown only when the action is bound.</p>
         <ul>
             <li><strong>Scroll wheel</strong> &mdash; scrolls whichever pane the cursor is over. In the tree/TOC pane the wheel moves the cursor one entry per notch (matches <code>j</code>/<code>k</code>). In the diff pane the wheel scrolls the viewport by three lines per notch &mdash; the diff cursor stays on its current logical line and is pinned to the visible edge if scrolling pushes it off-screen.</li>
             <li><strong>Shift+scroll</strong> &mdash; half-page scroll in the diff pane. In the tree/TOC pane Shift+wheel behaves the same as plain wheel (one entry per notch &mdash; no page step).</li>
@@ -640,7 +640,7 @@ printf '\033]52;c;%s\007' "$data" > /dev/tty</code></div>
             <li><strong>Scroll wheel in the file picker</strong> &mdash; moves the picker cursor. Shift+wheel uses a half-page step.</li>
         </ul>
         <p>Right-click, middle-click, drag selection, and clicks on the status bar or diff header are intentionally ignored. Clicks outside an open overlay are swallowed &mdash; dismiss an overlay with <code>Esc</code> or its toggle key. Modal states (annotation input, search input, confirm discard, reload confirm) swallow mouse events entirely.</p>
-        <p><strong>Text selection trade-off</strong> &mdash; once mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection:</p>
+        <p><strong>Text selection trade-off</strong> &mdash; while mouse tracking is on, plain drag is captured by revdiff. For terminal-native text selection, map and trigger <code>toggle_mouse</code> to suspend it, or hold a bypass modifier for a one-off selection:</p>
         <ul>
             <li><strong>kitty</strong>: hold <code>Ctrl+Shift</code> while dragging</li>
             <li><strong>iTerm2</strong>: hold <code>Option</code> while dragging</li>
@@ -678,7 +678,7 @@ map alt+t&gt;n theme_select</code></div>
         <p><strong>Pane:</strong> <code>toggle_pane</code>, <code>focus_tree</code>, <code>focus_diff</code></p>
         <p><strong>Search:</strong> <code>search</code></p>
         <p><strong>Annotations:</strong> <code>confirm</code>, <code>annotate_file</code>, <code>delete_annotation</code>, <code>annot_list</code>, <code>open_editor</code>, <code>next_annotation</code>, <code>prev_annotation</code>, <code>flush_output</code></p>
-        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>mark_reviewed</code>, <code>filter_unreviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
+        <p><strong>View:</strong> <code>toggle_collapsed</code>, <code>toggle_compact</code>, <code>toggle_wrap</code>, <code>toggle_tree</code>, <code>toggle_line_numbers</code>, <code>toggle_blame</code>, <code>toggle_word_diff</code>, <code>toggle_hunk</code>, <code>toggle_untracked</code>, <code>toggle_mouse</code>, <code>mark_reviewed</code>, <code>filter_unreviewed</code>, <code>theme_select</code>, <code>filter</code>, <code>info</code>, <code>reload</code></p>
         <p><strong>Quit:</strong> <code>quit</code>, <code>discard_quit</code>, <code>help</code>, <code>dismiss</code></p>
 
         <h2 id="vim-motion">Vim-motion preset</h2>
