@@ -13,6 +13,7 @@ import (
 
 	"github.com/umputun/revdiff/app/annotation"
 	"github.com/umputun/revdiff/app/diff"
+	"github.com/umputun/revdiff/app/keymap"
 	"github.com/umputun/revdiff/app/ui/overlay"
 	"github.com/umputun/revdiff/app/ui/sidepane"
 )
@@ -1798,4 +1799,37 @@ func TestModel_HandleBlameLoaded_FlushesPendingWheelBeforeSync(t *testing.T) {
 	assert.False(t, model.wheel.renderPending, "handleBlameLoaded must flush pending wheel work before syncViewportToCursor")
 	assert.False(t, model.wheel.tickInFlight, "handleBlameLoaded flush must also clear tickInFlight")
 	assert.Equal(t, wheelStep, model.nav.diffCursor, "cursor must be pinned to viewport top by the pre-blame flush")
+}
+
+func TestToggleMouse_KeyThroughUpdate(t *testing.T) {
+	tests := []struct {
+		name          string
+		trackingOn    bool
+		wantFirstCmd  tea.Msg
+		wantSecondCmd tea.Msg
+	}{
+		{name: "tracking on", trackingOn: true, wantFirstCmd: tea.DisableMouse(), wantSecondCmd: tea.EnableMouseCellMotion()},
+		{name: "no-mouse start", trackingOn: false, wantFirstCmd: tea.EnableMouseCellMotion(), wantSecondCmd: tea.DisableMouse()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := testNewModel(t, plainRenderer(), annotation.NewStore(), noopHighlighter(), ModelConfig{MouseTracking: tt.trackingOn})
+			m.keymap.Bind("m", keymap.ActionToggleMouse)
+			key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
+
+			// the bound key must reach handleMouseToggle through the real dispatch
+			// path and carry the exact opposite command per state
+			result, cmd := m.Update(key)
+			m = result.(Model)
+			require.NotNil(t, cmd, "bound toggle_mouse key must emit a tracking command")
+			assert.IsType(t, tt.wantFirstCmd, cmd())
+			assert.Equal(t, !tt.trackingOn, m.mouseTracking)
+
+			result, cmd = m.Update(key)
+			m = result.(Model)
+			require.NotNil(t, cmd, "second press must toggle back with the opposite command")
+			assert.IsType(t, tt.wantSecondCmd, cmd())
+			assert.Equal(t, tt.trackingOn, m.mouseTracking)
+		})
+	}
 }
