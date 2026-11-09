@@ -466,26 +466,6 @@ func TestHerdrAbandonedReviewLeavesNoStderrCapture(t *testing.T) {
 	}
 }
 
-// herdrAppLauncher is one launcher under test for the Herdr.app backend.
-type herdrAppLauncher struct {
-	name         string
-	path         string
-	args         []string
-	termPrefix   string
-	relaysStderr bool
-}
-
-func herdrAppLaunchers(t *testing.T) []herdrAppLauncher {
-	t.Helper()
-	planFile := filepath.Join(t.TempDir(), "plan.md")
-	writeTestFile(t, planFile, "# Plan\n")
-	return []herdrAppLauncher{
-		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-", relaysStderr: true},
-		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-", relaysStderr: true},
-		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}, termPrefix: "revdiff-plan-"},
-	}
-}
-
 // herdrAppEnv is the fake environment of a Herdr.app terminal, with both CLIs recorded.
 func herdrAppEnv(t *testing.T, code int, output string) map[string]string {
 	t.Helper()
@@ -540,7 +520,19 @@ func callsWithPrefix(calls []string, prefix string) []string {
 func TestHerdrAppOverlayRetriesPeek(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
-	for _, launcher := range herdrAppLaunchers(t) {
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name       string
+		path       string
+		args       []string
+		termPrefix string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}, termPrefix: "revdiff-plan-"},
+	}
+	for _, launcher := range launchers {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			output := "## f.go:1 (+)\nc\n"
@@ -580,7 +572,18 @@ func TestHerdrAppOverlayRetriesPeek(t *testing.T) {
 func TestHerdrAppMissingCLI(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
-	for _, launcher := range herdrAppLaunchers(t) {
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			backend := launcherBackend{name: "ghostty", command: "osascript", env: map[string]string{
@@ -604,7 +607,18 @@ func TestHerdrAppMissingCLI(t *testing.T) {
 func TestHerdrAppQuotedCwd(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
-	for _, launcher := range herdrAppLaunchers(t) {
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			dir := filepath.Join(t.TempDir(), "it's a dir")
@@ -630,6 +644,18 @@ func TestHerdrAppQuotedCwd(t *testing.T) {
 func TestHerdrAppKillsUnshownReview(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name       string
+		path       string
+		args       []string
+		termPrefix string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}, termPrefix: "revdiff-plan-"},
+	}
 	tests := []struct {
 		name       string
 		env        map[string]string
@@ -669,7 +695,7 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 			wantKill:   true,
 		},
 	}
-	for _, launcher := range herdrAppLaunchers(t) {
+	for _, launcher := range launchers {
 		for _, tc := range tests {
 			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
 				t.Parallel()
@@ -708,7 +734,19 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 func TestHerdrAppFastExitBeforePeek(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
-	for _, launcher := range herdrAppLaunchers(t) {
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name         string
+		path         string
+		args         []string
+		relaysStderr bool
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", relaysStderr: true},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", relaysStderr: true},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			env := herdrAppEnv(t, 1, "")
@@ -732,7 +770,18 @@ func TestHerdrAppFastExitBeforePeek(t *testing.T) {
 func TestHerdrAppSignalAfterShown(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
-	for _, launcher := range herdrAppLaunchers(t) {
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
