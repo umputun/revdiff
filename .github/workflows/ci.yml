@@ -41,7 +41,7 @@ jobs:
           command -v hg >/dev/null || { sudo apt-get update && sudo apt-get install -y mercurial; }
           hg --version | head -1
           tarball="jj-${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
-          curl -fsSLO "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/${tarball}"
+          curl -fsSLO --retry 5 --retry-delay 10 --retry-all-errors "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/${tarball}"
           echo "${JJ_SHA256}  ${tarball}" | sha256sum -c -
           sudo tar -xzf "${tarball}" -C /usr/local/bin ./jj
           jj --version
