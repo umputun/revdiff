@@ -1,6 +1,6 @@
 ---
 name: revdiff
-description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in agterm/tmux/zellij/herdr/kitty/wezterm/kaku/cmux/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff FILE", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
+description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in agterm/tmux/zellij/herdr/kitty/wezterm/kaku/cmux/herdr.app/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff FILE", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 ---
 
 # revdiff - TUI Diff Review
@@ -75,7 +75,7 @@ cat /tmp/feature.patch | $SCRIPT_DIR/launch-revdiff.sh --stdin
 
 ## How It Works
 
-1. Launch revdiff in a terminal overlay (agterm full-pane overlay, tmux popup, Zellij floating pane, herdr tab, kitty overlay, wezterm/Kaku split-pane, cmux split, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
+1. Launch revdiff in a terminal overlay (agterm full-pane overlay, tmux popup, Zellij floating pane, herdr tab, kitty overlay, wezterm/Kaku split-pane, cmux split, Herdr.app overlay, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
 2. User navigates the diff, adds annotations on specific lines
 3. On quit, annotations are captured from stdout
 4. Codex reads annotations and addresses each one
@@ -153,6 +153,8 @@ $SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--word-
 
 **Disconnect-resilient tmux window mode**: when running under tmux, prefix the launcher with `REVDIFF_TMUX_WINDOW=1` to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. The review then survives a dropped SSH or tmux client — reattach and it is still there. This is a launcher environment variable, not a revdiff flag.
 
+**Herdr.app overlay**: Herdr.app and herdr are different backends; the launcher detects Herdr.app by `$HC_TERMINAL_ID` and opens revdiff as an overlay over the window. If you hide the review overlay, reopen the `revdiff-…` terminal from the Agents list in the sidebar; the agent waits until you quit revdiff.
+
 **Pane-scoped overlay (herdr)**: when running under herdr, `REVDIFF_HERDR_PANE=1` opens revdiff in a zoomed split of the agent's own pane instead of a new fullscreen tab, keeping the agent pane one keypress away. The user sets it in the environment; it falls back to the tab overlay on an older herdr CLI. This is a launcher environment variable, not a revdiff flag.
 
 **Pane-scoped overlay (agterm)**: when running in an agterm split, `REVDIFF_AGTERM_PANE=1` opens revdiff in the agent's own pane instead of over the whole session, leaving the sibling pane live and visible. The user sets it in the environment; it is ignored outside a split. This is a launcher environment variable, not a revdiff flag.
@@ -160,7 +162,7 @@ $SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--word-
 **Floating panel (agterm)**: `REVDIFF_AGTERM_SIZE_PERCENT=N` (1-100) opens the session-wide agterm overlay as a floating panel at N percent of the session, keeping the agent's chat visible around the review. The user sets it in the environment; a pane-scoped overlay ignores it. This is a launcher environment variable, not a revdiff flag.
 
 The script:
-- Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm)
+- Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → Herdr.app → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout
@@ -198,6 +200,8 @@ $SCRIPT_DIR/launch-revdiff.sh --only=<file>
    fi
    ```
 4. If the output file has content, process it as annotations below. If it is empty or missing, fall back to the durable review history, which survives even when the launcher's cleanup removed the temp file: run `$SCRIPT_DIR/read-latest-history.sh` and process the annotations from its `## Annotations` section (see "Using Existing Review History"). Only if both are empty did the user quit without annotating.
+
+Under Herdr.app a hidden overlay is still open: reopen `revdiff-…` from the Agents list.
 
 Both reads return complete content: revdiff writes the output file atomically on exit, and the history entry is complete before the process exits. That guarantees no partial read, not that the file belongs to this review. The lookup only considers your own files and excludes files older than two hours, but a recent leftover or a second review of yours live under one `$TMPDIR` can still be the newest match.
 
