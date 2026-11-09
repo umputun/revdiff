@@ -325,6 +325,82 @@ case "$cmd_name" in
                 ;;
         esac
         ;;
+    hc)
+        # record every invocation so tests can assert the exact call sequence
+        if [ -n "${FAKE_HC_ARGS_FILE:-}" ]; then
+            echo "$*" >> "$FAKE_HC_ARGS_FILE"
+        fi
+        case "${1:-}" in
+            run)
+                hc_name=""
+                prev=""
+                for arg in "$@"; do
+                    [ "$prev" = "--name" ] && hc_name="$arg"
+                    prev="$arg"
+                done
+                case "${FAKE_HC_RUN_FAIL:-}" in
+                    1)
+                        echo '{"error":{"kind":"internal","message":"core unavailable"}}'
+                        exit 1
+                        ;;
+                    name_taken)
+                        printf '{"error":{"kind":"name_taken","message":"a live terminal is already named \\"%s\\""}}\n' "$hc_name"
+                        exit 1
+                        ;;
+                esac
+                while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+                [ "$#" -gt 0 ] && shift
+                # a real hc terminal starts the program apart from the caller; the
+                # synchronous default lets the review finish before the address prints,
+                # FAKE_HC_RUN_BG=1 starts it later so the launcher has to peek first
+                if [ "${FAKE_HC_RUN_BG:-}" = "1" ]; then
+                    (/bin/sleep "${FAKE_HC_RUN_DELAY:-0.5}"; "$@") >/dev/null 2>&1 &
+                else
+                    "$@" || true
+                fi
+                if [ -n "${FAKE_HC_RUN_JSON:-}" ]; then
+                    echo "$FAKE_HC_RUN_JSON"
+                    exit 0
+                fi
+                printf '{"address":"t42","name":"%s"}\n' "$hc_name"
+                ;;
+            kill | rm)
+                exit 0
+                ;;
+            *)
+                echo "unexpected hc command: $*" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    herdr-app)
+        if [ -n "${FAKE_HERDR_APP_ARGS_FILE:-}" ]; then
+            echo "$*" >> "$FAKE_HERDR_APP_ARGS_FILE"
+        fi
+        case "${1:-} ${2:-}" in
+            "do terminal.peek")
+                peek_fail=0
+                case "${FAKE_PEEK_FAIL:-}" in
+                    always) peek_fail=1 ;;
+                    first)
+                        if [ ! -f "$TMPDIR/peek-failed-once" ]; then
+                            : > "$TMPDIR/peek-failed-once"
+                            peek_fail=1
+                        fi
+                        ;;
+                esac
+                if [ "$peek_fail" = 1 ]; then
+                    echo '{"error":"no running terminal \"t42\""}'
+                    exit 1
+                fi
+                echo '{"ok":true}'
+                ;;
+            *)
+                echo "unexpected herdr-app command: $*" >&2
+                exit 1
+                ;;
+        esac
+        ;;
     *)
         echo "unexpected fake backend: $cmd_name" >&2
         exit 1

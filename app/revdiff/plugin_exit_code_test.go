@@ -43,7 +43,10 @@ type cmdResult struct {
 type launcherBackend struct {
 	name    string
 	command string
-	env     map[string]string
+	// extraCommands are more names the fake backend is installed under, for a backend
+	// driven through more than one CLI
+	extraCommands []string
+	env           map[string]string
 }
 
 type launcherRun struct {
@@ -459,6 +462,165 @@ func TestHerdrAbandonedReviewLeavesNoStderrCapture(t *testing.T) {
 
 			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]),
 				"a review outliving the launcher must not leave a stderr capture behind")
+		})
+	}
+}
+
+// herdrAppLauncher is one launcher under test for the Herdr.app backend.
+type herdrAppLauncher struct {
+	name         string
+	path         string
+	args         []string
+	termPrefix   string
+	relaysStderr bool
+}
+
+func herdrAppLaunchers(t *testing.T) []herdrAppLauncher {
+	t.Helper()
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	return []herdrAppLauncher{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-", relaysStderr: true},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-", relaysStderr: true},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}, termPrefix: "revdiff-plan-"},
+	}
+}
+
+// herdrAppEnv is the fake environment of a Herdr.app terminal, with both CLIs recorded.
+func herdrAppEnv(t *testing.T, code int, output string) map[string]string {
+	t.Helper()
+	backend := launcherBackend{name: "herdr-app", command: "hc", extraCommands: []string{"herdr-app"},
+		env: map[string]string{"HC_TERMINAL_ID": "t9c"}}
+	env := fakeLauncherEnv(t, launcherRun{backend: backend, code: code, output: output})
+	env["FAKE_HC_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "hc-args")
+	env["FAKE_HERDR_APP_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "herdr-app-args")
+	return env
+}
+
+// recordedCalls returns the lines a fake CLI recorded, or nil when it was never called.
+func recordedCalls(t *testing.T, path string) []string {
+	t.Helper()
+	b, err := os.ReadFile(path) //nolint:gosec // path is a test-owned temp file
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	require.NoError(t, err)
+	return strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+}
+
+// hcRunLine returns the recorded `hc run` call and the terminal name it passed.
+func hcRunLine(t *testing.T, calls []string) (line, name string) {
+	t.Helper()
+	for _, c := range calls {
+		if !strings.HasPrefix(c, "run ") {
+			continue
+		}
+		fields := strings.Fields(c)
+		for i, f := range fields {
+			if f == "--name" && i+1 < len(fields) {
+				return c, fields[i+1]
+			}
+		}
+		return c, ""
+	}
+	t.Fatalf("no hc run call in %q", calls)
+	return "", ""
+}
+
+func callsWithPrefix(calls []string, prefix string) []string {
+	var out []string
+	for _, c := range calls {
+		if strings.HasPrefix(c, prefix) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func TestHerdrAppOverlayRetriesPeek(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	for _, launcher := range herdrAppLaunchers(t) {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			output := "## f.go:1 (+)\nc\n"
+			env := herdrAppEnv(t, exitCodeAnnotations, output)
+			env["FAKE_HC_RUN_BG"] = "1"
+			env["FAKE_PEEK_FAIL"] = "first"
+			// the review must still be running when the retry comes, or the sentinel ends
+			// the peek loop first
+			env["FAKE_REVDIFF_DELAY"] = "1"
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assert.Empty(t, res.stderr)
+
+			assert.Equal(t, []string{"do terminal.peek --terminal t42", "do terminal.peek --terminal t42"},
+				recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]))
+			hc := recordedCalls(t, env["FAKE_HC_ARGS_FILE"])
+			line, name := hcRunLine(t, hc)
+			for _, want := range []string{"--bg", "--json", "--rm", "--no-notify", "--cwd " + root} {
+				assert.Contains(t, line, want)
+			}
+			assert.True(t, strings.HasPrefix(name, launcher.termPrefix), "terminal name %q", name)
+			if launcher.termPrefix == "revdiff-" {
+				assert.False(t, strings.HasPrefix(name, "revdiff-plan-"), "terminal name %q", name)
+			}
+			assert.Empty(t, callsWithPrefix(hc, "kill"))
+			assert.Empty(t, callsWithPrefix(hc, "rm"))
+			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+		})
+	}
+}
+
+// Herdr.app sets TERM_PROGRAM=ghostty, so a launcher that cannot find its CLIs must stop
+// instead of falling through to the Ghostty branch and opening another application.
+func TestHerdrAppMissingCLI(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	for _, launcher := range herdrAppLaunchers(t) {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			backend := launcherBackend{name: "ghostty", command: "osascript", env: map[string]string{
+				"HC_TERMINAL_ID": "t9c",
+				"TERM_PROGRAM":   "ghostty",
+			}}
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: 0})
+			// the developer's own hc in ~/.local/bin must not be found
+			env["PATH"] = filepath.Join(env["TMPDIR"], "bin") + string(os.PathListSeparator) + "/usr/bin:/bin"
+			env["FAKE_OSASCRIPT_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "osascript-args")
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			assert.Equal(t, 1, res.code)
+			assert.Contains(t, res.stderr, "error: Herdr.app session detected but hc/herdr-app CLI not found")
+			assert.NoFileExists(t, env["FAKE_OSASCRIPT_ARGS_FILE"])
+		})
+	}
+}
+
+func TestHerdrAppQuotedCwd(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	for _, launcher := range herdrAppLaunchers(t) {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			dir := filepath.Join(t.TempDir(), "it's a dir")
+			require.NoError(t, os.Mkdir(dir, 0o700))
+			output := "## f.go:1 (+)\nc\n"
+			env := herdrAppEnv(t, exitCodeAnnotations, output)
+			env["PWD"] = dir
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: dir, name: "bash", args: args, env: env})
+			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, output, res.stdout)
+			line, _ := hcRunLine(t, recordedCalls(t, env["FAKE_HC_ARGS_FILE"]))
+			real, err := filepath.EvalSymlinks(dir)
+			require.NoError(t, err)
+			assert.True(t, strings.Contains(line, "--cwd "+dir) || strings.Contains(line, "--cwd "+real), "hc run: %s", line)
 		})
 	}
 }
@@ -2740,6 +2902,12 @@ func launcherBackends() []launcherBackend {
 			"GHOSTTY_RESOURCES_DIR": "/Applications/cmux.app/Contents/Resources/ghostty",
 			"GHOSTTY_BIN_DIR":       "/Applications/cmux.app/Contents/MacOS",
 		}},
+		{name: "herdr-app", command: "hc", extraCommands: []string{"herdr-app"}, env: map[string]string{"HC_TERMINAL_ID": "t9c"}},
+		{name: "herdr-app ghostty env", command: "hc", extraCommands: []string{"herdr-app"}, env: map[string]string{
+			"HC_TERMINAL_ID":       "t9c",
+			"TERM_PROGRAM":         "ghostty",
+			"__CFBundleIdentifier": "dev.herdr.app",
+		}},
 		{name: "ghostty", command: "osascript", env: map[string]string{"TERM_PROGRAM": "ghostty"}},
 		{name: "iterm2", command: "osascript", env: map[string]string{"ITERM_SESSION_ID": "w0t0p0:ABC"}},
 		{name: "emacs", command: "emacsclient", env: map[string]string{"INSIDE_EMACS": "vterm"}},
@@ -2753,6 +2921,9 @@ func fakeLauncherEnv(t *testing.T, r launcherRun) map[string]string {
 	binDir := filepath.Join(tmp, "bin")
 	writeExecutable(t, filepath.Join(binDir, "revdiff"), testFixtureScript(t, "fake-revdiff-output.sh"))
 	writeExecutable(t, filepath.Join(binDir, r.backend.command), testFixtureScript(t, "fake-overlay-backend.sh"))
+	for _, extra := range r.backend.extraCommands {
+		writeExecutable(t, filepath.Join(binDir, extra), testFixtureScript(t, "fake-overlay-backend.sh"))
+	}
 	// A `sleep` that signals before it sleeps. Used to reach the refusal path's 300ms
 	// evidence grace deterministically: the signal is already pending when the grace sleep
 	// becomes the foreground command, so there is no window to race. FAKE_SLEEP_KILL picks
@@ -2829,6 +3000,9 @@ func cleanOverlayEnv() map[string]string {
 		"REVDIFF_TMUX_WINDOW":         "",
 		"AGENTDECK_INSTANCE_ID":       "",
 		"REVDIFF_CONFIG":              "",
+		"HC_TERMINAL_ID":              "",
+		"HC_TERMINAL_SOCKET":          "",
+		"HC_SCOPE":                    "",
 	}
 }
 

@@ -370,6 +370,76 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
+# Herdr.app: run the review in an hc terminal and show it with `herdr-app do terminal.peek`,
+# an overlay over the window that closes when revdiff exits. Herdr.app is not classic herdr
+# (above): it sets HC_TERMINAL_ID, not HERDR_ENV, and is driven through hc (herdr-core) and
+# herdr-app. It must precede ghostty, because Herdr.app embeds libghostty and sets
+# TERM_PROGRAM=ghostty; every other backend precedes it, so a multiplexer or terminal started
+# from a Herdr.app shell, which inherits HC_TERMINAL_ID, still wins.
+if [ -n "${HC_TERMINAL_ID:-}" ]; then
+    if ! command -v hc >/dev/null 2>&1 || ! command -v herdr-app >/dev/null 2>&1; then
+        echo "error: Herdr.app session detected but hc/herdr-app CLI not found" >&2
+        exit 1
+    fi
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
+    rm -f "$SENTINEL"
+
+    LAUNCH_SCRIPT=$(mktemp "$TMPBASE/plan-review-launch-XXXXXX")
+    HC_NAME="revdiff-plan-$$-$RANDOM"
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    # INT/TERM exit through the EXIT trap, as in the agterm branch
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    cat > "$LAUNCH_SCRIPT" <<LAUNCHER
+#!/bin/sh
+$REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
+LAUNCHER
+    chmod +x "$LAUNCH_SCRIPT"
+
+    HC_NEW=$(hc run --bg --json --rm --no-notify --name "$HC_NAME" --cwd "$CWD" -- sh "$LAUNCH_SCRIPT" 2>&1) || {
+        echo "error: hc run failed: $HC_NEW" >&2
+        exit 1
+    }
+    # jq when available, grep when jq is absent or yields empty, as in the herdr branch
+    HC_ADDR=""
+    if command -v jq >/dev/null 2>&1; then
+        HC_ADDR=$(printf '%s' "$HC_NEW" | jq -r '.address // empty' 2>/dev/null || true)
+    fi
+    if [ -z "$HC_ADDR" ]; then
+        HC_ADDR=$(printf '%s' "$HC_NEW" | grep -o '"address":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+    fi
+    if [ -z "$HC_ADDR" ]; then
+        echo "error: hc run did not return a terminal address: $HC_NEW" >&2
+        exit 1
+    fi
+
+    # the window registers a new terminal with a delay, so peek is retried for a short
+    # wall-clock window; a review that already ended needs no overlay
+    HC_SHOWN=""
+    HC_PEEK=""
+    SECONDS=0
+    while [ ! -f "$SENTINEL" ] && [ "$SECONDS" -lt 2 ]; do
+        if HC_PEEK=$(herdr-app "do" terminal.peek --terminal "$HC_ADDR" 2>&1); then
+            HC_SHOWN=1
+            break
+        fi
+        sleep 0.3 || true
+    done
+    if [ -z "$HC_SHOWN" ] && [ ! -f "$SENTINEL" ]; then
+        echo "error: Herdr.app could not show the review: $HC_PEEK" >&2
+        exit 1
+    fi
+
+    while [ ! -f "$SENTINEL" ]; do
+        sleep 0.3
+    done
+    rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
+    # no explicit close: hc run --rm removes the terminal when the launch script exits
+    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+    cat "$OUTPUT_FILE"
+    exit "${rc:-1}"
+fi
+
 # ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
 if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
 
@@ -563,5 +633,5 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
-echo "error: no overlay terminal available (requires agterm, tmux, zellij, herdr, kitty, wezterm, cmux, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires agterm, tmux, zellij, herdr, kitty, wezterm, cmux, Herdr.app, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
