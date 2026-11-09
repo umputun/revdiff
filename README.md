@@ -108,7 +108,7 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 
 > **Note:** cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 
-> **Note:** Herdr.app and herdr are different backends. Herdr.app sets `$HC_TERMINAL_ID` and `TERM_PROGRAM=ghostty`, so it is detected before ghostty and driven through its `hc` and `herdr-app` CLIs instead of Ghostty's AppleScript API. If you hide the review overlay, reopen the `revdiff-…` terminal from the Agents list in the sidebar; the agent waits until you quit revdiff.
+> **Herdr.app:** revdiff opens as an overlay over the Herdr.app window and closes when you quit revdiff. If you hide the overlay, the review keeps running: reopen the `revdiff-…` terminal from the Agents list in the sidebar. The agent waits until you quit revdiff. Herdr.app is not the herdr multiplexer, so `REVDIFF_HERDR_PANE` does not apply to it.
 
 > **Note:** iTerm2 uses a split pane (vertical or horizontal, auto-detected from terminal dimensions) rather than a full-screen overlay. The iTerm2 AppleScript API does not expose a zoom command, so the split view shares screen space with the invoking session.
 

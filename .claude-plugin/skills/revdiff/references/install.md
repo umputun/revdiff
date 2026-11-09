@@ -26,7 +26,7 @@ Use: `/revdiff [base] [against]` — opens review session in a terminal overlay 
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
 
-Herdr.app and herdr are different backends. Herdr.app sets `$HC_TERMINAL_ID` and `TERM_PROGRAM=ghostty`, so it is detected before ghostty and uses its `hc` and `herdr-app` CLIs. If you hide the review overlay, reopen the `revdiff-…` terminal from the Agents list in the sidebar; the agent waits until you quit revdiff.
+Herdr.app is detected by `$HC_TERMINAL_ID`. revdiff opens as an overlay over the Herdr.app window and closes when you quit revdiff. If you hide the overlay, the review keeps running: reopen the `revdiff-…` terminal from the Agents list in the sidebar. The agent waits until you quit revdiff. Herdr.app is not the herdr multiplexer, so `REVDIFF_HERDR_PANE` does not apply to it.
 
 **Sandbox note:** Ghostty and iTerm2 launchers use `osascript` (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add to your Claude Code `settings.json`:
 
