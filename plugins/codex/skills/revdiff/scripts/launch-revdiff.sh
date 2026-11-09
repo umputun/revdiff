@@ -757,8 +757,27 @@ if [ -n "${HC_TERMINAL_ID:-}" ]; then
     # review can outlive it: the script removes itself and writes stderr through its own
     # hard link, as the herdr pane review does
     LAUNCH_SCRIPT=$(mktemp "$TMPBASE/revdiff-launch-XXXXXX")
+    # a review that was never shown holds no annotations, and the user has no way to know
+    # a hidden terminal is waiting, so it is stopped by name: the name is claimed before
+    # `hc run`, which covers a launcher killed before it parsed the address. A shown or
+    # finished review is never touched.
+    # shellcheck disable=SC2317,SC2329  # invoked from the EXIT trap below, which shellcheck cannot
+    # see. both codes: shellcheck <0.11 reports this as SC2317, 0.11+ as SC2329
+    herdr_app_cleanup_unshown() {
+        if [ -n "$HC_SHOWN" ] || [ -n "$HC_DONE" ] || [ -f "$SENTINEL" ]; then
+            return 0
+        fi
+        if [ "$HC_CLAIMED" = 1 ]; then
+            hc kill "$HC_NAME" >/dev/null 2>&1 || true
+            hc rm "$HC_NAME" >/dev/null 2>&1 || true
+        fi
+        rm -f "$LAUNCH_SCRIPT"
+    }
     HC_NAME="revdiff-$$-$RANDOM"
-    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+    HC_CLAIMED=""
+    HC_SHOWN=""
+    HC_DONE=""
+    trap 'herdr_app_cleanup_unshown || true; rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
     # INT/TERM exit through the EXIT trap, as in the herdr and agterm branches
     trap 'exit 130' INT
     trap 'exit 143' TERM
@@ -769,7 +788,14 @@ rm -f "\$0"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
+    # claimed before the call, as herdr claims HERDR_DISPATCHED before pane run: a failed or
+    # interrupted call may still have created the terminal
+    HC_CLAIMED=1
     HC_NEW=$(hc run --bg --json --rm --no-notify --name "$HC_NAME" --cwd "$CWD" -- sh "$LAUNCH_SCRIPT" 2>&1) || {
+        # a taken name is another launcher's live review, never ours to stop
+        if printf '%s' "$HC_NEW" | grep -q '"kind":"name_taken"'; then
+            HC_CLAIMED=""
+        fi
         echo "error: hc run failed: $HC_NEW" >&2
         exit 1
     }
@@ -788,7 +814,6 @@ LAUNCHER
 
     # the window registers a new terminal with a delay, so peek is retried for a short
     # wall-clock window; a review that already ended needs no overlay
-    HC_SHOWN=""
     HC_PEEK=""
     SECONDS=0
     while [ ! -f "$SENTINEL" ] && [ "$SECONDS" -lt 2 ]; do
@@ -806,6 +831,8 @@ LAUNCHER
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
+    # the review has ended: the sentinel removed below must not read as "never shown"
+    HC_DONE=1
     rc=$(read_rc "$SENTINEL")
     # no explicit close: hc run --rm removes the terminal when the launch script exits
     rm -f "$SENTINEL"

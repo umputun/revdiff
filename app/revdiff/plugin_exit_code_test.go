@@ -625,6 +625,149 @@ func TestHerdrAppQuotedCwd(t *testing.T) {
 	}
 }
 
+// a review that was never shown holds no annotations, so the launcher stops it by name:
+// the user has no way to find a hidden terminal the agent is blocked on
+func TestHerdrAppKillsUnshownReview(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	tests := []struct {
+		name       string
+		env        map[string]string
+		wantStderr string
+		wantKill   bool
+		minElapsed time.Duration
+	}{
+		{
+			name:       "peek never succeeds",
+			env:        map[string]string{"FAKE_HC_RUN_BG": "1", "FAKE_HC_RUN_DELAY": "30", "FAKE_PEEK_FAIL": "always"},
+			wantStderr: `error: Herdr.app could not show the review: {"error":"no running terminal \"t42\""}`,
+			wantKill:   true,
+			minElapsed: 900 * time.Millisecond,
+		},
+		{
+			name:       "hc run fails",
+			env:        map[string]string{"FAKE_HC_RUN_FAIL": "1"},
+			wantStderr: "error: hc run failed:",
+			wantKill:   true,
+		},
+		{
+			name:       "name taken",
+			env:        map[string]string{"FAKE_HC_RUN_FAIL": "name_taken"},
+			wantStderr: "name_taken",
+			wantKill:   false,
+		},
+		{
+			name:       "no address",
+			env:        map[string]string{"FAKE_HC_RUN_JSON": `{"ok":true}`, "FAKE_HC_RUN_BG": "1", "FAKE_HC_RUN_DELAY": "30"},
+			wantStderr: "error: hc run did not return a terminal address:",
+			wantKill:   true,
+		},
+	}
+	for _, launcher := range herdrAppLaunchers(t) {
+		for _, tc := range tests {
+			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+				maps.Copy(env, tc.env)
+
+				args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+				start := time.Now()
+				res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+				elapsed := time.Since(start)
+				assert.Equal(t, 1, res.code)
+				assert.Contains(t, res.stderr, tc.wantStderr)
+				assert.Empty(t, res.stdout)
+				assert.GreaterOrEqual(t, elapsed, tc.minElapsed, "the peek window must be served")
+
+				hc := recordedCalls(t, env["FAKE_HC_ARGS_FILE"])
+				_, name := hcRunLine(t, hc)
+				require.True(t, strings.HasPrefix(name, launcher.termPrefix), "terminal name %q", name)
+				if tc.wantKill {
+					assert.Equal(t, []string{"kill " + name}, callsWithPrefix(hc, "kill"))
+					assert.Equal(t, []string{"rm " + name}, callsWithPrefix(hc, "rm"))
+				} else {
+					assert.Empty(t, callsWithPrefix(hc, "kill"), "a taken name belongs to another launcher")
+					assert.Empty(t, callsWithPrefix(hc, "rm"))
+				}
+				left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
+				require.NoError(t, err)
+				assert.Empty(t, left, "the launch script of a stopped review must go")
+			})
+		}
+	}
+}
+
+// revdiff that fails at once (bad ref, unknown flag) ends before any peek can work: the
+// caller gets its own exit code and error, not a "could not show" that hides it
+func TestHerdrAppFastExitBeforePeek(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	for _, launcher := range herdrAppLaunchers(t) {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			env := herdrAppEnv(t, 1, "")
+			env["FAKE_STDERR"] = "revdiff: unknown flag `--bogus-flag'"
+			env["FAKE_PEEK_FAIL"] = "always"
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			assert.Equal(t, 1, res.code)
+			assert.NotContains(t, res.stderr, "could not show")
+			if launcher.relaysStderr {
+				assert.Contains(t, res.stderr, "revdiff: unknown flag `--bogus-flag'")
+			}
+			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"))
+		})
+	}
+}
+
+// a launcher killed after the review is shown (a harness timeout) leaves the review open:
+// the SKILL.md fallback reads its output file once the user quits
+func TestHerdrAppSignalAfterShown(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	for _, launcher := range herdrAppLaunchers(t) {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+			env["FAKE_HC_RUN_BG"] = "1"
+			env["FAKE_HC_RUN_DELAY"] = "0.2"
+			env["FAKE_REVDIFF_DELAY"] = "3"
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			cmd := exec.Command("bash", args...) //nolint:gosec // fixed repo path
+			cmd.Dir, cmd.Env = root, mergeEnv(env)
+			require.NoError(t, cmd.Start())
+			require.Eventually(t, func() bool {
+				return len(recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"])) > 0
+			}, 15*time.Second, 20*time.Millisecond, "launcher never peeked")
+			// the fake records the peek before it answers; give the launcher time to mark
+			// the review shown, so the signal lands in the wait loop
+			time.Sleep(500 * time.Millisecond)
+			require.NoError(t, cmd.Process.Signal(syscall.SIGTERM))
+			done := make(chan struct{})
+			var waitErr error
+			go func() { waitErr = cmd.Wait(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(30 * time.Second):
+				_ = cmd.Process.Kill()
+				t.Fatal("launcher did not exit after SIGTERM")
+			}
+			assert.Equal(t, 143, commandExitCode(waitErr))
+			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
+				"a shown review must survive its launcher")
+
+			require.Eventually(t, func() bool {
+				left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
+				require.NoError(t, err)
+				return len(left) == 0
+			}, 15*time.Second, 50*time.Millisecond, "the review never finished")
+			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+		})
+	}
+}
+
 // pins #314: an apostrophe in a heredoc nested inside a command substitution
 // breaks the whole launcher under bash 3.2, the stock macOS /bin/bash. the
 // launchers cannot be parse-checked for it here — CI and most dev machines run
