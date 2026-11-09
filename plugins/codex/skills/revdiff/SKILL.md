@@ -92,6 +92,8 @@ cat /tmp/feature.patch | $SCRIPT_DIR/launch-revdiff.sh --stdin
 - Skip ref detection entirely, go directly to Step 2
 - Example: "all files exclude vendor" → `--all-files --exclude=vendor`
 
+**Directory review mode**: If `$ARGUMENTS` is a single absolute path to a directory (`test -d "$ARGUMENTS"`, e.g. `/abs/path/to/subrepo`), the user is naming a repository to review, not a file: pass it as `--dir=<abs-path>` and follow the `--dir` paragraph in Step 2, including running the ref detection below from inside that directory. This check runs before file review mode, which would otherwise turn the path into `--only=<abs-path>`.
+
 **File review mode**: If `$ARGUMENTS` is a single token that points at a file on disk (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`, `README.md`, `main.go`, `file.blah`), treat it as file review:
 - Decide with `test -f "$ARGUMENTS"` — if the file exists, it's file review mode
 - Also treat as file review if the token starts with `/` or `./`, or contains `/` and has a file extension (e.g., `src/app.go`), even when the file is not yet reachable from the current directory
@@ -135,6 +137,8 @@ When you are launching revdiff for the user (e.g., right after a refactor or ana
 
 Pass `--word-diff` when the change is mostly small edits inside existing lines (renames, signature or argument changes, refactors that rewrite part of a line), so the changed words are highlighted within each paired add/remove line. Skip it when the change mostly adds or removes whole blocks. The `W` key toggles the same highlighting during the review.
 
+**When the review target is a repository other than the current working directory** (the change spans several repos, or the user names a repo path), launch once per repository and pass `--dir=<abs-path>` to the launcher. `<abs-path>` must be absolute: the shell does not expand `~` after `--dir=`. Run the Step 1 ref detection from inside that directory: `(cd <abs-path> && $SCRIPT_DIR/detect-ref.sh)`. Relative paths in the other arguments (e.g. `--only`) resolve from `<abs-path>`, and the returned annotation paths are relative to that repository.
+
 Pass `--start-at-change` only when the user explicitly asks for that cursor preference; never infer it automatically.
 
 Pass `--filter-unreviewed` only when the user asks for the tree limited to files not marked reviewed; never infer it automatically. The `F` key toggles the same filter during the review.
@@ -146,7 +150,7 @@ Pass `--stop-at-annotations` only when the user explicitly asks for `[` and `]` 
 Run the launcher script:
 
 ```bash
-$SCRIPT_DIR/launch-revdiff.sh [base] [against] [--staged] [--untracked] [--word-diff] [--filter-unreviewed] [--cross-file-motion] [--stop-at-annotations] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
+$SCRIPT_DIR/launch-revdiff.sh [base] [against] [--dir=/abs/path] [--staged] [--untracked] [--word-diff] [--filter-unreviewed] [--cross-file-motion] [--stop-at-annotations] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
 ```
 
 **IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout. Set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher). Do NOT use `run_in_background` for this — background-task handling is unreliable for interactive TUI launchers. If the review outlasts the timeout cap, the fallback in Step 3 handles it.
@@ -197,7 +201,7 @@ $SCRIPT_DIR/launch-revdiff.sh --only=<file>
      cat "$output_file"
    fi
    ```
-4. If the output file has content, process it as annotations below. If it is empty or missing, fall back to the durable review history, which survives even when the launcher's cleanup removed the temp file: run `$SCRIPT_DIR/read-latest-history.sh` and process the annotations from its `## Annotations` section (see "Using Existing Review History"). Only if both are empty did the user quit without annotating.
+4. If the output file has content, process it as annotations below. If it is empty or missing, fall back to the durable review history, which survives even when the launcher's cleanup removed the temp file: run `$SCRIPT_DIR/read-latest-history.sh` and process the annotations from its `## Annotations` section (see "Using Existing Review History"). The script looks up the repository it runs in, so after a `--dir` launch run it inside that directory: `(cd <abs-path> && $SCRIPT_DIR/read-latest-history.sh)`. Only if both are empty did the user quit without annotating.
 
 Both reads return complete content: revdiff writes the output file atomically on exit, and the history entry is complete before the process exits. That guarantees no partial read, not that the file belongs to this review. The lookup only considers your own files and excludes files older than two hours, but a recent leftover or a second review of yours live under one `$TMPDIR` can still be the newest match.
 
