@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.15.0 - 2026-11-08
+
+This release fixes code execution through blame in Mercurial repositories and adds a `toggle_mouse` action.
+
+### New Features
+
+- add toggle_mouse action to suspend mouse tracking at runtime #435 @mikhail-angelov
+
+### Bug Fixes
+
+- fix option injection through file names in hg and jj blame #437 @umputun
+- keep a cross-file hunk jump tied to the load it was queued for #434 @umputun
+- ignore the compact toggle while another file is loading #434 @umputun
+- write the OpenCode v1 plan review file to a private temp directory #434 @umputun
+
+### Improvements
+
+- teach the agent skills when to pass `--word-diff` #434 @umputun
+- name Kaku and agterm in the plugin install references and skill descriptions #434 @umputun
+- drop the unreachable delete-only guards in hunk navigation #434 @umputun
+- bump github.com/dlclark/regexp2/v2 to 2.12.0 #430 @app/dependabot
+- update OpenCode v2 plugin dependencies #431 #432 #433 @app/dependabot
+- bump golangci-lint to v2.15.0 792600e
+
+**Blame in Mercurial repositories.** hg reads options anywhere on its command line, so a tracked file named like an option, such as `--config=extensions.x=evil.py`, reached `hg annotate` as an option. Turning blame on for that file made hg load `evil.py` from the repository and run it. Under jj the same kind of name became its own `--config`. Both now get `--` before the file name.
+
 ## v1.14.0 - 2026-11-03
 
 ### New Features
