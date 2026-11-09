@@ -347,6 +347,11 @@ case "$cmd_name" in
                         printf '{"error":{"kind":"name_taken","message":"a live terminal is already named \\"%s\\""}}\n' "$hc_name"
                         exit 1
                         ;;
+                    name_taken_spaced)
+                        # the same error, pretty-printed: the launcher must not depend on compact JSON
+                        printf '{"error": {"kind": "name_taken", "message": "a live terminal is already named \\"%s\\""}}\n' "$hc_name"
+                        exit 1
+                        ;;
                 esac
                 while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
                 [ "$#" -gt 0 ] && shift

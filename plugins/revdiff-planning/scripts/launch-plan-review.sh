@@ -374,8 +374,8 @@ fi
 # an overlay over the window that closes when revdiff exits. Herdr.app is not classic herdr
 # (above): it sets HC_TERMINAL_ID, not HERDR_ENV, and is driven through hc (herdr-core) and
 # herdr-app. It must precede ghostty, because Herdr.app embeds libghostty and sets
-# TERM_PROGRAM=ghostty; every other backend precedes it, so a multiplexer or terminal started
-# from a Herdr.app shell, which inherits HC_TERMINAL_ID, still wins.
+# TERM_PROGRAM=ghostty; every multiplexer and terminal backend before ghostty precedes it, so
+# one started from a Herdr.app shell, which inherits HC_TERMINAL_ID, still wins.
 if [ -n "${HC_TERMINAL_ID:-}" ]; then
     if ! command -v hc >/dev/null 2>&1 || ! command -v herdr-app >/dev/null 2>&1; then
         echo "error: Herdr.app session detected but hc/herdr-app CLI not found" >&2
@@ -392,7 +392,7 @@ if [ -n "${HC_TERMINAL_ID:-}" ]; then
     # shellcheck disable=SC2317,SC2329  # invoked from the EXIT trap below, which shellcheck cannot
     # see. both codes: shellcheck <0.11 reports this as SC2317, 0.11+ as SC2329
     herdr_app_cleanup_unshown() {
-        if [ -n "$HC_SHOWN" ] || [ -n "$HC_DONE" ] || [ -f "$SENTINEL" ]; then
+        if [ -n "$HC_SHOWN" ] || [ -f "$SENTINEL" ]; then
             return 0
         fi
         if [ "$HC_CLAIMED" = 1 ]; then
@@ -404,7 +404,6 @@ if [ -n "${HC_TERMINAL_ID:-}" ]; then
     HC_NAME="revdiff-plan-$$-$RANDOM"
     HC_CLAIMED=""
     HC_SHOWN=""
-    HC_DONE=""
     trap 'herdr_app_cleanup_unshown || true; rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
     # INT/TERM exit through the EXIT trap, as in the agterm branch
     trap 'exit 130' INT
@@ -419,8 +418,16 @@ LAUNCHER
     # interrupted call may still have created the terminal
     HC_CLAIMED=1
     HC_NEW=$(hc run --bg --json --rm --no-notify --name "$HC_NAME" --cwd "$CWD" -- sh "$LAUNCH_SCRIPT" 2>&1) || {
-        # a taken name is another launcher's live review, never ours to stop
-        if printf '%s' "$HC_NEW" | grep -q '"kind":"name_taken"'; then
+        # a taken name is another launcher's live review, never ours to stop. jq when
+        # available, grep when jq is absent or yields empty, as for the address below
+        HC_KIND=""
+        if command -v jq >/dev/null 2>&1; then
+            HC_KIND=$(printf '%s' "$HC_NEW" | jq -r '.error.kind // empty' 2>/dev/null || true)
+        fi
+        if [ -z "$HC_KIND" ]; then
+            HC_KIND=$(printf '%s' "$HC_NEW" | grep -o '"kind": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)
+        fi
+        if [ "$HC_KIND" = name_taken ]; then
             HC_CLAIMED=""
         fi
         echo "error: hc run failed: $HC_NEW" >&2
@@ -458,11 +465,10 @@ LAUNCHER
     while [ ! -f "$SENTINEL" ]; do
         sleep 0.3
     done
-    # the review has ended: the sentinel removed below must not read as "never shown"
-    HC_DONE=1
     rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
-    # no explicit close: hc run --rm removes the terminal when the launch script exits
-    rm -f "$SENTINEL" "$LAUNCH_SCRIPT"
+    # no explicit close: hc run --rm removes the terminal when the launch script exits.
+    # the sentinel stays until the EXIT trap, so the cleanup there still sees a finished review
+    rm -f "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit "${rc:-1}"
 fi

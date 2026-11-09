@@ -657,6 +657,12 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 			wantKill:   false,
 		},
 		{
+			name:       "name taken, spaced json",
+			env:        map[string]string{"FAKE_HC_RUN_FAIL": "name_taken_spaced"},
+			wantStderr: "name_taken",
+			wantKill:   false,
+		},
+		{
 			name:       "no address",
 			env:        map[string]string{"FAKE_HC_RUN_JSON": `{"ok":true}`, "FAKE_HC_RUN_BG": "1", "FAKE_HC_RUN_DELAY": "30"},
 			wantStderr: "error: hc run did not return a terminal address:",
