@@ -113,3 +113,18 @@ func TestJj_FileBlame_Integration(t *testing.T) {
 
 	assert.False(t, blame[2].Time.Before(blame[1].Time))
 }
+
+func TestJj_FileBlame_FlagShapedFilename(t *testing.T) {
+	// regression: jj parsed a filename like --config=... as its global --config option
+	dir := setupJjRepo(t)
+	j := NewJj(dir)
+
+	name := "--config=ui.color=always"
+	writeFile(t, dir, name, "line one\n")
+	jjCmd(t, dir, "describe", "-m", "first", "--quiet")
+
+	blame, err := j.FileBlame("", name, false)
+	require.NoError(t, err)
+	require.Len(t, blame, 1)
+	assert.Equal(t, "Test User", blame[1].Author)
+}
