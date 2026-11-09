@@ -1,7 +1,9 @@
 package diff
 
 import (
+	"fmt"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,4 +111,23 @@ func TestHg_FileBlame_Integration(t *testing.T) {
 
 	// second line should have a later or equal timestamp
 	assert.False(t, blame[2].Time.Before(blame[1].Time))
+}
+
+func TestHg_FileBlame_FlagShapedFilename(t *testing.T) {
+	// regression: hg parsed a filename like --config=extensions.x=evil.py as an option and ran evil.py
+	dir := setupHgRepo(t)
+	h := NewHg(dir)
+
+	marker := filepath.Join(t.TempDir(), "executed")
+	writeFile(t, dir, "evil.py", fmt.Sprintf("open(%q, 'w').write('x')\n", marker))
+	name := "--config=extensions.x=evil.py"
+	writeFile(t, dir, name, "line one\n")
+	hgCmd(t, dir, "add", "--", "evil.py", name)
+	hgCmd(t, dir, "commit", "-m", "first")
+
+	blame, err := h.FileBlame("", name, false)
+	require.NoError(t, err)
+	require.Len(t, blame, 1)
+	assert.Equal(t, "Test User", blame[1].Author)
+	assert.NoFileExists(t, marker)
 }

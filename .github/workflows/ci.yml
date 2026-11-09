@@ -33,6 +33,19 @@ jobs:
           command -v jq >/dev/null || { sudo apt-get update && sudo apt-get install -y jq; }
           jq --version
 
+      - name: install hg and jj
+        env:
+          JJ_VERSION: v0.47.1
+          JJ_SHA256: d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
+        run: |
+          command -v hg >/dev/null || { sudo apt-get update && sudo apt-get install -y mercurial; }
+          hg --version | head -1
+          tarball="jj-${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -fsSLO "https://github.com/jj-vcs/jj/releases/download/${JJ_VERSION}/${tarball}"
+          echo "${JJ_SHA256}  ${tarball}" | sha256sum -c -
+          sudo tar -xzf "${tarball}" -C /usr/local/bin ./jj
+          jj --version
+
       - name: build and test
         run: |
           go test -race -timeout=180s -covermode=atomic -coverprofile=$GITHUB_WORKSPACE/profile.cov_tmp ./...

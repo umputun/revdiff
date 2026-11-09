@@ -18,7 +18,7 @@ func (h *Hg) FileBlame(ref, file string, _ bool) (map[int]BlameLine, error) {
 	if targetRef := h.blameTargetRef(ref); targetRef != "" {
 		args = append(args, "-r", targetRef)
 	}
-	args = append(args, file)
+	args = append(args, "--", file)
 
 	out, err := h.runHg(args...)
 	if err != nil {
