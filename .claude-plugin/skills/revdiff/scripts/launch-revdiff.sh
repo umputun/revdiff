@@ -805,13 +805,14 @@ LAUNCHER
         echo "error: hc run failed: $HC_NEW" >&2
         exit 1
     }
-    # jq when available, grep when jq is absent or yields empty, as in the herdr branch
+    # jq when available, grep when jq is absent or yields empty, as for HC_KIND above; the
+    # pattern allows a space after the colon, so pretty-printed JSON parses too
     HC_ADDR=""
     if command -v jq >/dev/null 2>&1; then
         HC_ADDR=$(printf '%s' "$HC_NEW" | jq -r '.address // empty' 2>/dev/null || true)
     fi
     if [ -z "$HC_ADDR" ]; then
-        HC_ADDR=$(printf '%s' "$HC_NEW" | grep -o '"address":"[^"]*"' | head -1 | cut -d'"' -f4 || true)
+        HC_ADDR=$(printf '%s' "$HC_NEW" | grep -o '"address": *"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' || true)
     fi
     if [ -z "$HC_ADDR" ]; then
         echo "error: hc run did not return a terminal address: $HC_NEW" >&2
@@ -819,16 +820,28 @@ LAUNCHER
     fi
 
     # the window registers a new terminal with a delay, so peek is retried for a short
-    # wall-clock window; a review that already ended needs no overlay
+    # wall-clock window; a review that already ended needs no overlay. $SECONDS counts
+    # whole seconds, so `-lt 5` gives four to five seconds; a good peek leaves at once.
+    # A signal is recorded here, not acted on, as in the herdr pane split window: `exit 143` would run
+    # as soon as a successful peek returns and before HC_SHOWN=1, and the EXIT trap would
+    # stop a review the user has just seen. A recorded signal ends the loop and is paid
+    # once HC_SHOWN tells the trap what to do. A trap with a command, never `trap ''`,
+    # which herdr-app would inherit as SIG_IGN.
     HC_PEEK=""
+    HC_SIGNALLED=0
+    trap 'HC_SIGNALLED=130' INT
+    trap 'HC_SIGNALLED=143' TERM
     SECONDS=0
-    while [ ! -f "$SENTINEL" ] && [ "$SECONDS" -lt 2 ]; do
+    while [ "$HC_SIGNALLED" = 0 ] && [ ! -f "$SENTINEL" ] && [ "$SECONDS" -lt 5 ]; do
         if HC_PEEK=$(herdr-app "do" terminal.peek --terminal "$HC_ADDR" 2>&1); then
             HC_SHOWN=1
             break
         fi
         sleep 0.3 || true
     done
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    [ "$HC_SIGNALLED" != 0 ] && exit "$HC_SIGNALLED"
     if [ -z "$HC_SHOWN" ] && [ ! -f "$SENTINEL" ]; then
         echo "error: Herdr.app could not show the review: $HC_PEEK" >&2
         exit 1

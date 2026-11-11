@@ -335,7 +335,13 @@ case "$cmd_name" in
                 hc_name=""
                 prev=""
                 for arg in "$@"; do
+                    [ "$arg" = "--" ] && break
                     [ "$prev" = "--name" ] && hc_name="$arg"
+                    # records --cwd exactly as hc receives it: the args file joins argv with
+                    # spaces, so it cannot tell a quoted path from a split one
+                    if [ "$prev" = "--cwd" ] && [ -n "${FAKE_HC_CWD_FILE:-}" ]; then
+                        printf '%s\n' "$arg" >> "$FAKE_HC_CWD_FILE"
+                    fi
                     prev="$arg"
                 done
                 case "${FAKE_HC_RUN_FAIL:-}" in
@@ -397,6 +403,21 @@ case "$cmd_name" in
                 if [ "$peek_fail" = 1 ]; then
                     echo '{"error":"no running terminal \"t42\""}'
                     exit 1
+                fi
+                # FAKE_PEEK_KILL=parent|parent-int signals the launcher (TERM, or INT for
+                # parent-int) during a peek that succeeds, so the signal is pending when the
+                # call returns and before HC_SHOWN is set. The launcher calls peek inside
+                # $( ), and bash runs it from a forked copy of itself there: the parent of
+                # that copy, with the same command line, is the launcher
+                if [ -n "${FAKE_PEEK_KILL:-}" ]; then
+                    peek_sig=TERM
+                    [ "$FAKE_PEEK_KILL" = parent-int ] && peek_sig=INT
+                    peek_target=$PPID
+                    peek_grand=$(ps -o ppid= -p "$PPID" | tr -d ' ')
+                    if [ "$(ps -o command= -p "$peek_grand")" = "$(ps -o command= -p "$PPID")" ]; then
+                        peek_target=$peek_grand
+                    fi
+                    kill -"$peek_sig" "$peek_target"
                 fi
                 echo '{"ok":true}'
                 ;;

@@ -621,20 +621,21 @@ func TestHerdrAppQuotedCwd(t *testing.T) {
 	for _, launcher := range launchers {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
-			dir := filepath.Join(t.TempDir(), "it's a dir")
+			parent, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			dir := filepath.Join(parent, "it's a dir")
 			require.NoError(t, os.Mkdir(dir, 0o700))
 			output := "## f.go:1 (+)\nc\n"
 			env := herdrAppEnv(t, exitCodeAnnotations, output)
 			env["PWD"] = dir
+			cwdFile := filepath.Join(env["TMPDIR"], "hc-cwd")
+			env["FAKE_HC_CWD_FILE"] = cwdFile
 
 			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
 			res := runTestCmd(t, cmdReq{dir: dir, name: "bash", args: args, env: env})
 			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
 			assert.Equal(t, output, res.stdout)
-			line, _ := hcRunLine(t, recordedCalls(t, env["FAKE_HC_ARGS_FILE"]))
-			real, err := filepath.EvalSymlinks(dir)
-			require.NoError(t, err)
-			assert.True(t, strings.Contains(line, "--cwd "+dir) || strings.Contains(line, "--cwd "+real), "hc run: %s", line)
+			assertFileContent(t, cwdFile, dir+"\n")
 		})
 	}
 }
@@ -662,13 +663,14 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 		wantStderr string
 		wantKill   bool
 		minElapsed time.Duration
+		brokenJQ   bool // the grep fallback runs only when jq is absent or yields nothing
 	}{
 		{
 			name:       "peek never succeeds",
 			env:        map[string]string{"FAKE_HC_RUN_BG": "1", "FAKE_HC_RUN_DELAY": "30", "FAKE_PEEK_FAIL": "always"},
 			wantStderr: `error: Herdr.app could not show the review: {"error":"no running terminal \"t42\""}`,
 			wantKill:   true,
-			minElapsed: 900 * time.Millisecond,
+			minElapsed: 3900 * time.Millisecond,
 		},
 		{
 			name:       "hc run fails",
@@ -687,6 +689,7 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 			env:        map[string]string{"FAKE_HC_RUN_FAIL": "name_taken_spaced"},
 			wantStderr: "name_taken",
 			wantKill:   false,
+			brokenJQ:   true,
 		},
 		{
 			name:       "no address",
@@ -701,6 +704,9 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 				t.Parallel()
 				env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
 				maps.Copy(env, tc.env)
+				if tc.brokenJQ {
+					writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "jq"), "#!/bin/sh\nexit 1\n")
+				}
 
 				args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
 				start := time.Now()
@@ -785,31 +791,18 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+			// the review starts three seconds late, so the first peek succeeds and the
+			// launcher reaches its wait loop, whose first sleep is the fake sleep that
+			// signals it: no timing. No FAKE_REVDIFF_DELAY, whose sleep would spend the
+			// fake sleep's one-shot marker on the review instead of the launcher
 			env["FAKE_HC_RUN_BG"] = "1"
-			env["FAKE_HC_RUN_DELAY"] = "0.2"
-			env["FAKE_REVDIFF_DELAY"] = "3"
+			env["FAKE_HC_RUN_DELAY"] = "3"
+			env["FAKE_SLEEP_KILL"] = "parent"
 
 			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
-			cmd := exec.Command("bash", args...) //nolint:gosec // fixed repo path
-			cmd.Dir, cmd.Env = root, mergeEnv(env)
-			require.NoError(t, cmd.Start())
-			require.Eventually(t, func() bool {
-				return len(recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"])) > 0
-			}, 15*time.Second, 20*time.Millisecond, "launcher never peeked")
-			// the fake records the peek before it answers; give the launcher time to mark
-			// the review shown, so the signal lands in the wait loop
-			time.Sleep(500 * time.Millisecond)
-			require.NoError(t, cmd.Process.Signal(syscall.SIGTERM))
-			done := make(chan struct{})
-			var waitErr error
-			go func() { waitErr = cmd.Wait(); close(done) }()
-			select {
-			case <-done:
-			case <-time.After(30 * time.Second):
-				_ = cmd.Process.Kill()
-				t.Fatal("launcher did not exit after SIGTERM")
-			}
-			assert.Equal(t, 143, commandExitCode(waitErr))
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			assert.Equal(t, 143, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, []string{"do terminal.peek --terminal t42"}, recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]))
 			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
 				"a shown review must survive its launcher")
 
@@ -819,6 +812,90 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 				return len(left) == 0
 			}, 15*time.Second, 50*time.Millisecond, "the review never finished")
 			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+		})
+	}
+}
+
+// a signal that arrives during a peek that succeeds is paid only after HC_SHOWN is set, so
+// the review the user has just seen survives its launcher
+func TestHerdrAppSignalDuringPeek(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	// each trap records its own status, as in the herdr pane split window
+	signals := []struct {
+		name     string
+		kill     string
+		wantCode int
+	}{
+		{name: "TERM", kill: "parent", wantCode: 143},
+		{name: "INT", kill: "parent-int", wantCode: 130},
+	}
+	for _, launcher := range launchers {
+		for _, sig := range signals {
+			t.Run(launcher.name+"/"+sig.name, func(t *testing.T) {
+				t.Parallel()
+				env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+				env["FAKE_HC_RUN_BG"] = "1"
+				env["FAKE_HC_RUN_DELAY"] = "1"
+				env["FAKE_PEEK_KILL"] = sig.kill
+
+				args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+				res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+				assert.Equal(t, sig.wantCode, res.code, "stderr: %s", res.stderr)
+				assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
+					"a review shown by the interrupted peek must survive its launcher")
+
+				require.Eventually(t, func() bool {
+					left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
+					require.NoError(t, err)
+					return len(left) == 0
+				}, 15*time.Second, 50*time.Millisecond, "the review never finished")
+			})
+		}
+	}
+}
+
+// without a working jq the launcher reads the address with grep, which must accept
+// pretty-printed JSON as the HC_KIND fallback does
+func TestHerdrAppAddressWithoutJQ(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			output := "## f.go:1 (+)\nc\n"
+			env := herdrAppEnv(t, exitCodeAnnotations, output)
+			writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "jq"), "#!/bin/sh\nexit 1\n")
+			env["FAKE_HC_RUN_BG"] = "1"
+			env["FAKE_HC_RUN_JSON"] = `{"address": "t42", "name": "revdiff-test"}`
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assert.Equal(t, []string{"do terminal.peek --terminal t42"}, recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]))
 		})
 	}
 }
@@ -3128,11 +3205,13 @@ func fakeLauncherEnv(t *testing.T, r launcherRun) map[string]string {
 	// the target -- "parent" is a launcher-directed signal, "group" emulates Ctrl-C, which
 	// kills this sleep too, and "group-always" keeps doing it so every retry dies.
 	//
-	// The once-marker makes "group" hit only the FIRST sleep of the run, which on the
-	// refusal path is the grace. That assumption is load-bearing: combining FAKE_SLEEP_KILL
-	// with anything that sleeps earlier (a backend with its own wait loop, or
-	// FAKE_REVDIFF_DELAY) spends the marker on the wrong sleep and the case passes while
-	// testing nothing. Keep these cases on the refusal path.
+	// The once-marker makes the fake hit only the FIRST PATH `sleep` of the run. Two kinds of
+	// case rely on that. On the refusal path, the first sleep is the grace. In
+	// TestHerdrAppSignalAfterShown, it is the Herdr.app wait loop: that holds because the
+	// first peek succeeds (the one-peek assertion pins this) and FAKE_HC_RUN_DELAY uses
+	// /bin/sleep. Combining FAKE_SLEEP_KILL with anything that sleeps earlier (a failed peek,
+	// a backend with its own wait loop, or FAKE_REVDIFF_DELAY) spends the marker on the wrong
+	// sleep, and the case then passes while it tests nothing.
 	//
 	// The marker is written BEFORE the kill so the retry that follows runs a real sleep.
 	writeExecutable(t, filepath.Join(binDir, "sleep"), `#!/bin/sh
