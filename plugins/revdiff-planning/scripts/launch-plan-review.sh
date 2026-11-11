@@ -404,13 +404,16 @@ if [ -n "${HC_TERMINAL_ID:-}" ]; then
     HC_NAME="revdiff-plan-$$-$RANDOM"
     HC_CLAIMED=""
     HC_SHOWN=""
-    trap 'herdr_app_cleanup_unshown || true; rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp" "$LAUNCH_SCRIPT"' EXIT
+    # the launch script removes itself, as in launch-revdiff.sh: a shown review whose sh has
+    # not opened it yet must still start after the launcher is gone
+    trap 'herdr_app_cleanup_unshown || true; rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
     # INT/TERM exit through the EXIT trap, as in the agterm branch
     trap 'exit 130' INT
     trap 'exit 143' TERM
     cat > "$LAUNCH_SCRIPT" <<LAUNCHER
 #!/bin/sh
 $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")
+rm -f "\$0"
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
@@ -481,7 +484,6 @@ LAUNCHER
     rc=$(cat "$SENTINEL" 2>/dev/null || echo 1)
     # no explicit close: hc run --rm removes the terminal when the launch script exits.
     # the sentinel stays until the EXIT trap, so the cleanup there still sees a finished review
-    rm -f "$LAUNCH_SCRIPT"
     cat "$OUTPUT_FILE"
     exit "${rc:-1}"
 fi

@@ -771,8 +771,8 @@ func TestHerdrAppFastExitBeforePeek(t *testing.T) {
 	}
 }
 
-// a launcher killed after the review is shown (a harness timeout) leaves the review open:
-// the SKILL.md fallback reads its output file once the user quits
+// a launcher killed after the review is shown (a harness timeout) leaves the review open;
+// for launch-revdiff.sh the SKILL.md fallback then reads its output file once the user quits
 func TestHerdrAppSignalAfterShown(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -798,6 +798,8 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 			env["FAKE_HC_RUN_BG"] = "1"
 			env["FAKE_HC_RUN_DELAY"] = "3"
 			env["FAKE_SLEEP_KILL"] = "parent"
+			argsFile := filepath.Join(env["TMPDIR"], "revdiff-args")
+			env["FAKE_ARGS_FILE"] = argsFile
 
 			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
 			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
@@ -806,6 +808,12 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
 				"a shown review must survive its launcher")
 
+			// revdiff's args file proves the review ran: the launch script is also gone
+			// when a trap deleted it before sh opened it
+			require.Eventually(t, func() bool {
+				_, err := os.Stat(argsFile)
+				return err == nil
+			}, 15*time.Second, 50*time.Millisecond, "the shown review never ran")
 			require.Eventually(t, func() bool {
 				left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
 				require.NoError(t, err)
@@ -849,6 +857,8 @@ func TestHerdrAppSignalDuringPeek(t *testing.T) {
 				env["FAKE_HC_RUN_BG"] = "1"
 				env["FAKE_HC_RUN_DELAY"] = "1"
 				env["FAKE_PEEK_KILL"] = sig.kill
+				argsFile := filepath.Join(env["TMPDIR"], "revdiff-args")
+				env["FAKE_ARGS_FILE"] = argsFile
 
 				args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
 				res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
@@ -856,6 +866,10 @@ func TestHerdrAppSignalDuringPeek(t *testing.T) {
 				assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
 					"a review shown by the interrupted peek must survive its launcher")
 
+				require.Eventually(t, func() bool {
+					_, err := os.Stat(argsFile)
+					return err == nil
+				}, 15*time.Second, 50*time.Millisecond, "the shown review never ran")
 				require.Eventually(t, func() bool {
 					left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
 					require.NoError(t, err)
