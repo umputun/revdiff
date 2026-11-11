@@ -433,7 +433,8 @@ func sourceEditorPolicy(opts options, workDir string) ui.SourceEditorPolicy {
 			ExactPath: opts.compareAbsNew,
 		}
 	case workDir != "":
-		worktreeReview := !opts.Staged && opts.ref() == ""
+		// a single ref is diffed against the working tree, so the edited file is the reviewed new side
+		worktreeReview := !opts.Staged && !opts.twoRef()
 		return ui.SourceEditorPolicy{
 			Available: true,
 			Root:      workDir,
