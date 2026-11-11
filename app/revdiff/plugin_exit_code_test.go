@@ -1177,21 +1177,19 @@ func TestHerdrPaneOverlayOptIn(t *testing.T) {
 		{
 			// a generic error is not evidence the pane died, and there is no safe deadline
 			// when the API cannot report liveness: the loop must keep waiting through a
-			// control-plane outage and still finish the review normally. Sustained failures
-			// outlast the warn threshold here, then the sentinel lands. A 0.3s poll puts the
-			// tenth miss at ~3.2s against a 5s sentinel, so the warning lands with roughly
-			// 1.5x headroom; iterations slower than ~0.5s would flake it (fail, never
-			// false-pass). After the warn the poll backs off to 2s, so the run totals ~11
-			// gets, not the ~16 a flat poll would make.
+			// control-plane outage and still finish the review normally. The review ends on
+			// the poll count, never on elapsed time, or a slow runner ends it before the
+			// tenth miss warns.
 			name: "a control-plane outage does not end a live review",
 			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
-				"FAKE_HERDR_GET_FAIL": "1", "FAKE_HERDR_ASYNC": "1", "FAKE_REVDIFF_DELAY": "5"},
+				"FAKE_HERDR_GET_FAIL": "1", "FAKE_HERDR_ASYNC": "1",
+				"FAKE_REVDIFF_AFTER_GETS": "10", "FAKE_REVDIFF_DELAY": "3"},
 			wantSplit:      true,
 			wantZoom:       true,
 			wantGet:        true,
 			wantClose:      true,
 			wantRetriedGet: true,
-			// ~11 with the 2s backoff after miss 10; a flat 0.3s poll would make ~16
+			// ~12 with the 2s backoff after miss 10; a flat 0.3s poll would make ~20
 			maxGets:    13,
 			wantStderr: "still waiting for the review",
 		},

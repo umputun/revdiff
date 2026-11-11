@@ -21,6 +21,15 @@ fi
 if [ -n "${FAKE_STDERR:-}" ]; then
     printf "%s" "$FAKE_STDERR" >&2
 fi
+# holds the review open until the launcher has polled `pane get` this many times, so a
+# poll-count threshold is reached however slow each poll runs; bounded at 60s
+if [ -n "${FAKE_REVDIFF_AFTER_GETS:-}" ]; then
+    i=0
+    while [ "$(grep -v -- '--help' "$FAKE_HERDR_ARGS_FILE" 2>/dev/null | grep -c '^pane get')" -lt "$FAKE_REVDIFF_AFTER_GETS" ] && [ "$i" -lt 600 ]; do
+        sleep 0.1
+        i=$((i + 1))
+    done
+fi
 # lets a test hold a review open: the script has started, the sentinel is not yet written
 if [ -n "${FAKE_REVDIFF_DELAY:-}" ]; then
     sleep "$FAKE_REVDIFF_DELAY"
