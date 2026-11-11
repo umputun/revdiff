@@ -119,8 +119,7 @@ func (o options) startupUntracked() bool {
 	return o.Untracked && !o.twoRef()
 }
 
-// twoRef reports whether the review compares two refs (`a b`, `a..b` or `a...b`),
-// so neither side of the diff is the working tree.
+// twoRef reports whether the positional args name two refs: `a b`, `a..b` or `a...b`.
 func (o options) twoRef() bool {
 	return o.Refs.Against != "" || strings.Contains(o.Refs.Base, "..")
 }
