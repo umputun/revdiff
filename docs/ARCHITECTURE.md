@@ -578,9 +578,10 @@ User presses 'e' in diff pane
               → return to revdiff without reloading
 ```
 
-Source line navigation is best effort for all worktree-backed reviews. Staged and ref reviews still
-request the focused line when revdiff can derive one from the loaded diff, but clean editor exits
-from staged and ref reviews do not reload the displayed diff. Removed rows target the nearest line
+Source line navigation is best effort for all worktree-backed reviews. Staged and two-ref reviews
+still request the focused line when revdiff can derive one from the loaded diff, but clean editor
+exits from them do not reload the displayed diff. A single-ref review diffs against the working tree,
+so it reloads and guards annotated files the same way a working-tree review does. Removed rows target the nearest line
 that still exists in the current file; when previous and next current-file rows are equally near,
 the previous row wins.
 

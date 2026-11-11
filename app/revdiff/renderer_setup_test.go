@@ -326,7 +326,15 @@ func TestSourceEditorPolicy_ModeBehavior(t *testing.T) {
 	compareNew := filepath.Join(t.TempDir(), "new.md")
 	refOpts := options{}
 	refOpts.Refs.Base = "HEAD~1"
+	twoRefOpts := options{}
+	twoRefOpts.Refs.Base, twoRefOpts.Refs.Against = "main", "feature"
+	rangeOpts := options{}
+	rangeOpts.Refs.Base = "main..feature"
+	stagedRefOpts := options{Staged: true}
+	stagedRefOpts.Refs.Base = "HEAD~1"
 	compareOpts := options{compareAbsNew: compareNew}
+	guarded := ui.SourceEditorPolicy{Available: true, Root: workDir, ReloadAfterCleanExit: true, DisallowAnnotatedFileEditing: true}
+	unguarded := ui.SourceEditorPolicy{Available: true, Root: workDir}
 
 	tests := []struct {
 		name string
@@ -357,12 +365,10 @@ func TestSourceEditorPolicy_ModeBehavior(t *testing.T) {
 			root: workDir,
 			want: ui.SourceEditorPolicy{Available: true, Root: workDir},
 		},
-		{
-			name: "ref opens without reload",
-			opts: refOpts,
-			root: workDir,
-			want: ui.SourceEditorPolicy{Available: true, Root: workDir},
-		},
+		{name: "single ref reloads and guards annotations", opts: refOpts, root: workDir, want: guarded},
+		{name: "two refs open without reload", opts: twoRefOpts, root: workDir, want: unguarded},
+		{name: "ref range opens without reload", opts: rangeOpts, root: workDir, want: unguarded},
+		{name: "staged ref opens without reload", opts: stagedRefOpts, root: workDir, want: unguarded},
 		{
 			name: "compare opens exact new path without reload",
 			opts: compareOpts,
