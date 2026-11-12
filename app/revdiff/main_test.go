@@ -189,11 +189,12 @@ func TestFinalize_LoadError(t *testing.T) {
 	}
 }
 
-func TestFinalize_AllPreloadedNotesDeleted(t *testing.T) {
+func TestFinalize_AllWrittenNotesDeleted(t *testing.T) {
 	stale := "## file.go:1 (+)\nold note\n"
 	tests := []struct {
 		name      string
 		preloaded bool
+		flushed   bool
 		discarded bool
 		signaled  bool
 		wantFile  string
@@ -202,6 +203,9 @@ func TestFinalize_AllPreloadedNotesDeleted(t *testing.T) {
 		{name: "discard keeps the output file", preloaded: true, discarded: true, wantFile: stale},
 		{name: "signal keeps the output file", preloaded: true, signaled: true, wantFile: stale},
 		{name: "nothing preloaded keeps the output file", wantFile: stale},
+		{name: "quit after flush clears the output file", flushed: true, wantFile: ""},
+		{name: "discard after flush keeps the output file", flushed: true, discarded: true, wantFile: stale},
+		{name: "signal after flush keeps the output file", flushed: true, signaled: true, wantFile: stale},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -214,6 +218,7 @@ func TestFinalize_AllPreloadedNotesDeleted(t *testing.T) {
 				opts:        options{HistoryDir: histDir, Output: outFile, ExitCodeOnAnnotations: true},
 				annotations: "",
 				preloaded:   tt.preloaded,
+				flushed:     tt.flushed,
 				discarded:   tt.discarded,
 				workDir:     "repo",
 				signaled:    tt.signaled,
@@ -420,6 +425,17 @@ func TestRun_DeletingEveryPreloadedNoteClearsOutput(t *testing.T) {
 	assert.Equal(t, "0", res.status, "terminal: %q", res.terminal)
 	assert.Empty(t, res.stdout)
 	got, err := os.ReadFile(notesPath) //nolint:gosec // test-owned path
+	require.NoError(t, err)
+	assert.Empty(t, string(got))
+}
+
+func TestRun_ReloadAfterFlushClearsOutput(t *testing.T) {
+	outPath := filepath.Join(t.TempDir(), "annotations.md")
+
+	res := runPTYReview(t, map[string]string{"REVDIFF_TUI_TEST_OUTPUT": outPath}, "+1/-1", "Anote\rORyq")
+	assert.Equal(t, "0", res.status, "terminal: %q", res.terminal)
+	assert.Empty(t, res.stdout)
+	got, err := os.ReadFile(outPath) //nolint:gosec // test-owned path
 	require.NoError(t, err)
 	assert.Empty(t, string(got))
 }

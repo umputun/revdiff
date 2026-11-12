@@ -314,6 +314,7 @@ func run(opts options) (int, error) {
 			files:       m.Store().Files(),
 			discarded:   m.Discarded(),
 			preloaded:   preloaded,
+			flushed:     m.OutputFlushed(),
 			gitRoot:     gitRoot,
 			workDir:     workDir,
 			signaled:    signaled,
@@ -352,6 +353,7 @@ type finalizeReq struct {
 	files       []string
 	discarded   bool
 	preloaded   bool
+	flushed     bool
 	gitRoot     string
 	workDir     string
 	signaled    bool
@@ -361,8 +363,9 @@ type finalizeReq struct {
 
 // finalize persists the review after p.Run() joins. A discarded review writes
 // nothing, and so does one with no annotations unless --annotations preloaded
-// some: a graceful exit that deleted all of them writes the empty output, so a
-// stale -o file cannot bring them back on the next load. Otherwise the history
+// some or an O flush wrote the -o file: a graceful exit that deleted all of them
+// writes the empty output, so a stale -o file cannot bring them back on the next
+// load or hand them to the caller. Otherwise the history
 // safety-net save always runs; a signal-driven exit (r.signaled) stops there —
 // history only, never the -o handoff — while a graceful exit also writes the
 // annotation output.
@@ -376,7 +379,7 @@ func finalize(r finalizeReq) (int, error) {
 		return 0, nil
 	}
 	if r.annotations == "" {
-		if !r.preloaded || r.signaled {
+		if (!r.preloaded && !r.flushed) || r.signaled {
 			return 0, nil
 		}
 		return writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: "", stdout: r.stdout})
