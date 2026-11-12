@@ -308,17 +308,19 @@ func run(opts options) (int, error) {
 	// EIO that races the guard's QuitMsg — so the history safety net must run
 	// whenever the model is available and the exit was graceful or signaled.
 	if m, ok := finalModel.(ui.Model); ok && (runErr == nil || signaled) {
+		finalOpts := opts
+		finalOpts.Output = m.OutputPath()
 		return finalize(finalizeReq{
-			opts:        opts,
-			annotations: m.Store().FormatOutput(),
-			files:       m.Store().Files(),
-			discarded:   m.Discarded(),
-			preloaded:   preloaded,
-			gitRoot:     gitRoot,
-			workDir:     workDir,
-			signaled:    signaled,
-			loadErr:     m.LoadError(),
-			stdout:      os.Stdout,
+			opts:             finalOpts,
+			annotations:      m.Store().FormatOutput(),
+			files:            m.Store().Files(),
+			discarded:        m.Discarded(),
+			writeEmptyOutput: preloaded || m.OutputCheckpointed(),
+			gitRoot:          gitRoot,
+			workDir:          workDir,
+			signaled:         signaled,
+			loadErr:          m.LoadError(),
+			stdout:           os.Stdout,
 		})
 	}
 	if runErr != nil {
@@ -347,22 +349,22 @@ func (r tuiOutput) open() (*os.File, error) {
 }
 
 type finalizeReq struct {
-	opts        options
-	annotations string
-	files       []string
-	discarded   bool
-	preloaded   bool
-	gitRoot     string
-	workDir     string
-	signaled    bool
-	loadErr     error
-	stdout      io.Writer
+	opts             options
+	annotations      string
+	files            []string
+	discarded        bool
+	writeEmptyOutput bool
+	gitRoot          string
+	workDir          string
+	signaled         bool
+	loadErr          error
+	stdout           io.Writer
 }
 
 // finalize persists the review after p.Run() joins. A discarded review writes
-// nothing, and so does one with no annotations unless --annotations preloaded
-// some: a graceful exit that deleted all of them writes the empty output, so a
-// stale -o file cannot bring them back on the next load. Otherwise the history
+// nothing, and so does one with no annotations unless an output file needs to
+// be cleared because annotations were preloaded or the session checkpointed a
+// snapshot before deleting them. Otherwise the history
 // safety-net save always runs; a signal-driven exit (r.signaled) stops there —
 // history only, never the -o handoff — while a graceful exit also writes the
 // annotation output.
@@ -376,7 +378,7 @@ func finalize(r finalizeReq) (int, error) {
 		return 0, nil
 	}
 	if r.annotations == "" {
-		if !r.preloaded || r.signaled {
+		if !r.writeEmptyOutput || r.signaled {
 			return 0, nil
 		}
 		return writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: "", stdout: r.stdout})

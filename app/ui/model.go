@@ -104,6 +104,7 @@ type overlayManager interface {
 	OpenAnnotList(spec overlay.AnnotListSpec)
 	OpenThemeSelect(spec overlay.ThemeSelectSpec)
 	OpenFilePicker(spec overlay.FilePickerSpec)
+	OpenOutputPath(spec overlay.OutputPathSpec)
 	OpenInfo(spec overlay.InfoSpec)
 	UpdateInfo(spec overlay.InfoSpec)
 	Close()
@@ -334,7 +335,6 @@ type modelConfigState struct {
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
 	annotPrefix        string             // cached: marker + " "
 	annotFilePrefix    string             // cached: marker + " file: "
-	outputPath         string             // --output destination for the O in-session flush; empty disables it
 }
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
@@ -946,7 +946,6 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			wrapIndent:         max(0, cfg.WrapIndent),
 			annotPrefix:        cfg.AnnotationMarker + " ",
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
-			outputPath:         cfg.OutputPath,
 		},
 		mouseTracking: cfg.MouseTracking,
 		layout: layoutState{
@@ -976,6 +975,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		reviewed:             reviewedState{cache: make(map[string]string), pending: make(map[string]uint64)},
 		reload:               reloadState{applicable: cfg.ReloadApplicable},
 		compact:              compactState{applicable: cfg.CompactApplicable},
+		output:               outputState{path: cfg.OutputPath},
 		annot:                annotationState{rowCache: make(map[annotCacheKey][]string)},
 		renderCache:          &diffRenderCache{},
 		loadUntracked:        cfg.LoadUntracked,
@@ -997,6 +997,19 @@ func (m Model) Discarded() bool {
 // LoadError returns the error of the latest file-list load, nil when it succeeded.
 func (m Model) LoadError() error {
 	return m.filesErr
+}
+
+// OutputPath returns the effective annotation output destination. It starts
+// with --output and may be selected interactively through the O prompt.
+func (m Model) OutputPath() string {
+	return m.output.path
+}
+
+// OutputCheckpointed reports whether this session successfully wrote an
+// annotation snapshot to the output file. Finalization uses it to clear a
+// checkpoint when every annotation is later deleted before a graceful quit.
+func (m Model) OutputCheckpointed() bool {
+	return m.output.checkpointed
 }
 
 // Init initializes the model by loading changed files and the commit log
@@ -1335,6 +1348,9 @@ func (m Model) handleModalKey(msg tea.KeyMsg) (bool, tea.Model, tea.Cmd) {
 			m.cancelThemeSelect()
 		case overlay.OutcomeFileChosen:
 			model, cmd := m.jumpToFile(out.FileChoice.Path)
+			return true, model, cmd
+		case overlay.OutcomeOutputPathSubmitted:
+			model, cmd := m.handleOutputPathChoice(out.OutputPathChoice)
 			return true, model, cmd
 		case overlay.OutcomeClosed, overlay.OutcomeNone:
 		}

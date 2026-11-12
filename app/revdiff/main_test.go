@@ -192,15 +192,15 @@ func TestFinalize_LoadError(t *testing.T) {
 func TestFinalize_AllPreloadedNotesDeleted(t *testing.T) {
 	stale := "## file.go:1 (+)\nold note\n"
 	tests := []struct {
-		name      string
-		preloaded bool
-		discarded bool
-		signaled  bool
-		wantFile  string
+		name             string
+		writeEmptyOutput bool
+		discarded        bool
+		signaled         bool
+		wantFile         string
 	}{
-		{name: "quit clears the output file", preloaded: true, wantFile: ""},
-		{name: "discard keeps the output file", preloaded: true, discarded: true, wantFile: stale},
-		{name: "signal keeps the output file", preloaded: true, signaled: true, wantFile: stale},
+		{name: "quit clears the output file", writeEmptyOutput: true, wantFile: ""},
+		{name: "discard keeps the output file", writeEmptyOutput: true, discarded: true, wantFile: stale},
+		{name: "signal keeps the output file", writeEmptyOutput: true, signaled: true, wantFile: stale},
 		{name: "nothing preloaded keeps the output file", wantFile: stale},
 	}
 	for _, tt := range tests {
@@ -211,13 +211,13 @@ func TestFinalize_AllPreloadedNotesDeleted(t *testing.T) {
 
 			var buf bytes.Buffer
 			code, err := finalize(finalizeReq{
-				opts:        options{HistoryDir: histDir, Output: outFile, ExitCodeOnAnnotations: true},
-				annotations: "",
-				preloaded:   tt.preloaded,
-				discarded:   tt.discarded,
-				workDir:     "repo",
-				signaled:    tt.signaled,
-				stdout:      &buf,
+				opts:             options{HistoryDir: histDir, Output: outFile, ExitCodeOnAnnotations: true},
+				annotations:      "",
+				writeEmptyOutput: tt.writeEmptyOutput,
+				discarded:        tt.discarded,
+				workDir:          "repo",
+				signaled:         tt.signaled,
+				stdout:           &buf,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, 0, code)
@@ -422,6 +422,18 @@ func TestRun_DeletingEveryPreloadedNoteClearsOutput(t *testing.T) {
 	got, err := os.ReadFile(notesPath) //nolint:gosec // test-owned path
 	require.NoError(t, err)
 	assert.Empty(t, string(got))
+}
+
+func TestRun_PromptedOutputPathPersistsThroughQuit(t *testing.T) {
+	outPath := filepath.Join(t.TempDir(), "prompted-review.md")
+	keys := "Acheckpoint\nO" + outPath + "\nq"
+
+	res := runPTYReview(t, nil, "+1/-1", keys)
+	assert.Equal(t, "0", res.status, "terminal: %q", res.terminal)
+	assert.Empty(t, res.stdout, "runtime-selected output path must replace stdout handoff on q")
+	got, err := os.ReadFile(outPath) //nolint:gosec // test-owned path
+	require.NoError(t, err)
+	assert.Equal(t, "## a.txt (file-level)\ncheckpoint\n", string(got))
 }
 
 type ptyReviewResult struct {

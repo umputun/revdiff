@@ -1,13 +1,22 @@
 package annotation
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/umputun/revdiff/app/fsutil"
 )
+
+// ErrOutputExists reports that WriteFileIfAbsent refused to replace an
+// existing output target. Callers may ask the user for overwrite confirmation
+// and retry through WriteFile.
+var ErrOutputExists = errors.New("annotation output already exists")
 
 // Annotation represents a user comment on a specific diff line.
 type Annotation struct {
@@ -180,6 +189,26 @@ func (s *Store) WriteFile(path string) (string, error) {
 		return "", fmt.Errorf("write annotations to %s: %w", path, err)
 	}
 	return content, nil
+}
+
+// WriteFileIfAbsent creates missing parent directories and writes FormatOutput
+// atomically only when no filesystem entry currently occupies path. Symlinks,
+// including dangling symlinks, count as existing targets and require the caller
+// to confirm before using WriteFile.
+func (s *Store) WriteFileIfAbsent(path string) (string, error) {
+	path = filepath.Clean(path)
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create annotations output directory %s: %w", dir, err)
+	}
+	_, err := os.Lstat(path)
+	switch {
+	case err == nil:
+		return "", fmt.Errorf("%w: %s", ErrOutputExists, path)
+	case !errors.Is(err, fs.ErrNotExist):
+		return "", fmt.Errorf("check annotations output %s: %w", path, err)
+	}
+	return s.WriteFile(path)
 }
 
 // escapeHeaderLines prefixes any body line whose first non-space content is

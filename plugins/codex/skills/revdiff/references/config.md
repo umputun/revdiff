@@ -175,6 +175,6 @@ The `scroll_diff_page_*` and `scroll_diff_half_page_*` actions are the page-size
 
 Fixed modal keys (Enter, Esc in annotation/search input, confirm discard) are not remappable. Keymap-resolved actions like `open_editor` work during annotation input and can be rebound. Chord bindings do not fire during text input — use single-key `ctrl+*` bindings for actions that need to work during annotation input.
 
-The `flush_output` action (default `O`) exports the current annotations without exiting revdiff. `--output` writes the full snapshot to a file; `--post-flush-command` sends it to a command on stdin. They work independently or together. At least one must be configured, and an empty annotation store produces only a status hint.
+The `flush_output` action (default `O`) exports the current annotations without exiting revdiff. `--output` writes the full snapshot to a file; `--post-flush-command` sends it to a command on stdin. They work independently or together. With neither configured, `O` prompts for an output path, confirms before replacing an existing file, and remembers a successful selection for later flushes and graceful quit. An empty annotation store produces only a status hint.
 
 For clipboard-only flushes on macOS, set `post-flush-command = pbcopy` in the config file. No `--output` flag is required. On Linux, use `xclip -selection clipboard` for X11 or `wl-copy` for Wayland.

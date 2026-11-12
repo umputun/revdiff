@@ -1,6 +1,7 @@
 package annotation
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -514,6 +515,60 @@ func TestStore_WriteFileOverwritesExisting(t *testing.T) {
 	got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
 	require.NoError(t, err)
 	assert.Equal(t, s.FormatOutput(), string(got), "overwrite must replace stale content entirely")
+}
+
+func TestStore_WriteFileIfAbsent(t *testing.T) {
+	t.Run("writes new file", func(t *testing.T) {
+		s := NewStore()
+		s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "note"})
+		path := filepath.Join(t.TempDir(), "output.md")
+
+		snapshot, err := s.WriteFileIfAbsent(path)
+		require.NoError(t, err)
+		got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
+		require.NoError(t, err)
+		assert.Equal(t, snapshot, string(got))
+	})
+
+	t.Run("creates missing parent directories", func(t *testing.T) {
+		s := NewStore()
+		s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "note"})
+		path := filepath.Join(t.TempDir(), "missing", "nested", "output.md")
+
+		snapshot, err := s.WriteFileIfAbsent(path)
+		require.NoError(t, err)
+		got, err := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
+		require.NoError(t, err)
+		assert.Equal(t, snapshot, string(got))
+	})
+
+	t.Run("refuses existing file", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "output.md")
+		require.NoError(t, os.WriteFile(path, []byte("keep me"), 0o600))
+		s := NewStore()
+		s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "replacement"})
+
+		_, err := s.WriteFileIfAbsent(path)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrOutputExists)
+		got, readErr := os.ReadFile(path) //nolint:gosec // test path from t.TempDir()
+		require.NoError(t, readErr)
+		assert.Equal(t, "keep me", string(got), "refused write must leave the existing file untouched")
+	})
+
+	t.Run("dangling symlink counts as existing", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "output.md")
+		if err := os.Symlink(filepath.Join(dir, "missing"), path); err != nil {
+			t.Skipf("symlink unavailable: %v", err)
+		}
+		s := NewStore()
+		s.Add(Annotation{File: "handler.go", Line: 43, Type: "+", Comment: "replacement"})
+
+		_, err := s.WriteFileIfAbsent(path)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrOutputExists))
+	})
 }
 
 func TestStore_WriteFileEmptyStore(t *testing.T) {

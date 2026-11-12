@@ -167,8 +167,8 @@ across files by concern to keep files under ~500 lines:
 - **`editor.go`** — `$EDITOR` handoffs for annotation temp-file editing and source-file opening:
   `openEditor()` / `openSourceEditor()` wrap `app/editor.Editor` in `tea.ExecProcess`, capture
   target state, route completion, and refresh the current file after a clean source-editor exit
-- **`output.go`** — in-session annotation flush and optional post-flush command handoff through
-  injected `PostFlushHook` + `tea.ExecProcess`
+- **`output.go`** — in-session annotation flush, interactive output-path selection, and optional
+  post-flush command handoff through injected `PostFlushHook` + `tea.ExecProcess`
 - **`themeselect.go`** — theme selector operations: open, preview, confirm, apply (via injected
   `ThemeCatalog`)
 - **`filepicker.go`** — file picker open and selected-path jump integration; delegates
@@ -375,7 +375,10 @@ line for a new record header. Lines starting with `###` or `##` without a space 
 `fsutil.AtomicWriteFile` (temp file + rename, mode 0o600), and returns the exact snapshot written
 for the optional post-flush hook; it backs the in-session `O` flush. The exit-time file write calls
 `fsutil.AtomicWriteFile` directly with the already-formatted output, so both paths share the same
-atomic writer and a concurrent reader never sees a truncated file.
+atomic writer and a concurrent reader never sees a truncated file. `WriteFileIfAbsent(path)` adds
+the prompt's first-write guard: it creates missing parent directories, while an existing file or
+symlink returns `ErrOutputExists` without changing it, after which the UI can request explicit
+overwrite confirmation and retry via `WriteFile`.
 
 ### app/editor/ — external editor invocation
 
@@ -551,8 +554,11 @@ User presses 'a' on diff line
           content == ""  → cancelAnnotation (preserve existing annotation)
           otherwise      → saveComment(content, fileLevel, line, type)
   → re-render shows annotation (multi-line aware) below diff line
-  → 'O' (flush_output, requires --output and/or PostFlushHook):
+  → 'O' (flush_output):
       → empty store: status hint, no export
+      → no output target: open output-path overlay
+          → new path: atomic file snapshot; remember path for later O / graceful quit
+          → existing path: require overwrite confirmation before writing
       → optional store.WriteFile(path) → atomic file snapshot
       → optional PostFlushHook.Prepare(snapshot) → tea.ExecProcess → command reads snapshot from stdin
       → revdiff stays open (annotate → flush → hand off → 'R' reload loop)

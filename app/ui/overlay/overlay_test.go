@@ -75,6 +75,14 @@ func TestManager_OpenClose(t *testing.T) {
 		mgr.Close()
 		assert.False(t, mgr.Active())
 	})
+
+	t.Run("outputPath", func(t *testing.T) {
+		mgr.OpenOutputPath(OutputPathSpec{Path: "review.md"})
+		assert.True(t, mgr.Active())
+		assert.Equal(t, KindOutputPath, mgr.Kind())
+		mgr.Close()
+		assert.False(t, mgr.Active())
+	})
 }
 
 func TestManager_OpenClosesExisting(t *testing.T) {

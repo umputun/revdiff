@@ -785,7 +785,7 @@ The file picker lists paths currently visible in the sidebar, so annotated-only 
 | `@` | Toggle annotation list popup (navigate and jump to any annotation) |
 | `}` / `{` | Jump to next/previous annotation (always crosses file boundaries; silent no-op at the first/last annotation) |
 | `d` | Delete annotation under cursor |
-| `O` | Export annotations without exiting (requires `--output` and/or `--post-flush-command`) |
+| `O` | Export annotations without exiting; prompts for an output file when no target is configured |
 | `Ctrl+E` (during annotation input) | Open `$EDITOR` for multi-line annotation (`open_editor` — rebindable) |
 | `Esc` | Cancel annotation input |
 
@@ -793,7 +793,7 @@ While the annotation input is active, press `Ctrl+E` (or whatever key is bound t
 
 Press `e` in the diff pane to open the focused file in `$EDITOR` (`open_file_in_editor` — rebindable) when revdiff has a stable source path. Editor resolution is the same `$EDITOR` → `$VISUAL` → `vi` chain. Known editors receive either `$EDITOR +N path` or `$EDITOR --goto path:N` as appropriate; unknown editors receive only the file path. File lines are resolved on a best-effort basis. For working tree changes and single-ref reviews (e.g. `revdiff HEAD~1`, which compare against the working tree), a clean editor exit reloads the displayed file, and files with line annotations cannot be opened for editing because edits can orphan those annotations. For `--staged` or two refs, a clean editor exit returns to revdiff without reloading the displayed diff. In compare mode, `e` opens the `--compare-new` side. Diffs read with `--stdin` do not support opening files. Unsupported rows or files and editor errors show a status hint instead of launching an editor or changing the diff.
 
-Press `O` to export the current annotations without exiting (`flush_output`, rebindable). Configure `--output`, `--post-flush-command`, or both. With `--output`, each flush atomically overwrites the file with the full current annotation set (a snapshot, not an append log). With `--post-flush-command`, the same snapshot is sent to the command on stdin. If neither is configured, or if there are no annotations, revdiff shows a status hint and does nothing.
+Press `O` to export the current annotations without exiting (`flush_output`, rebindable). With `--output`, each flush atomically overwrites the file with the full current annotation set (a snapshot, not an append log). With `--post-flush-command`, the same snapshot is sent to the command on stdin. If neither is configured, `O` opens a path prompt; a new path is written immediately and becomes the output target for later flushes and graceful quit. Missing parent directories are created automatically. Existing paths require confirmation before overwrite. `Esc` cancels the prompt without writing. An empty annotation store still produces only a status hint.
 
 The output file supports a keep-open review loop with an AI agent: annotate, flush with `O`, let the agent read the file and edit code, then reload with `R` and continue in the same session.
 

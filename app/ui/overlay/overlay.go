@@ -1,11 +1,11 @@
 // Package overlay owns all layered popup UI for revdiff — help, annotation list,
-// theme selector, and file picker overlays. It provides a Manager coordinator
+// theme selector, file picker, output path, and info overlays. It provides a Manager coordinator
 // that enforces mutual exclusivity (only one overlay visible at a time), routes key dispatch
 // to the active overlay, and composes the overlay on top of the base view via
 // ANSI-aware centered compositing.
 //
 // Callers supply fully populated spec structs (HelpSpec, AnnotListSpec, ThemeSelectSpec,
-// FilePickerSpec)
+// FilePickerSpec, OutputPathSpec, InfoSpec)
 // when opening an overlay and handle side effects by switching on the returned Outcome
 // from HandleKey. The overlay package has no dependency on ui.Model, annotation store,
 // theme loading, or any filesystem operation.
@@ -32,6 +32,7 @@ const (
 	KindAnnotList        // annotation list popup
 	KindThemeSelect      // theme selector popup
 	KindFilePicker       // filterable file-jump popup
+	KindOutputPath       // annotation output-path prompt
 	KindInfo             // unified info popup (description + session + commits)
 )
 
@@ -39,13 +40,14 @@ const (
 type OutcomeKind int
 
 const (
-	OutcomeNone             OutcomeKind = iota // key consumed, no side effect
-	OutcomeClosed                              // overlay was closed
-	OutcomeAnnotationChosen                    // user picked an annotation (target in Outcome.AnnotationTarget)
-	OutcomeThemePreview                        // cursor moved to a new theme (name in Outcome.ThemeChoice)
-	OutcomeThemeConfirmed                      // user confirmed a theme (name in Outcome.ThemeChoice)
-	OutcomeThemeCanceled                       // user canceled theme selection
-	OutcomeFileChosen                          // user picked a file (path in Outcome.FileChoice)
+	OutcomeNone                OutcomeKind = iota // key consumed, no side effect
+	OutcomeClosed                                 // overlay was closed
+	OutcomeAnnotationChosen                       // user picked an annotation (target in Outcome.AnnotationTarget)
+	OutcomeThemePreview                           // cursor moved to a new theme (name in Outcome.ThemeChoice)
+	OutcomeThemeConfirmed                         // user confirmed a theme (name in Outcome.ThemeChoice)
+	OutcomeThemeCanceled                          // user canceled theme selection
+	OutcomeFileChosen                             // user picked a file (path in Outcome.FileChoice)
+	OutcomeOutputPathSubmitted                    // user submitted an output path (choice in Outcome.OutputPathChoice)
 )
 
 // Outcome is the return value from HandleKey. Callers switch on Kind and read
@@ -55,6 +57,7 @@ type Outcome struct {
 	AnnotationTarget *AnnotationTarget
 	ThemeChoice      *ThemeChoice
 	FileChoice       *FileChoice
+	OutputPathChoice *OutputPathChoice
 }
 
 // RenderCtx carries per-render parameters passed to Compose.
@@ -135,6 +138,22 @@ type FileChoice struct {
 	Path string
 }
 
+// OutputPathSpec describes the annotation output-path prompt. ConfirmOverwrite
+// switches the prompt from path entry to overwrite confirmation while retaining
+// Path so declining can return to editing without losing the value.
+type OutputPathSpec struct {
+	Path             string
+	ConfirmOverwrite bool
+	Error            string
+}
+
+// OutputPathChoice carries a submitted output path and whether the user
+// explicitly confirmed replacing an existing target.
+type OutputPathChoice struct {
+	Path      string
+	Overwrite bool
+}
+
 // InfoSpec describes the unified info popup, composed of three optional
 // sections rendered top-to-bottom: an agent-supplied prose description (#130
 // — empty hides the section), invocation/session info from --description-less
@@ -189,6 +208,7 @@ type Manager struct {
 	annotLst annotListOverlay
 	themeSel themeSelectOverlay
 	filePick filePickerOverlay
+	output   outputPathOverlay
 	info     infoOverlay
 	// bounds is the popup rectangle on screen as of the last Compose call;
 	// used by HandleMouse to hit-test clicks and translate to popup-local coords.
@@ -249,6 +269,13 @@ func (m *Manager) OpenFilePicker(spec FilePickerSpec) {
 	m.filePick.open(spec)
 }
 
+// OpenOutputPath activates the annotation output-path prompt.
+func (m *Manager) OpenOutputPath(spec OutputPathSpec) {
+	m.Close()
+	m.kind = KindOutputPath
+	m.output.open(spec)
+}
+
 // OpenInfo activates the unified info popup with the given spec.
 func (m *Manager) OpenInfo(spec InfoSpec) {
 	m.Close()
@@ -285,6 +312,8 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 		out = m.themeSel.handleKey(msg, action)
 	case KindFilePicker:
 		out = m.filePick.handleKey(msg, action)
+	case KindOutputPath:
+		out = m.output.handleKey(msg)
 	case KindInfo:
 		out = m.info.handleKey(msg, action)
 	default:
@@ -292,7 +321,8 @@ func (m *Manager) HandleKey(msg tea.KeyMsg, action keymap.Action) Outcome {
 	}
 
 	switch out.Kind {
-	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled, OutcomeFileChosen:
+	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled, OutcomeFileChosen,
+		OutcomeOutputPathSubmitted:
 		m.Close()
 	case OutcomeNone, OutcomeThemePreview: // no state change
 	}
@@ -333,6 +363,8 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 		out = m.themeSel.handleMouse(msg)
 	case KindFilePicker:
 		out = m.filePick.handleMouse(msg)
+	case KindOutputPath:
+		out = Outcome{Kind: OutcomeNone}
 	case KindInfo:
 		out = m.info.handleMouse(msg)
 	default: // KindNone handled by the early return above
@@ -340,7 +372,8 @@ func (m *Manager) HandleMouse(msg tea.MouseMsg) Outcome {
 	}
 
 	switch out.Kind {
-	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled, OutcomeFileChosen:
+	case OutcomeClosed, OutcomeAnnotationChosen, OutcomeThemeConfirmed, OutcomeThemeCanceled, OutcomeFileChosen,
+		OutcomeOutputPathSubmitted:
 		m.Close()
 	case OutcomeNone, OutcomeThemePreview: // no state change
 	}
@@ -363,6 +396,8 @@ func (m *Manager) Compose(base string, ctx RenderCtx) string {
 		fg = m.themeSel.render(ctx, m)
 	case KindFilePicker:
 		fg = m.filePick.render(ctx, m)
+	case KindOutputPath:
+		fg = m.output.render(ctx, m)
 	case KindInfo:
 		fg = m.info.render(ctx, m)
 	}
