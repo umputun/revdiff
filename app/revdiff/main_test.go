@@ -197,6 +197,7 @@ func TestFinalize_AllWrittenNotesDeleted(t *testing.T) {
 		flushed   bool
 		discarded bool
 		signaled  bool
+		loadErr   bool
 		wantFile  string
 	}{
 		{name: "quit clears the output file", preloaded: true, wantFile: ""},
@@ -206,6 +207,11 @@ func TestFinalize_AllWrittenNotesDeleted(t *testing.T) {
 		{name: "quit after flush clears the output file", flushed: true, wantFile: ""},
 		{name: "discard after flush keeps the output file", flushed: true, discarded: true, wantFile: stale},
 		{name: "signal after flush keeps the output file", flushed: true, signaled: true, wantFile: stale},
+		{name: "failed reload after flush clears the output file", flushed: true, loadErr: true, wantFile: ""},
+		{name: "failed reload after preload clears the output file", preloaded: true, loadErr: true, wantFile: ""},
+		{name: "failed reload with discard keeps the output file", flushed: true, discarded: true, loadErr: true, wantFile: stale},
+		{name: "failed reload with signal keeps the output file", flushed: true, signaled: true, loadErr: true, wantFile: stale},
+		{name: "failed load without written notes keeps the output file", loadErr: true, wantFile: stale},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -213,6 +219,10 @@ func TestFinalize_AllWrittenNotesDeleted(t *testing.T) {
 			outFile := filepath.Join(t.TempDir(), "annotations.md")
 			require.NoError(t, os.WriteFile(outFile, []byte(stale), 0o600))
 
+			var loadErr error
+			if tt.loadErr {
+				loadErr = errors.New("bad revision")
+			}
 			var buf bytes.Buffer
 			code, err := finalize(finalizeReq{
 				opts:        options{HistoryDir: histDir, Output: outFile, ExitCodeOnAnnotations: true},
@@ -222,9 +232,14 @@ func TestFinalize_AllWrittenNotesDeleted(t *testing.T) {
 				discarded:   tt.discarded,
 				workDir:     "repo",
 				signaled:    tt.signaled,
+				loadErr:     loadErr,
 				stdout:      &buf,
 			})
-			require.NoError(t, err)
+			if tt.loadErr {
+				require.EqualError(t, err, "load changed files: bad revision")
+			} else {
+				require.NoError(t, err)
+			}
 			assert.Equal(t, 0, code)
 			assert.Zero(t, historyFileCount(t, histDir))
 			assert.Empty(t, buf.String())
