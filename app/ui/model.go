@@ -999,6 +999,11 @@ func (m Model) LoadError() error {
 	return m.filesErr
 }
 
+// OutputFlushed reports whether an O flush wrote the -o file during this session.
+func (m Model) OutputFlushed() bool {
+	return m.output.flushed
+}
+
 // Init initializes the model by loading changed files and the commit log
 // in parallel. loadCommits returns nil when the feature is not applicable
 // (e.g. --stdin, standalone file, working-tree review), so tea.Batch harmlessly

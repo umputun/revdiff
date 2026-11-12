@@ -314,6 +314,7 @@ func run(opts options) (int, error) {
 			files:       m.Store().Files(),
 			discarded:   m.Discarded(),
 			preloaded:   preloaded,
+			flushed:     m.OutputFlushed(),
 			gitRoot:     gitRoot,
 			workDir:     workDir,
 			signaled:    signaled,
@@ -352,6 +353,7 @@ type finalizeReq struct {
 	files       []string
 	discarded   bool
 	preloaded   bool
+	flushed     bool
 	gitRoot     string
 	workDir     string
 	signaled    bool
@@ -361,22 +363,29 @@ type finalizeReq struct {
 
 // finalize persists the review after p.Run() joins. A discarded review writes
 // nothing, and so does one with no annotations unless --annotations preloaded
-// some: a graceful exit that deleted all of them writes the empty output, so a
-// stale -o file cannot bring them back on the next load. Otherwise the history
+// some or an O flush wrote the -o file: a graceful exit that deleted all of them
+// writes the empty output, so a stale -o file cannot bring them back on the next
+// load or hand them to the caller. Otherwise the history
 // safety-net save always runs; a signal-driven exit (r.signaled) stops there —
 // history only, never the -o handoff — while a graceful exit also writes the
 // annotation output.
 // A failed file-list load with no annotations returns the load error, so callers
-// never read an exit 0 with empty output as a clean review.
+// never read an exit 0 with empty output as a clean review; it still clears a
+// stale output file first, since a failed R reload is one way to end up there.
 func finalize(r finalizeReq) (int, error) {
 	if r.loadErr != nil && r.annotations == "" {
+		if r.clearsStaleOutput() {
+			if _, err := writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: "", stdout: r.stdout}); err != nil {
+				return 0, err
+			}
+		}
 		return 0, fmt.Errorf("load changed files: %w", r.loadErr)
 	}
 	if r.discarded {
 		return 0, nil
 	}
 	if r.annotations == "" {
-		if !r.preloaded || r.signaled {
+		if !r.clearsStaleOutput() {
 			return 0, nil
 		}
 		return writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: "", stdout: r.stdout})
@@ -386,6 +395,13 @@ func finalize(r finalizeReq) (int, error) {
 		return 0, nil
 	}
 	return writeAnnotationOutput(annotationOutputReq{opts: r.opts, output: r.annotations, stdout: r.stdout})
+}
+
+// clearsStaleOutput reports whether an exit with no annotations must write the
+// empty output: earlier notes reached it through --annotations or an O flush, and
+// the exit was graceful.
+func (r finalizeReq) clearsStaleOutput() bool {
+	return (r.preloaded || r.flushed) && !r.discarded && !r.signaled
 }
 
 type annotationOutputReq struct {

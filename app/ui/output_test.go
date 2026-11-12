@@ -96,6 +96,7 @@ func TestModel_HandleFlushOutput_Modes(t *testing.T) {
 			} else {
 				assert.NoFileExists(t, path)
 			}
+			assert.Equal(t, tc.wantOutput, model.OutputFlushed())
 			if tc.withHook {
 				assert.Equal(t, store.FormatOutput(), hook.content)
 			}
@@ -156,6 +157,7 @@ func TestModel_HandleFlushOutput_WriteError(t *testing.T) {
 	assert.Equal(t, "Flush failed", model.output.hint)
 	assert.Nil(t, cmd)
 	assert.NoFileExists(t, path)
+	assert.False(t, model.OutputFlushed())
 }
 
 func TestModel_HandleFlushOutput_PostFlushHook(t *testing.T) {
