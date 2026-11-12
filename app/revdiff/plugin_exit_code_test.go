@@ -539,8 +539,6 @@ func TestHerdrAppOverlayRetriesPeek(t *testing.T) {
 			env := herdrAppEnv(t, exitCodeAnnotations, output)
 			env["FAKE_HC_RUN_BG"] = "1"
 			env["FAKE_PEEK_FAIL"] = "first"
-			// the review must still be running when the retry comes, or the sentinel ends
-			// the peek loop first
 			env["FAKE_REVDIFF_DELAY"] = "1"
 
 			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
@@ -567,8 +565,6 @@ func TestHerdrAppOverlayRetriesPeek(t *testing.T) {
 	}
 }
 
-// Herdr.app sets TERM_PROGRAM=ghostty, so a launcher that cannot find its CLIs must stop
-// instead of falling through to the Ghostty branch and opening another application.
 func TestHerdrAppMissingCLI(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -591,7 +587,6 @@ func TestHerdrAppMissingCLI(t *testing.T) {
 				"TERM_PROGRAM":   "ghostty",
 			}}
 			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: 0})
-			// the developer's own hc in ~/.local/bin must not be found
 			env["PATH"] = filepath.Join(env["TMPDIR"], "bin") + string(os.PathListSeparator) + "/usr/bin:/bin"
 			env["FAKE_OSASCRIPT_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "osascript-args")
 
@@ -640,8 +635,6 @@ func TestHerdrAppQuotedCwd(t *testing.T) {
 	}
 }
 
-// a review that was never shown holds no annotations, so the launcher stops it by name:
-// the user has no way to find a hidden terminal the agent is blocked on
 func TestHerdrAppKillsUnshownReview(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -663,7 +656,7 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 		wantStderr string
 		wantKill   bool
 		minElapsed time.Duration
-		brokenJQ   bool // the grep fallback runs only when jq is absent or yields nothing
+		brokenJQ   bool
 	}{
 		{
 			name:       "peek never succeeds",
@@ -735,8 +728,6 @@ func TestHerdrAppKillsUnshownReview(t *testing.T) {
 	}
 }
 
-// revdiff that fails at once (bad ref, unknown flag) ends before any peek can work: the
-// caller gets its own exit code and error, not a "could not show" that hides it
 func TestHerdrAppFastExitBeforePeek(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -766,13 +757,13 @@ func TestHerdrAppFastExitBeforePeek(t *testing.T) {
 			if launcher.relaysStderr {
 				assert.Contains(t, res.stderr, "revdiff: unknown flag `--bogus-flag'")
 			}
+			assert.Empty(t, recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]), "a review that already ended needs no peek")
 			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"))
 		})
 	}
 }
 
-// a launcher killed after the review is shown (a harness timeout) leaves the review open;
-// for launch-revdiff.sh the SKILL.md fallback then reads its output file once the user quits
+// regression: the plan-review EXIT trap deleted a shown review's launch script before sh opened it
 func TestHerdrAppSignalAfterShown(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -791,10 +782,6 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 		t.Run(launcher.name, func(t *testing.T) {
 			t.Parallel()
 			env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
-			// the review starts three seconds late, so the first peek succeeds and the
-			// launcher reaches its wait loop, whose first sleep is the fake sleep that
-			// signals it: no timing. No FAKE_REVDIFF_DELAY, whose sleep would spend the
-			// fake sleep's one-shot marker on the review instead of the launcher
 			env["FAKE_HC_RUN_BG"] = "1"
 			env["FAKE_HC_RUN_DELAY"] = "3"
 			env["FAKE_SLEEP_KILL"] = "parent"
@@ -808,8 +795,6 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
 				"a shown review must survive its launcher")
 
-			// revdiff's args file proves the review ran: the launch script is also gone
-			// when a trap deleted it before sh opened it
 			require.Eventually(t, func() bool {
 				_, err := os.Stat(argsFile)
 				return err == nil
@@ -824,8 +809,7 @@ func TestHerdrAppSignalAfterShown(t *testing.T) {
 	}
 }
 
-// a signal that arrives during a peek that succeeds is paid only after HC_SHOWN is set, so
-// the review the user has just seen survives its launcher
+// regression: a signal during a successful peek stopped the review the user had just seen
 func TestHerdrAppSignalDuringPeek(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -840,7 +824,6 @@ func TestHerdrAppSignalDuringPeek(t *testing.T) {
 		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
 		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
 	}
-	// each trap records its own status, as in the herdr pane split window
 	signals := []struct {
 		name     string
 		kill     string
@@ -880,8 +863,7 @@ func TestHerdrAppSignalDuringPeek(t *testing.T) {
 	}
 }
 
-// without a working jq the launcher reads the address with grep, which must accept
-// pretty-printed JSON as the HC_KIND fallback does
+// regression: without jq the address fallback matched only compact JSON
 func TestHerdrAppAddressWithoutJQ(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
