@@ -99,13 +99,16 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **wezterm** | `wezterm cli split-pane` | `$WEZTERM_PANE` env var |
 | **Kaku** | `kaku cli split-pane` (same API as wezterm) | `$WEZTERM_PANE` env var |
 | **cmux** | `cmux new-split` + `cmux send` | `$CMUX_SURFACE_ID`, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` containing `cmux.app` |
+| **Herdr.app** | `hc run` + `herdr-app do terminal.peek` (overlay over the window) | `$HC_TERMINAL_ID` env var |
 | **ghostty** | AppleScript split + zoom (macOS only) | `$TERM_PROGRAM` + AppleScript probe |
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → Herdr.app → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
 
 > **Note:** cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
+
+> **Herdr.app:** revdiff opens as an overlay over the Herdr.app window and closes when you quit revdiff. If you hide the overlay, the review keeps running: reopen the `revdiff-…` terminal from the Agents list in the sidebar. The agent waits until you quit revdiff. Herdr.app is not the herdr multiplexer, so `REVDIFF_HERDR_PANE` does not apply to it.
 
 > **Note:** iTerm2 uses a split pane (vertical or horizontal, auto-detected from terminal dimensions) rather than a full-screen overlay. The iTerm2 AppleScript API does not expose a zoom command, so the split view shares screen space with the invoking session.
 
@@ -121,7 +124,7 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 >
 > Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` (a launcher option) instead of piping it in.
 >
-> Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.
+> Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
 
 > **Disconnect-resilient tmux window mode:** set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
 

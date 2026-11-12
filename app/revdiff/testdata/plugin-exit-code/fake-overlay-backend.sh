@@ -325,6 +325,108 @@ case "$cmd_name" in
                 ;;
         esac
         ;;
+    hc)
+        # record every invocation so tests can assert the exact call sequence
+        if [ -n "${FAKE_HC_ARGS_FILE:-}" ]; then
+            echo "$*" >> "$FAKE_HC_ARGS_FILE"
+        fi
+        case "${1:-}" in
+            run)
+                hc_name=""
+                prev=""
+                for arg in "$@"; do
+                    [ "$arg" = "--" ] && break
+                    [ "$prev" = "--name" ] && hc_name="$arg"
+                    # records --cwd exactly as hc receives it: the args file joins argv with
+                    # spaces, so it cannot tell a quoted path from a split one
+                    if [ "$prev" = "--cwd" ] && [ -n "${FAKE_HC_CWD_FILE:-}" ]; then
+                        printf '%s\n' "$arg" >> "$FAKE_HC_CWD_FILE"
+                    fi
+                    prev="$arg"
+                done
+                case "${FAKE_HC_RUN_FAIL:-}" in
+                    1)
+                        echo '{"error":{"kind":"internal","message":"core unavailable"}}'
+                        exit 1
+                        ;;
+                    name_taken)
+                        printf '{"error":{"kind":"name_taken","message":"a live terminal is already named \\"%s\\""}}\n' "$hc_name"
+                        exit 1
+                        ;;
+                    name_taken_spaced)
+                        # the same error, pretty-printed: the launcher must not depend on compact JSON
+                        printf '{"error": {"kind": "name_taken", "message": "a live terminal is already named \\"%s\\""}}\n' "$hc_name"
+                        exit 1
+                        ;;
+                esac
+                while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do shift; done
+                [ "$#" -gt 0 ] && shift
+                # a real hc terminal starts the program apart from the caller; the
+                # synchronous default lets the review finish before the address prints,
+                # FAKE_HC_RUN_BG=1 starts it later so the launcher has to peek first
+                if [ "${FAKE_HC_RUN_BG:-}" = "1" ]; then
+                    (/bin/sleep "${FAKE_HC_RUN_DELAY:-0.5}"; "$@") >/dev/null 2>&1 &
+                else
+                    "$@" || true
+                fi
+                if [ -n "${FAKE_HC_RUN_JSON:-}" ]; then
+                    echo "$FAKE_HC_RUN_JSON"
+                    exit 0
+                fi
+                printf '{"address":"t42","name":"%s"}\n' "$hc_name"
+                ;;
+            kill | rm)
+                exit 0
+                ;;
+            *)
+                echo "unexpected hc command: $*" >&2
+                exit 1
+                ;;
+        esac
+        ;;
+    herdr-app)
+        if [ -n "${FAKE_HERDR_APP_ARGS_FILE:-}" ]; then
+            echo "$*" >> "$FAKE_HERDR_APP_ARGS_FILE"
+        fi
+        case "${1:-} ${2:-}" in
+            "do terminal.peek")
+                peek_fail=0
+                case "${FAKE_PEEK_FAIL:-}" in
+                    always) peek_fail=1 ;;
+                    first)
+                        if [ ! -f "$TMPDIR/peek-failed-once" ]; then
+                            : > "$TMPDIR/peek-failed-once"
+                            peek_fail=1
+                        fi
+                        ;;
+                esac
+                if [ "$peek_fail" = 1 ]; then
+                    echo '{"error":"no running terminal \"t42\""}'
+                    exit 1
+                fi
+                # FAKE_PEEK_KILL=parent|parent-int signals the launcher (TERM, or INT for
+                # parent-int) during a peek that succeeds, so the signal is pending when the
+                # call returns and before HC_SHOWN is set. The launcher calls peek inside
+                # $( ), and bash runs it from a forked copy of itself there: the parent of
+                # that copy, with the same command line, is the launcher
+                if [ -n "${FAKE_PEEK_KILL:-}" ]; then
+                    peek_sig=TERM
+                    [ "$FAKE_PEEK_KILL" = parent-int ] && peek_sig=INT
+                    peek_target=$PPID
+                    peek_grand=$(ps -o ppid= -p "$PPID" | tr -d ' ')
+                    if [ "$(ps -o command= -p "$peek_grand")" = "$(ps -o command= -p "$PPID")" ]; then
+                        peek_target=$peek_grand
+                    fi
+                    kill -"$peek_sig" "$peek_target"
+                fi
+                echo '{"ok":true}'
+                ;;
+            *)
+                echo "unexpected herdr-app command: $*" >&2
+                exit 1
+                ;;
+        esac
+        ;;
     *)
         echo "unexpected fake backend: $cmd_name" >&2
         exit 1
