@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [revdiff](https://github.com/umputun/revdiff) installed and in the terminal client's `PATH`
-- A supported terminal: agterm, tmux, zellij, herdr, Kitty, WezTerm, cmux, Ghostty, iTerm2 or Emacs vterm
+- A supported terminal: agterm, tmux, zellij, herdr, Kitty, WezTerm, cmux, Herdr.app, Ghostty, iTerm2 or Emacs vterm
 - `jq` when `opencode.json` already exists
 
 ## Installation
