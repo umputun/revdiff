@@ -1150,9 +1150,9 @@ func TestModel_AnnotationInputWidthUsesMarkerWidth(t *testing.T) {
 		wantLineWidth int
 		wantFileWidth int
 	}{
-		{name: "default emoji marker", marker: "\U0001f4ac", wantLineWidth: 78, wantFileWidth: 72},
-		{name: "wide emoji marker", marker: "\U0001f4ac\U0001f4ac", wantLineWidth: 76, wantFileWidth: 70},
-		{name: "empty marker", marker: "", wantLineWidth: 80, wantFileWidth: 74},
+		{name: "default emoji marker", marker: "\U0001f4ac", wantLineWidth: 77, wantFileWidth: 71},
+		{name: "wide emoji marker", marker: "\U0001f4ac\U0001f4ac", wantLineWidth: 75, wantFileWidth: 69},
+		{name: "empty marker", marker: "", wantLineWidth: 79, wantFileWidth: 73},
 	}
 
 	for _, tt := range tests {
@@ -3281,19 +3281,12 @@ func TestModel_FileAnnotation_EmptyBody_Renders(t *testing.T) {
 	assert.Contains(t, rendered, "\U0001f4ac file:", "empty-body file annotation must paint the prefix-only row")
 }
 
-// TestModel_AnnotationVisualRows_ByteEquivalentToMaster is the regression safety net
-// for the chokepoint refactor. expected bytes were captured from the pre-refactor
-// master code path (commit 28e6d8f) using a one-off capture program that
-// replicated the wrap+style inner loop of renderWrappedAnnotation BEFORE cursor
-// prepend and BEFORE extendLineBg padding — i.e. exactly what the chokepoint
-// annotationVisualRows must return. if this test ever fails after a code change,
-// DO NOT regenerate the expected bytes from the current code; investigate why
-// the refactored chokepoint diverges from master.
+// TestModel_AnnotationVisualRows_Bytes pins the exact rows annotationVisualRows returns, BEFORE
+// cursor prepend and extendLineBg padding. expected bytes are worked out by hand; if this test
+// fails, DO NOT regenerate them from the current code, investigate the divergence.
 //
-// model setup matches the capture program: testModel defaults + explicit
-// width/treeWidth overrides per case, so diffContentWidth() returns the same
-// value (wrapWidth = diffContentWidth() - 1 = 93 wide, 25 narrow).
-func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
+// wrapWidth = diffContentWidth() - 1 = 93 wide, 25 narrow; annotRule takes 1 more cell.
+func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 	type caseDef struct {
 		name      string
 		width     int
@@ -3310,7 +3303,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 20,
 			prefix:    "\U0001f4ac ",
 			body:      "hello",
-			expected:  "\x1b[3m\U0001f4ac hello\x1b[23m",
+			expected:  "\x1b[3m▎\U0001f4ac hello\x1b[23m",
 		},
 		{
 			name:      "multi-line line-level",
@@ -3318,7 +3311,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 20,
 			prefix:    "\U0001f4ac ",
 			body:      "one\ntwo\nthree",
-			expected:  "\x1b[3m\U0001f4ac one\x1b[23m\n\x1b[3m   two\x1b[23m\n\x1b[3m   three\x1b[23m",
+			expected:  "\x1b[3m▎\U0001f4ac one\x1b[23m\n\x1b[3m▎   two\x1b[23m\n\x1b[3m▎   three\x1b[23m",
 		},
 		{
 			name:      "wrap-needed line-level narrow",
@@ -3326,12 +3319,14 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 8,
 			prefix:    "\U0001f4ac ",
 			body:      strings.Repeat("alpha ", 20),
-			expected: "\x1b[3m\U0001f4ac alpha alpha alpha\x1b[23m\n" +
-				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
-				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
-				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
-				"\x1b[3malpha alpha alpha alpha\x1b[23m\n" +
-				"\x1b[3malpha \x1b[23m",
+			// 24-3 = 21 cells for text: three per row.
+			expected: "\x1b[3m▎\U0001f4ac alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
+				"\x1b[3m▎   alpha alpha \x1b[23m",
 		},
 		{
 			name:      "multi-segment wrap on continuation narrow",
@@ -3339,12 +3334,44 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 8,
 			prefix:    "\U0001f4ac ",
 			body:      "short\n" + strings.Repeat("beta ", 20),
-			expected: "\x1b[3m\U0001f4ac short\x1b[23m\n" +
-				"\x1b[3m   beta beta beta beta\x1b[23m\n" +
-				"\x1b[3mbeta beta beta beta beta\x1b[23m\n" +
-				"\x1b[3mbeta beta beta beta beta\x1b[23m\n" +
-				"\x1b[3mbeta beta beta beta beta\x1b[23m\n" +
-				"\x1b[3mbeta \x1b[23m",
+			expected: "\x1b[3m▎\U0001f4ac short\x1b[23m\n" +
+				"\x1b[3m▎   beta beta beta beta\x1b[23m\n" +
+				"\x1b[3m▎   beta beta beta beta\x1b[23m\n" +
+				"\x1b[3m▎   beta beta beta beta\x1b[23m\n" +
+				"\x1b[3m▎   beta beta beta beta\x1b[23m\n" +
+				"\x1b[3m▎   beta beta beta beta \x1b[23m",
+		},
+		{
+			// a blank marker's one-space prefix is the whole gap after the rule.
+			name:      "wrap-needed empty marker narrow",
+			width:     40,
+			treeWidth: 8,
+			prefix:    " ",
+			body:      strings.Repeat("gamma ", 10),
+			expected: "\x1b[3m▎ gamma gamma gamma gamma\x1b[23m\n" +
+				"\x1b[3m▎ gamma gamma gamma gamma\x1b[23m\n" +
+				"\x1b[3m▎ gamma gamma \x1b[23m",
+		},
+		{
+			// the file-level prefix is 9 cells wide, leaving 15 for text.
+			name:      "wrap-needed file-level narrow",
+			width:     40,
+			treeWidth: 8,
+			prefix:    "\U0001f4ac file: ",
+			body:      strings.Repeat("delta ", 6),
+			expected: "\x1b[3m▎\U0001f4ac file: delta delta\x1b[23m\n" +
+				"\x1b[3m▎         delta delta\x1b[23m\n" +
+				"\x1b[3m▎         delta delta \x1b[23m",
+		},
+		{
+			// 7 cells left for text is under wrapMinContent, so the row wraps whole.
+			name:      "wrap-needed long marker falls back narrow",
+			width:     40,
+			treeWidth: 8,
+			prefix:    strings.Repeat(">", 16) + " ",
+			body:      "eps eps eps eps eps eps",
+			expected: "\x1b[3m▎" + strings.Repeat(">", 16) + " eps eps\x1b[23m\n" +
+				"\x1b[3m▎eps eps eps eps\x1b[23m",
 		},
 		{
 			name:      "single-line file-level",
@@ -3352,7 +3379,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 20,
 			prefix:    "\U0001f4ac file: ",
 			body:      "header",
-			expected:  "\x1b[3m\U0001f4ac file: header\x1b[23m",
+			expected:  "\x1b[3m▎\U0001f4ac file: header\x1b[23m",
 		},
 		{
 			name:      "multi-line file-level",
@@ -3360,7 +3387,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 20,
 			prefix:    "\U0001f4ac file: ",
 			body:      "line1\nline2",
-			expected:  "\x1b[3m\U0001f4ac file: line1\x1b[23m\n\x1b[3m         line2\x1b[23m",
+			expected:  "\x1b[3m▎\U0001f4ac file: line1\x1b[23m\n\x1b[3m▎         line2\x1b[23m",
 		},
 		{
 			// empty-body annotations are produced by --annotations preload when
@@ -3372,7 +3399,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 20,
 			prefix:    "\U0001f4ac ",
 			body:      "",
-			expected:  "\x1b[3m\U0001f4ac \x1b[23m",
+			expected:  "\x1b[3m▎\U0001f4ac \x1b[23m",
 		},
 		{
 			// file-level parallel of empty-body line-level: same regression
@@ -3382,7 +3409,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 			treeWidth: 20,
 			prefix:    "\U0001f4ac file: ",
 			body:      "",
-			expected:  "\x1b[3m\U0001f4ac file: \x1b[23m",
+			expected:  "\x1b[3m▎\U0001f4ac file: \x1b[23m",
 		},
 	}
 
@@ -3396,7 +3423,7 @@ func TestModel_AnnotationVisualRows_ByteEquivalentToMaster(t *testing.T) {
 
 			rows := m.annotationVisualRows(tc.prefix, tc.body)
 			got := strings.Join(rows, "\n")
-			assert.Equal(t, tc.expected, got, "annotationVisualRows must match pre-refactor master byte-for-byte")
+			assert.Equal(t, tc.expected, got, "annotationVisualRows must match the pinned rows byte-for-byte")
 		})
 	}
 }

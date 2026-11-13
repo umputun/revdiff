@@ -394,7 +394,7 @@ func (m Model) buildAnnotationMap() (annotations map[annotLineKey]string, fileCo
 func (m Model) renderFileAnnotationHeader(b *strings.Builder, fileComment string) {
 	// when actively editing a file-level annotation, always show the input widget
 	if m.annot.annotating && m.annot.fileAnnotating {
-		line := " " + m.renderer.AnnotationInline(m.annotFilePrefix()) + m.annot.input.View()
+		line := " " + m.renderer.AnnotationInline(annotRule+m.annotFilePrefix()) + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
@@ -736,7 +736,7 @@ func (m Model) extendLineBg(styled string, bg style.Color) string {
 // renderAnnotationOrInput writes the annotation input or existing annotation below a diff line.
 func (m Model) renderAnnotationOrInput(b *strings.Builder, idx int, annotationMap map[annotLineKey]string) {
 	if m.annot.annotating && !m.annot.fileAnnotating && idx == m.nav.diffCursor {
-		line := " " + m.renderer.AnnotationInline(m.annotPrefix()) + m.annot.input.View()
+		line := " " + m.renderer.AnnotationInline(annotRule+m.annotPrefix()) + m.annot.input.View()
 		// strip textinput's unstyled trailing padding so extendLineBg can re-pad with DiffBg
 		line = strings.TrimRight(line, " ")
 		b.WriteString(m.extendLineBg(line, m.resolver.Color(style.ColorKeyDiffPaneBg)) + "\n")
