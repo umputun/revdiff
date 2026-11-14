@@ -580,6 +580,9 @@ func TestModel_EmptyAnnotationMarkerExplicit(t *testing.T) {
 	assert.NotContains(t, rendered, "\U0001f4ac file:", "should not have emoji before file annotation")
 	assert.Contains(t, rendered, " bare note", "empty marker should render bare prefix for line annotation")
 	assert.Contains(t, rendered, " file: file note", "empty marker should render ' file: ' prefix for file annotation")
+	assert.NotContains(t, rendered, annotRuleGlyph, "empty marker should render no rule")
+	assert.Contains(t, rendered, "\n \x1b[3m bare note\x1b[23m\n", "line annotation row should carry no rule")
+	assert.Contains(t, rendered, " \x1b[3m file: file note\x1b[23m\n", "file annotation row should carry no rule")
 }
 
 func TestModel_RenderDiffAnnotationInput(t *testing.T) {
@@ -1147,12 +1150,13 @@ func TestModel_AnnotationInputWidthUsesMarkerWidth(t *testing.T) {
 	tests := []struct {
 		name          string
 		marker        string
+		rule          string
 		wantLineWidth int
 		wantFileWidth int
 	}{
-		{name: "default emoji marker", marker: "\U0001f4ac", wantLineWidth: 77, wantFileWidth: 71},
-		{name: "wide emoji marker", marker: "\U0001f4ac\U0001f4ac", wantLineWidth: 75, wantFileWidth: 69},
-		{name: "empty marker", marker: "", wantLineWidth: 79, wantFileWidth: 73},
+		{name: "default emoji marker", marker: "\U0001f4ac", rule: annotRuleGlyph, wantLineWidth: 77, wantFileWidth: 71},
+		{name: "wide emoji marker", marker: "\U0001f4ac\U0001f4ac", rule: annotRuleGlyph, wantLineWidth: 75, wantFileWidth: 69},
+		{name: "empty marker", marker: "", rule: "", wantLineWidth: 80, wantFileWidth: 74},
 	}
 
 	for _, tt := range tests {
@@ -1166,6 +1170,7 @@ func TestModel_AnnotationInputWidthUsesMarkerWidth(t *testing.T) {
 			m.layout.width = 120
 			m.layout.treeWidth = 30
 			m.layout.treeHidden = false
+			m.cfg.annotRule = tt.rule
 			m.cfg.annotPrefix = tt.marker + " "
 			m.cfg.annotFilePrefix = tt.marker + " file: "
 
@@ -3281,19 +3286,15 @@ func TestModel_FileAnnotation_EmptyBody_Renders(t *testing.T) {
 	assert.Contains(t, rendered, "\U0001f4ac file:", "empty-body file annotation must paint the prefix-only row")
 }
 
-// TestModel_AnnotationVisualRows_Bytes pins the exact rows annotationVisualRows returns, BEFORE
-// cursor prepend and extendLineBg padding. expected bytes are worked out by hand; if this test
-// fails, DO NOT regenerate them from the current code, investigate the divergence.
-//
-// wrapWidth = diffContentWidth() - 1 = 93 wide, 25 narrow; annotRule takes 1 more cell.
 func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 	type caseDef struct {
-		name      string
-		width     int
-		treeWidth int
-		prefix    string
-		body      string
-		expected  string
+		name        string
+		width       int
+		treeWidth   int
+		emptyMarker bool
+		prefix      string
+		body        string
+		expected    string
 	}
 
 	cases := []caseDef{
@@ -3319,7 +3320,6 @@ func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 			treeWidth: 8,
 			prefix:    "\U0001f4ac ",
 			body:      strings.Repeat("alpha ", 20),
-			// 24-3 = 21 cells for text: three per row.
 			expected: "\x1b[3m▎\U0001f4ac alpha alpha alpha\x1b[23m\n" +
 				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
 				"\x1b[3m▎   alpha alpha alpha\x1b[23m\n" +
@@ -3342,18 +3342,17 @@ func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 				"\x1b[3m▎   beta beta beta beta \x1b[23m",
 		},
 		{
-			// a blank marker's one-space prefix is the whole gap after the rule.
-			name:      "wrap-needed empty marker narrow",
-			width:     40,
-			treeWidth: 8,
-			prefix:    " ",
-			body:      strings.Repeat("gamma ", 10),
-			expected: "\x1b[3m▎ gamma gamma gamma gamma\x1b[23m\n" +
-				"\x1b[3m▎ gamma gamma gamma gamma\x1b[23m\n" +
-				"\x1b[3m▎ gamma gamma \x1b[23m",
+			name:        "wrap-needed empty marker narrow",
+			width:       40,
+			treeWidth:   8,
+			emptyMarker: true,
+			prefix:      " ",
+			body:        strings.Repeat("gamma ", 10),
+			expected: "\x1b[3m gamma gamma gamma gamma\x1b[23m\n" +
+				"\x1b[3m gamma gamma gamma gamma\x1b[23m\n" +
+				"\x1b[3m gamma gamma \x1b[23m",
 		},
 		{
-			// the file-level prefix is 9 cells wide, leaving 15 for text.
 			name:      "wrap-needed file-level narrow",
 			width:     40,
 			treeWidth: 8,
@@ -3364,7 +3363,6 @@ func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 				"\x1b[3m▎         delta delta \x1b[23m",
 		},
 		{
-			// 7 cells left for text is under wrapMinContent, so the row wraps whole.
 			name:      "wrap-needed long marker falls back narrow",
 			width:     40,
 			treeWidth: 8,
@@ -3372,6 +3370,14 @@ func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 			body:      "eps eps eps eps eps eps",
 			expected: "\x1b[3m▎" + strings.Repeat(">", 16) + " eps eps\x1b[23m\n" +
 				"\x1b[3m▎eps eps eps eps\x1b[23m",
+		},
+		{
+			name:      "wrap-needed line-level at 12-cell pane",
+			width:     38,
+			treeWidth: 20,
+			prefix:    "\U0001f4ac ",
+			body:      "one two three four",
+			expected:  "\x1b[3m▎\U0001f4ac one two\x1b[23m\n\x1b[3m▎three four\x1b[23m",
 		},
 		{
 			name:      "single-line file-level",
@@ -3419,6 +3425,9 @@ func TestModel_AnnotationVisualRows_Bytes(t *testing.T) {
 			m.file.name = "a.go"
 			m.layout.width = tc.width
 			m.layout.treeWidth = tc.treeWidth
+			if tc.emptyMarker {
+				m.cfg.annotRule = ""
+			}
 			m.file.lines = []diff.DiffLine{{NewNum: 1, Content: "line1", ChangeType: diff.ChangeContext}}
 
 			rows := m.annotationVisualRows(tc.prefix, tc.body)
