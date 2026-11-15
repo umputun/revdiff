@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	bubblecursor "github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,7 +82,7 @@ func TestModel_EnterInDiffPaneScrollsToShowAnnotationInputAtBottom(t *testing.T)
 	m.file.name = "a.go"
 	m.file.lines = lines
 	m.nav.diffCursor = 4
-	m.layout.viewport = viewport.New(100, 3)
+	m.layout.viewport = newDiffViewport(100, 3)
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.layout.viewport.SetYOffset(2) // cursor line (y=4) is the last visible row (2,3,4)
 
@@ -2477,7 +2476,7 @@ func TestModel_EditorFinishedScrollsToShowMultilineAnnotation(t *testing.T) {
 	m.file.lines = lines
 	m.nav.diffCursor = 3
 	// viewport height of 4 fits 1-row diff line + 3 annotation rows only if sync scrolls.
-	m.layout.viewport = viewport.New(80, 4)
+	m.layout.viewport = newDiffViewport(80, 4)
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.layout.viewport.SetYOffset(0)
 
@@ -2520,7 +2519,7 @@ func TestModel_EditorFinishedFileLevelGoesToTop(t *testing.T) {
 	m.file.name = "a.go"
 	m.file.lines = lines
 	m.nav.diffCursor = 3
-	m.layout.viewport = viewport.New(80, 3)
+	m.layout.viewport = newDiffViewport(80, 3)
 	m.layout.viewport.SetContent(m.renderDiff())
 	m.layout.viewport.SetYOffset(2)
 
