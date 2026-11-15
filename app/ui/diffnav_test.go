@@ -3831,6 +3831,31 @@ func BenchmarkModel_PageNavigation(b *testing.B) {
 	}
 }
 
+// BenchmarkModel_CursorKeystroke measures the round-trip of the most common key in a
+// review: moving the diff cursor one line (j, then k) through Update plus the frame paint.
+// The cursor starts mid-file so the viewport scrolls with neither end in reach.
+func BenchmarkModel_CursorKeystroke(b *testing.B) {
+	for _, n := range benchDiffSizes {
+		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {
+			m := benchModel(b, n)
+			m.layout.focus = paneDiff
+			m.nav.diffCursor = n / 2
+			m.syncViewportToCursor()
+			keys := []tea.KeyMsg{
+				{Type: tea.KeyRunes, Runes: []rune{'j'}},
+				{Type: tea.KeyRunes, Runes: []rune{'k'}},
+			}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := range b.N {
+				res, _ := m.Update(keys[i%2])
+				m = res.(Model)
+				sink = m.View()
+			}
+		})
+	}
+}
+
 func TestModel_DownPageMotionTerminatesOnAnnotatedLastLine(t *testing.T) {
 	// the downward walk used to spin forever once it reached a final navigable line carrying an
 	// annotation: moveDiffCursorDownWithHunks alternates cursorOnAnnotation false->true (annotation

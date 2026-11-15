@@ -151,6 +151,10 @@ across files by concern to keep files under ~500 lines:
   an earlier tall hunk lands on its last page; the start of the cursor's own hunk does not, or the
   walk would cycle back to its tail. `stepHunk` reports whether it moved because a page step can
   leave the cursor index unchanged, and only a step that did not move may cross files
+- **`diffviewport.go`** — `diffViewport`, the scrollable window over the rendered diff. The subset of
+  `bubbles/viewport` revdiff uses, minus its per-`SetContent` width scan of every line (60% of a
+  keystroke on a 50k-line diff, and unused: revdiff scrolls horizontally itself); `View` measures
+  only the visible rows
 - **`scrollbar.go`** — vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes
   (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion)
 - **`collapsed.go`** — collapsed diff mode: hide removes, show modified markers
@@ -518,7 +522,7 @@ diffLines + highlightedLines
           → skip removed lines
           → buildModifiedSet() for modify vs pure-add styling
 
-  → viewport.SetContent()
+  → viewport.SetContent() (diffViewport: split only, O(rows) slices)
   → View():
     ├── truncateHeaderTitle() (sanitize + left-truncate filename to 1 row)
     ├── lipgloss.JoinVertical(header, viewport.View())
@@ -689,7 +693,7 @@ make state ownership explicit without splitting into mini-models.
 |---------|---------|
 | `charmbracelet/bubbletea` | TUI framework (Elm architecture) |
 | `charmbracelet/lipgloss` | Terminal styling |
-| `charmbracelet/bubbles` | TUI components (viewport, textinput) |
+| `charmbracelet/bubbles` | TUI components (textinput) |
 | `jessevdk/go-flags` | CLI flag parsing with INI config support |
 | `alecthomas/chroma/v2` | Syntax highlighting |
 | `stretchr/testify` | Test assertions |

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -339,13 +338,13 @@ type modelConfigState struct {
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
 type layoutState struct {
-	viewport   viewport.Model // scrollable diff viewport
-	focus      pane           // which pane has focus
-	treeHidden bool           // user toggled tree/TOC pane off
-	width      int            // terminal width
-	height     int            // terminal height
-	treeWidth  int            // current tree pane width in columns
-	scrollX    int            // horizontal scroll offset for diff pane
+	viewport   diffViewport // scrollable diff viewport
+	focus      pane         // which pane has focus
+	treeHidden bool         // user toggled tree/TOC pane off
+	width      int          // terminal width
+	height     int          // terminal height
+	treeWidth  int          // current tree pane width in columns
+	scrollX    int          // horizontal scroll offset for diff pane
 }
 
 // modeState holds user-togglable view-mode flags.
@@ -1561,7 +1560,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	diffHeight := m.paneHeight() - 1 // pane height minus diff header
 
 	if !m.ready {
-		m.layout.viewport = viewport.New(diffWidth, diffHeight)
+		m.layout.viewport = newDiffViewport(diffWidth, diffHeight)
 		m.ready = true
 	} else {
 		m.layout.viewport.Width = diffWidth
