@@ -3831,9 +3831,6 @@ func BenchmarkModel_PageNavigation(b *testing.B) {
 	}
 }
 
-// BenchmarkModel_CursorKeystroke measures the round-trip of the most common key in a
-// review: moving the diff cursor one line (j, then k) through Update plus the frame paint.
-// The cursor starts mid-file so the viewport scrolls with neither end in reach.
 func BenchmarkModel_CursorKeystroke(b *testing.B) {
 	for _, n := range benchDiffSizes {
 		b.Run(fmt.Sprintf("lines=%d", n), func(b *testing.B) {

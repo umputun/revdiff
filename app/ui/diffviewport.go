@@ -7,14 +7,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// diffViewport is the scrollable window over the rendered diff. It keeps the
-// subset of bubbles/viewport that revdiff uses (the field names match, so call
-// sites read the same) and drops the part that made every keystroke O(file):
-// bubbles' SetContent measures the display width of every line, grapheme by
-// grapheme, to support its own horizontal scroll. revdiff never uses that
-// scroll (layout.scrollX and applyHorizontalScroll cut lines before they get
-// here), yet the measurement was 60% of a keystroke on a 50k-line diff.
-// Here SetContent only splits, and View measures just the rows it shows.
+// diffViewport is the scrollable window over the rendered diff. SetContent only splits; View
+// measures just the visible rows, since horizontal scroll happens before it in applyHorizontalScroll.
 type diffViewport struct {
 	Width   int // visible columns
 	Height  int // visible rows
@@ -28,8 +22,8 @@ func newDiffViewport(width, height int) diffViewport {
 	return diffViewport{Width: width, Height: height}
 }
 
-// SetContent replaces the content, one row per line. CRLF is normalized to LF
-// as bubbles/viewport did. An offset past the new last row moves to the bottom.
+// SetContent replaces the content, one row per line, with CRLF normalized to LF. An offset past
+// the new last row moves to the bottom.
 func (v *diffViewport) SetContent(s string) {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	v.lines = strings.Split(s, "\n")
