@@ -140,7 +140,7 @@ case "$cmd_name" in
             echo "session:1"
             exit 0
         fi
-        if [ "$#" -ge 4 ] && [ -x "${3:-}" ]; then
+        if [ "$#" -ge 4 ] && [ -f "${3:-}" ] && [ -x "${3:-}" ]; then
             "$3" "$4"
             echo "session:1"
             exit 0

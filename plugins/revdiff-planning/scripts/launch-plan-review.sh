@@ -488,7 +488,7 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
-# ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+)
+# ghostty: split pane via AppleScript (macOS only, requires Ghostty 1.3.0+; 1.4.0+ to target the agent tab)
 if [ "${TERM_PROGRAM:-}" = "ghostty" ] && command -v osascript >/dev/null 2>&1; then
 
     SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
@@ -502,14 +502,29 @@ $REVDIFF_CMD; rc=\$?; printf "%s" "\$rc" > $(sq "$SENTINEL").tmp && mv -f $(sq "
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    if ! GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" <<'APPLESCRIPT'
+    # the tty of the agent terminal, taken from the nearest ancestor that has one (the tool
+    # shell itself is usually detached), so the split targets that terminal even when the
+    # user has switched Ghostty tabs or windows since the review was requested
+    GHOSTTY_TTY=""
+    GHOSTTY_PID=$$
+    while [ "${GHOSTTY_PID:-0}" -gt 1 ] && read -r GHOSTTY_PID GHOSTTY_T < <(ps -o ppid=,tty= -p "$GHOSTTY_PID" 2>/dev/null); do
+        case "$GHOSTTY_T" in tty?*) GHOSTTY_TTY="/dev/$GHOSTTY_T"; break ;; esac
+    done
+
+    if ! GHOSTTY_TERM_ID=$(osascript - "$LAUNCH_SCRIPT" "$GHOSTTY_TTY" <<'APPLESCRIPT'
 on run argv
     set launchScript to item 1 of argv
+    set agentTty to item 2 of argv
     tell application "Ghostty"
         set cfg to new surface configuration
         set command of cfg to launchScript
         set wait after command of cfg to false
-        set ft to focused terminal of selected tab of front window
+        try
+            if agentTty is "" then error
+            set ft to first terminal whose tty is agentTty
+        on error
+            set ft to focused terminal of selected tab of front window
+        end try
         set newTerm to split ft direction down with configuration cfg
         perform action "toggle_split_zoom" on newTerm
         return id of newTerm

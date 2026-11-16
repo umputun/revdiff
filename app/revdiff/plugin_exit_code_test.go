@@ -1033,6 +1033,52 @@ func TestIterm2OverlayNamesSession(t *testing.T) {
 	}
 }
 
+// regression for #110: the Ghostty split must target the agent terminal, found by the tty of the
+// nearest ancestor that has one, not whatever tab is in front when the AppleScript runs
+func TestGhosttySplitTargetsAgentTTY(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+
+	backend := launcherBackend{name: "ghostty", command: "osascript", env: map[string]string{"TERM_PROGRAM": "ghostty"}}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: 0})
+			argsFile := filepath.Join(env["TMPDIR"], "osascript-args")
+			env["FAKE_OSASCRIPT_ARGS_FILE"] = argsFile
+			// the launcher itself is detached (no tty); its parent 4242 owns ttys042
+			writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "ps"), `#!/bin/sh
+case "$*" in
+    "-o ppid=,tty= -p 4242") echo "    1 ttys042" ;;
+    *) echo " 4242 ??" ;;
+esac
+`)
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			require.Equal(t, 0, res.code, res.stderr)
+
+			raw, err := os.ReadFile(argsFile) //nolint:gosec // path is a test-owned temp file
+			require.NoError(t, err)
+			calls := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			require.NotEmpty(t, calls)
+			assert.True(t, strings.HasSuffix(calls[0], " /dev/ttys042"),
+				"split osascript argv should end with the agent tty, got %q", calls[0])
+		})
+	}
+}
+
 // regression: tmux runs #() inside popup titles and window names, so a '#' must reach it as '##'
 func TestTmuxTitlesEscapeFormatChars(t *testing.T) {
 	if runtime.GOOS == "windows" {
