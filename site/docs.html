@@ -724,7 +724,7 @@ map alt+t&gt;n theme_select</code></div>
                 <tr><td><strong>kaku</strong></td><td><code>kaku cli split-pane</code> (same API as wezterm)</td><td><code>$WEZTERM_PANE</code></td></tr>
                 <tr><td><strong>cmux</strong></td><td><code>cmux new-split</code> + <code>cmux send</code></td><td><code>$CMUX_SURFACE_ID</code>, <code>__CFBundleIdentifier=com.cmuxterm.app</code>, or <code>GHOSTTY_RESOURCES_DIR</code> / <code>GHOSTTY_BIN_DIR</code> containing <code>cmux.app</code></td></tr>
                 <tr><td><strong>Herdr.app</strong></td><td><code>hc run</code> + <code>herdr-app do terminal.peek</code> (overlay over the window)</td><td><code>$HC_TERMINAL_ID</code> env var</td></tr>
-                <tr><td><strong>ghostty</strong></td><td>AppleScript split + zoom (macOS only)</td><td><code>$TERM_PROGRAM</code> + AppleScript probe</td></tr>
+                <tr><td><strong>ghostty</strong></td><td>AppleScript split + zoom (macOS only); targets the agent's own terminal on Ghostty 1.4.0+, the front tab on older versions</td><td><code>$TERM_PROGRAM</code> + AppleScript probe</td></tr>
                 <tr><td><strong>iTerm2</strong></td><td>AppleScript split pane (macOS only)</td><td><code>$ITERM_SESSION_ID</code></td></tr>
                 <tr><td><strong>Emacs vterm</strong></td><td>New frame via <code>emacsclient</code></td><td><code>$INSIDE_EMACS</code></td></tr>
             </tbody>

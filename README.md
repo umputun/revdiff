@@ -100,7 +100,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **Kaku** | `kaku cli split-pane` (same API as wezterm) | `$WEZTERM_PANE` env var |
 | **cmux** | `cmux new-split` + `cmux send` | `$CMUX_SURFACE_ID`, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` containing `cmux.app` |
 | **Herdr.app** | `hc run` + `herdr-app do terminal.peek` (overlay over the window) | `$HC_TERMINAL_ID` env var |
-| **ghostty** | AppleScript split + zoom (macOS only) | `$TERM_PROGRAM` + AppleScript probe |
+| **ghostty** | AppleScript split + zoom (macOS only); targets the agent's own terminal on Ghostty 1.4.0+, the front tab on older versions | `$TERM_PROGRAM` + AppleScript probe |
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
