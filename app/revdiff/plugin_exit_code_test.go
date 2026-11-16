@@ -1033,8 +1033,7 @@ func TestIterm2OverlayNamesSession(t *testing.T) {
 	}
 }
 
-// regression for #110: the Ghostty split must target the agent terminal, found by the tty of the
-// nearest ancestor that has one, not whatever tab is in front when the AppleScript runs
+// regression for #110: the Ghostty split went to the front tab instead of the agent terminal
 func TestGhosttySplitTargetsAgentTTY(t *testing.T) {
 	t.Parallel()
 	root := testRepoRoot(t)
@@ -1057,7 +1056,6 @@ func TestGhosttySplitTargetsAgentTTY(t *testing.T) {
 			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: 0})
 			argsFile := filepath.Join(env["TMPDIR"], "osascript-args")
 			env["FAKE_OSASCRIPT_ARGS_FILE"] = argsFile
-			// the launcher itself is detached (no tty); its parent 4242 owns ttys042
 			writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "ps"), `#!/bin/sh
 case "$*" in
     "-o ppid=,tty= -p 4242") echo "    1 ttys042" ;;

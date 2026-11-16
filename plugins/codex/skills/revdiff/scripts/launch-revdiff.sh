@@ -872,9 +872,7 @@ $(write_rc_cmd "$SENTINEL")
 LAUNCHER
     chmod +x "$LAUNCH_SCRIPT"
 
-    # the tty of the agent terminal, taken from the nearest ancestor that has one (the tool
-    # shell itself is usually detached), so the split targets that terminal even when the
-    # user has switched Ghostty tabs or windows since the review was requested
+    # the tool shell is usually detached, so the nearest ancestor with a tty is the agent terminal
     GHOSTTY_TTY=""
     GHOSTTY_PID=$$
     while [ "${GHOSTTY_PID:-0}" -gt 1 ] && read -r GHOSTTY_PID GHOSTTY_T < <(ps -o ppid=,tty= -p "$GHOSTTY_PID" 2>/dev/null); do
