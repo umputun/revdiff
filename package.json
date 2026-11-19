@@ -1,6 +1,6 @@
 {
   "name": "revdiff-pi",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Pi package for revdiff interactive diff review",
   "license": "MIT",
   "repository": {

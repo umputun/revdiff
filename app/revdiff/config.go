@@ -116,13 +116,12 @@ func (o options) ref() string {
 // disabled in two-ref mode (both `a b` and `a..b` forms) because untracked
 // files are working-tree state, not part of a historical diff between refs.
 func (o options) startupUntracked() bool {
-	if !o.Untracked {
-		return false
-	}
-	if o.Refs.Against != "" || strings.Contains(o.Refs.Base, "..") {
-		return false
-	}
-	return true
+	return o.Untracked && !o.twoRef()
+}
+
+// twoRef reports whether the positional args name two refs: `a b`, `a..b` or `a...b`.
+func (o options) twoRef() bool {
+	return o.Refs.Against != "" || strings.Contains(o.Refs.Base, "..")
 }
 
 // parseArgs parses CLI arguments with config file support.

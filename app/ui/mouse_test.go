@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,7 +181,7 @@ func mouseTestModel(t *testing.T, files []string, diffs map[string][]diff.DiffLi
 	m.layout.width = 120
 	m.layout.height = 40
 	m.layout.treeWidth = 36
-	m.layout.viewport = viewport.New(80, 30)
+	m.layout.viewport = newDiffViewport(80, 30)
 	if len(files) > 0 {
 		m.file.name = files[0]
 		if d, ok := diffs[files[0]]; ok {
@@ -401,7 +400,7 @@ func TestModel_HandleMouse_ShiftWheelHalfPage(t *testing.T) {
 	}
 	m := mouseTestModel(t, []string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 	m.file.lines = lines
-	m.layout.viewport = viewport.New(80, 20) // Height=20 so half-page = 10
+	m.layout.viewport = newDiffViewport(80, 20) // Height=20 so half-page = 10
 	m.layout.viewport.SetContent(m.renderDiff())
 
 	model := updateWheelAndFlush(t, m, wheelMsg(tea.MouseButtonWheelDown, 60, 10, true))

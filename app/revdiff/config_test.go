@@ -583,6 +583,26 @@ func TestOptions_StartupUntracked(t *testing.T) {
 	}
 }
 
+func TestOptions_TwoRef(t *testing.T) {
+	cases := []struct {
+		name, base, against string
+		want                bool
+	}{
+		{name: "no ref", want: false},
+		{name: "single ref", base: "HEAD~1", want: false},
+		{name: "two refs", base: "main", against: "feature", want: true},
+		{name: "dot-dot range", base: "main..feature", want: true},
+		{name: "triple-dot range", base: "main...feature", want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var o options
+			o.Refs.Base, o.Refs.Against = tc.base, tc.against
+			assert.Equal(t, tc.want, o.twoRef())
+		})
+	}
+}
+
 func TestParseArgs_WordDiff(t *testing.T) {
 	t.Run("default off", func(t *testing.T) {
 		opts, err := parseArgs(noConfigArgs(t))

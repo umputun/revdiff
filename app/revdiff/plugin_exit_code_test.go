@@ -43,7 +43,10 @@ type cmdResult struct {
 type launcherBackend struct {
 	name    string
 	command string
-	env     map[string]string
+	// extraCommands are more names the fake backend is installed under, for a backend
+	// driven through more than one CLI
+	extraCommands []string
+	env           map[string]string
 }
 
 type launcherRun struct {
@@ -577,6 +580,436 @@ func TestHerdrAbandonedReviewLeavesNoStderrCapture(t *testing.T) {
 	}
 }
 
+// herdrAppEnv is the fake environment of a Herdr.app terminal, with both CLIs recorded.
+func herdrAppEnv(t *testing.T, code int, output string) map[string]string {
+	t.Helper()
+	backend := launcherBackend{name: "herdr-app", command: "hc", extraCommands: []string{"herdr-app"},
+		env: map[string]string{"HC_TERMINAL_ID": "t9c"}}
+	env := fakeLauncherEnv(t, launcherRun{backend: backend, code: code, output: output})
+	env["FAKE_HC_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "hc-args")
+	env["FAKE_HERDR_APP_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "herdr-app-args")
+	return env
+}
+
+// recordedCalls returns the lines a fake CLI recorded, or nil when it was never called.
+func recordedCalls(t *testing.T, path string) []string {
+	t.Helper()
+	b, err := os.ReadFile(path) //nolint:gosec // path is a test-owned temp file
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	require.NoError(t, err)
+	return strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+}
+
+// hcRunLine returns the recorded `hc run` call and the terminal name it passed.
+func hcRunLine(t *testing.T, calls []string) (line, name string) {
+	t.Helper()
+	for _, c := range calls {
+		if !strings.HasPrefix(c, "run ") {
+			continue
+		}
+		fields := strings.Fields(c)
+		for i, f := range fields {
+			if f == "--name" && i+1 < len(fields) {
+				return c, fields[i+1]
+			}
+		}
+		return c, ""
+	}
+	t.Fatalf("no hc run call in %q", calls)
+	return "", ""
+}
+
+func callsWithPrefix(calls []string, prefix string) []string {
+	var out []string
+	for _, c := range calls {
+		if strings.HasPrefix(c, prefix) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func TestHerdrAppOverlayRetriesPeek(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name       string
+		path       string
+		args       []string
+		termPrefix string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}, termPrefix: "revdiff-plan-"},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			output := "## f.go:1 (+)\nc\n"
+			env := herdrAppEnv(t, exitCodeAnnotations, output)
+			env["FAKE_HC_RUN_BG"] = "1"
+			env["FAKE_PEEK_FAIL"] = "first"
+			env["FAKE_REVDIFF_DELAY"] = "1"
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assert.Empty(t, res.stderr)
+
+			assert.Equal(t, []string{"do terminal.peek --terminal t42", "do terminal.peek --terminal t42"},
+				recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]))
+			hc := recordedCalls(t, env["FAKE_HC_ARGS_FILE"])
+			line, name := hcRunLine(t, hc)
+			for _, want := range []string{"--bg", "--json", "--rm", "--no-notify", "--cwd " + root} {
+				assert.Contains(t, line, want)
+			}
+			assert.True(t, strings.HasPrefix(name, launcher.termPrefix), "terminal name %q", name)
+			if launcher.termPrefix == "revdiff-" {
+				assert.False(t, strings.HasPrefix(name, "revdiff-plan-"), "terminal name %q", name)
+			}
+			assert.Empty(t, callsWithPrefix(hc, "kill"))
+			assert.Empty(t, callsWithPrefix(hc, "rm"))
+			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+		})
+	}
+}
+
+func TestHerdrAppMissingCLI(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			backend := launcherBackend{name: "ghostty", command: "osascript", env: map[string]string{
+				"HC_TERMINAL_ID": "t9c",
+				"TERM_PROGRAM":   "ghostty",
+			}}
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: 0})
+			env["PATH"] = filepath.Join(env["TMPDIR"], "bin") + string(os.PathListSeparator) + "/usr/bin:/bin"
+			env["FAKE_OSASCRIPT_ARGS_FILE"] = filepath.Join(env["TMPDIR"], "osascript-args")
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			assert.Equal(t, 1, res.code)
+			assert.Contains(t, res.stderr, "error: Herdr.app session detected but hc/herdr-app CLI not found")
+			assert.NoFileExists(t, env["FAKE_OSASCRIPT_ARGS_FILE"])
+		})
+	}
+}
+
+func TestHerdrAppQuotedCwd(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			parent, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			dir := filepath.Join(parent, "it's a dir")
+			require.NoError(t, os.Mkdir(dir, 0o700))
+			output := "## f.go:1 (+)\nc\n"
+			env := herdrAppEnv(t, exitCodeAnnotations, output)
+			env["PWD"] = dir
+			cwdFile := filepath.Join(env["TMPDIR"], "hc-cwd")
+			env["FAKE_HC_CWD_FILE"] = cwdFile
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: dir, name: "bash", args: args, env: env})
+			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assertFileContent(t, cwdFile, dir+"\n")
+		})
+	}
+}
+
+func TestHerdrAppKillsUnshownReview(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name       string
+		path       string
+		args       []string
+		termPrefix string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", termPrefix: "revdiff-"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}, termPrefix: "revdiff-plan-"},
+	}
+	tests := []struct {
+		name       string
+		env        map[string]string
+		wantStderr string
+		wantKill   bool
+		minElapsed time.Duration
+		brokenJQ   bool
+	}{
+		{
+			name:       "peek never succeeds",
+			env:        map[string]string{"FAKE_HC_RUN_BG": "1", "FAKE_HC_RUN_DELAY": "30", "FAKE_PEEK_FAIL": "always"},
+			wantStderr: `error: Herdr.app could not show the review: {"error":"no running terminal \"t42\""}`,
+			wantKill:   true,
+			minElapsed: 3900 * time.Millisecond,
+		},
+		{
+			name:       "hc run fails",
+			env:        map[string]string{"FAKE_HC_RUN_FAIL": "1"},
+			wantStderr: "error: hc run failed:",
+			wantKill:   true,
+		},
+		{
+			name:       "name taken",
+			env:        map[string]string{"FAKE_HC_RUN_FAIL": "name_taken"},
+			wantStderr: "name_taken",
+			wantKill:   false,
+		},
+		{
+			name:       "name taken, spaced json",
+			env:        map[string]string{"FAKE_HC_RUN_FAIL": "name_taken_spaced"},
+			wantStderr: "name_taken",
+			wantKill:   false,
+			brokenJQ:   true,
+		},
+		{
+			name:       "no address",
+			env:        map[string]string{"FAKE_HC_RUN_JSON": `{"ok":true}`, "FAKE_HC_RUN_BG": "1", "FAKE_HC_RUN_DELAY": "30"},
+			wantStderr: "error: hc run did not return a terminal address:",
+			wantKill:   true,
+		},
+	}
+	for _, launcher := range launchers {
+		for _, tc := range tests {
+			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+				maps.Copy(env, tc.env)
+				if tc.brokenJQ {
+					writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "jq"), "#!/bin/sh\nexit 1\n")
+				}
+
+				args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+				start := time.Now()
+				res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+				elapsed := time.Since(start)
+				assert.Equal(t, 1, res.code)
+				assert.Contains(t, res.stderr, tc.wantStderr)
+				assert.Empty(t, res.stdout)
+				assert.GreaterOrEqual(t, elapsed, tc.minElapsed, "the peek window must be served")
+
+				hc := recordedCalls(t, env["FAKE_HC_ARGS_FILE"])
+				_, name := hcRunLine(t, hc)
+				require.True(t, strings.HasPrefix(name, launcher.termPrefix), "terminal name %q", name)
+				if tc.wantKill {
+					assert.Equal(t, []string{"kill " + name}, callsWithPrefix(hc, "kill"))
+					assert.Equal(t, []string{"rm " + name}, callsWithPrefix(hc, "rm"))
+				} else {
+					assert.Empty(t, callsWithPrefix(hc, "kill"), "a taken name belongs to another launcher")
+					assert.Empty(t, callsWithPrefix(hc, "rm"))
+				}
+				left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
+				require.NoError(t, err)
+				assert.Empty(t, left, "the launch script of a stopped review must go")
+			})
+		}
+	}
+}
+
+func TestHerdrAppFastExitBeforePeek(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name         string
+		path         string
+		args         []string
+		relaysStderr bool
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", relaysStderr: true},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", relaysStderr: true},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			env := herdrAppEnv(t, 1, "")
+			env["FAKE_STDERR"] = "revdiff: unknown flag `--bogus-flag'"
+			env["FAKE_PEEK_FAIL"] = "always"
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			assert.Equal(t, 1, res.code)
+			assert.NotContains(t, res.stderr, "could not show")
+			if launcher.relaysStderr {
+				assert.Contains(t, res.stderr, "revdiff: unknown flag `--bogus-flag'")
+			}
+			assert.Empty(t, recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]), "a review that already ended needs no peek")
+			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"))
+		})
+	}
+}
+
+// regression: the plan-review EXIT trap deleted a shown review's launch script before sh opened it
+func TestHerdrAppSignalAfterShown(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+			env["FAKE_HC_RUN_BG"] = "1"
+			env["FAKE_HC_RUN_DELAY"] = "3"
+			env["FAKE_SLEEP_KILL"] = "parent"
+			argsFile := filepath.Join(env["TMPDIR"], "revdiff-args")
+			env["FAKE_ARGS_FILE"] = argsFile
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			assert.Equal(t, 143, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, []string{"do terminal.peek --terminal t42"}, recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]))
+			assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
+				"a shown review must survive its launcher")
+
+			require.Eventually(t, func() bool {
+				_, err := os.Stat(argsFile)
+				return err == nil
+			}, 15*time.Second, 50*time.Millisecond, "the shown review never ran")
+			require.Eventually(t, func() bool {
+				left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
+				require.NoError(t, err)
+				return len(left) == 0
+			}, 15*time.Second, 50*time.Millisecond, "the review never finished")
+			assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+		})
+	}
+}
+
+// regression: a signal during a successful peek stopped the review the user had just seen
+func TestHerdrAppSignalDuringPeek(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	signals := []struct {
+		name     string
+		kill     string
+		wantCode int
+	}{
+		{name: "TERM", kill: "parent", wantCode: 143},
+		{name: "INT", kill: "parent-int", wantCode: 130},
+	}
+	for _, launcher := range launchers {
+		for _, sig := range signals {
+			t.Run(launcher.name+"/"+sig.name, func(t *testing.T) {
+				t.Parallel()
+				env := herdrAppEnv(t, exitCodeAnnotations, "x\n")
+				env["FAKE_HC_RUN_BG"] = "1"
+				env["FAKE_HC_RUN_DELAY"] = "1"
+				env["FAKE_PEEK_KILL"] = sig.kill
+				argsFile := filepath.Join(env["TMPDIR"], "revdiff-args")
+				env["FAKE_ARGS_FILE"] = argsFile
+
+				args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+				res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+				assert.Equal(t, sig.wantCode, res.code, "stderr: %s", res.stderr)
+				assert.Empty(t, callsWithPrefix(recordedCalls(t, env["FAKE_HC_ARGS_FILE"]), "kill"),
+					"a review shown by the interrupted peek must survive its launcher")
+
+				require.Eventually(t, func() bool {
+					_, err := os.Stat(argsFile)
+					return err == nil
+				}, 15*time.Second, 50*time.Millisecond, "the shown review never ran")
+				require.Eventually(t, func() bool {
+					left, err := filepath.Glob(filepath.Join(env["TMPDIR"], "*-launch-*"))
+					require.NoError(t, err)
+					return len(left) == 0
+				}, 15*time.Second, 50*time.Millisecond, "the review never finished")
+			})
+		}
+	}
+}
+
+// regression: without jq the address fallback matched only compact JSON
+func TestHerdrAppAddressWithoutJQ(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			output := "## f.go:1 (+)\nc\n"
+			env := herdrAppEnv(t, exitCodeAnnotations, output)
+			writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "jq"), "#!/bin/sh\nexit 1\n")
+			env["FAKE_HC_RUN_BG"] = "1"
+			env["FAKE_HC_RUN_JSON"] = `{"address": "t42", "name": "revdiff-test"}`
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			require.Equal(t, exitCodeAnnotations, res.code, "stderr: %s", res.stderr)
+			assert.Equal(t, output, res.stdout)
+			assert.Equal(t, []string{"do terminal.peek --terminal t42"}, recordedCalls(t, env["FAKE_HERDR_APP_ARGS_FILE"]))
+		})
+	}
+}
+
 // pins #314: an apostrophe in a heredoc nested inside a command substitution
 // breaks the whole launcher under bash 3.2, the stock macOS /bin/bash. the
 // launchers cannot be parse-checked for it here — CI and most dev machines run
@@ -710,6 +1143,50 @@ func TestIterm2OverlayNamesSession(t *testing.T) {
 			// $2 while production passes the sentinel alone — that heredoc must keep reading $1 only
 			assert.True(t, strings.HasSuffix(calls[0], " "+launcher.title),
 				"split osascript argv should end with the overlay title, got %q", calls[0])
+		})
+	}
+}
+
+// regression for #110: the Ghostty split went to the front tab instead of the agent terminal
+func TestGhosttySplitTargetsAgentTTY(t *testing.T) {
+	t.Parallel()
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name string
+		path string
+		args []string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile}},
+	}
+
+	backend := launcherBackend{name: "ghostty", command: "osascript", env: map[string]string{"TERM_PROGRAM": "ghostty"}}
+	for _, launcher := range launchers {
+		t.Run(launcher.name, func(t *testing.T) {
+			t.Parallel()
+			env := fakeLauncherEnv(t, launcherRun{backend: backend, code: 0})
+			argsFile := filepath.Join(env["TMPDIR"], "osascript-args")
+			env["FAKE_OSASCRIPT_ARGS_FILE"] = argsFile
+			writeExecutable(t, filepath.Join(env["TMPDIR"], "bin", "ps"), `#!/bin/sh
+case "$*" in
+    "-o ppid=,tty= -p 4242") echo "    1 ttys042" ;;
+    *) echo " 4242 ??" ;;
+esac
+`)
+
+			args := append([]string{filepath.Join(root, launcher.path)}, launcher.args...)
+			res := runTestCmd(t, cmdReq{dir: root, name: "bash", args: args, env: env})
+			require.Equal(t, 0, res.code, res.stderr)
+
+			raw, err := os.ReadFile(argsFile) //nolint:gosec // path is a test-owned temp file
+			require.NoError(t, err)
+			calls := strings.Split(strings.TrimSpace(string(raw)), "\n")
+			require.NotEmpty(t, calls)
+			assert.True(t, strings.HasSuffix(calls[0], " /dev/ttys042"),
+				"split osascript argv should end with the agent tty, got %q", calls[0])
 		})
 	}
 }
@@ -1291,21 +1768,19 @@ func TestHerdrPaneOverlayOptIn(t *testing.T) {
 		{
 			// a generic error is not evidence the pane died, and there is no safe deadline
 			// when the API cannot report liveness: the loop must keep waiting through a
-			// control-plane outage and still finish the review normally. Sustained failures
-			// outlast the warn threshold here, then the sentinel lands. A 0.3s poll puts the
-			// tenth miss at ~3.2s against a 5s sentinel, so the warning lands with roughly
-			// 1.5x headroom; iterations slower than ~0.5s would flake it (fail, never
-			// false-pass). After the warn the poll backs off to 2s, so the run totals ~11
-			// gets, not the ~16 a flat poll would make.
+			// control-plane outage and still finish the review normally. The review ends on
+			// the poll count, never on elapsed time, or a slow runner ends it before the
+			// tenth miss warns.
 			name: "a control-plane outage does not end a live review",
 			env: map[string]string{"REVDIFF_HERDR_PANE": "1", "FAKE_HERDR_PANE": "1",
-				"FAKE_HERDR_GET_FAIL": "1", "FAKE_HERDR_ASYNC": "1", "FAKE_REVDIFF_DELAY": "5"},
+				"FAKE_HERDR_GET_FAIL": "1", "FAKE_HERDR_ASYNC": "1",
+				"FAKE_REVDIFF_AFTER_GETS": "10", "FAKE_REVDIFF_DELAY": "3"},
 			wantSplit:      true,
 			wantZoom:       true,
 			wantGet:        true,
 			wantClose:      true,
 			wantRetriedGet: true,
-			// ~11 with the 2s backoff after miss 10; a flat 0.3s poll would make ~16
+			// ~12 with the 2s backoff after miss 10; a flat 0.3s poll would make ~20
 			maxGets:    13,
 			wantStderr: "still waiting for the review",
 		},
@@ -2854,6 +3329,12 @@ func launcherBackends() []launcherBackend {
 			"GHOSTTY_RESOURCES_DIR": "/Applications/cmux.app/Contents/Resources/ghostty",
 			"GHOSTTY_BIN_DIR":       "/Applications/cmux.app/Contents/MacOS",
 		}},
+		{name: "herdr-app", command: "hc", extraCommands: []string{"herdr-app"}, env: map[string]string{"HC_TERMINAL_ID": "t9c"}},
+		{name: "herdr-app ghostty env", command: "hc", extraCommands: []string{"herdr-app"}, env: map[string]string{
+			"HC_TERMINAL_ID":       "t9c",
+			"TERM_PROGRAM":         "ghostty",
+			"__CFBundleIdentifier": "dev.herdr.app",
+		}},
 		{name: "ghostty", command: "osascript", env: map[string]string{"TERM_PROGRAM": "ghostty"}},
 		{name: "iterm2", command: "osascript", env: map[string]string{"ITERM_SESSION_ID": "w0t0p0:ABC"}},
 		{name: "emacs", command: "emacsclient", env: map[string]string{"INSIDE_EMACS": "vterm"}},
@@ -2867,17 +3348,22 @@ func fakeLauncherEnv(t *testing.T, r launcherRun) map[string]string {
 	binDir := filepath.Join(tmp, "bin")
 	writeExecutable(t, filepath.Join(binDir, "revdiff"), testFixtureScript(t, "fake-revdiff-output.sh"))
 	writeExecutable(t, filepath.Join(binDir, r.backend.command), testFixtureScript(t, "fake-overlay-backend.sh"))
+	for _, extra := range r.backend.extraCommands {
+		writeExecutable(t, filepath.Join(binDir, extra), testFixtureScript(t, "fake-overlay-backend.sh"))
+	}
 	// A `sleep` that signals before it sleeps. Used to reach the refusal path's 300ms
 	// evidence grace deterministically: the signal is already pending when the grace sleep
 	// becomes the foreground command, so there is no window to race. FAKE_SLEEP_KILL picks
 	// the target -- "parent" is a launcher-directed signal, "group" emulates Ctrl-C, which
 	// kills this sleep too, and "group-always" keeps doing it so every retry dies.
 	//
-	// The once-marker makes "group" hit only the FIRST sleep of the run, which on the
-	// refusal path is the grace. That assumption is load-bearing: combining FAKE_SLEEP_KILL
-	// with anything that sleeps earlier (a backend with its own wait loop, or
-	// FAKE_REVDIFF_DELAY) spends the marker on the wrong sleep and the case passes while
-	// testing nothing. Keep these cases on the refusal path.
+	// The once-marker makes the fake hit only the FIRST PATH `sleep` of the run. Two kinds of
+	// case rely on that. On the refusal path, the first sleep is the grace. In
+	// TestHerdrAppSignalAfterShown, it is the Herdr.app wait loop: that holds because the
+	// first peek succeeds (the one-peek assertion pins this) and FAKE_HC_RUN_DELAY uses
+	// /bin/sleep. Combining FAKE_SLEEP_KILL with anything that sleeps earlier (a failed peek,
+	// a backend with its own wait loop, or FAKE_REVDIFF_DELAY) spends the marker on the wrong
+	// sleep, and the case then passes while it tests nothing.
 	//
 	// The marker is written BEFORE the kill so the retry that follows runs a real sleep.
 	writeExecutable(t, filepath.Join(binDir, "sleep"), `#!/bin/sh
@@ -2943,6 +3429,9 @@ func cleanOverlayEnv() map[string]string {
 		"REVDIFF_TMUX_WINDOW":         "",
 		"AGENTDECK_INSTANCE_ID":       "",
 		"REVDIFF_CONFIG":              "",
+		"HC_TERMINAL_ID":              "",
+		"HC_TERMINAL_SOCKET":          "",
+		"HC_SCOPE":                    "",
 	}
 }
 

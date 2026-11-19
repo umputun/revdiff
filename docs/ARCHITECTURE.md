@@ -151,6 +151,9 @@ across files by concern to keep files under ~500 lines:
   an earlier tall hunk lands on its last page; the start of the cursor's own hunk does not, or the
   walk would cycle back to its tail. `stepHunk` reports whether it moved because a page step can
   leave the cursor index unchanged, and only a step that did not move may cross files
+- **`diffviewport.go`** — `diffViewport`, the scrollable window over the rendered diff. Replaces
+  `bubbles/viewport`, whose `SetContent` measures the width of every line for a horizontal scroll
+  revdiff does not use (revdiff scrolls horizontally itself); `View` measures only the visible rows
 - **`scrollbar.go`** — vertical scrollbar thumb post-processing on rendered diff/tree/TOC panes
   (replaces right-border `│` with `┃` on rows mapped to the visible viewport portion)
 - **`collapsed.go`** — collapsed diff mode: hide removes, show modified markers
@@ -518,7 +521,7 @@ diffLines + highlightedLines
           → skip removed lines
           → buildModifiedSet() for modify vs pure-add styling
 
-  → viewport.SetContent()
+  → viewport.SetContent() (diffViewport: split only, O(rows) slices)
   → View():
     ├── truncateHeaderTitle() (sanitize + left-truncate filename to 1 row)
     ├── lipgloss.JoinVertical(header, viewport.View())
@@ -578,9 +581,10 @@ User presses 'e' in diff pane
               → return to revdiff without reloading
 ```
 
-Source line navigation is best effort for all worktree-backed reviews. Staged and ref reviews still
-request the focused line when revdiff can derive one from the loaded diff, but clean editor exits
-from staged and ref reviews do not reload the displayed diff. Removed rows target the nearest line
+Source line navigation is best effort for all worktree-backed reviews. Staged and two-ref reviews
+still request the focused line when revdiff can derive one from the loaded diff, but clean editor
+exits from them do not reload the displayed diff. A single-ref review diffs against the working tree,
+so it reloads and guards annotated files the same way a working-tree review does. Removed rows target the nearest line
 that still exists in the current file; when previous and next current-file rows are equally near,
 the previous row wins.
 
@@ -688,7 +692,7 @@ make state ownership explicit without splitting into mini-models.
 |---------|---------|
 | `charmbracelet/bubbletea` | TUI framework (Elm architecture) |
 | `charmbracelet/lipgloss` | Terminal styling |
-| `charmbracelet/bubbles` | TUI components (viewport, textinput) |
+| `charmbracelet/bubbles` | TUI components (textinput) |
 | `jessevdk/go-flags` | CLI flag parsing with INI config support |
 | `alecthomas/chroma/v2` | Syntax highlighting |
 | `stretchr/testify` | Test assertions |

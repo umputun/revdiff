@@ -20,6 +20,14 @@ import (
 // annotKeyFile is the lookup key for file-level annotations in wrappedAnnotationLineCount.
 const annotKeyFile = "file"
 
+// annotRuleGlyph is the block-quote rule that starts every annotation row when a marker is set.
+const annotRuleGlyph = "▎"
+
+// annotRule returns the cached rule that starts every annotation row, empty for an empty marker.
+func (m Model) annotRule() string {
+	return m.cfg.annotRule
+}
+
 // annotPrefix returns the cached annotation line prefix (marker + space).
 func (m Model) annotPrefix() string {
 	return m.cfg.annotPrefix
@@ -107,7 +115,7 @@ func (m *Model) startAnnotation() tea.Cmd {
 		break
 	}
 
-	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotPrefix())) // cursor col + annotation prefix + border margin
+	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotRule())+lipgloss.Width(m.annotPrefix())) // cursor col + rule + annotation prefix + border margin
 	if preFill != "" {
 		ti.SetValue(preFill)
 	}
@@ -172,7 +180,7 @@ func (m *Model) startFileAnnotation() tea.Cmd {
 		break
 	}
 
-	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotFilePrefix())) // cursor col + file annotation prefix + border margin
+	ti, cmd := m.newAnnotationInput(placeholder, 3+lipgloss.Width(m.annotRule())+lipgloss.Width(m.annotFilePrefix())) // cursor col + rule + file annotation prefix + border margin
 	if preFill != "" {
 		ti.SetValue(preFill)
 	}
@@ -470,34 +478,46 @@ func (m *Model) annotationVisualRows(prefix, body string) []string {
 
 // composeAnnotationRows builds the styled visual rows for an annotation.
 // splits body on "\n" into logical lines, applies prefix on row 0 and a matching-width
-// plain-space indent on continuation rows so body columns line up, wraps each segment
-// at wrapW, and wraps each visual row in AnnotationInline.
+// plain-space indent on continuation rows so body columns line up, starts each row
+// with annotRule (none for an empty marker), and wraps each visual row in AnnotationInline.
 //
 // IMPORTANT: the returned rows bake in the resolver's AnnotationInline styling
 // envelope. applyTheme rebuilds the resolver — invalidation of rowCache on
 // applyTheme is load-bearing. anyone adding a runtime color toggle that affects
 // AnnotationInline MUST also invalidate the cache.
 func (m Model) composeAnnotationRows(prefix, body string, wrapW int) []string {
-	first := prefix + body
-	logical := strings.Split(first, "\n")
+	rule := m.annotRule()
 	indent := strings.Repeat(" ", lipgloss.Width(prefix))
-
 	var rows []string
-	for i, segment := range logical {
-		if i > 0 {
-			segment = indent + segment
+	for i, segment := range strings.Split(body, "\n") {
+		lead := indent
+		if i == 0 {
+			lead = prefix
 		}
-		var lines []string
-		if wrapW > wrapMinContent && lipgloss.Width(segment) > wrapW {
-			lines = m.wrapContent(segment, wrapW)
-		} else {
-			lines = []string{segment}
-		}
-		for _, line := range lines {
-			rows = append(rows, m.renderer.AnnotationInline(line))
+		for _, line := range m.wrapAnnotationSegment(lead, segment, wrapW-lipgloss.Width(rule)) {
+			rows = append(rows, m.renderer.AnnotationInline(rule+line))
 		}
 	}
 	return rows
+}
+
+// wrapAnnotationSegment wraps one logical line at wrapW, hanging continuation rows under the text after lead.
+func (m Model) wrapAnnotationSegment(lead, segment string, wrapW int) []string {
+	line := lead + segment
+	if wrapW < wrapMinContent || lipgloss.Width(line) <= wrapW {
+		return []string{line}
+	}
+	indent := strings.Repeat(" ", lipgloss.Width(lead))
+	textW := wrapW - len(indent)
+	if textW < wrapMinContent {
+		return m.wrapContent(line, wrapW)
+	}
+	lines := m.wrapContent(segment, textW)
+	lines[0] = lead + lines[0]
+	for i := 1; i < len(lines); i++ {
+		lines[i] = indent + lines[i]
+	}
+	return lines
 }
 
 // wrappedAnnotationLineCount returns the number of visual rows an annotation occupies.

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -1893,7 +1892,7 @@ func TestModel_TreePaneToggle(t *testing.T) {
 	m.file.name = "a.go"
 	m.file.lines = lines
 	m.layout.focus = paneTree
-	m.layout.viewport = viewport.New(80, 30)
+	m.layout.viewport = newDiffViewport(80, 30)
 	origTreeWidth := m.layout.treeWidth
 
 	t.Run("t hides tree pane", func(t *testing.T) {
@@ -1937,7 +1936,7 @@ func TestModel_TreePaneToggle(t *testing.T) {
 	t.Run("no-op in single-file mode without TOC", func(t *testing.T) {
 		m2 := testModel([]string{"a.go"}, map[string][]diff.DiffLine{"a.go": lines})
 		m2.file.singleFile = true
-		m2.layout.viewport = viewport.New(80, 30)
+		m2.layout.viewport = newDiffViewport(80, 30)
 		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
 		model := result.(Model)
 		assert.False(t, model.layout.treeHidden, "t should be no-op in single-file mode without TOC")
@@ -1948,7 +1947,7 @@ func TestModel_TreePaneToggle(t *testing.T) {
 		m2.file.singleFile = true
 		m2.file.mdTOC = sidepane.ParseTOC([]diff.DiffLine{{NewNum: 1, Content: "# Header", ChangeType: diff.ChangeContext}}, "readme.md")
 		m2.layout.treeWidth = max(minTreeWidth, m2.layout.width*m2.cfg.treeWidthRatio/10)
-		m2.layout.viewport = viewport.New(80, 30)
+		m2.layout.viewport = newDiffViewport(80, 30)
 		m2.layout.focus = paneTree
 		result, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
 		model := result.(Model)

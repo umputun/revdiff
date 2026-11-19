@@ -22,9 +22,11 @@ Installs the `revdiff` binary into `GOBIN` (defaults to `$(go env GOPATH)/bin`).
 /plugin install revdiff@revdiff
 ```
 
-Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, ghostty, iTerm2, or Emacs vterm).
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app, ghostty, iTerm2, or Emacs vterm).
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
+
+Herdr.app is detected by `$HC_TERMINAL_ID`. revdiff opens as an overlay over the Herdr.app window and closes when you quit revdiff. If you hide the overlay, the review keeps running: reopen the `revdiff-…` terminal from the Agents list in the sidebar. The agent waits until you quit revdiff. Herdr.app is not the herdr multiplexer, so `REVDIFF_HERDR_PANE` does not apply to it.
 
 **Sandbox note:** Ghostty and iTerm2 launchers use `osascript` (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add to your Claude Code `settings.json`:
 
@@ -38,7 +40,7 @@ cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdent
 
 Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` instead of piping it in.
 
-Terminals using CLI tools (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux) are not affected.
+Terminals using CLI tools (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
 
 ### Plan Review Plugin
 

@@ -20,7 +20,7 @@ func (j *Jj) FileBlame(ref, file string, _ bool) (map[int]BlameLine, error) {
 	if targetRef := j.blameTargetRef(ref); targetRef != "" {
 		args = append(args, "-r", targetRef)
 	}
-	args = append(args, file)
+	args = append(args, "--", file)
 
 	out, err := j.runJj(args...)
 	if err != nil {

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -332,6 +331,7 @@ type modelConfigState struct {
 	treeWidthRatio     int                // 1-10 units for file tree panel
 	tabSpaces          string             // spaces to replace tabs with
 	wrapIndent         int                // extra indent (in columns) for wrap continuation rows; 0 disables
+	annotRule          string             // cached: annotRuleGlyph, or "" for an empty marker
 	annotPrefix        string             // cached: marker + " "
 	annotFilePrefix    string             // cached: marker + " file: "
 	outputPath         string             // --output destination for the O in-session flush; empty disables it
@@ -339,13 +339,13 @@ type modelConfigState struct {
 
 // layoutState holds viewport and layout concerns that change on resize and pane toggles.
 type layoutState struct {
-	viewport   viewport.Model // scrollable diff viewport
-	focus      pane           // which pane has focus
-	treeHidden bool           // user toggled tree/TOC pane off
-	width      int            // terminal width
-	height     int            // terminal height
-	treeWidth  int            // current tree pane width in columns
-	scrollX    int            // horizontal scroll offset for diff pane
+	viewport   diffViewport // scrollable diff viewport
+	focus      pane         // which pane has focus
+	treeHidden bool         // user toggled tree/TOC pane off
+	width      int          // terminal width
+	height     int          // terminal height
+	treeWidth  int          // current tree pane width in columns
+	scrollX    int          // horizontal scroll offset for diff pane
 }
 
 // modeState holds user-togglable view-mode flags.
@@ -904,6 +904,12 @@ func NewModel(cfg ModelConfig) (Model, error) {
 		startFocus = paneDiff
 	}
 
+	// an empty marker is the documented "render no marker" choice, so it drops the rule too.
+	annotRule := annotRuleGlyph
+	if cfg.AnnotationMarker == "" {
+		annotRule = ""
+	}
+
 	// the filter bit survives Rebuild, so switching it on here is what makes the first
 	// file list arrive filtered; the tree itself is still empty at this point.
 	tree := cfg.NewFileTree(nil) // empty tree for nil-safety before first filesLoadedMsg
@@ -944,6 +950,7 @@ func NewModel(cfg ModelConfig) (Model, error) {
 			treeWidthRatio:     cfg.TreeWidthRatio,
 			tabSpaces:          strings.Repeat(" ", cfg.TabWidth),
 			wrapIndent:         max(0, cfg.WrapIndent),
+			annotRule:          annotRule,
 			annotPrefix:        cfg.AnnotationMarker + " ",
 			annotFilePrefix:    cfg.AnnotationMarker + " file: ",
 			outputPath:         cfg.OutputPath,
@@ -997,6 +1004,11 @@ func (m Model) Discarded() bool {
 // LoadError returns the error of the latest file-list load, nil when it succeeded.
 func (m Model) LoadError() error {
 	return m.filesErr
+}
+
+// OutputFlushed reports whether an O flush wrote the -o file during this session.
+func (m Model) OutputFlushed() bool {
+	return m.output.flushed
 }
 
 // Init initializes the model by loading changed files and the commit log
@@ -1556,7 +1568,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	diffHeight := m.paneHeight() - 1 // pane height minus diff header
 
 	if !m.ready {
-		m.layout.viewport = viewport.New(diffWidth, diffHeight)
+		m.layout.viewport = newDiffViewport(diffWidth, diffHeight)
 		m.ready = true
 	} else {
 		m.layout.viewport.Width = diffWidth

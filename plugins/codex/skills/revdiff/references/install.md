@@ -28,9 +28,11 @@ If you previously copied the skills manually, remove `~/.codex/skills/revdiff` a
 
 The plugin provides both `/revdiff` and `/revdiff-plan`. Install `revdiff-planning@revdiff` separately for automatic Plan-mode review.
 
-Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, ghostty, iTerm2, or Emacs vterm). The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` is success-with-annotations, not launcher failure.
+Use: `/revdiff [base] [against]` — opens review session in a terminal overlay (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app, ghostty, iTerm2, or Emacs vterm). The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` is success-with-annotations, not launcher failure.
 
 cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`, so cmux uses the cmux CLI instead of Ghostty AppleScript.
+
+Herdr.app is detected by `$HC_TERMINAL_ID`. revdiff opens as an overlay over the Herdr.app window and closes when you quit revdiff. If you hide the overlay, the review keeps running: reopen the `revdiff-…` terminal from the Agents list in the sidebar. The agent waits until you quit revdiff. Herdr.app is not the herdr multiplexer, so `REVDIFF_HERDR_PANE` does not apply to it.
 
 ### Plan Review
 

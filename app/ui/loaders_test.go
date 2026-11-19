@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -430,7 +429,7 @@ func TestModel_FilterOnlyNoMatchShowsMessage(t *testing.T) {
 	m.ready = true
 	m.layout.width = 80
 	m.layout.height = 24
-	m.layout.viewport = viewport.New(76, 20)
+	m.layout.viewport = newDiffViewport(76, 20)
 
 	result, cmd := m.Update(filesLoadedMsg{entries: []diff.FileEntry{{Path: "ui/model.go"}, {Path: "diff/diff.go"}}})
 	model := result.(Model)
@@ -1257,7 +1256,7 @@ func TestModel_HandleBlameLoadedSyncsViewportForWrap(t *testing.T) {
 	m.layout.focus = paneDiff
 	m.layout.treeHidden = true
 	m.layout.width = 40
-	m.layout.viewport = viewport.New(37, 2)
+	m.layout.viewport = newDiffViewport(37, 2)
 	m.nav.diffCursor = 1
 
 	m.syncViewportToCursor()

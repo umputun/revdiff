@@ -7,11 +7,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// outputState holds transient feedback for the O in-session output flush.
-// hint is a status-bar message cleared on the next key press, mirroring
-// reloadState.hint.
+// outputState holds the O in-session output flush state. hint is a status-bar
+// message cleared on the next key press, mirroring reloadState.hint.
 type outputState struct {
-	hint string // transient status-bar message; cleared on next key press
+	hint    string // transient status-bar message; cleared on next key press
+	flushed bool   // an O flush wrote the -o file this session
 }
 
 type postFlushFinishedMsg struct {
@@ -48,6 +48,7 @@ func (m Model) handleFlushOutput() (tea.Model, tea.Cmd) {
 			m.output.hint = "Flush failed"
 			return m, nil
 		}
+		m.output.flushed = true
 		writtenHint = fmt.Sprintf("Wrote %d %s to output file", n, noun)
 	} else {
 		content = m.store.FormatOutput()
