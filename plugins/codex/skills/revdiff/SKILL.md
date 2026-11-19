@@ -92,7 +92,7 @@ cat /tmp/feature.patch | $SCRIPT_DIR/launch-revdiff.sh --stdin
 - Skip ref detection entirely, go directly to Step 2
 - Example: "all files exclude vendor" → `--all-files --exclude=vendor`
 
-**Directory review mode**: If `$ARGUMENTS` is a single absolute path to a directory (`test -d "$ARGUMENTS"`, e.g. `/abs/path/to/subrepo`), the user is naming a repository to review, not a file: pass it as `--dir=<abs-path>` and follow the `--dir` paragraph in Step 2, including running the ref detection below from inside that directory. This check runs before file review mode, which would otherwise turn the path into `--only=<abs-path>`.
+**Directory review mode**: If `$ARGUMENTS` is a single token that looks like a path (starts with `/`, `./` or `../`, or contains `/`) and names a directory (`test -d "$ARGUMENTS"`, e.g. `/abs/path/to/subrepo` or `./plugins/foo`), the user is naming a repository to review, not a file: make it absolute with `(CDPATH= cd -- "$ARGUMENTS" && pwd -P)`, pass the result as `--dir=<abs-path>` and follow the `--dir` paragraph in Step 2, including running the ref detection below from inside that directory. This check runs before file review mode, which would otherwise turn the path into `--only=<path>`. A bare word such as `docs` is not a directory review even when that directory exists, since it can also be a branch name: leave it to the file and ref rules below.
 
 **File review mode**: If `$ARGUMENTS` is a single token that points at a file on disk (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`, `README.md`, `main.go`, `file.blah`), treat it as file review:
 - Decide with `test -f "$ARGUMENTS"` — if the file exists, it's file review mode
