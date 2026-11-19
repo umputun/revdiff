@@ -87,7 +87,7 @@ Hand the diff to the launcher as a file with `--stdin-file=PATH`, a launcher opt
 - Skip ref detection entirely, go directly to Step 2
 - Example: "all files exclude vendor" → `--all-files --exclude=vendor`
 
-**Directory review mode**: If `$ARGUMENTS` is a single token that looks like a path (starts with `/`, `./` or `../`, or contains `/`) and names a directory (`test -d "$ARGUMENTS"`, e.g. `/abs/path/to/subrepo` or `./plugins/foo`), the user is naming a repository to review, not a file: make it absolute with `(CDPATH= cd -- "$ARGUMENTS" && pwd -P)`, pass the result as `--dir=<abs-path>` and follow the `--dir` paragraph in Step 2, including running the ref detection below from inside that directory. This check runs before file review mode, which would otherwise turn the path into `--only=<path>`. A bare word such as `docs` is not a directory review even when that directory exists, since it can also be a branch name: leave it to the file and ref rules below.
+**Directory review mode**: If `$ARGUMENTS` is a single token that looks like a path (starts with `/`, `~/`, `./` or `../`, or contains `/`) and names a directory (`test -d "$ARGUMENTS"`, e.g. `/abs/path/to/subrepo` or `./plugins/foo`), the user is naming a repository to review, not a file: make it absolute with `(CDPATH= cd -- "$ARGUMENTS" && pwd -P)`, replacing a leading `~/` with `$HOME/` before both commands since a quoted `~` is not expanded, pass the result as `--dir=<abs-path>` and follow the `--dir` paragraph in Step 2, including running the ref detection below from inside that directory. This check runs before file review mode, which would otherwise turn the path into `--only=<path>`. A bare word such as `docs` is not a directory review even when that directory exists, since it can also be a branch name: leave it to the file and ref rules below.
 
 **File review mode**: If `$ARGUMENTS` is a single token that points at a file on disk (e.g., `docs/plans/feature.md`, `/tmp/notes.txt`, `README.md`, `main.go`, `file.blah`), treat it as file review:
 - Decide with `test -f "$ARGUMENTS"` — if the file exists, it's file review mode
@@ -232,7 +232,7 @@ These are questions the user wants answered, not code changes.
    b. Launch revdiff with `--only=/tmp/revdiff-explain-XXXXXX.md` via the launcher script — this opens the explanation as a scrollable markdown view with TOC sidebar
    c. **If user quits without annotations** → explanation accepted, clean up temp file, proceed:
       - If pending code-change directives exist → go to Step 4
-      - Otherwise → go to Step 6 (re-launch revdiff with the original diff ref)
+      - Otherwise → go to Step 6 (re-launch revdiff with the original diff ref and the same `--dir`, if the review used one)
    d. **If user annotates the explanation** → these are follow-up questions or clarification requests. Read the annotations, refine/extend the explanation markdown, write updated temp file, go back to step (b)
 
 The explanation loop continues until the user quits without annotating. This allows a natural back-and-forth dialogue where the user can ask for more detail or corrections on specific parts of the explanation.
@@ -252,7 +252,7 @@ After plan approval, fix the actual source code. Each annotation is a directive.
 
 ### Step 6: Loop
 
-After fixing (or after "Continue review" from Step 3.5), run the launcher script again with the same ref. The user can:
+After fixing (or after "Continue review" from Step 3.5), run the launcher script again with the same ref and the same `--dir`, if the review used one. The user can:
 - Add more annotations → go back to Step 3
 - Quit without annotations → no annotations captured (no output); go to Step 7
 

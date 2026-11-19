@@ -38,6 +38,8 @@ Herdr.app is detected by `$HC_TERMINAL_ID`. revdiff opens as an overlay over the
 }
 ```
 
+With this exclusion, a review launched with `--dir` runs revdiff, and git with the target repository's own config, outside the sandbox in the directory `--dir` names.
+
 Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` instead of piping it in.
 
 Terminals using CLI tools (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
