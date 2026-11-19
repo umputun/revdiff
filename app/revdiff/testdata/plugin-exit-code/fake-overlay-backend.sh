@@ -37,6 +37,9 @@ run_cmux_send() {
     local cmd="${*: -1}"
     cmd="${cmd%\\n}"
     cmd="${cmd#exec }"
+    # a new cmux pane starts its shell in its own directory, not the launcher's, so the
+    # launch script has to change to the review directory itself
+    cd /
     eval "$cmd"
 }
 
