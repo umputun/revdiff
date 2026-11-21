@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# launch revdiff in a terminal overlay (agterm/tmux/zellij/herdr/kitty/wezterm/cmux/herdr.app/ghostty/iterm2) and capture annotations.
+# launch revdiff in a terminal overlay (rex/agterm/tmux/zellij/herdr/kitty/wezterm/cmux/herdr.app/ghostty/iterm2) and capture annotations.
 # source: .claude-plugin/skills/revdiff/scripts/launch-revdiff.sh (keep in sync)
 # usage: launch-revdiff.sh [ref] [--dir=DIR] [--staged] [--untracked] [--filter-unreviewed] [--stop-at-annotations] [--only=file1 ...] [--stdin | --stdin-file=PATH]
 # --stdin-file=PATH is a launcher option: it reaches revdiff as --stdin fed from PATH. a sandboxed
@@ -256,6 +256,32 @@ agterm_session_split() {
         | if . then 1 else 0 end
     ' 2>/dev/null || printf '0'
 }
+
+# rex: a split of the agent's own block, zoomed to fill the window. `rex split --wait` blocks
+# until revdiff exits, and rex closes the block after it. Checked before agterm because a rex
+# server started from an agterm shell passes AGTERM_* to its blocks. The session and block are
+# passed explicitly: without them rex acts on the focused block, which can be in a session the
+# user is looking at instead of the agent's.
+if [ "${TERM_PROGRAM:-}" = "rex" ] && [ -n "${REX_SESSION:-}" ] && [ -n "${REX_BLOCK:-}" ] &&
+    command -v rex >/dev/null 2>&1; then
+    REX_BIN=$(command -v rex)
+    SENTINEL=$(mktemp "$TMPBASE/revdiff-done-XXXXXX")
+    rm -f "$SENTINEL"
+    trap 'rm -f "$OUTPUT_FILE" "$ERR_FILE" "$STDIN_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+
+    # the new block's own REX_BLOCK names it, not the agent's block
+    REX_INNER="$(sq "$REX_BIN") block zoom -s \"\$REX_SESSION\" -b \"\$REX_BLOCK\" --on >/dev/null 2>&1; $(write_rc_cmd "$SENTINEL")"
+
+    # --wait returns the status of this sh, which ends with mv, so only the sentinel carries
+    # revdiff's code. stdout gets the creation result and must not reach the annotations
+    "$REX_BIN" split -s "$REX_SESSION" -b "$REX_BLOCK" --split=right --cwd "$CWD" \
+        --label "$OVERLAY_TITLE" --shell=none --wait -- sh -c "$REX_INNER" >/dev/null || true
+    if [ ! -s "$SENTINEL" ]; then
+        echo "error: revdiff did not finish in the rex split" >&2
+        exit 1
+    fi
+    print_output_and_exit "$(read_rc "$SENTINEL")"
+fi
 
 # agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a FULL-pane overlay (a
 # floating panel only with REVDIFF_AGTERM_SIZE_PERCENT) over the agent's own session and blocks
@@ -1118,5 +1144,5 @@ LAUNCHER
     print_output_and_exit "${rc:-1}"
 fi
 
-echo "error: no overlay terminal available (requires agterm, tmux, zellij, herdr, kitty, wezterm, cmux, Herdr.app, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires rex, agterm, tmux, zellij, herdr, kitty, wezterm, cmux, Herdr.app, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
