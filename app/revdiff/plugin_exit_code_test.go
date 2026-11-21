@@ -319,6 +319,7 @@ func TestShellLaunchersRexBackend(t *testing.T) {
 					calls := recordedCalls(t, rexArgs)
 					require.NotEmpty(t, calls)
 					assert.True(t, strings.HasPrefix(calls[0], "split -s session:1 -b block:1 --split=right "), calls[0])
+					assert.Contains(t, calls[0], " --cwd "+root+" ")
 					assert.Contains(t, calls[0], " --shell=none --wait -- sh -c ")
 					if tc.wantZoom {
 						assert.Equal(t, []string{"block zoom -s session:1 -b block:2 --on"}, calls[1:])
