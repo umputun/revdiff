@@ -122,11 +122,18 @@ case "$cmd_name" in
             "block zoom") exit 0 ;;
         esac
         # FAIL is a block closed under the review: rex's own error, no sentinel.
-        # NO_RUN is a split that returns 0 but never ran the command
+        # NO_RUN is a split that returns 0 but never ran the command.
+        # FAIL_AFTER_RUN is a nonzero return after the review already wrote its sentinel
         [ "${FAKE_REX_SPLIT_FAIL:-}" = "1" ] && { echo "Error: block block:2 closed" >&2; exit 1; }
         [ "${FAKE_REX_NO_RUN:-}" = "1" ] && exit 0
         # --wait prints the creation result before it waits
         echo "block:2"
+        # the new block gets its own id, so a zoom aimed at the agent's block is visible
+        export REX_BLOCK="block:2"
+        if [ "${FAKE_REX_FAIL_AFTER_RUN:-}" = "1" ]; then
+            (run_after_double_dash "$@")
+            exit 1
+        fi
         run_after_double_dash "$@"
         ;;
     kitty|wezterm)

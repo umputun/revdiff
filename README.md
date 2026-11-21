@@ -113,7 +113,7 @@ Priority: Rex → agterm → tmux → Zellij → herdr → kitty → wezterm/Kak
 
 > **Note:** iTerm2 uses a split pane (vertical or horizontal, auto-detected from terminal dimensions) rather than a full-screen overlay. The iTerm2 AppleScript API does not expose a zoom command, so the split view shares screen space with the invoking session.
 
-> **Note:** Ghostty and iTerm2 launchers use `osascript` (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add the launcher to `excludedCommands` in your Claude Code `settings.json`:
+> **Note:** Claude Code's sandbox blocks every way the launcher reaches a terminal: Ghostty and iTerm2 go through `osascript` (Apple Events), and the other terminals' CLIs (Rex, agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app, Emacs vterm) talk to the terminal over a local socket. With the sandbox enabled, add the launcher to `excludedCommands` in your Claude Code `settings.json`:
 >
 > ```json
 > {
@@ -124,8 +124,6 @@ Priority: Rex → agterm → tmux → Zellij → herdr → kitty → wezterm/Kak
 > ```
 >
 > Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` (a launcher option) instead of piping it in.
->
-> Terminals that use CLI tools instead of AppleScript (Rex, agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
 
 > **Disconnect-resilient tmux window mode:** set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
 

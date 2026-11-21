@@ -175,7 +175,7 @@ The bundled launcher sets `REVDIFF_EXIT_CODE_ON_ANNOTATIONS`; exit `10` means an
 
 #### Agterm sessions and approval escalation
 
-When Codex runs inside an agterm session, the launcher opens revdiff in agterm's native full-pane overlay — its first-choice backend, checked ahead of tmux. That branch needs `AGTERM_SESSION_ID` and `AGTERM_SOCKET` in the launcher's environment.
+When Codex runs inside an agterm session, the launcher opens revdiff in agterm's native full-pane overlay, checked right after Rex and ahead of tmux. That branch needs `AGTERM_SESSION_ID` and `AGTERM_SOCKET` in the launcher's environment.
 
 Codex commands that require approval or escalation run in a fresh environment that **strips every `AGTERM_*` variable** (along with `TERM_PROGRAM` and `GHOSTTY_*`), keeping only `PATH`. Launched from there without those variables, the launcher skips the agterm branch and fails with `no overlay terminal available`.
 

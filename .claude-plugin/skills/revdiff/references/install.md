@@ -28,7 +28,7 @@ cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdent
 
 Herdr.app is detected by `$HC_TERMINAL_ID`. revdiff opens as an overlay over the Herdr.app window and closes when you quit revdiff. If you hide the overlay, the review keeps running: reopen the `revdiff-…` terminal from the Agents list in the sidebar. The agent waits until you quit revdiff. Herdr.app is not the herdr multiplexer, so `REVDIFF_HERDR_PANE` does not apply to it.
 
-**Sandbox note:** Ghostty and iTerm2 launchers use `osascript` (Apple Events), which is blocked by Claude Code's sandbox. If you use these terminals with sandbox enabled, add to your Claude Code `settings.json`:
+**Sandbox note:** Claude Code's sandbox blocks every way the launcher reaches a terminal: Ghostty and iTerm2 go through `osascript` (Apple Events), and the other terminals' CLIs (Rex, agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app, Emacs vterm) talk to the terminal over a local socket. With the sandbox enabled, add to your Claude Code `settings.json`:
 
 ```json
 {
@@ -41,8 +41,6 @@ Herdr.app is detected by `$HC_TERMINAL_ID`. revdiff opens as an overlay over the
 With this exclusion, a review launched with `--dir` runs revdiff, and git with the target repository's own config, outside the sandbox in the directory `--dir` names.
 
 Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` instead of piping it in.
-
-Terminals using CLI tools (Rex, agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
 
 ### Plan Review Plugin
 
