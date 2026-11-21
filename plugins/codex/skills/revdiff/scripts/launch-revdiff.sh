@@ -287,7 +287,7 @@ fi
 # floating panel only with REVDIFF_AGTERM_SIZE_PERCENT) over the agent's own session and blocks
 # until it exits, returning revdiff's exit code directly — so, unlike the sentinel-polling backends
 # below, no sentinel is needed. Checked
-# first so an agterm session always uses its native overlay even when a multiplexer is also present.
+# right after rex so an agterm session uses its native overlay even when a multiplexer is also present.
 # Needs $AGTERM_SESSION_ID (set in every agterm session) and agtermctl on PATH; passes the bound
 # $AGTERM_SOCKET so it reaches the agterm instance hosting this session. Passes --cwd "$CWD" so the
 # overlay runs in the launcher's working directory (e.g. a PR worktree) instead of agtermctl's

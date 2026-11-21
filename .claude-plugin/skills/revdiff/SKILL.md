@@ -53,7 +53,7 @@ Use this instead of the normal launcher flow when:
 - the diff describes commits that are not checked out locally (e.g. someone else's branch on a remote-only PR)
 - the user pastes a unified diff and asks for a review of *that diff*, not the working tree
 
-Hand the diff to the launcher as a file with `--stdin-file=PATH`, a launcher option that feeds the file to revdiff as `--stdin`. Never pipe or redirect into the launcher: under Claude Code's sandbox a pipe or redirect keeps the whole command sandboxed, which breaks the Ghostty and iTerm2 launchers.
+Hand the diff to the launcher as a file with `--stdin-file=PATH`, a launcher option that feeds the file to revdiff as `--stdin`. Never pipe or redirect into the launcher: under Claude Code's sandbox a pipe or redirect keeps the whole command sandboxed, which blocks every backend.
 
 1. For command output, write it to a private temp file and print the path, in one call; a failing producer removes the file and stops the flow:
    ```bash
@@ -153,7 +153,7 @@ Run the launcher through the override-chain resolver, in two separate Bash calls
    /abs/path/printed/by/resolver/launch-revdiff.sh [base] [against] [--dir=/abs/path] [--staged] [--untracked] [--word-diff] [--filter-unreviewed] [--cross-file-motion] [--stop-at-annotations] [--only=file1] [--all-files] [--exclude=prefix] [--description=text|--description-file=path]
    ```
 
-Resolve again for every launch. Keep the second call a plain command, with no `$VAR` expansion, command substitution, pipe, redirect or cleanup in it: Ghostty and iTerm2 drive the terminal through `osascript`, which Claude Code's sandbox blocks, and Claude Code exempts a command from the sandbox only when every part of it matches the user's `*/launch-revdiff.sh*` exclusion (see `references/install.md`).
+Resolve again for every launch. Keep the second call a plain command, with no `$VAR` expansion, command substitution, pipe, redirect or cleanup in it: Claude Code's sandbox blocks every backend (`osascript` for Ghostty and iTerm2, a local socket for the rest), and Claude Code exempts a command from the sandbox only when every part of it matches the user's `*/launch-revdiff.sh*` exclusion (see `references/install.md`).
 
 **IMPORTANT — long-running command**: The launcher blocks until the user finishes reviewing in the TUI overlay, which can exceed the default bash tool timeout on many harnesses. Set the bash timeout parameter to the **maximum your harness allows** (e.g. 1800000 or higher on OpenCode) on the launcher call; the resolver returns in milliseconds. Do NOT use `run_in_background` for this — background-task handling is unreliable for interactive TUI launchers (processes may be killed unprompted, and polling loops can leave the session idle after the review finishes). If the review outlasts the timeout cap, the fallback in Step 3 handles it.
 

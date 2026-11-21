@@ -269,16 +269,20 @@ func TestShellLaunchersRexBackend(t *testing.T) {
 		termRex    bool
 		fakeEnv    map[string]string
 		wantRex    bool
+		wantZoom   bool
 		wantCode   int
 		wantOutput string
-		wantStderr string
+		wantStderr []string
 	}{
-		{name: "rex wins over agterm", termRex: true, wantRex: true, wantCode: exitCodeAnnotations, wantOutput: annotations},
+		{name: "rex wins over agterm", termRex: true, wantRex: true, wantZoom: true, wantCode: exitCodeAnnotations,
+			wantOutput: annotations},
 		{name: "stray rex ids keep agterm", wantCode: exitCodeAnnotations, wantOutput: annotations},
 		{name: "split fails", termRex: true, fakeEnv: map[string]string{"FAKE_REX_SPLIT_FAIL": "1"}, wantRex: true,
-			wantCode: 1, wantStderr: "Error: block block:2 closed"},
+			wantCode: 1, wantStderr: []string{"Error: block block:2 closed", "revdiff did not finish in the rex split"}},
 		{name: "split returns 0 without a sentinel", termRex: true, fakeEnv: map[string]string{"FAKE_REX_NO_RUN": "1"},
-			wantRex: true, wantCode: 1, wantStderr: "revdiff did not finish in the rex split"},
+			wantRex: true, wantCode: 1, wantStderr: []string{"revdiff did not finish in the rex split"}},
+		{name: "rex fails after the review finished", termRex: true, fakeEnv: map[string]string{"FAKE_REX_FAIL_AFTER_RUN": "1"},
+			wantRex: true, wantZoom: true, wantCode: exitCodeAnnotations, wantOutput: annotations},
 	}
 	for _, launcher := range launchers {
 		for _, tc := range tests {
@@ -305,13 +309,23 @@ func TestShellLaunchersRexBackend(t *testing.T) {
 				})
 				assert.Equal(t, tc.wantCode, res.code)
 				assert.Equal(t, tc.wantOutput, res.stdout)
-				if tc.wantStderr != "" {
-					assert.Contains(t, res.stderr, tc.wantStderr)
-				} else {
+				for _, want := range tc.wantStderr {
+					assert.Contains(t, res.stderr, want)
+				}
+				if len(tc.wantStderr) == 0 {
 					assert.Empty(t, res.stderr)
 				}
 				if tc.wantRex {
-					assert.FileExists(t, rexArgs)
+					calls := recordedCalls(t, rexArgs)
+					require.NotEmpty(t, calls)
+					assert.True(t, strings.HasPrefix(calls[0], "split -s session:1 -b block:1 --split=right "), calls[0])
+					assert.Contains(t, calls[0], " --cwd "+root+" ")
+					assert.Contains(t, calls[0], " --shell=none --wait -- sh -c ")
+					if tc.wantZoom {
+						assert.Equal(t, []string{"block zoom -s session:1 -b block:2 --on"}, calls[1:])
+					} else {
+						assert.Len(t, calls, 1)
+					}
 					assert.NoFileExists(t, agtermArgs)
 				} else {
 					assert.NoFileExists(t, rexArgs)

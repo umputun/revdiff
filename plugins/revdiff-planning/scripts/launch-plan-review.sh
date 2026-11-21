@@ -114,7 +114,7 @@ fi
 
 # agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a full-pane overlay over
 # the agent's own session and blocks until it exits — like tmux's display-popup -E, so no sentinel is
-# needed. checked first so an agterm session always uses its native overlay even when a multiplexer is
+# needed. checked right after rex so an agterm session uses its native overlay even when a multiplexer is
 # also present. needs $AGTERM_SESSION_ID (set in every agterm session) and agtermctl on PATH; passes
 # $AGTERM_SOCKET so it reaches the agterm instance hosting this session, and --cwd "$CWD" so the
 # overlay runs in the launcher's directory. the overlay-open stdout is discarded so only the review
