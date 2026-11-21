@@ -239,6 +239,93 @@ func TestShellLaunchersPreserveAnnotationExitCode(t *testing.T) {
 	}
 }
 
+// a rex server started from an agterm shell passes AGTERM_* to every block, so the rex branch
+// runs first, and only TERM_PROGRAM=rex makes stray REX_* ids count. `rex split --wait` returns
+// the inner shell's status, so the sentinel alone decides the exit code.
+func TestShellLaunchersRexBackend(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("shell launchers are not used on windows")
+	}
+
+	root := testRepoRoot(t)
+	planFile := filepath.Join(t.TempDir(), "plan.md")
+	writeTestFile(t, planFile, "# Plan\n")
+	launchers := []struct {
+		name     string
+		path     string
+		args     []string
+		sentinel string
+	}{
+		{name: "claude", path: ".claude-plugin/skills/revdiff/scripts/launch-revdiff.sh", sentinel: "revdiff-done-*"},
+		{name: "codex", path: "plugins/codex/skills/revdiff/scripts/launch-revdiff.sh", sentinel: "revdiff-done-*"},
+		{name: "plan review", path: "plugins/revdiff-planning/scripts/launch-plan-review.sh", args: []string{planFile},
+			sentinel: "plan-review-done-*"},
+	}
+	annotations := "## file.go:1 (+)\ncomment\n"
+	rexIDs := map[string]string{"REX_SESSION": "session:1", "REX_BLOCK": "block:1"}
+	tests := []struct {
+		name       string
+		termRex    bool
+		fakeEnv    map[string]string
+		wantRex    bool
+		wantCode   int
+		wantOutput string
+		wantStderr string
+	}{
+		{name: "rex wins over agterm", termRex: true, wantRex: true, wantCode: exitCodeAnnotations, wantOutput: annotations},
+		{name: "stray rex ids keep agterm", wantCode: exitCodeAnnotations, wantOutput: annotations},
+		{name: "split fails", termRex: true, fakeEnv: map[string]string{"FAKE_REX_SPLIT_FAIL": "1"}, wantRex: true,
+			wantCode: 1, wantStderr: "Error: block block:2 closed"},
+		{name: "split returns 0 without a sentinel", termRex: true, fakeEnv: map[string]string{"FAKE_REX_NO_RUN": "1"},
+			wantRex: true, wantCode: 1, wantStderr: "revdiff did not finish in the rex split"},
+	}
+	for _, launcher := range launchers {
+		for _, tc := range tests {
+			t.Run(launcher.name+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				backendEnv := map[string]string{"AGTERM_SESSION_ID": "sess-1"}
+				maps.Copy(backendEnv, rexIDs)
+				if tc.termRex {
+					backendEnv["TERM_PROGRAM"] = "rex"
+				}
+				backend := launcherBackend{name: "rex", command: "rex", extraCommands: []string{"agtermctl"}, env: backendEnv}
+				env := fakeLauncherEnv(t, launcherRun{backend: backend, code: exitCodeAnnotations, output: annotations})
+				maps.Copy(env, tc.fakeEnv)
+				rexArgs := filepath.Join(t.TempDir(), "rex-args")
+				agtermArgs := filepath.Join(t.TempDir(), "agterm-args")
+				env["FAKE_REX_ARGS_FILE"] = rexArgs
+				env["FAKE_AGTERM_ARGS_FILE"] = agtermArgs
+
+				res := runTestCmd(t, cmdReq{
+					dir:  root,
+					name: "bash",
+					args: append([]string{filepath.Join(root, launcher.path)}, launcher.args...),
+					env:  env,
+				})
+				assert.Equal(t, tc.wantCode, res.code)
+				assert.Equal(t, tc.wantOutput, res.stdout)
+				if tc.wantStderr != "" {
+					assert.Contains(t, res.stderr, tc.wantStderr)
+				} else {
+					assert.Empty(t, res.stderr)
+				}
+				if tc.wantRex {
+					assert.FileExists(t, rexArgs)
+					assert.NoFileExists(t, agtermArgs)
+				} else {
+					assert.NoFileExists(t, rexArgs)
+					assert.FileExists(t, agtermArgs)
+				}
+				sentinels, err := filepath.Glob(filepath.Join(env["TMPDIR"], launcher.sentinel))
+				require.NoError(t, err)
+				assert.Empty(t, sentinels, "sentinel leaked")
+				assert.Empty(t, leftoverStderrCaptures(t, env["TMPDIR"]))
+			})
+		}
+	}
+}
+
 func TestPlanLauncherTmuxWindowOptIn(t *testing.T) {
 	t.Parallel()
 	if runtime.GOOS == "windows" {
@@ -3339,6 +3426,9 @@ func launcherBackends() []launcherBackend {
 		{name: "iterm2", command: "osascript", env: map[string]string{"ITERM_SESSION_ID": "w0t0p0:ABC"}},
 		{name: "emacs", command: "emacsclient", env: map[string]string{"INSIDE_EMACS": "vterm"}},
 		{name: "agterm", command: "agtermctl", env: map[string]string{"AGTERM_SESSION_ID": "sess-1"}},
+		{name: "rex", command: "rex", env: map[string]string{
+			"TERM_PROGRAM": "rex", "REX_SESSION": "session:1", "REX_BLOCK": "block:1",
+		}},
 	}
 }
 
@@ -3421,6 +3511,9 @@ func cleanOverlayEnv() map[string]string {
 		"ITERM_SESSION_ID":            "",
 		"INSIDE_EMACS":                "",
 		"AGTERM_SESSION_ID":           "",
+		"REX_SESSION":                 "",
+		"REX_BLOCK":                   "",
+		"REX_SERVER":                  "",
 		"AGTERM_SOCKET":               "",
 		"AGTERM_PANE":                 "",
 		"AGTERM_WINDOW_ID":            "",

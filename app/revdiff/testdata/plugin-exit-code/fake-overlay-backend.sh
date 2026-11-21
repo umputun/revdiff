@@ -114,6 +114,21 @@ case "$cmd_name" in
     zellij)
         run_after_double_dash "$@"
         ;;
+    rex)
+        if [ -n "${FAKE_REX_ARGS_FILE:-}" ]; then
+            printf '%s\n' "$*" >> "$FAKE_REX_ARGS_FILE"
+        fi
+        case "${1:-} ${2:-}" in
+            "block zoom") exit 0 ;;
+        esac
+        # FAIL is a block closed under the review: rex's own error, no sentinel.
+        # NO_RUN is a split that returns 0 but never ran the command
+        [ "${FAKE_REX_SPLIT_FAIL:-}" = "1" ] && { echo "Error: block block:2 closed" >&2; exit 1; }
+        [ "${FAKE_REX_NO_RUN:-}" = "1" ] && exit 0
+        # --wait prints the creation result before it waits
+        echo "block:2"
+        run_after_double_dash "$@"
+        ;;
     kitty|wezterm)
         run_sh_c "$@"
         ;;

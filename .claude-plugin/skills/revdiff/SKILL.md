@@ -1,6 +1,6 @@
 ---
 name: revdiff
-description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in agterm/tmux/zellij/herdr/kitty/wezterm/kaku/cmux/herdr.app/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff <file>", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
+description: Review diffs, files, and documents with inline annotations in a TUI overlay, or answer questions about revdiff usage, configuration, themes, and keybindings. Opens revdiff in rex/agterm/tmux/zellij/herdr/kitty/wezterm/kaku/cmux/herdr.app/ghostty/iterm2/emacs-vterm, captures annotations, and addresses them. Works in git, hg, and jj repos (auto-detected). Activates on "revdiff", "review diff", "review changes", "annotate diff", "git review with revdiff", "hg review with revdiff", "review jj change", "interactive diff review", "revdiff all files", "review all files", "browse all files", "revdiff <file>", "revdiff README.md", "revdiff /tmp/notes.txt", "review this file", "annotate this file", "review file with revdiff", "open this review in revdiff", "show review in revdiff", "review in revdiff", "revdiff config", "revdiff themes", "revdiff keybindings", "how to configure revdiff", "what themes does revdiff have".
 argument-hint: 'optional: ref(s), "all files", or file path'
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
@@ -70,7 +70,7 @@ Hand the diff to the launcher as a file with `--stdin-file=PATH`, a launcher opt
 
 ## How It Works
 
-1. Launch revdiff in a terminal overlay (agterm full-pane overlay, tmux popup, Zellij floating pane, herdr tab, kitty overlay, wezterm/Kaku split-pane, cmux split, Herdr.app overlay, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
+1. Launch revdiff in a terminal overlay (Rex zoomed split, agterm full-pane overlay, tmux popup, Zellij floating pane, herdr tab, kitty overlay, wezterm/Kaku split-pane, cmux split, Herdr.app overlay, ghostty split+zoom, iTerm2 split pane, or Emacs vterm frame)
 2. User navigates the diff, adds annotations on specific lines
 3. On quit, annotations are captured from stdout
 4. Claude reads annotations and addresses each one
@@ -168,7 +168,7 @@ Resolve again for every launch. Keep the second call a plain command, with no `$
 **Floating panel (agterm)**: `REVDIFF_AGTERM_SIZE_PERCENT=N` (1-100) opens the session-wide agterm overlay as a floating panel at N percent of the session, keeping the agent's chat visible around the review. The user sets it in the environment; a pane-scoped overlay ignores it. This is a launcher environment variable, not a revdiff flag.
 
 The script:
-- Detects available terminal (agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → Herdr.app → ghostty → iTerm2 → Emacs vterm)
+- Detects available terminal (Rex → agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → Herdr.app → ghostty → iTerm2 → Emacs vterm)
 - Launches revdiff in an overlay
 - Captures annotation output to a temp file
 - Prints captured annotations to stdout

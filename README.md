@@ -91,6 +91,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 
 | Terminal | Overlay method | Detection |
 |----------|---------------|-----------|
+| **Rex** | `rex split --wait` of the agent's own block, zoomed to fill the window | `$TERM_PROGRAM=rex` + `$REX_SESSION` + `$REX_BLOCK` |
 | **agterm** | `agtermctl session overlay open … --block` (full-pane overlay, blocks until quit) | `$AGTERM_SESSION_ID` env var |
 | **tmux** | `display-popup` (blocks until quit) | `$TMUX` env var |
 | **Zellij** | `zellij run --floating` | `$ZELLIJ` env var |
@@ -104,7 +105,7 @@ The plugin requires one of the following terminals since Claude Code itself cann
 | **iTerm2** | `osascript` split pane (macOS only) | `$ITERM_SESSION_ID` env var |
 | **Emacs vterm** | New frame via `emacsclient` | `$INSIDE_EMACS` env var |
 
-Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → Herdr.app → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
+Priority: Rex → agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cmux → Herdr.app → ghostty → iTerm2 → Emacs vterm (first detected wins). If none are available, the plugin exits with an error.
 
 > **Note:** cmux is detected before ghostty when `$CMUX_SURFACE_ID` is set, `__CFBundleIdentifier=com.cmuxterm.app`, or `GHOSTTY_RESOURCES_DIR` / `GHOSTTY_BIN_DIR` contains `cmux.app`. The cmux block uses the cmux CLI (`new-split` + `send --surface`) instead of Ghostty's AppleScript API.
 
@@ -124,7 +125,7 @@ Priority: agterm → tmux → Zellij → herdr → kitty → wezterm/Kaku → cm
 >
 > Claude Code exempts a command only when every part of it matches, so the skill runs the launcher by its resolved path as a plain command, and passes a diff to review as `--stdin-file=PATH` (a launcher option) instead of piping it in.
 >
-> Terminals that use CLI tools instead of AppleScript (agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
+> Terminals that use CLI tools instead of AppleScript (Rex, agterm, tmux, Zellij, herdr, kitty, wezterm, Kaku, cmux, Herdr.app) are not affected.
 
 > **Disconnect-resilient tmux window mode:** set `REVDIFF_TMUX_WINDOW=1` in the launcher's environment to open revdiff in a persistent, server-owned tmux window instead of a client-owned `display-popup`. A dropped SSH or tmux client tears down a popup and kills the review, but a server-owned window survives the disconnect — reattach and the live review is still there. This is a launcher environment variable, not a revdiff flag.
 

@@ -85,6 +85,33 @@ is_cmux_session() {
     return 1
 }
 
+# rex: a split of the agent's own block, zoomed to fill the window; `rex split --wait` blocks
+# until revdiff exits. Checked before agterm because a rex server started from an agterm shell
+# passes AGTERM_* to its blocks. Session and block are explicit so rex never acts on the focused
+# block of another session.
+if [ "${TERM_PROGRAM:-}" = "rex" ] && [ -n "${REX_SESSION:-}" ] && [ -n "${REX_BLOCK:-}" ] &&
+    command -v rex >/dev/null 2>&1; then
+    REX_BIN=$(command -v rex)
+    SENTINEL=$(mktemp "$TMPBASE/plan-review-done-XXXXXX")
+    rm -f "$SENTINEL"
+    trap 'rm -f "$OUTPUT_FILE" "$SENTINEL" "$SENTINEL.tmp"' EXIT
+
+    # the new block's own REX_BLOCK names it, not the agent's block
+    REX_INNER="$(sq "$REX_BIN") block zoom -s \"\$REX_SESSION\" -b \"\$REX_BLOCK\" --on >/dev/null 2>&1; $REVDIFF_CMD; rc=\$?; printf '%s' \"\$rc\" > $(sq "$SENTINEL").tmp && mv -f $(sq "$SENTINEL").tmp $(sq "$SENTINEL")"
+
+    # --wait returns the status of this sh, which ends with mv, so only the sentinel carries
+    # revdiff's code. stdout gets the creation result and must not reach the annotations
+    "$REX_BIN" split -s "$REX_SESSION" -b "$REX_BLOCK" --split=right --cwd "$CWD" \
+        --label "$OVERLAY_TITLE" --shell=none --wait -- sh -c "$REX_INNER" >/dev/null || true
+    if [ ! -s "$SENTINEL" ]; then
+        echo "error: revdiff did not finish in the rex split" >&2
+        exit 1
+    fi
+    rc=$(cat "$SENTINEL")
+    cat "$OUTPUT_FILE"
+    exit "$rc"
+fi
+
 # agterm: `agtermctl session overlay open <cmd> --block` opens revdiff in a full-pane overlay over
 # the agent's own session and blocks until it exits — like tmux's display-popup -E, so no sentinel is
 # needed. checked first so an agterm session always uses its native overlay even when a multiplexer is
@@ -694,5 +721,5 @@ LAUNCHER
     exit "${rc:-1}"
 fi
 
-echo "error: no overlay terminal available (requires agterm, tmux, zellij, herdr, kitty, wezterm, cmux, Herdr.app, ghostty, iTerm2, or emacs vterm)" >&2
+echo "error: no overlay terminal available (requires rex, agterm, tmux, zellij, herdr, kitty, wezterm, cmux, Herdr.app, ghostty, iTerm2, or emacs vterm)" >&2
 exit 1
