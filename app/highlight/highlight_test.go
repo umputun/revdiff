@@ -297,3 +297,27 @@ func TestHighlighter_HealthyJSONataMatchesUnguardedOutput(t *testing.T) {
 	assert.Equal(t, want, got)
 	assert.Contains(t, got[1], "\033[", "healthy jsonata keeps its colors")
 }
+
+func TestHighlighter_LongHealthyJungleKeepsHighlighting(t *testing.T) {
+	lines := make([]diff.DiffLine, 0, 600)
+	for i := range 300 {
+		lines = append(lines,
+			diff.DiffLine{NewNum: 2*i + 1, Content: "project.manifest = manifest.xml", ChangeType: diff.ChangeAdd},
+			diff.DiffLine{NewNum: 2*i + 2, Content: "base.sourcePath = source;common", ChangeType: diff.ChangeAdd})
+	}
+
+	got := New("monokai", true).HighlightLines("monkey.jungle", lines)
+	require.Len(t, got, len(lines))
+	assert.Contains(t, got[len(got)-1], "\033[")
+}
+
+func TestHighlighter_StallDoesNotAffectNextFile(t *testing.T) {
+	h := New("monokai", true)
+	stalled := []diff.DiffLine{{NewNum: 1, Content: "it's", ChangeType: diff.ChangeAdd}}
+	healthy := []diff.DiffLine{{NewNum: 1, Content: "$sum(Price)", ChangeType: diff.ChangeAdd}}
+
+	assert.Nil(t, h.HighlightLines("a.jsonata", stalled))
+	got := h.HighlightLines("b.jsonata", healthy)
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0], "\033[")
+}

@@ -122,7 +122,8 @@ func IsValidStyle(styleName string) bool {
 // HighlightLines takes a filename (for lexer detection) and a slice of diff.DiffLine,
 // reconstructs the file content, tokenizes it with Chroma, and returns a parallel []string
 // where each entry contains the ANSI-formatted (foreground-only) version of that line's content.
-// returns nil if highlighting is disabled or no lexer matches the filename.
+// returns nil if highlighting is disabled, no lexer matches the filename, or the lexer stops
+// advancing on either the old or the new side.
 func (h *Highlighter) HighlightLines(filename string, lines []diff.DiffLine) []string {
 	if !h.enabled || len(lines) == 0 {
 		return nil
@@ -142,7 +143,7 @@ func (h *Highlighter) HighlightLines(filename string, lines []diff.DiffLine) []s
 	newHL := h.highlightFile(coalesced, style, newContent)
 	oldHL := h.highlightFile(coalesced, style, oldContent)
 	if guard.stalled {
-		log.Printf("[WARN] %s lexer stopped advancing on %s, showing it without highlighting",
+		log.Printf("[WARN] %s lexer stopped advancing on %q, showing it without highlighting",
 			lexer.Config().Name, filename)
 		return nil
 	}
