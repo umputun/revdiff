@@ -263,14 +263,7 @@ func TestHighlighter_StalledLexerReturnsNil(t *testing.T) {
 	h := New("monokai", true)
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			done := make(chan []string, 1)
-			go func() { done <- h.HighlightLines(tc.filename, tc.lines) }()
-			select {
-			case got := <-done:
-				assert.Nil(t, got)
-			case <-time.After(5 * time.Second):
-				t.Fatal("HighlightLines did not return")
-			}
+			assert.Nil(t, highlightWithin(t, h, tc.filename, tc.lines))
 		})
 	}
 }
@@ -316,8 +309,21 @@ func TestHighlighter_StallDoesNotAffectNextFile(t *testing.T) {
 	stalled := []diff.DiffLine{{NewNum: 1, Content: "it's", ChangeType: diff.ChangeAdd}}
 	healthy := []diff.DiffLine{{NewNum: 1, Content: "$sum(Price)", ChangeType: diff.ChangeAdd}}
 
-	assert.Nil(t, h.HighlightLines("a.jsonata", stalled))
+	assert.Nil(t, highlightWithin(t, h, "a.jsonata", stalled))
 	got := h.HighlightLines("b.jsonata", healthy)
 	require.Len(t, got, 1)
 	assert.Contains(t, got[0], "\033[")
+}
+
+func highlightWithin(t *testing.T, h *Highlighter, filename string, lines []diff.DiffLine) []string {
+	t.Helper()
+	done := make(chan []string, 1)
+	go func() { done <- h.HighlightLines(filename, lines) }()
+	select {
+	case got := <-done:
+		return got
+	case <-time.After(5 * time.Second):
+		t.Fatal("HighlightLines did not return")
+		return nil
+	}
 }

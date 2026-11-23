@@ -36,18 +36,18 @@ var raiseBacktrackingCap = sync.OnceFunc(func() {
 // maxEmptyTokenRun bounds consecutive empty tokens from a lexer. In chroma v2.27.0 a rule that
 // matches the empty string (JSONata's last rule, Jungle on `/` or `*`) emits empty tokens without
 // advancing, and chroma.Coalesce drops empty tokens inside its own loop, so tokenizing never
-// returns. Real files measured at most 4 in a row.
+// returns.
 const maxEmptyTokenRun = 1000
 
-// stallGuard wraps a lexer below chroma.Coalesce and ends tokenizing once the lexer stops
-// advancing. stalled stays set for every later Tokenise call on the same guard.
+// stallGuard wraps a lexer below chroma.Coalesce, the only place the empty tokens are still
+// visible, and ends tokenizing once the lexer stops advancing. stalled stays set across Tokenise
+// calls, so one guard shared by the old and new side reports a stall on either.
 type stallGuard struct {
 	chroma.Lexer
 	stalled bool
 }
 
-// Tokenise passes tokens through unchanged and returns EOF after maxEmptyTokenRun empty tokens
-// in a row, marking the guard stalled.
+// Tokenise implements chroma.Lexer.
 func (g *stallGuard) Tokenise(options *chroma.TokeniseOptions, text string) (chroma.Iterator, error) {
 	it, err := g.Lexer.Tokenise(options, text)
 	if err != nil {
