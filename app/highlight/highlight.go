@@ -33,6 +33,45 @@ var raiseBacktrackingCap = sync.OnceFunc(func() {
 	regexp2.DefaultOptimizationOptions.MaxBacktrackingStackSize = maxBacktrackingStack
 })
 
+// maxEmptyTokenRun bounds consecutive empty tokens from a lexer. In chroma v2.27.0 a rule that
+// matches the empty string (JSONata's last rule, Jungle on `/` or `*`) emits empty tokens without
+// advancing, and chroma.Coalesce drops empty tokens inside its own loop, so tokenizing never
+// returns.
+const maxEmptyTokenRun = 1000
+
+// stallGuard wraps a lexer below chroma.Coalesce, the only place the empty tokens are still
+// visible, and ends tokenizing once the lexer stops advancing. stalled stays set across Tokenise
+// calls, so one guard shared by the old and new side reports a stall on either.
+type stallGuard struct {
+	chroma.Lexer
+	stalled bool
+}
+
+// Tokenise implements chroma.Lexer.
+func (g *stallGuard) Tokenise(options *chroma.TokeniseOptions, text string) (chroma.Iterator, error) {
+	it, err := g.Lexer.Tokenise(options, text)
+	if err != nil {
+		return nil, fmt.Errorf("tokenise: %w", err)
+	}
+	empty, done := 0, false
+	return func() chroma.Token {
+		if done {
+			return chroma.EOF
+		}
+		tok := it()
+		if tok == chroma.EOF || tok.Value != "" {
+			empty = 0
+			return tok
+		}
+		empty++
+		if empty > maxEmptyTokenRun {
+			g.stalled, done = true, true
+			return chroma.EOF
+		}
+		return tok
+	}, nil
+}
+
 // chromaFallbackStyle is the name of the Chroma style that doubles as styles.Fallback.
 // styles.Get returns Fallback for unknown names, but "swapoff" is a real built-in style
 // whose registry entry IS the Fallback sentinel, so we must special-case it.
@@ -83,7 +122,8 @@ func IsValidStyle(styleName string) bool {
 // HighlightLines takes a filename (for lexer detection) and a slice of diff.DiffLine,
 // reconstructs the file content, tokenizes it with Chroma, and returns a parallel []string
 // where each entry contains the ANSI-formatted (foreground-only) version of that line's content.
-// returns nil if highlighting is disabled or no lexer matches the filename.
+// returns nil if highlighting is disabled, no lexer matches the filename, or the lexer stops
+// advancing on either the old or the new side.
 func (h *Highlighter) HighlightLines(filename string, lines []diff.DiffLine) []string {
 	if !h.enabled || len(lines) == 0 {
 		return nil
@@ -93,14 +133,20 @@ func (h *Highlighter) HighlightLines(filename string, lines []diff.DiffLine) []s
 	if lexer == nil {
 		return nil
 	}
-	lexer = chroma.Coalesce(lexer)
+	guard := &stallGuard{Lexer: lexer}
+	coalesced := chroma.Coalesce(guard)
 
 	style := styles.Get(h.styleName)
 
 	newContent, oldContent := h.reconstructFiles(lines)
 
-	newHL := h.highlightFile(lexer, style, newContent)
-	oldHL := h.highlightFile(lexer, style, oldContent)
+	newHL := h.highlightFile(coalesced, style, newContent)
+	oldHL := h.highlightFile(coalesced, style, oldContent)
+	if guard.stalled {
+		log.Printf("[WARN] %s lexer stopped advancing on %q, showing it without highlighting",
+			lexer.Config().Name, filename)
+		return nil
+	}
 
 	return h.mapHighlightedLines(lines, newHL, oldHL)
 }

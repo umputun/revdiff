@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -228,4 +230,100 @@ func TestHighlighter_LongQuotedStringUsesStringColor(t *testing.T) {
 	long := render(20000)
 	assert.Contains(t, long, fg(chroma.LiteralString), "long literal must keep the string color")
 	assert.NotContains(t, long, fg(chroma.Error), "long literal must not be painted as an error token")
+}
+
+func TestHighlighter_StalledLexerReturnsNil(t *testing.T) {
+	// pins issue #457: chroma v2.27.0 lexers that match the empty string froze HighlightLines
+	tests := []struct {
+		name     string
+		filename string
+		lines    []diff.DiffLine
+	}{
+		{name: "jsonata unmatched single quote", filename: "f.jsonata", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a", ChangeType: diff.ChangeAdd},
+			{NewNum: 2, Content: "it's", ChangeType: diff.ChangeAdd},
+			{NewNum: 3, Content: "b", ChangeType: diff.ChangeAdd},
+		}},
+		{name: "jsonata unmatched double quote", filename: "f.jsonata", lines: []diff.DiffLine{
+			{NewNum: 1, Content: `"x`, ChangeType: diff.ChangeAdd},
+		}},
+		{name: "jsonata transform operator", filename: "f.jsonata", lines: []diff.DiffLine{
+			{NewNum: 1, Content: `$ ~> |$|{"a": 1}|`, ChangeType: diff.ChangeAdd},
+		}},
+		{name: "jungle division", filename: "monkey.jungle", lines: []diff.DiffLine{
+			{NewNum: 1, Content: "a / b", ChangeType: diff.ChangeAdd},
+		}},
+		{name: "stall only in removed line", filename: "f.jsonata", lines: []diff.DiffLine{
+			{OldNum: 1, NewNum: 1, Content: "$x", ChangeType: diff.ChangeContext},
+			{OldNum: 2, Content: "it's", ChangeType: diff.ChangeRemove},
+			{NewNum: 2, Content: "$y", ChangeType: diff.ChangeAdd},
+		}},
+	}
+
+	h := New("monokai", true)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Nil(t, highlightWithin(t, h, tc.filename, tc.lines))
+		})
+	}
+}
+
+func TestHighlighter_HealthyJSONataMatchesUnguardedOutput(t *testing.T) {
+	src := []string{
+		`/* totals */`,
+		`$sum(Account.Order.Product.(Price * Quantity))`,
+		`{"name": $uppercase(name), "tags": tags[0..2], "ok": true}`,
+		`$filter($, function($v) { $v.price > 10.5 and $v.qty != 0 })`,
+	}
+	lines := make([]diff.DiffLine, len(src))
+	for i, s := range src {
+		lines[i] = diff.DiffLine{OldNum: i + 1, NewNum: i + 1, Content: s, ChangeType: diff.ChangeContext}
+	}
+
+	h := New("monokai", true)
+	got := h.HighlightLines("f.jsonata", lines)
+	require.Len(t, got, len(src))
+
+	lexer := lexers.Match("f.jsonata")
+	require.NotNil(t, lexer)
+	want := h.highlightFile(chroma.Coalesce(lexer), styles.Get("monokai"), strings.Join(src, "\n")+"\n")
+	assert.Equal(t, want, got)
+	assert.Contains(t, got[1], "\033[", "healthy jsonata keeps its colors")
+}
+
+func TestHighlighter_LongHealthyJungleKeepsHighlighting(t *testing.T) {
+	lines := make([]diff.DiffLine, 0, 600)
+	for i := range 300 {
+		lines = append(lines,
+			diff.DiffLine{NewNum: 2*i + 1, Content: "project.manifest = manifest.xml", ChangeType: diff.ChangeAdd},
+			diff.DiffLine{NewNum: 2*i + 2, Content: "base.sourcePath = source;common", ChangeType: diff.ChangeAdd})
+	}
+
+	got := New("monokai", true).HighlightLines("monkey.jungle", lines)
+	require.Len(t, got, len(lines))
+	assert.Contains(t, got[len(got)-1], "\033[")
+}
+
+func TestHighlighter_StallDoesNotAffectNextFile(t *testing.T) {
+	h := New("monokai", true)
+	stalled := []diff.DiffLine{{NewNum: 1, Content: "it's", ChangeType: diff.ChangeAdd}}
+	healthy := []diff.DiffLine{{NewNum: 1, Content: "$sum(Price)", ChangeType: diff.ChangeAdd}}
+
+	assert.Nil(t, highlightWithin(t, h, "a.jsonata", stalled))
+	got := h.HighlightLines("b.jsonata", healthy)
+	require.Len(t, got, 1)
+	assert.Contains(t, got[0], "\033[")
+}
+
+func highlightWithin(t *testing.T, h *Highlighter, filename string, lines []diff.DiffLine) []string {
+	t.Helper()
+	done := make(chan []string, 1)
+	go func() { done <- h.HighlightLines(filename, lines) }()
+	select {
+	case got := <-done:
+		return got
+	case <-time.After(5 * time.Second):
+		t.Fatal("HighlightLines did not return")
+		return nil
+	}
 }
