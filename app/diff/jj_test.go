@@ -113,11 +113,17 @@ func TestJj_ParseStatus(t *testing.T) {
 			},
 		},
 		{
-			name:  "rename expands to delete + add",
+			name:  "rename is one entry with origin",
 			input: "R {old.txt => new.txt}\n",
+			want:  []FileEntry{{Path: "new.txt", OldPath: "old.txt", Status: FileRenamed}},
+		},
+		{
+			name:  "rename with prefix and suffix beside other statuses",
+			input: "D d/gone.txt\nR d/{old.txt => new.txt}\nR {e => f}/mv.txt\n",
 			want: []FileEntry{
-				{Path: "old.txt", Status: FileDeleted},
-				{Path: "new.txt", Status: FileAdded},
+				{Path: "d/gone.txt", Status: FileDeleted},
+				{Path: "d/new.txt", OldPath: "d/old.txt", Status: FileRenamed},
+				{Path: "f/mv.txt", OldPath: "e/mv.txt", Status: FileRenamed},
 			},
 		},
 		{
@@ -420,6 +426,67 @@ func TestJj_ChangedFiles_Deleted(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "hello.txt", entries[0].Path)
 	assert.Equal(t, FileDeleted, entries[0].Status)
+}
+
+func TestJj_ChangedFiles_Renamed(t *testing.T) {
+	// issue #463: a rename was split into a standalone delete of old and an add of new
+	dir := setupJjRepo(t)
+	j := NewJj(dir)
+
+	writeFileAt(t, filepath.Join(dir, "d", "gone.txt"), "a\nb\nc\n")
+	writeFileAt(t, filepath.Join(dir, "d", "old.txt"), "1\n2\n3\n4\n")
+	writeFileAt(t, filepath.Join(dir, "e", "mv.txt"), "x\ny\n")
+	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
+	jjCmd(t, dir, "new", "-m", "rename", "--quiet")
+	require.NoError(t, os.Remove(filepath.Join(dir, "d", "gone.txt")))
+	require.NoError(t, os.Rename(filepath.Join(dir, "d", "old.txt"), filepath.Join(dir, "d", "new.txt")))
+	writeFile(t, dir, "d/new.txt", "1\n2\n3\n4\n5\n")
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "f"), 0o750))
+	require.NoError(t, os.Rename(filepath.Join(dir, "e", "mv.txt"), filepath.Join(dir, "f", "mv.txt")))
+
+	entries, err := j.ChangedFiles("", false)
+	require.NoError(t, err)
+	assert.Equal(t, []FileEntry{
+		{Path: "d/gone.txt", Status: FileDeleted},
+		{Path: "d/new.txt", OldPath: "d/old.txt", Status: FileRenamed},
+		{Path: "f/mv.txt", OldPath: "e/mv.txt", Status: FileRenamed},
+	}, entries)
+
+	lines, err := j.FileDiff(FileDiffRequest{Path: "d/new.txt", OldPath: "d/old.txt"})
+	require.NoError(t, err)
+	var changed []DiffLine
+	for _, l := range lines {
+		if l.ChangeType == ChangeAdd || l.ChangeType == ChangeRemove {
+			changed = append(changed, l)
+		}
+	}
+	assert.Equal(t, []DiffLine{{NewNum: 5, Content: "5", ChangeType: ChangeAdd}}, changed)
+
+	pure, err := j.FileDiff(FileDiffRequest{Path: "f/mv.txt", OldPath: "e/mv.txt"})
+	require.NoError(t, err)
+	assert.Empty(t, pure)
+}
+
+func TestJj_FileDiff_RenamedCompactTrailingDivider(t *testing.T) {
+	dir := setupJjRepo(t)
+	j := NewJj(dir)
+
+	var sb strings.Builder
+	for i := 1; i <= 20; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	writeFile(t, dir, "old.txt", sb.String())
+	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
+	jjCmd(t, dir, "new", "-m", "rename", "--quiet")
+	require.NoError(t, os.Remove(filepath.Join(dir, "old.txt")))
+	writeFile(t, dir, "new.txt", strings.Replace(sb.String(), "line 5\n", "line 5 CHANGED\n", 1))
+
+	lines, err := j.FileDiff(FileDiffRequest{Path: "new.txt", OldPath: "old.txt", ContextLines: 2})
+	require.NoError(t, err)
+	require.NotEmpty(t, lines)
+	last := lines[len(lines)-1]
+	assert.Equal(t, ChangeDivider, last.ChangeType, "expected a trailing divider")
+	assert.Equal(t, "⋯ 13 lines ⋯", last.Content)
 }
 
 func TestJj_FileDiff_Uncommitted(t *testing.T) {

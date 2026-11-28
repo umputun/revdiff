@@ -58,7 +58,7 @@ var jjRenameRe = regexp.MustCompile(`^R (.+)$`)
 var jjRenameBraceRe = regexp.MustCompile(`^(.*)\{(.+) => (.+)\}(.*)$`)
 
 // statusToFileStatus maps a jj summary status letter to a FileStatus.
-// Renames ("R") are caller-handled — they expand to two entries.
+// Renames ("R") are caller-handled, since their target carries both paths.
 func (j *Jj) statusToFileStatus(status string) FileStatus {
 	switch FileStatus(status) {
 	case FileModified:
@@ -90,8 +90,7 @@ func (j *Jj) ChangedFiles(ref string, _ bool) ([]FileEntry, error) {
 }
 
 // parseSummary parses `jj diff --summary` output into file entries.
-// Rename lines expand to a delete + add pair so the rest of the UI can treat
-// each side independently (matching hg/git behavior in this codebase).
+// A rename line becomes one FileRenamed entry with the origin in OldPath.
 func (j *Jj) parseSummary(out string) []FileEntry {
 	var entries []FileEntry
 	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
@@ -101,10 +100,7 @@ func (j *Jj) parseSummary(out string) []FileEntry {
 		// rename?
 		if m := jjRenameRe.FindStringSubmatch(line); m != nil && strings.HasPrefix(line, "R ") {
 			if oldPath, newPath, ok := j.expandRename(m[1]); ok {
-				entries = append(entries,
-					FileEntry{Path: oldPath, Status: FileDeleted},
-					FileEntry{Path: newPath, Status: FileAdded},
-				)
+				entries = append(entries, FileEntry{Path: newPath, OldPath: oldPath, Status: FileRenamed})
 				continue
 			}
 		}
@@ -158,9 +154,14 @@ func (j *Jj) FileDiff(req FileDiffRequest) ([]DiffLine, error) {
 	normalized := j.synthesizeBinaryDiff(out)
 
 	// trailing divider only matters in compact mode; skip the probe in full-file mode.
+	// jj pairs a rename from the new path alone, but its old side lives at OldPath.
 	total := 0
 	if req.ContextLines > 0 && req.ContextLines < fullContextSentinel {
-		total = j.totalOldLines(req.Ref, req.Path)
+		oldFile := req.Path
+		if req.OldPath != "" {
+			oldFile = req.OldPath
+		}
+		total = j.totalOldLines(req.Ref, oldFile)
 	}
 	return parseUnifiedDiff(normalized, total)
 }

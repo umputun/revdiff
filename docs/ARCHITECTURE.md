@@ -93,9 +93,11 @@ to carry the rename origin:
   recovered by `UntrackedRenames` off a throwaway index (`tempIndexWithIntentToAdd` copies
   `.git/index`, `git add -N` the untracked paths against the copy with `GIT_INDEX_FILE`, then
   `git diff -M` reports the pair); `FileDiff` renders them the same way via `untrackedRenameDiff`.
-  Git-only — `Hg`/`Jj` never set `OldPath`, so they ignore it
+  `Hg` never sets `OldPath` and ignores it
 - `Hg` — runs `hg diff --git`, parses unified diff output
-- `Jj` — runs `jj diff --git`, parses unified diff output; git-style refs (HEAD, HEAD~N, A..B)
+- `Jj` — runs `jj diff --git`, parses unified diff output; a `jj diff --summary` rename becomes one
+  `FileRenamed` entry with `OldPath`, and `FileDiff` needs only the new path to get the rename diff
+  (`OldPath` feeds the compact-mode old-side line count); git-style refs (HEAD, HEAD~N, A..B)
   translate to jj revsets via `--from`/`--to`. jj emits raw bytes for binary files, so
   `(*Jj).synthesizeBinaryDiff` rewrites such diffs with the git-style "Binary files … differ" marker
   so `parseUnifiedDiff` produces a binary placeholder.
