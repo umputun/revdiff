@@ -115,7 +115,7 @@ func FileEntryPaths(entries []FileEntry) []string {
 }
 
 // FileDiffRequest carries the inputs FileDiff needs to render one file's diff.
-// OldPath is the rename origin (empty for non-renames); only the Git renderer consumes it.
+// OldPath is the rename origin (empty for non-renames); only the Git and Jj renderers consume it.
 type FileDiffRequest struct {
 	Ref          string
 	Path         string // new/current path
