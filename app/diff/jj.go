@@ -91,7 +91,6 @@ func (j *Jj) ChangedFiles(ref string, _ bool) ([]FileEntry, error) {
 }
 
 // parseSummary parses `jj diff --summary` output into file entries.
-// A rename line becomes one FileRenamed entry with the origin in OldPath.
 func (j *Jj) parseSummary(out string) []FileEntry {
 	var entries []FileEntry
 	for line := range strings.SplitSeq(strings.TrimRight(out, "\n"), "\n") {
