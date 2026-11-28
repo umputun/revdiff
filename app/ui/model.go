@@ -742,8 +742,8 @@ type ModelConfig struct {
 	LoadUntracked func() ([]string, error) // optional untracked-files fetcher (nil when unavailable)
 	// LoadUntrackedRenames pairs untracked renames (a working-tree `mv` whose new
 	// side is still untracked) with their deleted origin so the tree shows one rename
-	// entry instead of a delete + all-add pair. Nil for non-git VCS (rename detection
-	// is git-only); only consulted in unstaged working-tree mode.
+	// entry instead of a delete + all-add pair. Nil for non-git VCS (untracked-rename
+	// detection is git-only); only consulted in unstaged working-tree mode.
 	LoadUntrackedRenames func([]string) ([]diff.FileEntry, error)
 	Keymap               *keymap.Keymap // custom key bindings (nil uses defaults)
 	Editor               ExternalEditor // external-editor driver (nil uses app/editor.Editor{})

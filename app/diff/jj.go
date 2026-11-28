@@ -54,8 +54,9 @@ var jjSummaryRe = regexp.MustCompile(`^([MAD]) (.+)$`)
 var jjRenameRe = regexp.MustCompile(`^R (.+)$`)
 
 // jjRenameBraceRe extracts the "old => new" pair from a rename target, optionally
-// surrounded by a static path prefix and suffix.
-var jjRenameBraceRe = regexp.MustCompile(`^(.*)\{(.+) => (.+)\}(.*)$`)
+// surrounded by a static path prefix and suffix. Either side may be empty when a file
+// moves one directory deeper or shallower ("d/{ => sub}/x.txt").
+var jjRenameBraceRe = regexp.MustCompile(`^(.*)\{(.*) => (.*)\}(.*)$`)
 
 // statusToFileStatus maps a jj summary status letter to a FileStatus.
 // Renames ("R") are caller-handled, since their target carries both paths.
@@ -130,7 +131,16 @@ func (j *Jj) expandRename(target string) (oldPath, newPath string, ok bool) {
 		return "", "", false
 	}
 	prefix, oldMid, newMid, suffix := m[1], m[2], m[3], m[4]
-	return prefix + oldMid + suffix, prefix + newMid + suffix, true
+	return j.joinRenamePath(prefix, oldMid, suffix), j.joinRenamePath(prefix, newMid, suffix), true
+}
+
+// joinRenamePath rebuilds one side of a brace rename. An empty middle drops the
+// separator the suffix starts with, so "d/" + "" + "/x.txt" is "d/x.txt".
+func (j *Jj) joinRenamePath(prefix, mid, suffix string) string {
+	if mid == "" {
+		return prefix + strings.TrimPrefix(suffix, "/")
+	}
+	return prefix + mid + suffix
 }
 
 // FileDiff returns the diff view for a single file.

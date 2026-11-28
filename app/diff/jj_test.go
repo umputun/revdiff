@@ -151,6 +151,9 @@ func TestJj_ExpandRename(t *testing.T) {
 		{name: "brace plain", target: "{old.txt => new.txt}", oldPath: "old.txt", newPath: "new.txt", ok: true},
 		{name: "brace with prefix and suffix", target: "dir/{old => new}/file.txt", oldPath: "dir/old/file.txt", newPath: "dir/new/file.txt", ok: true},
 		{name: "brace with prefix only", target: "dir/{a.txt => b.txt}", oldPath: "dir/a.txt", newPath: "dir/b.txt", ok: true},
+		{name: "move one level deeper", target: "d/{ => sub}/x.txt", oldPath: "d/x.txt", newPath: "d/sub/x.txt", ok: true},
+		{name: "move one level shallower", target: "d/{sub => }/y.txt", oldPath: "d/sub/y.txt", newPath: "d/y.txt", ok: true},
+		{name: "move from root into dir", target: "{ => b}/a.txt", oldPath: "a.txt", newPath: "b/a.txt", ok: true},
 		{name: "fallback arrow separator", target: "old.txt => new.txt", oldPath: "old.txt", newPath: "new.txt", ok: true},
 		{name: "no separator returns false", target: "just a path", ok: false},
 		{name: "empty returns false", target: "", ok: false},
@@ -436,6 +439,7 @@ func TestJj_ChangedFiles_Renamed(t *testing.T) {
 	writeFileAt(t, filepath.Join(dir, "d", "gone.txt"), "a\nb\nc\n")
 	writeFileAt(t, filepath.Join(dir, "d", "old.txt"), "1\n2\n3\n4\n")
 	writeFileAt(t, filepath.Join(dir, "e", "mv.txt"), "x\ny\n")
+	writeFileAt(t, filepath.Join(dir, "g", "z.txt"), "z\n")
 	jjCmd(t, dir, "describe", "-m", "init", "--quiet")
 	jjCmd(t, dir, "new", "-m", "rename", "--quiet")
 	require.NoError(t, os.Remove(filepath.Join(dir, "d", "gone.txt")))
@@ -443,6 +447,8 @@ func TestJj_ChangedFiles_Renamed(t *testing.T) {
 	writeFile(t, dir, "d/new.txt", "1\n2\n3\n4\n5\n")
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "f"), 0o750))
 	require.NoError(t, os.Rename(filepath.Join(dir, "e", "mv.txt"), filepath.Join(dir, "f", "mv.txt")))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "g", "sub"), 0o750))
+	require.NoError(t, os.Rename(filepath.Join(dir, "g", "z.txt"), filepath.Join(dir, "g", "sub", "z.txt")))
 
 	entries, err := j.ChangedFiles("", false)
 	require.NoError(t, err)
@@ -450,6 +456,7 @@ func TestJj_ChangedFiles_Renamed(t *testing.T) {
 		{Path: "d/gone.txt", Status: FileDeleted},
 		{Path: "d/new.txt", OldPath: "d/old.txt", Status: FileRenamed},
 		{Path: "f/mv.txt", OldPath: "e/mv.txt", Status: FileRenamed},
+		{Path: "g/sub/z.txt", OldPath: "g/z.txt", Status: FileRenamed},
 	}, entries)
 
 	lines, err := j.FileDiff(FileDiffRequest{Path: "d/new.txt", OldPath: "d/old.txt"})
